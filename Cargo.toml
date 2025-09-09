@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "crates/mockforge-cli",
+  "crates/mockforge-http",
+  "crates/mockforge-ws",
+  "crates/mockforge-grpc"
+]
+resolver = "2"

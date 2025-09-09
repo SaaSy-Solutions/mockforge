@@ -1,0 +1,1 @@
+pub fn note() -> &'static str { "http scaffold" }

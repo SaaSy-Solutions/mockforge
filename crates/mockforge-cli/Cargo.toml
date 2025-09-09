@@ -1,0 +1,13 @@
+[package]
+name = "mockforge-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+mockforge-http = { path = "../mockforge-http" }
+mockforge-ws = { path = "../mockforge-ws" }
+mockforge-grpc = { path = "../mockforge-grpc" }
