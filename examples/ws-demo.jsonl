@@ -1,0 +1,2 @@
+{"ts":0,"dir":"out","text":"HELLO","waitFor":"^CLIENT_READY$"}
+{"ts":10,"dir":"out","text":"{"type":"data"}"}
