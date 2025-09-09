@@ -1,4 +1,4 @@
-use axum::{routing::{get, any}, Router, extract::{Path, Query, State}, response::IntoResponse, http::{StatusCode, Uri}, Json};
+use axum::{routing::{get, any}, Router, extract::{Query, State}, response::IntoResponse, http::{StatusCode, Uri}, Json};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, fs, collections::HashMap, sync::Arc};
 use tracing::*;
@@ -88,7 +88,9 @@ async fn admin_state_post(State(_st): State<AppState>, Json(body): Json<AdminSta
 #[derive(Deserialize)]
 struct AnyQ(HashMap<String,String>);
 
-async fn handler(State(st): State<AppState>, uri: Uri, Path(path): Path<String>, Query(q): Query<AnyQ>) -> impl IntoResponse {
+async fn handler(State(st): State<AppState>, uri: Uri, query: Result<Query<AnyQ>, axum::extract::rejection::QueryRejection>) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/').to_string();
+    let q = query.unwrap_or(Query(AnyQ(HashMap::new()))).0;
     if let Some(dir) = st.cfg.replay_dir.as_ref() {
         if let Some(resp) = try_replay(dir, uri.path(), &q.0).ok().flatten() {
             return (StatusCode::OK, axum::Json(resp));

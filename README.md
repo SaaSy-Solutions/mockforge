@@ -3,8 +3,7 @@
 ## Run instructions
 
 cargo build
-MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false \
-cargo run -p mockforge-cli -- --spec mockforge/examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051
+MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false cargo watch -x 'run -p mockforge-cli -- --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051'
 
 ## HTTP
 
