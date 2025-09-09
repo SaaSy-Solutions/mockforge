@@ -1,0 +1,16 @@
+- targets: ["operation:getUser"]
+  patch:
+    - op: add
+      path: /metadata/requestId
+      value: "{{uuid}}"
+    - op: replace
+      path: /user/createdAt
+      value: "{{now}}"
+    - op: add
+      path: /user/score
+      value: "{{rand.float}}"
+- targets: ["tag:Payments"]
+  patch:
+    - op: replace
+      path: /payment/status
+      value: "FAILED"

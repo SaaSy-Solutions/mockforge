@@ -7,7 +7,7 @@ MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false cargo watch -x '
 
 ## HTTP
 
-curl <http://localhost:3000/ping>
+curl http://localhost:3000/ping
 
 ## WS (scripted replay)
 

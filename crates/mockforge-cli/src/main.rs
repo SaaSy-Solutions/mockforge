@@ -16,9 +16,9 @@ async fn main() {
     let args = Args::parse();
     info!("MockForge cli — http:{} ws:{} grpc:{} spec:{:?}", args.http_port, args.ws_port, args.grpc_port, args.spec);
 
-    let http = tokio::spawn(mockforge_http::start(args.http_port, args.spec.clone()));
-    let ws = tokio::spawn(mockforge_ws::start(args.ws_port));
-    let grpc = tokio::spawn(mockforge_grpc::start(args.grpc_port));
+    let http: tokio::task::JoinHandle<()> = tokio::spawn(mockforge_http::start(args.http_port, args.spec.clone()));
+    let ws: tokio::task::JoinHandle<()> = tokio::spawn(mockforge_ws::start(args.ws_port));
+    let grpc: tokio::task::JoinHandle<()> = tokio::spawn(mockforge_grpc::start(args.grpc_port));
 
     let _ = tokio::join!(http, ws, grpc);
 }
