@@ -4,6 +4,8 @@ package mockforge.greeter;
 service Greeter {
   rpc SayHello(HelloRequest) returns (HelloReply);
   rpc SayHelloStream(HelloRequest) returns (stream HelloReply);
+  rpc SayHelloClientStream(stream HelloRequest) returns (HelloReply);
+  rpc Chat(stream HelloRequest) returns (stream HelloReply);
 }
 
 message HelloRequest { string name = 1; }
