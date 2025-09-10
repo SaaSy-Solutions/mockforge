@@ -98,12 +98,15 @@ impl OpenApiRouteRegistry {
     pub fn validate_request(&self, path: &str, method: &str, body: Option<&Value>) -> Result<()> {
         if let Some(route) = self.get_route(path, method) {
             // Validate request body if required
-            if route.operation.request_body.is_some() {
-                if body.is_none() {
-                    return Err(Error::generic("Request body is required but not provided"));
-                }
-                // TODO: Implement schema validation
-                tracing::warn!("Request body validation not yet implemented for OpenAPI");
+            if let Some(schema) = &route.operation.request_body {
+                let value = body
+                    .ok_or_else(|| Error::generic("Request body is required but not provided"))?;
+                schema
+                    .validate_value(value, "body")
+                    .map_err(|e| Error::validation(format!("{}", e)))?;
+            } else if body.is_some() {
+                // No body expected but provided — not an error by default, but log it
+                tracing::debug!("Body provided for operation without requestBody; accepting");
             }
 
             Ok(())

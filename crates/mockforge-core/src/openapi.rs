@@ -13,6 +13,9 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
+use uuid::Uuid;
+use chrono::{NaiveDate, DateTime};
+use openapiv3::{SchemaKind, Type, StringFormat, VariantOrUnknownOrEmpty};
 
 /// OpenAPI specification loader and parser
 #[derive(Debug, Clone)]
@@ -291,22 +294,115 @@ impl OpenApiSchema {
 
     /// Create from OpenAPI schema data
     pub fn from_schema_data(schema: &Schema) -> Option<Self> {
-        // Simplified implementation - just extract basic type information
-        let schema_type = None; // TODO: Extract from schema kind when needed
-
-        Some(Self {
-            schema_type,
-            format: None, // Simplified - can be extended later
+        let mut out = Self {
+            schema_type: None,
+            format: None,
             description: schema.schema_data.description.clone(),
-            properties: HashMap::new(), // Simplified - can be extended later
-            required: Vec::new(),       // Simplified - can be extended later
-            items: None,                // Simplified - can be extended later
-            enum_values: None,          // Simplified - can be extended later
-            minimum: None,              // Simplified - can be extended later
+            properties: HashMap::new(),
+            required: Vec::new(),
+            items: None,
+            enum_values: None,
+            minimum: None,
             maximum: None,
-            min_length: None, // Simplified - can be extended later
+            min_length: None,
             max_length: None,
-        })
+        };
+
+        match &schema.schema_kind {
+            SchemaKind::Type(ty) => match ty {
+                Type::String(st) => {
+                    out.schema_type = Some("string".to_string());
+                    // map format
+                    out.format = match &st.format {
+                        VariantOrUnknownOrEmpty::Item(f) => Some(match f {
+                            StringFormat::Byte => "byte",
+                            StringFormat::Binary => "binary",
+                            StringFormat::Date => "date",
+                            StringFormat::DateTime => "date-time",
+                            StringFormat::Password => "password",
+                            _ => "string",
+                        }.to_string()),
+                        VariantOrUnknownOrEmpty::Unknown(s) => Some(s.clone()),
+                        VariantOrUnknownOrEmpty::Empty => None,
+                    };
+                    out.min_length = st.min_length;
+                    out.max_length = st.max_length;
+                    if !st.enumeration.is_empty() {
+                        let vals = st
+                            .enumeration
+                            .iter()
+                            .map(|opt| opt.clone().map(Value::String).unwrap_or(Value::Null))
+                            .collect::<Vec<_>>();
+                        out.enum_values = Some(vals);
+                    }
+                }
+                Type::Number(nt) => {
+                    out.schema_type = Some("number".to_string());
+                    out.minimum = nt.minimum;
+                    out.maximum = nt.maximum;
+                    if !nt.enumeration.is_empty() {
+                        let vals = nt
+                            .enumeration
+                            .iter()
+                            .map(|opt| opt.map(Value::from).unwrap_or(Value::Null))
+                            .collect();
+                        out.enum_values = Some(vals);
+                    }
+                }
+                Type::Integer(it) => {
+                    out.schema_type = Some("integer".to_string());
+                    out.minimum = it.minimum.map(|v| v as f64);
+                    out.maximum = it.maximum.map(|v| v as f64);
+                    if !it.enumeration.is_empty() {
+                        let vals = it
+                            .enumeration
+                            .iter()
+                            .map(|opt| opt.map(|v| Value::from(v as i64)).unwrap_or(Value::Null))
+                            .collect();
+                        out.enum_values = Some(vals);
+                    }
+                }
+                Type::Boolean(_) => {
+                    out.schema_type = Some("boolean".to_string());
+                }
+                Type::Array(at) => {
+                    out.schema_type = Some("array".to_string());
+                    if let Some(items) = &at.items {
+                        match items {
+                            ReferenceOr::Item(b) => {
+                                if let Some(mapped) = Self::from_schema_data(b) {
+                                    out.items = Some(Box::new(mapped));
+                                }
+                            }
+                            ReferenceOr::Reference { .. } => {
+                                // TODO: resolve $ref
+                            }
+                        }
+                    }
+                }
+                Type::Object(ot) => {
+                    out.schema_type = Some("object".to_string());
+                    // properties
+                    for (name, prop_schema) in &ot.properties {
+                        match prop_schema {
+                            ReferenceOr::Item(b) => {
+                                if let Some(mapped) = Self::from_schema_data(b) {
+                                    out.properties.insert(name.clone(), Box::new(mapped));
+                                }
+                            }
+                            ReferenceOr::Reference { .. } => {
+                                // TODO: resolve $ref
+                            }
+                        }
+                    }
+                    out.required = ot.required.clone();
+                }
+            },
+            // For composite/any, keep generic object
+            _ => {}
+        }
+
+        Some(out)
     }
 
     /// Create from request body
@@ -358,6 +454,128 @@ impl OpenApiSchema {
                 }
             }
             _ => Value::Null,
+        }
+    }
+
+    /// Validate a JSON value against this simplified schema
+    pub fn validate_value(&self, value: &Value, path: &str) -> Result<()> {
+        // enum check first (applies to many types)
+        if let Some(enum_vals) = &self.enum_values {
+            if !enum_vals.is_empty() && !enum_vals.iter().any(|v| v == value) {
+                return Err(Error::validation(format!(
+                    "{}: value not in enum {:?}",
+                    path, enum_vals
+                )));
+            }
+        }
+
+        match self.schema_type.as_deref() {
+            Some("string") => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::validation(format!("{}: expected string, got {}", path, value))
+                })?;
+                if let Some(min) = self.min_length {
+                    if s.len() < min {
+                        return Err(Error::validation(format!(
+                            "{}: minLength {} not satisfied",
+                            path, min
+                        )));
+                    }
+                }
+                if let Some(max) = self.max_length {
+                    if s.len() > max {
+                        return Err(Error::validation(format!(
+                            "{}: maxLength {} exceeded",
+                            path, max
+                        )));
+                    }
+                }
+                if let Some(fmt) = &self.format {
+                    match fmt.as_str() {
+                        "uuid" => {
+                            Uuid::parse_str(s).map_err(|_| {
+                                Error::validation(format!("{}: invalid uuid format", path))
+                            })?;
+                        }
+                        "date-time" => {
+                            DateTime::parse_from_rfc3339(s).map_err(|_| {
+                                Error::validation(format!("{}: invalid date-time format", path))
+                            })?;
+                        }
+                        "date" => {
+                            NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {
+                                Error::validation(format!("{}: invalid date format (YYYY-MM-DD)", path))
+                            })?;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(())
+            }
+            Some("number") | Some("integer") => {
+                let n = value.as_f64().ok_or_else(|| {
+                    Error::validation(format!("{}: expected number, got {}", path, value))
+                })?;
+                if let Some(min) = self.minimum {
+                    if n < min {
+                        return Err(Error::validation(format!(
+                            "{}: minimum {} not satisfied",
+                            path, min
+                        )));
+                    }
+                }
+                if let Some(max) = self.maximum {
+                    if n > max {
+                        return Err(Error::validation(format!(
+                            "{}: maximum {} exceeded",
+                            path, max
+                        )));
+                    }
+                }
+                Ok(())
+            }
+            Some("boolean") => {
+                if !value.is_boolean() {
+                    return Err(Error::validation(format!(
+                        "{}: expected boolean, got {}",
+                        path, value
+                    )));
+                }
+                Ok(())
+            }
+            Some("array") => {
+                let arr = value.as_array().ok_or_else(|| {
+                    Error::validation(format!("{}: expected array, got {}", path, value))
+                })?;
+                if let Some(items_schema) = &self.items {
+                    for (idx, item) in arr.iter().enumerate() {
+                        items_schema.validate_value(item, &format!("{}[{}]", path, idx))?;
+                    }
+                }
+                Ok(())
+            }
+            Some("object") => {
+                let obj = value.as_object().ok_or_else(|| {
+                    Error::validation(format!("{}: expected object, got {}", path, value))
+                })?;
+                // required
+                for req in &self.required {
+                    if !obj.contains_key(req) {
+                        return Err(Error::validation(format!(
+                            "{}: missing required property '{}'",
+                            path, req
+                        )));
+                    }
+                }
+                // validate known properties
+                for (name, schema) in &self.properties {
+                    if let Some(val) = obj.get(name) {
+                        schema.validate_value(val, &format!("{}/{}", path, name))?;
+                    }
+                }
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 }
