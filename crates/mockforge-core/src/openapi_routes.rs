@@ -8,11 +8,13 @@ use axum::{
     routing::{delete, get, head, options, patch, post, put},
     Json, Router,
 };
+use axum::extract::{Path as AxumPath, RawQuery};
+use axum::http::HeaderMap;
 use serde_json::{Map, Value};
 use std::sync::Arc;
 
 /// OpenAPI route registry that manages generated routes
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OpenApiRouteRegistry {
     /// The OpenAPI specification
     spec: Arc<OpenApiSpec>,
@@ -27,6 +29,13 @@ impl OpenApiRouteRegistry {
         let routes = Self::generate_routes(&spec);
 
         Self { spec, routes }
+    }
+
+    fn clone_for_validation(&self) -> Self {
+        OpenApiRouteRegistry {
+            spec: self.spec.clone(),
+            routes: self.routes.clone(),
+        }
     }
 
     /// Generate routes from the OpenAPI specification
@@ -57,12 +66,83 @@ impl OpenApiRouteRegistry {
         let mut router = Router::new();
 
         // Create individual routes for each operation
-        for route in self.routes {
+        for route in &self.routes {
             let axum_path = route.axum_path();
-            let response = route.mock_response();
+            let operation = route.operation.clone();
+            let method = route.method.clone();
+            let path_template = route.path.clone();
+            let validator = self.clone_for_validation();
+            let mock_response = route.mock_response();
 
-            // Create a simple handler that returns the mock response
-            let handler = move || async move { Json(response.clone()) };
+            // Handler: validate path/query/header/cookie/body, then return mock
+            let handler = move |
+                AxumPath(path_params): AxumPath<std::collections::HashMap<String, String>>,
+                RawQuery(raw_query): RawQuery,
+                headers: HeaderMap,
+                body: axum::body::Bytes,
+            | async move {
+                // Build params maps
+                let mut path_map = Map::new();
+                for (k, v) in path_params {
+                    path_map.insert(k, Value::String(v));
+                }
+
+                // Query
+                let mut query_map = Map::new();
+                if let Some(q) = raw_query {
+                    for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
+                        query_map.insert(k.to_string(), Value::String(v.to_string()));
+                    }
+                }
+
+                // Headers: only capture those declared on this operation
+                let mut header_map = Map::new();
+                for p in &operation.parameters {
+                    if p.location == "header" {
+                        let name_lc = p.name.to_ascii_lowercase();
+                        if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                            if let Some(val) = headers.get(hn) {
+                                if let Ok(s) = val.to_str() {
+                                    header_map.insert(p.name.clone(), Value::String(s.to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Cookies: parse Cookie header
+                let mut cookie_map = Map::new();
+                if let Some(val) = headers.get(axum::http::header::COOKIE) {
+                    if let Ok(s) = val.to_str() {
+                        for part in s.split(';') {
+                            let part = part.trim();
+                            if let Some((k, v)) = part.split_once('=') {
+                                cookie_map.insert(k.to_string(), Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+
+                // Body: try JSON when present
+                let body_json: Option<Value> = if !body.is_empty() {
+                    serde_json::from_slice(&body).ok()
+                } else { None };
+
+                if let Err(e) = validator.validate_request_with_all(&path_template, &method, &path_map, &query_map, &header_map, &cookie_map, body_json.as_ref()) {
+                    let msg = format!("Validation error: {}", e);
+                    return axum::http::Response::builder()
+                        .status(axum::http::StatusCode::BAD_REQUEST)
+                        .header(axum::http::header::CONTENT_TYPE, "application/json")
+                        .body(axum::body::Body::from(serde_json::to_vec(&serde_json::json!({"error": msg})).unwrap()))
+                        .unwrap();
+                }
+
+                axum::http::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .body(axum::body::Body::from(serde_json::to_vec(&mock_response).unwrap()))
+                    .unwrap()
+            };
 
             // Register the handler based on HTTP method
             router = match route.method.as_str() {
