@@ -438,6 +438,57 @@ mod tests {
         assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad)).is_err());
     }
 
+    #[tokio::test]
+    async fn test_oneof_anyof_allof_validation() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Composite API", "version": "1.0.0" },
+            "paths": {
+                "/composite": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "allOf": [
+                                            {"type": "object", "required": ["base"], "properties": {"base": {"type": "string"}}}
+                                        ],
+                                        "oneOf": [
+                                            {"type": "object", "properties": {"a": {"type": "integer"}}},
+                                            {"type": "object", "properties": {"b": {"type": "integer"}}}
+                                        ],
+                                        "anyOf": [
+                                            {"type": "object", "properties": {"flag": {"type": "boolean"}}},
+                                            {"type": "object", "properties": {"extra": {"type": "string"}}}
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+        // valid: satisfies base via allOf, exactly one of a/b, and at least one of flag/extra
+        let ok = json!({"base": "x", "a": 1, "flag": true});
+        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&ok)).is_ok());
+
+        // invalid oneOf: both a and b present
+        let bad_oneof = json!({"base": "x", "a": 1, "b": 2, "flag": false});
+        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_oneof)).is_err());
+
+        // invalid anyOf: none of flag/extra present
+        let bad_anyof = json!({"base": "x", "a": 1});
+        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_anyof)).is_err());
+
+        // invalid allOf: missing base
+        let bad_allof = json!({"a": 1, "flag": true});
+        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_allof)).is_err());
+    }
+
     #[test]
     fn test_path_conversion() {
         assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users"), "/users");

@@ -351,6 +351,12 @@ pub struct OpenApiSchema {
     pub min_length: Option<usize>,
     /// Maximum length
     pub max_length: Option<usize>,
+    /// oneOf variants
+    pub one_of: Vec<OpenApiSchema>,
+    /// anyOf variants
+    pub any_of: Vec<OpenApiSchema>,
+    /// allOf merged components
+    pub all_of: Vec<OpenApiSchema>,
 }
 
 impl OpenApiSchema {
@@ -378,6 +384,9 @@ impl OpenApiSchema {
             maximum: None,
             min_length: None,
             max_length: None,
+            one_of: Vec::new(),
+            any_of: Vec::new(),
+            all_of: Vec::new(),
         };
 
         match &schema.schema_kind {
@@ -478,8 +487,129 @@ impl OpenApiSchema {
                     out.required = ot.required.clone();
                 }
             },
-            // For composite/any, keep generic object
-            _ => {}
+            SchemaKind::OneOf { one_of } => {
+                for s in one_of {
+                    if let Some(schema) = Self::from_schema(s, spec) {
+                        out.one_of.push(schema);
+                    }
+                }
+            }
+            SchemaKind::AnyOf { any_of } => {
+                for s in any_of {
+                    if let Some(schema) = Self::from_schema(s, spec) {
+                        out.any_of.push(schema);
+                    }
+                }
+            }
+            SchemaKind::AllOf { all_of } => {
+                for s in all_of {
+                    if let Some(schema) = Self::from_schema(s, spec) {
+                        // store for validation; we also attempt a shallow merge for object props/required
+                        if let Some("object") = schema.schema_type.as_deref() {
+                            for (k, v) in &schema.properties {
+                                out.properties.entry(k.clone()).or_insert_with(|| v.clone());
+                            }
+                            for r in &schema.required {
+                                if !out.required.contains(r) {
+                                    out.required.push(r.clone());
+                                }
+                            }
+                        }
+                        if out.items.is_none() && schema.items.is_some() {
+                            out.items = schema.items.clone();
+                        }
+                        if out.schema_type.is_none() {
+                            out.schema_type = schema.schema_type.clone();
+                        }
+                        if out.format.is_none() {
+                            out.format = schema.format.clone();
+                        }
+                        // numeric/string constraints: keep existing if present, else take from child
+                        if out.minimum.is_none() { out.minimum = schema.minimum; }
+                        if out.maximum.is_none() { out.maximum = schema.maximum; }
+                        if out.min_length.is_none() { out.min_length = schema.min_length; }
+                        if out.max_length.is_none() { out.max_length = schema.max_length; }
+                        out.all_of.push(schema);
+                    }
+                }
+            }
+            SchemaKind::Any(any) => {
+                // Map basic type hints
+                if let Some(t) = &any.typ {
+                    out.schema_type = Some(t.clone());
+                }
+                // String constraints
+                out.min_length = any.min_length;
+                out.max_length = any.max_length;
+                if let Some(fmt) = &any.format { out.format = Some(fmt.clone()); }
+                // Numeric constraints
+                out.minimum = any.minimum;
+                out.maximum = any.maximum;
+                // Enumeration values
+                if !any.enumeration.is_empty() {
+                    out.enum_values = Some(any.enumeration.clone());
+                }
+                // Items
+                if let Some(items) = &any.items {
+                    match items {
+                        ReferenceOr::Item(b) => {
+                            if let Some(mapped) = Self::from_schema_data(b, spec) {
+                                out.items = Some(Box::new(mapped));
+                            }
+                        }
+                        ReferenceOr::Reference { reference } => {
+                            if let Some(resolved) = spec.get_schema(reference) {
+                                if let Some(mapped) = Self::from_schema_data(resolved, spec) {
+                                    out.items = Some(Box::new(mapped));
+                                }
+                            }
+                        }
+                    }
+                }
+                // Object properties
+                for (name, prop_schema) in &any.properties {
+                    match prop_schema {
+                        ReferenceOr::Item(b) => {
+                            if let Some(mapped) = Self::from_schema_data(b, spec) {
+                                out.properties.insert(name.clone(), Box::new(mapped));
+                            }
+                        }
+                        ReferenceOr::Reference { reference } => {
+                            if let Some(resolved) = spec.get_schema(reference) {
+                                if let Some(mapped) = Self::from_schema_data(resolved, spec) {
+                                    out.properties.insert(name.clone(), Box::new(mapped));
+                                }
+                            }
+                        }
+                    }
+                }
+                out.required = any.required.clone();
+                // Composition
+                for s in &any.one_of {
+                    if let Some(schema) = Self::from_schema(s, spec) {
+                        out.one_of.push(schema);
+                    }
+                }
+                for s in &any.any_of {
+                    if let Some(schema) = Self::from_schema(s, spec) {
+                        out.any_of.push(schema);
+                    }
+                }
+                for s in &any.all_of {
+                    if let Some(schema) = Self::from_schema(s, spec) {
+                        out.all_of.push(schema.clone());
+                        if let Some("object") = schema.schema_type.as_deref() {
+                            for (k, v) in &schema.properties {
+                                out.properties.entry(k.clone()).or_insert_with(|| v.clone());
+                            }
+                            for r in &schema.required {
+                                if !out.required.contains(r) { out.required.push(r.clone()); }
+                            }
+                        }
+                    }
+                }
+            }
+            SchemaKind::Not { .. } => { /* ignore */ }
         }
 
         Some(out)
@@ -546,6 +676,61 @@ impl OpenApiSchema {
 
     /// Validate a JSON value against this simplified schema
     pub fn validate_value(&self, value: &Value, path: &str) -> Result<()> {
+        // composition checks first
+        if !self.one_of.is_empty() {
+            let mut matches = 0usize;
+            for s in &self.one_of {
+                // Heuristic: for object schemas, require some structural signal to avoid vacuous matches
+                if let (Some("object"), Some(obj)) = (s.schema_type.as_deref(), value.as_object()) {
+                    if !s.required.is_empty() {
+                        if !s.required.iter().all(|k| obj.contains_key(k)) {
+                            continue;
+                        }
+                    } else if !s.properties.is_empty()
+                        && !s.properties.keys().any(|k| obj.contains_key(k))
+                    {
+                        continue;
+                    }
+                }
+                if s.validate_value(value, path).is_ok() { matches += 1; }
+            }
+            if matches != 1 {
+                return Err(Error::validation(format!(
+                    "{}: oneOf expected exactly one schema to match (got {})",
+                    path, matches
+                )));
+            }
+        }
+        if !self.any_of.is_empty() {
+            let mut matches = 0usize;
+            for s in &self.any_of {
+                if let (Some("object"), Some(obj)) = (s.schema_type.as_deref(), value.as_object()) {
+                    if !s.required.is_empty() {
+                        if !s.required.iter().all(|k| obj.contains_key(k)) {
+                            continue;
+                        }
+                    } else if !s.properties.is_empty()
+                        && !s.properties.keys().any(|k| obj.contains_key(k))
+                    {
+                        continue;
+                    }
+                }
+                if s.validate_value(value, path).is_ok() {
+                    matches += 1;
+                }
+            }
+            if matches == 0 {
+                return Err(Error::validation(format!(
+                    "{}: anyOf expected at least one schema to match",
+                    path
+                )));
+            }
+        }
+        if !self.all_of.is_empty() {
+            for s in &self.all_of {
+                s.validate_value(value, path)?;
+            }
+        }
         // enum check first (applies to many types)
         if let Some(enum_vals) = &self.enum_values {
             if !enum_vals.is_empty() && !enum_vals.iter().any(|v| v == value) {
@@ -577,29 +762,29 @@ impl OpenApiSchema {
                         )));
                     }
                 }
-                        if let Some(fmt) = &self.format {
-                            match fmt.as_str() {
-                                "email" => {
-                                    if !EMAIL_RE.is_match(s) {
-                                        return Err(Error::validation(format!(
-                                            "{}: invalid email format",
-                                            path
-                                        )));
-                                    }
-                                }
-                                "uri" => {
-                                    Url::parse(s).map_err(|_| {
-                                        Error::validation(format!(
-                                            "{}: invalid uri format",
-                                            path
-                                        ))
-                                    })?;
-                                }
-                                "uuid" => {
-                                    Uuid::parse_str(s).map_err(|_| {
-                                        Error::validation(format!("{}: invalid uuid format", path))
-                                    })?;
-                                }
+                if let Some(fmt) = &self.format {
+                    match fmt.as_str() {
+                        "email" => {
+                            if !EMAIL_RE.is_match(s) {
+                                return Err(Error::validation(format!(
+                                    "{}: invalid email format",
+                                    path
+                                )));
+                            }
+                        }
+                        "uri" => {
+                            Url::parse(s).map_err(|_| {
+                                Error::validation(format!(
+                                    "{}: invalid uri format",
+                                    path
+                                ))
+                            })?;
+                        }
+                        "uuid" => {
+                            Uuid::parse_str(s).map_err(|_| {
+                                Error::validation(format!("{}: invalid uuid format", path))
+                            })?;
+                        }
                         "date-time" => {
                             DateTime::parse_from_rfc3339(s).map_err(|_| {
                                 Error::validation(format!("{}: invalid date-time format", path))
@@ -873,6 +1058,9 @@ mod tests {
                         maximum: None,
                         min_length: None,
                         max_length: None,
+                        one_of: Vec::new(),
+                        any_of: Vec::new(),
+                        all_of: Vec::new(),
                     }),
                 ),
                 (
@@ -889,6 +1077,9 @@ mod tests {
                         maximum: None,
                         min_length: None,
                         max_length: None,
+                        one_of: Vec::new(),
+                        any_of: Vec::new(),
+                        all_of: Vec::new(),
                     }),
                 ),
             ]
@@ -901,6 +1092,9 @@ mod tests {
             maximum: None,
             min_length: None,
             max_length: None,
+            one_of: Vec::new(),
+            any_of: Vec::new(),
+            all_of: Vec::new(),
         };
 
         let mock_value = schema.generate_mock_value();
