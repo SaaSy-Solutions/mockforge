@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MockForge Admin</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <h1>MockForge Admin</h1>
+            <div class="header-controls">
+                <span id="status-indicator" class="status-indicator status-healthy">● Healthy</span>
+                <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+            </div>
+        </header>
+
+        <nav class="nav">
+            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+            <button class="nav-tab" data-tab="routes">Routes</button>
+            <button class="nav-tab" data-tab="fixtures">Fixtures</button>
+            <button class="nav-tab" data-tab="logs">Logs</button>
+            <button class="nav-tab" data-tab="config">Configuration</button>
+            <button class="nav-tab" data-tab="metrics">Metrics</button>
+        </nav>
+
+        <main class="main">
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>System Status</h3>
+                        <div id="system-status" class="status-grid">
+                            <div class="status-item">
+                                <span class="status-label">Uptime:</span>
+                                <span id="uptime" class="status-value">--</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Memory:</span>
+                                <span id="memory" class="status-value">--</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">CPU:</span>
+                                <span id="cpu" class="status-value">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Servers</h3>
+                        <div id="servers-list" class="servers-list">
+                            <div class="server-item">
+                                <span class="server-name">HTTP</span>
+                                <span id="http-status" class="server-status status-stopped">● Stopped</span>
+                            </div>
+                            <div class="server-item">
+                                <span class="server-name">WebSocket</span>
+                                <span id="ws-status" class="server-status status-stopped">● Stopped</span>
+                            </div>
+                            <div class="server-item">
+                                <span class="server-name">gRPC</span>
+                                <span id="grpc-status" class="server-status status-stopped">● Stopped</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card full-width">
+                        <h3>Recent Requests</h3>
+                        <div id="recent-requests" class="requests-table">
+                            <div class="table-header">
+                                <span>Time</span>
+                                <span>Method</span>
+                                <span>Path</span>
+                                <span>Status</span>
+                                <span>Response Time</span>
+                            </div>
+                            <div id="requests-body" class="table-body">
+                                <div class="loading">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="routes-tab" class="tab-content">
+                <div class="card full-width">
+                    <h3>Route Configuration</h3>
+                    <div id="routes-list" class="routes-list">
+                        <div class="loading">Loading routes...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="fixtures-tab" class="tab-content">
+                <div class="card full-width">
+                    <h3>Record/Replay Fixtures</h3>
+                    <div class="fixtures-controls">
+                        <button id="refresh-fixtures-btn" class="btn btn-secondary">Refresh</button>
+                    </div>
+                    <div id="fixtures-table" class="fixtures-table">
+                        <div class="loading">Loading fixtures...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="logs-tab" class="tab-content">
+                <div class="card full-width">
+                    <h3>Request Logs</h3>
+                    <div class="logs-controls">
+                        <input type="text" id="log-filter" placeholder="Filter logs..." class="filter-input">
+                        <button id="clear-logs-btn" class="btn btn-danger">Clear Logs</button>
+                    </div>
+                    <div id="logs-container" class="logs-container">
+                        <div class="loading">Loading logs...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="config-tab" class="tab-content">
+                <div class="config-grid">
+                    <div class="card">
+                        <h3>Latency Settings</h3>
+                        <form id="latency-form" class="config-form">
+                            <div class="form-group">
+                                <label for="latency-base">Base Latency (ms):</label>
+                                <input type="number" id="latency-base" name="base" min="0" value="50">
+                            </div>
+                            <div class="form-group">
+                                <label for="latency-jitter">Jitter (ms):</label>
+                                <input type="number" id="latency-jitter" name="jitter" min="0" value="20">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Latency</button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h3>Fault Injection</h3>
+                        <form id="fault-form" class="config-form">
+                            <div class="form-group">
+                                <label for="fault-enabled">
+                                    <input type="checkbox" id="fault-enabled" name="enabled">
+                                    Enable Fault Injection
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label for="fault-rate">Failure Rate:</label>
+                                <input type="number" id="fault-rate" name="rate" min="0" max="1" step="0.01" value="0.0">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Faults</button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h3>Proxy Settings</h3>
+                        <form id="proxy-form" class="config-form">
+                            <div class="form-group">
+                                <label for="proxy-enabled">
+                                    <input type="checkbox" id="proxy-enabled" name="enabled">
+                                    Enable Proxy
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label for="proxy-url">Upstream URL:</label>
+                                <input type="url" id="proxy-url" name="url" value="http://api.example.com">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Proxy</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="metrics-tab" class="tab-content">
+                <div class="card full-width">
+                    <h3>Performance Metrics</h3>
+                    <div id="metrics-content" class="metrics-content">
+                        <div class="loading">Loading metrics...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

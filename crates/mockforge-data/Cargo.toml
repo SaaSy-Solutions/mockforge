@@ -1,0 +1,23 @@
+[package]
+name = "mockforge-data"
+version = "0.1.0"
+edition = "2021"
+description = "Data generator for MockForge - faker + RAG synthetic data engine"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+fake = { version = "3.0", features = ["derive", "http", "chrono", "uuid", "random_color"] }
+fastrand = "2.0"
+itertools = { workspace = true }
+mockforge-core = { path = "../mockforge-core" }

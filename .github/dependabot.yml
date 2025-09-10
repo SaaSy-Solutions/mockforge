@@ -8,10 +8,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers:
-      - "rclanan"  # Replace with your GitHub username
-    assignees:
-      - "rclanan"  # Replace with your GitHub username
     commit-message:
       prefix: "deps"
       include: "scope"
@@ -31,10 +27,6 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 5
-    reviewers:
-      - "rclanan"  # Replace with your GitHub username
-    assignees:
-      - "rclanan"  # Replace with your GitHub username
     commit-message:
       prefix: "ci"
       include: "scope"

@@ -92,7 +92,7 @@ Teams need to develop and test frontends/services before real backends exist, an
 
 ### G. UI (minimal MVP)
 
-- Static status page at /__admin:
+- Admin interface at /__mockforge:
   - Routes list, recent requests, latency profile indicators
   - Toggle fixture priority per route
   - Tail logs (last N)

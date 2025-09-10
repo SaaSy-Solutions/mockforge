@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.8.4", features = ["ws"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+axum = { workspace = true }
+tokio = { workspace = true }
 futures = "0.3"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-regex = "1"
-tracing = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+tracing = { workspace = true }
+mockforge-core = { path = "../mockforge-core" }

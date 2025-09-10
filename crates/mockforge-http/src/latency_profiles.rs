@@ -20,12 +20,12 @@ pub struct LatencyProfiles {
 }
 
 impl LatencyProfiles {
-    pub fn load_from_glob(pattern: &str) -> anyhow::Result<Self> {
+    pub async fn load_from_glob(pattern: &str) -> anyhow::Result<Self> {
         let mut result = LatencyProfiles::default();
         for dir_entry in GlobWalkerBuilder::from_patterns(".", &[pattern]).build()? {
             let path = dir_entry?.path().to_path_buf();
             if path.extension().map(|e| e == "yaml" || e == "yml").unwrap_or(false) {
-                let text = std::fs::read_to_string(&path)?;
+                let text = tokio::fs::read_to_string(&path).await?;
                 let cfg: HashMap<String, Profile> = serde_yaml::from_str(&text)?;
                 for (k, v) in cfg {
                     if let Some(rest) = k.strip_prefix("operation:") {

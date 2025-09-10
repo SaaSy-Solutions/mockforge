@@ -36,7 +36,7 @@ mockforge/
     mockforge-grpc/   # gRPC server mock
     mockforge-data/   # faker + RAG synthetic data engine
     mockforge-cli/    # CLI frontend
-    mockforge-ui/     # /__admin status page
+    mockforge-ui/     # /__mockforge admin interface
 ```
 
 ## 3. Modules & Responsibilities
@@ -139,7 +139,7 @@ mockforge validate --spec openapi.yaml --fixtures fixtures/
 
 ### 3.7 UI (mockforge-ui)
 
-`/__admin` static page (served by axum):
+`/__mockforge` admin interface (served by axum):
 
 - Route list (HTTP, WS, gRPC)
 - Fixture presence indicator

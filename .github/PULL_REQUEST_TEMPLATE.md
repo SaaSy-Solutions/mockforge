@@ -1,4 +1,4 @@
-## Description
+# Description
 
 Brief description of the changes in this PR.
 
@@ -18,11 +18,13 @@ Brief description of the changes in this PR.
 ## Changes Made
 
 ### What was changed?
+
 - Change 1
 - Change 2
 - Change 3
 
 ### Why was it changed?
+
 - Reason for change 1
 - Reason for change 2
 - Reason for change 3
@@ -30,17 +32,20 @@ Brief description of the changes in this PR.
 ## Testing
 
 ### Manual Testing
+
 - [ ] Tested locally with `make run-example`
 - [ ] Tested with different configurations
 - [ ] Verified error handling
 
 ### Automated Testing
+
 - [ ] Unit tests added/updated
 - [ ] Integration tests added/updated
 - [ ] All existing tests pass
 - [ ] Code coverage maintained
 
 ### Quality Checks
+
 - [ ] Code formatted with `make fmt`
 - [ ] Clippy lints pass with `make clippy`
 - [ ] Security audit passes with `make audit`

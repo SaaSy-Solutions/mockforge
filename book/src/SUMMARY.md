@@ -2,13 +2,13 @@
 
 [Introduction](README.md)
 
-# Getting Started
+## Getting Started
 
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Basic Concepts](getting-started/concepts.md)
 
-# User Guide
+## User Guide
 
 - [HTTP Mocking](user-guide/http-mocking.md)
   - [OpenAPI Integration](user-guide/http-mocking/openapi.md)
@@ -22,13 +22,13 @@
   - [Interactive Mode](user-guide/websocket-mocking/interactive.md)
 - [Admin UI](user-guide/admin-ui.md)
 
-# Configuration
+## Configuration
 
 - [Environment Variables](configuration/environment.md)
 - [Configuration Files](configuration/files.md)
 - [Advanced Options](configuration/advanced.md)
 
-# Development
+## Development
 
 - [Building from Source](development/building.md)
 - [Testing](development/testing.md)
@@ -38,7 +38,7 @@
   - [gRPC Crate](development/architecture/grpc.md)
   - [WebSocket Crate](development/architecture/ws.md)
 
-# API Reference
+## API Reference
 
 - [CLI Reference](api/cli.md)
 - [Rust API](api/rust.md)
@@ -46,14 +46,14 @@
   - [gRPC Module](api/rust/grpc.md)
   - [WebSocket Module](api/rust/ws.md)
 
-# Contributing
+## Contributing
 
 - [Development Setup](contributing/setup.md)
 - [Code Style](contributing/style.md)
 - [Testing Guidelines](contributing/testing.md)
 - [Release Process](contributing/release.md)
 
-# Reference
+## Reference
 
 - [Configuration Schema](reference/config-schema.md)
 - [Supported Formats](reference/formats.md)

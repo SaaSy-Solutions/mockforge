@@ -1,32 +1,369 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use mockforge_core::{ServerConfig, load_config_with_fallback, apply_env_overrides};
+use mockforge_data::{schema::templates, DataConfig, DataGenerator, dataset::DatasetMetadata};
 use tracing::*;
 
 #[derive(Parser, Debug)]
-struct Args {
-    /// Path to OpenAPI spec (json or yaml)
-    #[arg(long)]
-    spec: Option<String>,
-    #[arg(long, default_value_t = 3000)]
-    http_port: u16,
-    #[arg(long, default_value_t = 3001)]
-    ws_port: u16,
-    #[arg(long, default_value_t = 50051)]
-    grpc_port: u16,
+#[command(name = "mockforge")]
+#[command(about = "MockForge - Advanced API Mocking Platform")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Start the mock servers (HTTP, WebSocket, gRPC)
+    Serve {
+        /// Path to OpenAPI spec (json or yaml)
+        #[arg(long)]
+        spec: Option<String>,
+        /// Configuration file path
+        #[arg(short, long)]
+        config: Option<String>,
+        #[arg(long, default_value_t = 3000)]
+        http_port: u16,
+        #[arg(long, default_value_t = 3001)]
+        ws_port: u16,
+        #[arg(long, default_value_t = 50051)]
+        grpc_port: u16,
+        /// Enable admin UI
+        #[arg(long)]
+        admin: bool,
+        #[arg(long, default_value_t = 8080)]
+        admin_port: u16,
+        /// Force embedding Admin UI under HTTP server
+        #[arg(long)]
+        admin_embed: bool,
+        /// Explicit mount path for embedded Admin UI (implies --admin-embed)
+        #[arg(long)]
+        admin_mount_path: Option<String>,
+        /// Force standalone Admin UI on separate port (overrides embed)
+        #[arg(long)]
+        admin_standalone: bool,
+        /// Disable Admin API endpoints (UI loads but API routes are absent)
+        #[arg(long)]
+        disable_admin_api: bool,
+    },
+    /// Generate synthetic data
+    Data {
+        #[command(subcommand)]
+        data_command: DataCommands,
+    },
+    /// Start admin UI server only
+    Admin {
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum DataCommands {
+    /// Generate data using built-in templates
+    Template {
+        /// Template type (user, product, order)
+        #[arg(value_enum)]
+        template: TemplateType,
+        /// Number of rows to generate
+        #[arg(short, long, default_value_t = 100)]
+        rows: usize,
+        /// Output format (json, jsonl, csv, yaml)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Enable RAG mode
+        #[arg(long)]
+        rag: bool,
+    },
+    /// Generate data from JSON schema
+    Schema {
+        /// Path to JSON schema file
+        #[arg(short, long)]
+        schema: String,
+        /// Number of rows to generate
+        #[arg(short, long, default_value_t = 100)]
+        rows: usize,
+        /// Output format
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Generate data from OpenAPI spec
+    OpenApi {
+        /// Path to OpenAPI spec file
+        #[arg(short, long)]
+        spec: String,
+        /// Number of rows to generate
+        #[arg(short, long, default_value_t = 100)]
+        rows: usize,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum TemplateType {
+    User,
+    Product,
+    Order,
+}
+
+async fn handle_data_command(command: DataCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match command {
+        DataCommands::Template { template, rows, format, output, rag } => {
+            let schema = match template {
+                TemplateType::User => templates::user_schema(),
+                TemplateType::Product => templates::product_schema(),
+                TemplateType::Order => templates::order_schema(),
+            };
+
+            let config = DataConfig {
+                rows,
+                rag_enabled: rag,
+                ..Default::default()
+            };
+
+            let mut generator = DataGenerator::new(schema, config)?;
+            let result = generator.generate().await?;
+
+            match format.as_str() {
+                "json" => {
+                    let json_output = result.to_json_string()?;
+                    handle_output(&json_output, &output).await?;
+                }
+                "jsonl" => {
+                    let jsonl_output = result.to_jsonl_string()?;
+                    handle_output(&jsonl_output, &output).await?;
+                }
+                "csv" => {
+                    // Convert GenerationResult to Dataset for CSV output
+                    let metadata = DatasetMetadata::new(
+                        "generated_dataset".to_string(),
+                        "json_schema".to_string(),
+                        &result,
+                        DataConfig::default(),
+                    );
+                    let dataset = mockforge_data::Dataset::new(metadata, result.data);
+                    let csv_output = dataset.to_csv_string()?;
+                    handle_output(&csv_output, &output).await?;
+                }
+                _ => {
+                    eprintln!("Unsupported format: {}. Supported: json, jsonl, csv", format);
+                    std::process::exit(1);
+                }
+            }
+        }
+        DataCommands::Schema { schema: schema_path, rows, format, output } => {
+            let schema_content = tokio::fs::read_to_string(&schema_path).await?;
+            let schema_value: serde_json::Value = serde_json::from_str(&schema_content)?;
+
+            let result = mockforge_data::generate_from_json_schema(&schema_value, rows).await?;
+
+            let output_content = match format.as_str() {
+                "json" => result.to_json_string()?,
+                "jsonl" => result.to_jsonl_string()?,
+                "csv" => {
+                    // Convert GenerationResult to Dataset for CSV output
+                    let metadata = DatasetMetadata::new(
+                        "generated_dataset".to_string(),
+                        "json_schema".to_string(),
+                        &result,
+                        DataConfig::default(),
+                    );
+                    let dataset = mockforge_data::Dataset::new(metadata, result.data);
+                    dataset.to_csv_string()?
+                },
+                _ => {
+                    eprintln!("Unsupported format: {}. Supported: json, jsonl, csv", format);
+                    std::process::exit(1);
+                }
+            };
+
+            handle_output(&output_content, &output).await?;
+        }
+        DataCommands::OpenApi { spec: spec_path, rows, output } => {
+            let spec_content = tokio::fs::read_to_string(&spec_path).await?;
+            let spec_value: serde_json::Value = serde_json::from_str(&spec_content)?;
+
+            let result = mockforge_data::generate_from_openapi(&spec_value, rows).await?;
+
+            let output_content = result.to_json_string()?;
+            handle_output(&output_content, &output).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_output(content: &str, output_path: &Option<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match output_path {
+        Some(path) => {
+            tokio::fs::write(path, content).await?;
+            println!("Data written to {}", path);
+        }
+        None => {
+            println!("{}", content);
+        }
+    }
+    Ok(())
+}
+
+async fn start_servers_with_config(
+    config: ServerConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!(
+        "MockForge servers starting — http:{} ws:{} grpc:{} admin:{}",
+        config.http.port, config.websocket.port, config.grpc.port, config.admin.port
+    );
+
+    let mut tasks = vec![];
+
+    // Start HTTP server (optionally with embedded Admin UI)
+    let http_config = config.http.clone();
+    let admin_mount_path = config.admin.mount_path.clone();
+    let admin_api_enabled = config.admin.api_enabled;
+    let http_port_for_addr = http_config.port;
+    let ws_port_for_addr = config.websocket.port;
+    let grpc_port_for_addr = config.grpc.port;
+
+    let http_task = tokio::spawn(async move {
+        if let Some(mount_path) = admin_mount_path {
+            // Build base HTTP app and mount admin UI under the configured path
+            let mut app = mockforge_http::build_router(http_config.openapi_spec).await;
+
+            // Compute server addresses for Admin state
+            let http_addr: std::net::SocketAddr = format!("127.0.0.1:{}", http_port_for_addr).parse().unwrap();
+            let ws_addr: std::net::SocketAddr = format!("127.0.0.1:{}", ws_port_for_addr).parse().unwrap();
+            let grpc_addr: std::net::SocketAddr = format!("127.0.0.1:{}", grpc_port_for_addr).parse().unwrap();
+
+            let admin_router = mockforge_ui::create_admin_router(Some(http_addr), Some(ws_addr), Some(grpc_addr), admin_api_enabled);
+            app = app.nest(mount_path.as_str(), admin_router);
+
+            if let Err(e) = mockforge_http::serve_router(http_port_for_addr, app).await {
+                error!("HTTP server error: {}", e);
+            }
+        } else if let Err(e) = mockforge_http::start(http_config.port, http_config.openapi_spec).await {
+            error!("HTTP server error: {}", e);
+        }
+    });
+    tasks.push(http_task);
+
+    // Start WebSocket server
+    let ws_config = config.websocket.clone();
+    let ws_task = tokio::spawn(async move {
+        if let Err(e) = mockforge_ws::start(ws_config.port).await {
+            error!("WebSocket server error: {}", e);
+        }
+    });
+    tasks.push(ws_task);
+
+    // Start gRPC server
+    let grpc_config = config.grpc.clone();
+    let grpc_task = tokio::spawn(async move {
+        if let Err(e) = mockforge_grpc::start(grpc_config.port).await {
+            error!("gRPC server error: {}", e);
+        }
+    });
+    tasks.push(grpc_task);
+
+    // Start admin UI as standalone if enabled and not mounted under HTTP
+    if config.admin.enabled && config.admin.mount_path.is_none() {
+        let admin_config = config.admin.clone();
+        let http_addr = format!("127.0.0.1:{}", config.http.port).parse().unwrap();
+        let ws_addr = format!("127.0.0.1:{}", config.websocket.port).parse().unwrap();
+        let grpc_addr = format!("127.0.0.1:{}", config.grpc.port).parse().unwrap();
+
+        let admin_task = tokio::spawn(async move {
+            let admin_addr = format!("127.0.0.1:{}", admin_config.port).parse().unwrap();
+            if let Err(e) = mockforge_ui::start_admin_server(
+                admin_addr,
+                Some(http_addr),
+                Some(ws_addr),
+                Some(grpc_addr),
+                admin_config.api_enabled,
+            ).await {
+                error!("Admin UI server error: {}", e);
+            }
+        });
+        tasks.push(admin_task);
+        info!("Admin UI available at http://127.0.0.1:{}", config.admin.port);
+    }
+
+    info!("MockForge servers running:");
+    info!("  HTTP: http://127.0.0.1:{}", config.http.port);
+    info!("  WebSocket: ws://127.0.0.1:{}", config.websocket.port);
+    info!("  gRPC: localhost:{}", config.grpc.port);
+    if config.admin.enabled {
+        if let Some(ref mount) = config.admin.mount_path {
+            info!("  Admin UI (embedded): http://127.0.0.1:{}{}/", config.http.port, mount);
+        } else {
+            info!("  Admin UI: http://127.0.0.1:{}/", config.admin.port);
+        }
+    }
+
+    // Wait for all tasks
+    for task in tasks {
+        let _ = task.await;
+    }
+
+    Ok(())
+}
+
+async fn start_admin_only(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("Starting MockForge Admin UI on port {}", port);
+    let addr = format!("127.0.0.1:{}", port).parse().unwrap();
+
+    mockforge_ui::start_admin_server(addr, None, None, None, true).await?;
+    Ok(())
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
-    let args = Args::parse();
-    info!(
-        "MockForge cli — http:{} ws:{} grpc:{} spec:{:?}",
-        args.http_port, args.ws_port, args.grpc_port, args.spec
-    );
 
-    let http: tokio::task::JoinHandle<()> =
-        tokio::spawn(mockforge_http::start(args.http_port, args.spec.clone()));
-    let ws: tokio::task::JoinHandle<()> = tokio::spawn(mockforge_ws::start(args.ws_port));
-    let grpc: tokio::task::JoinHandle<()> = tokio::spawn(mockforge_grpc::start(args.grpc_port));
+    let cli = Cli::parse();
 
-    let _ = tokio::join!(http, ws, grpc);
+    match cli.command {
+        Commands::Serve { spec, config, http_port, ws_port, grpc_port, admin, admin_port, admin_embed, admin_mount_path, admin_standalone, disable_admin_api } => {
+            // Load configuration
+            let mut server_config = if let Some(config_path) = config {
+                load_config_with_fallback(&config_path).await
+            } else {
+                ServerConfig::default()
+            };
+
+            // Apply command line overrides
+            if let Some(spec_path) = spec {
+                server_config.http.openapi_spec = Some(spec_path);
+            }
+            server_config.http.port = http_port;
+            server_config.websocket.port = ws_port;
+            server_config.grpc.port = grpc_port;
+            server_config.admin.enabled = admin;
+            server_config.admin.port = admin_port;
+            if disable_admin_api { server_config.admin.api_enabled = false; }
+            if admin_embed || admin_mount_path.is_some() {
+                server_config.admin.mount_path = Some(admin_mount_path.unwrap_or_else(|| "/admin".to_string()));
+            }
+            if admin_standalone { server_config.admin.mount_path = None; }
+
+            // Apply environment variable overrides
+            let server_config = apply_env_overrides(server_config);
+
+            start_servers_with_config(server_config).await?;
+        }
+        Commands::Data { data_command } => {
+            handle_data_command(data_command).await?;
+        }
+        Commands::Admin { port } => {
+            start_admin_only(port).await?;
+        }
+    }
+
+    Ok(())
 }

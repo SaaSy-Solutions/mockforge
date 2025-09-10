@@ -5,12 +5,14 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt"] }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+mockforge-core = { path = "../mockforge-core" }
 mockforge-http = { path = "../mockforge-http" }
 mockforge-ws = { path = "../mockforge-ws" }
 mockforge-grpc = { path = "../mockforge-grpc" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-openapiv3 = "2.2.0"
+mockforge-data = { path = "../mockforge-data" }
+mockforge-ui = { path = "../mockforge-ui" }
+serde = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,24 @@
+[package]
+name = "mockforge-core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared logic for MockForge - routing, validation, latency, proxy"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
+jsonschema = "0.18"
+openapiv3 = { workspace = true }
+axum = { workspace = true }

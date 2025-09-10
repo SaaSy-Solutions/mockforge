@@ -31,13 +31,13 @@ pub struct Overrides {
 }
 
 impl Overrides {
-    pub fn load_from_globs(patterns: &[&str]) -> anyhow::Result<Self> {
+    pub async fn load_from_globs(patterns: &[&str]) -> anyhow::Result<Self> {
         let mut rules = Vec::new();
         for pat in patterns {
             for entry in GlobWalkerBuilder::from_patterns(".", &[*pat]).build()? {
                 let path = entry?.path().to_path_buf();
                 if path.extension().map(|e| e == "yaml" || e == "yml").unwrap_or(false) {
-                    let text = std::fs::read_to_string(&path)?;
+                    let text = tokio::fs::read_to_string(&path).await?;
                     let mut file_rules: Vec<OverrideRule> = serde_yaml::from_str(&text)?;
                     for r in file_rules.iter_mut() {
                         for op in r.patch.iter_mut() {

@@ -1,16 +1,17 @@
 use axum::extract::ws::{Message, WebSocket};
 use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Router};
 use regex::Regex;
-use std::{fs, net::SocketAddr};
+use std::fs;
 use tracing::*;
 
-pub async fn start(port: u16) {
+pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new().route("/ws", get(ws_handler));
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+
+    // Use shared server utilities for consistent address creation
+    let addr = mockforge_core::wildcard_socket_addr(port);
     info!("WS listening on {}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
-        .await
-        .unwrap();
+    axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
+    Ok(())
 }
 
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {

@@ -3,14 +3,15 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 use tracing::*;
 
-pub async fn start(port: u16) {
-    let addr = format!("0.0.0.0:{}", port).parse().unwrap();
+pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Use shared server utilities for consistent address creation
+    let addr = mockforge_core::wildcard_socket_addr(port);
     info!("gRPC listening on {}", addr);
     Server::builder()
         .add_service(GreeterServer::new(GreeterSvc))
         .serve(addr)
-        .await
-        .unwrap();
+        .await?;
+    Ok(())
 }
 
 tonic::include_proto!("mockforge.greeter");

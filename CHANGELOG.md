@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial release of MockForge
 - HTTP API mocking with OpenAPI support
 - gRPC service mocking with Protocol Buffers
@@ -20,18 +21,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-commit hooks for code quality
 
 ### Changed
+
 - N/A
 
 ### Deprecated
+
 - N/A
 
 ### Removed
+
 - N/A
 
 ### Fixed
+
 - N/A
 
 ### Security
+
 - N/A
 
 ---
@@ -43,16 +49,19 @@ This project uses [cargo-release](https://github.com/crate-ci/cargo-release) for
 ### Creating a Release
 
 1. **Patch Release** (bug fixes):
+
    ```bash
    make release-patch
    ```
 
 2. **Minor Release** (new features):
+
    ```bash
    make release-minor
    ```
 
 3. **Major Release** (breaking changes):
+
    ```bash
    make release-major
    ```

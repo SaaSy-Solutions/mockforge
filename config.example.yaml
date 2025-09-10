@@ -1,0 +1,110 @@
+# MockForge Configuration Example
+# This file demonstrates all available configuration options
+
+# HTTP server configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+  openapi_spec: null  # Path to OpenAPI spec file
+  cors_enabled: true
+  request_timeout_secs: 30
+
+# WebSocket server configuration
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+  replay_file: null  # Path to WebSocket replay file
+  connection_timeout_secs: 300
+
+# gRPC server configuration
+grpc:
+  port: 50051
+  host: "0.0.0.0"
+  proto_dir: null  # Directory containing .proto files
+  tls: null  # TLS configuration (optional)
+
+# Admin UI configuration
+admin:
+  enabled: false
+  port: 8080
+  host: "127.0.0.1"
+  auth_required: false
+  username: null
+  password: null
+  # Optional: mount Admin UI under HTTP server instead of separate port
+  # When set (e.g., "/admin"), the Admin UI will be available at
+  #   http://<http-host>:<http-port><mount_path>/
+  # and APIs at
+  #   <mount_path>/__mockforge/*
+  mount_path: null
+  # Toggle Admin API endpoints under __mockforge
+  api_enabled: true
+
+# Core MockForge configuration
+core:
+  latency_enabled: true
+  failures_enabled: false
+  proxy:
+    upstream_url: "http://api.example.com"
+    timeout_seconds: 30
+  default_latency:
+    base_ms: 50
+    jitter_ms: 20
+    tag_overrides:
+      auth: 100
+      analytics: 200
+
+# Logging configuration
+logging:
+  level: "info"
+  json_format: false
+  file_path: null  # Optional log file path
+  max_file_size_mb: 10
+  max_files: 5
+
+# Data generation configuration
+data:
+  default_rows: 100
+  default_format: "json"
+  locale: "en"
+  templates: {}  # Custom faker templates
+  rag:
+    enabled: false
+    api_endpoint: null
+    api_key: null
+    model: null
+    context_window: 4000
+
+# Latency profiles (optional external file)
+# Can be loaded from a separate file: latency_profiles: "config/latency.yaml"
+# Example latency configuration:
+# operation:getUser:
+#   fixed_ms: 120
+#   jitter_ms: 80
+#   fail_p: 0.0
+#
+# tag:Payments:
+#   fixed_ms: 200
+#   jitter_ms: 300
+#   fail_p: 0.05
+#   fail_status: 503
+
+# Request/Response overrides (optional external file)
+# Can be loaded from a separate file: overrides: "config/overrides.yaml"
+# Example overrides configuration:
+# - targets: ["operation:getUser"]
+#   patch:
+#     - op: add
+#       path: /metadata/requestId
+#       value: "{{uuid}}"
+#     - op: replace
+#       path: /user/createdAt
+#       value: "{{now}}"
+#     - op: add
+#       path: /user/score
+#       value: "{{rand.float}}"
+# - targets: ["tag:Payments"]
+#   patch:
+#     - op: replace
+#       path: /payment/status
+#       value: "FAILED"
