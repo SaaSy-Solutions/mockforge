@@ -48,6 +48,8 @@ pub struct HttpConfig {
     pub validate_responses: bool,
     /// Per-route overrides: key "METHOD path" => mode (off/warn/enforce)
     pub validation_overrides: std::collections::HashMap<String, String>,
+    /// When embedding Admin UI under HTTP, skip validation for the mounted prefix
+    pub skip_admin_validation: bool,
 }
 
 impl Default for HttpConfig {
@@ -62,6 +64,7 @@ impl Default for HttpConfig {
             aggregate_validation_errors: true,
             validate_responses: false,
             validation_overrides: std::collections::HashMap::new(),
+            skip_admin_validation: true,
         }
     }
 }

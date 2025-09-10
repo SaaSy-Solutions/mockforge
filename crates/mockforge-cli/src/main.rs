@@ -263,12 +263,21 @@ async fn start_servers_with_config(
     let http_task = tokio::spawn(async move {
         if let Some(mount_path) = admin_mount_path {
             // Build base HTTP app and mount admin UI under the configured path
+            let mut overrides = std::collections::HashMap::new();
+            for (k, v) in &http_config.validation_overrides {
+                let mode = match v.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce};
+                overrides.insert(k.clone(), mode);
+            }
             let opts = Some(mockforge_core::openapi_routes::ValidationOptions {
-                request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION").unwrap_or_else(|_| "enforce".into()).as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled,"warn"=>mockforge_core::openapi_routes::ValidationMode::Warn,_=>mockforge_core::openapi_routes::ValidationMode::Enforce},
-                aggregate_errors: std::env::var("MOCKFORGE_AGGREGATE_ERRORS").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(true),
-                validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false),
-                overrides: std::collections::HashMap::new(),
+                request_mode: match http_config.request_validation.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce},
+                aggregate_errors: http_config.aggregate_validation_errors,
+                validate_responses: http_config.validate_responses,
+                overrides,
+                admin_skip_prefixes: if http_config.skip_admin_validation { vec![mount_path.clone(), "/__mockforge".into()] } else { vec![] },
             });
+            // Expose admin mount prefix to HTTP builder (used to set env for skip prefixes as well)
+            std::env::set_var("MOCKFORGE_ADMIN_MOUNT_PREFIX", &mount_path);
+
             let mut app = mockforge_http::build_router(http_config.openapi_spec, opts).await;
 
             // Compute server addresses for Admin state
@@ -290,8 +299,20 @@ async fn start_servers_with_config(
             if let Err(e) = mockforge_http::serve_router(http_port_for_addr, app).await {
                 error!("HTTP server error: {}", e);
             }
-        } else if let Err(e) =
-            mockforge_http::start(http_config.port, http_config.openapi_spec, None).await
+        } else if let Err(e) = {
+            let mut overrides = std::collections::HashMap::new();
+            for (k, v) in &http_config.validation_overrides {
+                let mode = match v.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce};
+                overrides.insert(k.clone(), mode);
+            }
+            let opts = Some(mockforge_core::openapi_routes::ValidationOptions {
+                request_mode: match http_config.request_validation.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce},
+                aggregate_errors: http_config.aggregate_validation_errors,
+                validate_responses: http_config.validate_responses,
+                overrides,
+                admin_skip_prefixes: if http_config.skip_admin_validation { vec!["/__mockforge".into()] } else { vec![] },
+            });
+            mockforge_http::start(http_config.port, http_config.openapi_spec, opts).await }
         {
             error!("HTTP server error: {}", e);
         }

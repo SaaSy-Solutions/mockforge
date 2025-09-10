@@ -33,11 +33,13 @@ pub struct ValidationOptions {
     pub aggregate_errors: bool,
     pub validate_responses: bool,
     pub overrides: std::collections::HashMap<String, ValidationMode>,
+    /// Skip validation for request paths starting with any of these prefixes
+    pub admin_skip_prefixes: Vec<String>,
 }
 
 impl Default for ValidationOptions {
     fn default() -> Self {
-        Self { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new() }
+        Self { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new(), admin_skip_prefixes: Vec::new() }
     }
 }
 
@@ -57,6 +59,7 @@ impl OpenApiRouteRegistry {
             aggregate_errors: std::env::var("MOCKFORGE_AGGREGATE_ERRORS").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(true),
             validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false),
             overrides: std::collections::HashMap::new(),
+            admin_skip_prefixes: Vec::new(),
         };
         Self { spec, routes, options }
     }
@@ -111,6 +114,7 @@ impl OpenApiRouteRegistry {
                 headers: HeaderMap,
                 body: axum::body::Bytes,
             | async move {
+                // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = Map::new();
                 for (k, v) in path_params {

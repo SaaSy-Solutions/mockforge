@@ -5,14 +5,14 @@ pub mod replay_listing;
 pub mod schema_diff;
 
 use axum::Router;
-use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
+use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec, ServerConfig};
 use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use axum::{routing::get, routing::post, Json};
 use serde::{Deserialize, Serialize};
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
-pub async fn build_router(spec_path: Option<String>, options: Option<ValidationOptions>) -> Router {
+pub async fn build_router(spec_path: Option<String>, mut options: Option<ValidationOptions>) -> Router {
     // Set up the basic router
     let mut app = Router::new();
 
@@ -21,6 +21,11 @@ pub async fn build_router(spec_path: Option<String>, options: Option<ValidationO
         match OpenApiSpec::from_file(&spec).await {
             Ok(openapi) => {
                 info!("Loaded OpenAPI spec from {}", spec);
+                // Add admin skip prefixes based on config via env (mount path) and internal admin API prefix
+                if let Some(ref mut opts) = options {
+                    if let Ok(pref) = std::env::var("MOCKFORGE_ADMIN_MOUNT_PREFIX") { if !pref.is_empty() { opts.admin_skip_prefixes.push(pref); } }
+                    opts.admin_skip_prefixes.push("/__mockforge".to_string());
+                }
                 let registry = if let Some(opts) = options {
                     OpenApiRouteRegistry::new_with_options(openapi, opts)
                 } else {

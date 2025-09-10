@@ -1031,7 +1031,7 @@ impl OpenApiSchema {
                 else if m.contains("oneOf") { "oneOf" }
                 else if m.contains("anyOf") { "anyOf" }
                 else { "validation" };
-            details.push(serde_json::json!({"path": path, "code": code, "message": m}));
+            details.push(serde_json::json!({"path": path, "code": code, "message": m, "value": value}));
         }
     }
 }
