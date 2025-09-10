@@ -8,7 +8,7 @@ use axum::{
     routing::{delete, get, head, options, patch, post, put},
     Json, Router,
 };
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::sync::Arc;
 
 /// OpenAPI route registry that manages generated routes
@@ -94,8 +94,20 @@ impl OpenApiRouteRegistry {
         self.routes.iter().filter(|route| route.path == path).collect()
     }
 
-    /// Validate request against OpenAPI spec
+    /// Validate request against OpenAPI spec (legacy body-only)
     pub fn validate_request(&self, path: &str, method: &str, body: Option<&Value>) -> Result<()> {
+        self.validate_request_with(path, method, &Map::new(), &Map::new(), body)
+    }
+
+    /// Validate request against OpenAPI spec with path/query params
+    pub fn validate_request_with(
+        &self,
+        path: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        body: Option<&Value>,
+    ) -> Result<()> {
         if let Some(route) = self.get_route(path, method) {
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
@@ -109,12 +121,29 @@ impl OpenApiRouteRegistry {
                 tracing::debug!("Body provided for operation without requestBody; accepting");
             }
 
-            // Validate path/query parameters if schema is available
-            // Note: this API doesn’t receive actual request params; we validate only required flags here.
+            // Validate path/query parameters
             for p in &route.operation.parameters {
-                if p.required && p.location == "path" {
-                    // For now, assume path templating enforces presence; leave as informational
-                    // Future: validate against extracted params map.
+                let (params_map, prefix) = match p.location.as_str() {
+                    "path" => (path_params, "path"),
+                    "query" => (query_params, "query"),
+                    _ => continue, // header/cookie skipped for now
+                };
+
+                match params_map.get(&p.name) {
+                    Some(v) => {
+                        if let Some(s) = &p.schema {
+                            s.validate_value(v, &format!("{}.{})", prefix, p.name))
+                                .map_err(|e| Error::validation(format!("{}", e)))?;
+                        }
+                    }
+                    None => {
+                        if p.required {
+                            return Err(Error::validation(format!(
+                                "missing required {} parameter '{}'",
+                                prefix, p.name
+                            )));
+                        }
+                    }
                 }
             }
 
