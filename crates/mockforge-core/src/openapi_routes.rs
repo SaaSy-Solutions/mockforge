@@ -247,6 +247,12 @@ impl OpenApiRouteRegistry {
         cookie_params: &Map<String, Value>,
         body: Option<&Value>,
     ) -> Result<()> {
+        // Skip validation for any configured admin prefixes
+        for pref in &self.options.admin_skip_prefixes {
+            if !pref.is_empty() && path.starts_with(pref) {
+                return Ok(());
+            }
+        }
         // Runtime env overrides
         let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| match v.to_ascii_lowercase().as_str() {"off"|"disable"|"disabled"=>ValidationMode::Disabled,"warn"|"warning"=>ValidationMode::Warn,_=>ValidationMode::Enforce});
         let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS").ok().map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(self.options.aggregate_errors);
@@ -796,6 +802,63 @@ mod tests {
         // invalid allOf: missing base
         let bad_allof = json!({"a": 1, "flag": true});
         assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_allof)).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_overrides_warn_mode_allows_invalid() {
+        // Spec with a POST route expecting an integer query param
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Overrides API", "version": "1.0.0" },
+            "paths": {"/things": {"post": {
+                "parameters": [{"name":"q","in":"query","required":true,"schema":{"type":"integer"}}],
+                "responses": {"200": {"description":"ok"}}
+            }}}
+        });
+
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let mut overrides = std::collections::HashMap::new();
+        overrides.insert("POST /things".to_string(), ValidationMode::Warn);
+        let registry = OpenApiRouteRegistry::new_with_options(spec, ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides,
+            admin_skip_prefixes: vec![],
+        });
+
+        // Invalid q (missing) should warn, not error
+        let ok = registry.validate_request_with("/things", "POST", &Map::new(), &Map::new(), None);
+        assert!(ok.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_admin_skip_prefix_short_circuit() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Skip API", "version": "1.0.0" },
+            "paths": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new_with_options(spec, ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: std::collections::HashMap::new(),
+            admin_skip_prefixes: vec!["/admin".into()],
+        });
+
+        // No route exists for this, but skip prefix means it is accepted
+        let res = registry.validate_request_with_all(
+            "/admin/__mockforge/health",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(res.is_ok());
     }
 
     #[test]

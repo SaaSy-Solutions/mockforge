@@ -363,3 +363,40 @@ Licensed under either of:
 - MIT License ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
+## Validation Modes
+
+You can control request/response validation via CLI, environment, or config.
+
+- Environment:
+  - `MOCKFORGE_REQUEST_VALIDATION=off|warn|enforce` (default: enforce)
+  - `MOCKFORGE_AGGREGATE_ERRORS=true|false` (default: true)
+  - `MOCKFORGE_RESPONSE_VALIDATION=true|false` (default: false)
+
+- CLI (serve):
+  - `--validation off|warn|enforce`
+  - `--aggregate-errors`
+  - `--validate-responses`
+
+- Config (config.yaml):
+
+```yaml
+http:
+  request_validation: "enforce"   # off|warn|enforce
+  aggregate_validation_errors: true
+  validate_responses: false
+  skip_admin_validation: true
+  validation_overrides:
+    "POST /users/{id}": "warn"
+    "GET /internal/health": "off"
+```
+
+When aggregation is enabled, 400 responses include both a flat `errors` list and a `details` array with structured items:
+
+```json
+{
+  "error": "request validation failed",
+  "details": [
+    { "path": "query.q", "code": "type", "message": "query.q: expected number, got \"abc\"", "value": "abc" }
+  ]
+}
+```
