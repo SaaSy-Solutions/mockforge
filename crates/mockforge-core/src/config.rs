@@ -1,13 +1,13 @@
 //! Configuration management for MockForge
 
-use crate::{Error, Result, Config as CoreConfig};
+use crate::{Config as CoreConfig, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
 
 /// Server configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServerConfig {
     /// HTTP server configuration
     pub http: HttpConfig,
@@ -242,11 +242,13 @@ impl Default for RagConfig {
 
 /// Load configuration from file
 pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
-    let content = fs::read_to_string(&path).await
+    let content = fs::read_to_string(&path)
+        .await
         .map_err(|e| Error::generic(format!("Failed to read config file: {}", e)))?;
 
     let config: ServerConfig = if path.as_ref().extension().and_then(|s| s.to_str()) == Some("yaml")
-                                || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml") {
+        || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml")
+    {
         serde_yaml::from_str(&content)
             .map_err(|e| Error::generic(format!("Failed to parse YAML config: {}", e)))?
     } else {
@@ -260,7 +262,8 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
 /// Save configuration to file
 pub async fn save_config<P: AsRef<Path>>(path: P, config: &ServerConfig) -> Result<()> {
     let content = if path.as_ref().extension().and_then(|s| s.to_str()) == Some("yaml")
-                  || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml") {
+        || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml")
+    {
         serde_yaml::to_string(config)
             .map_err(|e| Error::generic(format!("Failed to serialize config to YAML: {}", e)))?
     } else {
@@ -268,7 +271,8 @@ pub async fn save_config<P: AsRef<Path>>(path: P, config: &ServerConfig) -> Resu
             .map_err(|e| Error::generic(format!("Failed to serialize config to JSON: {}", e)))?
     };
 
-    fs::write(path, content).await
+    fs::write(path, content)
+        .await
         .map_err(|e| Error::generic(format!("Failed to write config file: {}", e)))?;
 
     Ok(())
@@ -282,7 +286,11 @@ pub async fn load_config_with_fallback<P: AsRef<Path>>(path: P) -> ServerConfig 
             config
         }
         Err(e) => {
-            tracing::warn!("Failed to load config from {:?}: {}. Using defaults.", path.as_ref(), e);
+            tracing::warn!(
+                "Failed to load config from {:?}: {}. Using defaults.",
+                path.as_ref(),
+                e
+            );
             ServerConfig::default()
         }
     }
@@ -369,7 +377,7 @@ pub fn validate_config(config: &ServerConfig) -> Result<()> {
     }
 
     // Check for port conflicts
-    let ports = vec![
+    let ports = [
         ("HTTP", config.http.port),
         ("WebSocket", config.websocket.port),
         ("gRPC", config.grpc.port),

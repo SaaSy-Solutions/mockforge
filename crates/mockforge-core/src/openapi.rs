@@ -26,11 +26,13 @@ pub struct OpenApiSpec {
 impl OpenApiSpec {
     /// Load OpenAPI spec from a file path
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(&path).await
+        let content = fs::read_to_string(&path)
+            .await
             .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec file: {}", e)))?;
 
         let spec: OpenAPI = if path.as_ref().extension().and_then(|s| s.to_str()) == Some("yaml")
-                           || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml") {
+            || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml")
+        {
             serde_yaml::from_str(&content)
                 .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?
         } else {
@@ -46,8 +48,9 @@ impl OpenApiSpec {
 
     /// Load OpenAPI spec from a JSON value
     pub fn from_json(value: Value) -> Result<Self> {
-        let spec: OpenAPI = serde_json::from_value(value)
-            .map_err(|e| Error::generic(format!("Failed to parse OpenAPI spec from JSON: {}", e)))?;
+        let spec: OpenAPI = serde_json::from_value(value).map_err(|e| {
+            Error::generic(format!("Failed to parse OpenAPI spec from JSON: {}", e))
+        })?;
 
         Ok(Self {
             spec,
@@ -99,14 +102,23 @@ impl OpenApiSpec {
 
     /// Get all paths with their operations
     pub fn all_paths_and_operations(&self) -> Vec<(String, Vec<(String, &Operation)>)> {
-        self.spec.paths.paths.iter()
+        self.spec
+            .paths
+            .paths
+            .iter()
             .map(|(path, _)| (path.clone(), self.operations_for_path(path)))
             .collect()
     }
 
     /// Get a schema by reference
     pub fn get_schema(&self, reference: &str) -> Option<&Schema> {
-        if let Some(schema_ref) = self.spec.components.as_ref()?.schemas.get(reference.trim_start_matches("#/components/schemas/")) {
+        if let Some(schema_ref) = self
+            .spec
+            .components
+            .as_ref()?
+            .schemas
+            .get(reference.trim_start_matches("#/components/schemas/"))
+        {
             match schema_ref {
                 ReferenceOr::Item(schema) => Some(schema),
                 ReferenceOr::Reference { .. } => None, // TODO: Handle references
@@ -124,7 +136,10 @@ impl OpenApiSpec {
         }
 
         if !self.spec.openapi.starts_with("3.") {
-            return Err(Error::generic(format!("Unsupported OpenAPI version: {}. Only 3.x is supported", self.spec.openapi)));
+            return Err(Error::generic(format!(
+                "Unsupported OpenAPI version: {}. Only 3.x is supported",
+                self.spec.openapi
+            )));
         }
 
         if self.spec.info.title.is_empty() {
@@ -182,12 +197,19 @@ impl OpenApiOperation {
             operation_id: operation.operation_id.clone(),
             summary: operation.summary.clone(),
             description: operation.description.clone(),
-            parameters: operation.parameters.iter()
-                .filter_map(|param| OpenApiParameter::from_parameter(param))
+            parameters: operation
+                .parameters
+                .iter()
+                .filter_map(OpenApiParameter::from_parameter)
                 .collect(),
-            request_body: operation.request_body.as_ref()
-                .and_then(|rb| OpenApiSchema::from_request_body(rb)),
-            responses: operation.responses.responses.iter()
+            request_body: operation
+                .request_body
+                .as_ref()
+                .and_then(OpenApiSchema::from_request_body),
+            responses: operation
+                .responses
+                .responses
+                .iter()
                 .filter_map(|(code, resp)| {
                     OpenApiResponse::from_response(resp).map(|r| (code.to_string(), r))
                 })
@@ -225,7 +247,7 @@ impl OpenApiParameter {
                     schema: None, // Simplified - could be extracted if available
                     description: param_data.description.clone(),
                 })
-            },
+            }
             ReferenceOr::Reference { .. } => None, // TODO: Handle references
         }
     }
@@ -277,10 +299,10 @@ impl OpenApiSchema {
             format: None, // Simplified - can be extended later
             description: schema.schema_data.description.clone(),
             properties: HashMap::new(), // Simplified - can be extended later
-            required: Vec::new(), // Simplified - can be extended later
-            items: None, // Simplified - can be extended later
-            enum_values: None, // Simplified - can be extended later
-            minimum: None, // Simplified - can be extended later
+            required: Vec::new(),       // Simplified - can be extended later
+            items: None,                // Simplified - can be extended later
+            enum_values: None,          // Simplified - can be extended later
+            minimum: None,              // Simplified - can be extended later
             maximum: None,
             min_length: None, // Simplified - can be extended later
             max_length: None,
@@ -292,10 +314,11 @@ impl OpenApiSchema {
         match request_body {
             ReferenceOr::Item(rb) => {
                 // Look for JSON content
-                rb.content.get("application/json")
+                rb.content
+                    .get("application/json")
                     .or_else(|| rb.content.get("*/*"))
                     .and_then(|media| media.schema.as_ref())
-                    .and_then(|schema| Self::from_schema(schema))
+                    .and_then(Self::from_schema)
             }
             ReferenceOr::Reference { .. } => None,
         }
@@ -353,10 +376,12 @@ impl OpenApiResponse {
     pub fn from_response(response_ref: &ReferenceOr<Response>) -> Option<Self> {
         match response_ref {
             ReferenceOr::Item(response) => {
-                let schema = response.content.get("application/json")
+                let schema = response
+                    .content
+                    .get("application/json")
                     .or_else(|| response.content.get("*/*"))
                     .and_then(|media| media.schema.as_ref())
-                    .and_then(|schema_ref| OpenApiSchema::from_schema(schema_ref));
+                    .and_then(OpenApiSchema::from_schema);
 
                 Some(Self {
                     description: response.description.clone(),
@@ -409,7 +434,8 @@ pub struct OpenApiRoute {
 impl OpenApiRoute {
     /// Create from OpenAPI operation
     pub fn from_operation(method: String, path: String, operation: &Operation) -> Self {
-        let operation_data = OpenApiOperation::from_operation(method.clone(), path.clone(), operation);
+        let operation_data =
+            OpenApiOperation::from_operation(method.clone(), path.clone(), operation);
         Self {
             method,
             path,
@@ -426,9 +452,13 @@ impl OpenApiRoute {
     /// Get mock response for this route
     pub fn mock_response(&self) -> Value {
         // Try to get the 200 response first, then any success response
-        if let Some(response) = self.operation.responses.get("200")
+        if let Some(response) = self
+            .operation
+            .responses
+            .get("200")
             .or_else(|| self.operation.responses.get("201"))
-            .or_else(|| self.operation.responses.get("default")) {
+            .or_else(|| self.operation.responses.get("default"))
+        {
             if let Some(schema) = &response.schema {
                 schema.generate_mock_value()
             } else {
@@ -500,33 +530,41 @@ mod tests {
             format: None,
             description: None,
             properties: vec![
-                ("id".to_string(), Box::new(OpenApiSchema {
-                    schema_type: Some("integer".to_string()),
-                    format: None,
-                    description: None,
-                    properties: HashMap::new(),
-                    required: Vec::new(),
-                    items: None,
-                    enum_values: None,
-                    minimum: None,
-                    maximum: None,
-                    min_length: None,
-                    max_length: None,
-                })),
-                ("name".to_string(), Box::new(OpenApiSchema {
-                    schema_type: Some("string".to_string()),
-                    format: None,
-                    description: None,
-                    properties: HashMap::new(),
-                    required: Vec::new(),
-                    items: None,
-                    enum_values: None,
-                    minimum: None,
-                    maximum: None,
-                    min_length: None,
-                    max_length: None,
-                })),
-            ].into_iter().collect(),
+                (
+                    "id".to_string(),
+                    Box::new(OpenApiSchema {
+                        schema_type: Some("integer".to_string()),
+                        format: None,
+                        description: None,
+                        properties: HashMap::new(),
+                        required: Vec::new(),
+                        items: None,
+                        enum_values: None,
+                        minimum: None,
+                        maximum: None,
+                        min_length: None,
+                        max_length: None,
+                    }),
+                ),
+                (
+                    "name".to_string(),
+                    Box::new(OpenApiSchema {
+                        schema_type: Some("string".to_string()),
+                        format: None,
+                        description: None,
+                        properties: HashMap::new(),
+                        required: Vec::new(),
+                        items: None,
+                        enum_values: None,
+                        minimum: None,
+                        maximum: None,
+                        min_length: None,
+                        max_length: None,
+                    }),
+                ),
+            ]
+            .into_iter()
+            .collect(),
             required: Vec::new(),
             items: None,
             enum_values: None,

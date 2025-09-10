@@ -19,7 +19,7 @@ pub struct LatencyProfile {
 impl Default for LatencyProfile {
     fn default() -> Self {
         Self {
-            base_ms: 50,  // 50ms base latency
+            base_ms: 50,   // 50ms base latency
             jitter_ms: 20, // ±20ms jitter
             tag_overrides: HashMap::new(),
         }
@@ -90,7 +90,7 @@ impl FaultConfig {
     /// Create a new fault configuration
     pub fn new(failure_rate: f64) -> Self {
         Self {
-            failure_rate: failure_rate.min(1.0).max(0.0),
+            failure_rate: failure_rate.clamp(0.0, 1.0),
             ..Default::default()
         }
     }
@@ -205,7 +205,10 @@ impl LatencyInjector {
     }
 
     /// Process a request with latency and potential fault injection
-    pub async fn process_request(&self, tags: &[String]) -> Result<Option<(u16, Option<serde_json::Value>)>> {
+    pub async fn process_request(
+        &self,
+        tags: &[String],
+    ) -> Result<Option<(u16, Option<serde_json::Value>)>> {
         if !self.enabled {
             return Ok(None);
         }

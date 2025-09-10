@@ -76,10 +76,7 @@ impl RouteRegistry {
 
     /// Add an HTTP route
     pub fn add_http_route(&mut self, route: Route) -> Result<()> {
-        self.http_routes
-            .entry(route.method.clone())
-            .or_insert_with(Vec::new)
-            .push(route);
+        self.http_routes.entry(route.method.clone()).or_default().push(route);
         Ok(())
     }
 
@@ -91,10 +88,7 @@ impl RouteRegistry {
 
     /// Add a gRPC route
     pub fn add_grpc_route(&mut self, service: String, route: Route) -> Result<()> {
-        self.grpc_routes
-            .entry(service)
-            .or_insert_with(Vec::new)
-            .push(route);
+        self.grpc_routes.entry(service).or_default().push(route);
         Ok(())
     }
 
@@ -103,10 +97,7 @@ impl RouteRegistry {
         self.http_routes
             .get(method)
             .map(|routes| {
-                routes
-                    .iter()
-                    .filter(|route| self.matches_path(&route.path, path))
-                    .collect()
+                routes.iter().filter(|route| self.matches_path(&route.path, path)).collect()
             })
             .unwrap_or_default()
     }
@@ -124,10 +115,7 @@ impl RouteRegistry {
         self.grpc_routes
             .get(service)
             .map(|routes| {
-                routes
-                    .iter()
-                    .filter(|route| self.matches_path(&route.path, method))
-                    .collect()
+                routes.iter().filter(|route| self.matches_path(&route.path, method)).collect()
             })
             .unwrap_or_default()
     }

@@ -111,3 +111,6 @@ htmlcov/
 mock_data/
 recordings/
 replays/
+
+# Local agent work directory
+.code/
