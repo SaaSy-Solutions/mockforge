@@ -256,8 +256,22 @@ impl OpenApiRouteRegistry {
         // Runtime env overrides
         let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| match v.to_ascii_lowercase().as_str() {"off"|"disable"|"disabled"=>ValidationMode::Disabled,"warn"|"warning"=>ValidationMode::Warn,_=>ValidationMode::Enforce});
         let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS").ok().map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(self.options.aggregate_errors);
+        // Per-route runtime overrides via JSON env var
+        let env_overrides: Option<serde_json::Map<String, serde_json::Value>> = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
+            .ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| v.as_object().cloned());
         // Response validation is handled in HTTP layer now
         let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
+        // Apply runtime overrides first if present
+        if let Some(map) = &env_overrides {
+            if let Some(v) = map.get(&format!("{} {}", method, path)) {
+                if let Some(m) = v.as_str() {
+                    effective_mode = match m { "off"=>ValidationMode::Disabled, "warn"=>ValidationMode::Warn, _=>ValidationMode::Enforce };
+                }
+            }
+        }
+        // Then static options overrides
         if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) { effective_mode = override_mode.clone(); }
         if matches!(effective_mode, ValidationMode::Disabled) { return Ok(()); }
         if let Some(route) = self.get_route(path, method) {

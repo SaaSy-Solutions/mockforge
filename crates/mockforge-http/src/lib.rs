@@ -78,18 +78,27 @@ struct ValidationSettings {
     mode: Option<String>,
     aggregate_errors: Option<bool>,
     validate_responses: Option<bool>,
+    overrides: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 async fn get_validation() -> Json<ValidationSettings> {
     let mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok();
     let aggregate_errors = std::env::var("MOCKFORGE_AGGREGATE_ERRORS").ok().map(|v| v=="1"||v.eq_ignore_ascii_case("true"));
     let validate_responses = std::env::var("MOCKFORGE_RESPONSE_VALIDATION").ok().map(|v| v=="1"||v.eq_ignore_ascii_case("true"));
-    Json(ValidationSettings { mode, aggregate_errors, validate_responses })
+    let overrides = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.as_object().cloned());
+    Json(ValidationSettings { mode, aggregate_errors, validate_responses, overrides })
 }
 
 async fn set_validation(Json(payload): Json<ValidationSettings>) -> Json<serde_json::Value> {
     if let Some(mode) = payload.mode { std::env::set_var("MOCKFORGE_REQUEST_VALIDATION", mode); }
     if let Some(agg) = payload.aggregate_errors { std::env::set_var("MOCKFORGE_AGGREGATE_ERRORS", if agg {"true"} else {"false"}); }
     if let Some(resp) = payload.validate_responses { std::env::set_var("MOCKFORGE_RESPONSE_VALIDATION", if resp {"true"} else {"false"}); }
+    if let Some(map) = payload.overrides {
+        let json = serde_json::Value::Object(map);
+        if let Ok(s) = serde_json::to_string(&json) { std::env::set_var("MOCKFORGE_VALIDATION_OVERRIDES_JSON", s); }
+    }
     Json(serde_json::json!({"status":"ok"}))
 }

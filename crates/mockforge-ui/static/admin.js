@@ -339,6 +339,10 @@ class MockForgeAdmin {
             document.getElementById('validation-mode').value = mode;
             document.getElementById('aggregate-errors').checked = !!data.aggregate_errors;
             document.getElementById('validate-responses').checked = !!data.validate_responses;
+            // Show overrides if present
+            if (data.overrides) {
+                this.renderOverrides(data.overrides);
+            }
         } catch (e) {
             console.warn('Failed to load validation settings');
         }
@@ -349,7 +353,8 @@ class MockForgeAdmin {
             const payload = {
                 mode: formData.get('mode'),
                 aggregate_errors: formData.has('aggregate_errors'),
-                validate_responses: formData.has('validate_responses')
+                validate_responses: formData.has('validate_responses'),
+                overrides: this.collectOverridesFromUI()
             };
             const response = await fetch(this.api('__mockforge/validation'), {
                 method: 'POST',
@@ -365,6 +370,74 @@ class MockForgeAdmin {
         } catch (e) {
             alert('Network error updating validation settings');
         }
+    }
+
+    renderOverrides(overrides) {
+        // Create simple list UI if not present
+        if (!document.getElementById('overrides-container')) {
+            const form = document.getElementById('validation-form');
+            const cont = document.createElement('div');
+            cont.id = 'overrides-container';
+            cont.className = 'form-group';
+            cont.innerHTML = `
+                <h4>Per-Route Overrides</h4>
+                <div id="overrides-list"></div>
+                <div style="display:flex; gap:.5rem; margin-top:.5rem;">
+                    <input id="ov-key" placeholder="METHOD /path" style="flex:2;"/>
+                    <select id="ov-mode" style="flex:1;">
+                        <option value="enforce">enforce</option>
+                        <option value="warn">warn</option>
+                        <option value="off">off</option>
+                    </select>
+                    <button id="ov-add" type="button" class="btn btn-secondary">Add/Update</button>
+                </div>
+            `;
+            form.appendChild(cont);
+            document.getElementById('ov-add').addEventListener('click', () => {
+                const key = document.getElementById('ov-key').value.trim();
+                const mode = document.getElementById('ov-mode').value;
+                if (!key) return;
+                const row = this.overrideRow(key, mode);
+                const list = document.getElementById('overrides-list');
+                const existing = list.querySelector(`[data-key="${key}"]`);
+                if (existing) existing.replaceWith(row); else list.appendChild(row);
+            });
+        }
+
+        const list = document.getElementById('overrides-list');
+        list.innerHTML = '';
+        Object.entries(overrides).forEach(([k, v]) => {
+            list.appendChild(this.overrideRow(k, v));
+        });
+    }
+
+    overrideRow(key, mode) {
+        const div = document.createElement('div');
+        div.dataset.key = key;
+        div.style = 'display:flex; gap:.5rem; align-items:center; margin-top:.25rem;';
+        div.innerHTML = `
+            <code style="flex:2;">${key}</code>
+            <select class="ov-mode" style="flex:1;">
+                <option value="enforce" ${mode==='enforce'?'selected':''}>enforce</option>
+                <option value="warn" ${mode==='warn'?'selected':''}>warn</option>
+                <option value="off" ${mode==='off'?'selected':''}>off</option>
+            </select>
+            <button type="button" class="btn btn-danger ov-del">Remove</button>
+        `;
+        div.querySelector('.ov-del').addEventListener('click', () => div.remove());
+        return div;
+    }
+
+    collectOverridesFromUI() {
+        const list = document.getElementById('overrides-list');
+        if (!list) return null;
+        const out = {};
+        list.querySelectorAll('[data-key]').forEach(row => {
+            const key = row.dataset.key;
+            const mode = row.querySelector('.ov-mode').value;
+            out[key] = mode;
+        });
+        return out;
     }
 
     async updateConfig(endpoint, data) {
