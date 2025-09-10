@@ -115,19 +115,16 @@ impl OpenApiSpec {
 
     /// Get a schema by reference
     pub fn get_schema(&self, reference: &str) -> Option<&Schema> {
-        if let Some(schema_ref) = self
+        let name = reference.trim_start_matches("#/components/schemas/");
+        let entry = self
             .spec
             .components
             .as_ref()?
             .schemas
-            .get(reference.trim_start_matches("#/components/schemas/"))
-        {
-            match schema_ref {
-                ReferenceOr::Item(schema) => Some(schema),
-                ReferenceOr::Reference { .. } => None, // TODO: Handle references
-            }
-        } else {
-            None
+            .get(name)?;
+        match entry {
+            ReferenceOr::Item(schema) => Some(schema),
+            ReferenceOr::Reference { reference } => self.get_schema(reference),
         }
     }
 
@@ -242,12 +239,27 @@ impl OpenApiParameter {
     pub fn from_parameter(param_ref: &ReferenceOr<Parameter>) -> Option<Self> {
         match param_ref {
             ReferenceOr::Item(param) => {
-                let param_data = param.parameter_data_ref();
+                let (param_data, location) = match param {
+                    Parameter::Query { parameter_data, .. } => (parameter_data, "query"),
+                    Parameter::Path { parameter_data, .. } => (parameter_data, "path"),
+                    Parameter::Header { parameter_data, .. } => (parameter_data, "header"),
+                    Parameter::Cookie { parameter_data, .. } => (parameter_data, "cookie"),
+                };
+
+                // Extract schema if present
+                let schema = match &param_data.format {
+                    ParameterSchemaOrContent::Schema(ref_or_schema) => match ref_or_schema {
+                        ReferenceOr::Item(schema) => OpenApiSchema::from_schema_data(schema),
+                        ReferenceOr::Reference { reference } => None, // TODO: resolve $ref into parameter schemas
+                    },
+                    ParameterSchemaOrContent::Content(_) => None,
+                };
+
                 Some(Self {
                     name: param_data.name.clone(),
-                    location: "query".to_string(), // Simplified - could be extracted from parameter type
+                    location: location.to_string(),
                     required: param_data.required,
-                    schema: None, // Simplified - could be extracted if available
+                    schema,
                     description: param_data.description.clone(),
                 })
             }

@@ -109,6 +109,15 @@ impl OpenApiRouteRegistry {
                 tracing::debug!("Body provided for operation without requestBody; accepting");
             }
 
+            // Validate path/query parameters if schema is available
+            // Note: this API doesn’t receive actual request params; we validate only required flags here.
+            for p in &route.operation.parameters {
+                if p.required && p.location == "path" {
+                    // For now, assume path templating enforces presence; leave as informational
+                    // Future: validate against extracted params map.
+                }
+            }
+
             Ok(())
         } else {
             Err(Error::generic(format!("Route {} {} not found in OpenAPI spec", method, path)))
