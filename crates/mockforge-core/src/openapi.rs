@@ -7,7 +7,7 @@
 //! - Mock response generation based on OpenAPI schemas
 
 use crate::{Error, Result};
-use openapiv3::{OpenAPI, Operation, Parameter, ReferenceOr, Response, Schema};
+use openapiv3::{OpenAPI, Operation, Parameter, ParameterSchemaOrContent, ReferenceOr, Response, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
