@@ -40,6 +40,11 @@ class MockForgeAdmin {
             this.updateProxy(new FormData(e.target));
         });
 
+        document.getElementById('validation-form')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.updateValidation(new FormData(e.target));
+        });
+
         // Fixtures controls
         document.getElementById('refresh-fixtures-btn')?.addEventListener('click', () => {
             this.loadFixtures();
@@ -155,6 +160,9 @@ class MockForgeAdmin {
                 break;
             case 'metrics':
                 this.loadMetrics();
+                break;
+            case 'config':
+                this.loadValidation();
                 break;
         }
     }
@@ -321,6 +329,42 @@ class MockForgeAdmin {
             enabled: formData.has('enabled'),
             upstream_url: formData.get('url')
         });
+    }
+
+    async loadValidation() {
+        try {
+            const response = await fetch(this.api('__mockforge/validation'));
+            const data = await response.json();
+            const mode = data.mode || 'enforce';
+            document.getElementById('validation-mode').value = mode;
+            document.getElementById('aggregate-errors').checked = !!data.aggregate_errors;
+            document.getElementById('validate-responses').checked = !!data.validate_responses;
+        } catch (e) {
+            console.warn('Failed to load validation settings');
+        }
+    }
+
+    async updateValidation(formData) {
+        try {
+            const payload = {
+                mode: formData.get('mode'),
+                aggregate_errors: formData.has('aggregate_errors'),
+                validate_responses: formData.has('validate_responses')
+            };
+            const response = await fetch(this.api('__mockforge/validation'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (result && result.status === 'ok') {
+                alert('Validation settings updated');
+            } else {
+                alert('Failed to update validation settings');
+            }
+        } catch (e) {
+            alert('Network error updating validation settings');
+        }
     }
 
     async updateConfig(endpoint, data) {

@@ -8,6 +8,14 @@ http:
   openapi_spec: null  # Path to OpenAPI spec file
   cors_enabled: true
   request_timeout_secs: 30
+  # Validation controls
+  request_validation: "enforce"   # off|warn|enforce
+  aggregate_validation_errors: true
+  validate_responses: false       # warn-only logging
+  skip_admin_validation: true     # don't validate admin endpoints under mount path
+  validation_overrides:
+    "POST /users/{id}": "warn"
+    "GET /internal/health": "off"
 
 # WebSocket server configuration
 websocket:
