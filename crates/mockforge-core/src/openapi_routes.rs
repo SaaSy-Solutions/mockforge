@@ -35,7 +35,7 @@ impl OpenApiRouteRegistry {
 
         for (path, operations) in spec.all_paths_and_operations() {
             for (method, operation) in operations {
-                routes.push(OpenApiRoute::from_operation(method, path.clone(), operation));
+                routes.push(OpenApiRoute::from_operation(method, path.clone(), operation, spec.as_ref()));
             }
         }
 
@@ -132,7 +132,7 @@ impl OpenApiRouteRegistry {
                 match params_map.get(&p.name) {
                     Some(v) => {
                         if let Some(s) = &p.schema {
-                            s.validate_value(v, &format!("{}.{})", prefix, p.name))
+                            s.validate_value(v, &format!("{}.{}", prefix, p.name))
                                 .map_err(|e| Error::validation(format!("{}", e)))?;
                         }
                     }
@@ -379,6 +379,63 @@ mod tests {
         // missing required path param
         let empty_path_params = serde_json::Map::new();
         assert!(registry.validate_request_with("/users/{id}", "POST", &empty_path_params, &query_params, Some(&body)).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_ref_resolution_for_params_and_body() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Ref API", "version": "1.0.0" },
+            "components": {
+                "schemas": {
+                    "EmailWebsite": {
+                        "type": "object",
+                        "required": ["email", "website"],
+                        "properties": {
+                            "email":   {"type": "string", "format": "email"},
+                            "website": {"type": "string", "format": "uri"}
+                        }
+                    }
+                },
+                "parameters": {
+                    "PathId": {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}},
+                    "QueryQ": {"name": "q",  "in": "query", "required": false, "schema": {"type": "integer"}}
+                },
+                "requestBodies": {
+                    "CreateUser": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/EmailWebsite"}
+                            }
+                        }
+                    }
+                }
+            },
+            "paths": {
+                "/users/{id}": {
+                    "post": {
+                        "parameters": [
+                            {"$ref": "#/components/parameters/PathId"},
+                            {"$ref": "#/components/parameters/QueryQ"}
+                        ],
+                        "requestBody": {"$ref": "#/components/requestBodies/CreateUser"},
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+        let mut path_params = serde_json::Map::new();
+        path_params.insert("id".to_string(), json!("abc"));
+        let mut query_params = serde_json::Map::new();
+        query_params.insert("q".to_string(), json!(7));
+
+        let body = json!({"email":"user@example.com","website":"https://example.com"});
+        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body)).is_ok());
+
+        let bad = json!({"email":"nope","website":"https://example.com"});
+        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad)).is_err());
     }
 
     #[test]

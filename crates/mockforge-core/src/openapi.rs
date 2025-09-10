@@ -137,6 +137,51 @@ impl OpenApiSpec {
         }
     }
 
+    /// Get a parameter by reference
+    pub fn get_parameter(&self, reference: &str) -> Option<&Parameter> {
+        let name = reference.trim_start_matches("#/components/parameters/");
+        let entry = self
+            .spec
+            .components
+            .as_ref()?
+            .parameters
+            .get(name)?;
+        match entry {
+            ReferenceOr::Item(param) => Some(param),
+            ReferenceOr::Reference { reference } => self.get_parameter(reference),
+        }
+    }
+
+    /// Get a request body by reference
+    pub fn get_request_body(&self, reference: &str) -> Option<&openapiv3::RequestBody> {
+        let name = reference.trim_start_matches("#/components/requestBodies/");
+        let entry = self
+            .spec
+            .components
+            .as_ref()?
+            .request_bodies
+            .get(name)?;
+        match entry {
+            ReferenceOr::Item(rb) => Some(rb),
+            ReferenceOr::Reference { reference } => self.get_request_body(reference),
+        }
+    }
+
+    /// Get a response by reference
+    pub fn get_response(&self, reference: &str) -> Option<&Response> {
+        let name = reference.trim_start_matches("#/components/responses/");
+        let entry = self
+            .spec
+            .components
+            .as_ref()?
+            .responses
+            .get(name)?;
+        match entry {
+            ReferenceOr::Item(resp) => Some(resp),
+            ReferenceOr::Reference { reference } => self.get_response(reference),
+        }
+    }
+
     /// Validate that this is a valid OpenAPI 3.0 spec
     pub fn validate(&self) -> Result<()> {
         // Basic validation - check required fields
@@ -199,7 +244,7 @@ pub struct OpenApiOperation {
 
 impl OpenApiOperation {
     /// Create from OpenAPI operation
-    pub fn from_operation(method: String, path: String, operation: &Operation) -> Self {
+    pub fn from_operation(method: String, path: String, operation: &Operation, spec: &OpenApiSpec) -> Self {
         Self {
             method,
             path,
@@ -209,18 +254,18 @@ impl OpenApiOperation {
             parameters: operation
                 .parameters
                 .iter()
-                .filter_map(OpenApiParameter::from_parameter)
+                .filter_map(|p| OpenApiParameter::from_parameter(p, spec))
                 .collect(),
             request_body: operation
                 .request_body
                 .as_ref()
-                .and_then(OpenApiSchema::from_request_body),
+                .and_then(|rb| OpenApiSchema::from_request_body(rb, spec)),
             responses: operation
                 .responses
                 .responses
                 .iter()
                 .filter_map(|(code, resp)| {
-                    OpenApiResponse::from_response(resp).map(|r| (code.to_string(), r))
+                    OpenApiResponse::from_response(resp, spec).map(|r| (code.to_string(), r))
                 })
                 .collect(),
             security: vec![], // TODO: Implement security requirement parsing
@@ -245,7 +290,7 @@ pub struct OpenApiParameter {
 
 impl OpenApiParameter {
     /// Create from OpenAPI parameter
-    pub fn from_parameter(param_ref: &ReferenceOr<Parameter>) -> Option<Self> {
+    pub fn from_parameter(param_ref: &ReferenceOr<Parameter>, spec: &OpenApiSpec) -> Option<Self> {
         match param_ref {
             ReferenceOr::Item(param) => {
                 let (param_data, location) = match param {
@@ -258,8 +303,10 @@ impl OpenApiParameter {
                 // Extract schema if present
                 let schema = match &param_data.format {
                     ParameterSchemaOrContent::Schema(ref_or_schema) => match ref_or_schema {
-                        ReferenceOr::Item(schema) => OpenApiSchema::from_schema_data(schema),
-                        ReferenceOr::Reference { reference } => None, // TODO: resolve $ref into parameter schemas
+                        ReferenceOr::Item(schema) => OpenApiSchema::from_schema_data(schema, spec),
+                        ReferenceOr::Reference { reference } => spec
+                            .get_schema(reference)
+                            .and_then(|s| OpenApiSchema::from_schema_data(s, spec)),
                     },
                     ParameterSchemaOrContent::Content(_) => None,
                 };
@@ -272,7 +319,9 @@ impl OpenApiParameter {
                     description: param_data.description.clone(),
                 })
             }
-            ReferenceOr::Reference { .. } => None, // TODO: Handle references
+            ReferenceOr::Reference { reference } => spec
+                .get_parameter(reference)
+                .and_then(|p| OpenApiParameter::from_parameter(&ReferenceOr::Item(p.clone()), spec)),
         }
     }
 }
@@ -306,15 +355,17 @@ pub struct OpenApiSchema {
 
 impl OpenApiSchema {
     /// Create from OpenAPI schema
-    pub fn from_schema(schema_ref: &ReferenceOr<Schema>) -> Option<Self> {
+    pub fn from_schema(schema_ref: &ReferenceOr<Schema>, spec: &OpenApiSpec) -> Option<Self> {
         match schema_ref {
-            ReferenceOr::Item(schema) => Self::from_schema_data(schema),
-            ReferenceOr::Reference { .. } => None, // TODO: Handle references
+            ReferenceOr::Item(schema) => Self::from_schema_data(schema, spec),
+            ReferenceOr::Reference { reference } => spec
+                .get_schema(reference)
+                .and_then(|s| Self::from_schema_data(s, spec)),
         }
     }
 
     /// Create from OpenAPI schema data
-    pub fn from_schema_data(schema: &Schema) -> Option<Self> {
+    pub fn from_schema_data(schema: &Schema, spec: &OpenApiSpec) -> Option<Self> {
         let mut out = Self {
             schema_type: None,
             format: None,
@@ -391,12 +442,16 @@ impl OpenApiSchema {
                     if let Some(items) = &at.items {
                         match items {
                             ReferenceOr::Item(b) => {
-                                if let Some(mapped) = Self::from_schema_data(b) {
+                                if let Some(mapped) = Self::from_schema_data(b, spec) {
                                     out.items = Some(Box::new(mapped));
                                 }
                             }
-                            ReferenceOr::Reference { .. } => {
-                                // TODO: resolve $ref
+                            ReferenceOr::Reference { reference } => {
+                                if let Some(resolved) = spec.get_schema(reference) {
+                                    if let Some(mapped) = Self::from_schema_data(resolved, spec) {
+                                        out.items = Some(Box::new(mapped));
+                                    }
+                                }
                             }
                         }
                     }
@@ -407,12 +462,16 @@ impl OpenApiSchema {
                     for (name, prop_schema) in &ot.properties {
                         match prop_schema {
                             ReferenceOr::Item(b) => {
-                                if let Some(mapped) = Self::from_schema_data(b) {
+                                if let Some(mapped) = Self::from_schema_data(b, spec) {
                                     out.properties.insert(name.clone(), Box::new(mapped));
                                 }
                             }
-                            ReferenceOr::Reference { .. } => {
-                                // TODO: resolve $ref
+                            ReferenceOr::Reference { reference } => {
+                                if let Some(resolved) = spec.get_schema(reference) {
+                                    if let Some(mapped) = Self::from_schema_data(resolved, spec) {
+                                        out.properties.insert(name.clone(), Box::new(mapped));
+                                    }
+                                }
                             }
                         }
                     }
@@ -427,17 +486,24 @@ impl OpenApiSchema {
     }
 
     /// Create from request body
-    pub fn from_request_body(request_body: &ReferenceOr<openapiv3::RequestBody>) -> Option<Self> {
+    pub fn from_request_body(request_body: &ReferenceOr<openapiv3::RequestBody>, spec: &OpenApiSpec) -> Option<Self> {
         match request_body {
             ReferenceOr::Item(rb) => {
-                // Look for JSON content
                 rb.content
                     .get("application/json")
                     .or_else(|| rb.content.get("*/*"))
                     .and_then(|media| media.schema.as_ref())
-                    .and_then(Self::from_schema)
+                    .and_then(|s| Self::from_schema(s, spec))
             }
-            ReferenceOr::Reference { .. } => None,
+            ReferenceOr::Reference { reference } => spec
+                .get_request_body(reference)
+                .and_then(|rb| {
+                    rb.content
+                        .get("application/json")
+                        .or_else(|| rb.content.get("*/*"))
+                        .and_then(|media| media.schema.as_ref())
+                        .and_then(|s| Self::from_schema(s, spec))
+                }),
         }
     }
 
@@ -628,7 +694,7 @@ pub struct OpenApiResponse {
 
 impl OpenApiResponse {
     /// Create from OpenAPI response
-    pub fn from_response(response_ref: &ReferenceOr<Response>) -> Option<Self> {
+    pub fn from_response(response_ref: &ReferenceOr<Response>, spec: &OpenApiSpec) -> Option<Self> {
         match response_ref {
             ReferenceOr::Item(response) => {
                 let schema = response
@@ -636,14 +702,22 @@ impl OpenApiResponse {
                     .get("application/json")
                     .or_else(|| response.content.get("*/*"))
                     .and_then(|media| media.schema.as_ref())
-                    .and_then(OpenApiSchema::from_schema);
+                    .and_then(|s| OpenApiSchema::from_schema(s, spec));
 
                 Some(Self {
                     description: response.description.clone(),
                     schema,
                 })
             }
-            ReferenceOr::Reference { .. } => None,
+            ReferenceOr::Reference { reference } => spec.get_response(reference).and_then(|r| {
+                let schema = r
+                    .content
+                    .get("application/json")
+                    .or_else(|| r.content.get("*/*"))
+                    .and_then(|media| media.schema.as_ref())
+                    .and_then(|s| OpenApiSchema::from_schema(s, spec));
+                Some(Self { description: r.description.clone(), schema })
+            }),
         }
     }
 }
@@ -688,9 +762,9 @@ pub struct OpenApiRoute {
 
 impl OpenApiRoute {
     /// Create from OpenAPI operation
-    pub fn from_operation(method: String, path: String, operation: &Operation) -> Self {
+    pub fn from_operation(method: String, path: String, operation: &Operation, spec: &OpenApiSpec) -> Self {
         let operation_data =
-            OpenApiOperation::from_operation(method.clone(), path.clone(), operation);
+            OpenApiOperation::from_operation(method.clone(), path.clone(), operation, spec);
         Self {
             method,
             path,
