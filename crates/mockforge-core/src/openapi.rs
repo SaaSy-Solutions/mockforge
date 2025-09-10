@@ -15,7 +15,16 @@ use std::path::Path;
 use tokio::fs;
 use uuid::Uuid;
 use chrono::{NaiveDate, DateTime};
+use url::Url;
+use regex::Regex;
+use once_cell::sync::Lazy;
 use openapiv3::{SchemaKind, Type, StringFormat, VariantOrUnknownOrEmpty};
+
+// Simple email regex for practical validation (not full RFC 5322)
+// Accepts forms like local@domain.tld and rejects obvious invalids
+static EMAIL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("valid email regex")
+});
 
 /// OpenAPI specification loader and parser
 #[derive(Debug, Clone)]
@@ -502,13 +511,29 @@ impl OpenApiSchema {
                         )));
                     }
                 }
-                if let Some(fmt) = &self.format {
-                    match fmt.as_str() {
-                        "uuid" => {
-                            Uuid::parse_str(s).map_err(|_| {
-                                Error::validation(format!("{}: invalid uuid format", path))
-                            })?;
-                        }
+                        if let Some(fmt) = &self.format {
+                            match fmt.as_str() {
+                                "email" => {
+                                    if !EMAIL_RE.is_match(s) {
+                                        return Err(Error::validation(format!(
+                                            "{}: invalid email format",
+                                            path
+                                        )));
+                                    }
+                                }
+                                "uri" => {
+                                    Url::parse(s).map_err(|_| {
+                                        Error::validation(format!(
+                                            "{}: invalid uri format",
+                                            path
+                                        ))
+                                    })?;
+                                }
+                                "uuid" => {
+                                    Uuid::parse_str(s).map_err(|_| {
+                                        Error::validation(format!("{}: invalid uuid format", path))
+                                    })?;
+                                }
                         "date-time" => {
                             DateTime::parse_from_rfc3339(s).map_err(|_| {
                                 Error::validation(format!("{}: invalid date-time format", path))
