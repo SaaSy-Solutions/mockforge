@@ -25,19 +25,7 @@ pub struct ServerConfig {
     pub data: DataConfig,
 }
 
-impl Default for ServerConfig {
-    fn default() -> Self {
-        Self {
-            http: HttpConfig::default(),
-            websocket: WebSocketConfig::default(),
-            grpc: GrpcConfig::default(),
-            admin: AdminConfig::default(),
-            core: CoreConfig::default(),
-            logging: LoggingConfig::default(),
-            data: DataConfig::default(),
-        }
-    }
-}
+// Default is derived for ServerConfig
 
 /// HTTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
