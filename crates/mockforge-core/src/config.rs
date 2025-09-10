@@ -40,6 +40,14 @@ pub struct HttpConfig {
     pub cors_enabled: bool,
     /// Request timeout in seconds
     pub request_timeout_secs: u64,
+    /// Request validation mode: off, warn, enforce
+    pub request_validation: String,
+    /// Aggregate validation errors into JSON array
+    pub aggregate_validation_errors: bool,
+    /// Validate responses (warn-only logging)
+    pub validate_responses: bool,
+    /// Per-route overrides: key "METHOD path" => mode (off/warn/enforce)
+    pub validation_overrides: std::collections::HashMap<String, String>,
 }
 
 impl Default for HttpConfig {
@@ -50,6 +58,10 @@ impl Default for HttpConfig {
             openapi_spec: None,
             cors_enabled: true,
             request_timeout_secs: 30,
+            request_validation: "enforce".to_string(),
+            aggregate_validation_errors: true,
+            validate_responses: false,
+            validation_overrides: std::collections::HashMap::new(),
         }
     }
 }

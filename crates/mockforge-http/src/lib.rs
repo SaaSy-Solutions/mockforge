@@ -5,18 +5,25 @@ pub mod replay_listing;
 pub mod schema_diff;
 
 use axum::Router;
+use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
+use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
-pub async fn build_router(spec_path: Option<String>) -> Router {
+pub async fn build_router(spec_path: Option<String>, options: Option<ValidationOptions>) -> Router {
     // Set up the basic router
     let mut app = Router::new();
 
     // If an OpenAPI spec is provided, integrate it
     if let Some(spec) = spec_path {
-        match mockforge_core::create_registry_from_file(&spec).await {
-            Ok(registry) => {
+        match OpenApiSpec::from_file(&spec).await {
+            Ok(openapi) => {
                 info!("Loaded OpenAPI spec from {}", spec);
+                let registry = if let Some(opts) = options {
+                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                } else {
+                    OpenApiRouteRegistry::new_with_env(openapi)
+                };
                 app = registry.build_router();
             }
             Err(e) => {
@@ -51,7 +58,8 @@ pub async fn serve_router(
 pub async fn start(
     port: u16,
     spec_path: Option<String>,
+    options: Option<ValidationOptions>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = build_router(spec_path).await;
+    let app = build_router(spec_path, options).await;
     serve_router(port, app).await
 }

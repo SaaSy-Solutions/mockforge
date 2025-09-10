@@ -1016,6 +1016,24 @@ impl OpenApiSchema {
             _ => {}
         }
     }
+
+    pub fn validate_collect_detailed(&self, value: &Value, path: &str, details: &mut Vec<serde_json::Value>) {
+        // Use validate_collect to get semantics, but also push structured codes
+        let mut msgs = Vec::new();
+        self.validate_collect(value, path, &mut msgs);
+        for m in msgs {
+            let code = if m.contains("minLength") { "minLength" }
+                else if m.contains("maxLength") { "maxLength" }
+                else if m.contains("invalid ") { "format" }
+                else if m.contains("expected string") || m.contains("expected number") || m.contains("expected object") || m.contains("expected array") || m.contains("expected boolean") { "type" }
+                else if m.contains("missing required") { "required" }
+                else if m.contains("additional property") { "additionalProperties" }
+                else if m.contains("oneOf") { "oneOf" }
+                else if m.contains("anyOf") { "anyOf" }
+                else { "validation" };
+            details.push(serde_json::json!({"path": path, "code": code, "message": m}));
+        }
+    }
 }
 
 /// OpenAPI response information
