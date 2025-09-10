@@ -1,0 +1,51 @@
+[book]
+title = "MockForge Documentation"
+author = "MockForge Contributors"
+description = "A comprehensive mocking framework for APIs, gRPC, and WebSockets"
+language = "en"
+
+[build]
+build-dir = "book"
+create-missing = true
+
+[output.html]
+git-repository-url = "https://github.com/SaaSy-Solutions/mockforge"
+edit-url-template = "https://github.com/SaaSy-Solutions/mockforge/edit/main/{path}"
+additional-css = ["custom.css"]
+additional-js = ["custom.js"]
+fold.enable = true
+fold.level = 1
+curly-quotes = true
+mathjax-support = false
+
+[output.html.search]
+enable = true
+limit-results = 20
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 2
+boost-paragraph = 1
+expand = true
+heading-split-level = 2
+
+[output.html.playground]
+editable = true
+copy-js = true
+line-numbers = true
+
+[output.linkcheck]
+follow-web-links = false
+exclude = [".*github\\.com.*"]
+cache-timeout = 3600
+
+[preprocessor.toc]
+command = "mdbook-toc"
+renderer = ["html"]
+
+[preprocessor.links]
+command = "mdbook-linkcheck"
+renderer = ["html"]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+renderer = ["html"]

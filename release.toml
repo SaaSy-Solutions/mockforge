@@ -1,0 +1,62 @@
+# cargo-release configuration
+# See: https://github.com/crate-ci/cargo-release
+
+[package]
+# Publish to crates.io
+publish = true
+# Don't verify that the version doesn't already exist
+no-verify = false
+# Allow dirty working directory
+allow-dirty = false
+# Generate changelog
+generate-changelog = true
+# Pre-release commit message
+pre-release-commit-message = "chore: release {{version}}"
+# Tag message
+tag-message = "Release {{version}}"
+# Don't push to remote
+push = false
+# Don't create GitHub release
+# (we handle this in GitHub Actions)
+create-release = false
+
+[[package.metadata.release.pre-release-replacements]]
+file = "README.md"
+search = "mockforge-cli = \".*\""
+replace = "mockforge-cli = \"{{version}}\""
+exactly = 1
+
+[[package.metadata.release.pre-release-replacements]]
+file = "book/src/README.md"
+search = "mockforge-cli = \".*\""
+replace = "mockforge-cli = \"{{version}}\""
+exactly = 1
+
+# Workspace member configuration
+[workspace.metadata.release]
+# Release members in order
+release = true
+# Shared changelog
+shared-version = true
+# Consolidated commit
+consolidated-commit = true
+# Publish order (dependencies first)
+publish-order = [
+    "mockforge-ws",
+    "mockforge-http",
+    "mockforge-grpc",
+    "mockforge-cli"
+]
+
+# Individual crate configurations
+[workspace.metadata.release.mockforge-ws]
+release = true
+
+[workspace.metadata.release.mockforge-http]
+release = true
+
+[workspace.metadata.release.mockforge-grpc]
+release = true
+
+[workspace.metadata.release.mockforge-cli]
+release = true

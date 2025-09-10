@@ -6,4 +6,3 @@
       "/ping": { "get": { "operationId": "ping", "responses": { "200": { "description": "ok" } } } }
     }
   }
-  

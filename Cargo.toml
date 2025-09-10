@@ -6,3 +6,36 @@ members = [
   "crates/mockforge-grpc"
 ]
 resolver = "2"
+
+# Workspace-wide package metadata
+[workspace.package]
+edition = "2021"
+authors = ["SaaSy Solutions LLC <talksaas@saasysolutionsllc.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://github.com/SaaSy-Solutions/mockforge"
+documentation = "https://docs.rs/mockforge"
+readme = "README.md"
+keywords = ["mock", "api", "testing", "grpc", "websocket"]
+categories = ["development-tools", "api-bindings", "web-programming"]
+
+# Workspace-wide linting configuration
+[workspace.lints.rust]
+# Deny these lints
+unsafe_code = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+# Enable pedantic lints for high code quality
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
+
+# Development dependencies for documentation and tooling
+[workspace.dependencies]
+mdbook = "0.4"
+cargo-release = "0.25"
+cargo-audit = "0.18"
+cargo-llvm-cov = "0.6"

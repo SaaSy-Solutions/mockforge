@@ -1,0 +1,111 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us understand and reproduce the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: MockForge version (run `mockforge --version`)
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: Rust Version
+      description: Rust version (run `rustc --version`)
+      placeholder: rustc 1.70.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: Your operating system and version
+      placeholder: Ubuntu 22.04, macOS 13.0, Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any additional context, configuration files, or error messages
+      placeholder: |
+        Add any other context about the problem here.
+
+        **Configuration files:**
+        - mockforge.toml
+        - OpenAPI spec
+        - gRPC proto files
+
+        **Error messages:**
+        ```
+        Paste error output here
+        ```
+
+        **Environment:**
+        - Docker version
+        - Node.js version (if applicable)
+        - Other relevant tools
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please verify these items
+      options:
+        - label: I have searched existing issues for duplicates
+          required: true
+        - label: I have included all relevant configuration files
+          required: false
+        - label: I have included complete error messages
+          required: false
+        - label: I am using the latest version of MockForge
+          required: true

@@ -1,0 +1,29 @@
+# Rust formatting configuration
+# See: https://rust-lang.github.io/rustfmt/
+
+# Maximum width of each line
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use spaces instead of tabs
+hard_tabs = false
+
+# Put each parameter on its own line if the function call is too long
+fn_call_width = 80
+
+# Chain one-liners
+chain_width = 80
+
+# Use field initialization shorthand if possible
+use_field_init_shorthand = true
+
+# Use try! instead of ? early return
+use_try_shorthand = true
+
+# Reorder imports
+reorder_imports = true
+
+# Reorder modules
+reorder_modules = true

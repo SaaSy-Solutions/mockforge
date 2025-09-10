@@ -1,0 +1,110 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Your ideas help make MockForge better for everyone.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What's the problem you're trying to solve?
+      placeholder: |
+        I'm always frustrated when...
+        The current implementation doesn't support...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your proposed solution
+      placeholder: |
+        I think MockForge should...
+        This would allow users to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative solutions?
+      placeholder: |
+        I've also considered...
+        Another approach would be...
+    validations:
+      required: false
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: How would this feature be used?
+      placeholder: |
+        In my project, I need to...
+        This would help with...
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Ideas
+      description: Any ideas about how this could be implemented?
+      placeholder: |
+        This could be implemented by...
+        The API could look like...
+        Configuration might include...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Feature Scope
+      description: Which areas would this feature affect?
+      options:
+        - label: HTTP mocking functionality
+        - label: gRPC mocking functionality
+        - label: WebSocket mocking functionality
+        - label: CLI interface
+        - label: Admin UI
+        - label: Configuration system
+        - label: Documentation
+        - label: Build/CI process
+        - label: Other (please specify in description)
+
+  - type: checkboxes
+    id: breaking-change
+    attributes:
+      label: Breaking Change
+      description: Would this be a breaking change?
+      options:
+        - label: This is a breaking change
+        - label: This is not a breaking change
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any additional context or examples
+      placeholder: |
+        Screenshots, mockups, or examples from similar tools would be helpful.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please verify these items
+      options:
+        - label: I have searched existing issues for similar requests
+          required: true
+        - label: This feature aligns with MockForge's goals
+          required: true
+        - label: I am willing to contribute to the implementation
+          required: false

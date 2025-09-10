@@ -1,12 +1,12 @@
 //! JSON schema diff utilities for 422 responses.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 #[derive(Debug, Clone)]
 pub struct FieldError {
     pub path: String,
     pub expected: String,
     pub found: String,
-    pub message: Option<String>
+    pub message: Option<String>,
 }
 
 pub fn diff(expected_schema: &Value, actual: &Value) -> Vec<FieldError> {
@@ -23,14 +23,17 @@ fn walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<FieldError>)
                 if let Some(av) = ao.get(k) {
                     walk(ev, av, &np, out);
                 } else {
-                    out.push(FieldError{
-                        path: np, expected: type_of(ev), found: "missing".into(), message: Some("required".into())
+                    out.push(FieldError {
+                        path: np,
+                        expected: type_of(ev),
+                        found: "missing".into(),
+                        message: Some("required".into()),
                     });
                 }
             }
         }
         (Value::Array(ea), Value::Array(aa)) => {
-            if let Some(esample) = ea.get(0) {
+            if let Some(esample) = ea.first() {
                 for (i, av) in aa.iter().enumerate() {
                     let np = format!("{}/{}", path, i);
                     walk(esample, av, &np, out);
@@ -41,7 +44,12 @@ fn walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<FieldError>)
             let et = type_of(e);
             let at = type_of(a);
             if et != at {
-                out.push(FieldError{ path: path.into(), expected: et, found: at, message: None });
+                out.push(FieldError {
+                    path: path.into(),
+                    expected: et,
+                    found: at,
+                    message: None,
+                });
             }
         }
     }

@@ -1,14 +1,16 @@
-use axum::{Router, routing::get, extract::WebSocketUpgrade, response::IntoResponse};
 use axum::extract::ws::{Message, WebSocket};
-use tracing::*;
+use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Router};
 use regex::Regex;
-use std::{net::SocketAddr, fs};
+use std::{fs, net::SocketAddr};
+use tracing::*;
 
 pub async fn start(port: u16) {
     let app = Router::new().route("/ws", get(ws_handler));
-    let addr = SocketAddr::from(([0,0,0,0], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("WS listening on {}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app).await.unwrap();
+    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
+        .await
+        .unwrap();
 }
 
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
@@ -21,17 +23,21 @@ async fn run_ws(mut socket: WebSocket) {
         if let Ok(text) = fs::read_to_string(&path) {
             let mut pending: Option<Regex> = None;
             for line in text.lines() {
-                if line.trim().is_empty() { continue; }
+                if line.trim().is_empty() {
+                    continue;
+                }
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
                     if v.get("dir").and_then(|x| x.as_str()) == Some("out") {
                         if let Some(w) = v.get("waitFor").and_then(|x| x.as_str()) {
-                            if let Ok(re) = Regex::new(w) { pending = Some(re); }
+                            if let Ok(re) = Regex::new(w) {
+                                pending = Some(re);
+                            }
                         }
                         if let Some(re) = &pending {
-                            loop {
-                                if let Some(Ok(Message::Text(inmsg))) = socket.recv().await {
-                                    if re.is_match(&inmsg) { break; }
-                                } else { break; }
+                            while let Some(Ok(Message::Text(inmsg))) = socket.recv().await {
+                                if re.is_match(&inmsg) {
+                                    break;
+                                }
                             }
                             pending = None;
                         }
@@ -48,7 +54,9 @@ async fn run_ws(mut socket: WebSocket) {
     // Echo mode
     while let Some(Ok(msg)) = socket.recv().await {
         match msg {
-            Message::Text(t) => { let _ = socket.send(Message::Text(format!("echo: {}", t).into())).await; }
+            Message::Text(t) => {
+                let _ = socket.send(Message::Text(format!("echo: {}", t).into())).await;
+            }
             Message::Close(_) => break,
             _ => {}
         }

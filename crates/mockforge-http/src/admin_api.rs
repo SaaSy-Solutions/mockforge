@@ -1,7 +1,7 @@
 //! Admin API (Axum): /__admin/api/state and /__admin/api/replay
-use axum::{routing::get, Router, extract::State, Json};
-use serde_json::{json, Value};
 use crate::replay_listing;
+use axum::{extract::State, routing::get, Json, Router};
+use serde_json::{json, Value};
 
 #[derive(Clone)]
 pub struct AppState {

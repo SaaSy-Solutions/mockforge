@@ -1,0 +1,25 @@
+# Clippy configuration for MockForge
+# See: https://doc.rust-lang.org/clippy/
+
+# Documentation settings
+missing-docs-in-crate-items = true
+
+# Code quality thresholds
+type-complexity-threshold = 250
+cognitive-complexity-threshold = 25
+too-many-arguments-threshold = 7
+too-many-lines-threshold = 100
+
+# Size thresholds for performance warnings
+large-error-threshold = 200
+stack-size-threshold = 1048576  # 1MB
+vec-box-size-threshold = 1048576  # 1MB
+
+# Allow common patterns in tests
+allow-dbg-in-tests = true
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-print-in-tests = true
+
+# Naming conventions
+single-char-binding-names-threshold = 3
