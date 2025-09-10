@@ -122,24 +122,22 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         },
     ];
 
-    let recent_logs = vec![
-        RequestLog {
-            id: "req_123".to_string(),
-            timestamp: chrono::Utc::now() - chrono::Duration::minutes(2),
-            method: "GET".to_string(),
-            path: "/api/users/123".to_string(),
-            status_code: 200,
-            response_time_ms: 45,
-            client_ip: Some("127.0.0.1".to_string()),
-            user_agent: Some("Mozilla/5.0".to_string()),
-            headers: HashMap::from([
-                ("accept".to_string(), "application/json".to_string()),
-                ("authorization".to_string(), "Bearer token123".to_string()),
-            ]),
-            response_size_bytes: 1024,
-            error_message: None,
-        },
-    ];
+    let recent_logs = vec![RequestLog {
+        id: "req_123".to_string(),
+        timestamp: chrono::Utc::now() - chrono::Duration::minutes(2),
+        method: "GET".to_string(),
+        path: "/api/users/123".to_string(),
+        status_code: 200,
+        response_time_ms: 45,
+        client_ip: Some("127.0.0.1".to_string()),
+        user_agent: Some("Mozilla/5.0".to_string()),
+        headers: HashMap::from([
+            ("accept".to_string(), "application/json".to_string()),
+            ("authorization".to_string(), "Bearer token123".to_string()),
+        ]),
+        response_size_bytes: 1024,
+        error_message: None,
+    }];
 
     let dashboard = DashboardData {
         system: system_info,
@@ -174,10 +172,12 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
 
 /// Get health check status
 pub async fn get_health() -> Json<HealthCheck> {
-    Json(HealthCheck::healthy()
-        .with_service("http".to_string(), "healthy".to_string())
-        .with_service("websocket".to_string(), "healthy".to_string())
-        .with_service("grpc".to_string(), "healthy".to_string()))
+    Json(
+        HealthCheck::healthy()
+            .with_service("http".to_string(), "healthy".to_string())
+            .with_service("websocket".to_string(), "healthy".to_string())
+            .with_service("grpc".to_string(), "healthy".to_string()),
+    )
 }
 
 /// Get request logs with optional filtering
@@ -266,9 +266,7 @@ pub async fn get_metrics() -> Json<ApiResponse<MetricsData>> {
 }
 
 /// Update latency profile
-pub async fn update_latency(
-    Json(update): Json<ConfigUpdate>,
-) -> Json<ApiResponse<String>> {
+pub async fn update_latency(Json(update): Json<ConfigUpdate>) -> Json<ApiResponse<String>> {
     if update.config_type != "latency" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
@@ -280,9 +278,7 @@ pub async fn update_latency(
 }
 
 /// Update fault injection configuration
-pub async fn update_faults(
-    Json(update): Json<ConfigUpdate>,
-) -> Json<ApiResponse<String>> {
+pub async fn update_faults(Json(update): Json<ConfigUpdate>) -> Json<ApiResponse<String>> {
     if update.config_type != "faults" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
@@ -294,9 +290,7 @@ pub async fn update_faults(
 }
 
 /// Update proxy configuration
-pub async fn update_proxy(
-    Json(update): Json<ConfigUpdate>,
-) -> Json<ApiResponse<String>> {
+pub async fn update_proxy(Json(update): Json<ConfigUpdate>) -> Json<ApiResponse<String>> {
     if update.config_type != "proxy" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
@@ -373,7 +367,7 @@ pub async fn get_fixtures() -> Json<ApiResponse<Vec<serde_json::Value>>> {
             "saved_at": "2024-01-15T11:00:00Z",
             "path": "/ws",
             "method": "WS"
-        })
+        }),
     ];
 
     Json(ApiResponse::success(fixtures))

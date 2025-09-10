@@ -1,10 +1,6 @@
 //! Data generator implementation
 
-use crate::{
-    faker::EnhancedFaker,
-    schema::SchemaDefinition,
-    DataConfig, GenerationResult,
-};
+use crate::{faker::EnhancedFaker, schema::SchemaDefinition, DataConfig, GenerationResult};
 use mockforge_core::Result;
 use std::time::Instant;
 
@@ -63,10 +59,8 @@ impl DataGenerator {
         let start_time = Instant::now();
 
         // Create a map of related schemas for lookup
-        let schema_map: std::collections::HashMap<String, &SchemaDefinition> = related_schemas
-            .iter()
-            .map(|s| (s.name.clone(), s))
-            .collect();
+        let schema_map: std::collections::HashMap<String, &SchemaDefinition> =
+            related_schemas.iter().map(|s| (s.name.clone(), s)).collect();
 
         let mut data = Vec::with_capacity(self.config.rows);
 
@@ -149,10 +143,7 @@ impl BatchGenerator {
             generators.push(generator);
         }
 
-        Ok(Self {
-            generators,
-            config,
-        })
+        Ok(Self { generators, config })
     }
 
     /// Generate data for all schemas
@@ -170,10 +161,8 @@ impl BatchGenerator {
     /// Generate data with cross-schema relationships
     pub async fn generate_with_relationships(&mut self) -> Result<Vec<GenerationResult>> {
         let mut results = Vec::new();
-        let schemas: Vec<SchemaDefinition> = self.generators
-            .iter()
-            .map(|g| g.schema().clone())
-            .collect();
+        let schemas: Vec<SchemaDefinition> =
+            self.generators.iter().map(|g| g.schema().clone()).collect();
 
         for generator in &mut self.generators {
             let result = generator.generate_with_relationships(&schemas).await?;
@@ -203,10 +192,8 @@ pub mod utils {
         let mut schema = SchemaDefinition::new(schema_name.to_string());
 
         for (field_name, field_type) in fields {
-            let field = crate::schema::FieldDefinition::new(
-                field_name.to_string(),
-                field_type.to_string(),
-            );
+            let field =
+                crate::schema::FieldDefinition::new(field_name.to_string(), field_type.to_string());
             schema = schema.with_field(field);
         }
 
@@ -244,7 +231,10 @@ pub mod utils {
     }
 
     /// Generate orders with user relationships
-    pub async fn generate_orders_with_users(order_count: usize, user_count: usize) -> Result<Vec<GenerationResult>> {
+    pub async fn generate_orders_with_users(
+        order_count: usize,
+        user_count: usize,
+    ) -> Result<Vec<GenerationResult>> {
         let user_schema = crate::schema::templates::user_schema();
         let order_schema = crate::schema::templates::order_schema();
 
@@ -253,10 +243,7 @@ pub mod utils {
             ..Default::default()
         };
 
-        let mut batch_generator = BatchGenerator::new(
-            vec![user_schema, order_schema],
-            config,
-        )?;
+        let mut batch_generator = BatchGenerator::new(vec![user_schema, order_schema], config)?;
 
         // Update the order generator to generate the right number of rows
         if let Some(order_generator) = batch_generator.generators.get_mut(1) {

@@ -118,7 +118,8 @@ impl HttpProxy {
         }
 
         // Build the upstream URL
-        let mut upstream_url = format!("{}{}", self.config.upstream_url.trim_end_matches('/'), path);
+        let mut upstream_url =
+            format!("{}{}", self.config.upstream_url.trim_end_matches('/'), path);
         if let Some(query) = query {
             upstream_url.push('?');
             upstream_url.push_str(query);
@@ -172,13 +173,9 @@ impl HttpProxy {
             .map_err(|e| Error::proxy(format!("Failed to serialize JSON: {}", e)))?;
 
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            "application/json".parse().unwrap(),
-        );
+        headers.insert(reqwest::header::CONTENT_TYPE, "application/json".parse().unwrap());
 
-        self.proxy_request("POST", path, None, &headers, Some(&body))
-            .await
+        self.proxy_request("POST", path, None, &headers, Some(&body)).await
     }
 
     /// Update proxy configuration

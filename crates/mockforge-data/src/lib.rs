@@ -2,17 +2,17 @@
 //!
 //! Synthetic data generation engine with faker primitives and RAG (Retrieval-Augmented Generation).
 
+pub mod dataset;
 pub mod faker;
 pub mod generator;
-pub mod schema;
 pub mod rag;
-pub mod dataset;
+pub mod schema;
 
+pub use dataset::Dataset;
 pub use fake::Faker;
 pub use generator::DataGenerator;
-pub use schema::{FieldDefinition, SchemaDefinition};
 pub use rag::RagEngine;
-pub use dataset::Dataset;
+pub use schema::{FieldDefinition, SchemaDefinition};
 
 /// Data generation configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -92,10 +92,8 @@ impl GenerationResult {
 
     /// Get data as JSON Lines string
     pub fn to_jsonl_string(&self) -> Result<String, serde_json::Error> {
-        let lines: Result<Vec<String>, _> = self.data
-            .iter()
-            .map(|value| serde_json::to_string(value))
-            .collect();
+        let lines: Result<Vec<String>, _> =
+            self.data.iter().map(|value| serde_json::to_string(value)).collect();
         lines.map(|lines| lines.join("\n"))
     }
 }

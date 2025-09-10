@@ -3,8 +3,11 @@
 //! This module provides functionality to automatically generate Axum routes
 //! from OpenAPI specifications, including mock response generation and validation.
 
-use crate::{Error, Result, OpenApiSpec, OpenApiRoute, OpenApiOperation};
-use axum::{Router, routing::{get, post, put, delete, patch, head, options}, Json};
+use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result};
+use axum::{
+    routing::{delete, get, head, options, patch, post, put},
+    Json, Router,
+};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -23,10 +26,7 @@ impl OpenApiRouteRegistry {
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
 
-        Self {
-            spec,
-            routes,
-        }
+        Self { spec, routes }
     }
 
     /// Generate routes from the OpenAPI specification
@@ -62,9 +62,7 @@ impl OpenApiRouteRegistry {
             let response = route.mock_response();
 
             // Create a simple handler that returns the mock response
-            let handler = move || async move {
-                Json(response.clone())
-            };
+            let handler = move || async move { Json(response.clone()) };
 
             // Register the handler based on HTTP method
             router = match route.method.as_str() {
@@ -81,25 +79,19 @@ impl OpenApiRouteRegistry {
 
         // Add OpenAPI documentation endpoint
         let spec_json = serde_json::to_value(&self.spec.spec).unwrap_or(Value::Null);
-        router = router.route("/openapi.json", get(move || async move {
-            Json(spec_json)
-        }));
+        router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
 
         router
     }
 
-
     /// Get route by path and method
     pub fn get_route(&self, path: &str, method: &str) -> Option<&OpenApiRoute> {
-        self.routes.iter()
-            .find(|route| route.path == path && route.method == method)
+        self.routes.iter().find(|route| route.path == path && route.method == method)
     }
 
     /// Get all routes for a specific path
     pub fn get_routes_for_path(&self, path: &str) -> Vec<&OpenApiRoute> {
-        self.routes.iter()
-            .filter(|route| route.path == path)
-            .collect()
+        self.routes.iter().filter(|route| route.path == path).collect()
     }
 
     /// Validate request against OpenAPI spec
@@ -127,9 +119,7 @@ impl OpenApiRouteRegistry {
 
     /// Get all paths defined in the spec
     pub fn paths(&self) -> Vec<String> {
-        let mut paths: Vec<String> = self.routes.iter()
-            .map(|route| route.path.clone())
-            .collect();
+        let mut paths: Vec<String> = self.routes.iter().map(|route| route.path.clone()).collect();
         paths.sort();
         paths.dedup();
         paths
@@ -137,9 +127,8 @@ impl OpenApiRouteRegistry {
 
     /// Get all HTTP methods supported
     pub fn methods(&self) -> Vec<String> {
-        let mut methods: Vec<String> = self.routes.iter()
-            .map(|route| route.method.clone())
-            .collect();
+        let mut methods: Vec<String> =
+            self.routes.iter().map(|route| route.method.clone()).collect();
         methods.sort();
         methods.dedup();
         methods
@@ -158,7 +147,9 @@ impl OpenApiRouteRegistry {
 }
 
 /// Helper function to create an OpenAPI route registry from a file
-pub async fn create_registry_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<OpenApiRouteRegistry> {
+pub async fn create_registry_from_file<P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<OpenApiRouteRegistry> {
     let spec = OpenApiSpec::from_file(path).await?;
     spec.validate()?;
     Ok(OpenApiRouteRegistry::new(spec))
@@ -302,6 +293,9 @@ mod tests {
     fn test_path_conversion() {
         assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users"), "/users");
         assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users/{id}"), "/users/:id");
-        assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users/{id}/posts/{postId}"), "/users/:id/posts/:postId");
+        assert_eq!(
+            OpenApiRouteRegistry::convert_path_to_axum("/users/{id}/posts/{postId}"),
+            "/users/:id/posts/:postId"
+        );
     }
 }

@@ -83,7 +83,9 @@ pub trait ServerStarter {
     fn port(&self) -> u16;
 
     /// Start the server (implementation-specific)
-    fn start_server(self) -> impl std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send;
+    fn start_server(
+        self,
+    ) -> impl std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send;
 }
 
 /// Helper function to start any server that implements ServerStarter
@@ -154,9 +156,7 @@ pub mod errors {
     }
 
     /// Create a standard JSON success response
-    pub fn json_success<T: serde::Serialize>(
-        data: T,
-    ) -> (StatusCode, Json<serde_json::Value>) {
+    pub fn json_success<T: serde::Serialize>(data: T) -> (StatusCode, Json<serde_json::Value>) {
         let success_response = json!({
             "success": true,
             "data": data,

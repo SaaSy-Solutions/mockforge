@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
-use mockforge_core::{ServerConfig, load_config_with_fallback, apply_env_overrides};
-use mockforge_data::{schema::templates, DataConfig, DataGenerator, dataset::DatasetMetadata};
+use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
+use mockforge_data::{dataset::DatasetMetadata, schema::templates, DataConfig, DataGenerator};
 use tracing::*;
 
 #[derive(Parser, Debug)]
@@ -113,9 +113,17 @@ enum TemplateType {
     Order,
 }
 
-async fn handle_data_command(command: DataCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_data_command(
+    command: DataCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
-        DataCommands::Template { template, rows, format, output, rag } => {
+        DataCommands::Template {
+            template,
+            rows,
+            format,
+            output,
+            rag,
+        } => {
             let schema = match template {
                 TemplateType::User => templates::user_schema(),
                 TemplateType::Product => templates::product_schema(),
@@ -158,7 +166,12 @@ async fn handle_data_command(command: DataCommands) -> Result<(), Box<dyn std::e
                 }
             }
         }
-        DataCommands::Schema { schema: schema_path, rows, format, output } => {
+        DataCommands::Schema {
+            schema: schema_path,
+            rows,
+            format,
+            output,
+        } => {
             let schema_content = tokio::fs::read_to_string(&schema_path).await?;
             let schema_value: serde_json::Value = serde_json::from_str(&schema_content)?;
 
@@ -177,7 +190,7 @@ async fn handle_data_command(command: DataCommands) -> Result<(), Box<dyn std::e
                     );
                     let dataset = mockforge_data::Dataset::new(metadata, result.data);
                     dataset.to_csv_string()?
-                },
+                }
                 _ => {
                     eprintln!("Unsupported format: {}. Supported: json, jsonl, csv", format);
                     std::process::exit(1);
@@ -186,7 +199,11 @@ async fn handle_data_command(command: DataCommands) -> Result<(), Box<dyn std::e
 
             handle_output(&output_content, &output).await?;
         }
-        DataCommands::OpenApi { spec: spec_path, rows, output } => {
+        DataCommands::OpenApi {
+            spec: spec_path,
+            rows,
+            output,
+        } => {
             let spec_content = tokio::fs::read_to_string(&spec_path).await?;
             let spec_value: serde_json::Value = serde_json::from_str(&spec_content)?;
 
@@ -200,7 +217,10 @@ async fn handle_data_command(command: DataCommands) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-async fn handle_output(content: &str, output_path: &Option<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_output(
+    content: &str,
+    output_path: &Option<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match output_path {
         Some(path) => {
             tokio::fs::write(path, content).await?;
@@ -237,17 +257,27 @@ async fn start_servers_with_config(
             let mut app = mockforge_http::build_router(http_config.openapi_spec).await;
 
             // Compute server addresses for Admin state
-            let http_addr: std::net::SocketAddr = format!("127.0.0.1:{}", http_port_for_addr).parse().unwrap();
-            let ws_addr: std::net::SocketAddr = format!("127.0.0.1:{}", ws_port_for_addr).parse().unwrap();
-            let grpc_addr: std::net::SocketAddr = format!("127.0.0.1:{}", grpc_port_for_addr).parse().unwrap();
+            let http_addr: std::net::SocketAddr =
+                format!("127.0.0.1:{}", http_port_for_addr).parse().unwrap();
+            let ws_addr: std::net::SocketAddr =
+                format!("127.0.0.1:{}", ws_port_for_addr).parse().unwrap();
+            let grpc_addr: std::net::SocketAddr =
+                format!("127.0.0.1:{}", grpc_port_for_addr).parse().unwrap();
 
-            let admin_router = mockforge_ui::create_admin_router(Some(http_addr), Some(ws_addr), Some(grpc_addr), admin_api_enabled);
+            let admin_router = mockforge_ui::create_admin_router(
+                Some(http_addr),
+                Some(ws_addr),
+                Some(grpc_addr),
+                admin_api_enabled,
+            );
             app = app.nest(mount_path.as_str(), admin_router);
 
             if let Err(e) = mockforge_http::serve_router(http_port_for_addr, app).await {
                 error!("HTTP server error: {}", e);
             }
-        } else if let Err(e) = mockforge_http::start(http_config.port, http_config.openapi_spec).await {
+        } else if let Err(e) =
+            mockforge_http::start(http_config.port, http_config.openapi_spec).await
+        {
             error!("HTTP server error: {}", e);
         }
     });
@@ -286,7 +316,9 @@ async fn start_servers_with_config(
                 Some(ws_addr),
                 Some(grpc_addr),
                 admin_config.api_enabled,
-            ).await {
+            )
+            .await
+            {
                 error!("Admin UI server error: {}", e);
             }
         });
@@ -329,7 +361,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Serve { spec, config, http_port, ws_port, grpc_port, admin, admin_port, admin_embed, admin_mount_path, admin_standalone, disable_admin_api } => {
+        Commands::Serve {
+            spec,
+            config,
+            http_port,
+            ws_port,
+            grpc_port,
+            admin,
+            admin_port,
+            admin_embed,
+            admin_mount_path,
+            admin_standalone,
+            disable_admin_api,
+        } => {
             // Load configuration
             let mut server_config = if let Some(config_path) = config {
                 load_config_with_fallback(&config_path).await
@@ -346,11 +390,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             server_config.grpc.port = grpc_port;
             server_config.admin.enabled = admin;
             server_config.admin.port = admin_port;
-            if disable_admin_api { server_config.admin.api_enabled = false; }
-            if admin_embed || admin_mount_path.is_some() {
-                server_config.admin.mount_path = Some(admin_mount_path.unwrap_or_else(|| "/admin".to_string()));
+            if disable_admin_api {
+                server_config.admin.api_enabled = false;
             }
-            if admin_standalone { server_config.admin.mount_path = None; }
+            if admin_embed || admin_mount_path.is_some() {
+                server_config.admin.mount_path =
+                    Some(admin_mount_path.unwrap_or_else(|| "/admin".to_string()));
+            }
+            if admin_standalone {
+                server_config.admin.mount_path = None;
+            }
 
             // Apply environment variable overrides
             let server_config = apply_env_overrides(server_config);

@@ -27,14 +27,20 @@ pub async fn build_router(spec_path: Option<String>) -> Router {
     }
 
     // Add basic health check endpoint if not already provided by OpenAPI spec
-    app.route("/health", axum::routing::get(|| async {
-        use mockforge_core::server_utils::health::HealthStatus;
-        axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
-    }))
+    app.route(
+        "/health",
+        axum::routing::get(|| async {
+            use mockforge_core::server_utils::health::HealthStatus;
+            axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
+        }),
+    )
 }
 
 /// Serve a provided router on the given port.
-pub async fn serve_router(port: u16, app: Router) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn serve_router(
+    port: u16,
+    app: Router,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("HTTP listening on {}", addr);
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
@@ -42,7 +48,10 @@ pub async fn serve_router(port: u16, app: Router) -> Result<(), Box<dyn std::err
 }
 
 /// Backwards-compatible start that builds + serves the base router.
-pub async fn start(port: u16, spec_path: Option<String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn start(
+    port: u16,
+    spec_path: Option<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = build_router(spec_path).await;
     serve_router(port, app).await
 }

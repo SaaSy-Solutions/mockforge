@@ -1,6 +1,5 @@
 //! Error types for MockForge Core
 
-
 /// Result type alias for MockForge operations
 pub type Result<T> = std::result::Result<T, Error>;
 

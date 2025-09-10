@@ -2,13 +2,13 @@
 //!
 //! Web-based admin interface for managing mock servers.
 
-pub mod routes;
 pub mod handlers;
+pub mod routes;
 // Templates module removed; static assets in `static/` are the single source of truth
 pub mod models;
 
+pub use models::{RequestLog, RouteInfo, ServerStatus, SystemInfo};
 pub use routes::create_admin_router;
-pub use models::{ServerStatus, RouteInfo, RequestLog, SystemInfo};
 
 use std::net::SocketAddr;
 

@@ -71,7 +71,11 @@ impl RagEngine {
     }
 
     /// Add a document to the knowledge base
-    pub fn add_document(&mut self, content: String, metadata: HashMap<String, Value>) -> Result<String> {
+    pub fn add_document(
+        &mut self,
+        content: String,
+        metadata: HashMap<String, Value>,
+    ) -> Result<String> {
         let id = format!("chunk_{}", self.chunks.len());
         let chunk = DocumentChunk {
             id: id.clone(),
@@ -95,8 +99,10 @@ impl RagEngine {
         }
 
         for field in &schema.fields {
-            let mut field_info = format!("Field '{}': type={}, required={}",
-                field.name, field.field_type, field.required);
+            let mut field_info = format!(
+                "Field '{}': type={}, required={}",
+                field.name, field.field_type, field.required
+            );
 
             if let Some(description) = &field.description {
                 field_info.push_str(&format!(" - {}", description));
@@ -106,11 +112,9 @@ impl RagEngine {
         }
 
         for (rel_name, relationship) in &schema.relationships {
-            schema_info.push(format!("Relationship '{}': {} -> {} ({:?})",
-                rel_name,
-                schema.name,
-                relationship.target_schema,
-                relationship.relationship_type
+            schema_info.push(format!(
+                "Relationship '{}': {} -> {} ({:?})",
+                rel_name, schema.name, relationship.target_schema, relationship.relationship_type
             ));
         }
 
@@ -142,8 +146,13 @@ impl RagEngine {
     }
 
     /// Build a generation prompt with retrieved context
-    fn build_generation_prompt(&self, schema: &SchemaDefinition, _row_index: usize) -> Result<String> {
-        let mut prompt = format!("Generate a single row of data for the '{}' schema.\n\n", schema.name);
+    fn build_generation_prompt(
+        &self,
+        schema: &SchemaDefinition,
+        _row_index: usize,
+    ) -> Result<String> {
+        let mut prompt =
+            format!("Generate a single row of data for the '{}' schema.\n\n", schema.name);
 
         // Add schema information
         if let Some(schema_info) = self.schema_kb.get(&schema.name) {
@@ -183,14 +192,14 @@ impl RagEngine {
         self.chunks
             .iter()
             .filter(|chunk| {
-                chunk.content.to_lowercase().contains(&query.to_lowercase()) ||
-                chunk.metadata.values().any(|v| {
-                    if let Some(s) = v.as_str() {
-                        s.to_lowercase().contains(&query.to_lowercase())
-                    } else {
-                        false
-                    }
-                })
+                chunk.content.to_lowercase().contains(&query.to_lowercase())
+                    || chunk.metadata.values().any(|v| {
+                        if let Some(s) = v.as_str() {
+                            s.to_lowercase().contains(&query.to_lowercase())
+                        } else {
+                            false
+                        }
+                    })
             })
             .take(limit)
             .collect()
@@ -227,10 +236,16 @@ impl RagEngine {
                         let json_str = &response[start..=end];
                         match serde_json::from_str(json_str) {
                             Ok(value) => Ok(value),
-                            Err(_) => Err(mockforge_core::Error::generic(format!("Failed to parse LLM response: {}", e))),
+                            Err(_) => Err(mockforge_core::Error::generic(format!(
+                                "Failed to parse LLM response: {}",
+                                e
+                            ))),
                         }
                     } else {
-                        Err(mockforge_core::Error::generic(format!("No closing brace found in response: {}", e)))
+                        Err(mockforge_core::Error::generic(format!(
+                            "No closing brace found in response: {}",
+                            e
+                        )))
                     }
                 } else {
                     Err(mockforge_core::Error::generic(format!("No JSON found in response: {}", e)))

@@ -34,7 +34,12 @@ pub struct DatasetMetadata {
 
 impl DatasetMetadata {
     /// Create new metadata
-    pub fn new(name: String, schema_name: String, result: &GenerationResult, config: DataConfig) -> Self {
+    pub fn new(
+        name: String,
+        schema_name: String,
+        result: &GenerationResult,
+        config: DataConfig,
+    ) -> Self {
         Self {
             name,
             description: None,
@@ -96,15 +101,21 @@ impl Dataset {
 
     /// Get dataset as JSON string
     pub fn to_json_string(&self) -> Result<String> {
-        serde_json::to_string_pretty(&self.data)
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to serialize dataset: {}", e)))
+        serde_json::to_string_pretty(&self.data).map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to serialize dataset: {}", e))
+        })
     }
 
     /// Get dataset as JSON Lines string
     pub fn to_jsonl_string(&self) -> Result<String> {
-        let lines: Result<Vec<String>> = self.data
+        let lines: Result<Vec<String>> = self
+            .data
             .iter()
-            .map(|value| serde_json::to_string(value).map_err(|e| mockforge_core::Error::generic(format!("JSON serialization error: {}", e))))
+            .map(|value| {
+                serde_json::to_string(value).map_err(|e| {
+                    mockforge_core::Error::generic(format!("JSON serialization error: {}", e))
+                })
+            })
             .collect();
 
         lines.map(|lines| lines.join("\n"))
@@ -148,8 +159,9 @@ impl Dataset {
 
     /// Get dataset as YAML string
     pub fn to_yaml_string(&self) -> Result<String> {
-        serde_yaml::to_string(&self.data)
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to serialize dataset: {}", e)))
+        serde_yaml::to_string(&self.data).map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to serialize dataset: {}", e))
+        })
     }
 
     /// Save dataset to file
@@ -161,14 +173,16 @@ impl Dataset {
             OutputFormat::Yaml => self.to_yaml_string()?,
         };
 
-        fs::write(path, content).await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to write dataset file: {}", e)))
+        fs::write(path, content).await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to write dataset file: {}", e))
+        })
     }
 
     /// Load dataset from file
     pub async fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(path).await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to read dataset file: {}", e)))?;
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to read dataset file: {}", e))
+        })?;
 
         // Try to parse as JSON array first
         if let Ok(data) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
@@ -207,11 +221,8 @@ impl Dataset {
     where
         F: Fn(&serde_json::Value) -> bool,
     {
-        let filtered_data: Vec<serde_json::Value> = self.data
-            .iter()
-            .filter(|row| predicate(row))
-            .cloned()
-            .collect();
+        let filtered_data: Vec<serde_json::Value> =
+            self.data.iter().filter(|row| predicate(row)).cloned().collect();
 
         let mut metadata = self.metadata.clone();
         metadata.row_count = filtered_data.len();
@@ -224,10 +235,7 @@ impl Dataset {
     where
         F: Fn(&serde_json::Value) -> serde_json::Value,
     {
-        let mapped_data: Vec<serde_json::Value> = self.data
-            .iter()
-            .map(|row| mapper(row))
-            .collect();
+        let mapped_data: Vec<serde_json::Value> = self.data.iter().map(|row| mapper(row)).collect();
 
         let metadata = self.metadata.clone();
         Self::new(metadata, mapped_data)
@@ -281,8 +289,9 @@ impl DatasetCollection {
 
     /// Save entire collection to directory
     pub async fn save_to_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<()> {
-        fs::create_dir_all(&dir_path).await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to create directory: {}", e)))?;
+        fs::create_dir_all(&dir_path).await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to create directory: {}", e))
+        })?;
 
         for (name, dataset) in &self.datasets {
             let file_path = dir_path.as_ref().join(format!("{}.json", name));
@@ -295,11 +304,13 @@ impl DatasetCollection {
     /// Load collection from directory
     pub async fn load_from_directory<P: AsRef<Path>>(dir_path: P) -> Result<Self> {
         let mut collection = Self::new();
-        let mut entries = fs::read_dir(dir_path).await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to read directory: {}", e)))?;
+        let mut entries = fs::read_dir(dir_path).await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to read directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to read directory entry: {}", e)))? {
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(_file_name) = path.file_stem().and_then(|s| s.to_str()) {
@@ -317,10 +328,14 @@ impl DatasetCollection {
         let mut stats = HashMap::new();
 
         stats.insert("total_datasets".to_string(), self.size().into());
-        stats.insert("total_rows".to_string(),
-            self.datasets.values().map(|d| d.row_count()).sum::<usize>().into());
+        stats.insert(
+            "total_rows".to_string(),
+            self.datasets.values().map(|d| d.row_count()).sum::<usize>().into(),
+        );
 
-        let dataset_info: Vec<serde_json::Value> = self.datasets.values()
+        let dataset_info: Vec<serde_json::Value> = self
+            .datasets
+            .values()
             .map(|d| {
                 serde_json::json!({
                     "name": d.metadata.name,
@@ -393,7 +408,8 @@ pub mod utils {
             OutputFormat::Yaml => dataset.to_yaml_string()?,
         };
 
-        fs::write(output_path, content).await
+        fs::write(output_path, content)
+            .await
             .map_err(|e| mockforge_core::Error::generic(format!("Failed to export dataset: {}", e)))
     }
 

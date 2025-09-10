@@ -147,7 +147,9 @@ impl FieldDefinition {
                     if s.len() < min_len_num as usize {
                         return Err(Error::generic(format!(
                             "Field '{}' length {} is less than minimum {}",
-                            self.name, s.len(), min_len_num
+                            self.name,
+                            s.len(),
+                            min_len_num
                         )));
                     }
                 }
@@ -158,7 +160,9 @@ impl FieldDefinition {
                     if s.len() > max_len_num as usize {
                         return Err(Error::generic(format!(
                             "Field '{}' length {} is greater than maximum {}",
-                            self.name, s.len(), max_len_num
+                            self.name,
+                            s.len(),
+                            max_len_num
                         )));
                     }
                 }
@@ -252,10 +256,8 @@ impl SchemaDefinition {
             .unwrap_or("GeneratedSchema")
             .to_string();
 
-        let description = json_schema
-            .get("description")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        let description =
+            json_schema.get("description").and_then(|v| v.as_str()).map(|s| s.to_string());
 
         let mut schema = Self::new(title);
         if let Some(desc) = description {
@@ -271,9 +273,7 @@ impl SchemaDefinition {
                     // Check if required
                     if let Some(required) = json_schema.get("required") {
                         if let Some(required_arr) = required.as_array() {
-                            let is_required = required_arr
-                                .iter()
-                                .any(|v| v.as_str() == Some(name));
+                            let is_required = required_arr.iter().any(|v| v.as_str() == Some(name));
                             if !is_required {
                                 field = field.optional();
                             }
@@ -317,14 +317,16 @@ impl SchemaDefinition {
         let spec = openapi_spec.as_object().unwrap();
 
         // Extract API title
-        let title = spec.get("info")
+        let title = spec
+            .get("info")
             .and_then(|info| info.get("title"))
             .and_then(|title| title.as_str())
             .unwrap_or("OpenAPI Generated Schema")
             .to_string();
 
         // Extract description
-        let description = spec.get("info")
+        let description = spec
+            .get("info")
             .and_then(|info| info.get("description"))
             .and_then(|desc| desc.as_str())
             .map(|s| s.to_string());
@@ -345,10 +347,20 @@ impl SchemaDefinition {
                             if let Some(request_body) = op_obj.get("requestBody") {
                                 if let Some(rb_obj) = request_body.as_object() {
                                     if let Some(content) = rb_obj.get("content") {
-                                        if let Some(json_content) = content.get("application/json") {
+                                        if let Some(json_content) = content.get("application/json")
+                                        {
                                             if let Some(schema_obj) = json_content.get("schema") {
-                                                let field_name = format!("{}_{}_request", path.replace("/", "_").trim_start_matches("_"), method);
-                                                if let Some(field) = Self::create_field_from_openapi_schema(&field_name, schema_obj) {
+                                                let field_name = format!(
+                                                    "{}_{}_request",
+                                                    path.replace("/", "_").trim_start_matches("_"),
+                                                    method
+                                                );
+                                                if let Some(field) =
+                                                    Self::create_field_from_openapi_schema(
+                                                        &field_name,
+                                                        schema_obj,
+                                                    )
+                                                {
                                                     schema = schema.with_field(field);
                                                 }
                                             }
@@ -362,12 +374,25 @@ impl SchemaDefinition {
                                 if let Some(resp_obj) = responses.as_object() {
                                     // Focus on success responses (200, 201, etc.)
                                     for (status_code, response) in resp_obj {
-                                        if status_code == "200" || status_code == "201" || status_code.starts_with("2") {
+                                        if status_code == "200"
+                                            || status_code == "201"
+                                            || status_code.starts_with("2")
+                                        {
                                             if let Some(resp_obj) = response.as_object() {
                                                 if let Some(content) = resp_obj.get("content") {
-                                                    if let Some(json_content) = content.get("application/json") {
-                                                        if let Some(schema_obj) = json_content.get("schema") {
-                                                            let field_name = format!("{}_{}_response_{}", path.replace("/", "_").trim_start_matches("_"), method, status_code);
+                                                    if let Some(json_content) =
+                                                        content.get("application/json")
+                                                    {
+                                                        if let Some(schema_obj) =
+                                                            json_content.get("schema")
+                                                        {
+                                                            let field_name = format!(
+                                                                "{}_{}_response_{}",
+                                                                path.replace("/", "_")
+                                                                    .trim_start_matches("_"),
+                                                                method,
+                                                                status_code
+                                                            );
                                                             if let Some(field) = Self::create_field_from_openapi_schema(&field_name, schema_obj) {
                                                                 schema = schema.with_field(field);
                                                             }
@@ -391,7 +416,9 @@ impl SchemaDefinition {
                 if let Some(schemas) = comp_obj.get("schemas") {
                     if let Some(schema_obj) = schemas.as_object() {
                         for (name, schema_def) in schema_obj {
-                            if let Some(field) = Self::create_field_from_openapi_schema(name, schema_def) {
+                            if let Some(field) =
+                                Self::create_field_from_openapi_schema(name, schema_def)
+                            {
                                 schema = schema.with_field(field);
                             }
                         }
@@ -486,7 +513,11 @@ pub struct Relationship {
 
 impl Relationship {
     /// Create a new relationship
-    pub fn new(target_schema: String, relationship_type: RelationshipType, foreign_key: String) -> Self {
+    pub fn new(
+        target_schema: String,
+        relationship_type: RelationshipType,
+        foreign_key: String,
+    ) -> Self {
         Self {
             target_schema,
             relationship_type,

@@ -32,7 +32,10 @@ impl Validator {
         if let Some(openapi_version) = spec.get("openapi") {
             if let Some(version_str) = openapi_version.as_str() {
                 if !version_str.starts_with("3.") {
-                    return Err(Error::validation(format!("Unsupported OpenAPI version: {}. Only 3.x is supported", version_str)));
+                    return Err(Error::validation(format!(
+                        "Unsupported OpenAPI version: {}. Only 3.x is supported",
+                        version_str
+                    )));
                 }
             }
         }
@@ -133,9 +136,7 @@ pub fn validate_json_schema(data: &Value, schema: &Value) -> ValidationResult {
     match Validator::from_json_schema(schema) {
         Ok(validator) => match validator.validate(data) {
             Ok(_) => ValidationResult::success(),
-            Err(Error::Validation { message }) => {
-                ValidationResult::failure(vec![message])
-            }
+            Err(Error::Validation { message }) => ValidationResult::failure(vec![message]),
             Err(e) => ValidationResult::failure(vec![format!("Unexpected error: {}", e)]),
         },
         Err(e) => ValidationResult::failure(vec![format!("Schema compilation error: {}", e)]),
@@ -183,10 +184,13 @@ pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
 
     // For now, just validate that data is a valid object
     if !data.is_object() {
-        return ValidationResult::failure(vec!["Request/response data must be a JSON object".to_string()]);
+        return ValidationResult::failure(vec![
+            "Request/response data must be a JSON object".to_string()
+        ]);
     }
 
-    ValidationResult::success().with_warning("Full OpenAPI schema validation not yet implemented".to_string())
+    ValidationResult::success()
+        .with_warning("Full OpenAPI schema validation not yet implemented".to_string())
 }
 
 /// Validate Protobuf message (placeholder)

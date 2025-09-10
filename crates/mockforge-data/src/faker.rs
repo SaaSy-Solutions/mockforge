@@ -14,9 +14,7 @@ pub struct EnhancedFaker {
 
 impl Default for EnhancedFaker {
     fn default() -> Self {
-        Self {
-            rng: rand::rng(),
-        }
+        Self { rng: rand::rng() }
     }
 }
 
@@ -50,7 +48,7 @@ impl EnhancedFaker {
     pub fn string(&mut self, length: usize) -> String {
         use fake::faker::lorem::en::*;
         let word_count = (length / 5).max(1); // Approximate words needed
-        let words: Vec<String> = Words(word_count..word_count+1).fake();
+        let words: Vec<String> = Words(word_count..word_count + 1).fake();
         words.join(" ")
     }
 
@@ -105,7 +103,9 @@ impl EnhancedFaker {
 
     /// Generate a random color name
     pub fn color(&mut self) -> String {
-        let colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white"];
+        let colors = [
+            "red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white",
+        ];
         self.random_element(&colors).unwrap_or(&"blue").to_string()
     }
 
@@ -118,7 +118,7 @@ impl EnhancedFaker {
     /// Generate random words
     pub fn words(&mut self, count: usize) -> Vec<String> {
         use fake::faker::lorem::en::*;
-        Words(count..count+1).fake()
+        Words(count..count + 1).fake()
     }
 
     /// Generate a random sentence
@@ -158,7 +158,9 @@ impl EnhancedFaker {
             "uuid" => Value::String(self.uuid()),
             "date" | "datetime" => Value::String(self.date_iso()),
             "int" | "integer" => Value::Number(self.int_range(0, 1000).into()),
-            "float" | "number" => Value::Number(serde_json::Number::from_f64(self.float_range(0.0, 1000.0)).unwrap()),
+            "float" | "number" => {
+                Value::Number(serde_json::Number::from_f64(self.float_range(0.0, 1000.0)).unwrap())
+            }
             "bool" | "boolean" => Value::Bool(self.boolean(0.5)),
             "word" => Value::String(self.word()),
             "sentence" => Value::String(self.sentence()),

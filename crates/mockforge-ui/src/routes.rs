@@ -6,8 +6,8 @@ use axum::{
 };
 use tower_http::cors::CorsLayer;
 
-use crate::handlers::*;
 use crate::handlers::AdminState;
+use crate::handlers::*;
 
 /// Create the admin router with static assets and optional API endpoints
 pub fn create_admin_router(
@@ -40,11 +40,8 @@ pub fn create_admin_router(
             .route("/__mockforge/servers/restart", post(restart_servers));
     }
 
-    router
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+    router.layer(CorsLayer::permissive()).with_state(state)
 }
-
 
 /// Health check endpoint (can be used by load balancers)
 pub fn health_router() -> Router {
