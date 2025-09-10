@@ -243,16 +243,21 @@ impl OpenApiRouteRegistry {
         cookie_params: &Map<String, Value>,
         body: Option<&Value>,
     ) -> Result<()> {
-        if matches!(self.options.request_mode, ValidationMode::Disabled) { return Ok(()); }
+        // Runtime env overrides
+        let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| match v.to_ascii_lowercase().as_str() {"off"|"disable"|"disabled"=>ValidationMode::Disabled,"warn"|"warning"=>ValidationMode::Warn,_=>ValidationMode::Enforce});
+        let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS").ok().map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(self.options.aggregate_errors);
+        // Response validation is handled in HTTP layer now
+        let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
+        if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) { effective_mode = override_mode.clone(); }
+        if matches!(effective_mode, ValidationMode::Disabled) { return Ok(()); }
         if let Some(route) = self.get_route(path, method) {
-            let effective_mode = self.options.overrides.get(&format!("{} {}", method, path)).cloned().unwrap_or(self.options.request_mode.clone());
             if matches!(effective_mode, ValidationMode::Disabled) { return Ok(()); }
             let mut errors: Vec<String> = Vec::new();
             let mut details: Vec<serde_json::Value> = Vec::new();
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
                 if let Some(value) = body {
-                    if self.options.aggregate_errors { schema.validate_collect(value, "body", &mut errors); schema.validate_collect_detailed(value, "body", &mut details); }
+                    if aggregate { schema.validate_collect(value, "body", &mut errors); schema.validate_collect_detailed(value, "body", &mut details); }
                     else if let Err(e) = schema.validate_value(value, "body") { errors.push(format!("{}", e)); }
                 } else { errors.push("body: Request body is required but not provided".to_string()); details.push(serde_json::json!({"path":"body","code":"required","message":"Request body is required"})); }
             } else if body.is_some() {
@@ -279,7 +284,7 @@ impl OpenApiRouteRegistry {
                     Some(v) => {
                         if let Some(s) = &p.schema {
                             let coerced = if p.location == "query" { coerce_by_style(v, s, p.style.as_deref()) } else { coerce_value_for_schema(v, s) };
-                            if self.options.aggregate_errors { s.validate_collect(&coerced, &format!("{}.{}", prefix, p.name), &mut errors); s.validate_collect_detailed(&coerced, &format!("{}.{}", prefix, p.name), &mut details); }
+                            if aggregate { s.validate_collect(&coerced, &format!("{}.{}", prefix, p.name), &mut errors); s.validate_collect_detailed(&coerced, &format!("{}.{}", prefix, p.name), &mut details); }
                             else if let Err(e) = s.validate_value(&coerced, &format!("{}.{}", prefix, p.name)) { errors.push(format!("{}", e)); }
                         }
                     }
