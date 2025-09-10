@@ -330,6 +330,57 @@ mod tests {
         assert_eq!(user_by_id_route.axum_path(), "/users/:id");
     }
 
+    #[tokio::test]
+    async fn test_validate_request_with_params_and_formats() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users/{id}": {
+                    "post": {
+                        "parameters": [
+                            { "name": "id", "in": "path", "required": true, "schema": {"type": "string"} },
+                            { "name": "q",  "in": "query", "required": false, "schema": {"type": "integer"} }
+                        ],
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["email", "website"],
+                                        "properties": {
+                                            "email":   {"type": "string", "format": "email"},
+                                            "website": {"type": "string", "format": "uri"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+        let mut path_params = serde_json::Map::new();
+        path_params.insert("id".to_string(), json!("abc"));
+        let mut query_params = serde_json::Map::new();
+        query_params.insert("q".to_string(), json!(123));
+
+        // valid body
+        let body = json!({"email":"a@b.co","website":"https://example.com"});
+        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body)).is_ok());
+
+        // invalid email
+        let bad_email = json!({"email":"not-an-email","website":"https://example.com"});
+        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad_email)).is_err());
+
+        // missing required path param
+        let empty_path_params = serde_json::Map::new();
+        assert!(registry.validate_request_with("/users/{id}", "POST", &empty_path_params, &query_params, Some(&body)).is_err());
+    }
+
     #[test]
     fn test_path_conversion() {
         assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users"), "/users");
