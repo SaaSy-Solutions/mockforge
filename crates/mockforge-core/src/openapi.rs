@@ -933,6 +933,89 @@ impl OpenApiSchema {
             _ => Ok(()),
         }
     }
+
+    /// Collect validation errors into `errors` rather than returning early.
+    pub fn validate_collect(&self, value: &Value, path: &str, errors: &mut Vec<String>) {
+        // composition
+        if !self.one_of.is_empty() {
+            let mut matches = 0usize;
+            for s in &self.one_of {
+                // avoid vacuous matches for object schemas
+                if let (Some("object"), Some(obj)) = (s.schema_type.as_deref(), value.as_object()) {
+                    if !s.required.is_empty() && !s.required.iter().all(|k| obj.contains_key(k)) { continue; }
+                    if s.required.is_empty() && !s.properties.is_empty() && !s.properties.keys().any(|k| obj.contains_key(k)) { continue; }
+                }
+                let mut sub = Vec::new();
+                s.validate_collect(value, path, &mut sub);
+                if sub.is_empty() { matches += 1; }
+            }
+            if matches != 1 {
+                errors.push(format!("{}: oneOf expected exactly one schema to match (got {})", path, matches));
+            }
+        }
+        if !self.any_of.is_empty() {
+            let mut matches = 0usize;
+            for s in &self.any_of {
+                if let (Some("object"), Some(obj)) = (s.schema_type.as_deref(), value.as_object()) {
+                    if !s.required.is_empty() && !s.required.iter().all(|k| obj.contains_key(k)) { continue; }
+                    if s.required.is_empty() && !s.properties.is_empty() && !s.properties.keys().any(|k| obj.contains_key(k)) { continue; }
+                }
+                let mut sub = Vec::new();
+                s.validate_collect(value, path, &mut sub);
+                if sub.is_empty() { matches += 1; }
+            }
+            if matches == 0 {
+                errors.push(format!("{}: anyOf expected at least one schema to match", path));
+            }
+        }
+        if !self.all_of.is_empty() {
+            for s in &self.all_of { s.validate_collect(value, path, errors); }
+        }
+
+        match self.schema_type.as_deref() {
+            Some("string") => {
+                if let Some(sv) = value.as_str() {
+                    if let Some(min) = self.min_length { if sv.len() < min { errors.push(format!("{}: minLength {} not satisfied", path, min)); } }
+                    if let Some(max) = self.max_length { if sv.len() > max { errors.push(format!("{}: maxLength {} exceeded", path, max)); } }
+                    if let Some(fmt) = &self.format {
+                        let tmp = self.validate_value(value, path);
+                        if let Err(e) = tmp { errors.push(format!("{}", e)); }
+                    }
+                } else {
+                    errors.push(format!("{}: expected string, got {}", path, value));
+                }
+            }
+            Some("number") | Some("integer") => {
+                if let Some(n) = value.as_f64() {
+                    if let Some(min) = self.minimum { if n < min { errors.push(format!("{}: minimum {} not satisfied", path, min)); } }
+                    if let Some(max) = self.maximum { if n > max { errors.push(format!("{}: maximum {} exceeded", path, max)); } }
+                } else {
+                    errors.push(format!("{}: expected number, got {}", path, value));
+                }
+            }
+            Some("boolean") => {
+                if !value.is_boolean() { errors.push(format!("{}: expected boolean, got {}", path, value)); }
+            }
+            Some("array") => {
+                if let Some(arr) = value.as_array() {
+                    if let Some(items) = &self.items { for (i, v) in arr.iter().enumerate() { items.validate_collect(v, &format!("{}[{}]", path, i), errors); } }
+                } else {
+                    errors.push(format!("{}: expected array, got {}", path, value));
+                }
+            }
+            Some("object") => {
+                if let Some(obj) = value.as_object() {
+                    for req in &self.required { if !obj.contains_key(req) { errors.push(format!("{}: missing required property '{}'", path, req)); } }
+                    for (k, s) in &self.properties { if let Some(v) = obj.get(k) { s.validate_collect(v, &format!("{}/{}", path, k), errors); } }
+                    if let Some(allowed) = self.additional_properties_allowed { if !allowed { for k in obj.keys() { if !self.properties.contains_key(k) { errors.push(format!("{}: additional property '{}' not allowed", path, k)); } } } }
+                    if let Some(schema) = &self.additional_properties_schema { for (k, v) in obj.iter() { if !self.properties.contains_key(k) { schema.validate_collect(v, &format!("{}/{}", path, k), errors); } } }
+                } else {
+                    errors.push(format!("{}: expected object, got {}", path, value));
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// OpenAPI response information

@@ -20,22 +20,47 @@ pub struct OpenApiRouteRegistry {
     spec: Arc<OpenApiSpec>,
     /// Generated routes
     routes: Vec<OpenApiRoute>,
+    /// Validation options
+    options: ValidationOptions,
+}
+
+#[derive(Debug, Clone)]
+pub enum ValidationMode { Disabled, Warn, Enforce }
+
+#[derive(Debug, Clone)]
+pub struct ValidationOptions {
+    pub request_mode: ValidationMode,
+    pub aggregate_errors: bool,
+    pub validate_responses: bool,
+}
+
+impl Default for ValidationOptions {
+    fn default() -> Self {
+        Self { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false }
+    }
 }
 
 impl OpenApiRouteRegistry {
     /// Create a new registry from an OpenAPI spec
-    pub fn new(spec: OpenApiSpec) -> Self {
+    pub fn new(spec: OpenApiSpec) -> Self { Self::new_with_env(spec) }
+
+    pub fn new_with_env(spec: OpenApiSpec) -> Self {
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
-
-        Self { spec, routes }
+        let options = ValidationOptions {
+            request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION").unwrap_or_else(|_| "enforce".into()).to_ascii_lowercase().as_str() {
+                "off" | "disable" | "disabled" => ValidationMode::Disabled,
+                "warn" | "warning" => ValidationMode::Warn,
+                _ => ValidationMode::Enforce,
+            },
+            aggregate_errors: std::env::var("MOCKFORGE_AGGREGATE_ERRORS").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(true),
+            validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false),
+        };
+        Self { spec, routes, options }
     }
 
     fn clone_for_validation(&self) -> Self {
-        OpenApiRouteRegistry {
-            spec: self.spec.clone(),
-            routes: self.routes.clone(),
-        }
+        OpenApiRouteRegistry { spec: self.spec.clone(), routes: self.routes.clone(), options: self.options.clone() }
     }
 
     /// Generate routes from the OpenAPI specification
@@ -52,14 +77,10 @@ impl OpenApiRouteRegistry {
     }
 
     /// Get all routes
-    pub fn routes(&self) -> &[OpenApiRoute] {
-        &self.routes
-    }
+    pub fn routes(&self) -> &[OpenApiRoute] { &self.routes }
 
     /// Get the OpenAPI specification
-    pub fn spec(&self) -> &OpenApiSpec {
-        &self.spec
-    }
+    pub fn spec(&self) -> &OpenApiSpec { &self.spec }
 
     /// Build an Axum router from the OpenAPI spec (simplified)
     pub fn build_router(self) -> Router {
@@ -129,12 +150,23 @@ impl OpenApiRouteRegistry {
                 } else { None };
 
                 if let Err(e) = validator.validate_request_with_all(&path_template, &method, &path_map, &query_map, &header_map, &cookie_map, body_json.as_ref()) {
-                    let msg = format!("Validation error: {}", e);
+                    let msg = format!("{}", e);
                     return axum::http::Response::builder()
                         .status(axum::http::StatusCode::BAD_REQUEST)
                         .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(axum::body::Body::from(serde_json::to_vec(&serde_json::json!({"error": msg})).unwrap()))
+                        .body(axum::body::Body::from(serde_json::to_vec(&serde_json::json!({"error": "request validation failed", "detail": msg})).unwrap()))
                         .unwrap();
+                }
+
+                // Optional response validation
+                if validator.options.validate_responses {
+                    if let Some(resp_schema) = operation.responses.get("200").and_then(|r| r.schema.as_ref()) {
+                        let mut errors = Vec::new();
+                        resp_schema.validate_collect(&mock_response, "response", &mut errors);
+                        if !errors.is_empty() {
+                            tracing::warn!("Response validation failed: {:?}", errors);
+                        }
+                    }
                 }
 
                 axum::http::Response::builder()
@@ -202,14 +234,17 @@ impl OpenApiRouteRegistry {
         cookie_params: &Map<String, Value>,
         body: Option<&Value>,
     ) -> Result<()> {
+        if matches!(self.options.request_mode, ValidationMode::Disabled) { return Ok(()); }
         if let Some(route) = self.get_route(path, method) {
+            let mut errors: Vec<String> = Vec::new();
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
-                let value = body
-                    .ok_or_else(|| Error::generic("Request body is required but not provided"))?;
-                schema
-                    .validate_value(value, "body")
-                    .map_err(|e| Error::validation(format!("{}", e)))?;
+                if let Some(value) = body {
+                    if self.options.aggregate_errors { schema.validate_collect(value, "body", &mut errors); }
+                    else if let Err(e) = schema.validate_value(value, "body") { errors.push(format!("{}", e)); }
+                } else {
+                    errors.push("body: Request body is required but not provided".to_string());
+                }
             } else if body.is_some() {
                 // No body expected but provided — not an error by default, but log it
                 tracing::debug!("Body provided for operation without requestBody; accepting");
@@ -234,22 +269,23 @@ impl OpenApiRouteRegistry {
                     Some(v) => {
                         if let Some(s) = &p.schema {
                             let coerced = if p.location == "query" { coerce_by_style(v, s, p.style.as_deref()) } else { coerce_value_for_schema(v, s) };
-                            s.validate_value(&coerced, &format!("{}.{}", prefix, p.name))
-                                .map_err(|e| Error::validation(format!("{}", e)))?;
+                            if self.options.aggregate_errors { s.validate_collect(&coerced, &format!("{}.{}", prefix, p.name), &mut errors); }
+                            else if let Err(e) = s.validate_value(&coerced, &format!("{}.{}", prefix, p.name)) { errors.push(format!("{}", e)); }
                         }
                     }
                     None => {
                         if p.required {
-                            return Err(Error::validation(format!(
-                                "missing required {} parameter '{}'",
-                                prefix, p.name
-                            )));
+                            errors.push(format!("missing required {} parameter '{}'", prefix, p.name));
                         }
                     }
                 }
             }
-
-            Ok(())
+            if errors.is_empty() { return Ok(()); }
+            match self.options.request_mode {
+                ValidationMode::Disabled => Ok(()),
+                ValidationMode::Warn => { tracing::warn!("Request validation warnings: {:?}", errors); Ok(()) }
+                ValidationMode::Enforce => Err(Error::validation(serde_json::to_string(&serde_json::json!({"errors": errors})).unwrap_or_else(|_| errors.join("; ")))),
+            }
         } else {
             Err(Error::generic(format!("Route {} {} not found in OpenAPI spec", method, path)))
         }
