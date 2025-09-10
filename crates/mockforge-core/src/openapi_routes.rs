@@ -108,6 +108,20 @@ impl OpenApiRouteRegistry {
         query_params: &Map<String, Value>,
         body: Option<&Value>,
     ) -> Result<()> {
+        self.validate_request_with_all(path, method, path_params, query_params, &Map::new(), &Map::new(), body)
+    }
+
+    /// Validate request against OpenAPI spec with path/query/header/cookie params
+    pub fn validate_request_with_all(
+        &self,
+        path: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_params: &Map<String, Value>,
+        cookie_params: &Map<String, Value>,
+        body: Option<&Value>,
+    ) -> Result<()> {
         if let Some(route) = self.get_route(path, method) {
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
@@ -126,13 +140,16 @@ impl OpenApiRouteRegistry {
                 let (params_map, prefix) = match p.location.as_str() {
                     "path" => (path_params, "path"),
                     "query" => (query_params, "query"),
-                    _ => continue, // header/cookie skipped for now
+                    "header" => (header_params, "header"),
+                    "cookie" => (cookie_params, "cookie"),
+                    _ => continue,
                 };
 
                 match params_map.get(&p.name) {
                     Some(v) => {
                         if let Some(s) = &p.schema {
-                            s.validate_value(v, &format!("{}.{}", prefix, p.name))
+                            let coerced = coerce_value_for_schema(v, s);
+                            s.validate_value(&coerced, &format!("{}.{}", prefix, p.name))
                                 .map_err(|e| Error::validation(format!("{}", e)))?;
                         }
                     }
@@ -184,6 +201,49 @@ impl OpenApiRouteRegistry {
     /// This is a utility function for converting path parameters from {param} to :param format
     pub fn convert_path_to_axum(openapi_path: &str) -> String {
         openapi_path.replace("{", ":").replace("}", "")
+    }
+}
+
+/// Coerce a parameter `value` into the expected JSON type per `schema` where reasonable.
+/// Applies only to param contexts (not request bodies). Conservative conversions:
+/// - integer/number: parse from string; arrays: split comma-separated strings and coerce items
+/// - boolean: parse true/false (case-insensitive) from string
+fn coerce_value_for_schema(value: &Value, schema: &crate::OpenApiSchema) -> Value {
+    match schema.schema_type.as_deref() {
+        Some("integer") => match value {
+            Value::String(s) => s.parse::<i64>().map(Value::from).unwrap_or(value.clone()),
+            _ => value.clone(),
+        },
+        Some("number") => match value {
+            Value::String(s) => s.parse::<f64>().ok().and_then(|n| serde_json::Number::from_f64(n)).map(Value::Number).unwrap_or(value.clone()),
+            _ => value.clone(),
+        },
+        Some("boolean") => match value {
+            Value::String(s) => {
+                let ls = s.to_ascii_lowercase();
+                match ls.as_str() { "true" => Value::Bool(true), "false" => Value::Bool(false), _ => value.clone() }
+            }
+            _ => value.clone(),
+        },
+        Some("array") => {
+            if let Some(items) = &schema.items {
+                match value {
+                    Value::String(s) => {
+                        // Split comma-separated values: "1,2,3"
+                        let parts = s.split(',').map(|p| Value::String(p.trim().to_string())).collect::<Vec<_>>();
+                        let coerced = parts.into_iter().map(|v| coerce_value_for_schema(&v, items)).collect::<Vec<_>>();
+                        Value::Array(coerced)
+                    }
+                    Value::Array(arr) => {
+                        Value::Array(arr.iter().map(|v| coerce_value_for_schema(v, items)).collect())
+                    }
+                    _ => value.clone(),
+                }
+            } else {
+                value.clone()
+            }
+        }
+        _ => value.clone(),
     }
 }
 
@@ -436,6 +496,54 @@ mod tests {
 
         let bad = json!({"email":"nope","website":"https://example.com"});
         assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad)).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_header_cookie_and_query_coercion() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Params API", "version": "1.0.0" },
+            "paths": {
+                "/items": {
+                    "get": {
+                        "parameters": [
+                            {"name": "X-Flag", "in": "header", "required": true, "schema": {"type": "boolean"}},
+                            {"name": "session", "in": "cookie", "required": true, "schema": {"type": "string"}},
+                            {"name": "ids", "in": "query", "required": false, "schema": {"type": "array", "items": {"type": "integer"}}}
+                        ],
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+
+        let path_params = serde_json::Map::new();
+        let mut query_params = serde_json::Map::new();
+        // comma-separated string for array should coerce
+        query_params.insert("ids".to_string(), json!("1,2,3"));
+        let mut header_params = serde_json::Map::new();
+        header_params.insert("X-Flag".to_string(), json!("true"));
+        let mut cookie_params = serde_json::Map::new();
+        cookie_params.insert("session".to_string(), json!("abc123"));
+
+        assert!(registry.validate_request_with_all(
+            "/items", "GET", &path_params, &query_params, &header_params, &cookie_params, None
+        ).is_ok());
+
+        // Missing required cookie
+        let empty_cookie = serde_json::Map::new();
+        assert!(registry.validate_request_with_all(
+            "/items", "GET", &path_params, &query_params, &header_params, &empty_cookie, None
+        ).is_err());
+
+        // Bad boolean header value (cannot coerce)
+        let mut bad_header = serde_json::Map::new();
+        bad_header.insert("X-Flag".to_string(), json!("notabool"));
+        assert!(registry.validate_request_with_all(
+            "/items", "GET", &path_params, &query_params, &bad_header, &cookie_params, None
+        ).is_err());
     }
 
     #[tokio::test]
