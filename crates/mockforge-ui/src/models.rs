@@ -246,6 +246,32 @@ pub struct MetricsData {
     pub cpu_usage_over_time: Vec<(chrono::DateTime<chrono::Utc>, f64)>,
 }
 
+/// Validation settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationSettings {
+    /// Validation mode: "enforce", "warn", or "off"
+    pub mode: String,
+    /// Whether to aggregate errors
+    pub aggregate_errors: bool,
+    /// Whether to validate responses
+    pub validate_responses: bool,
+    /// Per-route validation overrides
+    pub overrides: HashMap<String, String>,
+}
+
+/// Validation update request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationUpdate {
+    /// Validation mode
+    pub mode: String,
+    /// Whether to aggregate errors
+    pub aggregate_errors: bool,
+    /// Whether to validate responses
+    pub validate_responses: bool,
+    /// Per-route validation overrides
+    pub overrides: Option<HashMap<String, String>>,
+}
+
 /// Health check response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthCheck {

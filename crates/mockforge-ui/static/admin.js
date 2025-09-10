@@ -49,6 +49,12 @@ class MockForgeAdmin {
         document.getElementById('refresh-fixtures-btn')?.addEventListener('click', () => {
             this.loadFixtures();
         });
+
+        // Routes controls
+        document.getElementById('refresh-routes-btn')?.addEventListener('click', () => this.loadRoutes());
+        document.getElementById('routes-filter')?.addEventListener('input', () => this.renderRoutes());
+        document.getElementById('routes-only-overrides')?.addEventListener('change', () => this.renderRoutes());
+        document.getElementById('routes-sort')?.addEventListener('change', () => this.renderRoutes());
     }
 
     switchTab(tabName) {
@@ -167,28 +173,77 @@ class MockForgeAdmin {
         }
     }
 
-    loadRoutes() {
-        // Mock route data
-        const routes = [
-            { method: 'GET', path: '/api/users', requests: 45, latency: 50 },
-            { method: 'POST', path: '/api/users', requests: 12, latency: 75 },
-        ];
-
+    async loadRoutes() {
         const container = document.getElementById('routes-list');
-        if (container) {
-            container.innerHTML = routes.map(route => `
-                <div style="display: flex; justify-content: space-between; padding: 0.5rem; border-bottom: 1px solid #e2e8f0;">
-                    <div>
-                        <span style="font-weight: 600; margin-right: 1rem;">${route.method}</span>
-                        <span>${route.path}</span>
-                    </div>
-                    <div>
-                        <span>${route.requests} req</span>
-                        <span style="margin-left: 1rem;">${route.latency}ms</span>
-                    </div>
-                </div>
-            `).join('');
+        if (!container) return;
+        container.innerHTML = '<div class="loading">Loading routes...</div>';
+        try {
+            const [routesRes, valRes] = await Promise.all([
+                fetch(this.api('__mockforge/routes')),
+                fetch(this.api('__mockforge/validation')),
+            ]);
+            const routesJson = await routesRes.json();
+            const valJson = await valRes.json();
+            this.routesCache = (routesJson && routesJson.routes) || [];
+            this.overridesCache = (valJson && valJson.overrides) || {};
+            this.renderRoutes();
+        } catch (e) {
+            container.innerHTML = '<div class="loading">Failed to load routes</div>';
         }
+    }
+
+    renderRoutes() {
+        const container = document.getElementById('routes-list');
+        if (!container) return;
+        const q = (document.getElementById('routes-filter')?.value || '').toLowerCase();
+        const only = document.getElementById('routes-only-overrides')?.checked;
+        const sort = document.getElementById('routes-sort')?.value || 'path';
+        let routes = (this.routesCache || []).slice();
+        if (q) { routes = routes.filter(r => `${r.method} ${r.path}`.toLowerCase().includes(q)); }
+        if (only) { routes = routes.filter(r => !!this.overridesCache?.[`${r.method} ${r.path}`]); }
+        routes.sort((a,b) => sort === 'method' ? a.method.localeCompare(b.method) || a.path.localeCompare(b.path) : a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
+        container.innerHTML = routes.map(r => this.routeRow(r)).join('');
+        container.querySelectorAll('.btn-override').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const row = e.target.closest('[data-route]');
+                const method = row.dataset.method;
+                const path = row.dataset.path;
+                const key = `${method} ${path}`;
+                const mode = row.querySelector('.route-mode').value;
+                this.renderOverrides(this.collectOverridesFromUI() || {});
+                const list = document.getElementById('overrides-list');
+                const newRow = this.overrideRow(key, mode);
+                const existing = list.querySelector(`[data-key="${key}"]`);
+                if (existing) existing.replaceWith(newRow); else list.appendChild(newRow);
+            });
+        });
+        // Prefill per-route mode select based on overrides
+        container.querySelectorAll('[data-route]').forEach(row => {
+            const key = `${row.dataset.method} ${row.dataset.path}`;
+            const sel = row.querySelector('.route-mode');
+            const v = this.overridesCache?.[key];
+            if (v && sel) sel.value = v;
+            if (v) row.style.background = '#f0f9ff';
+        });
+    }
+
+    routeRow(r) {
+        return `
+            <div data-route data-method="${r.method}" data-path="${r.path}" style="display:flex; justify-content: space-between; padding:.5rem; border-bottom:1px solid #e2e8f0;">
+                <div>
+                    <span style=\"font-weight:600; margin-right:1rem;\">${r.method}</span>
+                    <span>${r.path}</span>
+                </div>
+                <div style=\"display:flex; gap:.5rem; align-items:center;\">
+                    <select class=\"route-mode\">
+                        <option value=\"enforce\">enforce</option>
+                        <option value=\"warn\">warn</option>
+                        <option value=\"off\">off</option>
+                    </select>
+                    <button type=\"button\" class=\"btn btn-secondary btn-override\">Add Override</button>
+                </div>
+            </div>
+        `;
     }
 
     async loadFixtures() {

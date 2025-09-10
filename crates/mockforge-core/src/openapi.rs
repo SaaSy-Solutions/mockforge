@@ -1018,7 +1018,7 @@ impl OpenApiSchema {
     }
 
     pub fn validate_collect_detailed(&self, value: &Value, path: &str, details: &mut Vec<serde_json::Value>) {
-        // Use validate_collect to get semantics, but also push structured codes
+        // Use validate_collect to get semantics, then enrich with expectations
         let mut msgs = Vec::new();
         self.validate_collect(value, path, &mut msgs);
         for m in msgs {
@@ -1031,7 +1031,33 @@ impl OpenApiSchema {
                 else if m.contains("oneOf") { "oneOf" }
                 else if m.contains("anyOf") { "anyOf" }
                 else { "validation" };
-            details.push(serde_json::json!({"path": path, "code": code, "message": m, "value": value}));
+
+            let mut obj = serde_json::Map::new();
+            obj.insert("path".into(), serde_json::Value::String(path.to_string()));
+            obj.insert("code".into(), serde_json::Value::String(code.to_string()));
+            obj.insert("message".into(), serde_json::Value::String(m.clone()));
+            obj.insert("value".into(), value.clone());
+
+            // Expected fields based on schema
+            if let Some(t) = &self.schema_type { obj.insert("expected_type".into(), serde_json::Value::String(t.clone())); }
+            if let Some(fmt) = &self.format { obj.insert("expected_format".into(), serde_json::Value::String(fmt.clone())); }
+            if let Some(min) = self.minimum { obj.insert("expected_min".into(), serde_json::json!(min)); }
+            if let Some(max) = self.maximum { obj.insert("expected_max".into(), serde_json::json!(max)); }
+            if let Some(minl) = self.min_length { obj.insert("expected_minLength".into(), serde_json::json!(minl)); }
+            if let Some(maxl) = self.max_length { obj.insert("expected_maxLength".into(), serde_json::json!(maxl)); }
+
+            // Enum expectations
+            if let Some(ev) = &self.enum_values { if !ev.is_empty() { obj.insert("expected_enum".into(), serde_json::Value::Array(ev.clone())); } }
+
+            // Array item hints
+            if let Some("array") = self.schema_type.as_deref() {
+                if let Some(items) = &self.items {
+                    if let Some(t) = &items.schema_type { obj.insert("items_expected_type".into(), serde_json::Value::String(t.clone())); }
+                    if let Some(fmt) = &items.format { obj.insert("items_expected_format".into(), serde_json::Value::String(fmt.clone())); }
+                }
+            }
+
+            details.push(serde_json::Value::Object(obj));
         }
     }
 }

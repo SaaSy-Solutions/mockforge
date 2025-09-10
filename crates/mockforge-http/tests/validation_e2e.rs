@@ -33,17 +33,16 @@ async fn toggling_validation_mode_runtime() {
     let res = client.post(&url).send().await.unwrap();
     assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
 
-    // Toggle to off
+    // Toggle to per-route warn (keeps enforce globally)
     let url_val = format!("http://{}/__mockforge/validation", addr);
-    let payload = serde_json::json!({"mode":"off"});
+    let payload = serde_json::json!({"mode":"enforce","overrides": {"POST /e2e": "warn"}});
     let res = client.post(&url_val).json(&payload).send().await.unwrap();
     assert!(res.status().is_success());
 
-    // Now invalid request should pass
+    // Now invalid request should pass due to per-route warn override
     let res = client.post(&url).send().await.unwrap();
     assert!(res.status().is_success());
 
     // Cleanup server
     drop(server);
 }
-

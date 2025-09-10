@@ -414,7 +414,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             validate_responses,
         } => {
             // Load configuration
-            let mut server_config = if let Some(config_path) = config {
+            let mut server_config = if let Some(ref config_path) = config {
                 load_config_with_fallback(&config_path).await
             } else {
                 ServerConfig::default()
@@ -447,6 +447,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             std::env::set_var("MOCKFORGE_REQUEST_VALIDATION", &validation);
             std::env::set_var("MOCKFORGE_AGGREGATE_ERRORS", if aggregate_errors {"true"} else {"false"});
             std::env::set_var("MOCKFORGE_RESPONSE_VALIDATION", if validate_responses {"true"} else {"false"});
+            if let Some(ref p) = server_config.http.openapi_spec { let _ = p; }
+            // If config file path is provided, pass it to HTTP so Admin API can persist changes
+            if let Some(ref config_path) = config {
+                std::env::set_var("MOCKFORGE_CONFIG_PATH", config_path);
+            }
 
             start_servers_with_config(server_config).await?;
         }

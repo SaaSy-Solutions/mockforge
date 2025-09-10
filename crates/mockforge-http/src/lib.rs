@@ -5,10 +5,11 @@ pub mod replay_listing;
 pub mod schema_diff;
 
 use axum::Router;
-use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec, ServerConfig};
-use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
-use axum::{routing::get, routing::post, Json};
+use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
+use mockforge_core::openapi_routes::ValidationOptions;
+use axum::{routing::get, Json};
 use serde::{Deserialize, Serialize};
+use mockforge_core::{load_config, save_config};
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
@@ -26,12 +27,29 @@ pub async fn build_router(spec_path: Option<String>, mut options: Option<Validat
                     if let Ok(pref) = std::env::var("MOCKFORGE_ADMIN_MOUNT_PREFIX") { if !pref.is_empty() { opts.admin_skip_prefixes.push(pref); } }
                     opts.admin_skip_prefixes.push("/__mockforge".to_string());
                 }
-                let registry = if let Some(opts) = options {
+                let registry = if let Some(opts) = options.clone() {
                     OpenApiRouteRegistry::new_with_options(openapi, opts)
                 } else {
                     OpenApiRouteRegistry::new_with_env(openapi)
                 };
+                
+                // Clone registry for routes listing before moving it to build_router
+                let routes_registry = registry.clone();
                 app = registry.build_router();
+
+                // Expose routes listing for Admin UI
+                if let Some(_opts) = options {
+                    let routes_json = routes_registry
+                        .routes()
+                        .iter()
+                        .map(|r| serde_json::json!({"method": r.method, "path": r.path}))
+                        .collect::<Vec<_>>();
+                    let handler = move || {
+                        let data = routes_json.clone();
+                        async move { Json(serde_json::json!({"routes": data})) }
+                    };
+                    app = app.route("/__mockforge/routes", get(handler));
+                }
             }
             Err(e) => {
                 warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec, e);
@@ -99,6 +117,25 @@ async fn set_validation(Json(payload): Json<ValidationSettings>) -> Json<serde_j
     if let Some(map) = payload.overrides {
         let json = serde_json::Value::Object(map);
         if let Ok(s) = serde_json::to_string(&json) { std::env::set_var("MOCKFORGE_VALIDATION_OVERRIDES_JSON", s); }
+    }
+    // Optionally persist to config file if MOCKFORGE_CONFIG_PATH is set
+    if let Ok(cfg_path) = std::env::var("MOCKFORGE_CONFIG_PATH") {
+        if let Ok(mut cfg) = load_config(&cfg_path).await {
+            if let Ok(mode) = std::env::var("MOCKFORGE_REQUEST_VALIDATION") { cfg.http.request_validation = mode; }
+            if let Ok(agg) = std::env::var("MOCKFORGE_AGGREGATE_ERRORS") { cfg.http.aggregate_validation_errors = agg == "1" || agg.eq_ignore_ascii_case("true"); }
+            if let Ok(rv) = std::env::var("MOCKFORGE_RESPONSE_VALIDATION") { cfg.http.validate_responses = rv == "1" || rv.eq_ignore_ascii_case("true"); }
+            if let Ok(over_json) = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON") {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&over_json) {
+                    if let Some(obj) = val.as_object() {
+                        cfg.http.validation_overrides.clear();
+                        for (k, v) in obj {
+                            if let Some(s) = v.as_str() { cfg.http.validation_overrides.insert(k.clone(), s.to_string()); }
+                        }
+                    }
+                }
+            }
+            let _ = save_config(&cfg_path, &cfg).await;
+        }
     }
     Json(serde_json::json!({"status":"ok"}))
 }

@@ -85,9 +85,21 @@
             <div id="routes-tab" class="tab-content">
                 <div class="card full-width">
                     <h3>Route Configuration</h3>
-                    <div id="routes-list" class="routes-list">
-                        <div class="loading">Loading routes...</div>
+                    <div class="routes-controls" style="display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem;">
+                        <button id="refresh-routes-btn" class="btn btn-secondary">Refresh</button>
+                        <input id="routes-filter" type="text" placeholder="Filter (method/path)" style="flex:1;"/>
+                        <label style="display:flex; align-items:center; gap:.25rem;">
+                            <input id="routes-only-overrides" type="checkbox"/>
+                            Only overridden
+                        </label>
+                        <label>Sort:
+                            <select id="routes-sort">
+                                <option value="path">Path</option>
+                                <option value="method">Method</option>
+                            </select>
+                        </label>
                     </div>
+                    <div id="routes-list" class="routes-list"><div class="loading">Loading routes...</div></div>
                 </div>
             </div>
 
