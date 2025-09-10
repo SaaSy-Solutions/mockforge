@@ -19,6 +19,7 @@ use url::Url;
 use regex::Regex;
 use once_cell::sync::Lazy;
 use openapiv3::{SchemaKind, Type, StringFormat, VariantOrUnknownOrEmpty};
+use std::net::IpAddr;
 
 // Simple email regex for practical validation (not full RFC 5322)
 // Accepts forms like local@domain.tld and rejects obvious invalids
@@ -273,6 +274,17 @@ impl OpenApiOperation {
     }
 }
 
+fn query_style_to_str(s: &openapiv3::QueryStyle) -> String {
+    use openapiv3::QueryStyle::*;
+    match s { Form => "form", SpaceDelimited => "spaceDelimited", PipeDelimited => "pipeDelimited", DeepObject => "deepObject" }.to_string()
+}
+fn path_style_to_str(s: &openapiv3::PathStyle) -> String {
+    use openapiv3::PathStyle::*;
+    match s { Simple => "simple", Label => "label", Matrix => "matrix" }.to_string()
+}
+fn header_style_to_str(s: &openapiv3::HeaderStyle) -> String { "simple".to_string() }
+fn cookie_style_to_str(s: &openapiv3::CookieStyle) -> String { "form".to_string() }
+
 /// OpenAPI parameter information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenApiParameter {
@@ -286,6 +298,10 @@ pub struct OpenApiParameter {
     pub schema: Option<OpenApiSchema>,
     /// Parameter description
     pub description: Option<String>,
+    /// Parameter style hint (query/header/path)
+    pub style: Option<String>,
+    /// Explode behavior
+    pub explode: Option<bool>,
 }
 
 impl OpenApiParameter {
@@ -293,11 +309,11 @@ impl OpenApiParameter {
     pub fn from_parameter(param_ref: &ReferenceOr<Parameter>, spec: &OpenApiSpec) -> Option<Self> {
         match param_ref {
             ReferenceOr::Item(param) => {
-                let (param_data, location) = match param {
-                    Parameter::Query { parameter_data, .. } => (parameter_data, "query"),
-                    Parameter::Path { parameter_data, .. } => (parameter_data, "path"),
-                    Parameter::Header { parameter_data, .. } => (parameter_data, "header"),
-                    Parameter::Cookie { parameter_data, .. } => (parameter_data, "cookie"),
+                let (param_data, location, style, explode) = match param {
+                    Parameter::Query { parameter_data, style, allow_reserved: _, allow_empty_value: _, } => (parameter_data, "query", Some(query_style_to_str(style)), Some(parameter_data.explode)),
+                    Parameter::Path { parameter_data, style } => (parameter_data, "path", Some(path_style_to_str(style)), Some(parameter_data.explode)),
+                    Parameter::Header { parameter_data, style } => (parameter_data, "header", Some(header_style_to_str(style)), Some(parameter_data.explode)),
+                    Parameter::Cookie { parameter_data, style } => (parameter_data, "cookie", Some(cookie_style_to_str(style)), Some(parameter_data.explode)),
                 };
 
                 // Extract schema if present
@@ -305,7 +321,7 @@ impl OpenApiParameter {
                     ParameterSchemaOrContent::Schema(ref_or_schema) => match ref_or_schema {
                         ReferenceOr::Item(schema) => OpenApiSchema::from_schema_data(schema, spec),
                         ReferenceOr::Reference { reference } => spec
-                            .get_schema(reference)
+                            .get_schema(&reference)
                             .and_then(|s| OpenApiSchema::from_schema_data(s, spec)),
                     },
                     ParameterSchemaOrContent::Content(_) => None,
@@ -317,6 +333,8 @@ impl OpenApiParameter {
                     required: param_data.required,
                     schema,
                     description: param_data.description.clone(),
+                    style,
+                    explode: explode.flatten(),
                 })
             }
             ReferenceOr::Reference { reference } => spec
@@ -357,6 +375,10 @@ pub struct OpenApiSchema {
     pub any_of: Vec<OpenApiSchema>,
     /// allOf merged components
     pub all_of: Vec<OpenApiSchema>,
+    /// Whether additionalProperties are allowed (if boolean specified)
+    pub additional_properties_allowed: Option<bool>,
+    /// Schema for additionalProperties values
+    pub additional_properties_schema: Option<Box<OpenApiSchema>>, 
 }
 
 impl OpenApiSchema {
@@ -387,6 +409,8 @@ impl OpenApiSchema {
             one_of: Vec::new(),
             any_of: Vec::new(),
             all_of: Vec::new(),
+            additional_properties_allowed: None,
+            additional_properties_schema: None,
         };
 
         match &schema.schema_kind {
@@ -485,6 +509,19 @@ impl OpenApiSchema {
                         }
                     }
                     out.required = ot.required.clone();
+                    // additionalProperties
+                    if let Some(ap) = &ot.additional_properties {
+                        match ap {
+                            openapiv3::AdditionalProperties::Any(b) => {
+                                out.additional_properties_allowed = Some(*b);
+                            }
+                            openapiv3::AdditionalProperties::Schema(s) => {
+                                if let Some(mapped) = Self::from_schema(s, spec) {
+                                    out.additional_properties_schema = Some(Box::new(mapped));
+                                }
+                            }
+                        }
+                    }
                 }
             },
             SchemaKind::OneOf { one_of } => {
@@ -764,6 +801,19 @@ impl OpenApiSchema {
                 }
                 if let Some(fmt) = &self.format {
                     match fmt.as_str() {
+                        "ipv4" => {
+                            let ip: IpAddr = s.parse().map_err(|_| Error::validation(format!("{}: invalid ipv4", path)))?;
+                            if !ip.is_ipv4() { return Err(Error::validation(format!("{}: invalid ipv4", path))); }
+                        }
+                        "ipv6" => {
+                            let ip: IpAddr = s.parse().map_err(|_| Error::validation(format!("{}: invalid ipv6", path)))?;
+                            if !ip.is_ipv6() { return Err(Error::validation(format!("{}: invalid ipv6", path))); }
+                        }
+                        "hostname" => {
+                            // simple hostname regex (no underscores, labels 1-63, total <=253)
+                            static HOST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$").unwrap());
+                            if !HOST_RE.is_match(s) { return Err(Error::validation(format!("{}: invalid hostname", path))); }
+                        }
                         "email" => {
                             if !EMAIL_RE.is_match(s) {
                                 return Err(Error::validation(format!(
@@ -859,6 +909,23 @@ impl OpenApiSchema {
                 for (name, schema) in &self.properties {
                     if let Some(val) = obj.get(name) {
                         schema.validate_value(val, &format!("{}/{}", path, name))?;
+                    }
+                }
+                // additionalProperties handling
+                if let Some(allowed) = self.additional_properties_allowed {
+                    if !allowed {
+                        for key in obj.keys() {
+                            if !self.properties.contains_key(key) {
+                                return Err(Error::validation(format!("{}: additional property '{}' not allowed", path, key)));
+                            }
+                        }
+                    }
+                }
+                if let Some(schema) = &self.additional_properties_schema {
+                    for (key, val) in obj.iter() {
+                        if !self.properties.contains_key(key) {
+                            schema.validate_value(val, &format!("{}/{}", path, key))?;
+                        }
                     }
                 }
                 Ok(())
@@ -1061,6 +1128,7 @@ mod tests {
                         one_of: Vec::new(),
                         any_of: Vec::new(),
                         all_of: Vec::new(),
+                        additional_properties_allowed: None, additional_properties_schema: None,
                     }),
                 ),
                 (
@@ -1077,9 +1145,8 @@ mod tests {
                         maximum: None,
                         min_length: None,
                         max_length: None,
-                        one_of: Vec::new(),
-                        any_of: Vec::new(),
-                        all_of: Vec::new(),
+                        one_of: Vec::new(), any_of: Vec::new(), all_of: Vec::new(),
+                        additional_properties_allowed: None, additional_properties_schema: None,
                     }),
                 ),
             ]
@@ -1095,6 +1162,7 @@ mod tests {
             one_of: Vec::new(),
             any_of: Vec::new(),
             all_of: Vec::new(),
+            additional_properties_allowed: None, additional_properties_schema: None,
         };
 
         let mock_value = schema.generate_mock_value();

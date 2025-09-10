@@ -145,10 +145,15 @@ impl OpenApiRouteRegistry {
                     _ => continue,
                 };
 
-                match params_map.get(&p.name) {
+                // For query deepObject, reconstruct value from key-likes: name[prop]
+                let deep_value = if p.location == "query" && p.style.as_deref() == Some("deepObject") {
+                    build_deep_object(&p.name, params_map)
+                } else { None };
+
+                match deep_value.as_ref().or_else(|| params_map.get(&p.name)) {
                     Some(v) => {
                         if let Some(s) = &p.schema {
-                            let coerced = coerce_value_for_schema(v, s);
+                            let coerced = if p.location == "query" { coerce_by_style(v, s, p.style.as_deref()) } else { coerce_value_for_schema(v, s) };
                             s.validate_value(&coerced, &format!("{}.{}", prefix, p.name))
                                 .map_err(|e| Error::validation(format!("{}", e)))?;
                         }
@@ -245,6 +250,38 @@ fn coerce_value_for_schema(value: &Value, schema: &crate::OpenApiSchema) -> Valu
         }
         _ => value.clone(),
     }
+}
+
+/// Apply style-aware coercion for query params
+fn coerce_by_style(value: &Value, schema: &crate::OpenApiSchema, style: Option<&str>) -> Value {
+    match (schema.schema_type.as_deref(), value, style) {
+        (Some("array"), Value::String(s), Some("spaceDelimited")) => {
+            let items = s.split(' ').filter(|p| !p.is_empty()).map(|p| Value::String(p.to_string())).collect::<Vec<_>>();
+            let item_schema = schema.items.as_deref().unwrap_or(schema);
+            Value::Array(items.into_iter().map(|v| coerce_value_for_schema(&v, item_schema)).collect())
+        }
+        (Some("array"), Value::String(s), Some("pipeDelimited")) => {
+            let items = s.split('|').map(|p| Value::String(p.to_string())).collect::<Vec<_>>();
+            let item_schema = schema.items.as_deref().unwrap_or(schema);
+            Value::Array(items.into_iter().map(|v| coerce_value_for_schema(&v, item_schema)).collect())
+        }
+        _ => coerce_value_for_schema(value, schema),
+    }
+}
+
+/// Build a deepObject from query params like `name[prop]=val`
+fn build_deep_object(name: &str, params: &Map<String, Value>) -> Option<Value> {
+    let prefix = format!("{}[", name);
+    let mut obj = Map::new();
+    for (k, v) in params.iter() {
+        if let Some(rest) = k.strip_prefix(&prefix) {
+            if rest.ends_with(']') {
+                let key = &rest[..rest.len()-1];
+                obj.insert(key.to_string(), v.clone());
+            }
+        }
+    }
+    if obj.is_empty() { None } else { Some(Value::Object(obj)) }
 }
 
 /// Helper function to create an OpenAPI route registry from a file
@@ -544,6 +581,34 @@ mod tests {
         assert!(registry.validate_request_with_all(
             "/items", "GET", &path_params, &query_params, &bad_header, &cookie_params, None
         ).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_query_styles_space_pipe_deepobject() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Query Styles API", "version": "1.0.0" },
+            "paths": {"/search": {"get": {
+                "parameters": [
+                    {"name":"tags","in":"query","style":"spaceDelimited","schema":{"type":"array","items":{"type":"string"}}},
+                    {"name":"ids","in":"query","style":"pipeDelimited","schema":{"type":"array","items":{"type":"integer"}}},
+                    {"name":"filter","in":"query","style":"deepObject","schema":{"type":"object","properties":{"color":{"type":"string"}},"required":["color"]}}
+                ],
+                "responses": {"200": {"description":"ok"}}
+            }} }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+
+        let path_params = Map::new();
+        let mut query = Map::new();
+        query.insert("tags".into(), json!("alpha beta gamma"));
+        query.insert("ids".into(), json!("1|2|3"));
+        query.insert("filter[color]".into(), json!("red"));
+
+        assert!(registry.validate_request_with(
+            "/search", "GET", &path_params, &query, None
+        ).is_ok());
     }
 
     #[tokio::test]
