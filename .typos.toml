@@ -1,0 +1,19 @@
+[files]
+extend-exclude = [
+  "target/**",
+]
+
+[default]
+extend-ignore-re = [
+  # Allow templating tokens like Nd/Nh/Nm/Ns in docs and code
+  "now[±\+\-](Nd|Nh|Nm|Ns)",
+]
+
+[default.extend-words]
+Nd = "Nd"
+Nh = "Nh"
+Nm = "Nm"
+Ns = "Ns"
+typ = "typ"
+ot = "ot"
+

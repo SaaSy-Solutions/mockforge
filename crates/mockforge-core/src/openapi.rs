@@ -293,8 +293,8 @@ fn path_style_to_str(s: &openapiv3::PathStyle) -> String {
     use openapiv3::PathStyle::*;
     match s { Simple => "simple", Label => "label", Matrix => "matrix" }.to_string()
 }
-fn header_style_to_str(s: &openapiv3::HeaderStyle) -> String { "simple".to_string() }
-fn cookie_style_to_str(s: &openapiv3::CookieStyle) -> String { "form".to_string() }
+fn header_style_to_str(_: &openapiv3::HeaderStyle) -> String { "simple".to_string() }
+fn cookie_style_to_str(_: &openapiv3::CookieStyle) -> String { "form".to_string() }
 
 /// OpenAPI parameter information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -332,7 +332,7 @@ impl OpenApiParameter {
                     ParameterSchemaOrContent::Schema(ref_or_schema) => match ref_or_schema {
                         ReferenceOr::Item(schema) => OpenApiSchema::from_schema_data(schema, spec),
                         ReferenceOr::Reference { reference } => spec
-                            .get_schema(&reference)
+                            .get_schema(reference)
                             .and_then(|s| OpenApiSchema::from_schema_data(s, spec)),
                     },
                     ParameterSchemaOrContent::Content(_) => None,
@@ -451,7 +451,6 @@ impl OpenApiSchema {
                             StringFormat::Date => "date",
                             StringFormat::DateTime => "date-time",
                             StringFormat::Password => "password",
-                            _ => "string",
                         }.to_string()),
                         VariantOrUnknownOrEmpty::Unknown(s) => Some(s.clone()),
                         VariantOrUnknownOrEmpty::Empty => None,
@@ -489,7 +488,7 @@ impl OpenApiSchema {
                         let vals = it
                             .enumeration
                             .iter()
-                            .map(|opt| opt.map(|v| Value::from(v as i64)).unwrap_or(Value::Null))
+                            .map(|opt| opt.map(Value::from).unwrap_or(Value::Null))
                             .collect();
                         out.enum_values = Some(vals);
                     }
@@ -858,7 +857,8 @@ impl OpenApiSchema {
                         }
                         "hostname" => {
                             // simple hostname regex (no underscores, labels 1-63, total <=253)
-                            static HOST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$").unwrap());
+                            if s.len() > 253 { return Err(Error::validation(format!("{}: invalid hostname", path))); }
+                            static HOST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$").unwrap());
                             if !HOST_RE.is_match(s) { return Err(Error::validation(format!("{}: invalid hostname", path))); }
                         }
                         "email" => {
@@ -1175,7 +1175,7 @@ impl OpenApiResponse {
                 }
                 Some(Self { description: response.description.clone(), schema, example })
             }
-            ReferenceOr::Reference { reference } => spec.get_response(reference).and_then(|r| {
+            ReferenceOr::Reference { reference } => spec.get_response(reference).map(|r| {
                 let media = r
                     .content
                     .get("application/json")
@@ -1191,7 +1191,7 @@ impl OpenApiResponse {
                         }
                     }
                 }
-                Some(Self { description: r.description.clone(), schema, example })
+                Self { description: r.description.clone(), schema, example }
             }),
         }
     }
@@ -1268,6 +1268,17 @@ impl OpenApiRoute {
             return (code, Value::Object(serde_json::Map::new()));
         }
         (200, Value::Object(serde_json::Map::new()))
+    }
+
+    /// Back-compat: return only the mock body
+    pub fn mock_response(&self) -> Value {
+        let (_, body) = self.mock_response_with_status();
+        body
+    }
+
+    /// Back-compat: return just the selected status code
+    pub fn get_response_status_code(&self) -> u16 {
+        self.select_best_2xx_response().map(|(c, _)| c).unwrap_or(200)
     }
 }
 
