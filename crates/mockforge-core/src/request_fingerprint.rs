@@ -179,7 +179,7 @@ pub enum RequestHandlerResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderName, HeaderValue};
+    use axum::http::Uri;
 
     #[test]
     fn test_request_fingerprint_creation() {

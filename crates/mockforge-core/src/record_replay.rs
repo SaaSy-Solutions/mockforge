@@ -222,13 +222,15 @@ pub async fn list_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequest>> 
         return Ok(fixtures);
     }
 
-    let mut entries = fs::read_dir(&http_dir).await
-        .map_err(|e| Error::generic(format!("Failed to read fixtures directory: {}", e)))?;
+    // Use globwalk to find all JSON files recursively
+    let walker = globwalk::GlobWalkerBuilder::from_patterns(&http_dir, &["**/*.json"])
+        .build()
+        .map_err(|e| Error::generic(format!("Failed to build glob walker: {}", e)))?;
 
-    while let Some(entry) = entries.next_entry().await
-        .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))? {
-
+    for entry in walker {
+        let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
+        
         if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
             if let Ok(content) = fs::read_to_string(&path).await {
                 if let Ok(recorded_request) = serde_json::from_str::<RecordedRequest>(&content) {
@@ -286,7 +288,7 @@ pub async fn clean_old_fixtures(fixtures_dir: &Path, older_than_days: u32) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderName, HeaderValue, Uri};
+    use axum::http::{Uri};
     use tempfile::TempDir;
 
     #[tokio::test]

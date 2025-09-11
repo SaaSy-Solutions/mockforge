@@ -17,6 +17,7 @@ pub mod routing;
 pub mod server_utils;
 pub mod templating;
 pub mod validation;
+pub mod ws_proxy;
 
 pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ServerConfig,
@@ -37,6 +38,7 @@ pub use routing::RouteRegistry;
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
 pub use validation::Validator;
+pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 
 
 /// Core configuration for MockForge
