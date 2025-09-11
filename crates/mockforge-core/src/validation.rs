@@ -1,7 +1,7 @@
 //! Schema validation logic for MockForge
 
 use crate::{Error, Result};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{self, Draft, Validator as JSONSchema};
 use serde_json::Value;
 
 /// Schema validator for different formats
@@ -18,9 +18,9 @@ pub enum Validator {
 impl Validator {
     /// Create a JSON Schema validator from a schema
     pub fn from_json_schema(schema: &Value) -> Result<Self> {
-        let compiled = JSONSchema::options()
+        let compiled = jsonschema::options()
             .with_draft(Draft::Draft7)
-            .compile(schema)
+            .build(schema)
             .map_err(|e| Error::validation(format!("Failed to compile JSON schema: {}", e)))?;
 
         Ok(Self::JsonSchema(compiled))
@@ -54,17 +54,18 @@ impl Validator {
     pub fn validate(&self, data: &Value) -> Result<()> {
         match self {
             Self::JsonSchema(schema) => {
-                let result = schema.validate(data);
+                let mut errors = Vec::new();
+                for error in schema.iter_errors(data) {
+                    errors.push(error.to_string());
+                }
 
-                match result {
-                    Ok(()) => Ok(()),
-                    Err(validation_errors) => {
-                        let mut errors = Vec::new();
-                        for error in validation_errors {
-                            errors.push(format!("{:?}", error));
-                        }
-                        Err(Error::validation(format!("Validation failed: {}", errors.join(", "))))
-                    }
+                if errors.is_empty() {
+                    Ok(())
+                } else {
+                    Err(Error::validation(format!(
+                        "Validation failed: {}",
+                        errors.join(", ")
+                    )))
                 }
             }
             Self::OpenApi => {
