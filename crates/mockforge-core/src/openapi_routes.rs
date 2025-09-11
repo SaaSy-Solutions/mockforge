@@ -4,7 +4,7 @@
 //! from OpenAPI specifications, including mock response generation and validation.
 
 use crate::templating::expand_tokens as core_expand_tokens;
-use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result};
+use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result, latency::LatencyInjector};
 use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::{
@@ -309,6 +309,157 @@ impl OpenApiRouteRegistry {
                 "HEAD" => router.route(&axum_path, head(handler)),
                 "OPTIONS" => router.route(&axum_path, options(handler)),
                 _ => router, // Skip unknown methods
+            };
+        }
+
+        // Add OpenAPI documentation endpoint
+        let spec_json = serde_json::to_value(&self.spec.spec).unwrap_or(Value::Null);
+        router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
+
+        router
+    }
+
+    /// Build an Axum router from the OpenAPI spec with latency injection support
+    pub fn build_router_with_latency(self, latency_injector: LatencyInjector) -> Router {
+        let mut router = Router::new();
+
+        // Create individual routes for each operation
+        for route in &self.routes {
+            let axum_path = route.axum_path();
+            let operation = route.operation.clone();
+            let method = route.method.clone();
+            let method_str = method.clone();
+            let method_for_router = method_str.clone();
+            let path_template = route.path.clone();
+            let validator = self.clone_for_validation();
+            let (selected_status, mock_response) = route.mock_response_with_status();
+            let injector = latency_injector.clone();
+
+            // Extract tags from operation for latency injection
+            // For now, we'll use the operation_id as a tag, or empty if not available
+            let operation_tags = operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
+
+            // Handler: inject latency, validate path/query/header/cookie/body, then return mock
+            let handler = move |AxumPath(path_params): AxumPath<
+                std::collections::HashMap<String, String>,
+            >,
+                                RawQuery(raw_query): RawQuery,
+                                headers: HeaderMap,
+                                body: axum::body::Bytes| async move {
+                // Inject latency before processing the request
+                if let Err(e) = injector.inject_latency(&operation_tags).await {
+                    tracing::warn!("Failed to inject latency: {}", e);
+                }
+
+                // Admin routes are mounted separately; no validation skip needed here.
+                // Build params maps
+                let mut path_map = Map::new();
+                for (k, v) in path_params {
+                    path_map.insert(k, Value::String(v));
+                }
+
+                // Query
+                let mut query_map = Map::new();
+                if let Some(q) = raw_query {
+                    for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
+                        query_map.insert(k.to_string(), Value::String(v.to_string()));
+                    }
+                }
+
+                // Headers: only capture those declared on this operation
+                let mut header_map = Map::new();
+                for p in &operation.parameters {
+                    if p.location == "header" {
+                        let name_lc = p.name.to_ascii_lowercase();
+                        if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                            if let Some(val) = headers.get(hn) {
+                                if let Ok(s) = val.to_str() {
+                                    header_map.insert(p.name.clone(), Value::String(s.to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Cookies: parse Cookie header
+                let mut cookie_map = Map::new();
+                if let Some(val) = headers.get(axum::http::header::COOKIE) {
+                    if let Ok(s) = val.to_str() {
+                        for part in s.split(';') {
+                            let part = part.trim();
+                            if let Some((k, v)) = part.split_once('=') {
+                                cookie_map.insert(k.to_string(), Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+
+                // Body: try JSON when present
+                let body_json: Option<Value> = if !body.is_empty() {
+                    serde_json::from_slice(&body).ok()
+                } else {
+                    None
+                };
+
+                if let Err(e) = validator.validate_request_with_all(
+                    &path_template,
+                    &method_str,
+                    &path_map,
+                    &query_map,
+                    &header_map,
+                    &cookie_map,
+                    body_json.as_ref(),
+                ) {
+                    let msg = format!("{}", e);
+                    let detail_val = serde_json::from_str::<serde_json::Value>(&msg)
+                        .unwrap_or(serde_json::json!(msg));
+                    let payload = serde_json::json!({
+                        "error": "request validation failed",
+                        "detail": detail_val,
+                        "method": method_str,
+                        "path": path_template,
+                        "timestamp": Utc::now().to_rfc3339(),
+                    });
+                    record_validation_error(&payload);
+                    // Choose status: prefer options.validation_status, fallback to env, else 400
+                    let status_code = validator
+                        .options
+                        .validation_status
+                        .unwrap_or_else(|| {
+                            std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                .ok()
+                                .and_then(|s| s.parse::<u16>().ok())
+                                .unwrap_or(400)
+                        });
+                    return (
+                        axum::http::StatusCode::from_u16(status_code).unwrap_or(axum::http::StatusCode::BAD_REQUEST),
+                        Json(payload),
+                    );
+                }
+
+                // Expand templating tokens in response if enabled
+                let mut response = mock_response.clone();
+                if validator.options.response_template_expand {
+                    response = core_expand_tokens(&response);
+                }
+
+                // Return the mock response
+                (
+                    axum::http::StatusCode::from_u16(selected_status).unwrap_or(axum::http::StatusCode::OK),
+                    Json(response),
+                )
+            };
+
+            // Add route to router based on HTTP method
+            router = match method_for_router.as_str() {
+                "GET" => router.route(&axum_path, get(handler)),
+                "POST" => router.route(&axum_path, post(handler)),
+                "PUT" => router.route(&axum_path, put(handler)),
+                "PATCH" => router.route(&axum_path, patch(handler)),
+                "DELETE" => router.route(&axum_path, delete(handler)),
+                "HEAD" => router.route(&axum_path, head(handler)),
+                "OPTIONS" => router.route(&axum_path, options(handler)),
+                _ => router.route(&axum_path, get(handler)), // Default to GET for unknown methods
             };
         }
 

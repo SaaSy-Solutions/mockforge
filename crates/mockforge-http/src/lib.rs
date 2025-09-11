@@ -10,7 +10,7 @@ use axum::{routing::get, Json};
 use mockforge_core::openapi_routes::{
     get_last_validation_error, get_validation_errors, ValidationOptions,
 };
-use mockforge_core::{load_config, save_config};
+use mockforge_core::{load_config, save_config, latency::LatencyInjector, LatencyProfile};
 use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
@@ -20,7 +20,16 @@ use tracing::*;
 /// Build the base HTTP router, optionally from an OpenAPI spec.
 pub async fn build_router(
     spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+) -> Router {
+    build_router_with_latency(spec_path, options, None).await
+}
+
+/// Build the base HTTP router with latency injection support
+pub async fn build_router_with_latency(
+    spec_path: Option<String>,
     mut options: Option<ValidationOptions>,
+    latency_injector: Option<LatencyInjector>,
 ) -> Router {
     // If richer faker is available, register provider once (idempotent)
     #[cfg(feature = "data-faker")]
@@ -63,7 +72,13 @@ pub async fn build_router(
 
                 // Clone registry for routes listing before moving it to build_router
                 let routes_registry = registry.clone();
-                app = registry.build_router();
+
+                // Build router with latency injection if provided
+                if let Some(injector) = latency_injector {
+                    app = registry.build_router_with_latency(injector);
+                } else {
+                    app = registry.build_router();
+                }
 
                 // Expose routes listing for Admin UI
                 if let Some(_opts) = options {
@@ -121,7 +136,21 @@ pub async fn start(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = build_router(spec_path, options).await;
+    start_with_latency(port, spec_path, options, None).await
+}
+
+/// Start HTTP server with latency injection support
+pub async fn start_with_latency(
+    port: u16,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    latency_profile: Option<LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let latency_injector = latency_profile.map(|profile| {
+        LatencyInjector::new(profile, Default::default())
+    });
+
+    let app = build_router_with_latency(spec_path, options, latency_injector).await;
     serve_router(port, app).await
 }
 

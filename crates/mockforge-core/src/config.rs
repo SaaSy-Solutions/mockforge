@@ -361,6 +361,17 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         config.admin.api_enabled = on;
     }
 
+    // Core configuration overrides
+    if let Ok(latency_enabled) = std::env::var("MOCKFORGE_LATENCY_ENABLED") {
+        let enabled = latency_enabled == "1" || latency_enabled.eq_ignore_ascii_case("true");
+        config.core.latency_enabled = enabled;
+    }
+
+    if let Ok(failures_enabled) = std::env::var("MOCKFORGE_FAILURES_ENABLED") {
+        let enabled = failures_enabled == "1" || failures_enabled.eq_ignore_ascii_case("true");
+        config.core.failures_enabled = enabled;
+    }
+
     // Logging overrides
     if let Ok(level) = std::env::var("MOCKFORGE_LOG_LEVEL") {
         config.logging.level = level;
