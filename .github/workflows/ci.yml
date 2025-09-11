@@ -31,6 +31,9 @@ jobs:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
 
+    - name: Install protoc (protobuf compiler)
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
@@ -65,6 +68,9 @@ jobs:
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install protoc (protobuf compiler)
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
     - name: Install cargo-audit
       run: cargo install cargo-audit
@@ -83,6 +89,9 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         components: llvm-tools-preview
+
+    - name: Install protoc (protobuf compiler)
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
@@ -110,6 +119,9 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: "1.82"  # MSRV updated for ICU crates
+
+    - name: Install protoc (protobuf compiler)
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
