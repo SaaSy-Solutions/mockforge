@@ -285,6 +285,64 @@ pub async fn clean_old_fixtures(fixtures_dir: &Path, older_than_days: u32) -> Re
     Ok(cleaned_count)
 }
 
+/// List ready-to-run fixtures (fixtures that can be used for smoke testing)
+pub async fn list_ready_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequest>> {
+    let mut fixtures = Vec::new();
+
+    if !fixtures_dir.exists() {
+        return Ok(fixtures);
+    }
+
+    let http_dir = fixtures_dir.join("http");
+    if !http_dir.exists() {
+        return Ok(fixtures);
+    }
+
+    // Use globwalk to find all JSON files recursively
+    let walker = globwalk::GlobWalkerBuilder::from_patterns(&http_dir, &["**/*.json"])
+        .build()
+        .map_err(|e| Error::generic(format!("Failed to build glob walker: {}", e)))?;
+
+    for entry in walker {
+        let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+        let path = entry.path();
+        
+        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+            if let Ok(content) = fs::read_to_string(&path).await {
+                if let Ok(recorded_request) = serde_json::from_str::<RecordedRequest>(&content) {
+                    // Check if this is a ready-to-run fixture (has a smoke_test metadata flag)
+                    if recorded_request.metadata.get("smoke_test").map_or(false, |v| v == "true") {
+                        fixtures.push(recorded_request);
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by timestamp (newest first)
+    fixtures.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    Ok(fixtures)
+}
+
+/// Create a smoke test endpoint listing
+pub async fn list_smoke_endpoints(fixtures_dir: &Path) -> Result<Vec<(String, String, String)>> {
+    let fixtures = list_ready_fixtures(fixtures_dir).await?;
+    let mut endpoints = Vec::new();
+
+    for fixture in fixtures {
+        let method = fixture.fingerprint.method.clone();
+        let path = fixture.fingerprint.path.clone();
+        let name = fixture.metadata.get("name")
+            .cloned()
+            .unwrap_or_else(|| format!("{} {}", method, path));
+        
+        endpoints.push((method, path, name));
+    }
+
+    Ok(endpoints)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
