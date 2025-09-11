@@ -109,7 +109,7 @@ jobs:
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: "1.79"  # MSRV updated to parse Cargo.lock v4
+        toolchain: "1.82"  # MSRV updated for ICU crates
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2

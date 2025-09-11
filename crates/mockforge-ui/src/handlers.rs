@@ -398,8 +398,12 @@ pub async fn update_validation(Json(update): Json<ValidationUpdate>) -> Json<Api
 
     // Validate the mode
     match update.mode.as_str() {
-        "enforce" | "warn" | "off" => {},
-        _ => return Json(ApiResponse::error("Invalid validation mode. Must be 'enforce', 'warn', or 'off'".to_string())),
+        "enforce" | "warn" | "off" => {}
+        _ => {
+            return Json(ApiResponse::error(
+                "Invalid validation mode. Must be 'enforce', 'warn', or 'off'".to_string(),
+            ))
+        }
     }
 
     Json(ApiResponse::success("Validation settings updated".to_string()))

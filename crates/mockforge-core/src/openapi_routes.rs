@@ -3,20 +3,20 @@
 //! This module provides functionality to automatically generate Axum routes
 //! from OpenAPI specifications, including mock response generation and validation.
 
+use crate::templating::expand_tokens as core_expand_tokens;
 use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result};
+use axum::extract::{Path as AxumPath, RawQuery};
+use axum::http::HeaderMap;
 use axum::{
     routing::{delete, get, head, options, patch, post, put},
     Json, Router,
 };
-use axum::extract::{Path as AxumPath, RawQuery};
-use axum::http::HeaderMap;
-use serde_json::{Map, Value};
-use std::sync::Arc;
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
-use std::collections::VecDeque;
 use chrono::Utc;
-use crate::templating::expand_tokens as core_expand_tokens;
+use once_cell::sync::Lazy;
+use serde_json::{Map, Value};
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::Mutex;
 // keep module-local definitions; do not import the same names
 
 /// OpenAPI route registry that manages generated routes
@@ -31,7 +31,11 @@ pub struct OpenApiRouteRegistry {
 }
 
 #[derive(Debug, Clone)]
-pub enum ValidationMode { Disabled, Warn, Enforce }
+pub enum ValidationMode {
+    Disabled,
+    Warn,
+    Enforce,
+}
 
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {
@@ -49,42 +53,76 @@ pub struct ValidationOptions {
 
 impl Default for ValidationOptions {
     fn default() -> Self {
-        Self { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new(), admin_skip_prefixes: Vec::new(), response_template_expand: false, validation_status: None }
+        Self {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: std::collections::HashMap::new(),
+            admin_skip_prefixes: Vec::new(),
+            response_template_expand: false,
+            validation_status: None,
+        }
     }
 }
 
 impl OpenApiRouteRegistry {
     /// Create a new registry from an OpenAPI spec
-    pub fn new(spec: OpenApiSpec) -> Self { Self::new_with_env(spec) }
+    pub fn new(spec: OpenApiSpec) -> Self {
+        Self::new_with_env(spec)
+    }
 
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
         let options = ValidationOptions {
-            request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION").unwrap_or_else(|_| "enforce".into()).to_ascii_lowercase().as_str() {
+            request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION")
+                .unwrap_or_else(|_| "enforce".into())
+                .to_ascii_lowercase()
+                .as_str()
+            {
                 "off" | "disable" | "disabled" => ValidationMode::Disabled,
                 "warn" | "warning" => ValidationMode::Warn,
                 _ => ValidationMode::Enforce,
             },
-            aggregate_errors: std::env::var("MOCKFORGE_AGGREGATE_ERRORS").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(true),
-            validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false),
+            aggregate_errors: std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(true),
+            validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
             overrides: std::collections::HashMap::new(),
             admin_skip_prefixes: Vec::new(),
-            response_template_expand: std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false),
-            validation_status: std::env::var("MOCKFORGE_VALIDATION_STATUS").ok().and_then(|s| s.parse::<u16>().ok()),
+            response_template_expand: std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+            validation_status: std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                .ok()
+                .and_then(|s| s.parse::<u16>().ok()),
         };
-        Self { spec, routes, options }
+        Self {
+            spec,
+            routes,
+            options,
+        }
     }
 
     /// Construct with explicit options
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
-        Self { spec, routes, options }
+        Self {
+            spec,
+            routes,
+            options,
+        }
     }
 
     fn clone_for_validation(&self) -> Self {
-        OpenApiRouteRegistry { spec: self.spec.clone(), routes: self.routes.clone(), options: self.options.clone() }
+        OpenApiRouteRegistry {
+            spec: self.spec.clone(),
+            routes: self.routes.clone(),
+            options: self.options.clone(),
+        }
     }
 
     /// Generate routes from the OpenAPI specification
@@ -93,7 +131,12 @@ impl OpenApiRouteRegistry {
 
         for (path, operations) in spec.all_paths_and_operations() {
             for (method, operation) in operations {
-                routes.push(OpenApiRoute::from_operation(method, path.clone(), operation, spec.as_ref()));
+                routes.push(OpenApiRoute::from_operation(
+                    method,
+                    path.clone(),
+                    operation,
+                    spec.as_ref(),
+                ));
             }
         }
 
@@ -101,10 +144,14 @@ impl OpenApiRouteRegistry {
     }
 
     /// Get all routes
-    pub fn routes(&self) -> &[OpenApiRoute] { &self.routes }
+    pub fn routes(&self) -> &[OpenApiRoute] {
+        &self.routes
+    }
 
     /// Get the OpenAPI specification
-    pub fn spec(&self) -> &OpenApiSpec { &self.spec }
+    pub fn spec(&self) -> &OpenApiSpec {
+        &self.spec
+    }
 
     /// Build an Axum router from the OpenAPI spec (simplified)
     pub fn build_router(self) -> Router {
@@ -120,12 +167,12 @@ impl OpenApiRouteRegistry {
             let (selected_status, mock_response) = route.mock_response_with_status();
 
             // Handler: validate path/query/header/cookie/body, then return mock
-            let handler = move |
-                AxumPath(path_params): AxumPath<std::collections::HashMap<String, String>>,
-                RawQuery(raw_query): RawQuery,
-                headers: HeaderMap,
-                body: axum::body::Bytes,
-            | async move {
+            let handler = move |AxumPath(path_params): AxumPath<
+                std::collections::HashMap<String, String>,
+            >,
+                                RawQuery(raw_query): RawQuery,
+                                headers: HeaderMap,
+                                body: axum::body::Bytes| async move {
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = Map::new();
@@ -172,11 +219,22 @@ impl OpenApiRouteRegistry {
                 // Body: try JSON when present
                 let body_json: Option<Value> = if !body.is_empty() {
                     serde_json::from_slice(&body).ok()
-                } else { None };
+                } else {
+                    None
+                };
 
-                if let Err(e) = validator.validate_request_with_all(&path_template, &method, &path_map, &query_map, &header_map, &cookie_map, body_json.as_ref()) {
+                if let Err(e) = validator.validate_request_with_all(
+                    &path_template,
+                    &method,
+                    &path_map,
+                    &query_map,
+                    &header_map,
+                    &cookie_map,
+                    body_json.as_ref(),
+                ) {
                     let msg = format!("{}", e);
-                    let detail_val = serde_json::from_str::<serde_json::Value>(&msg).unwrap_or(serde_json::json!(msg));
+                    let detail_val = serde_json::from_str::<serde_json::Value>(&msg)
+                        .unwrap_or(serde_json::json!(msg));
                     let payload = serde_json::json!({
                         "error": "request validation failed",
                         "detail": detail_val,
@@ -186,10 +244,17 @@ impl OpenApiRouteRegistry {
                     });
                     record_validation_error(&payload);
                     // Choose status: prefer options.validation_status, fallback to env, else 400
-                    let status_code = validator.options.validation_status
-                        .or_else(|| std::env::var("MOCKFORGE_VALIDATION_STATUS").ok().and_then(|s| s.parse::<u16>().ok()))
+                    let status_code = validator
+                        .options
+                        .validation_status
+                        .or_else(|| {
+                            std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                .ok()
+                                .and_then(|s| s.parse::<u16>().ok())
+                        })
                         .unwrap_or(400);
-                    let status = axum::http::StatusCode::from_u16(status_code).unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+                    let status = axum::http::StatusCode::from_u16(status_code)
+                        .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
                     return axum::http::Response::builder()
                         .status(status)
                         .header(axum::http::header::CONTENT_TYPE, "application/json")
@@ -200,8 +265,12 @@ impl OpenApiRouteRegistry {
                 // Expand tokens in the response if enabled (options or env)
                 let mut final_response = mock_response.clone();
                 let expand = validator.options.response_template_expand
-                    || std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false);
-                if expand { final_response = core_expand_tokens(&final_response); }
+                    || std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false);
+                if expand {
+                    final_response = core_expand_tokens(&final_response);
+                }
 
                 // Optional response validation
                 if validator.options.validate_responses {
@@ -210,14 +279,21 @@ impl OpenApiRouteRegistry {
                             let mut errors = Vec::new();
                             resp_schema.validate_collect(&final_response, "response", &mut errors);
                             if !errors.is_empty() {
-                                tracing::warn!("Response validation failed for status {}: {:?}", status_code, errors);
+                                tracing::warn!(
+                                    "Response validation failed for status {}: {:?}",
+                                    status_code,
+                                    errors
+                                );
                             }
                         }
                     }
                 }
 
                 axum::http::Response::builder()
-                    .status(axum::http::StatusCode::from_u16(selected_status).unwrap_or(axum::http::StatusCode::OK))
+                    .status(
+                        axum::http::StatusCode::from_u16(selected_status)
+                            .unwrap_or(axum::http::StatusCode::OK),
+                    )
                     .header(axum::http::header::CONTENT_TYPE, "application/json")
                     .body(axum::body::Body::from(serde_json::to_vec(&final_response).unwrap()))
                     .unwrap()
@@ -267,7 +343,15 @@ impl OpenApiRouteRegistry {
         query_params: &Map<String, Value>,
         body: Option<&Value>,
     ) -> Result<()> {
-        self.validate_request_with_all(path, method, path_params, query_params, &Map::new(), &Map::new(), body)
+        self.validate_request_with_all(
+            path,
+            method,
+            path_params,
+            query_params,
+            &Map::new(),
+            &Map::new(),
+            body,
+        )
     }
 
     /// Validate request against OpenAPI spec with path/query/header/cookie params
@@ -289,36 +373,63 @@ impl OpenApiRouteRegistry {
             }
         }
         // Runtime env overrides
-        let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| match v.to_ascii_lowercase().as_str() {"off"|"disable"|"disabled"=>ValidationMode::Disabled,"warn"|"warning"=>ValidationMode::Warn,_=>ValidationMode::Enforce});
-        let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS").ok().map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(self.options.aggregate_errors);
-        // Per-route runtime overrides via JSON env var
-        let env_overrides: Option<serde_json::Map<String, serde_json::Value>> = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
+        let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| {
+            match v.to_ascii_lowercase().as_str() {
+                "off" | "disable" | "disabled" => ValidationMode::Disabled,
+                "warn" | "warning" => ValidationMode::Warn,
+                _ => ValidationMode::Enforce,
+            }
+        });
+        let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
             .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.as_object().cloned());
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(self.options.aggregate_errors);
+        // Per-route runtime overrides via JSON env var
+        let env_overrides: Option<serde_json::Map<String, serde_json::Value>> =
+            std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v.as_object().cloned());
         // Response validation is handled in HTTP layer now
         let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
         // Apply runtime overrides first if present
         if let Some(map) = &env_overrides {
             if let Some(v) = map.get(&format!("{} {}", method, path)) {
                 if let Some(m) = v.as_str() {
-                    effective_mode = match m { "off"=>ValidationMode::Disabled, "warn"=>ValidationMode::Warn, _=>ValidationMode::Enforce };
+                    effective_mode = match m {
+                        "off" => ValidationMode::Disabled,
+                        "warn" => ValidationMode::Warn,
+                        _ => ValidationMode::Enforce,
+                    };
                 }
             }
         }
         // Then static options overrides
-        if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) { effective_mode = override_mode.clone(); }
-        if matches!(effective_mode, ValidationMode::Disabled) { return Ok(()); }
+        if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) {
+            effective_mode = override_mode.clone();
+        }
+        if matches!(effective_mode, ValidationMode::Disabled) {
+            return Ok(());
+        }
         if let Some(route) = self.get_route(path, method) {
-            if matches!(effective_mode, ValidationMode::Disabled) { return Ok(()); }
+            if matches!(effective_mode, ValidationMode::Disabled) {
+                return Ok(());
+            }
             let mut errors: Vec<String> = Vec::new();
             let mut details: Vec<serde_json::Value> = Vec::new();
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
                 if let Some(value) = body {
-                    if aggregate { schema.validate_collect(value, "body", &mut errors); schema.validate_collect_detailed(value, "body", &mut details); }
-                    else if let Err(e) = schema.validate_value(value, "body") { errors.push(format!("{}", e)); }
-                } else { errors.push("body: Request body is required but not provided".to_string()); details.push(serde_json::json!({"path":"body","code":"required","message":"Request body is required"})); }
+                    if aggregate {
+                        schema.validate_collect(value, "body", &mut errors);
+                        schema.validate_collect_detailed(value, "body", &mut details);
+                    } else if let Err(e) = schema.validate_value(value, "body") {
+                        errors.push(format!("{}", e));
+                    }
+                } else {
+                    errors.push("body: Request body is required but not provided".to_string());
+                    details.push(serde_json::json!({"path":"body","code":"required","message":"Request body is required"}));
+                }
             } else if body.is_some() {
                 // No body expected but provided — not an error by default, but log it
                 tracing::debug!("Body provided for operation without requestBody; accepting");
@@ -335,31 +446,62 @@ impl OpenApiRouteRegistry {
                 };
 
                 // For query deepObject, reconstruct value from key-likes: name[prop]
-                let deep_value = if p.location == "query" && p.style.as_deref() == Some("deepObject") {
-                    build_deep_object(&p.name, params_map)
-                } else { None };
+                let deep_value =
+                    if p.location == "query" && p.style.as_deref() == Some("deepObject") {
+                        build_deep_object(&p.name, params_map)
+                    } else {
+                        None
+                    };
 
                 match deep_value.as_ref().or_else(|| params_map.get(&p.name)) {
                     Some(v) => {
                         if let Some(s) = &p.schema {
-                            let coerced = if p.location == "query" { coerce_by_style(v, s, p.style.as_deref()) } else { coerce_value_for_schema(v, s) };
-                            if aggregate { s.validate_collect(&coerced, &format!("{}.{}", prefix, p.name), &mut errors); s.validate_collect_detailed(&coerced, &format!("{}.{}", prefix, p.name), &mut details); }
-                            else if let Err(e) = s.validate_value(&coerced, &format!("{}.{}", prefix, p.name)) { errors.push(format!("{}", e)); }
+                            let coerced = if p.location == "query" {
+                                coerce_by_style(v, s, p.style.as_deref())
+                            } else {
+                                coerce_value_for_schema(v, s)
+                            };
+                            if aggregate {
+                                s.validate_collect(
+                                    &coerced,
+                                    &format!("{}.{}", prefix, p.name),
+                                    &mut errors,
+                                );
+                                s.validate_collect_detailed(
+                                    &coerced,
+                                    &format!("{}.{}", prefix, p.name),
+                                    &mut details,
+                                );
+                            } else if let Err(e) =
+                                s.validate_value(&coerced, &format!("{}.{}", prefix, p.name))
+                            {
+                                errors.push(format!("{}", e));
+                            }
                         }
                     }
                     None => {
                         if p.required {
-                            errors.push(format!("missing required {} parameter '{}'", prefix, p.name));
+                            errors.push(format!(
+                                "missing required {} parameter '{}'",
+                                prefix, p.name
+                            ));
                             details.push(serde_json::json!({"path":format!("{}.{}", prefix, p.name),"code":"required","message":"Missing required parameter"}));
                         }
                     }
                 }
             }
-            if errors.is_empty() { return Ok(()); }
+            if errors.is_empty() {
+                return Ok(());
+            }
             match effective_mode {
                 ValidationMode::Disabled => Ok(()),
-                ValidationMode::Warn => { tracing::warn!("Request validation warnings: {:?}", errors); Ok(()) }
-                ValidationMode::Enforce => Err(Error::validation(serde_json::json!({"errors": errors, "details": details}).to_string())),
+                ValidationMode::Warn => {
+                    tracing::warn!("Request validation warnings: {:?}", errors);
+                    Ok(())
+                }
+                ValidationMode::Enforce => Err(Error::validation(
+                    serde_json::json!({"errors": errors, "details": details}).to_string(),
+                )),
             }
         } else {
             Err(Error::generic(format!("Route {} {} not found in OpenAPI spec", method, path)))
@@ -399,12 +541,15 @@ impl OpenApiRouteRegistry {
 
 // Note: templating helpers are now in core::templating (shared across modules)
 
-static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> = Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));
+static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> =
+    Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));
 
 /// Record last validation error for Admin UI inspection
 pub fn record_validation_error(v: &serde_json::Value) {
     let mut q = LAST_ERRORS.lock().unwrap();
-    if q.len() >= 20 { q.pop_front(); }
+    if q.len() >= 20 {
+        q.pop_front();
+    }
     q.push_back(v.clone());
 }
 
@@ -429,13 +574,22 @@ fn coerce_value_for_schema(value: &Value, schema: &crate::OpenApiSchema) -> Valu
             _ => value.clone(),
         },
         Some("number") => match value {
-            Value::String(s) => s.parse::<f64>().ok().and_then(serde_json::Number::from_f64).map(Value::Number).unwrap_or(value.clone()),
+            Value::String(s) => s
+                .parse::<f64>()
+                .ok()
+                .and_then(serde_json::Number::from_f64)
+                .map(Value::Number)
+                .unwrap_or(value.clone()),
             _ => value.clone(),
         },
         Some("boolean") => match value {
             Value::String(s) => {
                 let ls = s.to_ascii_lowercase();
-                match ls.as_str() { "true" => Value::Bool(true), "false" => Value::Bool(false), _ => value.clone() }
+                match ls.as_str() {
+                    "true" => Value::Bool(true),
+                    "false" => Value::Bool(false),
+                    _ => value.clone(),
+                }
             }
             _ => value.clone(),
         },
@@ -444,13 +598,19 @@ fn coerce_value_for_schema(value: &Value, schema: &crate::OpenApiSchema) -> Valu
                 match value {
                     Value::String(s) => {
                         // Split comma-separated values: "1,2,3"
-                        let parts = s.split(',').map(|p| Value::String(p.trim().to_string())).collect::<Vec<_>>();
-                        let coerced = parts.into_iter().map(|v| coerce_value_for_schema(&v, items)).collect::<Vec<_>>();
+                        let parts = s
+                            .split(',')
+                            .map(|p| Value::String(p.trim().to_string()))
+                            .collect::<Vec<_>>();
+                        let coerced = parts
+                            .into_iter()
+                            .map(|v| coerce_value_for_schema(&v, items))
+                            .collect::<Vec<_>>();
                         Value::Array(coerced)
                     }
-                    Value::Array(arr) => {
-                        Value::Array(arr.iter().map(|v| coerce_value_for_schema(v, items)).collect())
-                    }
+                    Value::Array(arr) => Value::Array(
+                        arr.iter().map(|v| coerce_value_for_schema(v, items)).collect(),
+                    ),
                     _ => value.clone(),
                 }
             } else {
@@ -465,14 +625,22 @@ fn coerce_value_for_schema(value: &Value, schema: &crate::OpenApiSchema) -> Valu
 fn coerce_by_style(value: &Value, schema: &crate::OpenApiSchema, style: Option<&str>) -> Value {
     match (schema.schema_type.as_deref(), value, style) {
         (Some("array"), Value::String(s), Some("spaceDelimited")) => {
-            let items = s.split(' ').filter(|p| !p.is_empty()).map(|p| Value::String(p.to_string())).collect::<Vec<_>>();
+            let items = s
+                .split(' ')
+                .filter(|p| !p.is_empty())
+                .map(|p| Value::String(p.to_string()))
+                .collect::<Vec<_>>();
             let item_schema = schema.items.as_deref().unwrap_or(schema);
-            Value::Array(items.into_iter().map(|v| coerce_value_for_schema(&v, item_schema)).collect())
+            Value::Array(
+                items.into_iter().map(|v| coerce_value_for_schema(&v, item_schema)).collect(),
+            )
         }
         (Some("array"), Value::String(s), Some("pipeDelimited")) => {
             let items = s.split('|').map(|p| Value::String(p.to_string())).collect::<Vec<_>>();
             let item_schema = schema.items.as_deref().unwrap_or(schema);
-            Value::Array(items.into_iter().map(|v| coerce_value_for_schema(&v, item_schema)).collect())
+            Value::Array(
+                items.into_iter().map(|v| coerce_value_for_schema(&v, item_schema)).collect(),
+            )
         }
         _ => coerce_value_for_schema(value, schema),
     }
@@ -489,7 +657,11 @@ fn build_deep_object(name: &str, params: &Map<String, Value>) -> Option<Value> {
             }
         }
     }
-    if obj.is_empty() { None } else { Some(Value::Object(obj)) }
+    if obj.is_empty() {
+        None
+    } else {
+        Some(Value::Object(obj))
+    }
 }
 
 /// Helper function to create an OpenAPI route registry from a file
@@ -675,15 +847,33 @@ mod tests {
 
         // valid body
         let body = json!({"email":"a@b.co","website":"https://example.com"});
-        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body)).is_ok());
+        assert!(registry
+            .validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body))
+            .is_ok());
 
         // invalid email
         let bad_email = json!({"email":"not-an-email","website":"https://example.com"});
-        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad_email)).is_err());
+        assert!(registry
+            .validate_request_with(
+                "/users/{id}",
+                "POST",
+                &path_params,
+                &query_params,
+                Some(&bad_email)
+            )
+            .is_err());
 
         // missing required path param
         let empty_path_params = serde_json::Map::new();
-        assert!(registry.validate_request_with("/users/{id}", "POST", &empty_path_params, &query_params, Some(&body)).is_err());
+        assert!(registry
+            .validate_request_with(
+                "/users/{id}",
+                "POST",
+                &empty_path_params,
+                &query_params,
+                Some(&body)
+            )
+            .is_err());
     }
 
     #[tokio::test]
@@ -737,10 +927,14 @@ mod tests {
         query_params.insert("q".to_string(), json!(7));
 
         let body = json!({"email":"user@example.com","website":"https://example.com"});
-        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body)).is_ok());
+        assert!(registry
+            .validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body))
+            .is_ok());
 
         let bad = json!({"email":"nope","website":"https://example.com"});
-        assert!(registry.validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad)).is_err());
+        assert!(registry
+            .validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad))
+            .is_err());
     }
 
     #[tokio::test]
@@ -773,22 +967,46 @@ mod tests {
         let mut cookie_params = serde_json::Map::new();
         cookie_params.insert("session".to_string(), json!("abc123"));
 
-        assert!(registry.validate_request_with_all(
-            "/items", "GET", &path_params, &query_params, &header_params, &cookie_params, None
-        ).is_ok());
+        assert!(registry
+            .validate_request_with_all(
+                "/items",
+                "GET",
+                &path_params,
+                &query_params,
+                &header_params,
+                &cookie_params,
+                None
+            )
+            .is_ok());
 
         // Missing required cookie
         let empty_cookie = serde_json::Map::new();
-        assert!(registry.validate_request_with_all(
-            "/items", "GET", &path_params, &query_params, &header_params, &empty_cookie, None
-        ).is_err());
+        assert!(registry
+            .validate_request_with_all(
+                "/items",
+                "GET",
+                &path_params,
+                &query_params,
+                &header_params,
+                &empty_cookie,
+                None
+            )
+            .is_err());
 
         // Bad boolean header value (cannot coerce)
         let mut bad_header = serde_json::Map::new();
         bad_header.insert("X-Flag".to_string(), json!("notabool"));
-        assert!(registry.validate_request_with_all(
-            "/items", "GET", &path_params, &query_params, &bad_header, &cookie_params, None
-        ).is_err());
+        assert!(registry
+            .validate_request_with_all(
+                "/items",
+                "GET",
+                &path_params,
+                &query_params,
+                &bad_header,
+                &cookie_params,
+                None
+            )
+            .is_err());
     }
 
     #[tokio::test]
@@ -814,9 +1032,9 @@ mod tests {
         query.insert("ids".into(), json!("1|2|3"));
         query.insert("filter[color]".into(), json!("red"));
 
-        assert!(registry.validate_request_with(
-            "/search", "GET", &path_params, &query, None
-        ).is_ok());
+        assert!(registry
+            .validate_request_with("/search", "GET", &path_params, &query, None)
+            .is_ok());
     }
 
     #[tokio::test]
@@ -855,19 +1073,51 @@ mod tests {
         let registry = create_registry_from_json(spec_json).unwrap();
         // valid: satisfies base via allOf, exactly one of a/b, and at least one of flag/extra
         let ok = json!({"base": "x", "a": 1, "flag": true});
-        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&ok)).is_ok());
+        assert!(registry
+            .validate_request_with(
+                "/composite",
+                "POST",
+                &serde_json::Map::new(),
+                &serde_json::Map::new(),
+                Some(&ok)
+            )
+            .is_ok());
 
         // invalid oneOf: both a and b present
         let bad_oneof = json!({"base": "x", "a": 1, "b": 2, "flag": false});
-        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_oneof)).is_err());
+        assert!(registry
+            .validate_request_with(
+                "/composite",
+                "POST",
+                &serde_json::Map::new(),
+                &serde_json::Map::new(),
+                Some(&bad_oneof)
+            )
+            .is_err());
 
         // invalid anyOf: none of flag/extra present
         let bad_anyof = json!({"base": "x", "a": 1});
-        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_anyof)).is_err());
+        assert!(registry
+            .validate_request_with(
+                "/composite",
+                "POST",
+                &serde_json::Map::new(),
+                &serde_json::Map::new(),
+                Some(&bad_anyof)
+            )
+            .is_err());
 
         // invalid allOf: missing base
         let bad_allof = json!({"a": 1, "flag": true});
-        assert!(registry.validate_request_with("/composite", "POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&bad_allof)).is_err());
+        assert!(registry
+            .validate_request_with(
+                "/composite",
+                "POST",
+                &serde_json::Map::new(),
+                &serde_json::Map::new(),
+                Some(&bad_allof)
+            )
+            .is_err());
     }
 
     #[tokio::test]
@@ -885,15 +1135,18 @@ mod tests {
         let spec = OpenApiSpec::from_json(spec_json).unwrap();
         let mut overrides = std::collections::HashMap::new();
         overrides.insert("POST /things".to_string(), ValidationMode::Warn);
-        let registry = OpenApiRouteRegistry::new_with_options(spec, ValidationOptions {
-            request_mode: ValidationMode::Enforce,
-            aggregate_errors: true,
-            validate_responses: false,
-            overrides,
-            admin_skip_prefixes: vec![],
-            response_template_expand: false,
-            validation_status: None,
-        });
+        let registry = OpenApiRouteRegistry::new_with_options(
+            spec,
+            ValidationOptions {
+                request_mode: ValidationMode::Enforce,
+                aggregate_errors: true,
+                validate_responses: false,
+                overrides,
+                admin_skip_prefixes: vec![],
+                response_template_expand: false,
+                validation_status: None,
+            },
+        );
 
         // Invalid q (missing) should warn, not error
         let ok = registry.validate_request_with("/things", "POST", &Map::new(), &Map::new(), None);
@@ -908,15 +1161,18 @@ mod tests {
             "paths": {}
         });
         let spec = OpenApiSpec::from_json(spec_json).unwrap();
-        let registry = OpenApiRouteRegistry::new_with_options(spec, ValidationOptions {
-            request_mode: ValidationMode::Enforce,
-            aggregate_errors: true,
-            validate_responses: false,
-            overrides: std::collections::HashMap::new(),
-            admin_skip_prefixes: vec!["/admin".into()],
-            response_template_expand: false,
-            validation_status: None,
-        });
+        let registry = OpenApiRouteRegistry::new_with_options(
+            spec,
+            ValidationOptions {
+                request_mode: ValidationMode::Enforce,
+                aggregate_errors: true,
+                validate_responses: false,
+                overrides: std::collections::HashMap::new(),
+                admin_skip_prefixes: vec!["/admin".into()],
+                response_template_expand: false,
+                validation_status: None,
+            },
+        );
 
         // No route exists for this, but skip prefix means it is accepted
         let res = registry.validate_request_with_all(

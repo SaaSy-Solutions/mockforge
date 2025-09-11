@@ -1,6 +1,6 @@
 use axum::Router;
-use mockforge_http::build_router;
 use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
+use mockforge_http::build_router;
 use std::net::SocketAddr;
 
 #[tokio::test]
@@ -20,7 +20,15 @@ async fn media_example_token_expansion_toggle() {
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
-    let opts = Some(ValidationOptions { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new(), admin_skip_prefixes: vec!["/__mockforge".into()], response_template_expand: false, validation_status: None });
+    let opts = Some(ValidationOptions {
+        request_mode: ValidationMode::Enforce,
+        aggregate_errors: true,
+        validate_responses: false,
+        overrides: std::collections::HashMap::new(),
+        admin_skip_prefixes: vec!["/__mockforge".into()],
+        response_template_expand: false,
+        validation_status: None,
+    });
     let app: Router = build_router(Some(path.to_string_lossy().to_string()), opts).await;
 
     // Bind server
@@ -51,4 +59,3 @@ async fn media_example_token_expansion_toggle() {
 
     drop(server);
 }
-

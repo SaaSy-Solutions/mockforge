@@ -1,5 +1,5 @@
+use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
 use serde_json::json;
-use mockforge_core::{OpenApiSpec, OpenApiRouteRegistry};
 
 #[tokio::test]
 async fn validate_pattern_and_array_size() {
@@ -26,13 +26,36 @@ async fn validate_pattern_and_array_size() {
 
     // valid
     let body = json!({"name":"Alice","tags":["a","b"]});
-    reg.validate_request_with("/users","POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&body)).unwrap();
+    reg.validate_request_with(
+        "/users",
+        "POST",
+        &serde_json::Map::new(),
+        &serde_json::Map::new(),
+        Some(&body),
+    )
+    .unwrap();
 
     // pattern fail
     let body = json!({"name":"alice","tags":["a","b"]});
-    assert!(reg.validate_request_with("/users","POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&body)).is_err());
+    assert!(reg
+        .validate_request_with(
+            "/users",
+            "POST",
+            &serde_json::Map::new(),
+            &serde_json::Map::new(),
+            Some(&body)
+        )
+        .is_err());
 
     // minItems fail
     let body = json!({"name":"Alice","tags":["only_one", "two", "three", "four"]});
-    assert!(reg.validate_request_with("/users","POST", &serde_json::Map::new(), &serde_json::Map::new(), Some(&body)).is_err());
+    assert!(reg
+        .validate_request_with(
+            "/users",
+            "POST",
+            &serde_json::Map::new(),
+            &serde_json::Map::new(),
+            Some(&body)
+        )
+        .is_err());
 }

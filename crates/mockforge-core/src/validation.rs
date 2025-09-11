@@ -62,10 +62,7 @@ impl Validator {
                 if errors.is_empty() {
                     Ok(())
                 } else {
-                    Err(Error::validation(format!(
-                        "Validation failed: {}",
-                        errors.join(", ")
-                    )))
+                    Err(Error::validation(format!("Validation failed: {}", errors.join(", "))))
                 }
             }
             Self::OpenApi => {
