@@ -5,15 +5,48 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// Latency distribution types
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LatencyDistribution {
+    /// Fixed latency with optional jitter (backward compatible)
+    Fixed,
+    /// Normal (Gaussian) distribution
+    Normal,
+    /// Pareto (power-law) distribution for heavy-tailed latency
+    Pareto,
+}
+
 /// Latency profile configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct LatencyProfile {
-    /// Base latency in milliseconds
+    /// Base latency in milliseconds (mean for distributions)
     pub base_ms: u64,
-    /// Random jitter range in milliseconds (added to base)
+    /// Random jitter range in milliseconds (for fixed distribution)
     pub jitter_ms: u64,
+    /// Distribution type for latency variation
+    #[serde(default)]
+    pub distribution: LatencyDistribution,
+    /// Standard deviation for normal distribution (in milliseconds)
+    #[serde(default)]
+    pub std_dev_ms: Option<f64>,
+    /// Shape parameter for pareto distribution (alpha > 0)
+    #[serde(default)]
+    pub pareto_shape: Option<f64>,
+    /// Minimum latency bound (prevents negative values)
+    #[serde(default)]
+    pub min_ms: u64,
+    /// Maximum latency bound (prevents extreme values)
+    #[serde(default)]
+    pub max_ms: Option<u64>,
     /// Tag-based latency overrides
     pub tag_overrides: HashMap<String, u64>,
+}
+
+impl Default for LatencyDistribution {
+    fn default() -> Self {
+        LatencyDistribution::Fixed
+    }
 }
 
 impl Default for LatencyProfile {
@@ -21,17 +54,55 @@ impl Default for LatencyProfile {
         Self {
             base_ms: 50,   // 50ms base latency
             jitter_ms: 20, // ±20ms jitter
+            distribution: LatencyDistribution::Fixed,
+            std_dev_ms: None,
+            pareto_shape: None,
+            min_ms: 0,
+            max_ms: None,
             tag_overrides: HashMap::new(),
         }
     }
 }
 
 impl LatencyProfile {
-    /// Create a new latency profile
+    /// Create a new latency profile with fixed distribution (backward compatible)
     pub fn new(base_ms: u64, jitter_ms: u64) -> Self {
         Self {
             base_ms,
             jitter_ms,
+            distribution: LatencyDistribution::Fixed,
+            std_dev_ms: None,
+            pareto_shape: None,
+            min_ms: 0,
+            max_ms: None,
+            tag_overrides: HashMap::new(),
+        }
+    }
+
+    /// Create a new latency profile with normal distribution
+    pub fn with_normal_distribution(base_ms: u64, std_dev_ms: f64) -> Self {
+        Self {
+            base_ms,
+            jitter_ms: 0, // Not used for normal distribution
+            distribution: LatencyDistribution::Normal,
+            std_dev_ms: Some(std_dev_ms),
+            pareto_shape: None,
+            min_ms: 0,
+            max_ms: None,
+            tag_overrides: HashMap::new(),
+        }
+    }
+
+    /// Create a new latency profile with pareto distribution
+    pub fn with_pareto_distribution(base_ms: u64, shape: f64) -> Self {
+        Self {
+            base_ms,
+            jitter_ms: 0, // Not used for pareto distribution
+            distribution: LatencyDistribution::Pareto,
+            std_dev_ms: None,
+            pareto_shape: Some(shape),
+            min_ms: 0,
+            max_ms: None,
             tag_overrides: HashMap::new(),
         }
     }
@@ -42,26 +113,71 @@ impl LatencyProfile {
         self
     }
 
+    /// Set minimum latency bound
+    pub fn with_min_ms(mut self, min_ms: u64) -> Self {
+        self.min_ms = min_ms;
+        self
+    }
+
+    /// Set maximum latency bound
+    pub fn with_max_ms(mut self, max_ms: u64) -> Self {
+        self.max_ms = Some(max_ms);
+        self
+    }
+
     /// Calculate latency for a request with optional tags
     pub fn calculate_latency(&self, tags: &[String]) -> Duration {
         let mut rng = rand::rng();
 
         // Check for tag overrides (use the first matching tag)
-        let base_ms = tags
-            .iter()
-            .find_map(|tag| self.tag_overrides.get(tag))
-            .copied()
-            .unwrap_or(self.base_ms);
+        // Note: Tag overrides always use fixed latency for simplicity
+        if let Some(&override_ms) = tags.iter().find_map(|tag| self.tag_overrides.get(tag)) {
+            return Duration::from_millis(override_ms);
+        }
 
-        // Add random jitter
-        let jitter = if self.jitter_ms > 0 {
-            rng.random_range(0..=self.jitter_ms * 2).saturating_sub(self.jitter_ms)
-        } else {
-            0
+        let mut latency_ms = match self.distribution {
+            LatencyDistribution::Fixed => {
+                // Original behavior: base + jitter
+                let jitter = if self.jitter_ms > 0 {
+                    rng.random_range(0..=self.jitter_ms * 2).saturating_sub(self.jitter_ms)
+                } else {
+                    0
+                };
+                self.base_ms.saturating_add(jitter)
+            }
+            LatencyDistribution::Normal => {
+                // Simple approximation of normal distribution using Box-Muller transform
+                let std_dev = self.std_dev_ms.unwrap_or((self.base_ms as f64) * 0.2);
+                let mean = self.base_ms as f64;
+
+                // Generate two uniform random numbers
+                let u1: f64 = rng.random();
+                let u2: f64 = rng.random();
+
+                // Box-Muller transform
+                let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+                let sample = (mean + std_dev * z0).max(0.0) as u64;
+                sample
+            }
+            LatencyDistribution::Pareto => {
+                // Pareto distribution: P(x) = shape * scale^shape / x^(shape+1) for x >= scale
+                let shape = self.pareto_shape.unwrap_or(2.0);
+                let scale = self.base_ms as f64;
+
+                // Inverse CDF method for Pareto distribution
+                let u: f64 = rng.random();
+                let sample = (scale / (1.0 - u).powf(1.0 / shape)) as u64;
+                sample
+            }
         };
 
-        let total_ms = base_ms.saturating_add(jitter);
-        Duration::from_millis(total_ms)
+        // Apply bounds
+        latency_ms = latency_ms.max(self.min_ms);
+        if let Some(max_ms) = self.max_ms {
+            latency_ms = latency_ms.min(max_ms);
+        }
+
+        Duration::from_millis(latency_ms)
     }
 }
 
@@ -146,7 +262,7 @@ impl FaultConfig {
 }
 
 /// Latency and fault injector
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LatencyInjector {
     /// Latency profile
     latency_profile: LatencyProfile,

@@ -47,4 +47,3 @@ Faker expansions can be disabled via `MOCKFORGE_FAKE_TOKENS=false`.
 
 - Tokens inject random/time-based values; disable faker to reduce variability.
 - For deterministic integration tests, set `MOCKFORGE_FAKE_TOKENS=false` and prefer explicit literals.
-

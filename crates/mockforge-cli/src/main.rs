@@ -59,6 +59,12 @@ enum Commands {
         /// Validation error HTTP status code (e.g., 400 or 422)
         #[arg(long)]
         validation_status: Option<u16>,
+        /// Enable latency simulation
+        #[arg(long)]
+        latency_enabled: bool,
+        /// Enable failure injection
+        #[arg(long)]
+        failures_enabled: bool,
     },
     /// Generate synthetic data
     Data {
@@ -265,6 +271,19 @@ async fn start_servers_with_config(
     let http_port_for_addr = http_config.port;
     let ws_port_for_addr = config.websocket.port;
     let grpc_port_for_addr = config.grpc.port;
+    let http_latency_profile = if config.core.latency_enabled {
+        Some(config.core.default_latency.clone())
+    } else {
+        None
+    };
+    let http_latency_injector = if config.core.latency_enabled {
+        Some(mockforge_core::latency::LatencyInjector::new(
+            config.core.default_latency.clone(),
+            Default::default(),
+        ))
+    } else {
+        None
+    };
 
     let http_task = tokio::spawn(async move {
         if let Some(mount_path) = admin_mount_path {
@@ -298,7 +317,7 @@ async fn start_servers_with_config(
             // Expose admin mount prefix to HTTP builder (used to set env for skip prefixes as well)
             std::env::set_var("MOCKFORGE_ADMIN_MOUNT_PREFIX", &mount_path);
 
-            let mut app = mockforge_http::build_router(http_config.openapi_spec, opts).await;
+            let mut app = mockforge_http::build_router_with_latency(http_config.openapi_spec, opts, http_latency_injector).await;
 
             // Compute server addresses for Admin state
             let http_addr: std::net::SocketAddr =
@@ -346,7 +365,7 @@ async fn start_servers_with_config(
                 response_template_expand: http_config.response_template_expand,
                 validation_status: http_config.validation_status,
             });
-            mockforge_http::start(http_config.port, http_config.openapi_spec, opts).await
+            mockforge_http::start_with_latency(http_config.port, http_config.openapi_spec, opts, http_latency_profile).await
         } {
             error!("HTTP server error: {}", e);
         }
@@ -355,8 +374,13 @@ async fn start_servers_with_config(
 
     // Start WebSocket server
     let ws_config = config.websocket.clone();
+    let ws_latency = if config.core.latency_enabled {
+        Some(config.core.default_latency.clone())
+    } else {
+        None
+    };
     let ws_task = tokio::spawn(async move {
-        if let Err(e) = mockforge_ws::start(ws_config.port).await {
+        if let Err(e) = mockforge_ws::start_with_latency(ws_config.port, ws_latency).await {
             error!("WebSocket server error: {}", e);
         }
     });
@@ -364,8 +388,13 @@ async fn start_servers_with_config(
 
     // Start gRPC server
     let grpc_config = config.grpc.clone();
+    let grpc_latency = if config.core.latency_enabled {
+        Some(config.core.default_latency.clone())
+    } else {
+        None
+    };
     let grpc_task = tokio::spawn(async move {
-        if let Err(e) = mockforge_grpc::start(grpc_config.port).await {
+        if let Err(e) = mockforge_grpc::start_with_latency(grpc_config.port, grpc_latency).await {
             error!("gRPC server error: {}", e);
         }
     });
@@ -448,6 +477,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             validate_responses,
             response_template_expand,
             validation_status,
+            latency_enabled,
+            failures_enabled,
         } => {
             // Load configuration
             let mut server_config = if let Some(ref config_path) = config {
@@ -475,6 +506,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             if admin_standalone {
                 server_config.admin.mount_path = None;
             }
+
+            // Apply CLI latency overrides
+            server_config.core.latency_enabled = latency_enabled;
+            server_config.core.failures_enabled = failures_enabled;
 
             // Apply environment variable overrides
             let server_config = apply_env_overrides(server_config);

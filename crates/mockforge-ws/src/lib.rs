@@ -2,32 +2,70 @@ use axum::extract::ws::{Message, WebSocket};
 use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Router};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
+use mockforge_core::{latency::LatencyInjector, LatencyProfile};
 use regex::Regex;
 use std::fs;
+use std::future::IntoFuture;
 use tracing::*;
 
 /// Build the WebSocket router (exposed for tests and embedding)
 pub fn router() -> Router {
     #[cfg(feature = "data-faker")]
     register_core_faker_provider();
-    Router::new().route("/ws", get(ws_handler))
+
+    Router::new().route("/ws", get(ws_handler_no_state))
+}
+
+/// Build the WebSocket router with latency injector state
+pub fn router_with_latency(latency_injector: LatencyInjector) -> Router {
+    #[cfg(feature = "data-faker")]
+    register_core_faker_provider();
+
+    Router::new()
+        .route("/ws", get(ws_handler_with_state))
+        .with_state(latency_injector)
 }
 
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = router();
+    start_with_latency(port, None).await
+}
 
+pub async fn start_with_latency(
+    port: u16,
+    latency_profile: Option<LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Use shared server utilities for consistent address creation
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("WS listening on {}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
+
+    if let Some(profile) = latency_profile {
+        let latency_injector = LatencyInjector::new(profile, Default::default());
+        let app = router_with_latency(latency_injector);
+        axum::serve(tokio::net::TcpListener::bind(addr).await?, app.into_make_service())
+            .into_future()
+            .await?;
+    } else {
+        let app = router();
+        axum::serve(tokio::net::TcpListener::bind(addr).await?, app.into_make_service())
+            .into_future()
+            .await?;
+    }
+
     Ok(())
 }
 
-async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(run_ws)
+async fn ws_handler_no_state(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| run_ws(socket, None))
 }
 
-async fn run_ws(mut socket: WebSocket) {
+async fn ws_handler_with_state(
+    ws: WebSocketUpgrade,
+    axum::extract::State(latency_injector): axum::extract::State<LatencyInjector>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| run_ws(socket, Some(latency_injector)))
+}
+
+async fn run_ws(mut socket: WebSocket, latency_injector: Option<LatencyInjector>) {
     // If MOCKFORGE_WS_REPLAY_FILE is set, drive scripted replay with optional waitFor gates.
     if let Ok(path) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
         if let Ok(text) = fs::read_to_string(&path) {
@@ -59,6 +97,12 @@ async fn run_ws(mut socket: WebSocket) {
                             if expand {
                                 out = mockforge_core::templating::expand_str(&out);
                             }
+
+                            // Inject latency before sending message
+                            if let Some(ref injector) = latency_injector {
+                                let _ = injector.inject_latency(&[]).await;
+                            }
+
                             let _ = socket.send(Message::Text(out.into())).await;
                         }
                     }
@@ -72,6 +116,11 @@ async fn run_ws(mut socket: WebSocket) {
     while let Some(Ok(msg)) = socket.recv().await {
         match msg {
             Message::Text(t) => {
+                // Inject latency before sending echo response
+                if let Some(ref injector) = latency_injector {
+                    let _ = injector.inject_latency(&[]).await;
+                }
+
                 let _ = socket.send(Message::Text(format!("echo: {}", t).into())).await;
             }
             Message::Close(_) => break,

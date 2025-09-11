@@ -19,6 +19,7 @@ jobs:
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       SCCACHE_CACHE_SIZE: "2G"
       CARGO_INCREMENTAL: "0"
     strategy:
@@ -129,6 +130,7 @@ jobs:
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       SCCACHE_CACHE_SIZE: "2G"
       CARGO_INCREMENTAL: "0"
     steps:
