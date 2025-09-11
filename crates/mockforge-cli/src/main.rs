@@ -285,6 +285,16 @@ async fn start_servers_with_config(
         None
     };
 
+    // Create failure injector if failures are enabled
+    let http_failure_injector = if config.core.failures_enabled {
+        Some(mockforge_core::create_failure_injector(
+            config.core.failures_enabled,
+            config.core.failure_config.clone(),
+        ))
+    } else {
+        None
+    };
+
     let http_task = tokio::spawn(async move {
         if let Some(mount_path) = admin_mount_path {
             // Build base HTTP app and mount admin UI under the configured path
@@ -317,7 +327,7 @@ async fn start_servers_with_config(
             // Expose admin mount prefix to HTTP builder (used to set env for skip prefixes as well)
             std::env::set_var("MOCKFORGE_ADMIN_MOUNT_PREFIX", &mount_path);
 
-            let mut app = mockforge_http::build_router_with_latency(http_config.openapi_spec, opts, http_latency_injector).await;
+            let mut app = mockforge_http::build_router_with_injectors(http_config.openapi_spec, opts, http_latency_injector, http_failure_injector.clone()).await;
 
             // Compute server addresses for Admin state
             let http_addr: std::net::SocketAddr =
@@ -365,7 +375,7 @@ async fn start_servers_with_config(
                 response_template_expand: http_config.response_template_expand,
                 validation_status: http_config.validation_status,
             });
-            mockforge_http::start_with_latency(http_config.port, http_config.openapi_spec, opts, http_latency_profile).await
+            mockforge_http::start_with_injectors(http_config.port, http_config.openapi_spec, opts, http_latency_profile, http_failure_injector).await
         } {
             error!("HTTP server error: {}", e);
         }

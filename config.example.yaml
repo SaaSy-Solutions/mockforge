@@ -56,6 +56,25 @@ admin:
 core:
   latency_enabled: true
   failures_enabled: false
+  # Failure injection configuration
+  failure_config:
+    global_error_rate: 0.0  # Global error rate (0.0 to 1.0)
+    default_status_codes: [500, 502, 503, 504]  # Default status codes for failures
+    # Per-tag error rates and status overrides
+    tag_configs:
+      auth:
+        error_rate: 0.05  # 5% error rate for auth operations
+        status_codes: [401, 403]  # Custom status codes for auth failures
+        error_message: "Authentication failed"
+      payments:
+        error_rate: 0.02  # 2% error rate for payment operations
+        status_codes: [402, 503]  # Custom status codes for payment failures
+        error_message: "Payment processing failed"
+      analytics:
+        error_rate: 0.0  # No errors for analytics
+    # Tag filtering (optional)
+    include_tags: []  # If empty, all tags are included
+    exclude_tags: ["health", "metrics"]  # Exclude these tags from failure injection
   proxy:
     upstream_url: "http://api.example.com"
     timeout_seconds: 30
