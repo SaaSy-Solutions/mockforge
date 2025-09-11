@@ -6,6 +6,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 use tracing::*;
 
+pub mod reflection;
+
+pub use reflection::{ProxyConfig, ReflectionProxy};
+
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     start_with_latency(port, None).await
 }
