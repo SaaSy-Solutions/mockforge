@@ -1,9 +1,11 @@
 //! Proxy functionality for forwarding requests to upstream services
 
 use crate::{Error, Result};
+use axum::http::{HeaderMap, Method, Uri};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 
 /// Proxy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +20,8 @@ pub struct ProxyConfig {
     pub additional_headers: HashMap<String, String>,
     /// Whether to enable proxy mode
     pub enabled: bool,
+    /// Proxy prefix (e.g., "/proxy")
+    pub prefix: Option<String>,
 }
 
 impl Default for ProxyConfig {
@@ -33,6 +37,7 @@ impl Default for ProxyConfig {
             ],
             additional_headers: HashMap::new(),
             enabled: false,
+            prefix: Some("/proxy".to_string()),
         }
     }
 }
@@ -46,95 +51,79 @@ impl ProxyConfig {
         }
     }
 
-    /// Enable the proxy
-    pub fn enable(mut self) -> Self {
-        self.enabled = true;
-        self
-    }
-
-    /// Disable the proxy
-    pub fn disable(mut self) -> Self {
-        self.enabled = false;
-        self
-    }
-
-    /// Add a header to forward
-    pub fn forward_header(mut self, header: String) -> Self {
-        if !self.forward_headers.contains(&header) {
-            self.forward_headers.push(header);
+    /// Check if a request should be proxied
+    pub fn should_proxy(&self, path: &str) -> bool {
+        if !self.enabled {
+            return false;
         }
-        self
+
+        if let Some(ref prefix) = self.prefix {
+            path.starts_with(prefix)
+        } else {
+            true
+        }
     }
 
-    /// Add an additional header
-    pub fn with_header(mut self, key: String, value: String) -> Self {
-        self.additional_headers.insert(key, value);
-        self
-    }
-
-    /// Set timeout
-    pub fn with_timeout(mut self, seconds: u64) -> Self {
-        self.timeout_seconds = seconds;
-        self
+    /// Strip the proxy prefix from a path
+    pub fn strip_prefix(&self, path: &str) -> String {
+        if let Some(ref prefix) = self.prefix {
+            if path.starts_with(prefix) {
+                path.strip_prefix(prefix).unwrap_or(path).to_string()
+            } else {
+                path.to_string()
+            }
+        } else {
+            path.to_string()
+        }
     }
 }
 
-/// HTTP proxy for forwarding requests
-#[derive(Debug)]
-pub struct HttpProxy {
-    /// HTTP client for making requests
+/// Proxy handler for forwarding requests to upstream
+pub struct ProxyHandler {
+    pub config: ProxyConfig,
     client: Client,
-    /// Proxy configuration
-    config: ProxyConfig,
 }
 
-impl HttpProxy {
-    /// Create a new HTTP proxy
-    pub fn new(config: ProxyConfig) -> Self {
+impl ProxyHandler {
+    /// Create a new proxy handler
+    pub fn new(config: ProxyConfig) -> Result<Self> {
+        let timeout = Duration::from_secs(config.timeout_seconds);
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(config.timeout_seconds))
+            .timeout(timeout)
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| Error::generic(format!("Failed to create HTTP client: {}", e)))?;
 
-        Self { client, config }
+        Ok(Self { config, client })
     }
 
-    /// Check if proxy is enabled
-    pub fn is_enabled(&self) -> bool {
-        self.config.enabled
-    }
-
-    /// Proxy an HTTP request
+    /// Proxy a request to the upstream service
     pub async fn proxy_request(
         &self,
-        method: &str,
-        path: &str,
-        query: Option<&str>,
-        headers: &reqwest::header::HeaderMap,
+        method: &Method,
+        uri: &Uri,
+        headers: &HeaderMap,
         body: Option<&[u8]>,
-    ) -> Result<reqwest::Response> {
-        if !self.is_enabled() {
-            return Err(Error::proxy("Proxy is not enabled"));
+    ) -> Result<ProxyResponse> {
+        if !self.config.should_proxy(uri.path()) {
+            return Err(Error::generic("Request should not be proxied".to_string()));
         }
 
-        // Build the upstream URL
-        let mut upstream_url =
-            format!("{}{}", self.config.upstream_url.trim_end_matches('/'), path);
-        if let Some(query) = query {
-            upstream_url.push('?');
-            upstream_url.push_str(query);
+        // Build upstream URL
+        let upstream_path = self.config.strip_prefix(uri.path());
+        let mut upstream_url = format!("{}{}", self.config.upstream_url, upstream_path);
+
+        if let Some(query) = uri.query() {
+            upstream_url = format!("{}?{}", upstream_url, query);
         }
 
-        // Build the request
-        let mut request_builder = self.client.request(
-            method.parse().map_err(|_| Error::proxy("Invalid HTTP method"))?,
-            &upstream_url,
-        );
+        // Build request
+        let mut request_builder = self.client
+            .request(method.clone(), &upstream_url);
 
-        // Forward selected headers
+        // Forward headers
         for header_name in &self.config.forward_headers {
-            if let Some(value) = headers.get(header_name) {
-                request_builder = request_builder.header(header_name, value);
+            if let Some(header_value) = headers.get(header_name) {
+                request_builder = request_builder.header(header_name, header_value);
             }
         }
 
@@ -144,105 +133,67 @@ impl HttpProxy {
         }
 
         // Add body if present
-        if let Some(body) = body {
-            request_builder = request_builder.body(body.to_vec());
+        if let Some(body_data) = body {
+            request_builder = request_builder.body(body_data.to_vec());
         }
 
-        // Execute the request
+        // Send request
         let response = request_builder
             .send()
             .await
-            .map_err(|e| Error::proxy(format!("Failed to proxy request: {}", e)))?;
+            .map_err(|e| Error::generic(format!("Failed to send proxy request: {}", e)))?;
 
-        Ok(response)
-    }
-
-    /// Proxy a simple GET request
-    pub async fn proxy_get(&self, path: &str, query: Option<&str>) -> Result<reqwest::Response> {
-        self.proxy_request("GET", path, query, &reqwest::header::HeaderMap::new(), None)
+        let status = response.status();
+        let response_headers = response.headers().clone();
+        let response_body = response
+            .bytes()
             .await
-    }
+            .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?;
 
-    /// Proxy a POST request with JSON body
-    pub async fn proxy_post_json(
-        &self,
-        path: &str,
-        json_body: &serde_json::Value,
-    ) -> Result<reqwest::Response> {
-        let body = serde_json::to_vec(json_body)
-            .map_err(|e| Error::proxy(format!("Failed to serialize JSON: {}", e)))?;
-
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(reqwest::header::CONTENT_TYPE, "application/json".parse().unwrap());
-
-        self.proxy_request("POST", path, None, &headers, Some(&body)).await
-    }
-
-    /// Update proxy configuration
-    pub fn update_config(&mut self, config: ProxyConfig) -> Result<()> {
-        self.config = config;
-        // Recreate client with new timeout
-        self.client = Client::builder()
-            .timeout(std::time::Duration::from_secs(self.config.timeout_seconds))
-            .build()
-            .map_err(|e| Error::proxy(format!("Failed to update client: {}", e)))?;
-        Ok(())
+        Ok(ProxyResponse {
+            status_code: status.as_u16(),
+            headers: response_headers,
+            body: response_body.to_vec(),
+        })
     }
 }
 
-impl Default for HttpProxy {
-    fn default() -> Self {
-        Self::new(ProxyConfig::default())
-    }
+/// Proxy response
+#[derive(Debug, Clone)]
+pub struct ProxyResponse {
+    /// Response status code
+    pub status_code: u16,
+    /// Response headers
+    pub headers: HeaderMap,
+    /// Response body
+    pub body: Vec<u8>,
 }
 
-/// Proxy manager for handling different types of proxy operations
-#[derive(Debug)]
-pub struct ProxyManager {
-    /// HTTP proxy
-    http_proxy: HttpProxy,
-    /// gRPC proxy (placeholder)
-    grpc_enabled: bool,
-}
 
-impl ProxyManager {
-    /// Create a new proxy manager
-    pub fn new(http_config: ProxyConfig) -> Self {
-        Self {
-            http_proxy: HttpProxy::new(http_config),
-            grpc_enabled: false,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn test_proxy_config() {
+        let config = ProxyConfig::new("http://api.example.com".to_string());
+        assert!(config.should_proxy("/proxy/users"));
+        assert!(!config.should_proxy("/api/users"));
+
+        let stripped = config.strip_prefix("/proxy/users");
+        assert_eq!(stripped, "/users");
     }
 
-    /// Get the HTTP proxy
-    pub fn http_proxy(&self) -> &HttpProxy {
-        &self.http_proxy
-    }
+    #[test]
+    fn test_proxy_config_no_prefix() {
+        let mut config = ProxyConfig::new("http://api.example.com".to_string());
+        config.prefix = None;
 
-    /// Get mutable HTTP proxy
-    pub fn http_proxy_mut(&mut self) -> &mut HttpProxy {
-        &mut self.http_proxy
-    }
+        assert!(config.should_proxy("/api/users"));
+        assert!(config.should_proxy("/any/path"));
 
-    /// Enable gRPC proxying (placeholder)
-    pub fn enable_grpc_proxy(&mut self) {
-        self.grpc_enabled = true;
-        tracing::info!("gRPC proxy enabled (placeholder implementation)");
-    }
-
-    /// Check if any proxy is enabled
-    pub fn has_active_proxy(&self) -> bool {
-        self.http_proxy.is_enabled() || self.grpc_enabled
-    }
-
-    /// Update HTTP proxy configuration
-    pub fn update_http_config(&mut self, config: ProxyConfig) -> Result<()> {
-        self.http_proxy.update_config(config)
-    }
-}
-
-impl Default for ProxyManager {
-    fn default() -> Self {
-        Self::new(ProxyConfig::default())
+        let stripped = config.strip_prefix("/api/users");
+        assert_eq!(stripped, "/api/users");
     }
 }
