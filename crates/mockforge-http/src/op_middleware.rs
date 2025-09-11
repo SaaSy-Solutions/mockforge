@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::latency_profiles::LatencyProfiles;
 use crate::overrides::Overrides;
+use mockforge_core::FailureInjector;
 
 #[derive(Clone)]
 pub struct OperationMeta {
@@ -16,6 +17,7 @@ pub struct OperationMeta {
 pub struct Shared {
     pub profiles: LatencyProfiles,
     pub overrides: Overrides,
+    pub failure_injector: Option<FailureInjector>,
 }
 
 pub async fn fault_then_next<B>(
@@ -28,6 +30,16 @@ where
     B: axum::body::HttpBody<Data = axum::body::Bytes> + Send + 'static,
     B::Error: Send + std::fmt::Display + std::error::Error + Sync,
 {
+    // First, check the new enhanced failure injection system
+    if let Some(failure_injector) = &shared.failure_injector {
+        if let Some((status_code, error_message)) = failure_injector.process_request(&op.tags) {
+            let mut res = Response::new(axum::body::Body::from(error_message));
+            *res.status_mut() = StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            return res;
+        }
+    }
+
+    // Fallback to legacy latency profiles system for backward compatibility
     if let Some((code, msg)) = shared
         .profiles
         .maybe_fault(&op.id, &op.tags.iter().map(|s| s.to_string()).collect::<Vec<_>>())
@@ -37,6 +49,7 @@ where
         *res.status_mut() = StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         return res;
     }
+
     let (parts, body) = req.into_parts();
     let body = axum::body::Body::new(body);
     let req = Request::from_parts(parts, body);

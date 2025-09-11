@@ -321,6 +321,11 @@ impl OpenApiRouteRegistry {
 
     /// Build an Axum router from the OpenAPI spec with latency injection support
     pub fn build_router_with_latency(self, latency_injector: LatencyInjector) -> Router {
+        self.build_router_with_injectors(latency_injector, None)
+    }
+
+    /// Build an Axum router from the OpenAPI spec with both latency and failure injection support
+    pub fn build_router_with_injectors(self, latency_injector: LatencyInjector, failure_injector: Option<crate::FailureInjector>) -> Router {
         let mut router = Router::new();
 
         // Create individual routes for each operation
@@ -334,9 +339,10 @@ impl OpenApiRouteRegistry {
             let validator = self.clone_for_validation();
             let (selected_status, mock_response) = route.mock_response_with_status();
             let injector = latency_injector.clone();
+            let failure_injector = failure_injector.clone();
 
-            // Extract tags from operation for latency injection
-            // For now, we'll use the operation_id as a tag, or empty if not available
+            // Extract tags from operation for latency and failure injection
+            // For now, use operation_id as the primary tag
             let operation_tags = operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
 
             // Handler: inject latency, validate path/query/header/cookie/body, then return mock
@@ -346,6 +352,19 @@ impl OpenApiRouteRegistry {
                                 RawQuery(raw_query): RawQuery,
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
+                // Check for failure injection first
+                if let Some(ref failure_injector) = failure_injector {
+                    if let Some((status_code, error_message)) = failure_injector.process_request(&operation_tags) {
+                        return (
+                            axum::http::StatusCode::from_u16(status_code).unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+                            axum::Json(serde_json::json!({
+                                "error": error_message,
+                                "injected_failure": true
+                            }))
+                        );
+                    }
+                }
+
                 // Inject latency before processing the request
                 if let Err(e) = injector.inject_latency(&operation_tags).await {
                     tracing::warn!("Failed to inject latency: {}", e);

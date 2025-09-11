@@ -4,6 +4,7 @@
 
 pub mod config;
 pub mod error;
+pub mod failure_injection;
 pub mod latency;
 pub mod openapi;
 pub mod openapi_routes;
@@ -17,6 +18,7 @@ pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ServerConfig,
 };
 pub use error::{Error, Result};
+pub use failure_injection::{create_failure_injector, FailureInjector, FailureConfig, TagFailureConfig};
 pub use latency::LatencyProfile;
 pub use openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 pub use openapi_routes::{
@@ -28,6 +30,7 @@ pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
 pub use validation::Validator;
 
+
 /// Core configuration for MockForge
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
@@ -35,6 +38,8 @@ pub struct Config {
     pub latency_enabled: bool,
     /// Enable failure simulation
     pub failures_enabled: bool,
+    /// Failure injection configuration
+    pub failure_config: Option<FailureConfig>,
     /// Proxy configuration
     pub proxy: Option<ProxyConfig>,
     /// Default latency profile
@@ -47,6 +52,7 @@ impl Default for Config {
         Self {
             latency_enabled: true,
             failures_enabled: false,
+            failure_config: None,
             proxy: None,
             default_latency: LatencyProfile::default(),
         }

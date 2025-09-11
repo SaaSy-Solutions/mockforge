@@ -31,6 +31,16 @@ pub async fn build_router_with_latency(
     mut options: Option<ValidationOptions>,
     latency_injector: Option<LatencyInjector>,
 ) -> Router {
+    build_router_with_injectors(spec_path, options, latency_injector, None).await
+}
+
+/// Build the base HTTP router with both latency and failure injection support
+pub async fn build_router_with_injectors(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    latency_injector: Option<LatencyInjector>,
+    failure_injector: Option<mockforge_core::FailureInjector>,
+) -> Router {
     // If richer faker is available, register provider once (idempotent)
     #[cfg(feature = "data-faker")]
     {
@@ -73,9 +83,9 @@ pub async fn build_router_with_latency(
                 // Clone registry for routes listing before moving it to build_router
                 let routes_registry = registry.clone();
 
-                // Build router with latency injection if provided
+                // Build router with latency and failure injection if provided
                 if let Some(injector) = latency_injector {
-                    app = registry.build_router_with_latency(injector);
+                    app = registry.build_router_with_injectors(injector, failure_injector);
                 } else {
                     app = registry.build_router();
                 }
@@ -151,6 +161,22 @@ pub async fn start_with_latency(
     });
 
     let app = build_router_with_latency(spec_path, options, latency_injector).await;
+    serve_router(port, app).await
+}
+
+/// Start HTTP server with both latency and failure injection support
+pub async fn start_with_injectors(
+    port: u16,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    latency_profile: Option<LatencyProfile>,
+    failure_injector: Option<mockforge_core::FailureInjector>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let latency_injector = latency_profile.map(|profile| {
+        LatencyInjector::new(profile, Default::default())
+    });
+
+    let app = build_router_with_injectors(spec_path, options, latency_injector, failure_injector).await;
     serve_router(port, app).await
 }
 
