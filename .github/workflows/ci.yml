@@ -14,6 +14,10 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
     strategy:
       matrix:
         rust:
@@ -33,6 +37,9 @@ jobs:
 
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+    - name: Install sccache
+      run: sudo apt-get update && sudo apt-get install -y sccache
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -58,6 +65,10 @@ jobs:
     - name: Check documentation
       run: cargo doc --workspace --no-deps
       if: matrix.rust == 'stable'
+
+    - name: sccache stats
+      if: always()
+      run: sccache --show-stats || true
 
   security-audit:
     name: Security Audit
@@ -111,6 +122,10 @@ jobs:
   msrv:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
@@ -123,11 +138,18 @@ jobs:
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+    - name: Install sccache
+      run: sudo apt-get update && sudo apt-get install -y sccache
+
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
     - name: Check MSRV compatibility
       run: cargo check --workspace
+
+    - name: sccache stats
+      if: always()
+      run: sccache --show-stats || true
 
   typos:
     name: Spell Check
