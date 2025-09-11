@@ -28,7 +28,7 @@ pub async fn build_router(
 /// Build the base HTTP router with latency injection support
 pub async fn build_router_with_latency(
     spec_path: Option<String>,
-    mut options: Option<ValidationOptions>,
+    options: Option<ValidationOptions>,
     latency_injector: Option<LatencyInjector>,
 ) -> Router {
     build_router_with_injectors(spec_path, options, latency_injector, None).await
@@ -37,7 +37,7 @@ pub async fn build_router_with_latency(
 /// Build the base HTTP router with both latency and failure injection support
 pub async fn build_router_with_injectors(
     spec_path: Option<String>,
-    options: Option<ValidationOptions>,
+    mut options: Option<ValidationOptions>,
     latency_injector: Option<LatencyInjector>,
     failure_injector: Option<mockforge_core::FailureInjector>,
 ) -> Router {
