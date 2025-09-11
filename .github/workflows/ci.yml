@@ -42,7 +42,7 @@ jobs:
       if: matrix.rust == 'stable'
 
     - name: Run clippy
-      run: cargo clippy --all-targets --all-features
+      run: cargo clippy --all-targets --all-features -- -D warnings
       if: matrix.rust == 'stable'
 
     - name: Build workspace
