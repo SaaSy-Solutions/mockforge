@@ -2,6 +2,7 @@
 
 use axum::{
     extract::{Query, State},
+    http,
     response::{Html, Json},
 };
 use serde_json::json;
@@ -44,13 +45,13 @@ pub async fn serve_admin_html() -> Html<&'static str> {
 }
 
 /// Serve admin CSS
-pub async fn serve_admin_css() -> &'static str {
-    crate::get_admin_css()
+pub async fn serve_admin_css() -> ([(http::HeaderName, &'static str); 1], &'static str) {
+    ([(http::header::CONTENT_TYPE, "text/css")], crate::get_admin_css())
 }
 
 /// Serve admin JavaScript
-pub async fn serve_admin_js() -> &'static str {
-    crate::get_admin_js()
+pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'static str) {
+    ([(http::header::CONTENT_TYPE, "application/javascript")], crate::get_admin_js())
 }
 
 /// Get dashboard data
@@ -371,4 +372,35 @@ pub async fn get_fixtures() -> Json<ApiResponse<Vec<serde_json::Value>>> {
     ];
 
     Json(ApiResponse::success(fixtures))
+}
+
+/// Get current validation settings
+pub async fn get_validation() -> Json<ApiResponse<ValidationSettings>> {
+    // Mock validation settings for demonstration
+    // In a real implementation, this would read from the actual validation configuration
+    let validation_settings = ValidationSettings {
+        mode: "enforce".to_string(),
+        aggregate_errors: true,
+        validate_responses: false,
+        overrides: HashMap::from([
+            ("GET /api/users".to_string(), "warn".to_string()),
+            ("POST /api/users".to_string(), "enforce".to_string()),
+        ]),
+    };
+
+    Json(ApiResponse::success(validation_settings))
+}
+
+/// Update validation settings
+pub async fn update_validation(Json(update): Json<ValidationUpdate>) -> Json<ApiResponse<String>> {
+    // In a real implementation, this would update the actual validation configuration
+    tracing::info!("Updating validation settings: {:?}", update);
+
+    // Validate the mode
+    match update.mode.as_str() {
+        "enforce" | "warn" | "off" => {},
+        _ => return Json(ApiResponse::error("Invalid validation mode. Must be 'enforce', 'warn', or 'off'".to_string())),
+    }
+
+    Json(ApiResponse::success("Validation settings updated".to_string()))
 }

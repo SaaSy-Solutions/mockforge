@@ -3,9 +3,18 @@ use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Rout
 use regex::Regex;
 use std::fs;
 use tracing::*;
+#[cfg(feature = "data-faker")]
+use mockforge_data::provider::register_core_faker_provider;
+
+/// Build the WebSocket router (exposed for tests and embedding)
+pub fn router() -> Router {
+    #[cfg(feature = "data-faker")]
+    register_core_faker_provider();
+    Router::new().route("/ws", get(ws_handler))
+}
 
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = Router::new().route("/ws", get(ws_handler));
+    let app = router();
 
     // Use shared server utilities for consistent address creation
     let addr = mockforge_core::wildcard_socket_addr(port);
@@ -43,7 +52,10 @@ async fn run_ws(mut socket: WebSocket) {
                             pending = None;
                         }
                         if let Some(t) = v.get("text").and_then(|x| x.as_str()) {
-                            let _ = socket.send(Message::Text(t.to_string().into())).await;
+                            let mut out = t.to_string();
+                            let expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false);
+                            if expand { out = mockforge_core::templating::expand_str(&out); }
+                            let _ = socket.send(Message::Text(out.into())).await;
                         }
                     }
                 }

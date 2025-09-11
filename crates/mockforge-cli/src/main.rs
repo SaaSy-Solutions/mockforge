@@ -44,6 +44,21 @@ enum Commands {
         /// Disable Admin API endpoints (UI loads but API routes are absent)
         #[arg(long)]
         disable_admin_api: bool,
+        /// Request validation mode: off, warn, enforce
+        #[arg(long, value_parser = ["off","warn","enforce"], default_value = "enforce")]
+        validation: String,
+        /// Aggregate request validation errors into JSON array
+        #[arg(long, default_value_t = true)]
+        aggregate_errors: bool,
+        /// Validate responses (warn-only)
+        #[arg(long, default_value_t = false)]
+        validate_responses: bool,
+        /// Expand templating tokens in responses/examples
+        #[arg(long, default_value_t = false)]
+        response_template_expand: bool,
+        /// Validation error HTTP status code (e.g., 400 or 422)
+        #[arg(long)]
+        validation_status: Option<u16>,
     },
     /// Generate synthetic data
     Data {
@@ -254,7 +269,24 @@ async fn start_servers_with_config(
     let http_task = tokio::spawn(async move {
         if let Some(mount_path) = admin_mount_path {
             // Build base HTTP app and mount admin UI under the configured path
-            let mut app = mockforge_http::build_router(http_config.openapi_spec).await;
+            let mut overrides = std::collections::HashMap::new();
+            for (k, v) in &http_config.validation_overrides {
+                let mode = match v.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce};
+                overrides.insert(k.clone(), mode);
+            }
+            let opts = Some(mockforge_core::openapi_routes::ValidationOptions {
+                request_mode: match http_config.request_validation.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce},
+                aggregate_errors: http_config.aggregate_validation_errors,
+                validate_responses: http_config.validate_responses,
+                overrides,
+                admin_skip_prefixes: if http_config.skip_admin_validation { vec![mount_path.clone(), "/__mockforge".into()] } else { vec![] },
+                response_template_expand: http_config.response_template_expand,
+                validation_status: http_config.validation_status,
+            });
+            // Expose admin mount prefix to HTTP builder (used to set env for skip prefixes as well)
+            std::env::set_var("MOCKFORGE_ADMIN_MOUNT_PREFIX", &mount_path);
+
+            let mut app = mockforge_http::build_router(http_config.openapi_spec, opts).await;
 
             // Compute server addresses for Admin state
             let http_addr: std::net::SocketAddr =
@@ -275,8 +307,22 @@ async fn start_servers_with_config(
             if let Err(e) = mockforge_http::serve_router(http_port_for_addr, app).await {
                 error!("HTTP server error: {}", e);
             }
-        } else if let Err(e) =
-            mockforge_http::start(http_config.port, http_config.openapi_spec).await
+        } else if let Err(e) = {
+            let mut overrides = std::collections::HashMap::new();
+            for (k, v) in &http_config.validation_overrides {
+                let mode = match v.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce};
+                overrides.insert(k.clone(), mode);
+            }
+            let opts = Some(mockforge_core::openapi_routes::ValidationOptions {
+                request_mode: match http_config.request_validation.as_str() {"off"=>mockforge_core::openapi_routes::ValidationMode::Disabled, "warn"=>mockforge_core::openapi_routes::ValidationMode::Warn, _=>mockforge_core::openapi_routes::ValidationMode::Enforce},
+                aggregate_errors: http_config.aggregate_validation_errors,
+                validate_responses: http_config.validate_responses,
+                overrides,
+                admin_skip_prefixes: if http_config.skip_admin_validation { vec!["/__mockforge".into()] } else { vec![] },
+                response_template_expand: http_config.response_template_expand,
+                validation_status: http_config.validation_status,
+            });
+            mockforge_http::start(http_config.port, http_config.openapi_spec, opts).await }
         {
             error!("HTTP server error: {}", e);
         }
@@ -373,9 +419,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             admin_mount_path,
             admin_standalone,
             disable_admin_api,
+            validation,
+            aggregate_errors,
+            validate_responses,
+            response_template_expand,
+            validation_status,
         } => {
             // Load configuration
-            let mut server_config = if let Some(config_path) = config {
+            let mut server_config = if let Some(ref config_path) = config {
                 load_config_with_fallback(&config_path).await
             } else {
                 ServerConfig::default()
@@ -403,6 +454,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
             // Apply environment variable overrides
             let server_config = apply_env_overrides(server_config);
+
+            // Export validation flags as env for HTTP layer or pass via options at build
+            std::env::set_var("MOCKFORGE_REQUEST_VALIDATION", &validation);
+            std::env::set_var("MOCKFORGE_AGGREGATE_ERRORS", if aggregate_errors {"true"} else {"false"});
+            std::env::set_var("MOCKFORGE_RESPONSE_VALIDATION", if validate_responses {"true"} else {"false"});
+            if response_template_expand { std::env::set_var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND", "true"); }
+            if let Some(code) = validation_status { std::env::set_var("MOCKFORGE_VALIDATION_STATUS", code.to_string()); }
+            if let Some(ref p) = server_config.http.openapi_spec { let _ = p; }
+            // If config file path is provided, pass it to HTTP so Admin API can persist changes
+            if let Some(ref config_path) = config {
+                std::env::set_var("MOCKFORGE_CONFIG_PATH", config_path);
+            }
 
             start_servers_with_config(server_config).await?;
         }

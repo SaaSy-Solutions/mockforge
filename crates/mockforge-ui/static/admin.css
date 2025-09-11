@@ -319,3 +319,36 @@ body {
     font-size: 0.875rem;
     word-break: break-all;
 }
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    width: min(900px, 92vw);
+    background: var(--card-background);
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow);
+    padding: 1rem;
+}
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .75rem;
+}
+.modal-body { padding: .5rem; }
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    margin-top: .75rem;
+}
