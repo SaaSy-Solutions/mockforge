@@ -7,6 +7,7 @@ pub mod faker;
 pub mod generator;
 pub mod rag;
 pub mod schema;
+pub mod provider;
 
 pub use dataset::Dataset;
 pub use fake::Faker;

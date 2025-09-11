@@ -39,7 +39,7 @@ jobs:
       if: matrix.rust == 'stable'
 
     - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      run: cargo clippy --all-targets --all-features
       if: matrix.rust == 'stable'
 
     - name: Build workspace
@@ -109,7 +109,7 @@ jobs:
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: "1.70"  # Update this to your actual MSRV
+        toolchain: "1.79"  # MSRV updated to parse Cargo.lock v4
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2

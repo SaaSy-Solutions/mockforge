@@ -271,6 +271,7 @@ impl OpenApiRouteRegistry {
     }
 
     /// Validate request against OpenAPI spec with path/query/header/cookie params
+    #[allow(clippy::too_many_arguments)]
     pub fn validate_request_with_all(
         &self,
         path: &str,
@@ -428,7 +429,7 @@ fn coerce_value_for_schema(value: &Value, schema: &crate::OpenApiSchema) -> Valu
             _ => value.clone(),
         },
         Some("number") => match value {
-            Value::String(s) => s.parse::<f64>().ok().and_then(|n| serde_json::Number::from_f64(n)).map(Value::Number).unwrap_or(value.clone()),
+            Value::String(s) => s.parse::<f64>().ok().and_then(serde_json::Number::from_f64).map(Value::Number).unwrap_or(value.clone()),
             _ => value.clone(),
         },
         Some("boolean") => match value {
@@ -483,8 +484,7 @@ fn build_deep_object(name: &str, params: &Map<String, Value>) -> Option<Value> {
     let mut obj = Map::new();
     for (k, v) in params.iter() {
         if let Some(rest) = k.strip_prefix(&prefix) {
-            if rest.ends_with(']') {
-                let key = &rest[..rest.len()-1];
+            if let Some(key) = rest.strip_suffix(']') {
                 obj.insert(key.to_string(), v.clone());
             }
         }
