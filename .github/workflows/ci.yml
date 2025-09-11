@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,11 +15,14 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.rust == 'nightly' }}
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "2G"
       CARGO_INCREMENTAL: "0"
     strategy:
+      fail-fast: false
       matrix:
         rust:
           - stable
@@ -125,6 +129,7 @@ jobs:
     env:
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "2G"
       CARGO_INCREMENTAL: "0"
     steps:
     - name: Checkout repository
