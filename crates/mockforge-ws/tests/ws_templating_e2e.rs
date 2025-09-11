@@ -12,7 +12,7 @@ async fn ws_replay_expands_tokens() {
     let server = tokio::spawn(async move { axum::serve(listener, mockforge_ws::router()).await.unwrap() });
 
     // Connect
-    let url = format!("ws://{}", addr);
+    let url = format!("ws://{}/ws", addr);
     let (mut ws_stream, _) = tokio_tungstenite::connect_async(url).await.unwrap();
     ws_stream.send(Message::Text("CLIENT_READY".into())).await.unwrap();
     if let Some(Ok(Message::Text(t))) = ws_stream.next().await { assert!(t.contains("HELLO")); assert!(!t.contains("{{uuid}}")); }
