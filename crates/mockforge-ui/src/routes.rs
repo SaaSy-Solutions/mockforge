@@ -44,6 +44,9 @@ pub fn create_admin_router(
             .route("/__mockforge/config/latency", post(update_latency))
             .route("/__mockforge/config/faults", post(update_faults))
             .route("/__mockforge/config/proxy", post(update_proxy))
+            // Smoke tests
+            .route("/__mockforge/smoke", get(get_smoke_tests))
+            .route("/__mockforge/smoke/run", get(run_smoke_tests_endpoint))
             // Management actions
             .route("/__mockforge/logs/clear", post(clear_logs))
             .route("/__mockforge/servers/restart", post(restart_servers));

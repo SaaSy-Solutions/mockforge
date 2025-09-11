@@ -26,7 +26,7 @@ pub use error::{Error, Result};
 pub use failure_injection::{create_failure_injector, FailureInjector, FailureConfig, TagFailureConfig};
 pub use latency::LatencyProfile;
 pub use priority_handler::{PriorityHttpHandler, PriorityResponse, MockGenerator, MockResponse, SimpleMockGenerator};
-pub use record_replay::{RecordedRequest, ReplayHandler, RecordHandler, RecordReplayHandler, list_fixtures, clean_old_fixtures};
+pub use record_replay::{RecordedRequest, ReplayHandler, RecordHandler, RecordReplayHandler, list_fixtures, clean_old_fixtures, list_ready_fixtures, list_smoke_endpoints};
 pub use request_fingerprint::{RequestFingerprint, ResponsePriority, ResponseSource, RequestHandlerResult};
 pub use openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 pub use openapi_routes::{

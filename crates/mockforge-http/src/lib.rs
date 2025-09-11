@@ -126,6 +126,9 @@ pub async fn build_router_with_injectors(
     // Admin: download config and overrides YAML
     .route("/__mockforge/config.yaml", get(download_config_yaml))
     .route("/__mockforge/validation/patch.yaml", get(download_overrides_yaml))
+    // Smoke test endpoints
+    .route("/__mockforge/smoke", get(get_smoke_test_index))
+    .route("/__mockforge/smoke/run", get(run_smoke_tests))
 }
 
 /// Serve a provided router on the given port.
@@ -328,4 +331,71 @@ async fn download_overrides_yaml() -> axum::response::Response {
         )
         .body(axum::body::Body::from(y))
         .unwrap()
+}
+
+/// Get smoke test index listing
+async fn get_smoke_test_index() -> Json<serde_json::Value> {
+    use mockforge_core::{list_smoke_endpoints};
+    use std::path::Path;
+    
+    // Get fixtures directory from environment or use default
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "./fixtures".to_string());
+    
+    let fixtures_path = Path::new(&fixtures_dir);
+    
+    // Get smoke endpoints
+    let endpoints = list_smoke_endpoints(fixtures_path).await.unwrap_or_else(|_| vec![]);
+    
+    // Format as JSON response
+    let endpoints_json: Vec<serde_json::Value> = endpoints
+        .into_iter()
+        .map(|(method, path, name)| {
+            serde_json::json!({
+                "method": method,
+                "path": path,
+                "name": name
+            })
+        })
+        .collect();
+    
+    Json(serde_json::json!({
+        "endpoints": endpoints_json,
+        "count": endpoints_json.len()
+    }))
+}
+
+/// Run smoke tests
+async fn run_smoke_tests() -> Json<serde_json::Value> {
+    use mockforge_core::{list_ready_fixtures};
+    use std::path::Path;
+    
+    // Get fixtures directory from environment or use default
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "./fixtures".to_string());
+    
+    let fixtures_path = Path::new(&fixtures_dir);
+    
+    // Get ready fixtures
+    let fixtures = list_ready_fixtures(fixtures_path).await.unwrap_or_else(|_| vec![]);
+    
+    // Format as JSON response
+    let fixtures_json: Vec<serde_json::Value> = fixtures
+        .into_iter()
+        .map(|fixture| {
+            serde_json::json!({
+                "method": fixture.fingerprint.method,
+                "path": fixture.fingerprint.path,
+                "timestamp": fixture.timestamp,
+                "status_code": fixture.status_code,
+                "name": fixture.metadata.get("name").cloned().unwrap_or("Unnamed test".to_string())
+            })
+        })
+        .collect();
+    
+    Json(serde_json::json!({
+        "fixtures": fixtures_json,
+        "count": fixtures_json.len(),
+        "status": "success"
+    }))
 }

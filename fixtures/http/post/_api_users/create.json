@@ -1,0 +1,20 @@
+{
+  "fingerprint": {
+    "method": "POST",
+    "path": "/api/users",
+    "query_params": {},
+    "headers": {
+      "content-type": "application/json"
+    }
+  },
+  "timestamp": "2024-01-15T10:35:00Z",
+  "status_code": 201,
+  "response_headers": {
+    "content-type": "application/json"
+  },
+  "response_body": "{\"id\": 3, \"name\": \"Bob Johnson\"}",
+  "metadata": {
+    "smoke_test": "true",
+    "name": "Create User Endpoint"
+  }
+}

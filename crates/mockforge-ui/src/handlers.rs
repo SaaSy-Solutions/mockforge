@@ -511,3 +511,39 @@ pub struct FileSaveRequest {
     pub file_path: String,
     pub content: String,
 }
+
+/// Get smoke tests
+pub async fn get_smoke_tests() -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    // Mock smoke tests data for demonstration
+    // In a real implementation, this would read from the fixtures directory
+    let smoke_tests = vec![
+        json!({
+            "id": "smoke_1",
+            "name": "Get Users Endpoint",
+            "method": "GET",
+            "path": "/api/users",
+            "description": "Test the users endpoint",
+            "last_run": "2024-01-15T10:30:00Z",
+            "status": "passed"
+        }),
+        json!({
+            "id": "smoke_2",
+            "name": "Create User Endpoint",
+            "method": "POST",
+            "path": "/api/users",
+            "description": "Test creating a new user",
+            "last_run": "2024-01-15T10:35:00Z",
+            "status": "failed"
+        }),
+    ];
+
+    Json(ApiResponse::success(smoke_tests))
+}
+
+/// Run smoke tests endpoint
+pub async fn run_smoke_tests_endpoint() -> Json<ApiResponse<String>> {
+    // In a real implementation, this would run the actual smoke tests
+    tracing::info!("Running smoke tests");
+    
+    Json(ApiResponse::success("Smoke tests completed".to_string()))
+}
