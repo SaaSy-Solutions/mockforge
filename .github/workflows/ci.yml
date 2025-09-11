@@ -38,8 +38,8 @@ jobs:
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-    - name: Install sccache
-      run: sudo apt-get update && sudo apt-get install -y sccache
+    - name: Setup sccache (GHA backend)
+      uses: mozilla-actions/sccache-action@v0.0.5
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -138,8 +138,8 @@ jobs:
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-    - name: Install sccache
-      run: sudo apt-get update && sudo apt-get install -y sccache
+    - name: Setup sccache (GHA backend)
+      uses: mozilla-actions/sccache-action@v0.0.5
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
