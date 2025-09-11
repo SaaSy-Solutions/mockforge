@@ -12,12 +12,19 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
+
+    - name: Install sccache
+      run: sudo apt-get update && sudo apt-get install -y sccache
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -27,6 +34,10 @@ jobs:
 
     - name: Build release binaries
       run: cargo build --workspace --release
+
+    - name: sccache stats
+      if: always()
+      run: sccache --show-stats || true
 
     - name: Generate changelog
       id: changelog
@@ -61,12 +72,19 @@ jobs:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
+
+    - name: Install sccache
+      run: sudo apt-get update && sudo apt-get install -y sccache
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
