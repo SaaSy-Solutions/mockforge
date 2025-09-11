@@ -160,7 +160,7 @@ impl RagEngine {
             for info in schema_info {
                 prompt.push_str(&format!("- {}\n", info));
             }
-            prompt.push_str("\n");
+            prompt.push('\n');
         }
 
         // Retrieve relevant context from documents
@@ -170,7 +170,7 @@ impl RagEngine {
             for chunk in relevant_chunks {
                 prompt.push_str(&format!("- {}\n", chunk.content));
             }
-            prompt.push_str("\n");
+            prompt.push('\n');
         }
 
         // Add generation instructions

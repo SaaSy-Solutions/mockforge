@@ -111,11 +111,7 @@ impl Dataset {
         let lines: Result<Vec<String>> = self
             .data
             .iter()
-            .map(|value| {
-                serde_json::to_string(value).map_err(|e| {
-                    mockforge_core::Error::generic(format!("JSON serialization error: {}", e))
-                })
-            })
+            .map(|value| serde_json::to_string(value).map_err(|e| mockforge_core::Error::generic(format!("JSON serialization error: {}", e))))
             .collect();
 
         lines.map(|lines| lines.join("\n"))
@@ -235,7 +231,7 @@ impl Dataset {
     where
         F: Fn(&serde_json::Value) -> serde_json::Value,
     {
-        let mapped_data: Vec<serde_json::Value> = self.data.iter().map(|row| mapper(row)).collect();
+        let mapped_data: Vec<serde_json::Value> = self.data.iter().map(mapper).collect();
 
         let metadata = self.metadata.clone();
         Self::new(metadata, mapped_data)
@@ -248,6 +244,7 @@ pub struct DatasetCollection {
     /// Datasets indexed by name
     datasets: HashMap<String, Dataset>,
     /// Collection metadata
+    #[allow(dead_code)]
     metadata: HashMap<String, String>,
 }
 

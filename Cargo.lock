@@ -1536,6 +1536,7 @@ name = "mockforge-grpc"
 version = "0.1.0"
 dependencies = [
  "mockforge-core",
+ "mockforge-data",
  "prost",
  "serde",
  "serde_json",
