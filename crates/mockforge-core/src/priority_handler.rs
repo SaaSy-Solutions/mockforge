@@ -109,7 +109,7 @@ impl PriorityHttpHandler {
 
         // 3. PROXY: Check if request should be proxied
         if let Some(ref proxy_handler) = self.proxy_handler {
-            if proxy_handler.config.should_proxy(uri.path()) {
+            if proxy_handler.config.should_proxy(&method, uri.path()) {
                 match proxy_handler.proxy_request(&method, uri, headers, body).await {
                     Ok(proxy_response) => {
                         let mut response_headers = HashMap::new();
@@ -127,7 +127,7 @@ impl PriorityHttpHandler {
 
                         return Ok(PriorityResponse {
                             source: ResponseSource::new(ResponsePriority::Proxy, "proxy".to_string())
-                                .with_metadata("upstream_url".to_string(), proxy_handler.config.upstream_url.clone()),
+                                .with_metadata("upstream_url".to_string(), proxy_handler.config.get_upstream_url(uri.path())),
                             status_code: proxy_response.status_code,
                             headers: response_headers,
                             body: proxy_response.body,

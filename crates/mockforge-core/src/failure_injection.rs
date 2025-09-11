@@ -261,6 +261,8 @@ mod tests {
     fn test_include_tags() {
         let mut config = create_test_config();
         config.include_tags = vec!["auth".to_string()];
+        // Set error rate to 1.0 to ensure failure injection
+        config.tag_configs.get_mut("auth").unwrap().error_rate = 1.0;
         let injector = FailureInjector::new(Some(config), true);
 
         assert!(injector.should_inject_failure(&["auth".to_string()]));

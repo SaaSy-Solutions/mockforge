@@ -1,8 +1,8 @@
-use axum::extract::ws::{Message, WebSocket};
-use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Router};
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::{response::IntoResponse, routing::get, Router};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
-use mockforge_core::{latency::LatencyInjector, LatencyProfile};
+use mockforge_core::{latency::LatencyInjector, LatencyProfile, WsProxyHandler};
 use regex::Regex;
 use std::fs;
 use std::future::IntoFuture;
@@ -55,17 +55,38 @@ pub async fn start_with_latency(
 }
 
 async fn ws_handler_no_state(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| run_ws(socket, None))
+    ws.on_upgrade(move |socket| run_ws(socket, None, None))
 }
 
 async fn ws_handler_with_state(
     ws: WebSocketUpgrade,
     axum::extract::State(latency_injector): axum::extract::State<LatencyInjector>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| run_ws(socket, Some(latency_injector)))
+    ws.on_upgrade(move |socket| run_ws(socket, Some(latency_injector), None))
 }
 
-async fn run_ws(mut socket: WebSocket, latency_injector: Option<LatencyInjector>) {
+async fn run_ws(
+    socket: WebSocket,
+    latency_injector: Option<LatencyInjector>,
+    ws_proxy_handler: Option<WsProxyHandler>,
+) {
+    // Check if we should proxy this connection
+    if let Some(proxy_handler) = ws_proxy_handler {
+        // For now, we'll use a simple path. In a real implementation, we'd extract the path
+        // from the request that initiated the WebSocket upgrade.
+        let path = "/ws";
+        if proxy_handler.config.should_proxy(path) {
+            if let Err(e) = proxy_handler.proxy_connection(path, socket).await {
+                error!("WebSocket proxy failed: {}", e);
+            }
+            return;
+        }
+    }
+
+    run_ws_local(socket, latency_injector).await
+}
+
+async fn run_ws_local(mut socket: WebSocket, latency_injector: Option<LatencyInjector>) {
     // If MOCKFORGE_WS_REPLAY_FILE is set, drive scripted replay with optional waitFor gates.
     if let Ok(path) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
         if let Ok(text) = fs::read_to_string(&path) {
