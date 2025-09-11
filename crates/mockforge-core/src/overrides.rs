@@ -1,7 +1,8 @@
 //! Overrides engine with templating helpers.
 use globwalk::GlobWalkerBuilder;
-use json_patch::{patch, AddOperation, PatchOperation, RemoveOperation, ReplaceOperation};
-use mockforge_core::templating::expand_tokens as core_expand_tokens;
+use json_patch::{AddOperation, PatchOperation, RemoveOperation, ReplaceOperation};
+use jsonptr::PointerBuf;
+use crate::templating::expand_tokens as core_expand_tokens;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,10 +62,10 @@ impl Overrides {
     /// Load overrides from glob patterns, with support for MOCKFORGE_HTTP_OVERRIDES_GLOB
     pub async fn load_from_globs(patterns: &[&str]) -> anyhow::Result<Self> {
         // Check for environment variable override
-        let patterns = if let Ok(env_patterns) = std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB") {
-            env_patterns.split(',').map(|s| s.trim()).collect::<Vec<_>>()
+        let patterns: Vec<String> = if let Ok(env_patterns) = std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB") {
+            env_patterns.split(',').map(|s| s.trim().to_string()).collect()
         } else {
-            patterns.iter().map(|s| *s).collect::<Vec<_>>()
+            patterns.iter().map(|s| s.to_string()).collect()
         };
 
         let mut rules = Vec::new();
@@ -72,7 +73,8 @@ impl Overrides {
 
         for pat in patterns {
             for entry in GlobWalkerBuilder::from_patterns(".", &[pat]).build()? {
-                let path = entry?.path().to_path_buf();
+                let entry = entry?;
+                let path = entry.path().to_path_buf();
                 if path.extension().map(|e| e == "yaml" || e == "yml").unwrap_or(false) {
                     let text = tokio::fs::read_to_string(&path).await?;
                     let mut file_rules: Vec<OverrideRule> = serde_yaml::from_str(&text)?;
@@ -104,6 +106,7 @@ impl Overrides {
                 }
             }
         }
+        println!("Total rules loaded: {}", rules.len());
         Ok(Overrides { rules, regex_cache })
     }
 
@@ -162,29 +165,31 @@ fn matches_target(
 fn apply_patch(doc: &mut Value, op: &PatchOp) {
     let ops = match op {
         PatchOp::Add { path, value } => vec![PatchOperation::Add(AddOperation {
-            path: path.parse().unwrap_or_else(|_| json_patch::jsonptr::PointerBuf::new()),
+            path: path.parse().unwrap_or_else(|_| PointerBuf::new()),
             value: value.clone(),
         })],
         PatchOp::Replace { path, value } => vec![PatchOperation::Replace(ReplaceOperation {
-            path: path.parse().unwrap_or_else(|_| json_patch::jsonptr::PointerBuf::new()),
+            path: path.parse().unwrap_or_else(|_| PointerBuf::new()),
             value: value.clone(),
         })],
         PatchOp::Remove { path } => vec![PatchOperation::Remove(RemoveOperation {
-            path: path.parse().unwrap_or_else(|_| json_patch::jsonptr::PointerBuf::new()),
+            path: path.parse().unwrap_or_else(|_| PointerBuf::new()),
         })],
     };
 
-    // `Patch` is just a Vec<PatchOperation>
-    let _ = patch(doc, &ops);
+    // Apply the patch using the correct function
+    let _ = json_patch::patch(doc, &ops);
 }
 
 /// Apply merge patch operation (deep merge for objects, append for arrays)
 fn apply_merge_patch(doc: &mut Value, op: &PatchOp) {
     match op {
         PatchOp::Add { path, value } => {
-            if let Ok(pointer) = path.parse::<json_patch::jsonptr::PointerBuf>() {
-                if let Some(target) = pointer.get_mut(doc) {
-                    match (target, value) {
+            if let Ok(pointer) = path.parse::<PointerBuf>() {
+                // For merge operations, we need to handle the logic manually
+                // First, check if the path exists
+                if let Some(existing_value) = doc.pointer_mut(pointer.as_str()) {
+                    match (existing_value, value) {
                         (Value::Object(target_obj), Value::Object(value_obj)) => {
                             // Deep merge objects
                             for (key, val) in value_obj {
@@ -201,15 +206,21 @@ fn apply_merge_patch(doc: &mut Value, op: &PatchOp) {
                         }
                     }
                 } else {
-                    // Path doesn't exist, create it
-                    let _ = pointer.set(doc, value.clone());
+                    // Path doesn't exist, create it using the standard patch operation
+                    let ops = vec![PatchOperation::Add(AddOperation {
+                        path: pointer,
+                        value: value.clone(),
+                    })];
+                    let _ = json_patch::patch(doc, &ops);
                 }
             }
         }
         PatchOp::Replace { path, value } => {
-            if let Ok(pointer) = path.parse::<json_patch::jsonptr::PointerBuf>() {
-                if let Some(target) = pointer.get_mut(doc) {
-                    match (target, value) {
+            if let Ok(pointer) = path.parse::<PointerBuf>() {
+                // For merge operations, we need to handle the logic manually
+                // First, check if the path exists
+                if let Some(existing_value) = doc.pointer_mut(pointer.as_str()) {
+                    match (existing_value, value) {
                         (Value::Object(target_obj), Value::Object(value_obj)) => {
                             // Deep merge objects
                             for (key, val) in value_obj {
@@ -227,17 +238,83 @@ fn apply_merge_patch(doc: &mut Value, op: &PatchOp) {
                         }
                     }
                 } else {
-                    // Path doesn't exist, create it
-                    let _ = pointer.set(doc, value.clone());
+                    // Path doesn't exist, create it using the standard patch operation
+                    let ops = vec![PatchOperation::Add(AddOperation {
+                        path: pointer,
+                        value: value.clone(),
+                    })];
+                    let _ = json_patch::patch(doc, &ops);
                 }
             }
         }
         PatchOp::Remove { path } => {
-            if let Ok(pointer) = path.parse::<json_patch::jsonptr::PointerBuf>() {
-                let _ = pointer.remove(doc);
+            if let Ok(pointer) = path.parse::<PointerBuf>() {
+                let ops = vec![PatchOperation::Remove(RemoveOperation {
+                    path: pointer,
+                })];
+                let _ = json_patch::patch(doc, &ops);
             }
         }
     }
 }
 
 // templating moved to mockforge-core::templating
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::TempDir;
+    use std::fs::File;
+    use std::io::Write;
+
+    #[tokio::test]
+    async fn test_overrides_functionality() {
+        let temp_dir = TempDir::new().unwrap();
+        let override_file = temp_dir.path().join("test-overrides.yaml");
+        
+        let override_content = r#"
+- targets: ["operation:getUser"]
+  patch:
+    - op: add
+      path: /metadata
+      value: {}
+    - op: add
+      path: /metadata/requestId
+      value: "test-request-id"
+    - op: replace
+      path: /user/name
+      value: "Jane Doe"
+"#;
+        
+        let mut file = File::create(&override_file).unwrap();
+        file.write_all(override_content.as_bytes()).unwrap();
+        
+        // Directly load the file instead of using globs
+        let text = std::fs::read_to_string(&override_file).unwrap();
+        let rules: Vec<OverrideRule> = serde_yaml::from_str(&text).unwrap();
+        
+        let overrides = Overrides {
+            rules,
+            regex_cache: HashMap::new(),
+        };
+        
+        let mut response = json!({
+            "user": {
+                "id": 123,
+                "name": "John Doe"
+            }
+        });
+        
+        overrides.apply(
+            "getUser",
+            &[],
+            "/users/{id}",
+            &mut response,
+        );
+        
+        // Check that the overrides were applied
+        assert_eq!(response["user"]["name"], "Jane Doe");
+        assert_eq!(response["metadata"]["requestId"], "test-request-id");
+    }
+}

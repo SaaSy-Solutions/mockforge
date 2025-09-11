@@ -4,7 +4,7 @@
 //! from OpenAPI specifications, including mock response generation and validation.
 
 use crate::templating::expand_tokens as core_expand_tokens;
-use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result, latency::LatencyInjector};
+use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result, latency::LatencyInjector, Overrides};
 use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::{
@@ -326,6 +326,16 @@ impl OpenApiRouteRegistry {
 
     /// Build an Axum router from the OpenAPI spec with both latency and failure injection support
     pub fn build_router_with_injectors(self, latency_injector: LatencyInjector, failure_injector: Option<crate::FailureInjector>) -> Router {
+        self.build_router_with_injectors_and_overrides(latency_injector, failure_injector, None)
+    }
+
+    /// Build an Axum router from the OpenAPI spec with latency, failure injection, and overrides support
+    pub fn build_router_with_injectors_and_overrides(
+        self,
+        latency_injector: LatencyInjector,
+        failure_injector: Option<crate::FailureInjector>,
+        overrides: Option<Overrides>
+    ) -> Router {
         let mut router = Router::new();
 
         // Create individual routes for each operation
@@ -340,6 +350,7 @@ impl OpenApiRouteRegistry {
             let (selected_status, mock_response) = route.mock_response_with_status();
             let injector = latency_injector.clone();
             let failure_injector = failure_injector.clone();
+            let route_overrides = overrides.clone();
 
             // Extract tags from operation for latency and failure injection
             // For now, use operation_id as the primary tag
@@ -460,6 +471,18 @@ impl OpenApiRouteRegistry {
                 let mut response = mock_response.clone();
                 if validator.options.response_template_expand {
                     response = core_expand_tokens(&response);
+                }
+
+                // Apply overrides if provided
+                if let Some(ref overrides) = route_overrides {
+                    // Extract tags from operation for override matching
+                    let operation_tags = operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
+                    overrides.apply(
+                        &operation.operation_id.unwrap_or_default(),
+                        &operation_tags,
+                        &path_template,
+                        &mut response,
+                    );
                 }
 
                 // Return the mock response

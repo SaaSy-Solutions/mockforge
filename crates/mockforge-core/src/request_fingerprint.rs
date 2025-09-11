@@ -206,7 +206,7 @@ mod tests {
         headers.insert("x-api-key", "key123".parse().unwrap());
         headers.insert("authorization", "Bearer token".parse().unwrap());
 
-        let fingerprint1 = RequestFingerprint::new(method, &uri, &headers, None);
+        let fingerprint1 = RequestFingerprint::new(method.clone(), &uri, &headers, None);
         let fingerprint2 = RequestFingerprint::new(method, &uri, &headers, None);
 
         assert_eq!(fingerprint1.to_string(), fingerprint2.to_string());

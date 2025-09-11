@@ -8,6 +8,7 @@ pub mod failure_injection;
 pub mod latency;
 pub mod openapi;
 pub mod openapi_routes;
+pub mod overrides;
 pub mod priority_handler;
 pub mod proxy;
 pub mod record_replay;
@@ -30,6 +31,7 @@ pub use openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 pub use openapi_routes::{
     create_registry_from_file, create_registry_from_json, OpenApiRouteRegistry,
 };
+pub use overrides::{OverrideRule, OverrideMode, Overrides, PatchOp};
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};
 pub use routing::RouteRegistry;
 pub use server_utils::errors::{json_error, json_success};

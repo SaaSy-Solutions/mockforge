@@ -4,13 +4,13 @@ use axum::{extract::State, middleware::Next, response::Response, Extension};
 use serde_json::Value;
 
 use crate::latency_profiles::LatencyProfiles;
-use crate::overrides::Overrides;
-use mockforge_core::FailureInjector;
+use mockforge_core::{FailureInjector, Overrides};
 
 #[derive(Clone)]
 pub struct OperationMeta {
     pub id: String,
     pub tags: Vec<String>,
+    pub path: String,
 }
 
 #[derive(Clone)]
@@ -60,6 +60,7 @@ pub fn apply_overrides(shared: &Shared, op: &OperationMeta, body: &mut Value) {
     shared.overrides.apply(
         &op.id,
         &op.tags.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        &op.path,
         body,
     );
 }

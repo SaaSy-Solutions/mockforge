@@ -286,7 +286,7 @@ pub async fn clean_old_fixtures(fixtures_dir: &Path, older_than_days: u32) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderName, HeaderValue};
+    use axum::http::{HeaderName, HeaderValue, Uri};
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -298,7 +298,7 @@ mod tests {
 
         // Create a test fingerprint
         let method = Method::GET;
-        let uri = Uri::from_static("/api/users?page=1");
+        let uri: Uri = "/api/users?page=1".parse().unwrap();
         let headers = HeaderMap::new();
         let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
 
@@ -333,7 +333,7 @@ mod tests {
         // Record a few requests
         for i in 0..3 {
             let method = Method::GET;
-            let uri = Uri::from_static(&format!("/api/users/{}", i));
+            let uri: Uri = format!("/api/users/{}", i).parse().unwrap();
             let headers = HeaderMap::new();
             let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
 

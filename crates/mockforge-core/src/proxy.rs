@@ -173,7 +173,7 @@ pub struct ProxyResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
+    // use axum::http::HeaderValue;
 
     #[test]
     fn test_proxy_config() {
