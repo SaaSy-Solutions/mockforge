@@ -126,7 +126,7 @@ impl DataGenerator {
 
 /// Batch data generator for generating multiple datasets
 #[derive(Debug)]
-    pub struct BatchGenerator {
+pub struct BatchGenerator {
     /// Generators for different schemas
     generators: Vec<DataGenerator>,
     /// Global configuration

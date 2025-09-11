@@ -5,9 +5,9 @@
 pub mod dataset;
 pub mod faker;
 pub mod generator;
+pub mod provider;
 pub mod rag;
 pub mod schema;
-pub mod provider;
 
 pub use dataset::Dataset;
 pub use fake::Faker;
@@ -93,8 +93,7 @@ impl GenerationResult {
 
     /// Get data as JSON Lines string
     pub fn to_jsonl_string(&self) -> Result<String, serde_json::Error> {
-        let lines: Result<Vec<String>, _> =
-            self.data.iter().map(serde_json::to_string).collect();
+        let lines: Result<Vec<String>, _> = self.data.iter().map(serde_json::to_string).collect();
         lines.map(|lines| lines.join("\n"))
     }
 }

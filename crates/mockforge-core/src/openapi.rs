@@ -7,25 +7,26 @@
 //! - Mock response generation based on OpenAPI schemas
 
 use crate::{Error, Result};
-use openapiv3::{OpenAPI, Operation, Parameter, ParameterSchemaOrContent, ReferenceOr, Response, Schema};
+use chrono::{DateTime, NaiveDate};
+use once_cell::sync::Lazy;
+use openapiv3::{
+    OpenAPI, Operation, Parameter, ParameterSchemaOrContent, ReferenceOr, Response, Schema,
+};
+use openapiv3::{SchemaKind, StringFormat, Type, VariantOrUnknownOrEmpty};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::path::Path;
 use tokio::fs;
-use uuid::Uuid;
-use chrono::{NaiveDate, DateTime};
 use url::Url;
-use regex::Regex;
-use once_cell::sync::Lazy;
-use openapiv3::{SchemaKind, Type, StringFormat, VariantOrUnknownOrEmpty};
-use std::net::IpAddr;
+use uuid::Uuid;
 
 // Simple email regex for practical validation (not full RFC 5322)
 // Accepts forms like local@domain.tld and rejects obvious invalids
-static EMAIL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("valid email regex")
-});
+static EMAIL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("valid email regex"));
 
 /// OpenAPI specification loader and parser
 #[derive(Debug, Clone)]
@@ -126,12 +127,7 @@ impl OpenApiSpec {
     /// Get a schema by reference
     pub fn get_schema(&self, reference: &str) -> Option<&Schema> {
         let name = reference.trim_start_matches("#/components/schemas/");
-        let entry = self
-            .spec
-            .components
-            .as_ref()?
-            .schemas
-            .get(name)?;
+        let entry = self.spec.components.as_ref()?.schemas.get(name)?;
         match entry {
             ReferenceOr::Item(schema) => Some(schema),
             ReferenceOr::Reference { reference } => self.get_schema(reference),
@@ -141,12 +137,7 @@ impl OpenApiSpec {
     /// Get a parameter by reference
     pub fn get_parameter(&self, reference: &str) -> Option<&Parameter> {
         let name = reference.trim_start_matches("#/components/parameters/");
-        let entry = self
-            .spec
-            .components
-            .as_ref()?
-            .parameters
-            .get(name)?;
+        let entry = self.spec.components.as_ref()?.parameters.get(name)?;
         match entry {
             ReferenceOr::Item(param) => Some(param),
             ReferenceOr::Reference { reference } => self.get_parameter(reference),
@@ -156,12 +147,7 @@ impl OpenApiSpec {
     /// Get a request body by reference
     pub fn get_request_body(&self, reference: &str) -> Option<&openapiv3::RequestBody> {
         let name = reference.trim_start_matches("#/components/requestBodies/");
-        let entry = self
-            .spec
-            .components
-            .as_ref()?
-            .request_bodies
-            .get(name)?;
+        let entry = self.spec.components.as_ref()?.request_bodies.get(name)?;
         match entry {
             ReferenceOr::Item(rb) => Some(rb),
             ReferenceOr::Reference { reference } => self.get_request_body(reference),
@@ -171,12 +157,7 @@ impl OpenApiSpec {
     /// Get a response by reference
     pub fn get_response(&self, reference: &str) -> Option<&Response> {
         let name = reference.trim_start_matches("#/components/responses/");
-        let entry = self
-            .spec
-            .components
-            .as_ref()?
-            .responses
-            .get(name)?;
+        let entry = self.spec.components.as_ref()?.responses.get(name)?;
         match entry {
             ReferenceOr::Item(resp) => Some(resp),
             ReferenceOr::Reference { reference } => self.get_response(reference),
@@ -245,7 +226,12 @@ pub struct OpenApiOperation {
 
 impl OpenApiOperation {
     /// Create from OpenAPI operation
-    pub fn from_operation(method: String, path: String, operation: &Operation, spec: &OpenApiSpec) -> Self {
+    pub fn from_operation(
+        method: String,
+        path: String,
+        operation: &Operation,
+        spec: &OpenApiSpec,
+    ) -> Self {
         Self {
             method,
             path,
@@ -287,14 +273,29 @@ impl OpenApiOperation {
 
 fn query_style_to_str(s: &openapiv3::QueryStyle) -> String {
     use openapiv3::QueryStyle::*;
-    match s { Form => "form", SpaceDelimited => "spaceDelimited", PipeDelimited => "pipeDelimited", DeepObject => "deepObject" }.to_string()
+    match s {
+        Form => "form",
+        SpaceDelimited => "spaceDelimited",
+        PipeDelimited => "pipeDelimited",
+        DeepObject => "deepObject",
+    }
+    .to_string()
 }
 fn path_style_to_str(s: &openapiv3::PathStyle) -> String {
     use openapiv3::PathStyle::*;
-    match s { Simple => "simple", Label => "label", Matrix => "matrix" }.to_string()
+    match s {
+        Simple => "simple",
+        Label => "label",
+        Matrix => "matrix",
+    }
+    .to_string()
 }
-fn header_style_to_str(_: &openapiv3::HeaderStyle) -> String { "simple".to_string() }
-fn cookie_style_to_str(_: &openapiv3::CookieStyle) -> String { "form".to_string() }
+fn header_style_to_str(_: &openapiv3::HeaderStyle) -> String {
+    "simple".to_string()
+}
+fn cookie_style_to_str(_: &openapiv3::CookieStyle) -> String {
+    "form".to_string()
+}
 
 /// OpenAPI parameter information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -321,10 +322,44 @@ impl OpenApiParameter {
         match param_ref {
             ReferenceOr::Item(param) => {
                 let (param_data, location, style, explode) = match param {
-                    Parameter::Query { parameter_data, style, allow_reserved: _, allow_empty_value: _, } => (parameter_data, "query", Some(query_style_to_str(style)), Some(parameter_data.explode)),
-                    Parameter::Path { parameter_data, style } => (parameter_data, "path", Some(path_style_to_str(style)), Some(parameter_data.explode)),
-                    Parameter::Header { parameter_data, style } => (parameter_data, "header", Some(header_style_to_str(style)), Some(parameter_data.explode)),
-                    Parameter::Cookie { parameter_data, style } => (parameter_data, "cookie", Some(cookie_style_to_str(style)), Some(parameter_data.explode)),
+                    Parameter::Query {
+                        parameter_data,
+                        style,
+                        allow_reserved: _,
+                        allow_empty_value: _,
+                    } => (
+                        parameter_data,
+                        "query",
+                        Some(query_style_to_str(style)),
+                        Some(parameter_data.explode),
+                    ),
+                    Parameter::Path {
+                        parameter_data,
+                        style,
+                    } => (
+                        parameter_data,
+                        "path",
+                        Some(path_style_to_str(style)),
+                        Some(parameter_data.explode),
+                    ),
+                    Parameter::Header {
+                        parameter_data,
+                        style,
+                    } => (
+                        parameter_data,
+                        "header",
+                        Some(header_style_to_str(style)),
+                        Some(parameter_data.explode),
+                    ),
+                    Parameter::Cookie {
+                        parameter_data,
+                        style,
+                    } => (
+                        parameter_data,
+                        "cookie",
+                        Some(cookie_style_to_str(style)),
+                        Some(parameter_data.explode),
+                    ),
                 };
 
                 // Extract schema if present
@@ -348,9 +383,9 @@ impl OpenApiParameter {
                     explode: explode.flatten(),
                 })
             }
-            ReferenceOr::Reference { reference } => spec
-                .get_parameter(reference)
-                .and_then(|p| OpenApiParameter::from_parameter(&ReferenceOr::Item(p.clone()), spec)),
+            ReferenceOr::Reference { reference } => spec.get_parameter(reference).and_then(|p| {
+                OpenApiParameter::from_parameter(&ReferenceOr::Item(p.clone()), spec)
+            }),
         }
     }
 }
@@ -407,9 +442,9 @@ impl OpenApiSchema {
     pub fn from_schema(schema_ref: &ReferenceOr<Schema>, spec: &OpenApiSpec) -> Option<Self> {
         match schema_ref {
             ReferenceOr::Item(schema) => Self::from_schema_data(schema, spec),
-            ReferenceOr::Reference { reference } => spec
-                .get_schema(reference)
-                .and_then(|s| Self::from_schema_data(s, spec)),
+            ReferenceOr::Reference { reference } => {
+                spec.get_schema(reference).and_then(|s| Self::from_schema_data(s, spec))
+            }
         }
     }
 
@@ -445,13 +480,16 @@ impl OpenApiSchema {
                     out.schema_type = Some("string".to_string());
                     // map format
                     out.format = match &st.format {
-                        VariantOrUnknownOrEmpty::Item(f) => Some(match f {
-                            StringFormat::Byte => "byte",
-                            StringFormat::Binary => "binary",
-                            StringFormat::Date => "date",
-                            StringFormat::DateTime => "date-time",
-                            StringFormat::Password => "password",
-                        }.to_string()),
+                        VariantOrUnknownOrEmpty::Item(f) => Some(
+                            match f {
+                                StringFormat::Byte => "byte",
+                                StringFormat::Binary => "binary",
+                                StringFormat::Date => "date",
+                                StringFormat::DateTime => "date-time",
+                                StringFormat::Password => "password",
+                            }
+                            .to_string(),
+                        ),
                         VariantOrUnknownOrEmpty::Unknown(s) => Some(s.clone()),
                         VariantOrUnknownOrEmpty::Empty => None,
                     };
@@ -590,10 +628,18 @@ impl OpenApiSchema {
                             out.format = schema.format.clone();
                         }
                         // numeric/string constraints: keep existing if present, else take from child
-                        if out.minimum.is_none() { out.minimum = schema.minimum; }
-                        if out.maximum.is_none() { out.maximum = schema.maximum; }
-                        if out.min_length.is_none() { out.min_length = schema.min_length; }
-                        if out.max_length.is_none() { out.max_length = schema.max_length; }
+                        if out.minimum.is_none() {
+                            out.minimum = schema.minimum;
+                        }
+                        if out.maximum.is_none() {
+                            out.maximum = schema.maximum;
+                        }
+                        if out.min_length.is_none() {
+                            out.min_length = schema.min_length;
+                        }
+                        if out.max_length.is_none() {
+                            out.max_length = schema.max_length;
+                        }
                         out.all_of.push(schema);
                     }
                 }
@@ -606,8 +652,12 @@ impl OpenApiSchema {
                 // String constraints
                 out.min_length = any.min_length;
                 out.max_length = any.max_length;
-                if let Some(p) = &any.pattern { out.pattern = Some(p.clone()); }
-                if let Some(fmt) = &any.format { out.format = Some(fmt.clone()); }
+                if let Some(p) = &any.pattern {
+                    out.pattern = Some(p.clone());
+                }
+                if let Some(fmt) = &any.format {
+                    out.format = Some(fmt.clone());
+                }
                 // Numeric constraints
                 out.minimum = any.minimum;
                 out.maximum = any.maximum;
@@ -669,7 +719,9 @@ impl OpenApiSchema {
                                 out.properties.entry(k.clone()).or_insert_with(|| v.clone());
                             }
                             for r in &schema.required {
-                                if !out.required.contains(r) { out.required.push(r.clone()); }
+                                if !out.required.contains(r) {
+                                    out.required.push(r.clone());
+                                }
                             }
                         }
                     }
@@ -686,31 +738,37 @@ impl OpenApiSchema {
     }
 
     /// Create from request body
-    pub fn from_request_body(request_body: &ReferenceOr<openapiv3::RequestBody>, spec: &OpenApiSpec) -> Option<Self> {
+    pub fn from_request_body(
+        request_body: &ReferenceOr<openapiv3::RequestBody>,
+        spec: &OpenApiSpec,
+    ) -> Option<Self> {
         match request_body {
-            ReferenceOr::Item(rb) => {
-                rb.content
-                    .get("application/json")
-                    .or_else(|| rb.content.get("*/*"))
-                    .and_then(|media| media.schema.as_ref())
-                    .and_then(|s| Self::from_schema(s, spec))
-            }
-            ReferenceOr::Reference { reference } => spec
-                .get_request_body(reference)
-                .and_then(|rb| {
+            ReferenceOr::Item(rb) => rb
+                .content
+                .get("application/json")
+                .or_else(|| rb.content.get("*/*"))
+                .and_then(|media| media.schema.as_ref())
+                .and_then(|s| Self::from_schema(s, spec)),
+            ReferenceOr::Reference { reference } => {
+                spec.get_request_body(reference).and_then(|rb| {
                     rb.content
                         .get("application/json")
                         .or_else(|| rb.content.get("*/*"))
                         .and_then(|media| media.schema.as_ref())
                         .and_then(|s| Self::from_schema(s, spec))
-                }),
+                })
+            }
         }
     }
 
     /// Generate a mock value for this schema
     pub fn generate_mock_value(&self) -> Value {
-        if let Some(ex) = &self.example { return ex.clone(); }
-        if let Some(def) = &self.default_value { return def.clone(); }
+        if let Some(ex) = &self.example {
+            return ex.clone();
+        }
+        if let Some(def) = &self.default_value {
+            return def.clone();
+        }
         match self.schema_type.as_deref() {
             Some("string") => {
                 if let Some(enum_vals) = &self.enum_values {
@@ -764,7 +822,9 @@ impl OpenApiSchema {
                         continue;
                     }
                 }
-                if s.validate_value(value, path).is_ok() { matches += 1; }
+                if s.validate_value(value, path).is_ok() {
+                    matches += 1;
+                }
             }
             if matches != 1 {
                 return Err(Error::validation(format!(
@@ -848,18 +908,38 @@ impl OpenApiSchema {
                 if let Some(fmt) = &self.format {
                     match fmt.as_str() {
                         "ipv4" => {
-                            let ip: IpAddr = s.parse().map_err(|_| Error::validation(format!("{}: invalid ipv4", path)))?;
-                            if !ip.is_ipv4() { return Err(Error::validation(format!("{}: invalid ipv4", path))); }
+                            let ip: IpAddr = s.parse().map_err(|_| {
+                                Error::validation(format!("{}: invalid ipv4", path))
+                            })?;
+                            if !ip.is_ipv4() {
+                                return Err(Error::validation(format!("{}: invalid ipv4", path)));
+                            }
                         }
                         "ipv6" => {
-                            let ip: IpAddr = s.parse().map_err(|_| Error::validation(format!("{}: invalid ipv6", path)))?;
-                            if !ip.is_ipv6() { return Err(Error::validation(format!("{}: invalid ipv6", path))); }
+                            let ip: IpAddr = s.parse().map_err(|_| {
+                                Error::validation(format!("{}: invalid ipv6", path))
+                            })?;
+                            if !ip.is_ipv6() {
+                                return Err(Error::validation(format!("{}: invalid ipv6", path)));
+                            }
                         }
                         "hostname" => {
                             // simple hostname regex (no underscores, labels 1-63, total <=253)
-                            if s.len() > 253 { return Err(Error::validation(format!("{}: invalid hostname", path))); }
-                            static HOST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$").unwrap());
-                            if !HOST_RE.is_match(s) { return Err(Error::validation(format!("{}: invalid hostname", path))); }
+                            if s.len() > 253 {
+                                return Err(Error::validation(format!(
+                                    "{}: invalid hostname",
+                                    path
+                                )));
+                            }
+                            static HOST_RE: Lazy<Regex> = Lazy::new(|| {
+                                Regex::new(r"^([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$").unwrap()
+                            });
+                            if !HOST_RE.is_match(s) {
+                                return Err(Error::validation(format!(
+                                    "{}: invalid hostname",
+                                    path
+                                )));
+                            }
                         }
                         "email" => {
                             if !EMAIL_RE.is_match(s) {
@@ -871,10 +951,7 @@ impl OpenApiSchema {
                         }
                         "uri" => {
                             Url::parse(s).map_err(|_| {
-                                Error::validation(format!(
-                                    "{}: invalid uri format",
-                                    path
-                                ))
+                                Error::validation(format!("{}: invalid uri format", path))
                             })?;
                         }
                         "uuid" => {
@@ -889,7 +966,10 @@ impl OpenApiSchema {
                         }
                         "date" => {
                             NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {
-                                Error::validation(format!("{}: invalid date format (YYYY-MM-DD)", path))
+                                Error::validation(format!(
+                                    "{}: invalid date format (YYYY-MM-DD)",
+                                    path
+                                ))
                             })?;
                         }
                         _ => {}
@@ -979,7 +1059,10 @@ impl OpenApiSchema {
                     if !allowed {
                         for key in obj.keys() {
                             if !self.properties.contains_key(key) {
-                                return Err(Error::validation(format!("{}: additional property '{}' not allowed", path, key)));
+                                return Err(Error::validation(format!(
+                                    "{}: additional property '{}' not allowed",
+                                    path, key
+                                )));
                             }
                         }
                     }
@@ -1005,43 +1088,76 @@ impl OpenApiSchema {
             for s in &self.one_of {
                 // avoid vacuous matches for object schemas
                 if let (Some("object"), Some(obj)) = (s.schema_type.as_deref(), value.as_object()) {
-                    if !s.required.is_empty() && !s.required.iter().all(|k| obj.contains_key(k)) { continue; }
-                    if s.required.is_empty() && !s.properties.is_empty() && !s.properties.keys().any(|k| obj.contains_key(k)) { continue; }
+                    if !s.required.is_empty() && !s.required.iter().all(|k| obj.contains_key(k)) {
+                        continue;
+                    }
+                    if s.required.is_empty()
+                        && !s.properties.is_empty()
+                        && !s.properties.keys().any(|k| obj.contains_key(k))
+                    {
+                        continue;
+                    }
                 }
                 let mut sub = Vec::new();
                 s.validate_collect(value, path, &mut sub);
-                if sub.is_empty() { matches += 1; }
+                if sub.is_empty() {
+                    matches += 1;
+                }
             }
             if matches != 1 {
-                errors.push(format!("{}: oneOf expected exactly one schema to match (got {})", path, matches));
+                errors.push(format!(
+                    "{}: oneOf expected exactly one schema to match (got {})",
+                    path, matches
+                ));
             }
         }
         if !self.any_of.is_empty() {
             let mut matches = 0usize;
             for s in &self.any_of {
                 if let (Some("object"), Some(obj)) = (s.schema_type.as_deref(), value.as_object()) {
-                    if !s.required.is_empty() && !s.required.iter().all(|k| obj.contains_key(k)) { continue; }
-                    if s.required.is_empty() && !s.properties.is_empty() && !s.properties.keys().any(|k| obj.contains_key(k)) { continue; }
+                    if !s.required.is_empty() && !s.required.iter().all(|k| obj.contains_key(k)) {
+                        continue;
+                    }
+                    if s.required.is_empty()
+                        && !s.properties.is_empty()
+                        && !s.properties.keys().any(|k| obj.contains_key(k))
+                    {
+                        continue;
+                    }
                 }
                 let mut sub = Vec::new();
                 s.validate_collect(value, path, &mut sub);
-                if sub.is_empty() { matches += 1; }
+                if sub.is_empty() {
+                    matches += 1;
+                }
             }
             if matches == 0 {
                 errors.push(format!("{}: anyOf expected at least one schema to match", path));
             }
         }
         if !self.all_of.is_empty() {
-            for s in &self.all_of { s.validate_collect(value, path, errors); }
+            for s in &self.all_of {
+                s.validate_collect(value, path, errors);
+            }
         }
 
         match self.schema_type.as_deref() {
             Some("string") => {
                 if let Some(sv) = value.as_str() {
-                    if let Some(min) = self.min_length { if sv.len() < min { errors.push(format!("{}: minLength {} not satisfied", path, min)); } }
-                    if let Some(max) = self.max_length { if sv.len() > max { errors.push(format!("{}: maxLength {} exceeded", path, max)); } }
+                    if let Some(min) = self.min_length {
+                        if sv.len() < min {
+                            errors.push(format!("{}: minLength {} not satisfied", path, min));
+                        }
+                    }
+                    if let Some(max) = self.max_length {
+                        if sv.len() > max {
+                            errors.push(format!("{}: maxLength {} exceeded", path, max));
+                        }
+                    }
                     if self.pattern.is_some() || self.format.is_some() {
-                        if let Err(e) = self.validate_value(value, path) { errors.push(format!("{}", e)); }
+                        if let Err(e) = self.validate_value(value, path) {
+                            errors.push(format!("{}", e));
+                        }
                     }
                 } else {
                     errors.push(format!("{}: expected string, got {}", path, value));
@@ -1049,30 +1165,77 @@ impl OpenApiSchema {
             }
             Some("number") | Some("integer") => {
                 if let Some(n) = value.as_f64() {
-                    if let Some(min) = self.minimum { if n < min { errors.push(format!("{}: minimum {} not satisfied", path, min)); } }
-                    if let Some(max) = self.maximum { if n > max { errors.push(format!("{}: maximum {} exceeded", path, max)); } }
+                    if let Some(min) = self.minimum {
+                        if n < min {
+                            errors.push(format!("{}: minimum {} not satisfied", path, min));
+                        }
+                    }
+                    if let Some(max) = self.maximum {
+                        if n > max {
+                            errors.push(format!("{}: maximum {} exceeded", path, max));
+                        }
+                    }
                 } else {
                     errors.push(format!("{}: expected number, got {}", path, value));
                 }
             }
             Some("boolean") => {
-                if !value.is_boolean() { errors.push(format!("{}: expected boolean, got {}", path, value)); }
+                if !value.is_boolean() {
+                    errors.push(format!("{}: expected boolean, got {}", path, value));
+                }
             }
             Some("array") => {
                 if let Some(arr) = value.as_array() {
-                    if let Some(min) = self.min_items { if arr.len() < min { errors.push(format!("{}: minItems {} not satisfied", path, min)); } }
-                    if let Some(max) = self.max_items { if arr.len() > max { errors.push(format!("{}: maxItems {} exceeded", path, max)); } }
-                    if let Some(items) = &self.items { for (i, v) in arr.iter().enumerate() { items.validate_collect(v, &format!("{}[{}]", path, i), errors); } }
+                    if let Some(min) = self.min_items {
+                        if arr.len() < min {
+                            errors.push(format!("{}: minItems {} not satisfied", path, min));
+                        }
+                    }
+                    if let Some(max) = self.max_items {
+                        if arr.len() > max {
+                            errors.push(format!("{}: maxItems {} exceeded", path, max));
+                        }
+                    }
+                    if let Some(items) = &self.items {
+                        for (i, v) in arr.iter().enumerate() {
+                            items.validate_collect(v, &format!("{}[{}]", path, i), errors);
+                        }
+                    }
                 } else {
                     errors.push(format!("{}: expected array, got {}", path, value));
                 }
             }
             Some("object") => {
                 if let Some(obj) = value.as_object() {
-                    for req in &self.required { if !obj.contains_key(req) { errors.push(format!("{}: missing required property '{}'", path, req)); } }
-                    for (k, s) in &self.properties { if let Some(v) = obj.get(k) { s.validate_collect(v, &format!("{}/{}", path, k), errors); } }
-                    if let Some(allowed) = self.additional_properties_allowed { if !allowed { for k in obj.keys() { if !self.properties.contains_key(k) { errors.push(format!("{}: additional property '{}' not allowed", path, k)); } } } }
-                    if let Some(schema) = &self.additional_properties_schema { for (k, v) in obj.iter() { if !self.properties.contains_key(k) { schema.validate_collect(v, &format!("{}/{}", path, k), errors); } } }
+                    for req in &self.required {
+                        if !obj.contains_key(req) {
+                            errors.push(format!("{}: missing required property '{}'", path, req));
+                        }
+                    }
+                    for (k, s) in &self.properties {
+                        if let Some(v) = obj.get(k) {
+                            s.validate_collect(v, &format!("{}/{}", path, k), errors);
+                        }
+                    }
+                    if let Some(allowed) = self.additional_properties_allowed {
+                        if !allowed {
+                            for k in obj.keys() {
+                                if !self.properties.contains_key(k) {
+                                    errors.push(format!(
+                                        "{}: additional property '{}' not allowed",
+                                        path, k
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    if let Some(schema) = &self.additional_properties_schema {
+                        for (k, v) in obj.iter() {
+                            if !self.properties.contains_key(k) {
+                                schema.validate_collect(v, &format!("{}/{}", path, k), errors);
+                            }
+                        }
+                    }
                 } else {
                     errors.push(format!("{}: expected object, got {}", path, value));
                 }
@@ -1081,23 +1244,46 @@ impl OpenApiSchema {
         }
     }
 
-    pub fn validate_collect_detailed(&self, value: &Value, path: &str, details: &mut Vec<serde_json::Value>) {
+    pub fn validate_collect_detailed(
+        &self,
+        value: &Value,
+        path: &str,
+        details: &mut Vec<serde_json::Value>,
+    ) {
         // Use validate_collect to get semantics, then enrich with expectations
         let mut msgs = Vec::new();
         self.validate_collect(value, path, &mut msgs);
         for m in msgs {
-            let code = if m.contains("minLength") { "minLength" }
-                else if m.contains("maxLength") { "maxLength" }
-                else if m.contains("minItems") { "minItems" }
-                else if m.contains("maxItems") { "maxItems" }
-                else if m.contains("pattern") { "pattern" }
-                else if m.contains("invalid ") { "format" }
-                else if m.contains("expected string") || m.contains("expected number") || m.contains("expected object") || m.contains("expected array") || m.contains("expected boolean") { "type" }
-                else if m.contains("missing required") { "required" }
-                else if m.contains("additional property") { "additionalProperties" }
-                else if m.contains("oneOf") { "oneOf" }
-                else if m.contains("anyOf") { "anyOf" }
-                else { "validation" };
+            let code = if m.contains("minLength") {
+                "minLength"
+            } else if m.contains("maxLength") {
+                "maxLength"
+            } else if m.contains("minItems") {
+                "minItems"
+            } else if m.contains("maxItems") {
+                "maxItems"
+            } else if m.contains("pattern") {
+                "pattern"
+            } else if m.contains("invalid ") {
+                "format"
+            } else if m.contains("expected string")
+                || m.contains("expected number")
+                || m.contains("expected object")
+                || m.contains("expected array")
+                || m.contains("expected boolean")
+            {
+                "type"
+            } else if m.contains("missing required") {
+                "required"
+            } else if m.contains("additional property") {
+                "additionalProperties"
+            } else if m.contains("oneOf") {
+                "oneOf"
+            } else if m.contains("anyOf") {
+                "anyOf"
+            } else {
+                "validation"
+            };
 
             let mut obj = serde_json::Map::new();
             obj.insert("path".into(), serde_json::Value::String(path.to_string()));
@@ -1106,34 +1292,80 @@ impl OpenApiSchema {
             obj.insert("value".into(), value.clone());
 
             // Expected fields based on schema
-            if let Some(t) = &self.schema_type { obj.insert("expected_type".into(), serde_json::Value::String(t.clone())); }
-            if let Some(fmt) = &self.format { obj.insert("expected_format".into(), serde_json::Value::String(fmt.clone())); }
-            if let Some(min) = self.minimum { obj.insert("expected_min".into(), serde_json::json!(min)); }
-            if let Some(max) = self.maximum { obj.insert("expected_max".into(), serde_json::json!(max)); }
-            if let Some(minl) = self.min_length { obj.insert("expected_minLength".into(), serde_json::json!(minl)); }
-            if let Some(maxl) = self.max_length { obj.insert("expected_maxLength".into(), serde_json::json!(maxl)); }
-            if let Some(p) = &self.pattern { obj.insert("expected_pattern".into(), serde_json::Value::String(p.clone())); }
+            if let Some(t) = &self.schema_type {
+                obj.insert("expected_type".into(), serde_json::Value::String(t.clone()));
+            }
+            if let Some(fmt) = &self.format {
+                obj.insert("expected_format".into(), serde_json::Value::String(fmt.clone()));
+            }
+            if let Some(min) = self.minimum {
+                obj.insert("expected_min".into(), serde_json::json!(min));
+            }
+            if let Some(max) = self.maximum {
+                obj.insert("expected_max".into(), serde_json::json!(max));
+            }
+            if let Some(minl) = self.min_length {
+                obj.insert("expected_minLength".into(), serde_json::json!(minl));
+            }
+            if let Some(maxl) = self.max_length {
+                obj.insert("expected_maxLength".into(), serde_json::json!(maxl));
+            }
+            if let Some(p) = &self.pattern {
+                obj.insert("expected_pattern".into(), serde_json::Value::String(p.clone()));
+            }
 
             // Enum expectations
-            if let Some(ev) = &self.enum_values { if !ev.is_empty() { obj.insert("expected_enum".into(), serde_json::Value::Array(ev.clone())); } }
+            if let Some(ev) = &self.enum_values {
+                if !ev.is_empty() {
+                    obj.insert("expected_enum".into(), serde_json::Value::Array(ev.clone()));
+                }
+            }
 
             // Array item hints
             if let Some("array") = self.schema_type.as_deref() {
                 if let Some(items) = &self.items {
-                    if let Some(t) = &items.schema_type { obj.insert("items_expected_type".into(), serde_json::Value::String(t.clone())); }
-                    if let Some(fmt) = &items.format { obj.insert("items_expected_format".into(), serde_json::Value::String(fmt.clone())); }
+                    if let Some(t) = &items.schema_type {
+                        obj.insert(
+                            "items_expected_type".into(),
+                            serde_json::Value::String(t.clone()),
+                        );
+                    }
+                    if let Some(fmt) = &items.format {
+                        obj.insert(
+                            "items_expected_format".into(),
+                            serde_json::Value::String(fmt.clone()),
+                        );
+                    }
                 }
-                if let Some(mi) = self.min_items { obj.insert("expected_minItems".into(), serde_json::json!(mi)); }
-                if let Some(ma) = self.max_items { obj.insert("expected_maxItems".into(), serde_json::json!(ma)); }
+                if let Some(mi) = self.min_items {
+                    obj.insert("expected_minItems".into(), serde_json::json!(mi));
+                }
+                if let Some(ma) = self.max_items {
+                    obj.insert("expected_maxItems".into(), serde_json::json!(ma));
+                }
             }
 
             // Object property hints
             if let Some("object") = self.schema_type.as_deref() {
                 if !self.properties.is_empty() {
-                    obj.insert("object_properties".into(), serde_json::Value::Array(self.properties.keys().cloned().map(serde_json::Value::String).collect()));
+                    obj.insert(
+                        "object_properties".into(),
+                        serde_json::Value::Array(
+                            self.properties
+                                .keys()
+                                .cloned()
+                                .map(serde_json::Value::String)
+                                .collect(),
+                        ),
+                    );
                 }
                 if !self.required.is_empty() {
-                    obj.insert("required_properties".into(), serde_json::Value::Array(self.required.iter().cloned().map(serde_json::Value::String).collect()));
+                    obj.insert(
+                        "required_properties".into(),
+                        serde_json::Value::Array(
+                            self.required.iter().cloned().map(serde_json::Value::String).collect(),
+                        ),
+                    );
                 }
             }
 
@@ -1169,17 +1401,20 @@ impl OpenApiResponse {
                 if example.is_none() {
                     if let Some(m) = media {
                         if let Some((_, exref)) = m.examples.iter().next() {
-                            if let Some(ex) = exref.as_item() { example = ex.value.clone(); }
+                            if let Some(ex) = exref.as_item() {
+                                example = ex.value.clone();
+                            }
                         }
                     }
                 }
-                Some(Self { description: response.description.clone(), schema, example })
+                Some(Self {
+                    description: response.description.clone(),
+                    schema,
+                    example,
+                })
             }
             ReferenceOr::Reference { reference } => spec.get_response(reference).map(|r| {
-                let media = r
-                    .content
-                    .get("application/json")
-                    .or_else(|| r.content.get("*/*"));
+                let media = r.content.get("application/json").or_else(|| r.content.get("*/*"));
                 let schema = media
                     .and_then(|m| m.schema.as_ref())
                     .and_then(|s| OpenApiSchema::from_schema(s, spec));
@@ -1187,11 +1422,17 @@ impl OpenApiResponse {
                 if example.is_none() {
                     if let Some(m) = media {
                         if let Some((_, exref)) = m.examples.iter().next() {
-                            if let Some(ex) = exref.as_item() { example = ex.value.clone(); }
+                            if let Some(ex) = exref.as_item() {
+                                example = ex.value.clone();
+                            }
                         }
                     }
                 }
-                Self { description: r.description.clone(), schema, example }
+                Self {
+                    description: r.description.clone(),
+                    schema,
+                    example,
+                }
             }),
         }
     }
@@ -1237,7 +1478,12 @@ pub struct OpenApiRoute {
 
 impl OpenApiRoute {
     /// Create from OpenAPI operation
-    pub fn from_operation(method: String, path: String, operation: &Operation, spec: &OpenApiSpec) -> Self {
+    pub fn from_operation(
+        method: String,
+        path: String,
+        operation: &Operation,
+        spec: &OpenApiSpec,
+    ) -> Self {
         let operation_data =
             OpenApiOperation::from_operation(method.clone(), path.clone(), operation, spec);
         Self {
@@ -1253,7 +1499,6 @@ impl OpenApiRoute {
         self.path.replace("{", ":").replace("}", "")
     }
 
-
     /// Select the best 2xx response from the OpenAPI spec
     /// Returns the response status code and the response object
     pub fn select_best_2xx_response(&self) -> Option<(u16, &OpenApiResponse)> {
@@ -1263,8 +1508,12 @@ impl OpenApiRoute {
     /// Get (status, body) for this route using 2xx selection
     pub fn mock_response_with_status(&self) -> (u16, Value) {
         if let Some((code, response)) = self.select_best_2xx_response() {
-            if let Some(ex) = &response.example { return (code, ex.clone()); }
-            if let Some(schema) = &response.schema { return (code, schema.generate_mock_value()); }
+            if let Some(ex) = &response.example {
+                return (code, ex.clone());
+            }
+            if let Some(schema) = &response.schema {
+                return (code, schema.generate_mock_value());
+            }
             return (code, Value::Object(serde_json::Map::new()));
         }
         (200, Value::Object(serde_json::Map::new()))
@@ -1287,7 +1536,9 @@ impl OpenApiOperation {
     /// Returns the response status code and the response object
     pub fn select_best_2xx_response(&self) -> Option<(u16, &OpenApiResponse)> {
         // Define 2xx status codes in priority order
-        let priority_codes = ["200", "201", "202", "204", "203", "205", "206", "207", "208", "226"];
+        let priority_codes = [
+            "200", "201", "202", "204", "203", "205", "206", "207", "208", "226",
+        ];
 
         // First try explicit 2xx codes in priority order
         for code in &priority_codes {
@@ -1301,7 +1552,9 @@ impl OpenApiOperation {
             .responses
             .keys()
             .filter_map(|k| k.parse::<u16>().ok())
-            .filter(|c| (200..=299).contains(c) && !priority_codes.contains(&c.to_string().as_str()))
+            .filter(|c| {
+                (200..=299).contains(c) && !priority_codes.contains(&c.to_string().as_str())
+            })
             .collect();
         others.sort_unstable();
         if let Some(code) = others.first() {
@@ -1409,7 +1662,8 @@ mod tests {
                         one_of: Vec::new(),
                         any_of: Vec::new(),
                         all_of: Vec::new(),
-                        additional_properties_allowed: None, additional_properties_schema: None,
+                        additional_properties_allowed: None,
+                        additional_properties_schema: None,
                     }),
                 ),
                 (
@@ -1431,8 +1685,11 @@ mod tests {
                         max_length: None,
                         min_items: None,
                         max_items: None,
-                        one_of: Vec::new(), any_of: Vec::new(), all_of: Vec::new(),
-                        additional_properties_allowed: None, additional_properties_schema: None,
+                        one_of: Vec::new(),
+                        any_of: Vec::new(),
+                        all_of: Vec::new(),
+                        additional_properties_allowed: None,
+                        additional_properties_schema: None,
                     }),
                 ),
             ]
@@ -1453,7 +1710,8 @@ mod tests {
             one_of: Vec::new(),
             any_of: Vec::new(),
             all_of: Vec::new(),
-            additional_properties_allowed: None, additional_properties_schema: None,
+            additional_properties_allowed: None,
+            additional_properties_schema: None,
         };
 
         let mock_value = schema.generate_mock_value();
@@ -1492,7 +1750,7 @@ mod tests {
             operations[0].0.clone(),
             "/test".to_string(),
             operations[0].1,
-            &spec
+            &spec,
         );
 
         // Test response selection priority (200 should be selected first)
@@ -1534,7 +1792,7 @@ mod tests {
             operations[0].0.clone(),
             "/test".to_string(),
             operations[0].1,
-            &spec
+            &spec,
         );
 
         // Should fallback to default and use 200 as status code
@@ -1575,7 +1833,7 @@ mod tests {
             operations[0].0.clone(),
             "/test".to_string(),
             operations[0].1,
-            &spec
+            &spec,
         );
 
         // Should select 200 (highest priority)
@@ -1605,7 +1863,7 @@ mod tests {
             operations[0].0.clone(),
             "/test".to_string(),
             operations[0].1,
-            &spec
+            &spec,
         );
 
         // Should return None when no responses exist

@@ -1,10 +1,10 @@
 use axum::extract::ws::{Message, WebSocket};
 use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Router};
+#[cfg(feature = "data-faker")]
+use mockforge_data::provider::register_core_faker_provider;
 use regex::Regex;
 use std::fs;
 use tracing::*;
-#[cfg(feature = "data-faker")]
-use mockforge_data::provider::register_core_faker_provider;
 
 /// Build the WebSocket router (exposed for tests and embedding)
 pub fn router() -> Router {
@@ -53,8 +53,12 @@ async fn run_ws(mut socket: WebSocket) {
                         }
                         if let Some(t) = v.get("text").and_then(|x| x.as_str()) {
                             let mut out = t.to_string();
-                            let expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false);
-                            if expand { out = mockforge_core::templating::expand_str(&out); }
+                            let expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                                .unwrap_or(false);
+                            if expand {
+                                out = mockforge_core::templating::expand_str(&out);
+                            }
                             let _ = socket.send(Message::Text(out.into())).await;
                         }
                     }

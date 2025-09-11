@@ -11,7 +11,9 @@ pub struct EnhancedFaker;
 
 impl EnhancedFaker {
     /// Create a new enhanced faker
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Generate a random UUID
     pub fn uuid(&mut self) -> String {
@@ -19,13 +21,19 @@ impl EnhancedFaker {
     }
 
     /// Generate a random integer within range
-    pub fn int_range(&mut self, min: i64, max: i64) -> i64 { rand::rng().random_range(min..=max) }
+    pub fn int_range(&mut self, min: i64, max: i64) -> i64 {
+        rand::rng().random_range(min..=max)
+    }
 
     /// Generate a random float within range
-    pub fn float_range(&mut self, min: f64, max: f64) -> f64 { rand::rng().random_range(min..=max) }
+    pub fn float_range(&mut self, min: f64, max: f64) -> f64 {
+        rand::rng().random_range(min..=max)
+    }
 
     /// Generate a random boolean with given probability
-    pub fn boolean(&mut self, probability: f64) -> bool { rand::rng().random_bool(probability.clamp(0.0, 1.0)) }
+    pub fn boolean(&mut self, probability: f64) -> bool {
+        rand::rng().random_bool(probability.clamp(0.0, 1.0))
+    }
 
     /// Generate a random string of given length
     pub fn string(&mut self, length: usize) -> String {

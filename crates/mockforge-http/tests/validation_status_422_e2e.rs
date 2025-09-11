@@ -1,6 +1,6 @@
 use axum::Router;
-use mockforge_http::build_router;
 use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
+use mockforge_http::build_router;
 use std::net::SocketAddr;
 
 #[tokio::test]
@@ -21,7 +21,15 @@ async fn enforce_uses_422_when_flag_set() {
     // Turn on 422
     std::env::set_var("MOCKFORGE_VALIDATION_STATUS", "422");
 
-    let opts = Some(ValidationOptions { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new(), admin_skip_prefixes: vec!["/__mockforge".into()], response_template_expand: false, validation_status: None });
+    let opts = Some(ValidationOptions {
+        request_mode: ValidationMode::Enforce,
+        aggregate_errors: true,
+        validate_responses: false,
+        overrides: std::collections::HashMap::new(),
+        admin_skip_prefixes: vec!["/__mockforge".into()],
+        response_template_expand: false,
+        validation_status: None,
+    });
     let app: Router = build_router(Some(path.to_string_lossy().to_string()), opts).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -35,4 +43,3 @@ async fn enforce_uses_422_when_flag_set() {
 
     drop(server);
 }
-

@@ -111,7 +111,11 @@ impl Dataset {
         let lines: Result<Vec<String>> = self
             .data
             .iter()
-            .map(|value| serde_json::to_string(value).map_err(|e| mockforge_core::Error::generic(format!("JSON serialization error: {}", e))))
+            .map(|value| {
+                serde_json::to_string(value).map_err(|e| {
+                    mockforge_core::Error::generic(format!("JSON serialization error: {}", e))
+                })
+            })
             .collect();
 
         lines.map(|lines| lines.join("\n"))

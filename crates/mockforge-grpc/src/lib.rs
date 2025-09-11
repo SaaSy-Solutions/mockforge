@@ -1,9 +1,9 @@
+#[cfg(feature = "data-faker")]
+use mockforge_data::provider::register_core_faker_provider;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 use tracing::*;
-#[cfg(feature = "data-faker")]
-use mockforge_data::provider::register_core_faker_provider;
 
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(feature = "data-faker")]
