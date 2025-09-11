@@ -68,7 +68,7 @@ impl DataGenerator {
             let mut row = self.schema.generate_row(&mut self.faker)?;
 
             // Resolve relationships
-            for (_rel_name, relationship) in &self.schema.relationships {
+            for relationship in self.schema.relationships.values() {
                 if let Some(target_schema) = schema_map.get(&relationship.target_schema) {
                     // Generate a related row
                     let related_row = target_schema.generate_row(&mut self.faker)?;
@@ -126,10 +126,11 @@ impl DataGenerator {
 
 /// Batch data generator for generating multiple datasets
 #[derive(Debug)]
-pub struct BatchGenerator {
+    pub struct BatchGenerator {
     /// Generators for different schemas
     generators: Vec<DataGenerator>,
     /// Global configuration
+    #[allow(dead_code)]
     config: DataConfig,
 }
 

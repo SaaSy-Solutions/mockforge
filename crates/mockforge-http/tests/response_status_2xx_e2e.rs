@@ -1,6 +1,6 @@
 use axum::Router;
 use mockforge_http::build_router;
-use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
+use mockforge_core::openapi_routes::ValidationOptions;
 
 #[tokio::test]
 async fn returns_202_when_present() {
@@ -48,4 +48,3 @@ async fn returns_204_with_empty_body() {
     assert!(res.text().await.unwrap().is_empty());
     drop(server);
 }
-

@@ -94,7 +94,7 @@ impl GenerationResult {
     /// Get data as JSON Lines string
     pub fn to_jsonl_string(&self) -> Result<String, serde_json::Error> {
         let lines: Result<Vec<String>, _> =
-            self.data.iter().map(|value| serde_json::to_string(value)).collect();
+            self.data.iter().map(serde_json::to_string).collect();
         lines.map(|lines| lines.join("\n"))
     }
 }
