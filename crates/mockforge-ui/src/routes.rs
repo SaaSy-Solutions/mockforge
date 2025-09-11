@@ -31,6 +31,9 @@ pub fn create_admin_router(
             .route("/__mockforge/metrics", get(get_metrics))
             .route("/__mockforge/config", get(get_config))
             .route("/__mockforge/fixtures", get(get_fixtures))
+            // Validation settings
+            .route("/__mockforge/validation", get(get_validation))
+            .route("/__mockforge/validation", post(update_validation))
             // Configuration updates
             .route("/__mockforge/config/latency", post(update_latency))
             .route("/__mockforge/config/faults", post(update_faults))

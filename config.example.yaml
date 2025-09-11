@@ -8,6 +8,18 @@ http:
   openapi_spec: null  # Path to OpenAPI spec file
   cors_enabled: true
   request_timeout_secs: 30
+  # Validation controls
+  request_validation: "enforce"   # off|warn|enforce
+  aggregate_validation_errors: true
+  validate_responses: false       # warn-only logging
+  # Expand simple tokens in mock responses and media examples
+  # Tokens: {{uuid}}, {{now}}, {{rand.int}}, {{rand.float}}
+  # Can also be toggled via env MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true|false
+  response_template_expand: false
+  skip_admin_validation: true     # don't validate admin endpoints under mount path
+  validation_overrides:
+    "POST /users/{id}": "warn"
+    "GET /internal/health": "off"
 
 # WebSocket server configuration
 websocket:

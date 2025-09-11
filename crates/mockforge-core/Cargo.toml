@@ -19,6 +19,7 @@ reqwest = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 rand = { workspace = true }
+once_cell = { workspace = true }
 jsonschema = "0.33"
 openapiv3 = { workspace = true }
 axum = { workspace = true }
