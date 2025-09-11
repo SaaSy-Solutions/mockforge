@@ -7,6 +7,7 @@ pub mod error;
 pub mod latency;
 pub mod openapi;
 pub mod openapi_routes;
+pub mod templating;
 pub mod proxy;
 pub mod routing;
 pub mod server_utils;

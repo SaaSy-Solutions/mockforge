@@ -2,8 +2,12 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 use tracing::*;
+#[cfg(feature = "data-faker")]
+use mockforge_data::provider::register_core_faker_provider;
 
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    #[cfg(feature = "data-faker")]
+    register_core_faker_provider();
     // Use shared server utilities for consistent address creation
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("gRPC listening on {}", addr);

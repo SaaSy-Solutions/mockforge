@@ -6,6 +6,7 @@ use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
+use mockforge_core::templating::expand_tokens as core_expand_tokens;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OverrideRule {
@@ -43,7 +44,7 @@ impl Overrides {
                         for op in r.patch.iter_mut() {
                             match op {
                                 PatchOp::Add { value, .. } | PatchOp::Replace { value, .. } => {
-                                    *value = expand_tokens(value);
+                                    *value = core_expand_tokens(value);
                                 }
                                 _ => {}
                             }
@@ -99,34 +100,4 @@ fn apply_patch(doc: &mut Value, op: &PatchOp) {
     let _ = patch(doc, &ops);
 }
 
-fn expand_tokens(v: &Value) -> Value {
-    match v {
-        Value::String(s) => Value::String(expand_str(s)),
-        Value::Array(a) => Value::Array(a.iter().map(expand_tokens).collect()),
-        Value::Object(o) => {
-            let mut map = serde_json::Map::new();
-            for (k, vv) in o {
-                map.insert(k.clone(), expand_tokens(vv));
-            }
-            Value::Object(map)
-        }
-        _ => v.clone(),
-    }
-}
-
-fn expand_str(s: &str) -> String {
-    let mut out = s.to_string();
-    out = out.replace("{{uuid}}", &Uuid::new_v4().to_string());
-    out = out.replace("{{now}}", &Utc::now().to_rfc3339());
-    out = out.replace("{{now+1d}}", &(Utc::now() + ChronoDuration::days(1)).to_rfc3339());
-    out = out.replace("{{now-1d}}", &(Utc::now() - ChronoDuration::days(1)).to_rfc3339());
-    if out.contains("{{rand.int}}") {
-        let n: i64 = rng().random_range(0..=1_000_000);
-        out = out.replace("{{rand.int}}", &n.to_string());
-    }
-    if out.contains("{{rand.float}}") {
-        let n: f64 = rng().random();
-        out = out.replace("{{rand.float}}", &format!("{:.6}", n));
-    }
-    out
-}
+// templating moved to mockforge-core::templating

@@ -53,6 +53,12 @@ enum Commands {
         /// Validate responses (warn-only)
         #[arg(long, default_value_t = false)]
         validate_responses: bool,
+        /// Expand templating tokens in responses/examples
+        #[arg(long, default_value_t = false)]
+        response_template_expand: bool,
+        /// Validation error HTTP status code (e.g., 400 or 422)
+        #[arg(long)]
+        validation_status: Option<u16>,
     },
     /// Generate synthetic data
     Data {
@@ -274,6 +280,8 @@ async fn start_servers_with_config(
                 validate_responses: http_config.validate_responses,
                 overrides,
                 admin_skip_prefixes: if http_config.skip_admin_validation { vec![mount_path.clone(), "/__mockforge".into()] } else { vec![] },
+                response_template_expand: http_config.response_template_expand,
+                validation_status: http_config.validation_status,
             });
             // Expose admin mount prefix to HTTP builder (used to set env for skip prefixes as well)
             std::env::set_var("MOCKFORGE_ADMIN_MOUNT_PREFIX", &mount_path);
@@ -311,6 +319,8 @@ async fn start_servers_with_config(
                 validate_responses: http_config.validate_responses,
                 overrides,
                 admin_skip_prefixes: if http_config.skip_admin_validation { vec!["/__mockforge".into()] } else { vec![] },
+                response_template_expand: http_config.response_template_expand,
+                validation_status: http_config.validation_status,
             });
             mockforge_http::start(http_config.port, http_config.openapi_spec, opts).await }
         {
@@ -412,6 +422,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             validation,
             aggregate_errors,
             validate_responses,
+            response_template_expand,
+            validation_status,
         } => {
             // Load configuration
             let mut server_config = if let Some(ref config_path) = config {
@@ -447,6 +459,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             std::env::set_var("MOCKFORGE_REQUEST_VALIDATION", &validation);
             std::env::set_var("MOCKFORGE_AGGREGATE_ERRORS", if aggregate_errors {"true"} else {"false"});
             std::env::set_var("MOCKFORGE_RESPONSE_VALIDATION", if validate_responses {"true"} else {"false"});
+            if response_template_expand { std::env::set_var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND", "true"); }
+            if let Some(code) = validation_status { std::env::set_var("MOCKFORGE_VALIDATION_STATUS", code.to_string()); }
             if let Some(ref p) = server_config.http.openapi_spec { let _ = p; }
             // If config file path is provided, pass it to HTTP so Admin API can persist changes
             if let Some(ref config_path) = config {

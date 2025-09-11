@@ -6,14 +6,22 @@ pub mod schema_diff;
 
 use axum::Router;
 use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
-use mockforge_core::openapi_routes::ValidationOptions;
+use mockforge_core::openapi_routes::{ValidationOptions, get_last_validation_error, get_validation_errors};
 use axum::{routing::get, Json};
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use mockforge_core::{load_config, save_config};
 use tracing::*;
+#[cfg(feature = "data-faker")]
+use mockforge_data::provider::register_core_faker_provider;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
 pub async fn build_router(spec_path: Option<String>, mut options: Option<ValidationOptions>) -> Router {
+    // If richer faker is available, register provider once (idempotent)
+    #[cfg(feature = "data-faker")]
+    {
+        register_core_faker_provider();
+    }
     // Set up the basic router
     let mut app = Router::new();
 
@@ -27,7 +35,10 @@ pub async fn build_router(spec_path: Option<String>, mut options: Option<Validat
                     if let Ok(pref) = std::env::var("MOCKFORGE_ADMIN_MOUNT_PREFIX") { if !pref.is_empty() { opts.admin_skip_prefixes.push(pref); } }
                     opts.admin_skip_prefixes.push("/__mockforge".to_string());
                 }
-                let registry = if let Some(opts) = options.clone() {
+                let registry = if let Some(mut opts) = options.clone() {
+                    // Thread env overrides for new options if present
+                    if let Ok(s) = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND") { if s=="1" || s.eq_ignore_ascii_case("true") { opts.response_template_expand = true; } }
+                    if let Ok(s) = std::env::var("MOCKFORGE_VALIDATION_STATUS") { if let Ok(c)=s.parse::<u16>() { opts.validation_status = Some(c); } }
                     OpenApiRouteRegistry::new_with_options(openapi, opts)
                 } else {
                     OpenApiRouteRegistry::new_with_env(openapi)
@@ -68,6 +79,12 @@ pub async fn build_router(spec_path: Option<String>, mut options: Option<Validat
     )
     // Admin: runtime validation toggle
     .route("/__mockforge/validation", get(get_validation).post(set_validation))
+    // Admin: fetch last validation error
+    .route("/__mockforge/validation/last_error", get(get_last_error))
+    .route("/__mockforge/validation/history", get(get_error_history))
+    // Admin: download config and overrides YAML
+    .route("/__mockforge/config.yaml", get(download_config_yaml))
+    .route("/__mockforge/validation/patch.yaml", get(download_overrides_yaml))
 }
 
 /// Serve a provided router on the given port.
@@ -97,6 +114,7 @@ struct ValidationSettings {
     aggregate_errors: Option<bool>,
     validate_responses: Option<bool>,
     overrides: Option<serde_json::Map<String, serde_json::Value>>,
+    config_path: Option<String>,
 }
 
 async fn get_validation() -> Json<ValidationSettings> {
@@ -107,7 +125,8 @@ async fn get_validation() -> Json<ValidationSettings> {
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
         .and_then(|v| v.as_object().cloned());
-    Json(ValidationSettings { mode, aggregate_errors, validate_responses, overrides })
+    let config_path = std::env::var("MOCKFORGE_CONFIG_PATH").ok();
+    Json(ValidationSettings { mode, aggregate_errors, validate_responses, overrides, config_path })
 }
 
 async fn set_validation(Json(payload): Json<ValidationSettings>) -> Json<serde_json::Value> {
@@ -138,4 +157,63 @@ async fn set_validation(Json(payload): Json<ValidationSettings>) -> Json<serde_j
         }
     }
     Json(serde_json::json!({"status":"ok"}))
+}
+
+async fn get_last_error() -> Json<serde_json::Value> {
+    if let Some(err) = get_last_validation_error() {
+        Json(err)
+    } else {
+        Json(serde_json::json!({"error":"none"}))
+    }
+}
+
+async fn get_error_history() -> Json<serde_json::Value> {
+    let items = get_validation_errors();
+    Json(serde_json::json!({"errors": items}))
+}
+
+async fn download_config_yaml() -> axum::response::Response {
+    if let Ok(path) = std::env::var("MOCKFORGE_CONFIG_PATH") {
+        if let Ok(cfg) = load_config(&path).await {
+            if let Ok(yaml) = serde_yaml::to_string(&cfg) {
+                return axum::response::Response::builder()
+                    .status(StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "application/x-yaml")
+                    .header(axum::http::header::CONTENT_DISPOSITION, "attachment; filename=mockforge.config.yaml")
+                    .body(axum::body::Body::from(yaml))
+                    .unwrap();
+            }
+        }
+    }
+    axum::response::Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(axum::body::Body::from("Config not available"))
+        .unwrap()
+}
+
+async fn download_overrides_yaml() -> axum::response::Response {
+    // Compose YAML snippet with validation settings + overrides
+    let mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").unwrap_or_else(|_| "enforce".into());
+    let agg = std::env::var("MOCKFORGE_AGGREGATE_ERRORS").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(true);
+    let resp = std::env::var("MOCKFORGE_RESPONSE_VALIDATION").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false);
+    let overrides = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON").ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or(serde_json::json!({}));
+    let mut y = String::new();
+    use std::fmt::Write as _;
+    let _ = writeln!(&mut y, "http:");
+    let _ = writeln!(&mut y, "  request_validation: \"{}\"", mode);
+    let _ = writeln!(&mut y, "  aggregate_validation_errors: {}", if agg {"true"} else {"false"});
+    let _ = writeln!(&mut y, "  validate_responses: {}", if resp {"true"} else {"false"});
+    let _ = writeln!(&mut y, "  validation_overrides:");
+    if let Some(map) = overrides.as_object() {
+        for (k, v) in map {
+            let mode = v.as_str().unwrap_or("enforce");
+            let _ = writeln!(&mut y, "    \"{}\": \"{}\"", k, mode);
+        }
+    }
+    axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header(axum::http::header::CONTENT_TYPE, "application/x-yaml")
+        .header(axum::http::header::CONTENT_DISPOSITION, "attachment; filename=validation.overrides.yaml")
+        .body(axum::body::Body::from(y))
+        .unwrap()
 }

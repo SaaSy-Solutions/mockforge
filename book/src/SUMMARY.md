@@ -57,6 +57,7 @@
 
 - [Configuration Schema](reference/config-schema.md)
 - [Supported Formats](reference/formats.md)
+- [Templating Reference](reference/templating.md)
 - [Troubleshooting](reference/troubleshooting.md)
 - [FAQ](reference/faq.md)
 - [Changelog](reference/changelog.md)

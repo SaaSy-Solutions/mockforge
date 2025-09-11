@@ -12,6 +12,12 @@ use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use serde_json::{Map, Value};
 use std::sync::Arc;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
+use std::collections::VecDeque;
+use chrono::Utc;
+use crate::templating::expand_tokens as core_expand_tokens;
+// keep module-local definitions; do not import the same names
 
 /// OpenAPI route registry that manages generated routes
 #[derive(Debug, Clone)]
@@ -35,11 +41,15 @@ pub struct ValidationOptions {
     pub overrides: std::collections::HashMap<String, ValidationMode>,
     /// Skip validation for request paths starting with any of these prefixes
     pub admin_skip_prefixes: Vec<String>,
+    /// Expand templating tokens in responses/examples
+    pub response_template_expand: bool,
+    /// HTTP status for validation failures (e.g., 400 or 422)
+    pub validation_status: Option<u16>,
 }
 
 impl Default for ValidationOptions {
     fn default() -> Self {
-        Self { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new(), admin_skip_prefixes: Vec::new() }
+        Self { request_mode: ValidationMode::Enforce, aggregate_errors: true, validate_responses: false, overrides: std::collections::HashMap::new(), admin_skip_prefixes: Vec::new(), response_template_expand: false, validation_status: None }
     }
 }
 
@@ -60,6 +70,8 @@ impl OpenApiRouteRegistry {
             validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false),
             overrides: std::collections::HashMap::new(),
             admin_skip_prefixes: Vec::new(),
+            response_template_expand: std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false),
+            validation_status: std::env::var("MOCKFORGE_VALIDATION_STATUS").ok().and_then(|s| s.parse::<u16>().ok()),
         };
         Self { spec, routes, options }
     }
@@ -105,7 +117,7 @@ impl OpenApiRouteRegistry {
             let method = route.method.clone();
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
-            let mock_response = route.mock_response();
+            let (selected_status, mock_response) = route.mock_response_with_status();
 
             // Handler: validate path/query/header/cookie/body, then return mock
             let handler = move |
@@ -164,28 +176,50 @@ impl OpenApiRouteRegistry {
 
                 if let Err(e) = validator.validate_request_with_all(&path_template, &method, &path_map, &query_map, &header_map, &cookie_map, body_json.as_ref()) {
                     let msg = format!("{}", e);
+                    let detail_val = serde_json::from_str::<serde_json::Value>(&msg).unwrap_or(serde_json::json!(msg));
+                    let payload = serde_json::json!({
+                        "error": "request validation failed",
+                        "detail": detail_val,
+                        "method": method,
+                        "path": path_template,
+                        "timestamp": Utc::now().to_rfc3339(),
+                    });
+                    record_validation_error(&payload);
+                    // Choose status: prefer options.validation_status, fallback to env, else 400
+                    let status_code = validator.options.validation_status
+                        .or_else(|| std::env::var("MOCKFORGE_VALIDATION_STATUS").ok().and_then(|s| s.parse::<u16>().ok()))
+                        .unwrap_or(400);
+                    let status = axum::http::StatusCode::from_u16(status_code).unwrap_or(axum::http::StatusCode::BAD_REQUEST);
                     return axum::http::Response::builder()
-                        .status(axum::http::StatusCode::BAD_REQUEST)
+                        .status(status)
                         .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(axum::body::Body::from(serde_json::to_vec(&serde_json::json!({"error": "request validation failed", "detail": msg})).unwrap()))
+                        .body(axum::body::Body::from(serde_json::to_vec(&payload).unwrap()))
                         .unwrap();
                 }
 
+                // Expand tokens in the response if enabled (options or env)
+                let mut final_response = mock_response.clone();
+                let expand = validator.options.response_template_expand
+                    || std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND").map(|v| v=="1"||v.eq_ignore_ascii_case("true")).unwrap_or(false);
+                if expand { final_response = core_expand_tokens(&final_response); }
+
                 // Optional response validation
                 if validator.options.validate_responses {
-                    if let Some(resp_schema) = operation.responses.get("200").and_then(|r| r.schema.as_ref()) {
-                        let mut errors = Vec::new();
-                        resp_schema.validate_collect(&mock_response, "response", &mut errors);
-                        if !errors.is_empty() {
-                            tracing::warn!("Response validation failed: {:?}", errors);
+                    if let Some((status_code, response)) = operation.select_best_2xx_response() {
+                        if let Some(resp_schema) = &response.schema {
+                            let mut errors = Vec::new();
+                            resp_schema.validate_collect(&final_response, "response", &mut errors);
+                            if !errors.is_empty() {
+                                tracing::warn!("Response validation failed for status {}: {:?}", status_code, errors);
+                            }
                         }
                     }
                 }
 
                 axum::http::Response::builder()
-                    .status(axum::http::StatusCode::OK)
+                    .status(axum::http::StatusCode::from_u16(selected_status).unwrap_or(axum::http::StatusCode::OK))
                     .header(axum::http::header::CONTENT_TYPE, "application/json")
-                    .body(axum::body::Body::from(serde_json::to_vec(&mock_response).unwrap()))
+                    .body(axum::body::Body::from(serde_json::to_vec(&final_response).unwrap()))
                     .unwrap()
             };
 
@@ -331,10 +365,7 @@ impl OpenApiRouteRegistry {
         }
     }
 
-    /// Generate mock response for a route
-    pub fn generate_mock_response(&self, path: &str, method: &str) -> Option<Value> {
-        self.get_route(path, method).map(|route| route.mock_response())
-    }
+    // Legacy helper removed (mock + status selection happens in handler via route.mock_response_with_status)
 
     /// Get all paths defined in the spec
     pub fn paths(&self) -> Vec<String> {
@@ -363,6 +394,27 @@ impl OpenApiRouteRegistry {
     pub fn convert_path_to_axum(openapi_path: &str) -> String {
         openapi_path.replace("{", ":").replace("}", "")
     }
+}
+
+// Note: templating helpers are now in core::templating (shared across modules)
+
+static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> = Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));
+
+/// Record last validation error for Admin UI inspection
+pub fn record_validation_error(v: &serde_json::Value) {
+    let mut q = LAST_ERRORS.lock().unwrap();
+    if q.len() >= 20 { q.pop_front(); }
+    q.push_back(v.clone());
+}
+
+/// Get most recent validation error
+pub fn get_last_validation_error() -> Option<serde_json::Value> {
+    LAST_ERRORS.lock().unwrap().back().cloned()
+}
+
+/// Get recent validation errors (most recent last)
+pub fn get_validation_errors() -> Vec<serde_json::Value> {
+    LAST_ERRORS.lock().unwrap().iter().cloned().collect()
 }
 
 /// Coerce a parameter `value` into the expected JSON type per `schema` where reasonable.
@@ -839,6 +891,8 @@ mod tests {
             validate_responses: false,
             overrides,
             admin_skip_prefixes: vec![],
+            response_template_expand: false,
+            validation_status: None,
         });
 
         // Invalid q (missing) should warn, not error
@@ -860,6 +914,8 @@ mod tests {
             validate_responses: false,
             overrides: std::collections::HashMap::new(),
             admin_skip_prefixes: vec!["/admin".into()],
+            response_template_expand: false,
+            validation_status: None,
         });
 
         // No route exists for this, but skip prefix means it is accepted

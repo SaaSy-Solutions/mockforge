@@ -261,14 +261,25 @@ impl OpenApiOperation {
                 .request_body
                 .as_ref()
                 .and_then(|rb| OpenApiSchema::from_request_body(rb, spec)),
-            responses: operation
-                .responses
-                .responses
-                .iter()
-                .filter_map(|(code, resp)| {
-                    OpenApiResponse::from_response(resp, spec).map(|r| (code.to_string(), r))
-                })
-                .collect(),
+            responses: {
+                let mut responses: HashMap<String, OpenApiResponse> = operation
+                    .responses
+                    .responses
+                    .iter()
+                    .filter_map(|(code, resp)| {
+                        OpenApiResponse::from_response(resp, spec).map(|r| (code.to_string(), r))
+                    })
+                    .collect();
+
+                // Add the default response if it exists
+                if let Some(default_resp) = &operation.responses.default {
+                    if let Some(openapi_resp) = OpenApiResponse::from_response(default_resp, spec) {
+                        responses.insert("default".to_string(), openapi_resp);
+                    }
+                }
+
+                responses
+            },
             security: vec![], // TODO: Implement security requirement parsing
         }
     }
@@ -365,10 +376,20 @@ pub struct OpenApiSchema {
     pub minimum: Option<f64>,
     /// Maximum value
     pub maximum: Option<f64>,
+    /// Regex pattern (for strings)
+    pub pattern: Option<String>,
+    /// Example value (if provided)
+    pub example: Option<Value>,
+    /// Default value (if provided)
+    pub default_value: Option<Value>,
     /// Minimum length
     pub min_length: Option<usize>,
     /// Maximum length
     pub max_length: Option<usize>,
+    /// Minimum items (arrays)
+    pub min_items: Option<usize>,
+    /// Maximum items (arrays)
+    pub max_items: Option<usize>,
     /// oneOf variants
     pub one_of: Vec<OpenApiSchema>,
     /// anyOf variants
@@ -378,7 +399,7 @@ pub struct OpenApiSchema {
     /// Whether additionalProperties are allowed (if boolean specified)
     pub additional_properties_allowed: Option<bool>,
     /// Schema for additionalProperties values
-    pub additional_properties_schema: Option<Box<OpenApiSchema>>, 
+    pub additional_properties_schema: Option<Box<OpenApiSchema>>,
 }
 
 impl OpenApiSchema {
@@ -404,8 +425,13 @@ impl OpenApiSchema {
             enum_values: None,
             minimum: None,
             maximum: None,
+            pattern: None,
+            example: None,
+            default_value: None,
             min_length: None,
             max_length: None,
+            min_items: None,
+            max_items: None,
             one_of: Vec::new(),
             any_of: Vec::new(),
             all_of: Vec::new(),
@@ -432,6 +458,7 @@ impl OpenApiSchema {
                     };
                     out.min_length = st.min_length;
                     out.max_length = st.max_length;
+                    out.pattern = st.pattern.clone();
                     if !st.enumeration.is_empty() {
                         let vals = st
                             .enumeration
@@ -472,6 +499,8 @@ impl OpenApiSchema {
                 }
                 Type::Array(at) => {
                     out.schema_type = Some("array".to_string());
+                    out.min_items = at.min_items;
+                    out.max_items = at.max_items;
                     if let Some(items) = &at.items {
                         match items {
                             ReferenceOr::Item(b) => {
@@ -578,6 +607,7 @@ impl OpenApiSchema {
                 // String constraints
                 out.min_length = any.min_length;
                 out.max_length = any.max_length;
+                if let Some(p) = &any.pattern { out.pattern = Some(p.clone()); }
                 if let Some(fmt) = &any.format { out.format = Some(fmt.clone()); }
                 // Numeric constraints
                 out.minimum = any.minimum;
@@ -649,6 +679,10 @@ impl OpenApiSchema {
             SchemaKind::Not { .. } => { /* ignore */ }
         }
 
+        // Capture example/default if present on schema data
+        out.example = schema.schema_data.example.clone();
+        out.default_value = schema.schema_data.default.clone();
+
         Some(out)
     }
 
@@ -676,6 +710,8 @@ impl OpenApiSchema {
 
     /// Generate a mock value for this schema
     pub fn generate_mock_value(&self) -> Value {
+        if let Some(ex) = &self.example { return ex.clone(); }
+        if let Some(def) = &self.default_value { return def.clone(); }
         match self.schema_type.as_deref() {
             Some("string") => {
                 if let Some(enum_vals) = &self.enum_values {
@@ -799,6 +835,17 @@ impl OpenApiSchema {
                         )));
                     }
                 }
+                // regex pattern
+                if let Some(pat) = &self.pattern {
+                    if let Ok(re) = Regex::new(pat) {
+                        if !re.is_match(s) {
+                            return Err(Error::validation(format!(
+                                "{}: pattern '{}' not matched",
+                                path, pat
+                            )));
+                        }
+                    }
+                }
                 if let Some(fmt) = &self.format {
                     match fmt.as_str() {
                         "ipv4" => {
@@ -885,6 +932,22 @@ impl OpenApiSchema {
                 let arr = value.as_array().ok_or_else(|| {
                     Error::validation(format!("{}: expected array, got {}", path, value))
                 })?;
+                if let Some(min) = self.min_items {
+                    if arr.len() < min {
+                        return Err(Error::validation(format!(
+                            "{}: minItems {} not satisfied",
+                            path, min
+                        )));
+                    }
+                }
+                if let Some(max) = self.max_items {
+                    if arr.len() > max {
+                        return Err(Error::validation(format!(
+                            "{}: maxItems {} exceeded",
+                            path, max
+                        )));
+                    }
+                }
                 if let Some(items_schema) = &self.items {
                     for (idx, item) in arr.iter().enumerate() {
                         items_schema.validate_value(item, &format!("{}[{}]", path, idx))?;
@@ -977,9 +1040,8 @@ impl OpenApiSchema {
                 if let Some(sv) = value.as_str() {
                     if let Some(min) = self.min_length { if sv.len() < min { errors.push(format!("{}: minLength {} not satisfied", path, min)); } }
                     if let Some(max) = self.max_length { if sv.len() > max { errors.push(format!("{}: maxLength {} exceeded", path, max)); } }
-                    if let Some(fmt) = &self.format {
-                        let tmp = self.validate_value(value, path);
-                        if let Err(e) = tmp { errors.push(format!("{}", e)); }
+                    if self.pattern.is_some() || self.format.is_some() {
+                        if let Err(e) = self.validate_value(value, path) { errors.push(format!("{}", e)); }
                     }
                 } else {
                     errors.push(format!("{}: expected string, got {}", path, value));
@@ -998,6 +1060,8 @@ impl OpenApiSchema {
             }
             Some("array") => {
                 if let Some(arr) = value.as_array() {
+                    if let Some(min) = self.min_items { if arr.len() < min { errors.push(format!("{}: minItems {} not satisfied", path, min)); } }
+                    if let Some(max) = self.max_items { if arr.len() > max { errors.push(format!("{}: maxItems {} exceeded", path, max)); } }
                     if let Some(items) = &self.items { for (i, v) in arr.iter().enumerate() { items.validate_collect(v, &format!("{}[{}]", path, i), errors); } }
                 } else {
                     errors.push(format!("{}: expected array, got {}", path, value));
@@ -1024,6 +1088,9 @@ impl OpenApiSchema {
         for m in msgs {
             let code = if m.contains("minLength") { "minLength" }
                 else if m.contains("maxLength") { "maxLength" }
+                else if m.contains("minItems") { "minItems" }
+                else if m.contains("maxItems") { "maxItems" }
+                else if m.contains("pattern") { "pattern" }
                 else if m.contains("invalid ") { "format" }
                 else if m.contains("expected string") || m.contains("expected number") || m.contains("expected object") || m.contains("expected array") || m.contains("expected boolean") { "type" }
                 else if m.contains("missing required") { "required" }
@@ -1045,6 +1112,7 @@ impl OpenApiSchema {
             if let Some(max) = self.maximum { obj.insert("expected_max".into(), serde_json::json!(max)); }
             if let Some(minl) = self.min_length { obj.insert("expected_minLength".into(), serde_json::json!(minl)); }
             if let Some(maxl) = self.max_length { obj.insert("expected_maxLength".into(), serde_json::json!(maxl)); }
+            if let Some(p) = &self.pattern { obj.insert("expected_pattern".into(), serde_json::Value::String(p.clone())); }
 
             // Enum expectations
             if let Some(ev) = &self.enum_values { if !ev.is_empty() { obj.insert("expected_enum".into(), serde_json::Value::Array(ev.clone())); } }
@@ -1054,6 +1122,18 @@ impl OpenApiSchema {
                 if let Some(items) = &self.items {
                     if let Some(t) = &items.schema_type { obj.insert("items_expected_type".into(), serde_json::Value::String(t.clone())); }
                     if let Some(fmt) = &items.format { obj.insert("items_expected_format".into(), serde_json::Value::String(fmt.clone())); }
+                }
+                if let Some(mi) = self.min_items { obj.insert("expected_minItems".into(), serde_json::json!(mi)); }
+                if let Some(ma) = self.max_items { obj.insert("expected_maxItems".into(), serde_json::json!(ma)); }
+            }
+
+            // Object property hints
+            if let Some("object") = self.schema_type.as_deref() {
+                if !self.properties.is_empty() {
+                    obj.insert("object_properties".into(), serde_json::Value::Array(self.properties.keys().cloned().map(serde_json::Value::String).collect()));
+                }
+                if !self.required.is_empty() {
+                    obj.insert("required_properties".into(), serde_json::Value::Array(self.required.iter().cloned().map(serde_json::Value::String).collect()));
                 }
             }
 
@@ -1069,6 +1149,8 @@ pub struct OpenApiResponse {
     pub description: String,
     /// Response schema
     pub schema: Option<OpenApiSchema>,
+    /// Inline example (from media.example or first media.examples entry)
+    pub example: Option<serde_json::Value>,
 }
 
 impl OpenApiResponse {
@@ -1076,26 +1158,40 @@ impl OpenApiResponse {
     pub fn from_response(response_ref: &ReferenceOr<Response>, spec: &OpenApiSpec) -> Option<Self> {
         match response_ref {
             ReferenceOr::Item(response) => {
-                let schema = response
+                let media = response
                     .content
                     .get("application/json")
-                    .or_else(|| response.content.get("*/*"))
-                    .and_then(|media| media.schema.as_ref())
+                    .or_else(|| response.content.get("*/*"));
+                let schema = media
+                    .and_then(|m| m.schema.as_ref())
                     .and_then(|s| OpenApiSchema::from_schema(s, spec));
-
-                Some(Self {
-                    description: response.description.clone(),
-                    schema,
-                })
+                let mut example = media.and_then(|m| m.example.clone());
+                if example.is_none() {
+                    if let Some(m) = media {
+                        if let Some((_, exref)) = m.examples.iter().next() {
+                            if let Some(ex) = exref.as_item() { example = ex.value.clone(); }
+                        }
+                    }
+                }
+                Some(Self { description: response.description.clone(), schema, example })
             }
             ReferenceOr::Reference { reference } => spec.get_response(reference).and_then(|r| {
-                let schema = r
+                let media = r
                     .content
                     .get("application/json")
-                    .or_else(|| r.content.get("*/*"))
-                    .and_then(|media| media.schema.as_ref())
+                    .or_else(|| r.content.get("*/*"));
+                let schema = media
+                    .and_then(|m| m.schema.as_ref())
                     .and_then(|s| OpenApiSchema::from_schema(s, spec));
-                Some(Self { description: r.description.clone(), schema })
+                let mut example = media.and_then(|m| m.example.clone());
+                if example.is_none() {
+                    if let Some(m) = media {
+                        if let Some((_, exref)) = m.examples.iter().next() {
+                            if let Some(ex) = exref.as_item() { example = ex.value.clone(); }
+                        }
+                    }
+                }
+                Some(Self { description: r.description.clone(), schema, example })
             }),
         }
     }
@@ -1157,30 +1253,72 @@ impl OpenApiRoute {
         self.path.replace("{", ":").replace("}", "")
     }
 
-    /// Get mock response for this route
-    pub fn mock_response(&self) -> Value {
-        // Try to get the 200 response first, then any success response
-        if let Some(response) = self
-            .operation
-            .responses
-            .get("200")
-            .or_else(|| self.operation.responses.get("201"))
-            .or_else(|| self.operation.responses.get("default"))
-        {
-            if let Some(schema) = &response.schema {
-                schema.generate_mock_value()
-            } else {
-                Value::Object(serde_json::Map::new())
-            }
-        } else {
-            Value::Object(serde_json::Map::new())
-        }
+
+    /// Select the best 2xx response from the OpenAPI spec
+    /// Returns the response status code and the response object
+    pub fn select_best_2xx_response(&self) -> Option<(u16, &OpenApiResponse)> {
+        self.operation.select_best_2xx_response()
     }
+
+    /// Get (status, body) for this route using 2xx selection
+    pub fn mock_response_with_status(&self) -> (u16, Value) {
+        if let Some((code, response)) = self.select_best_2xx_response() {
+            if let Some(ex) = &response.example { return (code, ex.clone()); }
+            if let Some(schema) = &response.schema { return (code, schema.generate_mock_value()); }
+            return (code, Value::Object(serde_json::Map::new()));
+        }
+        (200, Value::Object(serde_json::Map::new()))
+    }
+}
+
+impl OpenApiOperation {
+    /// Select the best 2xx response from the OpenAPI spec
+    /// Returns the response status code and the response object
+    pub fn select_best_2xx_response(&self) -> Option<(u16, &OpenApiResponse)> {
+        // Define 2xx status codes in priority order
+        let priority_codes = ["200", "201", "202", "204", "203", "205", "206", "207", "208", "226"];
+
+        // First try explicit 2xx codes in priority order
+        for code in &priority_codes {
+            if let Some(response) = self.responses.get(*code) {
+                return Some((code.parse().unwrap_or(200), response));
+            }
+        }
+
+        // Then try any other numeric 2xx codes (sorted ascending)
+        let mut others: Vec<u16> = self
+            .responses
+            .keys()
+            .filter_map(|k| k.parse::<u16>().ok())
+            .filter(|c| (200..=299).contains(c) && !priority_codes.contains(&c.to_string().as_str()))
+            .collect();
+        others.sort_unstable();
+        if let Some(code) = others.first() {
+            if let Some(resp) = self.responses.get(&code.to_string()) {
+                return Some((*code, resp));
+            }
+        }
+
+        // 2XX wildcard
+        if let Some(response) = self.responses.get("2XX").or_else(|| self.responses.get("2xx")) {
+            return Some((200, response));
+        }
+
+        // Then try "default" response
+        if let Some(response) = self.responses.get("default") {
+            return Some((200, response)); // Default to 200 for default responses
+        }
+
+        None
+    }
+
+    // Legacy helpers removed in favor of route.mock_response_with_status
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[tokio::test]
     async fn test_openapi_spec_from_json() {
@@ -1250,8 +1388,13 @@ mod tests {
                         enum_values: None,
                         minimum: None,
                         maximum: None,
+                        pattern: None,
+                        example: None,
+                        default_value: None,
                         min_length: None,
                         max_length: None,
+                        min_items: None,
+                        max_items: None,
                         one_of: Vec::new(),
                         any_of: Vec::new(),
                         all_of: Vec::new(),
@@ -1270,8 +1413,13 @@ mod tests {
                         enum_values: None,
                         minimum: None,
                         maximum: None,
+                        pattern: None,
+                        example: None,
+                        default_value: None,
                         min_length: None,
                         max_length: None,
+                        min_items: None,
+                        max_items: None,
                         one_of: Vec::new(), any_of: Vec::new(), all_of: Vec::new(),
                         additional_properties_allowed: None, additional_properties_schema: None,
                     }),
@@ -1284,8 +1432,13 @@ mod tests {
             enum_values: None,
             minimum: None,
             maximum: None,
+            pattern: None,
+            example: None,
+            default_value: None,
             min_length: None,
             max_length: None,
+            min_items: None,
+            max_items: None,
             one_of: Vec::new(),
             any_of: Vec::new(),
             all_of: Vec::new(),
@@ -1298,5 +1451,166 @@ mod tests {
         let obj = mock_value.as_object().unwrap();
         assert!(obj.contains_key("id"));
         assert!(obj.contains_key("name"));
+    }
+
+    #[test]
+    fn test_response_selection_priority() {
+        // Test comprehensive 2xx response selection with priority ordering
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Response Test", "version": "1.0.0"},
+            "paths": {
+                "/test": {
+                    "get": {
+                        "responses": {
+                            // Test all common 2xx codes in non-priority order
+                            "202": {"description": "Accepted"},
+                            "200": {"description": "OK"},
+                            "201": {"description": "Created"},
+                            "204": {"description": "No Content"},
+                            "203": {"description": "Non-Authoritative Information"}
+                        }
+                    }
+                }
+            }
+        });
+
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let operations = spec.operations_for_path("/test");
+        let operation = OpenApiOperation::from_operation(
+            operations[0].0.clone(),
+            "/test".to_string(),
+            operations[0].1,
+            &spec
+        );
+
+        // Test response selection priority (200 should be selected first)
+        let (status_code, response) = operation.select_best_2xx_response().unwrap();
+        assert_eq!(status_code, 200);
+        assert_eq!(response.description, "OK");
+
+        // Test status code getter
+        let route = OpenApiRoute {
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            operation: operation.clone(),
+        };
+        assert_eq!(route.get_response_status_code(), 200);
+    }
+
+    #[test]
+    fn test_response_selection_fallback_to_default() {
+        // Test fallback to "default" response when no 2xx codes exist
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Default Test", "version": "1.0.0"},
+            "paths": {
+                "/test": {
+                    "get": {
+                        "responses": {
+                            "400": {"description": "Bad Request"},
+                            "500": {"description": "Server Error"},
+                            "default": {"description": "Default Response"}
+                        }
+                    }
+                }
+            }
+        });
+
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let operations = spec.operations_for_path("/test");
+        let operation = OpenApiOperation::from_operation(
+            operations[0].0.clone(),
+            "/test".to_string(),
+            operations[0].1,
+            &spec
+        );
+
+        // Should fallback to default and use 200 as status code
+        let (status_code, response) = operation.select_best_2xx_response().unwrap();
+        assert_eq!(status_code, 200);
+        assert_eq!(response.description, "Default Response");
+    }
+
+    #[test]
+    fn test_response_selection_all_2xx_codes() {
+        // Test that all 2xx codes are supported
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "2xx Test", "version": "1.0.0"},
+            "paths": {
+                "/test": {
+                    "get": {
+                        "responses": {
+                            "226": {"description": "IM Used"},           // Should be selected (lowest priority)
+                            "208": {"description": "Already Reported"},
+                            "207": {"description": "Multi-Status"},
+                            "206": {"description": "Partial Content"},
+                            "205": {"description": "Reset Content"},     // Should be selected over 226
+                            "204": {"description": "No Content"},        // Should be selected over 205
+                            "203": {"description": "Non-Authoritative"}, // Should be selected over 204
+                            "202": {"description": "Accepted"},          // Should be selected over 203
+                            "201": {"description": "Created"},           // Should be selected over 202
+                            "200": {"description": "OK"}                 // Should be selected first
+                        }
+                    }
+                }
+            }
+        });
+
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let operations = spec.operations_for_path("/test");
+        let operation = OpenApiOperation::from_operation(
+            operations[0].0.clone(),
+            "/test".to_string(),
+            operations[0].1,
+            &spec
+        );
+
+        // Should select 200 (highest priority)
+        let (status_code, response) = operation.select_best_2xx_response().unwrap();
+        assert_eq!(status_code, 200);
+        assert_eq!(response.description, "OK");
+    }
+
+    #[test]
+    fn test_response_selection_no_responses() {
+        // Test behavior when no responses are defined
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "No Response Test", "version": "1.0.0"},
+            "paths": {
+                "/test": {
+                    "get": {
+                        "responses": {}
+                    }
+                }
+            }
+        });
+
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let operations = spec.operations_for_path("/test");
+        let operation = OpenApiOperation::from_operation(
+            operations[0].0.clone(),
+            "/test".to_string(),
+            operations[0].1,
+            &spec
+        );
+
+        // Should return None when no responses exist
+        assert!(operation.select_best_2xx_response().is_none());
+
+        // Status code getter should default to 200
+        let route = OpenApiRoute {
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            operation: operation.clone(),
+        };
+        assert_eq!(route.get_response_status_code(), 200);
+
+        // Mock response should return empty object
+        let mock_response = route.mock_response();
+        assert!(mock_response.is_object());
+        assert_eq!(mock_response.as_object().unwrap().len(), 0);
     }
 }
