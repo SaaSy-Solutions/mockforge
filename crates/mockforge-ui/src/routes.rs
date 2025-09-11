@@ -31,6 +31,12 @@ pub fn create_admin_router(
             .route("/__mockforge/metrics", get(get_metrics))
             .route("/__mockforge/config", get(get_config))
             .route("/__mockforge/fixtures", get(get_fixtures))
+            .route("/__mockforge/fixtures/delete", post(delete_fixture))
+            .route("/__mockforge/fixtures/download", get(download_fixture))
+            .route("/__mockforge/env", get(get_env_vars))
+            .route("/__mockforge/env", post(update_env_var))
+            .route("/__mockforge/files/content", post(get_file_content))
+            .route("/__mockforge/files/save", post(save_file_content))
             // Validation settings
             .route("/__mockforge/validation", get(get_validation))
             .route("/__mockforge/validation", post(update_validation))

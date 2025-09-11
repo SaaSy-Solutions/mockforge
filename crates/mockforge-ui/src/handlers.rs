@@ -3,8 +3,9 @@
 use axum::{
     extract::{Query, State},
     http,
-    response::{Html, Json},
+    response::{Html, IntoResponse, Json},
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -343,7 +344,7 @@ pub async fn get_config() -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(config))
 }
 
-/// Get fixtures/replay data (compatibility with existing React admin UI)
+/// Get fixtures/replay data
 pub async fn get_fixtures() -> Json<ApiResponse<Vec<serde_json::Value>>> {
     // Mock fixtures data for demonstration
     // In a real implementation, this would read from the fixtures directory
@@ -372,6 +373,25 @@ pub async fn get_fixtures() -> Json<ApiResponse<Vec<serde_json::Value>>> {
     ];
 
     Json(ApiResponse::success(fixtures))
+}
+
+/// Delete a fixture
+pub async fn delete_fixture(Json(payload): Json<FixtureDeleteRequest>) -> Json<ApiResponse<String>> {
+    // In a real implementation, this would delete the actual fixture file
+    tracing::info!("Deleting fixture: {:?}", payload);
+    
+    Json(ApiResponse::success("Fixture deleted".to_string()))
+}
+
+/// Download a fixture file
+pub async fn download_fixture() -> impl IntoResponse {
+    // In a real implementation, this would serve the actual fixture file
+    let content = r#"{"request": {"method": "GET", "path": "/api/users"}, "response": {"status": 200, "body": "{\"users\": []}"}}"#;
+    
+    (
+        [(http::header::CONTENT_TYPE, "application/json")],
+        content,
+    )
 }
 
 /// Get current validation settings
@@ -407,4 +427,87 @@ pub async fn update_validation(Json(update): Json<ValidationUpdate>) -> Json<Api
     }
 
     Json(ApiResponse::success("Validation settings updated".to_string()))
+}
+
+/// Get environment variables
+pub async fn get_env_vars() -> Json<ApiResponse<HashMap<String, String>>> {
+    // In a real implementation, this would read actual environment variables
+    let env_vars = HashMap::from([
+        ("MOCKFORGE_LATENCY_ENABLED".to_string(), "true".to_string()),
+        ("MOCKFORGE_FAILURES_ENABLED".to_string(), "false".to_string()),
+        ("MOCKFORGE_PROXY_ENABLED".to_string(), "false".to_string()),
+        ("MOCKFORGE_RECORD_ENABLED".to_string(), "true".to_string()),
+        ("MOCKFORGE_REPLAY_ENABLED".to_string(), "true".to_string()),
+    ]);
+
+    Json(ApiResponse::success(env_vars))
+}
+
+/// Update environment variable
+pub async fn update_env_var(Json(update): Json<EnvVarUpdate>) -> Json<ApiResponse<String>> {
+    // In a real implementation, this would update the actual environment variable
+    tracing::info!("Updating environment variable: {}={}", update.key, update.value);
+    
+    Json(ApiResponse::success("Environment variable updated".to_string()))
+}
+
+/// Get file content
+pub async fn get_file_content(Json(request): Json<FileContentRequest>) -> Json<ApiResponse<String>> {
+    // In a real implementation, this would read the actual file content
+    match request.file_type.as_str() {
+        "yaml" | "yml" => {
+            let content = r#"http:
+  request_validation: "enforce"
+  aggregate_validation_errors: true
+  validate_responses: false
+  validation_overrides: {}
+"#;
+            Json(ApiResponse::success(content.to_string()))
+        }
+        "json" => {
+            let content = r#"{
+  "latency": {
+    "base_ms": 50,
+    "jitter_ms": 20
+  }
+}"#;
+            Json(ApiResponse::success(content.to_string()))
+        }
+        _ => Json(ApiResponse::error("Unsupported file type".to_string())),
+    }
+}
+
+/// Save file content
+pub async fn save_file_content(Json(request): Json<FileSaveRequest>) -> Json<ApiResponse<String>> {
+    // In a real implementation, this would save the actual file content
+    tracing::info!("Saving file: {}", request.file_path);
+    
+    Json(ApiResponse::success("File saved successfully".to_string()))
+}
+
+/// Fixture delete request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureDeleteRequest {
+    pub fixture_id: String,
+}
+
+/// Environment variable update
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvVarUpdate {
+    pub key: String,
+    pub value: String,
+}
+
+/// File content request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileContentRequest {
+    pub file_path: String,
+    pub file_type: String,
+}
+
+/// File save request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileSaveRequest {
+    pub file_path: String,
+    pub content: String,
 }

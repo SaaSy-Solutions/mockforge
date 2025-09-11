@@ -23,6 +23,7 @@
             <button class="nav-tab" data-tab="logs">Logs</button>
             <button class="nav-tab" data-tab="config">Configuration</button>
             <button class="nav-tab" data-tab="metrics">Metrics</button>
+            <button class="nav-tab" data-tab="files">Files</button>
         </nav>
 
         <main class="main">
@@ -99,8 +100,8 @@
                             </select>
                         </label>
                         <span id="routes-count" class="badge" style="background:#2563eb; color:#fff; padding:.25rem .5rem; border-radius:.25rem;">0 overridden</span>
-                        <a id="download-overrides" class="btn btn-secondary" href="__mockforge/validation/patch.yaml">Download overrides YAML</a>
-                        <a id="download-config" class="btn btn-secondary" href="__mockforge/config.yaml">Download full config</a>
+                        <button id="download-overrides" class="btn btn-secondary">Download overrides YAML</button>
+                        <button id="download-config" class="btn btn-secondary">Download full config</button>
                         <button id="reset-overrides" type="button" class="btn btn-danger">Reset Overrides</button>
                         <button id="export-overrides-json" type="button" class="btn btn-secondary">Export overrides JSON</button>
                     </div>
@@ -113,6 +114,8 @@
                     <h3>Record/Replay Fixtures</h3>
                     <div class="fixtures-controls">
                         <button id="refresh-fixtures-btn" class="btn btn-secondary">Refresh</button>
+                        <input type="text" id="fixtures-filter" placeholder="Filter fixtures..." class="filter-input">
+                        <button id="delete-selected-fixtures" class="btn btn-danger">Delete Selected</button>
                     </div>
                     <div id="fixtures-table" class="fixtures-table">
                         <div class="loading">Loading fixtures...</div>
@@ -212,6 +215,18 @@
                     </div>
 
                     <div class="card">
+                        <h3>Environment Variables</h3>
+                        <div id="env-vars-container">
+                            <div class="loading">Loading environment variables...</div>
+                        </div>
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <input type="text" id="new-env-key" placeholder="Variable name" style="width: 40%; margin-right: 0.5rem;">
+                            <input type="text" id="new-env-value" placeholder="Value" style="width: 40%; margin-right: 0.5rem;">
+                            <button id="add-env-var" class="btn btn-secondary">Add</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
                         <h3>Error Inspector (optional)</h3>
                         <div class="form-group" style="display:flex; gap:.5rem; align-items:center;">
                             <button id="fetch-last-error" type="button" class="btn btn-secondary">Fetch Last 400 Error</button>
@@ -239,6 +254,25 @@
                     <h3>Performance Metrics</h3>
                     <div id="metrics-content" class="metrics-content">
                         <div class="loading">Loading metrics...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="files-tab" class="tab-content">
+                <div class="card full-width">
+                    <h3>Configuration Files</h3>
+                    <div class="files-controls">
+                        <select id="file-selector">
+                            <option value="">Select a configuration file...</option>
+                            <option value="config.yaml">config.yaml</option>
+                            <option value="validation.overrides.yaml">validation.overrides.yaml</option>
+                            <option value="routes.json">routes.json</option>
+                        </select>
+                        <button id="load-file" class="btn btn-secondary">Load File</button>
+                        <button id="save-file" class="btn btn-primary">Save File</button>
+                    </div>
+                    <div class="form-group">
+                        <textarea id="file-content" rows="20" style="width: 100%; font-family: monospace;" placeholder="Select a file to load its content..."></textarea>
                     </div>
                 </div>
             </div>

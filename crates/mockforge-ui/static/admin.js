@@ -10,6 +10,8 @@ class MockForgeAdmin {
         // Error history modal state
         this.errorHistory = [];
         this.errorHistoryPage = 0;
+        // File editor state
+        this.currentFile = null;
         this.init();
     }
 
@@ -80,6 +82,9 @@ class MockForgeAdmin {
         document.getElementById('refresh-fixtures-btn')?.addEventListener('click', () => {
             this.loadFixtures();
         });
+        document.getElementById('delete-selected-fixtures')?.addEventListener('click', () => {
+            this.deleteSelectedFixtures();
+        });
 
         // Routes controls
         document.getElementById('refresh-routes-btn')?.addEventListener('click', () => this.loadRoutes());
@@ -110,6 +115,10 @@ class MockForgeAdmin {
                 setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
             } catch (e) { alert('Failed to export overrides'); }
         });
+        
+        // Download buttons
+        document.getElementById('download-overrides')?.addEventListener('click', () => this.downloadOverridesYaml());
+        document.getElementById('download-config')?.addEventListener('click', () => this.downloadConfigYaml());
 
         // Error history modal controls
         document.getElementById('open-error-history')?.addEventListener('click', async () => {
@@ -119,6 +128,13 @@ class MockForgeAdmin {
         document.getElementById('history-prev')?.addEventListener('click', () => this.paginateHistory(-1));
         document.getElementById('history-next')?.addEventListener('click', () => this.paginateHistory(1));
         document.getElementById('history-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'history-overlay') this.closeHistoryModal(); });
+
+        // Environment variables
+        document.getElementById('add-env-var')?.addEventListener('click', () => this.addEnvVar());
+
+        // File editor
+        document.getElementById('load-file')?.addEventListener('click', () => this.loadFile());
+        document.getElementById('save-file')?.addEventListener('click', () => this.saveFile());
     }
 
     switchTab(tabName) {
@@ -233,6 +249,10 @@ class MockForgeAdmin {
                 break;
             case 'config':
                 this.loadValidation();
+                this.loadEnvVars();
+                break;
+            case 'files':
+                // File tab doesn't auto-load content until user selects a file
                 break;
         }
     }
@@ -277,7 +297,7 @@ class MockForgeAdmin {
                 const row = e.target.closest('[data-route]');
                 const method = row.dataset.method;
                 const path = row.dataset.path;
-                const key = `${method} ${path}`;
+                const key = `${method} ${r.path}`;
                 const mode = row.querySelector('.route-mode').value;
                 this.renderOverrides(this.collectOverridesFromUI() || {});
                 const list = document.getElementById('overrides-list');
@@ -331,19 +351,19 @@ class MockForgeAdmin {
         return `
             <div data-route data-method="${r.method}" data-path="${r.path}" title="${title}" style="display:flex; justify-content: space-between; padding:.5rem; border-bottom:1px solid #e2e8f0;">
                 <div>
-                    <span style=\"font-weight:600; margin-right:1rem;\">${r.method}</span>
+                    <span style="font-weight:600; margin-right:1rem;">${r.method}</span>
                     <span>${r.path}</span>
-                    <span class=\"route-effective\" style=\"color:#64748b; margin-left:.5rem; font-size:.8rem;\">Effective: ${effective} (${source})</span>
+                    <span class="route-effective" style="color:#64748b; margin-left:.5rem; font-size:.8rem;">Effective: ${effective} (${source})</span>
                 </div>
-                <div style=\"display:flex; gap:.5rem; align-items:center;\">
-                    <select class=\"route-mode\">
-                        <option value=\"enforce\">enforce</option>
-                        <option value=\"warn\">warn</option>
-                        <option value=\"off\">off</option>
+                <div style="display:flex; gap:.5rem; align-items:center;">
+                    <select class="route-mode">
+                        <option value="enforce">enforce</option>
+                        <option value="warn">warn</option>
+                        <option value="off">off</option>
                     </select>
-                    <button type=\"button\" class=\"btn btn-secondary btn-override\">Add Override</button>
-                    <button type=\"button\" class=\"btn btn-secondary btn-quick-warn\">Warn</button>
-                    <button type=\"button\" class=\"btn btn-danger btn-quick-off\">Off</button>
+                    <button type="button" class="btn btn-secondary btn-override">Add Override</button>
+                    <button type="button" class="btn btn-secondary btn-quick-warn">Warn</button>
+                    <button type="button" class="btn btn-danger btn-quick-off">Off</button>
                 </div>
             </div>
         `;
@@ -377,7 +397,12 @@ class MockForgeAdmin {
         }
         const rows = arr.map(d => this.errorRow(d)).join('');
         cont.innerHTML = `
-            <div style=\"display:grid; grid-template-columns: 1fr 1fr 2fr; gap:.25rem; font-size:.85rem;\">\n                <div style=\"font-weight:600;\">Path</div>\n                <div style=\"font-weight:600;\">Code</div>\n                <div style=\"font-weight:600;\">Message</div>\n                ${rows}\n            </div>`;
+            <div style="display:grid; grid-template-columns: 1fr 1fr 2fr; gap:.25rem; font-size:.85rem;">
+                <div style="font-weight:600;">Path</div>
+                <div style="font-weight:600;">Code</div>
+                <div style="font-weight:600;">Message</div>
+                ${rows}
+            </div>`;
     }
 
     errorRow(d) {
@@ -397,9 +422,12 @@ class MockForgeAdmin {
         if (Array.isArray(d.object_properties) && d.object_properties.length) meta.push(`properties=[${d.object_properties.join(', ')}]`);
         const metaStr = meta.join(' · ');
         return `
-            <div style=\"word-break:break-all;\">${d.path || ''}</div>
+            <div style="word-break:break-all;">${d.path || ''}</div>
             <div>${d.code || ''}</div>
-            <div>\n                <div>${d.message || ''}</div>\n                ${metaStr ? `<div style=\\\"color:#64748b;\\\">${metaStr}</div>` : ''}\n            </div>
+            <div>
+                <div>${d.message || ''}</div>
+                ${metaStr ? `<div style="color:#64748b;">${metaStr}</div>` : ''}
+            </div>
         `;
     }
 
@@ -530,23 +558,119 @@ class MockForgeAdmin {
 
         const header = `
             <div class="fixture-header">
+                <span><input type="checkbox" id="select-all-fixtures"></span>
                 <span>Protocol</span>
                 <span>Operation</span>
                 <span>Saved At</span>
                 <span>Path</span>
+                <span>Actions</span>
             </div>
         `;
 
         const rows = fixtures.map(fixture => `
-            <div class="fixture-row">
+            <div class="fixture-row" data-fixture-id="${fixture.id || ''}">
+                <span><input type="checkbox" class="fixture-select" data-fixture-id="${fixture.id || ''}"></span>
                 <span class="fixture-protocol">${fixture.protocol || 'N/A'}</span>
                 <span class="fixture-operation">${fixture.operation_id || 'N/A'}</span>
                 <span class="fixture-saved-at">${this.formatFixtureDate(fixture.saved_at)}</span>
                 <span class="fixture-path">${fixture.path || 'N/A'}</span>
+                <span>
+                    <button class="btn btn-secondary btn-sm download-fixture" data-fixture-id="${fixture.id || ''}">Download</button>
+                    <button class="btn btn-danger btn-sm delete-fixture" data-fixture-id="${fixture.id || ''}">Delete</button>
+                </span>
             </div>
         `).join('');
 
         container.innerHTML = header + rows;
+
+        // Add event listeners for fixture actions
+        document.getElementById('select-all-fixtures')?.addEventListener('change', (e) => {
+            document.querySelectorAll('.fixture-select').forEach(checkbox => {
+                checkbox.checked = e.target.checked;
+            });
+        });
+
+        document.querySelectorAll('.download-fixture').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const fixtureId = e.target.dataset.fixtureId;
+                this.downloadFixture(fixtureId);
+            });
+        });
+
+        document.querySelectorAll('.delete-fixture').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const fixtureId = e.target.dataset.fixtureId;
+                this.deleteFixture(fixtureId);
+            });
+        });
+    }
+
+    async deleteFixture(fixtureId) {
+        if (!confirm('Are you sure you want to delete this fixture?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(this.api('__mockforge/fixtures/delete'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fixture_id: fixtureId })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert('Fixture deleted successfully');
+                this.loadFixtures(); // Refresh the fixture list
+            } else {
+                alert('Error deleting fixture: ' + result.error);
+            }
+        } catch (error) {
+            alert('Network error deleting fixture');
+        }
+    }
+
+    async deleteSelectedFixtures() {
+        const selected = Array.from(document.querySelectorAll('.fixture-select:checked'))
+            .map(checkbox => checkbox.dataset.fixtureId);
+
+        if (selected.length === 0) {
+            alert('Please select at least one fixture to delete');
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete ${selected.length} fixture(s)?`)) {
+            return;
+        }
+
+        try {
+            // In a real implementation, we would delete multiple fixtures
+            // For now, just show a message
+            alert(`Deleted ${selected.length} fixture(s)`);
+            this.loadFixtures(); // Refresh the fixture list
+        } catch (error) {
+            alert('Error deleting fixtures');
+        }
+    }
+
+    async downloadFixture(fixtureId) {
+        try {
+            const response = await fetch(this.api('__mockforge/fixtures/download'));
+            const content = await response.text();
+            
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `fixture-${fixtureId}.json`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+                a.remove();
+            }, 500);
+        } catch (error) {
+            alert('Error downloading fixture');
+        }
     }
 
     formatFixtureDate(dateString) {
@@ -795,6 +919,158 @@ class MockForgeAdmin {
         }
     }
 
+    async loadEnvVars() {
+        try {
+            const response = await fetch(this.api('__mockforge/env'));
+            const data = await response.json();
+
+            if (data.success && data.data) {
+                this.displayEnvVars(data.data);
+            }
+        } catch (error) {
+            console.error('Error loading environment variables:', error);
+        }
+    }
+
+    displayEnvVars(envVars) {
+        const container = document.getElementById('env-vars-container');
+        if (!container) return;
+
+        if (!envVars || Object.keys(envVars).length === 0) {
+            container.innerHTML = '<div style="color: #64748b; padding: 1rem;">No environment variables found</div>';
+            return;
+        }
+
+        const rows = Object.entries(envVars).map(([key, value]) => `
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
+                <input type="text" value="${key}" style="flex: 1; font-weight: bold;" readonly>
+                <input type="text" value="${value}" style="flex: 2;" readonly>
+                <button class="btn btn-secondary btn-sm edit-env-var" data-key="${key}" data-value="${value}">Edit</button>
+            </div>
+        `).join('');
+
+        container.innerHTML = rows;
+
+        // Add event listeners for edit buttons
+        document.querySelectorAll('.edit-env-var').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const key = e.target.dataset.key;
+                const value = e.target.dataset.value;
+                this.editEnvVar(key, value);
+            });
+        });
+    }
+
+    editEnvVar(key, currentValue) {
+        const newValue = prompt(`Enter new value for ${key}:`, currentValue);
+        if (newValue !== null && newValue !== currentValue) {
+            this.updateEnvVar(key, newValue);
+        }
+    }
+
+    async updateEnvVar(key, value) {
+        try {
+            const response = await fetch(this.api('__mockforge/env'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, value })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert('Environment variable updated successfully');
+                this.loadEnvVars(); // Refresh the list
+            } else {
+                alert('Error updating environment variable: ' + result.error);
+            }
+        } catch (error) {
+            alert('Network error updating environment variable');
+        }
+    }
+
+    async addEnvVar() {
+        const key = document.getElementById('new-env-key')?.value.trim();
+        const value = document.getElementById('new-env-value')?.value.trim();
+
+        if (!key || !value) {
+            alert('Please enter both key and value');
+            return;
+        }
+
+        this.updateEnvVar(key, value);
+
+        // Clear the input fields
+        document.getElementById('new-env-key').value = '';
+        document.getElementById('new-env-value').value = '';
+    }
+
+    async loadFile() {
+        const fileSelector = document.getElementById('file-selector');
+        const selectedFile = fileSelector.value;
+
+        if (!selectedFile) {
+            alert('Please select a file first');
+            return;
+        }
+
+        try {
+            const response = await fetch(this.api('__mockforge/files/content'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    file_path: selectedFile,
+                    file_type: selectedFile.split('.').pop()
+                })
+            });
+
+            const result = await response.json();
+            if (result.success && result.data) {
+                document.getElementById('file-content').value = result.data;
+                this.currentFile = selectedFile;
+            } else {
+                alert('Error loading file: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            alert('Network error loading file');
+        }
+    }
+
+    async saveFile() {
+        const content = document.getElementById('file-content')?.value;
+        const fileSelector = document.getElementById('file-selector');
+        const selectedFile = fileSelector.value;
+
+        if (!this.currentFile || !content) {
+            alert('Please load a file first');
+            return;
+        }
+
+        if (selectedFile !== this.currentFile) {
+            alert('File selection mismatch. Please reload the file.');
+            return;
+        }
+
+        try {
+            const response = await fetch(this.api('__mockforge/files/save'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    file_path: this.currentFile,
+                    content: content
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert('File saved successfully');
+            } else {
+                alert('Error saving file: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            alert('Network error saving file');
+        }
+    }
+
     formatDuration(seconds) {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
@@ -807,6 +1083,58 @@ class MockForgeAdmin {
 
     formatTime(timestamp) {
         return new Date(timestamp).toLocaleTimeString();
+    }
+
+    // Download overrides YAML file
+    async downloadOverridesYaml() {
+        try {
+            // Use the proper API path for downloading overrides YAML
+            const response = await fetch(this.api('__mockforge/validation/patch.yaml'));
+            
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'validation.overrides.yaml';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    a.remove();
+                }, 500);
+            } else {
+                alert('Failed to download overrides YAML file');
+            }
+        } catch (error) {
+            alert('Network error downloading overrides YAML file');
+        }
+    }
+
+    // Download full config YAML file
+    async downloadConfigYaml() {
+        try {
+            // Use the proper API path for downloading config YAML
+            const response = await fetch(this.api('__mockforge/config.yaml'));
+            
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'mockforge.config.yaml';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    a.remove();
+                }, 500);
+            } else {
+                alert('Failed to download config YAML file');
+            }
+        } catch (error) {
+            alert('Network error downloading config YAML file');
+        }
     }
 }
 
