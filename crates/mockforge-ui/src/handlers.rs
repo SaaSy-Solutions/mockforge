@@ -10,9 +10,12 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{Utc, Duration};
+use chrono::Utc;
+use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use crate::models::*;
+use mockforge_core::{Result, Error};
 
 /// Request metrics for tracking
 #[derive(Debug, Clone, Default)]
@@ -25,8 +28,12 @@ pub struct RequestMetrics {
     pub requests_by_endpoint: HashMap<String, u64>,
     /// Response times (last N measurements)
     pub response_times: Vec<u64>,
+    /// Response times by endpoint (last N measurements per endpoint)
+    pub response_times_by_endpoint: HashMap<String, Vec<u64>>,
     /// Error count by endpoint
     pub errors_by_endpoint: HashMap<String, u64>,
+    /// Last request timestamp by endpoint
+    pub last_request_by_endpoint: HashMap<String, chrono::DateTime<chrono::Utc>>,
 }
 
 /// System metrics
@@ -38,6 +45,102 @@ pub struct SystemMetrics {
     pub cpu_usage_percent: f64,
     /// Active threads
     pub active_threads: u32,
+}
+
+/// Time series data point
+#[derive(Debug, Clone)]
+pub struct TimeSeriesPoint {
+    /// Timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Value
+    pub value: f64,
+}
+
+/// Time series data for tracking metrics over time
+#[derive(Debug, Clone, Default)]
+pub struct TimeSeriesData {
+    /// Memory usage over time
+    pub memory_usage: Vec<TimeSeriesPoint>,
+    /// CPU usage over time
+    pub cpu_usage: Vec<TimeSeriesPoint>,
+    /// Request count over time
+    pub request_count: Vec<TimeSeriesPoint>,
+    /// Response time over time
+    pub response_time: Vec<TimeSeriesPoint>,
+}
+
+/// Restart status tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestartStatus {
+    /// Whether a restart is currently in progress
+    pub in_progress: bool,
+    /// Timestamp when restart was initiated
+    pub initiated_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Restart reason/message
+    pub reason: Option<String>,
+    /// Whether restart was successful
+    pub success: Option<bool>,
+}
+
+/// Fixture metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureInfo {
+    /// Unique identifier for the fixture
+    pub id: String,
+    /// Protocol type (http, websocket, grpc)
+    pub protocol: String,
+    /// HTTP method or operation type
+    pub method: String,
+    /// Request path
+    pub path: String,
+    /// When the fixture was saved
+    pub saved_at: chrono::DateTime<chrono::Utc>,
+    /// File size in bytes
+    pub file_size: u64,
+    /// File path relative to fixtures directory
+    pub file_path: String,
+    /// Request fingerprint hash
+    pub fingerprint: String,
+    /// Additional metadata from the fixture file
+    pub metadata: serde_json::Value,
+}
+
+/// Smoke test result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmokeTestResult {
+    /// Test ID
+    pub id: String,
+    /// Test name
+    pub name: String,
+    /// HTTP method
+    pub method: String,
+    /// Request path
+    pub path: String,
+    /// Test description
+    pub description: String,
+    /// When the test was last run
+    pub last_run: Option<chrono::DateTime<chrono::Utc>>,
+    /// Test status (passed, failed, running, pending)
+    pub status: String,
+    /// Response time in milliseconds
+    pub response_time_ms: Option<u64>,
+    /// Error message if test failed
+    pub error_message: Option<String>,
+    /// HTTP status code received
+    pub status_code: Option<u16>,
+    /// Test duration in seconds
+    pub duration_seconds: Option<f64>,
+}
+
+/// Smoke test execution context
+#[derive(Debug, Clone)]
+pub struct SmokeTestContext {
+    /// Base URL for the service being tested
+    pub base_url: String,
+    /// Timeout for individual tests
+    pub timeout_seconds: u64,
+    /// Whether to run tests in parallel
+    pub parallel: bool,
 }
 
 /// Configuration state
@@ -72,6 +175,12 @@ pub struct AdminState {
     pub config: Arc<RwLock<ConfigurationState>>,
     /// Request logs (protected by RwLock)
     pub logs: Arc<RwLock<Vec<RequestLog>>>,
+    /// Time series data (protected by RwLock)
+    pub time_series: Arc<RwLock<TimeSeriesData>>,
+    /// Restart status (protected by RwLock)
+    pub restart_status: Arc<RwLock<RestartStatus>>,
+    /// Smoke test results (protected by RwLock)
+    pub smoke_test_results: Arc<RwLock<Vec<SmokeTestResult>>>,
 }
 
 impl AdminState {
@@ -121,6 +230,14 @@ impl AdminState {
                 },
             })),
             logs: Arc::new(RwLock::new(Vec::new())),
+            time_series: Arc::new(RwLock::new(TimeSeriesData::default())),
+            restart_status: Arc::new(RwLock::new(RestartStatus {
+                in_progress: false,
+                initiated_at: None,
+                reason: None,
+                success: None,
+            })),
+            smoke_test_results: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -129,17 +246,31 @@ impl AdminState {
         let mut metrics = self.metrics.write().await;
 
         metrics.total_requests += 1;
-        *metrics.requests_by_endpoint.entry(format!("{} {}", method, path)).or_insert(0) += 1;
+        let endpoint = format!("{} {}", method, path);
+        *metrics.requests_by_endpoint.entry(endpoint.clone()).or_insert(0) += 1;
 
         if status_code >= 400 {
-            *metrics.errors_by_endpoint.entry(format!("{} {}", method, path)).or_insert(0) += 1;
+            *metrics.errors_by_endpoint.entry(endpoint.clone()).or_insert(0) += 1;
         }
 
-        // Keep only last 100 response times
+        // Keep only last 100 response times globally
         metrics.response_times.push(response_time_ms);
         if metrics.response_times.len() > 100 {
             metrics.response_times.remove(0);
         }
+
+        // Keep only last 50 response times per endpoint
+        let endpoint_times = metrics.response_times_by_endpoint.entry(endpoint.clone()).or_insert_with(Vec::new);
+        endpoint_times.push(response_time_ms);
+        if endpoint_times.len() > 50 {
+            endpoint_times.remove(0);
+        }
+
+        // Update last request timestamp for this endpoint
+        metrics.last_request_by_endpoint.insert(endpoint, chrono::Utc::now());
+
+        // Update time series data for request count and response time
+        self.update_time_series_on_request(response_time_ms).await;
 
         // Record the log
         let mut logs = self.logs.write().await;
@@ -176,11 +307,154 @@ impl AdminState {
         system_metrics.memory_usage_mb = memory_mb;
         system_metrics.cpu_usage_percent = cpu_percent;
         system_metrics.active_threads = threads;
+
+        // Update time series data
+        self.update_time_series_data(memory_mb as f64, cpu_percent).await;
+    }
+
+    /// Update time series data with new metrics
+    async fn update_time_series_data(&self, memory_mb: f64, cpu_percent: f64) {
+        let now = chrono::Utc::now();
+        let mut time_series = self.time_series.write().await;
+
+        // Add memory usage data point
+        time_series.memory_usage.push(TimeSeriesPoint {
+            timestamp: now,
+            value: memory_mb,
+        });
+
+        // Add CPU usage data point
+        time_series.cpu_usage.push(TimeSeriesPoint {
+            timestamp: now,
+            value: cpu_percent,
+        });
+
+        // Add request count data point (from current metrics)
+        let metrics = self.metrics.read().await;
+        time_series.request_count.push(TimeSeriesPoint {
+            timestamp: now,
+            value: metrics.total_requests as f64,
+        });
+
+        // Add average response time data point
+        let avg_response_time = if !metrics.response_times.is_empty() {
+            metrics.response_times.iter().sum::<u64>() as f64 / metrics.response_times.len() as f64
+        } else {
+            0.0
+        };
+        time_series.response_time.push(TimeSeriesPoint {
+            timestamp: now,
+            value: avg_response_time,
+        });
+
+        // Keep only last 100 data points for each metric to prevent memory bloat
+        const MAX_POINTS: usize = 100;
+        if time_series.memory_usage.len() > MAX_POINTS {
+            time_series.memory_usage.remove(0);
+        }
+        if time_series.cpu_usage.len() > MAX_POINTS {
+            time_series.cpu_usage.remove(0);
+        }
+        if time_series.request_count.len() > MAX_POINTS {
+            time_series.request_count.remove(0);
+        }
+        if time_series.response_time.len() > MAX_POINTS {
+            time_series.response_time.remove(0);
+        }
     }
 
     /// Get system metrics
     pub async fn get_system_metrics(&self) -> SystemMetrics {
         self.system_metrics.read().await.clone()
+    }
+
+    /// Get time series data
+    pub async fn get_time_series_data(&self) -> TimeSeriesData {
+        self.time_series.read().await.clone()
+    }
+
+    /// Get restart status
+    pub async fn get_restart_status(&self) -> RestartStatus {
+        self.restart_status.read().await.clone()
+    }
+
+    /// Initiate server restart
+    pub async fn initiate_restart(&self, reason: String) -> Result<()> {
+        let mut status = self.restart_status.write().await;
+
+        if status.in_progress {
+            return Err(Error::generic("Restart already in progress".to_string()));
+        }
+
+        status.in_progress = true;
+        status.initiated_at = Some(chrono::Utc::now());
+        status.reason = Some(reason);
+        status.success = None;
+
+        Ok(())
+    }
+
+    /// Complete restart (success or failure)
+    pub async fn complete_restart(&self, success: bool) {
+        let mut status = self.restart_status.write().await;
+        status.in_progress = false;
+        status.success = Some(success);
+    }
+
+    /// Get smoke test results
+    pub async fn get_smoke_test_results(&self) -> Vec<SmokeTestResult> {
+        self.smoke_test_results.read().await.clone()
+    }
+
+    /// Update smoke test result
+    pub async fn update_smoke_test_result(&self, result: SmokeTestResult) {
+        let mut results = self.smoke_test_results.write().await;
+
+        // Find existing result by ID and update, or add new one
+        if let Some(existing) = results.iter_mut().find(|r| r.id == result.id) {
+            *existing = result;
+        } else {
+            results.push(result);
+        }
+
+        // Keep only last 100 test results
+        if results.len() > 100 {
+            results.remove(0);
+        }
+    }
+
+    /// Clear all smoke test results
+    pub async fn clear_smoke_test_results(&self) {
+        let mut results = self.smoke_test_results.write().await;
+        results.clear();
+    }
+
+    /// Update time series data when a request is recorded
+    async fn update_time_series_on_request(&self, response_time_ms: u64) {
+        let now = chrono::Utc::now();
+        let mut time_series = self.time_series.write().await;
+
+        // Add request count data point
+        let metrics = self.metrics.read().await;
+        time_series.request_count.push(TimeSeriesPoint {
+            timestamp: now,
+            value: metrics.total_requests as f64,
+        });
+
+        // Add response time data point
+        time_series.response_time.push(TimeSeriesPoint {
+            timestamp: now,
+            value: response_time_ms as f64,
+        });
+
+        // Keep only last 100 data points for each metric to prevent memory bloat
+        const MAX_POINTS: usize = 100;
+        if time_series.request_count.len() > MAX_POINTS {
+            time_series.request_count.remove(0);
+        }
+        if time_series.response_time.len() > MAX_POINTS {
+            time_series.response_time.remove(0);
+        }
     }
 
     /// Get current configuration
@@ -298,7 +572,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         cpu_usage_percent: system_metrics.cpu_usage_percent,
         active_threads: system_metrics.active_threads as usize,
         total_routes: metrics.requests_by_endpoint.len(),
-        total_fixtures: 0, // TODO: Implement fixture counting
+        total_fixtures: count_fixtures().unwrap_or(0),
     };
 
     let servers = vec![
@@ -309,8 +583,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
             start_time: Some(state.start_time),
             uptime_seconds: Some(uptime),
             active_connections: metrics.active_connections,
-            total_requests: *metrics.requests_by_endpoint.get("GET /api/users").unwrap_or(&0) +
-                           *metrics.requests_by_endpoint.get("POST /api/users").unwrap_or(&0),
+            total_requests: count_requests_by_server_type(&metrics, "HTTP"),
         },
         ServerStatus {
             server_type: "WebSocket".to_string(),
@@ -319,7 +592,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
             start_time: Some(state.start_time),
             uptime_seconds: Some(uptime),
             active_connections: metrics.active_connections / 2, // Estimate
-            total_requests: 0, // TODO: Implement WebSocket metrics
+            total_requests: count_requests_by_server_type(&metrics, "WebSocket"),
         },
         ServerStatus {
             server_type: "gRPC".to_string(),
@@ -328,7 +601,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
             start_time: Some(state.start_time),
             uptime_seconds: Some(uptime),
             active_connections: metrics.active_connections / 3, // Estimate
-            total_requests: 0, // TODO: Implement gRPC metrics
+            total_requests: count_requests_by_server_type(&metrics, "gRPC"),
         },
     ];
 
@@ -343,12 +616,12 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
 
             routes.push(RouteInfo {
                 method: Some(method.clone()),
-                path,
+                path: path.clone(),
                 priority: 0,
-                has_fixtures: false, // TODO: Check for actual fixtures
-                latency_ms: Some(50), // TODO: Calculate actual latency
+                has_fixtures: route_has_fixtures(&method, &path),
+                latency_ms: calculate_endpoint_latency(&metrics, endpoint),
                 request_count: *count,
-                last_request: Some(Utc::now() - Duration::minutes(5)), // TODO: Track actual timestamps
+                last_request: get_endpoint_last_request(&metrics, endpoint),
                 error_count,
             });
         }
@@ -407,6 +680,7 @@ pub async fn get_logs(
 pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<MetricsData>> {
     let metrics = state.get_metrics().await;
     let system_metrics = state.get_system_metrics().await;
+    let time_series = state.get_time_series_data().await;
 
     // Calculate percentiles from response times
     let mut response_times = metrics.response_times.clone();
@@ -444,19 +718,25 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
         error_rate_by_endpoint.insert(endpoint.clone(), error_rate);
     }
 
-    // Generate time series data (simplified - in real implementation would track over time)
-    let now = Utc::now();
-    let memory_usage_over_time = vec![
-        (now - Duration::minutes(10), system_metrics.memory_usage_mb),
-        (now - Duration::minutes(5), system_metrics.memory_usage_mb),
-        (now, system_metrics.memory_usage_mb),
-    ];
+    // Convert time series data to the format expected by the frontend
+    // If no time series data exists yet, use current system metrics as a fallback
+    let memory_usage_over_time = if time_series.memory_usage.is_empty() {
+        vec![(Utc::now(), system_metrics.memory_usage_mb)]
+    } else {
+        time_series.memory_usage
+            .iter()
+            .map(|point| (point.timestamp, point.value as u64))
+            .collect()
+    };
 
-    let cpu_usage_over_time = vec![
-        (now - Duration::minutes(10), system_metrics.cpu_usage_percent),
-        (now - Duration::minutes(5), system_metrics.cpu_usage_percent),
-        (now, system_metrics.cpu_usage_percent),
-    ];
+    let cpu_usage_over_time = if time_series.cpu_usage.is_empty() {
+        vec![(Utc::now(), system_metrics.cpu_usage_percent)]
+    } else {
+        time_series.cpu_usage
+            .iter()
+            .map(|point| (point.timestamp, point.value))
+            .collect()
+    };
 
     let metrics_data = MetricsData {
         requests_by_endpoint: metrics.requests_by_endpoint,
@@ -576,11 +856,191 @@ pub async fn clear_logs(State(state): State<AdminState>) -> Json<ApiResponse<Str
 }
 
 /// Restart servers
-pub async fn restart_servers() -> Json<ApiResponse<String>> {
-    // In a real implementation, this would restart the actual servers
-    tracing::warn!("Server restart not implemented in demo mode");
+pub async fn restart_servers(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
+    // Check if restart is already in progress
+    let current_status = state.get_restart_status().await;
+    if current_status.in_progress {
+        return Json(ApiResponse::error("Server restart already in progress".to_string()));
+    }
 
-    Json(ApiResponse::success("Servers restarted (demo)".to_string()))
+    // Initiate restart status
+    if let Err(e) = state.initiate_restart("Manual restart requested via admin UI".to_string()).await {
+        return Json(ApiResponse::error(format!("Failed to initiate restart: {}", e)));
+    }
+
+    // Spawn restart task to avoid blocking the response
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = perform_server_restart(&state_clone).await {
+            tracing::error!("Server restart failed: {}", e);
+            state_clone.complete_restart(false).await;
+        } else {
+            tracing::info!("Server restart completed successfully");
+            state_clone.complete_restart(true).await;
+        }
+    });
+
+    tracing::info!("Server restart initiated via admin UI");
+    Json(ApiResponse::success("Server restart initiated. Please wait for completion.".to_string()))
+}
+
+/// Perform the actual server restart
+async fn perform_server_restart(_state: &AdminState) -> Result<()> {
+    // Get the current process ID
+    let current_pid = std::process::id();
+    tracing::info!("Initiating restart for process PID: {}", current_pid);
+
+    // Try to find the parent process (MockForge CLI)
+    let parent_pid = get_parent_process_id(current_pid)?;
+    tracing::info!("Found parent process PID: {}", parent_pid);
+
+    // Method 1: Try to restart via parent process signal
+    if let Ok(()) = restart_via_parent_signal(parent_pid).await {
+        tracing::info!("Restart initiated via parent process signal");
+        return Ok(());
+    }
+
+    // Method 2: Fallback to process replacement
+    if let Ok(()) = restart_via_process_replacement().await {
+        tracing::info!("Restart initiated via process replacement");
+        return Ok(());
+    }
+
+    // Method 3: Last resort - graceful shutdown with restart script
+    restart_via_script().await
+}
+
+/// Get parent process ID
+fn get_parent_process_id(pid: u32) -> Result<u32> {
+    // Try to read from /proc/pid/stat on Linux
+    #[cfg(target_os = "linux")]
+    {
+        let stat_path = format!("/proc/{}/stat", pid);
+        if let Ok(content) = std::fs::read_to_string(&stat_path) {
+            let fields: Vec<&str> = content.split_whitespace().collect();
+            if fields.len() > 3 {
+                if let Ok(ppid) = fields[3].parse::<u32>() {
+                    return Ok(ppid);
+                }
+            }
+        }
+    }
+
+    // Fallback: assume we're running under a shell/process manager
+    Ok(1) // PID 1 as fallback
+}
+
+/// Restart via parent process signal
+async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+
+        // Send SIGTERM to parent process to trigger restart
+        let output = Command::new("kill")
+            .args(&["-TERM", &parent_pid.to_string()])
+            .output()
+            .map_err(|e| Error::generic(format!("Failed to send signal: {}", e)))?;
+
+        if !output.status.success() {
+            return Err(Error::generic("Failed to send restart signal to parent process".to_string()));
+        }
+
+        // Wait a moment for the signal to be processed
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    {
+        Err(Error::generic("Signal-based restart not supported on this platform".to_string()))
+    }
+}
+
+/// Restart via process replacement
+async fn restart_via_process_replacement() -> Result<()> {
+    // Get the current executable path
+    let current_exe = std::env::current_exe()
+        .map_err(|e| Error::generic(format!("Failed to get current executable: {}", e)))?;
+
+    // Get current command line arguments
+    let args: Vec<String> = std::env::args().collect();
+
+    tracing::info!("Restarting with command: {:?}", args);
+
+    // Start new process
+    let mut child = Command::new(&current_exe)
+        .args(&args[1..]) // Skip the program name
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| Error::generic(format!("Failed to start new process: {}", e)))?;
+
+    // Give the new process a moment to start
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Check if the new process is still running
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            if status.success() {
+                tracing::info!("New process started successfully");
+                Ok(())
+            } else {
+                Err(Error::generic("New process exited with error".to_string()))
+            }
+        }
+        Ok(None) => {
+            tracing::info!("New process is running, exiting current process");
+            // Exit current process
+            std::process::exit(0);
+        }
+        Err(e) => Err(Error::generic(format!("Failed to check new process status: {}", e))),
+    }
+}
+
+/// Restart via external script
+async fn restart_via_script() -> Result<()> {
+    // Look for restart script in common locations
+    let script_paths = [
+        "./scripts/restart.sh",
+        "./restart.sh",
+        "restart.sh",
+    ];
+
+    for script_path in &script_paths {
+        if std::path::Path::new(script_path).exists() {
+            tracing::info!("Using restart script: {}", script_path);
+
+            let output = Command::new("bash")
+                .arg(script_path)
+                .output()
+                .map_err(|e| Error::generic(format!("Failed to execute restart script: {}", e)))?;
+
+            if output.status.success() {
+                return Ok(());
+            } else {
+                tracing::warn!("Restart script failed: {}", String::from_utf8_lossy(&output.stderr));
+            }
+        }
+    }
+
+    // If no script found, try to use the clear-ports script as a fallback
+    let clear_script = "./scripts/clear-ports.sh";
+    if std::path::Path::new(clear_script).exists() {
+        tracing::info!("Using clear-ports script as fallback");
+
+        let _ = Command::new("bash")
+            .arg(clear_script)
+            .output();
+    }
+
+    Err(Error::generic("No restart mechanism available. Please restart manually.".to_string()))
+}
+
+/// Get restart status
+pub async fn get_restart_status(State(state): State<AdminState>) -> Json<ApiResponse<RestartStatus>> {
+    let status = state.get_restart_status().await;
+    Json(ApiResponse::success(status))
 }
 
 /// Get server configuration
@@ -615,54 +1075,651 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
     Json(ApiResponse::success(config))
 }
 
-/// Get fixtures/replay data
-pub async fn get_fixtures() -> Json<ApiResponse<Vec<serde_json::Value>>> {
-    // Mock fixtures data for demonstration
-    // In a real implementation, this would read from the fixtures directory
-    let fixtures = vec![
-        json!({
-            "protocol": "http",
-            "operation_id": "get_users",
-            "saved_at": "2024-01-15T10:30:00Z",
-            "path": "/api/users",
-            "method": "GET"
-        }),
-        json!({
-            "protocol": "http",
-            "operation_id": "create_user",
-            "saved_at": "2024-01-15T10:35:00Z",
-            "path": "/api/users",
-            "method": "POST"
-        }),
-        json!({
-            "protocol": "websocket",
-            "operation_id": "ws_chat",
-            "saved_at": "2024-01-15T11:00:00Z",
-            "path": "/ws",
-            "method": "WS"
-        }),
-    ];
+/// Count total fixtures in the fixtures directory
+pub fn count_fixtures() -> Result<usize> {
+    // Get the fixtures directory from environment or use default
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
 
-    Json(ApiResponse::success(fixtures))
+    if !fixtures_path.exists() {
+        return Ok(0);
+    }
+
+    let mut total_count = 0;
+
+    // Count HTTP fixtures
+    let http_fixtures_path = fixtures_path.join("http");
+    if http_fixtures_path.exists() {
+        total_count += count_fixtures_in_directory(&http_fixtures_path)?;
+    }
+
+    // Count WebSocket fixtures
+    let ws_fixtures_path = fixtures_path.join("websocket");
+    if ws_fixtures_path.exists() {
+        total_count += count_fixtures_in_directory(&ws_fixtures_path)?;
+    }
+
+    // Count gRPC fixtures
+    let grpc_fixtures_path = fixtures_path.join("grpc");
+    if grpc_fixtures_path.exists() {
+        total_count += count_fixtures_in_directory(&grpc_fixtures_path)?;
+    }
+
+    Ok(total_count)
+}
+
+/// Helper function to count JSON files in a directory recursively
+fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
+    let mut count = 0;
+
+    if let Ok(entries) = std::fs::read_dir(dir_path) {
+        for entry in entries {
+            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recursively count fixtures in subdirectories
+                count += count_fixtures_in_directory(&path)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                // Count JSON files as fixtures
+                count += 1;
+            }
+        }
+    }
+
+    Ok(count)
+}
+
+/// Check if a specific route has fixtures
+pub fn route_has_fixtures(method: &str, path: &str) -> bool {
+    // Get the fixtures directory from environment or use default
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+    if !fixtures_path.exists() {
+        return false;
+    }
+
+    // Check HTTP fixtures
+    let method_lower = method.to_lowercase();
+    let path_hash = path.replace('/', "_").replace(':', "_");
+    let http_fixtures_path = fixtures_path
+        .join("http")
+        .join(&method_lower)
+        .join(&path_hash);
+
+    if http_fixtures_path.exists() {
+        // Check if there are any JSON files in this directory
+        if let Ok(entries) = std::fs::read_dir(&http_fixtures_path) {
+            for entry in entries.flatten() {
+                if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Check WebSocket fixtures for WS method
+    if method.to_uppercase() == "WS" {
+        let ws_fixtures_path = fixtures_path
+            .join("websocket")
+            .join(&path_hash);
+
+        if ws_fixtures_path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&ws_fixtures_path) {
+                for entry in entries.flatten() {
+                    if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Calculate average latency for a specific endpoint
+fn calculate_endpoint_latency(metrics: &RequestMetrics, endpoint: &str) -> Option<u64> {
+    metrics.response_times_by_endpoint
+        .get(endpoint)
+        .and_then(|times| {
+            if times.is_empty() {
+                None
+            } else {
+                let sum: u64 = times.iter().sum();
+                Some(sum / times.len() as u64)
+            }
+        })
+}
+
+/// Get the last request timestamp for a specific endpoint
+fn get_endpoint_last_request(metrics: &RequestMetrics, endpoint: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    metrics.last_request_by_endpoint.get(endpoint).copied()
+}
+
+/// Count total requests for a specific server type
+fn count_requests_by_server_type(metrics: &RequestMetrics, server_type: &str) -> u64 {
+    match server_type {
+        "HTTP" => {
+            // Count all HTTP requests (GET, POST, PUT, DELETE, etc.)
+            metrics.requests_by_endpoint
+                .iter()
+                .filter(|(endpoint, _)| {
+                    let method = endpoint.split(' ').next().unwrap_or("");
+                    matches!(method, "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS")
+                })
+                .map(|(_, count)| count)
+                .sum()
+        }
+        "WebSocket" => {
+            // Count WebSocket requests (WS method)
+            metrics.requests_by_endpoint
+                .iter()
+                .filter(|(endpoint, _)| {
+                    let method = endpoint.split(' ').next().unwrap_or("");
+                    method == "WS"
+                })
+                .map(|(_, count)| count)
+                .sum()
+        }
+        "gRPC" => {
+            // Count gRPC requests (gRPC method)
+            metrics.requests_by_endpoint
+                .iter()
+                .filter(|(endpoint, _)| {
+                    let method = endpoint.split(' ').next().unwrap_or("");
+                    method == "gRPC"
+                })
+                .map(|(_, count)| count)
+                .sum()
+        }
+        _ => 0,
+    }
+}
+
+/// Get fixtures/replay data
+pub async fn get_fixtures() -> Json<ApiResponse<Vec<FixtureInfo>>> {
+    match scan_fixtures_directory() {
+        Ok(fixtures) => Json(ApiResponse::success(fixtures)),
+        Err(e) => {
+            tracing::error!("Failed to scan fixtures directory: {}", e);
+            Json(ApiResponse::error(format!("Failed to load fixtures: {}", e)))
+        }
+    }
+}
+
+/// Scan the fixtures directory and return all fixture information
+fn scan_fixtures_directory() -> Result<Vec<FixtureInfo>> {
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+    if !fixtures_path.exists() {
+        tracing::warn!("Fixtures directory does not exist: {}", fixtures_dir);
+        return Ok(Vec::new());
+    }
+
+    let mut all_fixtures = Vec::new();
+
+    // Scan HTTP fixtures
+    let http_fixtures = scan_protocol_fixtures(fixtures_path, "http")?;
+    all_fixtures.extend(http_fixtures);
+
+    // Scan WebSocket fixtures
+    let ws_fixtures = scan_protocol_fixtures(fixtures_path, "websocket")?;
+    all_fixtures.extend(ws_fixtures);
+
+    // Scan gRPC fixtures
+    let grpc_fixtures = scan_protocol_fixtures(fixtures_path, "grpc")?;
+    all_fixtures.extend(grpc_fixtures);
+
+    // Sort by saved_at timestamp (newest first)
+    all_fixtures.sort_by(|a, b| b.saved_at.cmp(&a.saved_at));
+
+    tracing::info!("Found {} fixtures in directory: {}", all_fixtures.len(), fixtures_dir);
+    Ok(all_fixtures)
+}
+
+/// Scan fixtures for a specific protocol
+fn scan_protocol_fixtures(
+    fixtures_path: &std::path::Path,
+    protocol: &str,
+) -> Result<Vec<FixtureInfo>> {
+    let protocol_path = fixtures_path.join(protocol);
+    let mut fixtures = Vec::new();
+
+    if !protocol_path.exists() {
+        return Ok(fixtures);
+    }
+
+    // Walk through the protocol directory recursively
+    if let Ok(entries) = std::fs::read_dir(&protocol_path) {
+        for entry in entries {
+            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recursively scan subdirectories
+                let sub_fixtures = scan_directory_recursive(&path, protocol)?;
+                fixtures.extend(sub_fixtures);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                // Process individual JSON fixture file
+                if let Ok(fixture) = parse_fixture_file_sync(&path, protocol) {
+                    fixtures.push(fixture);
+                }
+            }
+        }
+    }
+
+    Ok(fixtures)
+}
+
+/// Recursively scan a directory for fixture files
+fn scan_directory_recursive(
+    dir_path: &std::path::Path,
+    protocol: &str,
+) -> Result<Vec<FixtureInfo>> {
+    let mut fixtures = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(dir_path) {
+        for entry in entries {
+            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recursively scan subdirectories
+                let sub_fixtures = scan_directory_recursive(&path, protocol)?;
+                fixtures.extend(sub_fixtures);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                // Process individual JSON fixture file
+                if let Ok(fixture) = parse_fixture_file_sync(&path, protocol) {
+                    fixtures.push(fixture);
+                }
+            }
+        }
+    }
+
+    Ok(fixtures)
+}
+
+/// Parse a single fixture file and extract metadata (synchronous version)
+fn parse_fixture_file_sync(
+    file_path: &std::path::Path,
+    protocol: &str,
+) -> Result<FixtureInfo> {
+    // Get file metadata
+    let metadata = std::fs::metadata(file_path)
+        .map_err(|e| Error::generic(format!("Failed to read file metadata: {}", e)))?;
+
+    let file_size = metadata.len();
+    let modified_time = metadata.modified()
+        .map_err(|e| Error::generic(format!("Failed to get file modification time: {}", e)))?;
+
+    let saved_at = chrono::DateTime::from(modified_time);
+
+    // Read and parse the fixture file
+    let content = std::fs::read_to_string(file_path)
+        .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
+
+    let fixture_data: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| Error::generic(format!("Failed to parse fixture JSON: {}", e)))?;
+
+    // Extract method and path from the fixture data
+    let (method, path) = extract_method_and_path(&fixture_data, protocol)?;
+
+    // Generate a unique ID based on file path and content
+    let id = generate_fixture_id(file_path, &content);
+
+    // Extract fingerprint from file path or fixture data
+    let fingerprint = extract_fingerprint(file_path, &fixture_data)?;
+
+    // Get relative file path
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+    let file_path_str = file_path
+        .strip_prefix(fixtures_path)
+        .unwrap_or(file_path)
+        .to_string_lossy()
+        .to_string();
+
+    Ok(FixtureInfo {
+        id,
+        protocol: protocol.to_string(),
+        method,
+        path,
+        saved_at,
+        file_size,
+        file_path: file_path_str,
+        fingerprint,
+        metadata: fixture_data,
+    })
+}
+
+
+/// Extract method and path from fixture data
+fn extract_method_and_path(
+    fixture_data: &serde_json::Value,
+    protocol: &str,
+) -> Result<(String, String)> {
+    match protocol {
+        "http" => {
+            // For HTTP fixtures, look for request.method and request.path
+            let method = fixture_data
+                .get("request")
+                .and_then(|req| req.get("method"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("UNKNOWN")
+                .to_uppercase();
+
+            let path = fixture_data
+                .get("request")
+                .and_then(|req| req.get("path"))
+                .and_then(|p| p.as_str())
+                .unwrap_or("/unknown")
+                .to_string();
+
+            Ok((method, path))
+        }
+        "websocket" => {
+            // For WebSocket fixtures, use WS method and extract path from metadata
+            let path = fixture_data
+                .get("path")
+                .and_then(|p| p.as_str())
+                .or_else(|| fixture_data.get("request").and_then(|req| req.get("path")).and_then(|p| p.as_str()))
+                .unwrap_or("/ws")
+                .to_string();
+
+            Ok(("WS".to_string(), path))
+        }
+        "grpc" => {
+            // For gRPC fixtures, extract service and method
+            let service = fixture_data
+                .get("service")
+                .and_then(|s| s.as_str())
+                .unwrap_or("UnknownService");
+
+            let method = fixture_data
+                .get("method")
+                .and_then(|m| m.as_str())
+                .unwrap_or("UnknownMethod");
+
+            let path = format!("/{}/{}", service, method);
+            Ok(("gRPC".to_string(), path))
+        }
+        _ => {
+            let path = fixture_data
+                .get("path")
+                .and_then(|p| p.as_str())
+                .unwrap_or("/unknown")
+                .to_string();
+            Ok((protocol.to_uppercase(), path))
+        }
+    }
+}
+
+/// Generate a unique fixture ID
+fn generate_fixture_id(file_path: &std::path::Path, content: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    file_path.hash(&mut hasher);
+    content.hash(&mut hasher);
+    format!("fixture_{:x}", hasher.finish())
+}
+
+/// Extract fingerprint from file path or fixture data
+fn extract_fingerprint(
+    file_path: &std::path::Path,
+    fixture_data: &serde_json::Value,
+) -> Result<String> {
+    // Try to extract from fixture data first
+    if let Some(fingerprint) = fixture_data
+        .get("fingerprint")
+        .and_then(|f| f.as_str())
+    {
+        return Ok(fingerprint.to_string());
+    }
+
+    // Try to extract from file path (common pattern: method_path_hash.json)
+    if let Some(file_name) = file_path.file_stem().and_then(|s| s.to_str()) {
+        // Look for hash pattern at the end of filename
+        if let Some(hash) = file_name.split('_').last() {
+            if hash.len() >= 8 && hash.chars().all(|c| c.is_alphanumeric()) {
+                return Ok(hash.to_string());
+            }
+        }
+    }
+
+    // Fallback: generate from file path
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    file_path.hash(&mut hasher);
+    Ok(format!("{:x}", hasher.finish()))
 }
 
 /// Delete a fixture
 pub async fn delete_fixture(Json(payload): Json<FixtureDeleteRequest>) -> Json<ApiResponse<String>> {
-    // In a real implementation, this would delete the actual fixture file
-    tracing::info!("Deleting fixture: {:?}", payload);
+    match delete_fixture_by_id(&payload.fixture_id).await {
+        Ok(_) => {
+            tracing::info!("Successfully deleted fixture: {}", payload.fixture_id);
+            Json(ApiResponse::success("Fixture deleted successfully".to_string()))
+        }
+        Err(e) => {
+            tracing::error!("Failed to delete fixture {}: {}", payload.fixture_id, e);
+            Json(ApiResponse::error(format!("Failed to delete fixture: {}", e)))
+        }
+    }
+}
 
-    Json(ApiResponse::success("Fixture deleted".to_string()))
+/// Delete multiple fixtures
+pub async fn delete_fixtures_bulk(Json(payload): Json<FixtureBulkDeleteRequest>) -> Json<ApiResponse<FixtureBulkDeleteResult>> {
+    let mut deleted_count = 0;
+    let mut errors = Vec::new();
+
+    for fixture_id in &payload.fixture_ids {
+        match delete_fixture_by_id(fixture_id).await {
+            Ok(_) => {
+                deleted_count += 1;
+                tracing::info!("Successfully deleted fixture: {}", fixture_id);
+            }
+            Err(e) => {
+                errors.push(format!("Failed to delete {}: {}", fixture_id, e));
+                tracing::error!("Failed to delete fixture {}: {}", fixture_id, e);
+            }
+        }
+    }
+
+    let result = FixtureBulkDeleteResult {
+        deleted_count,
+        total_requested: payload.fixture_ids.len(),
+        errors: errors.clone(),
+    };
+
+    if errors.is_empty() {
+        Json(ApiResponse::success(result))
+    } else {
+        Json(ApiResponse::error(format!("Partial success: {} deleted, {} errors", deleted_count, errors.len())))
+    }
+}
+
+/// Delete a single fixture by ID
+async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
+    // First, try to find the fixture by scanning the fixtures directory
+    // This is more robust than trying to parse the ID format
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+    if !fixtures_path.exists() {
+        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+    }
+
+    // Search for the fixture file by ID across all protocols
+    let file_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
+
+    // Delete the file
+    if file_path.exists() {
+        std::fs::remove_file(&file_path)
+            .map_err(|e| Error::generic(format!("Failed to delete fixture file {}: {}", file_path.display(), e)))?;
+        tracing::info!("Deleted fixture file: {}", file_path.display());
+
+        // Also try to remove empty parent directories
+        cleanup_empty_directories(&file_path).await;
+
+        Ok(())
+    } else {
+        Err(Error::generic(format!("Fixture file not found: {}", file_path.display())))
+    }
+}
+
+/// Find a fixture file by its ID across all protocols
+fn find_fixture_file_by_id(fixtures_path: &std::path::Path, fixture_id: &str) -> Result<std::path::PathBuf> {
+    // Search in all protocol directories
+    let protocols = ["http", "websocket", "grpc"];
+
+    for protocol in &protocols {
+        let protocol_path = fixtures_path.join(protocol);
+        if let Ok(found_path) = search_fixture_in_directory(&protocol_path, fixture_id) {
+            return Ok(found_path);
+        }
+    }
+
+    Err(Error::generic(format!("Fixture with ID '{}' not found in any protocol directory", fixture_id)))
+}
+
+/// Recursively search for a fixture file by ID in a directory
+fn search_fixture_in_directory(dir_path: &std::path::Path, fixture_id: &str) -> Result<std::path::PathBuf> {
+    if !dir_path.exists() {
+        return Err(Error::generic(format!("Directory does not exist: {}", dir_path.display())));
+    }
+
+    if let Ok(entries) = std::fs::read_dir(dir_path) {
+        for entry in entries {
+            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recursively search subdirectories
+                if let Ok(found_path) = search_fixture_in_directory(&path, fixture_id) {
+                    return Ok(found_path);
+                }
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                // Check if this file matches the fixture ID
+                if let Ok(fixture_info) = parse_fixture_file_sync(&path, "unknown") {
+                    if fixture_info.id == fixture_id {
+                        return Ok(path);
+                    }
+                }
+            }
+        }
+    }
+
+    Err(Error::generic(format!("Fixture not found in directory: {}", dir_path.display())))
+}
+
+/// Clean up empty directories after file deletion
+async fn cleanup_empty_directories(file_path: &std::path::Path) {
+    if let Some(parent) = file_path.parent() {
+        // Try to remove empty directories up to the protocol level
+        let mut current = parent;
+        let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+            .unwrap_or_else(|_| "fixtures".to_string());
+        let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+        while current != fixtures_path && current.parent().is_some() {
+            if let Ok(entries) = std::fs::read_dir(current) {
+                if entries.count() == 0 {
+                    if let Err(e) = std::fs::remove_dir(current) {
+                        tracing::debug!("Failed to remove empty directory {}: {}", current.display(), e);
+                        break;
+                    } else {
+                        tracing::debug!("Removed empty directory: {}", current.display());
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+
+            if let Some(next_parent) = current.parent() {
+                current = next_parent;
+            } else {
+                break;
+            }
+        }
+    }
 }
 
 /// Download a fixture file
-pub async fn download_fixture() -> impl IntoResponse {
-    // In a real implementation, this would serve the actual fixture file
-    let content = r#"{"request": {"method": "GET", "path": "/api/users"}, "response": {"status": 200, "body": "{\"users\": []}"}}"#;
+pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
+    // Extract fixture ID from query parameters
+    let fixture_id = match params.get("id") {
+        Some(id) => id,
+        None => {
+            return axum::response::Response::builder()
+                .status(http::StatusCode::BAD_REQUEST)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(r#"{"error": "Missing fixture ID parameter"}"#.to_string())
+                .unwrap();
+        }
+    };
 
-    (
-        [(http::header::CONTENT_TYPE, "application/json")],
-        content,
-    )
+    // Find and read the fixture file
+    match download_fixture_by_id(fixture_id).await {
+        Ok((content, file_name)) => {
+            axum::response::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .header(http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", file_name))
+                .body(content)
+                .unwrap()
+        }
+        Err(e) => {
+            tracing::error!("Failed to download fixture {}: {}", fixture_id, e);
+            let error_response = format!(r#"{{"error": "Failed to download fixture: {}"}}"#, e);
+            axum::response::Response::builder()
+                .status(http::StatusCode::NOT_FOUND)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(error_response)
+                .unwrap()
+        }
+    }
+}
+
+/// Download a fixture file by ID
+async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
+    // Find the fixture file by ID
+    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+    if !fixtures_path.exists() {
+        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+    }
+
+    let file_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
+
+    // Read the file content
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
+
+    // Get the filename for the download
+    let file_name = file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("fixture.json")
+        .to_string();
+
+    tracing::info!("Downloaded fixture file: {} ({} bytes)", file_path.display(), content.len());
+    Ok((content, file_name))
 }
 
 /// Get current validation settings
@@ -768,10 +1825,106 @@ pub async fn get_file_content(Json(request): Json<FileContentRequest>) -> Json<A
 
 /// Save file content
 pub async fn save_file_content(Json(request): Json<FileSaveRequest>) -> Json<ApiResponse<String>> {
-    // In a real implementation, this would save the actual file content
-    tracing::info!("Saving file: {}", request.file_path);
+    match save_file_to_filesystem(&request.file_path, &request.content).await {
+        Ok(_) => {
+            tracing::info!("Successfully saved file: {}", request.file_path);
+            Json(ApiResponse::success("File saved successfully".to_string()))
+        }
+        Err(e) => {
+            tracing::error!("Failed to save file {}: {}", request.file_path, e);
+            Json(ApiResponse::error(format!("Failed to save file: {}", e)))
+        }
+    }
+}
 
-    Json(ApiResponse::success("File saved successfully".to_string()))
+/// Save content to a file on the filesystem
+async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
+    // Validate the file path for security
+    validate_file_path(file_path)?;
+
+    // Validate the file content for security
+    validate_file_content(content)?;
+
+    // Convert to PathBuf
+    let path = std::path::Path::new(file_path);
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| Error::generic(format!("Failed to create directory {}: {}", parent.display(), e)))?;
+    }
+
+    // Write the content to the file
+    std::fs::write(path, content)
+        .map_err(|e| Error::generic(format!("Failed to write file {}: {}", path.display(), e)))?;
+
+    // Verify the file was written correctly
+    let written_content = std::fs::read_to_string(path)
+        .map_err(|e| Error::generic(format!("Failed to verify written file {}: {}", path.display(), e)))?;
+
+    if written_content != content {
+        return Err(Error::generic(format!("File content verification failed for {}", path.display())));
+    }
+
+    tracing::info!("File saved successfully: {} ({} bytes)", path.display(), content.len());
+    Ok(())
+}
+
+/// Validate file path for security
+fn validate_file_path(file_path: &str) -> Result<()> {
+    // Check for path traversal attacks
+    if file_path.contains("..") {
+        return Err(Error::generic("Path traversal detected in file path".to_string()));
+    }
+
+    // Check for absolute paths that might be outside allowed directories
+    let path = std::path::Path::new(file_path);
+    if path.is_absolute() {
+        // For absolute paths, ensure they're within allowed directories
+        let allowed_dirs = [
+            std::env::current_dir().unwrap_or_default(),
+            std::path::PathBuf::from("."),
+            std::path::PathBuf::from("fixtures"),
+            std::path::PathBuf::from("config"),
+        ];
+
+        let mut is_allowed = false;
+        for allowed_dir in &allowed_dirs {
+            if path.starts_with(allowed_dir) {
+                is_allowed = true;
+                break;
+            }
+        }
+
+        if !is_allowed {
+            return Err(Error::generic("File path is outside allowed directories".to_string()));
+        }
+    }
+
+    // Check for dangerous file extensions or names
+    let dangerous_extensions = ["exe", "bat", "cmd", "sh", "ps1", "scr", "com"];
+    if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+        if dangerous_extensions.contains(&extension.to_lowercase().as_str()) {
+            return Err(Error::generic(format!("Dangerous file extension not allowed: {}", extension)));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate file content for security
+fn validate_file_content(content: &str) -> Result<()> {
+    // Check for reasonable file size (prevent DoS)
+    if content.len() > 10 * 1024 * 1024 { // 10MB limit
+        return Err(Error::generic("File content too large (max 10MB)".to_string()));
+    }
+
+    // Check for null bytes (potential security issue)
+    if content.contains('\0') {
+        return Err(Error::generic("File content contains null bytes".to_string()));
+    }
+
+    Ok(())
 }
 
 /// Fixture delete request
@@ -785,6 +1938,20 @@ pub struct FixtureDeleteRequest {
 pub struct EnvVarUpdate {
     pub key: String,
     pub value: String,
+}
+
+/// Fixture bulk delete request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureBulkDeleteRequest {
+    pub fixture_ids: Vec<String>,
+}
+
+/// Fixture bulk delete result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureBulkDeleteResult {
+    pub deleted_count: usize,
+    pub total_requested: usize,
+    pub errors: Vec<String>,
 }
 
 /// File content request
@@ -802,37 +1969,160 @@ pub struct FileSaveRequest {
 }
 
 /// Get smoke tests
-pub async fn get_smoke_tests() -> Json<ApiResponse<Vec<serde_json::Value>>> {
-    // Mock smoke tests data for demonstration
-    // In a real implementation, this would read from the fixtures directory
-    let smoke_tests = vec![
-        json!({
-            "id": "smoke_1",
-            "name": "Get Users Endpoint",
-            "method": "GET",
-            "path": "/api/users",
-            "description": "Test the users endpoint",
-            "last_run": "2024-01-15T10:30:00Z",
-            "status": "passed"
-        }),
-        json!({
-            "id": "smoke_2",
-            "name": "Create User Endpoint",
-            "method": "POST",
-            "path": "/api/users",
-            "description": "Test creating a new user",
-            "last_run": "2024-01-15T10:35:00Z",
-            "status": "failed"
-        }),
-    ];
-
-    Json(ApiResponse::success(smoke_tests))
+pub async fn get_smoke_tests(State(state): State<AdminState>) -> Json<ApiResponse<Vec<SmokeTestResult>>> {
+    let results = state.get_smoke_test_results().await;
+    Json(ApiResponse::success(results))
 }
 
 /// Run smoke tests endpoint
-pub async fn run_smoke_tests_endpoint() -> Json<ApiResponse<String>> {
-    // In a real implementation, this would run the actual smoke tests
-    tracing::info!("Running smoke tests");
+pub async fn run_smoke_tests_endpoint(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
+    tracing::info!("Starting smoke test execution");
 
-    Json(ApiResponse::success("Smoke tests completed".to_string()))
+    // Spawn smoke test execution in background to avoid blocking
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = execute_smoke_tests(&state_clone).await {
+            tracing::error!("Smoke test execution failed: {}", e);
+        } else {
+            tracing::info!("Smoke test execution completed successfully");
+        }
+    });
+
+    Json(ApiResponse::success("Smoke tests started. Check results in the smoke tests section.".to_string()))
+}
+
+/// Execute smoke tests against fixtures
+async fn execute_smoke_tests(state: &AdminState) -> Result<()> {
+    // Get base URL from environment or use default
+    let base_url = std::env::var("MOCKFORGE_BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+    let context = SmokeTestContext {
+        base_url,
+        timeout_seconds: 30,
+        parallel: true,
+    };
+
+    // Get all fixtures to create smoke tests from
+    let fixtures = scan_fixtures_directory()?;
+
+    // Filter for HTTP fixtures only (smoke tests are typically HTTP)
+    let http_fixtures: Vec<&FixtureInfo> = fixtures
+        .iter()
+        .filter(|f| f.protocol == "http")
+        .collect();
+
+    if http_fixtures.is_empty() {
+        tracing::warn!("No HTTP fixtures found for smoke testing");
+        return Ok(());
+    }
+
+    tracing::info!("Running smoke tests for {} HTTP fixtures", http_fixtures.len());
+
+    // Create smoke test results from fixtures
+    let mut test_results = Vec::new();
+
+    for fixture in http_fixtures {
+        let test_result = create_smoke_test_from_fixture(fixture);
+        test_results.push(test_result);
+    }
+
+    // Execute tests
+    let mut executed_results = Vec::new();
+    for mut test_result in test_results {
+        // Update status to running
+        test_result.status = "running".to_string();
+        state.update_smoke_test_result(test_result.clone()).await;
+
+        // Execute the test
+        let start_time = std::time::Instant::now();
+        match execute_single_smoke_test(&test_result, &context).await {
+            Ok((status_code, response_time_ms)) => {
+                test_result.status = "passed".to_string();
+                test_result.status_code = Some(status_code);
+                test_result.response_time_ms = Some(response_time_ms);
+                test_result.error_message = None;
+            }
+            Err(e) => {
+                test_result.status = "failed".to_string();
+                test_result.error_message = Some(e.to_string());
+                test_result.status_code = None;
+                test_result.response_time_ms = None;
+            }
+        }
+
+        let duration = start_time.elapsed();
+        test_result.duration_seconds = Some(duration.as_secs_f64());
+        test_result.last_run = Some(chrono::Utc::now());
+
+        executed_results.push(test_result.clone());
+        state.update_smoke_test_result(test_result).await;
+    }
+
+    tracing::info!("Smoke test execution completed: {} tests run", executed_results.len());
+    Ok(())
+}
+
+/// Create a smoke test result from a fixture
+fn create_smoke_test_from_fixture(fixture: &FixtureInfo) -> SmokeTestResult {
+    let test_name = format!("{} {}", fixture.method, fixture.path);
+    let description = format!("Smoke test for {} endpoint", fixture.path);
+
+    SmokeTestResult {
+        id: format!("smoke_{}", fixture.id),
+        name: test_name,
+        method: fixture.method.clone(),
+        path: fixture.path.clone(),
+        description,
+        last_run: None,
+        status: "pending".to_string(),
+        response_time_ms: None,
+        error_message: None,
+        status_code: None,
+        duration_seconds: None,
+    }
+}
+
+/// Execute a single smoke test
+async fn execute_single_smoke_test(
+    test: &SmokeTestResult,
+    context: &SmokeTestContext,
+) -> Result<(u16, u64)> {
+    let url = format!("{}{}", context.base_url, test.path);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(context.timeout_seconds))
+        .build()
+        .map_err(|e| Error::generic(format!("Failed to create HTTP client: {}", e)))?;
+
+    let start_time = std::time::Instant::now();
+
+    let response = match test.method.as_str() {
+        "GET" => client.get(&url).send().await,
+        "POST" => client.post(&url).send().await,
+        "PUT" => client.put(&url).send().await,
+        "DELETE" => client.delete(&url).send().await,
+        "PATCH" => client.patch(&url).send().await,
+        "HEAD" => client.head(&url).send().await,
+        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &url).send().await,
+        _ => {
+            return Err(Error::generic(format!("Unsupported HTTP method: {}", test.method)));
+        }
+    };
+
+    let response_time = start_time.elapsed();
+    let response_time_ms = response_time.as_millis() as u64;
+
+    match response {
+        Ok(resp) => {
+            let status_code = resp.status().as_u16();
+            if status_code >= 200 && status_code < 400 {
+                Ok((status_code, response_time_ms))
+            } else {
+                Err(Error::generic(format!("HTTP error: {} {}", status_code, resp.status().canonical_reason().unwrap_or("Unknown"))))
+            }
+        }
+        Err(e) => {
+            Err(Error::generic(format!("Request failed: {}", e)))
+        }
+    }
 }
