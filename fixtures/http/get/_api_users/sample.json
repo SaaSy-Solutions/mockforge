@@ -1,1 +1,18 @@
-{\n  \"fingerprint\": {\n    \"method\": \"GET\",\n    \"path\": \"/api/users\",\n    \"query_params\": {},\n    \"headers\": {}\n  },\n  \"timestamp\": \"2024-01-15T10:30:00Z\",\n  \"status_code\": 200,\n  \"response_headers\": {\n    \"content-type\": \"application/json\"\n  },\n  \"response_body\": \"{\\\"users\\\": [{\\\"id\\\": 1, \\\"name\\\": \\\"John Doe\\\"}, {\\\"id\\\": 2, \\\"name\\\": \\\"Jane Smith\\\"}]}\",\n  \"metadata\": {\n    \"smoke_test\": \"true\",\n    \"name\": \"Get Users Endpoint\"\n  }\n}
+{
+  "fingerprint": {
+    "method": "GET",
+    "path": "/api/users",
+    "query_params": {},
+    "headers": {}
+  },
+  "timestamp": "2024-01-15T10:30:00Z",
+  "status_code": 200,
+  "response_headers": {
+    "content-type": "application/json"
+  },
+  "response_body": "{\"users\": [{\"id\": 1, \"name\": \"John Doe\"}, {\"id\": 2, \"name\": \"Jane Smith\"}]}",
+  "metadata": {
+    "smoke_test": "true",
+    "name": "Get Users Endpoint"
+  }
+}

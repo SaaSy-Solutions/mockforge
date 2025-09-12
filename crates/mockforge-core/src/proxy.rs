@@ -19,6 +19,8 @@ pub struct ProxyRule {
 }
 
 /// Proxy configuration
+/// Environment variables:
+/// - MOCKFORGE_PROXY_UPSTREAM_URL: Default upstream URL for proxy (default: http://localhost:8080)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyConfig {
     /// Default upstream base URL
@@ -48,7 +50,8 @@ fn default_passthrough() -> bool {
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
-            upstream_url: "http://localhost:8080".to_string(),
+            upstream_url: std::env::var("MOCKFORGE_PROXY_UPSTREAM_URL")
+                .unwrap_or_else(|_| "http://localhost:8080".to_string()),
             timeout_seconds: 30,
             forward_headers: vec![
                 "authorization".to_string(),
@@ -190,7 +193,7 @@ impl ProxyHandler {
 
         // Get the upstream URL for this path
         let upstream_base = self.config.get_upstream_url(uri.path());
-        
+
         // Build upstream URL
         let upstream_path = self.config.strip_prefix(uri.path());
         let mut upstream_url = format!("{}{}", upstream_base, upstream_path);
@@ -299,7 +302,7 @@ mod tests {
 
         assert!(config.should_proxy(&Method::GET, "/api/users/123"));
         assert!(config.should_proxy(&Method::GET, "/api/orders/456"));
-        
+
         assert_eq!(config.get_upstream_url("/api/users/123"), "http://users.example.com");
         assert_eq!(config.get_upstream_url("/api/orders/456"), "http://orders.example.com");
         assert_eq!(config.get_upstream_url("/api/products"), "http://default.example.com");

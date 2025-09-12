@@ -32,6 +32,7 @@ pub fn create_admin_router(
             .route("/__mockforge/config", get(get_config))
             .route("/__mockforge/fixtures", get(get_fixtures))
             .route("/__mockforge/fixtures/delete", post(delete_fixture))
+            .route("/__mockforge/fixtures/delete-bulk", post(delete_fixtures_bulk))
             .route("/__mockforge/fixtures/download", get(download_fixture))
             .route("/__mockforge/env", get(get_env_vars))
             .route("/__mockforge/env", post(update_env_var))
@@ -49,7 +50,8 @@ pub fn create_admin_router(
             .route("/__mockforge/smoke/run", get(run_smoke_tests_endpoint))
             // Management actions
             .route("/__mockforge/logs/clear", post(clear_logs))
-            .route("/__mockforge/servers/restart", post(restart_servers));
+            .route("/__mockforge/servers/restart", post(restart_servers))
+            .route("/__mockforge/servers/restart/status", get(get_restart_status));
     }
 
     router.layer(CorsLayer::permissive()).with_state(state)

@@ -5,8 +5,6 @@ use axum::extract::ws::{Message as AxumMessage, WebSocket};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::*;
 
 /// WebSocket proxy rule
@@ -21,6 +19,8 @@ pub struct WsProxyRule {
 }
 
 /// WebSocket proxy configuration
+/// Environment variables:
+/// - MOCKFORGE_WS_PROXY_UPSTREAM_URL: Default upstream WebSocket URL for proxy (default: ws://localhost:8080)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsProxyConfig {
     /// Default upstream WebSocket URL
@@ -42,7 +42,8 @@ fn default_passthrough() -> bool {
 impl Default for WsProxyConfig {
     fn default() -> Self {
         Self {
-            upstream_url: "ws://localhost:8080".to_string(),
+            upstream_url: std::env::var("MOCKFORGE_WS_PROXY_UPSTREAM_URL")
+                .unwrap_or_else(|_| "ws://localhost:8080".to_string()),
             enabled: false,
             rules: Vec::new(),
             passthrough_by_default: true,
@@ -150,6 +151,7 @@ fn tungstenite_to_axum(msg: TungsteniteMessage) -> AxumMessage {
 }
 
 /// WebSocket proxy handler for tunneling connections to upstream
+#[derive(Clone)]
 pub struct WsProxyHandler {
     pub config: WsProxyConfig,
 }
@@ -180,23 +182,17 @@ impl WsProxyHandler {
 
         info!("Connected to upstream WebSocket at {}", upstream_url);
 
-        // Create shared state for message routing
-        let client_to_upstream = Arc::new(Mutex::new(client_socket));
-        let upstream_to_client = Arc::new(Mutex::new(upstream_socket));
-
-        // Spawn tasks to handle bidirectional message forwarding
-        let client_to_upstream_clone = upstream_to_client.clone();
-        let upstream_to_client_clone = client_to_upstream.clone();
+        // Use a simpler approach without shared mutexes
+        let (mut client_sink, mut client_stream) = client_socket.split();
+        let (mut upstream_sink, mut upstream_stream) = upstream_socket.split();
 
         // Forward messages from client to upstream
         let forward_client_to_upstream = tokio::spawn(async move {
-            let mut client_socket = client_to_upstream.lock().await;
-            while let Some(msg) = client_socket.recv().await {
+            while let Some(msg) = client_stream.next().await {
                 match msg {
                     Ok(message) => {
                         let tungstenite_msg = axum_to_tungstenite(message);
-                        let mut upstream_socket = client_to_upstream_clone.lock().await;
-                        if let Err(e) = upstream_socket.send(tungstenite_msg).await {
+                        if let Err(e) = upstream_sink.send(tungstenite_msg).await {
                             error!("Failed to send message to upstream: {}", e);
                             break;
                         }
@@ -211,13 +207,11 @@ impl WsProxyHandler {
 
         // Forward messages from upstream to client
         let forward_upstream_to_client = tokio::spawn(async move {
-            let mut upstream_socket = upstream_to_client.lock().await;
-            while let Some(msg) = upstream_socket.next().await {
+            while let Some(msg) = upstream_stream.next().await {
                 match msg {
                     Ok(message) => {
                         let axum_msg = tungstenite_to_axum(message);
-                        let mut client_socket = upstream_to_client_clone.lock().await;
-                        if let Err(e) = client_socket.send(axum_msg).await {
+                        if let Err(e) = client_sink.send(axum_msg).await {
                             error!("Failed to send message to client: {}", e);
                             break;
                         }
@@ -265,7 +259,7 @@ mod tests {
 
         assert!(config.should_proxy("/ws/users/123"));
         assert!(config.should_proxy("/ws/orders/456"));
-        
+
         assert_eq!(config.get_upstream_url("/ws/users/123"), "ws://users.example.com");
         assert_eq!(config.get_upstream_url("/ws/orders/456"), "ws://orders.example.com");
         assert_eq!(config.get_upstream_url("/ws/products"), "ws://default.example.com");

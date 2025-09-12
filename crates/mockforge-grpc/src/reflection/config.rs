@@ -15,6 +15,14 @@ pub struct ProxyConfig {
     /// Whether to require services to be explicitly allowed
     #[serde(default)]
     pub require_explicit_allow: bool,
+    /// gRPC port for connection pooling
+    #[serde(default = "default_grpc_port")]
+    pub grpc_port: u16,
+}
+
+/// Default gRPC port
+fn default_grpc_port() -> u16 {
+    50051
 }
 
 impl Default for ProxyConfig {
@@ -23,6 +31,7 @@ impl Default for ProxyConfig {
             allowlist: HashSet::new(),
             denylist: HashSet::new(),
             require_explicit_allow: false,
+            grpc_port: default_grpc_port(),
         }
     }
 }
@@ -34,15 +43,15 @@ impl ProxyConfig {
         if self.denylist.contains(service_name) {
             return false;
         }
-        
+
         // If we require explicit allow and service is not in allowlist, it's not allowed
         if self.require_explicit_allow && !self.allowlist.is_empty() && !self.allowlist.contains(service_name) {
             return false;
         }
-        
+
         true
     }
-    
+
     /// Check if a service is denied
     pub fn is_service_denied(&self, service_name: &str) -> bool {
         self.denylist.contains(service_name)

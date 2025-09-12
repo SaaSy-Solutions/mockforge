@@ -12,12 +12,173 @@ class MockForgeAdmin {
         this.errorHistoryPage = 0;
         // File editor state
         this.currentFile = null;
+        // Toast notification system
+        this.toastContainer = null;
+        this.activeToasts = new Set();
         this.init();
     }
 
     init() {
+        this.initializeToastContainer();
         this.bindEvents();
         this.loadDashboard();
+    }
+
+    // Toast Notification System
+    initializeToastContainer() {
+        // Create toast container if it doesn't exist
+        this.toastContainer = document.getElementById('toast-container');
+        if (!this.toastContainer) {
+            this.toastContainer = document.createElement('div');
+            this.toastContainer.id = 'toast-container';
+            this.toastContainer.className = 'toast-container';
+            document.body.appendChild(this.toastContainer);
+        }
+    }
+
+    showToast(type, title, message, duration = 5000) {
+        const toastId = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.id = toastId;
+        toast.className = `toast toast-${type}`;
+
+        // Create progress bar for auto-dismiss
+        const progressBar = document.createElement('div');
+        progressBar.className = 'toast-progress';
+        progressBar.style.width = '100%';
+
+        toast.innerHTML = `
+            <div class="toast-icon"></div>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close" type="button" aria-label="Close notification"></button>
+        `;
+
+        toast.appendChild(progressBar);
+
+        // Add close functionality
+        const closeBtn = toast.querySelector('.toast-close');
+        closeBtn.addEventListener('click', () => this.hideToast(toastId));
+
+        // Add to container and show
+        this.toastContainer.appendChild(toast);
+        this.activeToasts.add(toastId);
+
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        // Auto-dismiss if duration is specified
+        if (duration > 0) {
+            // Animate progress bar
+            setTimeout(() => {
+                progressBar.style.width = '0%';
+                progressBar.style.transition = `width ${duration}ms linear`;
+            }, 100);
+
+            // Hide toast after duration
+            setTimeout(() => {
+                this.hideToast(toastId);
+            }, duration);
+        }
+
+        return toastId;
+    }
+
+    hideToast(toastId) {
+        const toast = document.getElementById(toastId);
+        if (!toast) return;
+
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+
+        // Remove from DOM after animation
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+            this.activeToasts.delete(toastId);
+        }, 300);
+    }
+
+    // Convenience methods for different toast types
+    showSuccess(title, message, duration = 5000) {
+        return this.showToast('success', title, message, duration);
+    }
+
+    showError(title, message, duration = 8000) {
+        return this.showToast('error', title, message, duration);
+    }
+
+    showWarning(title, message, duration = 6000) {
+        return this.showToast('warning', title, message, duration);
+    }
+
+    showInfo(title, message, duration = 5000) {
+        return this.showToast('info', title, message, duration);
+    }
+
+    // Show confirmation modal for critical actions
+    showConfirmation(title, message, onConfirm, onCancel = null) {
+        const modalId = `confirm-${Date.now()}`;
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal-overlay open';
+
+        modal.innerHTML = `
+            <div class="modal" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3>${title}</h3>
+                </div>
+                <div class="modal-body">
+                    <p>${message}</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirm-ok">Confirm</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Add event listeners
+        modal.querySelector('#confirm-ok').addEventListener('click', () => {
+            this.closeConfirmation(modalId);
+            if (onConfirm) onConfirm();
+        });
+
+        modal.querySelector('#confirm-cancel').addEventListener('click', () => {
+            this.closeConfirmation(modalId);
+            if (onCancel) onCancel();
+        });
+
+        // Close on overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closeConfirmation(modalId);
+                if (onCancel) onCancel();
+            }
+        });
+
+        return modalId;
+    }
+
+    closeConfirmation(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.remove('open');
+            setTimeout(() => {
+                if (modal.parentNode) {
+                    modal.parentNode.removeChild(modal);
+                }
+            }, 200);
+        }
     }
 
     bindEvents() {
@@ -101,8 +262,8 @@ class MockForgeAdmin {
                 });
                 await this.loadValidation();
                 await this.loadRoutes();
-                alert('Overrides reset');
-            } catch (e) { alert('Failed to reset overrides'); }
+                this.showSuccess('Overrides Reset', 'All route overrides have been reset successfully');
+            } catch (e) { this.showError('Reset Failed', 'Failed to reset overrides. Please try again.'); }
         });
         document.getElementById('export-overrides-json')?.addEventListener('click', async () => {
             try {
@@ -113,9 +274,9 @@ class MockForgeAdmin {
                 const a = document.createElement('a');
                 a.href = url; a.download = 'validation.overrides.json'; document.body.appendChild(a); a.click();
                 setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
-            } catch (e) { alert('Failed to export overrides'); }
+            } catch (e) { this.showError('Export Failed', 'Failed to export overrides. Please try again.'); }
         });
-        
+
         // Download buttons
         document.getElementById('download-overrides')?.addEventListener('click', () => this.downloadOverridesYaml());
         document.getElementById('download-config')?.addEventListener('click', () => this.downloadConfigYaml());
@@ -318,7 +479,7 @@ class MockForgeAdmin {
                 await this.applyQuickOverride(key, mode);
                 await this.loadValidation();
                 await this.loadRoutes();
-                alert(`Override saved for ${key}: ${mode}`);
+                this.showSuccess('Override Saved', `Override saved for ${key}: ${mode}`);
             });
         });
         // Prefill per-route mode select based on overrides
@@ -606,27 +767,29 @@ class MockForgeAdmin {
     }
 
     async deleteFixture(fixtureId) {
-        if (!confirm('Are you sure you want to delete this fixture?')) {
-            return;
-        }
+        this.showConfirmation(
+            'Delete Fixture',
+            'Are you sure you want to delete this fixture? This action cannot be undone.',
+            async () => {
+                try {
+                    const response = await fetch(this.api('__mockforge/fixtures/delete'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fixture_id: fixtureId })
+                    });
 
-        try {
-            const response = await fetch(this.api('__mockforge/fixtures/delete'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fixture_id: fixtureId })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                alert('Fixture deleted successfully');
-                this.loadFixtures(); // Refresh the fixture list
-            } else {
-                alert('Error deleting fixture: ' + result.error);
+                    const result = await response.json();
+                    if (result.success) {
+                        this.showSuccess('Fixture Deleted', 'The fixture has been deleted successfully');
+                        this.loadFixtures(); // Refresh the fixture list
+                    } else {
+                        this.showError('Delete Failed', `Error deleting fixture: ${result.error}`);
+                    }
+                } catch (error) {
+                    this.showError('Network Error', 'Failed to delete fixture. Please check your connection.');
+                }
             }
-        } catch (error) {
-            alert('Network error deleting fixture');
-        }
+        );
     }
 
     async deleteSelectedFixtures() {
@@ -634,29 +797,52 @@ class MockForgeAdmin {
             .map(checkbox => checkbox.dataset.fixtureId);
 
         if (selected.length === 0) {
-            alert('Please select at least one fixture to delete');
+            this.showWarning('No Selection', 'Please select at least one fixture to delete');
             return;
         }
 
-        if (!confirm(`Are you sure you want to delete ${selected.length} fixture(s)?`)) {
-            return;
-        }
+        this.showConfirmation(
+            'Delete Multiple Fixtures',
+            `Are you sure you want to delete ${selected.length} fixture(s)? This action cannot be undone.`,
+            async () => {
+                try {
+                    const response = await fetch(this.api('__mockforge/fixtures/delete-bulk'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fixture_ids: selected })
+                    });
 
-        try {
-            // In a real implementation, we would delete multiple fixtures
-            // For now, just show a message
-            alert(`Deleted ${selected.length} fixture(s)`);
-            this.loadFixtures(); // Refresh the fixture list
-        } catch (error) {
-            alert('Error deleting fixtures');
-        }
+                    const result = await response.json();
+
+                    if (result.success) {
+                        const data = result.data;
+                        if (data.errors && data.errors.length > 0) {
+                            // Show partial success message with errors
+                            const errorList = data.errors.join(', ');
+                            this.showWarning(
+                                'Partial Success',
+                                `${data.deleted_count}/${data.total_requested} fixtures deleted successfully. Some errors occurred: ${errorList}`
+                            );
+                        } else {
+                            this.showSuccess('Bulk Delete Complete', `Successfully deleted ${data.deleted_count} fixture(s)`);
+                        }
+                        this.loadFixtures(); // Refresh the fixture list
+                    } else {
+                        this.showError('Bulk Delete Failed', `Error deleting fixtures: ${result.error}`);
+                    }
+                } catch (error) {
+                    console.error('Error deleting fixtures:', error);
+                    this.showError('Network Error', 'Failed to delete fixtures. Please check your connection.');
+                }
+            }
+        );
     }
 
     async downloadFixture(fixtureId) {
         try {
             const response = await fetch(this.api('__mockforge/fixtures/download'));
             const content = await response.text();
-            
+
             const blob = new Blob([content], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -669,7 +855,7 @@ class MockForgeAdmin {
                 a.remove();
             }, 500);
         } catch (error) {
-            alert('Error downloading fixture');
+            this.showError('Download Failed', 'Error downloading fixture. Please try again.');
         }
     }
 
@@ -799,13 +985,13 @@ class MockForgeAdmin {
                 body: JSON.stringify(payload)
             });
             const result = await response.json();
-            if (result && result.status === 'ok') {
-                alert('Validation settings updated' + (this.configPath ? ` and persisted to ${this.configPath}` : ''));
+            if (result && result.success) {
+                this.showSuccess('Settings Updated', 'Validation settings updated' + (this.configPath ? ` and persisted to ${this.configPath}` : ''));
             } else {
-                alert('Failed to update validation settings');
+                this.showError('Update Failed', result.error || 'Failed to update validation settings');
             }
         } catch (e) {
-            alert('Network error updating validation settings');
+            this.showError('Network Error', 'Failed to update validation settings. Please check your connection.');
         }
     }
 
@@ -910,12 +1096,12 @@ class MockForgeAdmin {
 
             const result = await response.json();
             if (result.success) {
-                alert('Configuration updated successfully');
+                this.showSuccess('Configuration Updated', 'Configuration updated successfully');
             } else {
-                alert('Error updating configuration: ' + result.error);
+                this.showError('Update Failed', `Error updating configuration: ${result.error}`);
             }
         } catch (error) {
-            alert('Network error updating configuration');
+            this.showError('Network Error', 'Failed to update configuration. Please check your connection.');
         }
     }
 
@@ -978,13 +1164,13 @@ class MockForgeAdmin {
 
             const result = await response.json();
             if (result.success) {
-                alert('Environment variable updated successfully');
+                this.showSuccess('Environment Variable Updated', 'Environment variable updated successfully');
                 this.loadEnvVars(); // Refresh the list
             } else {
-                alert('Error updating environment variable: ' + result.error);
+                this.showError('Update Failed', `Error updating environment variable: ${result.error}`);
             }
         } catch (error) {
-            alert('Network error updating environment variable');
+            this.showError('Network Error', 'Failed to update environment variable. Please check your connection.');
         }
     }
 
@@ -993,7 +1179,7 @@ class MockForgeAdmin {
         const value = document.getElementById('new-env-value')?.value.trim();
 
         if (!key || !value) {
-            alert('Please enter both key and value');
+            this.showWarning('Missing Information', 'Please enter both key and value for the environment variable');
             return;
         }
 
@@ -1009,7 +1195,7 @@ class MockForgeAdmin {
         const selectedFile = fileSelector.value;
 
         if (!selectedFile) {
-            alert('Please select a file first');
+            this.showWarning('No File Selected', 'Please select a file first');
             return;
         }
 
@@ -1017,7 +1203,7 @@ class MockForgeAdmin {
             const response = await fetch(this.api('__mockforge/files/content'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     file_path: selectedFile,
                     file_type: selectedFile.split('.').pop()
                 })
@@ -1028,10 +1214,10 @@ class MockForgeAdmin {
                 document.getElementById('file-content').value = result.data;
                 this.currentFile = selectedFile;
             } else {
-                alert('Error loading file: ' + (result.error || 'Unknown error'));
+                this.showError('Load Failed', `Error loading file: ${result.error || 'Unknown error'}`);
             }
         } catch (error) {
-            alert('Network error loading file');
+            this.showError('Network Error', 'Failed to load file. Please check your connection.');
         }
     }
 
@@ -1041,12 +1227,12 @@ class MockForgeAdmin {
         const selectedFile = fileSelector.value;
 
         if (!this.currentFile || !content) {
-            alert('Please load a file first');
+            this.showWarning('No File Loaded', 'Please load a file first');
             return;
         }
 
         if (selectedFile !== this.currentFile) {
-            alert('File selection mismatch. Please reload the file.');
+            this.showWarning('File Mismatch', 'File selection mismatch. Please reload the file.');
             return;
         }
 
@@ -1054,7 +1240,7 @@ class MockForgeAdmin {
             const response = await fetch(this.api('__mockforge/files/save'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     file_path: this.currentFile,
                     content: content
                 })
@@ -1062,12 +1248,12 @@ class MockForgeAdmin {
 
             const result = await response.json();
             if (result.success) {
-                alert('File saved successfully');
+                this.showSuccess('File Saved', 'File saved successfully');
             } else {
-                alert('Error saving file: ' + (result.error || 'Unknown error'));
+                this.showError('Save Failed', `Error saving file: ${result.error || 'Unknown error'}`);
             }
         } catch (error) {
-            alert('Network error saving file');
+            this.showError('Network Error', 'Failed to save file. Please check your connection.');
         }
     }
 
@@ -1090,7 +1276,7 @@ class MockForgeAdmin {
         try {
             // Use the proper API path for downloading overrides YAML
             const response = await fetch(this.api('__mockforge/validation/patch.yaml'));
-            
+
             if (response.ok) {
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
@@ -1104,10 +1290,10 @@ class MockForgeAdmin {
                     a.remove();
                 }, 500);
             } else {
-                alert('Failed to download overrides YAML file');
+                this.showError('Download Failed', 'Failed to download overrides YAML file');
             }
         } catch (error) {
-            alert('Network error downloading overrides YAML file');
+            this.showError('Network Error', 'Failed to download overrides YAML file. Please check your connection.');
         }
     }
 
@@ -1116,7 +1302,7 @@ class MockForgeAdmin {
         try {
             // Use the proper API path for downloading config YAML
             const response = await fetch(this.api('__mockforge/config.yaml'));
-            
+
             if (response.ok) {
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
@@ -1130,10 +1316,10 @@ class MockForgeAdmin {
                     a.remove();
                 }, 500);
             } else {
-                alert('Failed to download config YAML file');
+                this.showError('Download Failed', 'Failed to download config YAML file');
             }
         } catch (error) {
-            alert('Network error downloading config YAML file');
+            this.showError('Network Error', 'Failed to download config YAML file. Please check your connection.');
         }
     }
 }

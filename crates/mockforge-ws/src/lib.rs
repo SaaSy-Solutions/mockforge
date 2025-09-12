@@ -1,4 +1,5 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::Path;
 use axum::{response::IntoResponse, routing::get, Router};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
@@ -24,6 +25,31 @@ pub fn router_with_latency(latency_injector: LatencyInjector) -> Router {
     Router::new()
         .route("/ws", get(ws_handler_with_state))
         .with_state(latency_injector)
+}
+
+/// Build the WebSocket router with proxy handler
+pub fn router_with_proxy(ws_proxy_handler: WsProxyHandler) -> Router {
+    #[cfg(feature = "data-faker")]
+    register_core_faker_provider();
+
+    Router::new()
+        .route("/ws", get(ws_handler_with_proxy_root))
+        .route("/ws/{*path}", get(ws_handler_with_proxy))
+        .with_state(ws_proxy_handler)
+}
+
+/// Build the WebSocket router with both latency injector and proxy handler
+pub fn router_with_latency_and_proxy(
+    latency_injector: LatencyInjector,
+    ws_proxy_handler: WsProxyHandler,
+) -> Router {
+    #[cfg(feature = "data-faker")]
+    register_core_faker_provider();
+
+    Router::new()
+        .route("/ws", get(ws_handler_with_latency_and_proxy_root))
+        .route("/ws/{*path}", get(ws_handler_with_latency_and_proxy))
+        .with_state((latency_injector, ws_proxy_handler))
 }
 
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -54,6 +80,50 @@ pub async fn start_with_latency(
     Ok(())
 }
 
+/// Start WebSocket server with proxy configuration
+pub async fn start_with_proxy(
+    port: u16,
+    ws_proxy_handler: WsProxyHandler,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let addr = mockforge_core::wildcard_socket_addr(port);
+    info!("WS listening on {} with proxy support", addr);
+
+    let app = router_with_proxy(ws_proxy_handler);
+    axum::serve(tokio::net::TcpListener::bind(addr).await?, app.into_make_service())
+        .into_future()
+        .await?;
+
+    Ok(())
+}
+
+/// Start WebSocket server with both latency injection and proxy support
+pub async fn start_with_latency_and_proxy(
+    port: u16,
+    latency_profile: Option<LatencyProfile>,
+    ws_proxy_handler: WsProxyHandler,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let addr = mockforge_core::wildcard_socket_addr(port);
+    info!("WS listening on {} with latency injection and proxy support", addr);
+
+    let latency_injector = if let Some(profile) = latency_profile {
+        Some(LatencyInjector::new(profile, Default::default()))
+    } else {
+        None
+    };
+
+    let app = if let Some(injector) = latency_injector {
+        router_with_latency_and_proxy(injector, ws_proxy_handler)
+    } else {
+        router_with_proxy(ws_proxy_handler)
+    };
+
+    axum::serve(tokio::net::TcpListener::bind(addr).await?, app.into_make_service())
+        .into_future()
+        .await?;
+
+    Ok(())
+}
+
 async fn ws_handler_no_state(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| run_ws(socket, None, None))
 }
@@ -65,21 +135,81 @@ async fn ws_handler_with_state(
     ws.on_upgrade(move |socket| run_ws(socket, Some(latency_injector), None))
 }
 
+/// WebSocket handler with proxy support for root /ws path
+async fn ws_handler_with_proxy_root(
+    ws: WebSocketUpgrade,
+    axum::extract::State(ws_proxy_handler): axum::extract::State<WsProxyHandler>,
+) -> impl IntoResponse {
+    let full_path = "/ws".to_string();
+    info!("WebSocket handler (root): full_path='{}'", full_path);
+    ws.on_upgrade(move |socket| run_ws_with_path(socket, None, Some(ws_proxy_handler), full_path))
+}
+
+/// WebSocket handler with proxy support - extracts path from request
+async fn ws_handler_with_proxy(
+    Path(path): Path<String>,
+    ws: WebSocketUpgrade,
+    axum::extract::State(ws_proxy_handler): axum::extract::State<WsProxyHandler>,
+) -> impl IntoResponse {
+    // Reconstruct the full path by prepending /ws
+    let full_path = format!("/ws/{}", path);
+    info!("WebSocket handler: captured path='{}', full_path='{}'", path, full_path);
+    ws.on_upgrade(move |socket| run_ws_with_path(socket, None, Some(ws_proxy_handler), full_path))
+}
+
+/// WebSocket handler with both latency injector and proxy support for root /ws path
+async fn ws_handler_with_latency_and_proxy_root(
+    ws: WebSocketUpgrade,
+    axum::extract::State((latency_injector, ws_proxy_handler)): axum::extract::State<(LatencyInjector, WsProxyHandler)>,
+) -> impl IntoResponse {
+    let full_path = "/ws".to_string();
+    info!("WebSocket handler (latency+proxy root): full_path='{}'", full_path);
+    ws.on_upgrade(move |socket| run_ws_with_path(socket, Some(latency_injector), Some(ws_proxy_handler), full_path))
+}
+
+/// WebSocket handler with both latency injector and proxy support - extracts path from request
+async fn ws_handler_with_latency_and_proxy(
+    Path(path): Path<String>,
+    ws: WebSocketUpgrade,
+    axum::extract::State((latency_injector, ws_proxy_handler)): axum::extract::State<(LatencyInjector, WsProxyHandler)>,
+) -> impl IntoResponse {
+    // Reconstruct the full path by prepending /ws
+    let full_path = format!("/ws/{}", path);
+    info!("WebSocket handler (latency+proxy): captured path='{}', full_path='{}'", path, full_path);
+    ws.on_upgrade(move |socket| run_ws_with_path(socket, Some(latency_injector), Some(ws_proxy_handler), full_path))
+}
+
 async fn run_ws(
     socket: WebSocket,
     latency_injector: Option<LatencyInjector>,
     ws_proxy_handler: Option<WsProxyHandler>,
 ) {
+    // For backward compatibility, use default path when no path is provided
+    run_ws_with_path(socket, latency_injector, ws_proxy_handler, "/ws".to_string()).await
+}
+
+/// Run WebSocket connection with explicit path for proxy routing
+async fn run_ws_with_path(
+    socket: WebSocket,
+    latency_injector: Option<LatencyInjector>,
+    ws_proxy_handler: Option<WsProxyHandler>,
+    path: String,
+) {
     // Check if we should proxy this connection
     if let Some(proxy_handler) = ws_proxy_handler {
-        // For now, we'll use a simple path. In a real implementation, we'd extract the path
-        // from the request that initiated the WebSocket upgrade.
-        let path = "/ws";
-        if proxy_handler.config.should_proxy(path) {
-            if let Err(e) = proxy_handler.proxy_connection(path, socket).await {
-                error!("WebSocket proxy failed: {}", e);
+        info!("Checking if WebSocket connection at path '{}' should be proxied", path);
+        info!("Proxy config enabled: {}, passthrough_by_default: {}",
+               proxy_handler.config.enabled, proxy_handler.config.passthrough_by_default);
+        info!("Proxy rules: {:?}", proxy_handler.config.rules);
+
+        if proxy_handler.config.should_proxy(&path) {
+            info!("Proxying WebSocket connection at path '{}' to upstream", path);
+            if let Err(e) = proxy_handler.proxy_connection(&path, socket).await {
+                error!("WebSocket proxy failed for path '{}': {}", path, e);
             }
             return;
+        } else {
+            info!("WebSocket connection at path '{}' will be handled locally", path);
         }
     }
 

@@ -1,1 +1,0 @@
-print('gen grpc stubs')

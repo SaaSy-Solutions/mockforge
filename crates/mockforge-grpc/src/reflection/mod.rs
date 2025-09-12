@@ -6,6 +6,7 @@
 pub mod client;
 pub mod descriptor;
 pub mod proxy;
+pub mod mock_proxy;
 pub mod cache;
 pub mod config;
 pub mod connection_pool;
@@ -14,5 +15,6 @@ pub mod metrics;
 
 pub use client::ReflectionClient;
 pub use proxy::ReflectionProxy;
+pub use mock_proxy::MockReflectionProxy;
 pub use config::ProxyConfig;
 pub use connection_pool::ConnectionPool;
