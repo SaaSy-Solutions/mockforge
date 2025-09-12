@@ -28,7 +28,7 @@ pub use latency::LatencyProfile;
 pub use priority_handler::{PriorityHttpHandler, PriorityResponse, MockGenerator, MockResponse, SimpleMockGenerator};
 pub use record_replay::{RecordedRequest, ReplayHandler, RecordHandler, RecordReplayHandler, list_fixtures, clean_old_fixtures, list_ready_fixtures, list_smoke_endpoints};
 pub use request_fingerprint::{RequestFingerprint, ResponsePriority, ResponseSource, RequestHandlerResult};
-pub use openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
+pub use openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec, OpenApiSecurityRequirement};
 pub use openapi_routes::{
     create_registry_from_file, create_registry_from_json, OpenApiRouteRegistry,
 };
@@ -37,7 +37,7 @@ pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};
 pub use routing::RouteRegistry;
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
-pub use validation::Validator;
+pub use validation::{Validator, validate_openapi_security, validate_openapi_operation_security};
 pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 
 

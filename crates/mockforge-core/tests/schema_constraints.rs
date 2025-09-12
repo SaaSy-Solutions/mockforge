@@ -47,8 +47,54 @@ async fn validate_pattern_and_array_size() {
         )
         .is_err());
 
-    // minItems fail
+    // minItems fail (this test seems wrong - it's testing maxItems, not minItems)
     let body = json!({"name":"Alice","tags":["only_one", "two", "three", "four"]});
+    assert!(reg
+        .validate_request_with(
+            "/users",
+            "POST",
+            &serde_json::Map::new(),
+            &serde_json::Map::new(),
+            Some(&body)
+        )
+        .is_err());
+}
+
+#[tokio::test]
+async fn validate_min_items_constraint() {
+    let spec = json!({
+        "openapi":"3.0.0",
+        "info": {"title":"T","version":"1"},
+        "paths": {
+            "/users": {"post": {
+                "requestBody": {"content": {"application/json": {"schema": {
+                    "type":"object","required":["tags"],
+                    "properties":{
+                        "tags": {"type":"array","minItems":2,"items":{"type":"string"}}
+                    }
+                }}}},
+                "responses": {
+                    "200": {"description":"ok","content":{"application/json":{"schema":{"type":"object"}}}}
+                }
+            }}
+        }
+    });
+    let spec = OpenApiSpec::from_json(spec).unwrap();
+    let reg = OpenApiRouteRegistry::new(spec);
+
+    // valid - meets minItems
+    let body = json!({"tags":["a","b"]});
+    reg.validate_request_with(
+        "/users",
+        "POST",
+        &serde_json::Map::new(),
+        &serde_json::Map::new(),
+        Some(&body),
+    )
+    .unwrap();
+
+    // minItems fail - only 1 item
+    let body = json!({"tags":["only_one"]});
     assert!(reg
         .validate_request_with(
             "/users",

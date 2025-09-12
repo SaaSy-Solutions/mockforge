@@ -1,11 +1,24 @@
 //! Dataset management and persistence
 
-use crate::{DataConfig, GenerationResult, OutputFormat};
-use mockforge_core::Result;
+use crate::{DataConfig, GenerationResult, OutputFormat, SchemaDefinition};
+use mockforge_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
+
+/// Dataset validation result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatasetValidationResult {
+    /// Whether the dataset is valid
+    pub valid: bool,
+    /// Validation errors
+    pub errors: Vec<String>,
+    /// Validation warnings
+    pub warnings: Vec<String>,
+    /// Total number of rows validated
+    pub total_rows_validated: usize,
+}
 
 /// Dataset metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -414,13 +427,123 @@ pub mod utils {
             .map_err(|e| mockforge_core::Error::generic(format!("Failed to export dataset: {}", e)))
     }
 
-    /// Validate dataset against schema (placeholder)
+    /// Validate dataset against schema
     pub fn validate_dataset_against_schema(
-        _dataset: &Dataset,
-        _schema: &crate::schema::SchemaDefinition,
+        dataset: &Dataset,
+        schema: &SchemaDefinition,
     ) -> Result<Vec<String>> {
-        // TODO: Implement schema validation for datasets
-        tracing::warn!("Dataset schema validation not yet implemented");
-        Ok(Vec::new())
+        let mut errors = Vec::new();
+
+        // Validate each row in the dataset
+        for (row_index, row) in dataset.data.iter().enumerate() {
+            match row {
+                serde_json::Value::Object(row_obj) => {
+                    // Validate each field in the schema
+                    for field in &schema.fields {
+                        let field_name = &field.name;
+
+                        if let Some(field_value) = row_obj.get(field_name) {
+                            // Validate the field value
+                            if let Err(validation_error) = field.validate_value(field_value) {
+                                errors.push(format!(
+                                    "Row {}: Field '{}': {}",
+                                    row_index + 1,
+                                    field_name,
+                                    validation_error
+                                ));
+                            }
+                        } else if field.required {
+                            errors.push(format!(
+                                "Row {}: Required field '{}' is missing",
+                                row_index + 1,
+                                field_name
+                            ));
+                        }
+                    }
+
+                    // Check for unexpected fields
+                    for (key, _) in row_obj {
+                        let field_exists_in_schema = schema.fields.iter().any(|f| f.name == *key);
+                        if !field_exists_in_schema {
+                            errors.push(format!(
+                                "Row {}: Unexpected field '{}' not defined in schema",
+                                row_index + 1,
+                                key
+                            ));
+                        }
+                    }
+                }
+                _ => {
+                    errors.push(format!(
+                        "Row {}: Expected object, got {}",
+                        row_index + 1,
+                        row
+                    ));
+                }
+            }
+        }
+
+        // Validate dataset-level constraints
+        if let Err(count_error) = validate_dataset_size(dataset, schema) {
+            errors.push(count_error.to_string());
+        }
+
+        Ok(errors)
+    }
+
+    /// Validate dataset size constraints
+    fn validate_dataset_size(dataset: &Dataset, schema: &SchemaDefinition) -> mockforge_core::Result<()> {
+        // Check if there are any size constraints in schema metadata
+        if let Some(min_rows) = schema.metadata.get("min_rows") {
+            if let Some(min_count) = min_rows.as_u64() {
+                if dataset.data.len() < min_count as usize {
+                    return Err(Error::validation(format!(
+                        "Dataset has {} rows, but schema requires at least {} rows",
+                        dataset.data.len(),
+                        min_count
+                    )));
+                }
+            }
+        }
+
+        if let Some(max_rows) = schema.metadata.get("max_rows") {
+            if let Some(max_count) = max_rows.as_u64() {
+                if dataset.data.len() > max_count as usize {
+                    return Err(Error::validation(format!(
+                        "Dataset has {} rows, but schema allows at most {} rows",
+                        dataset.data.len(),
+                        max_count
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate dataset and return detailed result
+    pub fn validate_with_details(
+        dataset: &Dataset,
+        schema: &SchemaDefinition,
+    ) -> DatasetValidationResult {
+        let errors = validate_dataset_against_schema(dataset, schema);
+
+        match errors {
+            Ok(validation_errors) => {
+                let warnings = Vec::new(); // Could add warnings for deprecated fields, etc.
+                DatasetValidationResult {
+                    valid: validation_errors.is_empty(),
+                    errors: validation_errors,
+                    warnings,
+                    total_rows_validated: dataset.data.len(),
+                }
+            }
+            Err(e) => DatasetValidationResult {
+                valid: false,
+                errors: vec![format!("Validation failed: {}", e)],
+                warnings: Vec::new(),
+                total_rows_validated: dataset.data.len(),
+            },
+        }
     }
 }
