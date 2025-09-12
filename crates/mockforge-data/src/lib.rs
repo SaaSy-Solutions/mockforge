@@ -9,10 +9,10 @@ pub mod provider;
 pub mod rag;
 pub mod schema;
 
-pub use dataset::Dataset;
+pub use dataset::{Dataset, DatasetValidationResult};
 pub use fake::Faker;
 pub use generator::DataGenerator;
-pub use rag::RagEngine;
+pub use rag::{RagEngine, RagConfig, LlmProvider, EmbeddingProvider, SearchResult};
 pub use schema::{FieldDefinition, SchemaDefinition};
 
 /// Data generation configuration

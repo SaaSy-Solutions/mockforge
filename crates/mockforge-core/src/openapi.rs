@@ -199,6 +199,132 @@ impl OpenApiSpec {
     pub fn description(&self) -> Option<&str> {
         self.spec.info.description.as_deref()
     }
+
+    /// Get a security scheme by name
+    pub fn get_security_scheme(&self, name: &str) -> Option<&openapiv3::SecurityScheme> {
+        self.spec.components.as_ref()?.security_schemes.get(name)
+            .and_then(|scheme| match scheme {
+                ReferenceOr::Item(s) => Some(s),
+                ReferenceOr::Reference { .. } => None, // TODO: Handle references
+            })
+    }
+
+    /// Validate security requirements for an operation
+    pub fn validate_security_requirements(
+        &self,
+        security_requirements: &[OpenApiSecurityRequirement],
+        auth_header: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<()> {
+        if security_requirements.is_empty() {
+            // No security requirements, so validation passes
+            return Ok(());
+        }
+
+        for requirement in security_requirements {
+            self.validate_single_security_requirement(requirement, auth_header, api_key)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate a single security requirement
+    fn validate_single_security_requirement(
+        &self,
+        requirement: &OpenApiSecurityRequirement,
+        auth_header: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<()> {
+        let scheme = self.get_security_scheme(&requirement.scheme)
+            .ok_or_else(|| Error::generic(format!("Security scheme '{}' not found", requirement.scheme)))?;
+
+        match scheme {
+            openapiv3::SecurityScheme::APIKey { location, name, .. } => {
+                match location {
+                    openapiv3::APIKeyLocation::Header => {
+                        if let Some(header_value) = auth_header {
+                            // For API key in header, just check if header is present
+                            // In a real implementation, you might want to validate the key format
+                            if header_value.is_empty() {
+                                return Err(Error::generic(format!(
+                                    "API key header '{}' is required but empty", name
+                                )));
+                            }
+                        } else {
+                            return Err(Error::generic(format!(
+                                "API key header '{}' is required", name
+                            )));
+                        }
+                    }
+                    openapiv3::APIKeyLocation::Query => {
+                        // Query parameter validation would require request parsing
+                        // For now, we'll assume it's present if we have an API key
+                        if api_key.is_none() || api_key.unwrap().is_empty() {
+                            return Err(Error::generic(format!(
+                                "API key query parameter '{}' is required", name
+                            )));
+                        }
+                    }
+                    openapiv3::APIKeyLocation::Cookie => {
+                        // Cookie validation would require cookie parsing
+                        return Err(Error::generic("Cookie-based API key validation not implemented"));
+                    }
+                }
+            }
+            openapiv3::SecurityScheme::HTTP { scheme, .. } => {
+                match scheme.to_lowercase().as_str() {
+                    "bearer" | "basic" => {
+                        if let Some(header_value) = auth_header {
+                            if header_value.is_empty() {
+                                return Err(Error::generic(format!(
+                                    "HTTP {} authentication header is required but empty", scheme
+                                )));
+                            }
+                            // For Bearer tokens, check if it starts with "Bearer "
+                            if scheme == "bearer" && !header_value.to_lowercase().starts_with("bearer ") {
+                                return Err(Error::generic(
+                                    "Bearer token must start with 'Bearer '"
+                                ));
+                            }
+                        } else {
+                            return Err(Error::generic(format!(
+                                "HTTP {} authentication header is required", scheme
+                            )));
+                        }
+                    }
+                    _ => {
+                        return Err(Error::generic(format!(
+                            "HTTP authentication scheme '{}' not supported", scheme
+                        )));
+                    }
+                }
+            }
+            openapiv3::SecurityScheme::OAuth2 { .. } => {
+                // OAuth2 validation would require token introspection
+                // For now, just check if we have some form of authentication
+                if auth_header.is_none() && api_key.is_none() {
+                    return Err(Error::generic("OAuth2 authentication is required"));
+                }
+            }
+            openapiv3::SecurityScheme::OpenIDConnect { .. } => {
+                // OpenID Connect validation would require token validation
+                // For now, just check if we have some form of authentication
+                if auth_header.is_none() && api_key.is_none() {
+                    return Err(Error::generic("OpenID Connect authentication is required"));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Extract security requirements from global spec security
+    pub fn get_global_security_requirements(&self) -> Vec<OpenApiSecurityRequirement> {
+        self.spec.security.iter()
+            .flatten()
+            .map(|req| OpenApiSecurityRequirement::from_security_requirement(req))
+            .collect()
+    }
 }
 
 /// OpenAPI operation information
@@ -266,7 +392,12 @@ impl OpenApiOperation {
 
                 responses
             },
-            security: vec![], // TODO: Implement security requirement parsing
+            security: operation
+                .security
+                .iter()
+                .flatten()
+                .map(|req| OpenApiSecurityRequirement::from_security_requirement(req))
+                .collect(),
         }
     }
 }

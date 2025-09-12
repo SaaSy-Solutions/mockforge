@@ -21,3 +21,8 @@ fake = { version = "3.0", features = ["derive", "http", "chrono", "uuid", "rando
 fastrand = "2.0"
 itertools = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
+reqwest = { workspace = true }
+
+# For vector operations and similarity calculations
+ndarray = "0.15"
+ndarray-stats = "0.5"

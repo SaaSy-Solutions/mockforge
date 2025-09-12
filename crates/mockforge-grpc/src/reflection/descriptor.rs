@@ -21,24 +21,31 @@ impl ServiceDescriptorCache {
             methods: HashMap::new(),
         }
     }
-    
+
     /// Add a service descriptor to the cache
     pub fn add_service(&mut self, service: ServiceDescriptor) {
         let service_name = service.full_name().to_string();
         self.services.insert(service_name.clone(), service.clone());
-        
+
         // Cache all methods for this service
         for method in service.methods() {
             let method_name = method.name().to_string();
             self.methods.insert((service_name.clone(), method_name), method);
         }
     }
-    
+
     /// Get a service descriptor by name
     pub fn get_service(&self, service_name: &str) -> Option<&ServiceDescriptor> {
         self.services.get(service_name)
     }
-    
+
+    /// Get a service descriptor by name with proper error handling
+    pub fn get_service_with_error(&self, service_name: &str) -> Result<&ServiceDescriptor, Status> {
+        self.services.get(service_name).ok_or_else(|| {
+            Status::not_found(format!("Service '{}' not found in descriptor cache", service_name))
+        })
+    }
+
     /// Get a method descriptor by service and method name
     pub fn get_method(
         &self,
@@ -48,18 +55,18 @@ impl ServiceDescriptorCache {
         self.methods
             .get(&(service_name.to_string(), method_name.to_string()))
             .ok_or_else(|| {
-                Status::unimplemented(format!(
+                Status::not_found(format!(
                     "Method {} not found in service {}",
                     method_name, service_name
                 ))
             })
     }
-    
+
     /// Check if a service exists in the cache
     pub fn contains_service(&self, service_name: &str) -> bool {
         self.services.contains_key(service_name)
     }
-    
+
     /// Check if a method exists in the cache
     pub fn contains_method(&self, service_name: &str, method_name: &str) -> bool {
         self.methods.contains_key(&(service_name.to_string(), method_name.to_string()))
