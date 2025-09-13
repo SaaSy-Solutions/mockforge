@@ -89,19 +89,17 @@ impl FailureInjector {
         }
 
         // Check include tags (if specified, only include these tags)
-        if !config.include_tags.is_empty() {
-            if !tags.iter().any(|tag| config.include_tags.contains(tag)) {
-                return false;
-            }
+        if !config.include_tags.is_empty()
+            && !tags.iter().any(|tag| config.include_tags.contains(tag))
+        {
+            return false;
         }
 
         // Find the best matching tag configuration
         let tag_config = self.find_best_tag_config(tags, config);
 
         // Use tag-specific error rate if available, otherwise global rate
-        let error_rate = tag_config
-            .map(|tc| tc.error_rate)
-            .unwrap_or(config.global_error_rate);
+        let error_rate = tag_config.map(|tc| tc.error_rate).unwrap_or(config.global_error_rate);
 
         // Check if failure should occur based on error rate
         if error_rate <= 0.0 {

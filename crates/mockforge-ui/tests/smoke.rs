@@ -113,12 +113,27 @@ async fn test_post_endpoints() {
     let post_endpoints = vec![
         ("/__mockforge/fixtures/delete", r#"{"fixture_id": "test"}"#),
         ("/__mockforge/env", r#"{"key": "TEST_KEY", "value": "test_value"}"#),
-        ("/__mockforge/files/content", r#"{"file_path": "test.yaml", "file_type": "yaml"}"#),
+        (
+            "/__mockforge/files/content",
+            r#"{"file_path": "test.yaml", "file_type": "yaml"}"#,
+        ),
         ("/__mockforge/files/save", r#"{"file_path": "test.yaml", "content": "test"}"#),
-        ("/__mockforge/config/latency", r#"{"config_type": "latency", "data": {"base_ms": 50}}"#),
-        ("/__mockforge/config/faults", r#"{"config_type": "faults", "data": {"enabled": true}}"#),
-        ("/__mockforge/config/proxy", r#"{"config_type": "proxy", "data": {"enabled": true}}"#),
-        ("/__mockforge/validation", r#"{"mode": "enforce", "aggregate_errors": true, "validate_responses": false}"#),
+        (
+            "/__mockforge/config/latency",
+            r#"{"config_type": "latency", "data": {"base_ms": 50}}"#,
+        ),
+        (
+            "/__mockforge/config/faults",
+            r#"{"config_type": "faults", "data": {"enabled": true}}"#,
+        ),
+        (
+            "/__mockforge/config/proxy",
+            r#"{"config_type": "proxy", "data": {"enabled": true}}"#,
+        ),
+        (
+            "/__mockforge/validation",
+            r#"{"mode": "enforce", "aggregate_errors": true, "validate_responses": false}"#,
+        ),
     ];
 
     for (endpoint, body) in post_endpoints {
@@ -130,7 +145,7 @@ async fn test_post_endpoints() {
                     .uri(endpoint)
                     .header("Content-Type", "application/json")
                     .body(Body::from(body.to_string()))
-                    .unwrap()
+                    .unwrap(),
             )
             .await
             .unwrap();

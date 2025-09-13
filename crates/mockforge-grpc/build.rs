@@ -1,14 +1,14 @@
 use std::env;
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let out_dir = env::var("OUT_DIR").unwrap();
 
     // Get proto directory from environment variable or use default
-    let proto_dir = env::var("MOCKFORGE_PROTO_DIR")
-        .unwrap_or_else(|_| format!("{}/proto", manifest_dir));
+    let proto_dir =
+        env::var("MOCKFORGE_PROTO_DIR").unwrap_or_else(|_| format!("{}/proto", manifest_dir));
 
     let proto_path = Path::new(&proto_dir);
 
@@ -33,7 +33,8 @@ fn main() {
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
 
     // Add include paths for all proto files
-    let include_paths: Vec<String> = proto_files.iter()
+    let include_paths: Vec<String> = proto_files
+        .iter()
         .map(|path_str| {
             Path::new(path_str)
                 .parent()

@@ -10,7 +10,7 @@ use axum::{routing::get, Json};
 use mockforge_core::openapi_routes::{
     get_last_validation_error, get_validation_errors, ValidationOptions,
 };
-use mockforge_core::{load_config, save_config, latency::LatencyInjector, LatencyProfile};
+use mockforge_core::{latency::LatencyInjector, load_config, save_config, LatencyProfile};
 use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
@@ -18,10 +18,7 @@ use serde::{Deserialize, Serialize};
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
-pub async fn build_router(
-    spec_path: Option<String>,
-    options: Option<ValidationOptions>,
-) -> Router {
+pub async fn build_router(spec_path: Option<String>, options: Option<ValidationOptions>) -> Router {
     build_router_with_latency(spec_path, options, None).await
 }
 
@@ -140,14 +137,15 @@ pub async fn serve_router(
     app: Router,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
-    
+
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("HTTP listening on {}", addr);
-    
+
     axum::serve(
         tokio::net::TcpListener::bind(addr).await?,
-        app.into_make_service_with_connect_info::<SocketAddr>()
-    ).await?;
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -167,9 +165,8 @@ pub async fn start_with_latency(
     options: Option<ValidationOptions>,
     latency_profile: Option<LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let latency_injector = latency_profile.map(|profile| {
-        LatencyInjector::new(profile, Default::default())
-    });
+    let latency_injector =
+        latency_profile.map(|profile| LatencyInjector::new(profile, Default::default()));
 
     let app = build_router_with_latency(spec_path, options, latency_injector).await;
     serve_router(port, app).await
@@ -183,11 +180,11 @@ pub async fn start_with_injectors(
     latency_profile: Option<LatencyProfile>,
     failure_injector: Option<mockforge_core::FailureInjector>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let latency_injector = latency_profile.map(|profile| {
-        LatencyInjector::new(profile, Default::default())
-    });
+    let latency_injector =
+        latency_profile.map(|profile| LatencyInjector::new(profile, Default::default()));
 
-    let app = build_router_with_injectors(spec_path, options, latency_injector, failure_injector).await;
+    let app =
+        build_router_with_injectors(spec_path, options, latency_injector, failure_injector).await;
     serve_router(port, app).await
 }
 
@@ -344,18 +341,18 @@ async fn download_overrides_yaml() -> axum::response::Response {
 
 /// Get smoke test index listing
 async fn get_smoke_test_index() -> Json<serde_json::Value> {
-    use mockforge_core::{list_smoke_endpoints};
+    use mockforge_core::list_smoke_endpoints;
     use std::path::Path;
-    
+
     // Get fixtures directory from environment or use default
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "./fixtures".to_string());
-    
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "./fixtures".to_string());
+
     let fixtures_path = Path::new(&fixtures_dir);
-    
+
     // Get smoke endpoints
     let endpoints = list_smoke_endpoints(fixtures_path).await.unwrap_or_else(|_| vec![]);
-    
+
     // Format as JSON response
     let endpoints_json: Vec<serde_json::Value> = endpoints
         .into_iter()
@@ -367,7 +364,7 @@ async fn get_smoke_test_index() -> Json<serde_json::Value> {
             })
         })
         .collect();
-    
+
     Json(serde_json::json!({
         "endpoints": endpoints_json,
         "count": endpoints_json.len()
@@ -376,18 +373,18 @@ async fn get_smoke_test_index() -> Json<serde_json::Value> {
 
 /// Run smoke tests
 async fn run_smoke_tests() -> Json<serde_json::Value> {
-    use mockforge_core::{list_ready_fixtures};
+    use mockforge_core::list_ready_fixtures;
     use std::path::Path;
-    
+
     // Get fixtures directory from environment or use default
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "./fixtures".to_string());
-    
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "./fixtures".to_string());
+
     let fixtures_path = Path::new(&fixtures_dir);
-    
+
     // Get ready fixtures
     let fixtures = list_ready_fixtures(fixtures_path).await.unwrap_or_else(|_| vec![]);
-    
+
     // Format as JSON response
     let fixtures_json: Vec<serde_json::Value> = fixtures
         .into_iter()
@@ -401,7 +398,7 @@ async fn run_smoke_tests() -> Json<serde_json::Value> {
             })
         })
         .collect();
-    
+
     Json(serde_json::json!({
         "fixtures": fixtures_json,
         "count": fixtures_json.len(),

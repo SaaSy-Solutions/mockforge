@@ -1,4 +1,4 @@
-use mockforge_data::{Dataset, FieldDefinition, SchemaDefinition, DatasetValidationResult};
+use mockforge_data::{Dataset, DatasetValidationResult, FieldDefinition, SchemaDefinition};
 use serde_json::json;
 
 #[cfg(test)]
@@ -78,7 +78,9 @@ mod dataset_validation_tests {
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         assert!(!error_list.is_empty());
-        assert!(error_list.iter().any(|e| e.contains("type mismatch") || e.contains("expected number")));
+        assert!(error_list
+            .iter()
+            .any(|e| e.contains("type mismatch") || e.contains("expected number")));
     }
 
     #[test]

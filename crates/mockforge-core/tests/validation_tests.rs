@@ -73,18 +73,13 @@ mod validation_tests {
             "/users",
             "GET",
             Some("Bearer token123"),
-            None
+            None,
         );
         assert!(result.valid);
 
         // Test without authentication
-        let result = validate_openapi_operation_security(
-            &openapi_spec,
-            "/users",
-            "GET",
-            None,
-            None
-        );
+        let result =
+            validate_openapi_operation_security(&openapi_spec, "/users", "GET", None, None);
         assert!(!result.valid);
         assert!(result.errors.iter().any(|e| e.contains("authentication header is required")));
 
@@ -94,7 +89,7 @@ mod validation_tests {
             "/users",
             "GET",
             Some("token123"),
-            None
+            None,
         );
         assert!(!result.valid);
         assert!(result.errors.iter().any(|e| e.contains("Bearer token must start with")));
@@ -132,18 +127,13 @@ mod validation_tests {
             "/users",
             "GET",
             Some("api-key-123"),
-            None
+            None,
         );
         assert!(result.valid);
 
         // Test without API key
-        let result = validate_openapi_operation_security(
-            &openapi_spec,
-            "/users",
-            "GET",
-            None,
-            None
-        );
+        let result =
+            validate_openapi_operation_security(&openapi_spec, "/users", "GET", None, None);
         assert!(!result.valid);
         assert!(result.errors.iter().any(|e| e.contains("API key header")));
     }
@@ -165,13 +155,8 @@ mod validation_tests {
         let openapi_spec = mockforge_core::OpenApiSpec::from_json(spec).unwrap();
 
         // No security requirements - should pass
-        let result = validate_openapi_operation_security(
-            &openapi_spec,
-            "/users",
-            "GET",
-            None,
-            None
-        );
+        let result =
+            validate_openapi_operation_security(&openapi_spec, "/users", "GET", None, None);
         assert!(result.valid);
     }
 

@@ -7,9 +7,9 @@ use std::collections::HashMap;
 #[cfg(test)]
 mod admin_handlers_tests {
     use super::*;
-    use tokio::sync::RwLock;
-    use std::sync::Arc;
     use chrono::Utc;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
 
     fn create_test_state() -> AdminState {
         AdminState::new(
@@ -38,7 +38,15 @@ mod admin_handlers_tests {
 
         state.record_request("GET", "/api/users", 200, 45, None).await;
         state.record_request("POST", "/api/users", 201, 120, None).await;
-        state.record_request("GET", "/api/users", 500, 2000, Some("Internal Server Error".to_string())).await;
+        state
+            .record_request(
+                "GET",
+                "/api/users",
+                500,
+                2000,
+                Some("Internal Server Error".to_string()),
+            )
+            .await;
 
         let metrics = state.get_metrics().await;
         assert_eq!(metrics.total_requests, 3);
@@ -51,10 +59,7 @@ mod admin_handlers_tests {
     async fn test_update_latency_config() {
         let state = create_test_state();
 
-        let overrides = HashMap::from([
-            ("auth".to_string(), 200u64),
-            ("api".to_string(), 150u64),
-        ]);
+        let overrides = HashMap::from([("auth".to_string(), 200u64), ("api".to_string(), 150u64)]);
 
         state.update_latency_config(100, 50, overrides).await;
 
@@ -82,7 +87,9 @@ mod admin_handlers_tests {
     async fn test_update_proxy_config() {
         let state = create_test_state();
 
-        state.update_proxy_config(true, Some("http://api.example.com".to_string()), 60).await;
+        state
+            .update_proxy_config(true, Some("http://api.example.com".to_string()), 60)
+            .await;
 
         let config = state.get_config().await;
         assert!(config.proxy_config.enabled);
@@ -105,7 +112,10 @@ mod admin_handlers_tests {
         assert_eq!(config.validation_settings.mode, "warn");
         assert!(!config.validation_settings.aggregate_errors);
         assert!(config.validation_settings.validate_responses);
-        assert_eq!(config.validation_settings.overrides.get("GET /health"), Some(&"off".to_string()));
+        assert_eq!(
+            config.validation_settings.overrides.get("GET /health"),
+            Some(&"off".to_string())
+        );
     }
 
     #[tokio::test]
@@ -204,7 +214,9 @@ mod admin_handlers_tests {
         let state = create_test_state();
 
         let start_time = Utc::now();
-        state.record_request("GET", "/api/test", 200, 100, Some("Test error".to_string())).await;
+        state
+            .record_request("GET", "/api/test", 200, 100, Some("Test error".to_string()))
+            .await;
         let end_time = Utc::now();
 
         let logs = state.logs.read().await;
@@ -259,7 +271,9 @@ mod admin_handlers_tests {
         state.record_request("GET", "/api/users", 200, 60, None).await;
         state.record_request("POST", "/api/users", 201, 120, None).await;
         state.record_request("GET", "/api/products", 200, 40, None).await;
-        state.record_request("GET", "/api/users", 500, 2000, Some("Server error".to_string())).await;
+        state
+            .record_request("GET", "/api/users", 500, 2000, Some("Server error".to_string()))
+            .await;
 
         let metrics = state.get_metrics().await;
 

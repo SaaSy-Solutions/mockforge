@@ -12,7 +12,7 @@ pub mod schema;
 pub use dataset::{Dataset, DatasetValidationResult};
 pub use fake::Faker;
 pub use generator::DataGenerator;
-pub use rag::{RagEngine, RagConfig, LlmProvider, EmbeddingProvider, SearchResult};
+pub use rag::{EmbeddingProvider, LlmProvider, RagConfig, RagEngine, SearchResult};
 pub use schema::{FieldDefinition, SchemaDefinition};
 
 /// Data generation configuration

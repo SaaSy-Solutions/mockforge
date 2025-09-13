@@ -40,45 +40,47 @@ where
 {
     let mut attempts = 0;
     let mut delay = Duration::from_millis(config.base_delay_ms);
-    
+
     loop {
         match operation().await {
             Ok(result) => return Ok(result),
             Err(status) => {
                 attempts += 1;
-                
+
                 // If we've reached the maximum retries, return the error
                 if attempts > config.max_retries {
                     error!("Operation failed after {} attempts: {}", attempts, status);
                     return Err(status);
                 }
-                
+
                 // For certain types of errors, we might not want to retry
                 match status.code() {
                     // Don't retry these errors
-                    tonic::Code::InvalidArgument | 
-                    tonic::Code::NotFound | 
-                    tonic::Code::AlreadyExists | 
-                    tonic::Code::PermissionDenied |
-                    tonic::Code::FailedPrecondition |
-                    tonic::Code::Aborted |
-                    tonic::Code::OutOfRange |
-                    tonic::Code::Unimplemented => {
+                    tonic::Code::InvalidArgument
+                    | tonic::Code::NotFound
+                    | tonic::Code::AlreadyExists
+                    | tonic::Code::PermissionDenied
+                    | tonic::Code::FailedPrecondition
+                    | tonic::Code::Aborted
+                    | tonic::Code::OutOfRange
+                    | tonic::Code::Unimplemented => {
                         error!("Non-retryable error: {}", status);
                         return Err(status);
                     }
                     // Retry all other errors
                     _ => {
-                        warn!("Attempt {} failed: {}. Retrying in {:?}...", 
-                              attempts, status, delay);
-                        
+                        warn!(
+                            "Attempt {} failed: {}. Retrying in {:?}...",
+                            attempts, status, delay
+                        );
+
                         // Wait before retrying
                         sleep(delay).await;
-                        
+
                         // Calculate next delay with exponential backoff
                         if config.exponential_backoff {
                             delay = Duration::from_millis(
-                                (delay.as_millis() * 2).min(config.max_delay_ms as u128) as u64
+                                (delay.as_millis() * 2).min(config.max_delay_ms as u128) as u64,
                             );
                         }
                     }
@@ -91,10 +93,10 @@ where
 /// Simulate various error conditions for testing
 pub fn simulate_error(error_rate: f64) -> Result<(), Status> {
     use rand::Rng;
-    
+
     let mut rng = rand::thread_rng();
     let random: f64 = rng.gen();
-    
+
     if random < error_rate {
         // Simulate different types of errors
         let error_type: u32 = rng.gen_range(0..5);

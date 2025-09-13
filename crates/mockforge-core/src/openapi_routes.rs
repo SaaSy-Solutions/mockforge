@@ -4,7 +4,9 @@
 //! from OpenAPI specifications, including mock response generation and validation.
 
 use crate::templating::expand_tokens as core_expand_tokens;
-use crate::{Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Result, latency::LatencyInjector, Overrides};
+use crate::{
+    latency::LatencyInjector, Error, OpenApiOperation, OpenApiRoute, OpenApiSpec, Overrides, Result,
+};
 use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::{
@@ -325,7 +327,11 @@ impl OpenApiRouteRegistry {
     }
 
     /// Build an Axum router from the OpenAPI spec with both latency and failure injection support
-    pub fn build_router_with_injectors(self, latency_injector: LatencyInjector, failure_injector: Option<crate::FailureInjector>) -> Router {
+    pub fn build_router_with_injectors(
+        self,
+        latency_injector: LatencyInjector,
+        failure_injector: Option<crate::FailureInjector>,
+    ) -> Router {
         self.build_router_with_injectors_and_overrides(latency_injector, failure_injector, None)
     }
 
@@ -334,7 +340,7 @@ impl OpenApiRouteRegistry {
         self,
         latency_injector: LatencyInjector,
         failure_injector: Option<crate::FailureInjector>,
-        overrides: Option<Overrides>
+        overrides: Option<Overrides>,
     ) -> Router {
         let mut router = Router::new();
 
@@ -354,7 +360,8 @@ impl OpenApiRouteRegistry {
 
             // Extract tags from operation for latency and failure injection
             // For now, use operation_id as the primary tag
-            let operation_tags = operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
+            let operation_tags =
+                operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
 
             // Handler: inject latency, validate path/query/header/cookie/body, then return mock
             let handler = move |AxumPath(path_params): AxumPath<
@@ -365,13 +372,16 @@ impl OpenApiRouteRegistry {
                                 body: axum::body::Bytes| async move {
                 // Check for failure injection first
                 if let Some(ref failure_injector) = failure_injector {
-                    if let Some((status_code, error_message)) = failure_injector.process_request(&operation_tags) {
+                    if let Some((status_code, error_message)) =
+                        failure_injector.process_request(&operation_tags)
+                    {
                         return (
-                            axum::http::StatusCode::from_u16(status_code).unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+                            axum::http::StatusCode::from_u16(status_code)
+                                .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
                             axum::Json(serde_json::json!({
                                 "error": error_message,
                                 "injected_failure": true
-                            }))
+                            })),
                         );
                     }
                 }
@@ -452,17 +462,15 @@ impl OpenApiRouteRegistry {
                     });
                     record_validation_error(&payload);
                     // Choose status: prefer options.validation_status, fallback to env, else 400
-                    let status_code = validator
-                        .options
-                        .validation_status
-                        .unwrap_or_else(|| {
-                            std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                                .ok()
-                                .and_then(|s| s.parse::<u16>().ok())
-                                .unwrap_or(400)
-                        });
+                    let status_code = validator.options.validation_status.unwrap_or_else(|| {
+                        std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                            .ok()
+                            .and_then(|s| s.parse::<u16>().ok())
+                            .unwrap_or(400)
+                    });
                     return (
-                        axum::http::StatusCode::from_u16(status_code).unwrap_or(axum::http::StatusCode::BAD_REQUEST),
+                        axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST),
                         Json(payload),
                     );
                 }
@@ -476,7 +484,8 @@ impl OpenApiRouteRegistry {
                 // Apply overrides if provided
                 if let Some(ref overrides) = route_overrides {
                     // Extract tags from operation for override matching
-                    let operation_tags = operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
+                    let operation_tags =
+                        operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
                     overrides.apply(
                         &operation.operation_id.unwrap_or_default(),
                         &operation_tags,
@@ -487,7 +496,8 @@ impl OpenApiRouteRegistry {
 
                 // Return the mock response
                 (
-                    axum::http::StatusCode::from_u16(selected_status).unwrap_or(axum::http::StatusCode::OK),
+                    axum::http::StatusCode::from_u16(selected_status)
+                        .unwrap_or(axum::http::StatusCode::OK),
                     Json(response),
                 )
             };

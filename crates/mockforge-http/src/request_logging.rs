@@ -6,7 +6,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use mockforge_core::{log_request_global, create_http_log_entry};
+use mockforge_core::{create_http_log_entry, log_request_global};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Instant;
@@ -25,10 +25,10 @@ pub async fn log_http_requests(
     let path = matched_path
         .map(|mp| mp.as_str().to_string())
         .unwrap_or_else(|| uri.split('?').next().unwrap_or(&uri).to_string());
-    
+
     // Extract headers (filter sensitive ones)
     let headers = extract_safe_headers(req.headers());
-    
+
     // Extract user agent
     let user_agent = req
         .headers()
@@ -42,7 +42,7 @@ pub async fn log_http_requests(
     // Calculate response time
     let response_time_ms = start_time.elapsed().as_millis() as u64;
     let status_code = response.status().as_u16();
-    
+
     // Estimate response size (not perfect but good enough)
     let response_size_bytes = response
         .headers()
@@ -53,7 +53,11 @@ pub async fn log_http_requests(
 
     // Determine if this is an error
     let error_message = if status_code >= 400 {
-        Some(format!("HTTP {} {}", status_code, response.status().canonical_reason().unwrap_or("Unknown")))
+        Some(format!(
+            "HTTP {} {}",
+            status_code,
+            response.status().canonical_reason().unwrap_or("Unknown")
+        ))
     } else {
         None
     };
@@ -90,7 +94,7 @@ pub async fn log_http_requests(
 /// Extract safe headers (exclude sensitive ones)
 fn extract_safe_headers(headers: &HeaderMap) -> HashMap<String, String> {
     let mut safe_headers = HashMap::new();
-    
+
     // List of safe headers to include
     let safe_header_names = [
         "accept",

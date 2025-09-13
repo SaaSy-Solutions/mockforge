@@ -45,7 +45,10 @@ impl ProxyConfig {
         }
 
         // If we require explicit allow and service is not in allowlist, it's not allowed
-        if self.require_explicit_allow && !self.allowlist.is_empty() && !self.allowlist.contains(service_name) {
+        if self.require_explicit_allow
+            && !self.allowlist.is_empty()
+            && !self.allowlist.contains(service_name)
+        {
             return false;
         }
 

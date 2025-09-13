@@ -5,17 +5,17 @@ use axum::{
     http::{self, StatusCode},
     response::{Html, IntoResponse, Json},
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use chrono::Utc;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 
 use crate::models::*;
-use mockforge_core::{Result, Error};
+use mockforge_core::{Error, Result};
 
 /// Request metrics for tracking
 #[derive(Debug, Clone, Default)]
@@ -242,7 +242,14 @@ impl AdminState {
     }
 
     /// Record a request
-    pub async fn record_request(&self, method: &str, path: &str, status_code: u16, response_time_ms: u64, error: Option<String>) {
+    pub async fn record_request(
+        &self,
+        method: &str,
+        path: &str,
+        status_code: u16,
+        response_time_ms: u64,
+        error: Option<String>,
+    ) {
         let mut metrics = self.metrics.write().await;
 
         metrics.total_requests += 1;
@@ -260,7 +267,10 @@ impl AdminState {
         }
 
         // Keep only last 50 response times per endpoint
-        let endpoint_times = metrics.response_times_by_endpoint.entry(endpoint.clone()).or_insert_with(Vec::new);
+        let endpoint_times = metrics
+            .response_times_by_endpoint
+            .entry(endpoint.clone())
+            .or_insert_with(Vec::new);
         endpoint_times.push(response_time_ms);
         if endpoint_times.len() > 50 {
             endpoint_times.remove(0);
@@ -463,7 +473,12 @@ impl AdminState {
     }
 
     /// Update latency configuration
-    pub async fn update_latency_config(&self, base_ms: u64, jitter_ms: u64, tag_overrides: HashMap<String, u64>) {
+    pub async fn update_latency_config(
+        &self,
+        base_ms: u64,
+        jitter_ms: u64,
+        tag_overrides: HashMap<String, u64>,
+    ) {
         let mut config = self.config.write().await;
         config.latency_profile.base_ms = base_ms;
         config.latency_profile.jitter_ms = jitter_ms;
@@ -471,7 +486,12 @@ impl AdminState {
     }
 
     /// Update fault configuration
-    pub async fn update_fault_config(&self, enabled: bool, failure_rate: f64, status_codes: Vec<u16>) {
+    pub async fn update_fault_config(
+        &self,
+        enabled: bool,
+        failure_rate: f64,
+        status_codes: Vec<u16>,
+    ) {
         let mut config = self.config.write().await;
         config.fault_config.enabled = enabled;
         config.fault_config.failure_rate = failure_rate;
@@ -479,7 +499,12 @@ impl AdminState {
     }
 
     /// Update proxy configuration
-    pub async fn update_proxy_config(&self, enabled: bool, upstream_url: Option<String>, timeout_seconds: u64) {
+    pub async fn update_proxy_config(
+        &self,
+        enabled: bool,
+        upstream_url: Option<String>,
+        timeout_seconds: u64,
+    ) {
         let mut config = self.config.write().await;
         config.proxy_config.enabled = enabled;
         config.proxy_config.upstream_url = upstream_url;
@@ -487,7 +512,13 @@ impl AdminState {
     }
 
     /// Update validation settings
-    pub async fn update_validation_config(&self, mode: String, aggregate_errors: bool, validate_responses: bool, overrides: HashMap<String, String>) {
+    pub async fn update_validation_config(
+        &self,
+        mode: String,
+        aggregate_errors: bool,
+        validate_responses: bool,
+        overrides: HashMap<String, String>,
+    ) {
         let mut config = self.config.write().await;
         config.validation_settings.mode = mode;
         config.validation_settings.aggregate_errors = aggregate_errors;
@@ -559,29 +590,28 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     let recent_logs = if let Some(global_logger) = mockforge_core::get_global_logger() {
         // Get logs from centralized logger
         let centralized_logs = global_logger.get_recent_logs(Some(20)).await;
-        
+
         // Convert to RequestLog format for admin UI
-        centralized_logs.into_iter().map(|log| RequestLog {
-            id: log.id,
-            timestamp: log.timestamp,
-            method: log.method,
-            path: log.path,
-            status_code: log.status_code,
-            response_time_ms: log.response_time_ms,
-            client_ip: log.client_ip,
-            user_agent: log.user_agent,
-            headers: log.headers,
-            response_size_bytes: log.response_size_bytes,
-            error_message: log.error_message,
-        }).collect()
+        centralized_logs
+            .into_iter()
+            .map(|log| RequestLog {
+                id: log.id,
+                timestamp: log.timestamp,
+                method: log.method,
+                path: log.path,
+                status_code: log.status_code,
+                response_time_ms: log.response_time_ms,
+                client_ip: log.client_ip,
+                user_agent: log.user_agent,
+                headers: log.headers,
+                response_size_bytes: log.response_size_bytes,
+                error_message: log.error_message,
+            })
+            .collect()
     } else {
         // Fallback to local logs if centralized logger not available
         let logs = state.logs.read().await;
-        logs.iter()
-            .rev()
-            .take(10)
-            .cloned()
-            .collect()
+        logs.iter().rev().take(10).cloned().collect()
     };
 
     let system_info = SystemInfo {
@@ -680,7 +710,11 @@ pub async fn get_routes(State(state): State<AdminState>) -> impl IntoResponse {
     }
 
     // Fallback: return empty routes
-    (StatusCode::OK, [("content-type", "application/json")], r#"{"routes":[]}"#.to_string())
+    (
+        StatusCode::OK,
+        [("content-type", "application/json")],
+        r#"{"routes":[]}"#.to_string(),
+    )
 }
 
 /// Get server info (HTTP server address for API calls)
@@ -726,9 +760,10 @@ pub async fn get_logs(
     let logs = if let Some(global_logger) = mockforge_core::get_global_logger() {
         // Get logs from centralized logger
         let centralized_logs = global_logger.get_recent_logs(filter.limit).await;
-        
+
         // Convert to RequestLog format and apply filters
-        centralized_logs.into_iter()
+        centralized_logs
+            .into_iter()
             .filter(|log| {
                 if let Some(ref method) = filter.method {
                     if log.method != *method {
@@ -816,7 +851,8 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
     let memory_usage_over_time = if time_series.memory_usage.is_empty() {
         vec![(Utc::now(), system_metrics.memory_usage_mb)]
     } else {
-        time_series.memory_usage
+        time_series
+            .memory_usage
             .iter()
             .map(|point| (point.timestamp, point.value as u64))
             .collect()
@@ -825,7 +861,8 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
     let cpu_usage_over_time = if time_series.cpu_usage.is_empty() {
         vec![(Utc::now(), system_metrics.cpu_usage_percent)]
     } else {
-        time_series.cpu_usage
+        time_series
+            .cpu_usage
             .iter()
             .map(|point| (point.timestamp, point.value))
             .collect()
@@ -847,29 +884,24 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
 }
 
 /// Update latency profile
-pub async fn update_latency(State(state): State<AdminState>, Json(update): Json<ConfigUpdate>) -> Json<ApiResponse<String>> {
+pub async fn update_latency(
+    State(state): State<AdminState>,
+    Json(update): Json<ConfigUpdate>,
+) -> Json<ApiResponse<String>> {
     if update.config_type != "latency" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
 
     // Extract latency configuration from the update data
-    let base_ms = update.data.get("base_ms")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(50);
+    let base_ms = update.data.get("base_ms").and_then(|v| v.as_u64()).unwrap_or(50);
 
-    let jitter_ms = update.data.get("jitter_ms")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(20);
+    let jitter_ms = update.data.get("jitter_ms").and_then(|v| v.as_u64()).unwrap_or(20);
 
-    let tag_overrides = update.data.get("tag_overrides")
+    let tag_overrides = update
+        .data
+        .get("tag_overrides")
         .and_then(|v| v.as_object())
-        .map(|obj| {
-            obj.iter()
-                .filter_map(|(k, v)| {
-                    v.as_u64().map(|val| (k.clone(), val))
-                })
-                .collect()
-        })
+        .map(|obj| obj.iter().filter_map(|(k, v)| v.as_u64().map(|val| (k.clone(), val))).collect())
         .unwrap_or_default();
 
     // Update the actual configuration
@@ -881,60 +913,63 @@ pub async fn update_latency(State(state): State<AdminState>, Json(update): Json<
 }
 
 /// Update fault injection configuration
-pub async fn update_faults(State(state): State<AdminState>, Json(update): Json<ConfigUpdate>) -> Json<ApiResponse<String>> {
+pub async fn update_faults(
+    State(state): State<AdminState>,
+    Json(update): Json<ConfigUpdate>,
+) -> Json<ApiResponse<String>> {
     if update.config_type != "faults" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
 
     // Extract fault configuration from the update data
-    let enabled = update.data.get("enabled")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let enabled = update.data.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let failure_rate = update.data.get("failure_rate")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+    let failure_rate = update.data.get("failure_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-    let status_codes = update.data.get("status_codes")
+    let status_codes = update
+        .data
+        .get("status_codes")
         .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_u64().map(|n| n as u16))
-                .collect()
-        })
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u16)).collect())
         .unwrap_or_else(|| vec![500, 502, 503]);
 
     // Update the actual configuration
     state.update_fault_config(enabled, failure_rate, status_codes).await;
 
-    tracing::info!("Updated fault configuration: enabled={}, failure_rate={}", enabled, failure_rate);
+    tracing::info!(
+        "Updated fault configuration: enabled={}, failure_rate={}",
+        enabled,
+        failure_rate
+    );
 
     Json(ApiResponse::success("Fault configuration updated".to_string()))
 }
 
 /// Update proxy configuration
-pub async fn update_proxy(State(state): State<AdminState>, Json(update): Json<ConfigUpdate>) -> Json<ApiResponse<String>> {
+pub async fn update_proxy(
+    State(state): State<AdminState>,
+    Json(update): Json<ConfigUpdate>,
+) -> Json<ApiResponse<String>> {
     if update.config_type != "proxy" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
 
     // Extract proxy configuration from the update data
-    let enabled = update.data.get("enabled")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let enabled = update.data.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let upstream_url = update.data.get("upstream_url")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let upstream_url =
+        update.data.get("upstream_url").and_then(|v| v.as_str()).map(|s| s.to_string());
 
-    let timeout_seconds = update.data.get("timeout_seconds")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(30);
+    let timeout_seconds = update.data.get("timeout_seconds").and_then(|v| v.as_u64()).unwrap_or(30);
 
     // Update the actual configuration
     state.update_proxy_config(enabled, upstream_url.clone(), timeout_seconds).await;
 
-    tracing::info!("Updated proxy configuration: enabled={}, upstream_url={:?}", enabled, upstream_url);
+    tracing::info!(
+        "Updated proxy configuration: enabled={}, upstream_url={:?}",
+        enabled,
+        upstream_url
+    );
 
     Json(ApiResponse::success("Proxy configuration updated".to_string()))
 }
@@ -957,7 +992,10 @@ pub async fn restart_servers(State(state): State<AdminState>) -> Json<ApiRespons
     }
 
     // Initiate restart status
-    if let Err(e) = state.initiate_restart("Manual restart requested via admin UI".to_string()).await {
+    if let Err(e) = state
+        .initiate_restart("Manual restart requested via admin UI".to_string())
+        .await
+    {
         return Json(ApiResponse::error(format!("Failed to initiate restart: {}", e)));
     }
 
@@ -974,7 +1012,9 @@ pub async fn restart_servers(State(state): State<AdminState>) -> Json<ApiRespons
     });
 
     tracing::info!("Server restart initiated via admin UI");
-    Json(ApiResponse::success("Server restart initiated. Please wait for completion.".to_string()))
+    Json(ApiResponse::success(
+        "Server restart initiated. Please wait for completion.".to_string(),
+    ))
 }
 
 /// Perform the actual server restart
@@ -1036,7 +1076,9 @@ async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
             .map_err(|e| Error::generic(format!("Failed to send signal: {}", e)))?;
 
         if !output.status.success() {
-            return Err(Error::generic("Failed to send restart signal to parent process".to_string()));
+            return Err(Error::generic(
+                "Failed to send restart signal to parent process".to_string(),
+            ));
         }
 
         // Wait a moment for the signal to be processed
@@ -1046,7 +1088,9 @@ async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
 
     #[cfg(not(unix))]
     {
-        Err(Error::generic("Signal-based restart not supported on this platform".to_string()))
+        Err(Error::generic(
+            "Signal-based restart not supported on this platform".to_string(),
+        ))
     }
 }
 
@@ -1094,11 +1138,7 @@ async fn restart_via_process_replacement() -> Result<()> {
 /// Restart via external script
 async fn restart_via_script() -> Result<()> {
     // Look for restart script in common locations
-    let script_paths = [
-        "./scripts/restart.sh",
-        "./restart.sh",
-        "restart.sh",
-    ];
+    let script_paths = ["./scripts/restart.sh", "./restart.sh", "restart.sh"];
 
     for script_path in &script_paths {
         if std::path::Path::new(script_path).exists() {
@@ -1112,7 +1152,10 @@ async fn restart_via_script() -> Result<()> {
             if output.status.success() {
                 return Ok(());
             } else {
-                tracing::warn!("Restart script failed: {}", String::from_utf8_lossy(&output.stderr));
+                tracing::warn!(
+                    "Restart script failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
         }
     }
@@ -1122,16 +1165,18 @@ async fn restart_via_script() -> Result<()> {
     if std::path::Path::new(clear_script).exists() {
         tracing::info!("Using clear-ports script as fallback");
 
-        let _ = Command::new("bash")
-            .arg(clear_script)
-            .output();
+        let _ = Command::new("bash").arg(clear_script).output();
     }
 
-    Err(Error::generic("No restart mechanism available. Please restart manually.".to_string()))
+    Err(Error::generic(
+        "No restart mechanism available. Please restart manually.".to_string(),
+    ))
 }
 
 /// Get restart status
-pub async fn get_restart_status(State(state): State<AdminState>) -> Json<ApiResponse<RestartStatus>> {
+pub async fn get_restart_status(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<RestartStatus>> {
     let status = state.get_restart_status().await;
     Json(ApiResponse::success(status))
 }
@@ -1171,8 +1216,8 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
 /// Count total fixtures in the fixtures directory
 pub fn count_fixtures() -> Result<usize> {
     // Get the fixtures directory from environment or use default
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
@@ -1208,7 +1253,8 @@ fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
 
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries {
-            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let entry = entry
+                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -1227,8 +1273,8 @@ fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
 /// Check if a specific route has fixtures
 pub fn route_has_fixtures(method: &str, path: &str) -> bool {
     // Get the fixtures directory from environment or use default
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
@@ -1238,10 +1284,7 @@ pub fn route_has_fixtures(method: &str, path: &str) -> bool {
     // Check HTTP fixtures
     let method_lower = method.to_lowercase();
     let path_hash = path.replace('/', "_").replace(':', "_");
-    let http_fixtures_path = fixtures_path
-        .join("http")
-        .join(&method_lower)
-        .join(&path_hash);
+    let http_fixtures_path = fixtures_path.join("http").join(&method_lower).join(&path_hash);
 
     if http_fixtures_path.exists() {
         // Check if there are any JSON files in this directory
@@ -1256,9 +1299,7 @@ pub fn route_has_fixtures(method: &str, path: &str) -> bool {
 
     // Check WebSocket fixtures for WS method
     if method.to_uppercase() == "WS" {
-        let ws_fixtures_path = fixtures_path
-            .join("websocket")
-            .join(&path_hash);
+        let ws_fixtures_path = fixtures_path.join("websocket").join(&path_hash);
 
         if ws_fixtures_path.exists() {
             if let Ok(entries) = std::fs::read_dir(&ws_fixtures_path) {
@@ -1276,20 +1317,21 @@ pub fn route_has_fixtures(method: &str, path: &str) -> bool {
 
 /// Calculate average latency for a specific endpoint
 fn calculate_endpoint_latency(metrics: &RequestMetrics, endpoint: &str) -> Option<u64> {
-    metrics.response_times_by_endpoint
-        .get(endpoint)
-        .and_then(|times| {
-            if times.is_empty() {
-                None
-            } else {
-                let sum: u64 = times.iter().sum();
-                Some(sum / times.len() as u64)
-            }
-        })
+    metrics.response_times_by_endpoint.get(endpoint).and_then(|times| {
+        if times.is_empty() {
+            None
+        } else {
+            let sum: u64 = times.iter().sum();
+            Some(sum / times.len() as u64)
+        }
+    })
 }
 
 /// Get the last request timestamp for a specific endpoint
-fn get_endpoint_last_request(metrics: &RequestMetrics, endpoint: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+fn get_endpoint_last_request(
+    metrics: &RequestMetrics,
+    endpoint: &str,
+) -> Option<chrono::DateTime<chrono::Utc>> {
     metrics.last_request_by_endpoint.get(endpoint).copied()
 }
 
@@ -1298,18 +1340,23 @@ fn count_requests_by_server_type(metrics: &RequestMetrics, server_type: &str) ->
     match server_type {
         "HTTP" => {
             // Count all HTTP requests (GET, POST, PUT, DELETE, etc.)
-            metrics.requests_by_endpoint
+            metrics
+                .requests_by_endpoint
                 .iter()
                 .filter(|(endpoint, _)| {
                     let method = endpoint.split(' ').next().unwrap_or("");
-                    matches!(method, "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS")
+                    matches!(
+                        method,
+                        "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS"
+                    )
                 })
                 .map(|(_, count)| count)
                 .sum()
         }
         "WebSocket" => {
             // Count WebSocket requests (WS method)
-            metrics.requests_by_endpoint
+            metrics
+                .requests_by_endpoint
                 .iter()
                 .filter(|(endpoint, _)| {
                     let method = endpoint.split(' ').next().unwrap_or("");
@@ -1320,7 +1367,8 @@ fn count_requests_by_server_type(metrics: &RequestMetrics, server_type: &str) ->
         }
         "gRPC" => {
             // Count gRPC requests (gRPC method)
-            metrics.requests_by_endpoint
+            metrics
+                .requests_by_endpoint
                 .iter()
                 .filter(|(endpoint, _)| {
                     let method = endpoint.split(' ').next().unwrap_or("");
@@ -1346,8 +1394,8 @@ pub async fn get_fixtures() -> Json<ApiResponse<Vec<FixtureInfo>>> {
 
 /// Scan the fixtures directory and return all fixture information
 fn scan_fixtures_directory() -> Result<Vec<FixtureInfo>> {
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
@@ -1391,7 +1439,8 @@ fn scan_protocol_fixtures(
     // Walk through the protocol directory recursively
     if let Ok(entries) = std::fs::read_dir(&protocol_path) {
         for entry in entries {
-            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let entry = entry
+                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -1419,7 +1468,8 @@ fn scan_directory_recursive(
 
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries {
-            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let entry = entry
+                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -1439,16 +1489,14 @@ fn scan_directory_recursive(
 }
 
 /// Parse a single fixture file and extract metadata (synchronous version)
-fn parse_fixture_file_sync(
-    file_path: &std::path::Path,
-    protocol: &str,
-) -> Result<FixtureInfo> {
+fn parse_fixture_file_sync(file_path: &std::path::Path, protocol: &str) -> Result<FixtureInfo> {
     // Get file metadata
     let metadata = std::fs::metadata(file_path)
         .map_err(|e| Error::generic(format!("Failed to read file metadata: {}", e)))?;
 
     let file_size = metadata.len();
-    let modified_time = metadata.modified()
+    let modified_time = metadata
+        .modified()
         .map_err(|e| Error::generic(format!("Failed to get file modification time: {}", e)))?;
 
     let saved_at = chrono::DateTime::from(modified_time);
@@ -1470,8 +1518,8 @@ fn parse_fixture_file_sync(
     let fingerprint = extract_fingerprint(file_path, &fixture_data)?;
 
     // Get relative file path
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
     let fixtures_path = std::path::Path::new(&fixtures_dir);
     let file_path_str = file_path
         .strip_prefix(fixtures_path)
@@ -1491,7 +1539,6 @@ fn parse_fixture_file_sync(
         metadata: fixture_data,
     })
 }
-
 
 /// Extract method and path from fixture data
 fn extract_method_and_path(
@@ -1522,7 +1569,12 @@ fn extract_method_and_path(
             let path = fixture_data
                 .get("path")
                 .and_then(|p| p.as_str())
-                .or_else(|| fixture_data.get("request").and_then(|req| req.get("path")).and_then(|p| p.as_str()))
+                .or_else(|| {
+                    fixture_data
+                        .get("request")
+                        .and_then(|req| req.get("path"))
+                        .and_then(|p| p.as_str())
+                })
                 .unwrap_or("/ws")
                 .to_string();
 
@@ -1530,15 +1582,11 @@ fn extract_method_and_path(
         }
         "grpc" => {
             // For gRPC fixtures, extract service and method
-            let service = fixture_data
-                .get("service")
-                .and_then(|s| s.as_str())
-                .unwrap_or("UnknownService");
+            let service =
+                fixture_data.get("service").and_then(|s| s.as_str()).unwrap_or("UnknownService");
 
-            let method = fixture_data
-                .get("method")
-                .and_then(|m| m.as_str())
-                .unwrap_or("UnknownMethod");
+            let method =
+                fixture_data.get("method").and_then(|m| m.as_str()).unwrap_or("UnknownMethod");
 
             let path = format!("/{}/{}", service, method);
             Ok(("gRPC".to_string(), path))
@@ -1571,10 +1619,7 @@ fn extract_fingerprint(
     fixture_data: &serde_json::Value,
 ) -> Result<String> {
     // Try to extract from fixture data first
-    if let Some(fingerprint) = fixture_data
-        .get("fingerprint")
-        .and_then(|f| f.as_str())
-    {
+    if let Some(fingerprint) = fixture_data.get("fingerprint").and_then(|f| f.as_str()) {
         return Ok(fingerprint.to_string());
     }
 
@@ -1598,7 +1643,9 @@ fn extract_fingerprint(
 }
 
 /// Delete a fixture
-pub async fn delete_fixture(Json(payload): Json<FixtureDeleteRequest>) -> Json<ApiResponse<String>> {
+pub async fn delete_fixture(
+    Json(payload): Json<FixtureDeleteRequest>,
+) -> Json<ApiResponse<String>> {
     match delete_fixture_by_id(&payload.fixture_id).await {
         Ok(_) => {
             tracing::info!("Successfully deleted fixture: {}", payload.fixture_id);
@@ -1612,7 +1659,9 @@ pub async fn delete_fixture(Json(payload): Json<FixtureDeleteRequest>) -> Json<A
 }
 
 /// Delete multiple fixtures
-pub async fn delete_fixtures_bulk(Json(payload): Json<FixtureBulkDeleteRequest>) -> Json<ApiResponse<FixtureBulkDeleteResult>> {
+pub async fn delete_fixtures_bulk(
+    Json(payload): Json<FixtureBulkDeleteRequest>,
+) -> Json<ApiResponse<FixtureBulkDeleteResult>> {
     let mut deleted_count = 0;
     let mut errors = Vec::new();
 
@@ -1638,7 +1687,11 @@ pub async fn delete_fixtures_bulk(Json(payload): Json<FixtureBulkDeleteRequest>)
     if errors.is_empty() {
         Json(ApiResponse::success(result))
     } else {
-        Json(ApiResponse::error(format!("Partial success: {} deleted, {} errors", deleted_count, errors.len())))
+        Json(ApiResponse::error(format!(
+            "Partial success: {} deleted, {} errors",
+            deleted_count,
+            errors.len()
+        )))
     }
 }
 
@@ -1646,8 +1699,8 @@ pub async fn delete_fixtures_bulk(Json(payload): Json<FixtureBulkDeleteRequest>)
 async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
     // First, try to find the fixture by scanning the fixtures directory
     // This is more robust than trying to parse the ID format
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
@@ -1659,8 +1712,9 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
 
     // Delete the file
     if file_path.exists() {
-        std::fs::remove_file(&file_path)
-            .map_err(|e| Error::generic(format!("Failed to delete fixture file {}: {}", file_path.display(), e)))?;
+        std::fs::remove_file(&file_path).map_err(|e| {
+            Error::generic(format!("Failed to delete fixture file {}: {}", file_path.display(), e))
+        })?;
         tracing::info!("Deleted fixture file: {}", file_path.display());
 
         // Also try to remove empty parent directories
@@ -1673,7 +1727,10 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
 }
 
 /// Find a fixture file by its ID across all protocols
-fn find_fixture_file_by_id(fixtures_path: &std::path::Path, fixture_id: &str) -> Result<std::path::PathBuf> {
+fn find_fixture_file_by_id(
+    fixtures_path: &std::path::Path,
+    fixture_id: &str,
+) -> Result<std::path::PathBuf> {
     // Search in all protocol directories
     let protocols = ["http", "websocket", "grpc"];
 
@@ -1684,18 +1741,25 @@ fn find_fixture_file_by_id(fixtures_path: &std::path::Path, fixture_id: &str) ->
         }
     }
 
-    Err(Error::generic(format!("Fixture with ID '{}' not found in any protocol directory", fixture_id)))
+    Err(Error::generic(format!(
+        "Fixture with ID '{}' not found in any protocol directory",
+        fixture_id
+    )))
 }
 
 /// Recursively search for a fixture file by ID in a directory
-fn search_fixture_in_directory(dir_path: &std::path::Path, fixture_id: &str) -> Result<std::path::PathBuf> {
+fn search_fixture_in_directory(
+    dir_path: &std::path::Path,
+    fixture_id: &str,
+) -> Result<std::path::PathBuf> {
     if !dir_path.exists() {
         return Err(Error::generic(format!("Directory does not exist: {}", dir_path.display())));
     }
 
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries {
-            let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            let entry = entry
+                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -1714,7 +1778,10 @@ fn search_fixture_in_directory(dir_path: &std::path::Path, fixture_id: &str) -> 
         }
     }
 
-    Err(Error::generic(format!("Fixture not found in directory: {}", dir_path.display())))
+    Err(Error::generic(format!(
+        "Fixture not found in directory: {}",
+        dir_path.display()
+    )))
 }
 
 /// Clean up empty directories after file deletion
@@ -1722,15 +1789,19 @@ async fn cleanup_empty_directories(file_path: &std::path::Path) {
     if let Some(parent) = file_path.parent() {
         // Try to remove empty directories up to the protocol level
         let mut current = parent;
-        let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-            .unwrap_or_else(|_| "fixtures".to_string());
+        let fixtures_dir =
+            std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
         let fixtures_path = std::path::Path::new(&fixtures_dir);
 
         while current != fixtures_path && current.parent().is_some() {
             if let Ok(entries) = std::fs::read_dir(current) {
                 if entries.count() == 0 {
                     if let Err(e) = std::fs::remove_dir(current) {
-                        tracing::debug!("Failed to remove empty directory {}: {}", current.display(), e);
+                        tracing::debug!(
+                            "Failed to remove empty directory {}: {}",
+                            current.display(),
+                            e
+                        );
                         break;
                     } else {
                         tracing::debug!("Removed empty directory: {}", current.display());
@@ -1767,14 +1838,15 @@ pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> 
 
     // Find and read the fixture file
     match download_fixture_by_id(fixture_id).await {
-        Ok((content, file_name)) => {
-            axum::response::Response::builder()
-                .status(http::StatusCode::OK)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .header(http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", file_name))
-                .body(content)
-                .unwrap()
-        }
+        Ok((content, file_name)) => axum::response::Response::builder()
+            .status(http::StatusCode::OK)
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .header(
+                http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", file_name),
+            )
+            .body(content)
+            .unwrap(),
         Err(e) => {
             tracing::error!("Failed to download fixture {}: {}", fixture_id, e);
             let error_response = format!(r#"{{"error": "Failed to download fixture: {}"}}"#, e);
@@ -1790,8 +1862,8 @@ pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> 
 /// Download a fixture file by ID
 async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
     // Find the fixture file by ID
-    let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
-        .unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
@@ -1816,7 +1888,9 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
 }
 
 /// Get current validation settings
-pub async fn get_validation(State(state): State<AdminState>) -> Json<ApiResponse<ValidationSettings>> {
+pub async fn get_validation(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<ValidationSettings>> {
     // Get real validation settings from configuration
     let config_state = state.get_config().await;
 
@@ -1824,7 +1898,10 @@ pub async fn get_validation(State(state): State<AdminState>) -> Json<ApiResponse
 }
 
 /// Update validation settings
-pub async fn update_validation(State(state): State<AdminState>, Json(update): Json<ValidationUpdate>) -> Json<ApiResponse<String>> {
+pub async fn update_validation(
+    State(state): State<AdminState>,
+    Json(update): Json<ValidationUpdate>,
+) -> Json<ApiResponse<String>> {
     // Validate the mode
     match update.mode.as_str() {
         "enforce" | "warn" | "off" => {}
@@ -1837,15 +1914,20 @@ pub async fn update_validation(State(state): State<AdminState>, Json(update): Js
 
     // Update the actual validation configuration
     let mode = update.mode.clone();
-    state.update_validation_config(
-        update.mode,
-        update.aggregate_errors,
-        update.validate_responses,
-        update.overrides.unwrap_or_default(),
-    ).await;
+    state
+        .update_validation_config(
+            update.mode,
+            update.aggregate_errors,
+            update.validate_responses,
+            update.overrides.unwrap_or_default(),
+        )
+        .await;
 
-    tracing::info!("Updated validation settings: mode={}, aggregate_errors={}",
-                   mode, update.aggregate_errors);
+    tracing::info!(
+        "Updated validation settings: mode={}, aggregate_errors={}",
+        mode,
+        update.aggregate_errors
+    );
 
     Json(ApiResponse::success("Validation settings updated".to_string()))
 }
@@ -1865,42 +1947,35 @@ pub async fn get_env_vars() -> Json<ApiResponse<HashMap<String, String>>> {
         "MOCKFORGE_LOG_LEVEL",
         "MOCKFORGE_CONFIG_FILE",
         "RUST_LOG",
-
         // HTTP server configuration
         "MOCKFORGE_HTTP_PORT",
         "MOCKFORGE_HTTP_HOST",
         "MOCKFORGE_HTTP_OPENAPI_SPEC",
         "MOCKFORGE_CORS_ENABLED",
         "MOCKFORGE_REQUEST_TIMEOUT_SECS",
-
         // WebSocket server configuration
         "MOCKFORGE_WS_PORT",
         "MOCKFORGE_WS_HOST",
         "MOCKFORGE_WS_REPLAY_FILE",
         "MOCKFORGE_WS_CONNECTION_TIMEOUT_SECS",
-
         // gRPC server configuration
         "MOCKFORGE_GRPC_PORT",
         "MOCKFORGE_GRPC_HOST",
-
         // Admin UI configuration
         "MOCKFORGE_ADMIN_ENABLED",
         "MOCKFORGE_ADMIN_PORT",
         "MOCKFORGE_ADMIN_HOST",
         "MOCKFORGE_ADMIN_MOUNT_PATH",
         "MOCKFORGE_ADMIN_API_ENABLED",
-
         // Template and validation
         "MOCKFORGE_RESPONSE_TEMPLATE_EXPAND",
         "MOCKFORGE_REQUEST_VALIDATION",
         "MOCKFORGE_AGGREGATE_ERRORS",
         "MOCKFORGE_RESPONSE_VALIDATION",
         "MOCKFORGE_VALIDATION_STATUS",
-
         // Data generation
         "MOCKFORGE_RAG_ENABLED",
         "MOCKFORGE_FAKE_TOKENS",
-
         // Other settings
         "MOCKFORGE_FIXTURES_DIR",
     ];
@@ -1930,7 +2005,9 @@ pub async fn update_env_var(Json(update): Json<EnvVarUpdate>) -> Json<ApiRespons
 }
 
 /// Get file content
-pub async fn get_file_content(Json(request): Json<FileContentRequest>) -> Json<ApiResponse<String>> {
+pub async fn get_file_content(
+    Json(request): Json<FileContentRequest>,
+) -> Json<ApiResponse<String>> {
     // In a real implementation, this would read the actual file content
     match request.file_type.as_str() {
         "yaml" | "yml" => {
@@ -1982,8 +2059,9 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
 
     // Create parent directories if they don't exist
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| Error::generic(format!("Failed to create directory {}: {}", parent.display(), e)))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            Error::generic(format!("Failed to create directory {}: {}", parent.display(), e))
+        })?;
     }
 
     // Write the content to the file
@@ -1991,11 +2069,15 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
         .map_err(|e| Error::generic(format!("Failed to write file {}: {}", path.display(), e)))?;
 
     // Verify the file was written correctly
-    let written_content = std::fs::read_to_string(path)
-        .map_err(|e| Error::generic(format!("Failed to verify written file {}: {}", path.display(), e)))?;
+    let written_content = std::fs::read_to_string(path).map_err(|e| {
+        Error::generic(format!("Failed to verify written file {}: {}", path.display(), e))
+    })?;
 
     if written_content != content {
-        return Err(Error::generic(format!("File content verification failed for {}", path.display())));
+        return Err(Error::generic(format!(
+            "File content verification failed for {}",
+            path.display()
+        )));
     }
 
     tracing::info!("File saved successfully: {} ({} bytes)", path.display(), content.len());
@@ -2037,7 +2119,10 @@ fn validate_file_path(file_path: &str) -> Result<()> {
     let dangerous_extensions = ["exe", "bat", "cmd", "sh", "ps1", "scr", "com"];
     if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
         if dangerous_extensions.contains(&extension.to_lowercase().as_str()) {
-            return Err(Error::generic(format!("Dangerous file extension not allowed: {}", extension)));
+            return Err(Error::generic(format!(
+                "Dangerous file extension not allowed: {}",
+                extension
+            )));
         }
     }
 
@@ -2047,7 +2132,8 @@ fn validate_file_path(file_path: &str) -> Result<()> {
 /// Validate file content for security
 fn validate_file_content(content: &str) -> Result<()> {
     // Check for reasonable file size (prevent DoS)
-    if content.len() > 10 * 1024 * 1024 { // 10MB limit
+    if content.len() > 10 * 1024 * 1024 {
+        // 10MB limit
         return Err(Error::generic("File content too large (max 10MB)".to_string()));
     }
 
@@ -2101,13 +2187,17 @@ pub struct FileSaveRequest {
 }
 
 /// Get smoke tests
-pub async fn get_smoke_tests(State(state): State<AdminState>) -> Json<ApiResponse<Vec<SmokeTestResult>>> {
+pub async fn get_smoke_tests(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<Vec<SmokeTestResult>>> {
     let results = state.get_smoke_test_results().await;
     Json(ApiResponse::success(results))
 }
 
 /// Run smoke tests endpoint
-pub async fn run_smoke_tests_endpoint(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
+pub async fn run_smoke_tests_endpoint(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<String>> {
     tracing::info!("Starting smoke test execution");
 
     // Spawn smoke test execution in background to avoid blocking
@@ -2120,14 +2210,16 @@ pub async fn run_smoke_tests_endpoint(State(state): State<AdminState>) -> Json<A
         }
     });
 
-    Json(ApiResponse::success("Smoke tests started. Check results in the smoke tests section.".to_string()))
+    Json(ApiResponse::success(
+        "Smoke tests started. Check results in the smoke tests section.".to_string(),
+    ))
 }
 
 /// Execute smoke tests against fixtures
 async fn execute_smoke_tests(state: &AdminState) -> Result<()> {
     // Get base URL from environment or use default
-    let base_url = std::env::var("MOCKFORGE_BASE_URL")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let base_url =
+        std::env::var("MOCKFORGE_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
     let context = SmokeTestContext {
         base_url,
@@ -2139,10 +2231,8 @@ async fn execute_smoke_tests(state: &AdminState) -> Result<()> {
     let fixtures = scan_fixtures_directory()?;
 
     // Filter for HTTP fixtures only (smoke tests are typically HTTP)
-    let http_fixtures: Vec<&FixtureInfo> = fixtures
-        .iter()
-        .filter(|f| f.protocol == "http")
-        .collect();
+    let http_fixtures: Vec<&FixtureInfo> =
+        fixtures.iter().filter(|f| f.protocol == "http").collect();
 
     if http_fixtures.is_empty() {
         tracing::warn!("No HTTP fixtures found for smoke testing");
@@ -2250,11 +2340,13 @@ async fn execute_single_smoke_test(
             if status_code >= 200 && status_code < 400 {
                 Ok((status_code, response_time_ms))
             } else {
-                Err(Error::generic(format!("HTTP error: {} {}", status_code, resp.status().canonical_reason().unwrap_or("Unknown"))))
+                Err(Error::generic(format!(
+                    "HTTP error: {} {}",
+                    status_code,
+                    resp.status().canonical_reason().unwrap_or("Unknown")
+                )))
             }
         }
-        Err(e) => {
-            Err(Error::generic(format!("Request failed: {}", e)))
-        }
+        Err(e) => Err(Error::generic(format!("Request failed: {}", e))),
     }
 }

@@ -6,10 +6,11 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 /// Latency distribution types
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LatencyDistribution {
     /// Fixed latency with optional jitter (backward compatible)
+    #[default]
     Fixed,
     /// Normal (Gaussian) distribution
     Normal,
@@ -41,12 +42,6 @@ pub struct LatencyProfile {
     pub max_ms: Option<u64>,
     /// Tag-based latency overrides
     pub tag_overrides: HashMap<String, u64>,
-}
-
-impl Default for LatencyDistribution {
-    fn default() -> Self {
-        LatencyDistribution::Fixed
-    }
 }
 
 impl Default for LatencyProfile {
@@ -156,8 +151,7 @@ impl LatencyProfile {
 
                 // Box-Muller transform
                 let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
-                let sample = (mean + std_dev * z0).max(0.0) as u64;
-                sample
+                (mean + std_dev * z0).max(0.0) as u64
             }
             LatencyDistribution::Pareto => {
                 // Pareto distribution: P(x) = shape * scale^shape / x^(shape+1) for x >= scale
@@ -166,8 +160,7 @@ impl LatencyProfile {
 
                 // Inverse CDF method for Pareto distribution
                 let u: f64 = rng.random();
-                let sample = (scale / (1.0 - u).powf(1.0 / shape)) as u64;
-                sample
+                (scale / (1.0 - u).powf(1.0 / shape)) as u64
             }
         };
 

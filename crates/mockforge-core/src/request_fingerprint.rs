@@ -4,6 +4,7 @@
 use axum::http::{HeaderMap, Method, Uri};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 /// Request fingerprint for unique identification
@@ -23,12 +24,7 @@ pub struct RequestFingerprint {
 
 impl RequestFingerprint {
     /// Create a new request fingerprint
-    pub fn new(
-        method: Method,
-        uri: &Uri,
-        headers: &HeaderMap,
-        body: Option<&[u8]>,
-    ) -> Self {
+    pub fn new(method: Method, uri: &Uri, headers: &HeaderMap, body: Option<&[u8]>) -> Self {
         let mut query_parts = Vec::new();
         if let Some(query) = uri.query() {
             let mut params: Vec<&str> = query.split('&').collect();
@@ -72,9 +68,10 @@ impl RequestFingerprint {
             body_hash,
         }
     }
+}
 
-    /// Generate a unique string representation of the fingerprint
-    pub fn to_string(&self) -> String {
+impl fmt::Display for RequestFingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parts = Vec::new();
         parts.push(self.method.clone());
         parts.push(self.path.clone());
@@ -91,14 +88,23 @@ impl RequestFingerprint {
             parts.push(format!("body:{}", hash));
         }
 
-        parts.join("|")
+        write!(f, "{}", parts.join("|"))
     }
+}
 
+impl RequestFingerprint {
     /// Generate a short hash of the fingerprint for use as filename
     pub fn to_hash(&self) -> String {
         use std::collections::hash_map::DefaultHasher;
         let mut hasher = DefaultHasher::new();
-        self.to_string().hash(&mut hasher);
+        self.method.hash(&mut hasher);
+        self.path.hash(&mut hasher);
+        self.query.hash(&mut hasher);
+        for (k, v) in &self.headers {
+            k.hash(&mut hasher);
+            v.hash(&mut hasher);
+        }
+        self.body_hash.hash(&mut hasher);
         format!("{:x}", hasher.finish())
     }
 

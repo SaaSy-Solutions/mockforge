@@ -37,10 +37,7 @@ pub struct MockResponse {
 
 impl DynamicGrpcService {
     /// Create a new dynamic gRPC service
-    pub fn new(
-        service: ProtoService,
-        latency_injector: Option<LatencyInjector>,
-    ) -> Self {
+    pub fn new(service: ProtoService, latency_injector: Option<LatencyInjector>) -> Self {
         let mut mock_responses = HashMap::new();
 
         // Generate default mock responses for each method
@@ -62,10 +59,13 @@ impl DynamicGrpcService {
         let response_json = match method_name {
             "SayHello" | "SayHelloStream" | "SayHelloClientStream" | "Chat" => {
                 r#"{"message": "Hello from MockForge!"}"#.to_string()
-            },
+            }
             _ => {
                 // Generic response for unknown methods
-                format!(r#"{{"result": "Mock response for {}", "type": "{}"}}"#, method_name, output_type)
+                format!(
+                    r#"{{"result": "Mock response for {}", "type": "{}"}}"#,
+                    method_name, output_type
+                )
             }
         };
 
@@ -91,18 +91,19 @@ impl DynamicGrpcService {
         }
 
         // Get mock response for this method
-        let mock_response = self.mock_responses.get(method_name)
+        let mock_response = self
+            .mock_responses
+            .get(method_name)
             .ok_or_else(|| Status::not_found(format!("Method {} not found", method_name)))?;
 
         // Check if we should simulate an error
         if mock_response.simulate_error {
             let error_code = mock_response.error_code.unwrap_or(2); // UNKNOWN
-            let error_message = mock_response.error_message.as_deref()
+            let error_message = mock_response
+                .error_message
+                .as_deref()
                 .unwrap_or("Simulated error from MockForge");
-            return Err(Status::new(
-                tonic::Code::from_i32(error_code),
-                error_message,
-            ));
+            return Err(Status::new(tonic::Code::from_i32(error_code), error_message));
         }
 
         // Create response
@@ -128,22 +129,25 @@ impl DynamicGrpcService {
         }
 
         // Get mock response for this method
-        let mock_response = self.mock_responses.get(method_name)
+        let mock_response = self
+            .mock_responses
+            .get(method_name)
             .ok_or_else(|| Status::not_found(format!("Method {} not found", method_name)))?;
 
         // Check if we should simulate an error
         if mock_response.simulate_error {
             let error_code = mock_response.error_code.unwrap_or(2); // UNKNOWN
-            let error_message = mock_response.error_message.as_deref()
+            let error_message = mock_response
+                .error_message
+                .as_deref()
                 .unwrap_or("Simulated error from MockForge");
-            return Err(Status::new(
-                tonic::Code::from_i32(error_code),
-                error_message,
-            ));
+            return Err(Status::new(tonic::Code::from_i32(error_code), error_message));
         }
 
         // Create a streaming response
-        let stream = self.create_server_stream(method_name, &request.into_inner(), mock_response).await?;
+        let stream = self
+            .create_server_stream(method_name, &request.into_inner(), mock_response)
+            .await?;
         Ok(Response::new(stream))
     }
 
@@ -165,11 +169,17 @@ impl DynamicGrpcService {
         tokio::spawn(async move {
             // Generate multiple stream messages (3-5 messages per stream)
             let message_count = 3 + (method_name.len() % 3); // 3-5 messages based on method name
-            
+
             for i in 0..message_count {
                 // Create a mock response message
-                let stream_response = Self::create_stream_response_message(&method_name, &output_type, &response_json, i, message_count);
-                
+                let stream_response = Self::create_stream_response_message(
+                    &method_name,
+                    &output_type,
+                    &response_json,
+                    i,
+                    message_count,
+                );
+
                 if tx.send(Ok(stream_response)).await.is_err() {
                     debug!("Stream receiver dropped for method: {}", method_name);
                     break; // Receiver dropped
@@ -180,7 +190,10 @@ impl DynamicGrpcService {
                 tokio::time::sleep(delay).await;
             }
 
-            info!("Completed server streaming for method: {} with {} messages", method_name, message_count);
+            info!(
+                "Completed server streaming for method: {} with {} messages",
+                method_name, message_count
+            );
         });
 
         Ok(ReceiverStream::new(rx))
@@ -250,24 +263,30 @@ impl DynamicGrpcService {
         debug!("Received {} client messages", messages.len());
 
         // Get mock response for this method
-        let mock_response = self.mock_responses.get(method_name)
+        let mock_response = self
+            .mock_responses
+            .get(method_name)
             .ok_or_else(|| Status::not_found(format!("Method {} not found", method_name)))?;
 
         // Check if we should simulate an error
         if mock_response.simulate_error {
             let error_code = mock_response.error_code.unwrap_or(2); // UNKNOWN
-            let error_message = mock_response.error_message.as_deref()
+            let error_message = mock_response
+                .error_message
+                .as_deref()
                 .unwrap_or("Simulated error from MockForge");
-            return Err(Status::new(
-                tonic::Code::from_i32(error_code),
-                error_message,
-            ));
+            return Err(Status::new(tonic::Code::from_i32(error_code), error_message));
         }
 
         // Create response based on collected messages
         let response = Any {
             type_url: format!("type.googleapis.com/{}", self.get_output_type(method_name)),
-            value: format!(r#"{{"message": "Processed {} messages from MockForge!"}}"#, messages.len()).as_bytes().to_vec(),
+            value: format!(
+                r#"{{"message": "Processed {} messages from MockForge!"}}"#,
+                messages.len()
+            )
+            .as_bytes()
+            .to_vec(),
         };
 
         Ok(Response::new(response))
@@ -287,18 +306,19 @@ impl DynamicGrpcService {
         }
 
         // Get mock response for this method
-        let mock_response = self.mock_responses.get(method_name)
+        let mock_response = self
+            .mock_responses
+            .get(method_name)
             .ok_or_else(|| Status::not_found(format!("Method {} not found", method_name)))?;
 
         // Check if we should simulate an error
         if mock_response.simulate_error {
             let error_code = mock_response.error_code.unwrap_or(2); // UNKNOWN
-            let error_message = mock_response.error_message.as_deref()
+            let error_message = mock_response
+                .error_message
+                .as_deref()
                 .unwrap_or("Simulated error from MockForge");
-            return Err(Status::new(
-                tonic::Code::from_i32(error_code),
-                error_message,
-            ));
+            return Err(Status::new(tonic::Code::from_i32(error_code), error_message));
         }
 
         // Create a bidirectional streaming response
@@ -328,7 +348,10 @@ impl DynamicGrpcService {
             // Read from input stream and respond to each message
             while let Ok(Some(input_message)) = request.get_mut().message().await {
                 input_count += 1;
-                debug!("Received bidirectional input message {} for method: {}", input_count, method_name);
+                debug!(
+                    "Received bidirectional input message {} for method: {}",
+                    input_count, method_name
+                );
 
                 // For each input message, generate 1-2 response messages
                 let responses_per_input = if input_count % 3 == 0 { 2 } else { 1 };
@@ -358,7 +381,10 @@ impl DynamicGrpcService {
 
                 // Limit the number of messages we process to prevent infinite loops
                 if input_count >= 100 {
-                    warn!("Reached maximum input message limit (100) for bidirectional method: {}", method_name);
+                    warn!(
+                        "Reached maximum input message limit (100) for bidirectional method: {}",
+                        method_name
+                    );
                     break;
                 }
             }
@@ -382,7 +408,8 @@ impl DynamicGrpcService {
     ) -> Any {
         // Try to extract some context from the input message
         let input_context = if let Ok(input_str) = String::from_utf8(input_message.value.clone()) {
-            if input_str.len() < 200 { // Reasonable length limit
+            if input_str.len() < 200 {
+                // Reasonable length limit
                 input_str
             } else {
                 format!("Large input ({} bytes)", input_message.value.len())
@@ -430,7 +457,9 @@ impl DynamicGrpcService {
 
     /// Get the output type for a method
     fn get_output_type(&self, method_name: &str) -> String {
-        self.service.methods.iter()
+        self.service
+            .methods
+            .iter()
             .find(|m| m.name == method_name)
             .map(|m| m.output_type.clone())
             .unwrap_or_else(|| "google.protobuf.Any".to_string())
@@ -452,7 +481,12 @@ impl DynamicGrpcService {
     }
 
     /// Set error simulation for a method
-    pub fn set_error_simulation(&mut self, method_name: &str, error_message: &str, error_code: i32) {
+    pub fn set_error_simulation(
+        &mut self,
+        method_name: &str,
+        error_message: &str,
+        error_code: i32,
+    ) {
         if let Some(mock_response) = self.mock_responses.get_mut(method_name) {
             mock_response.simulate_error = true;
             mock_response.error_message = Some(error_message.to_string());

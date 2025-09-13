@@ -42,9 +42,7 @@ impl DescriptorCache {
         trace!("Getting method from cache: {}::{}", service_name, method_name);
 
         let cache = self.cache.read().await;
-        cache
-            .get_method(service_name, method_name)
-            .map(|m| m.clone())
+        cache.get_method(service_name, method_name).map(|m| m.clone())
     }
 
     /// Get a service descriptor from the cache with proper error handling
@@ -52,9 +50,7 @@ impl DescriptorCache {
         trace!("Getting service from cache: {}", service_name);
 
         let cache = self.cache.read().await;
-        cache
-            .get_service_with_error(service_name)
-            .map(|s| s.clone())
+        cache.get_service_with_error(service_name).map(|s| s.clone())
     }
 
     /// Check if a service exists in the cache

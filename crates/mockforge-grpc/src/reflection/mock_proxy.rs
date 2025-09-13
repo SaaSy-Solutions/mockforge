@@ -3,21 +3,17 @@
 //! This module provides a reflection proxy that can serve mock responses
 //! instead of forwarding requests to other servers.
 
-use crate::reflection::{
-    cache::DescriptorCache,
-    config::ProxyConfig,
-    connection_pool::ConnectionPool,
-};
 use crate::dynamic::ServiceRegistry;
-use prost_reflect::{DynamicMessage, ReflectMessage, DescriptorPool, MessageDescriptor};
+use crate::reflection::{
+    cache::DescriptorCache, config::ProxyConfig, connection_pool::ConnectionPool,
+};
+use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, ReflectMessage};
 use prost_types::Any;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{
-    Request, Response, Status, Streaming,
-};
+use tonic::{Request, Response, Status, Streaming};
 use tracing::{debug, info, warn};
 
 /// A mock-enabled reflection proxy that serves mock responses
@@ -40,7 +36,10 @@ impl MockReflectionProxy {
         config: ProxyConfig,
         service_registry: Arc<ServiceRegistry>,
     ) -> Result<Self, Status> {
-        debug!("Creating mock reflection proxy with {} services", service_registry.service_names().len());
+        debug!(
+            "Creating mock reflection proxy with {} services",
+            service_registry.service_names().len()
+        );
 
         let cache = DescriptorCache::new();
 
@@ -89,7 +88,8 @@ impl MockReflectionProxy {
             let response_any = dynamic_service.handle_unary(method_name, request_any).await?;
 
             // Convert back to DynamicMessage
-            let response_dynamic = self.convert_any_to_dynamic_message(&response_any.into_inner())?;
+            let response_dynamic =
+                self.convert_any_to_dynamic_message(&response_any.into_inner())?;
 
             Ok(Response::new(response_dynamic))
         } else {
@@ -123,7 +123,8 @@ impl MockReflectionProxy {
             let _request_any = Request::new(request_any);
 
             // Create a streaming response
-            let stream = self.create_mock_stream(service_name, method_name, dynamic_service).await?;
+            let stream =
+                self.create_mock_stream(service_name, method_name, dynamic_service).await?;
             Ok(Response::new(stream))
         } else {
             // Service not found in our registry, create a generic mock stream
@@ -153,17 +154,31 @@ impl MockReflectionProxy {
         // Get the dynamic service from our registry
         if let Some(dynamic_service) = self.service_registry.get(service_name) {
             // Try to use the dynamic service for client streaming
-            match self.handle_client_streaming_with_service(service_name, method_name, request, dynamic_service).await {
+            match self
+                .handle_client_streaming_with_service(
+                    service_name,
+                    method_name,
+                    request,
+                    dynamic_service,
+                )
+                .await
+            {
                 Ok(response) => Ok(response),
                 Err(e) => {
-                    warn!("Failed to handle client streaming with service {}.{}: {}", service_name, method_name, e);
+                    warn!(
+                        "Failed to handle client streaming with service {}.{}: {}",
+                        service_name, method_name, e
+                    );
                     // Fallback to generic handling
                     self.handle_client_streaming_generic(service_name, method_name).await
                 }
             }
         } else {
             // Service not found in our registry, create a generic mock response
-            warn!("Service {} not found in registry, creating generic client streaming response", service_name);
+            warn!(
+                "Service {} not found in registry, creating generic client streaming response",
+                service_name
+            );
             self.handle_client_streaming_generic(service_name, method_name).await
         }
     }
@@ -188,12 +203,24 @@ impl MockReflectionProxy {
         // Get the dynamic service from our registry
         if let Some(dynamic_service) = self.service_registry.get(service_name) {
             // Create a bidirectional streaming response
-            let stream = self.create_bidirectional_mock_stream(service_name, method_name, request, dynamic_service).await?;
+            let stream = self
+                .create_bidirectional_mock_stream(
+                    service_name,
+                    method_name,
+                    request,
+                    dynamic_service,
+                )
+                .await?;
             Ok(Response::new(stream))
         } else {
             // Service not found in our registry, create a generic bidirectional mock stream
-            warn!("Service {} not found in registry, creating generic bidirectional mock stream", service_name);
-            let stream = self.create_generic_bidirectional_mock_stream(service_name, method_name, request).await?;
+            warn!(
+                "Service {} not found in registry, creating generic bidirectional mock stream",
+                service_name
+            );
+            let stream = self
+                .create_generic_bidirectional_mock_stream(service_name, method_name, request)
+                .await?;
             Ok(Response::new(stream))
         }
     }
@@ -221,24 +248,49 @@ impl MockReflectionProxy {
             // Read from input stream and respond to each message
             while let Ok(Some(_input_message)) = request.get_mut().message().await {
                 input_count += 1;
-                debug!("Received bidirectional input message {} for {}.{}", input_count, service_name, method_name);
+                debug!(
+                    "Received bidirectional input message {} for {}.{}",
+                    input_count, service_name, method_name
+                );
 
                 // For each input message, generate 1-2 response messages
                 let responses_per_input = if input_count % 3 == 0 { 2 } else { 1 };
-                
+
                 for response_idx in 0..responses_per_input {
                     output_count += 1;
-                    
-                    match Self::create_bidirectional_response_message(&cache, &service_name, &method_name, input_count, output_count, response_idx).await {
+
+                    match Self::create_bidirectional_response_message(
+                        &cache,
+                        &service_name,
+                        &method_name,
+                        input_count,
+                        output_count,
+                        response_idx,
+                    )
+                    .await
+                    {
                         Ok(response_message) => {
                             if tx.send(Ok(response_message)).await.is_err() {
-                                debug!("Bidirectional stream receiver dropped for {}.{}", service_name, method_name);
+                                debug!(
+                                    "Bidirectional stream receiver dropped for {}.{}",
+                                    service_name, method_name
+                                );
                                 return;
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to create bidirectional response message for {}.{}: {}", service_name, method_name, e);
-                            if tx.send(Err(Status::internal(format!("Failed to create response: {}", e)))).await.is_err() {
+                            warn!(
+                                "Failed to create bidirectional response message for {}.{}: {}",
+                                service_name, method_name, e
+                            );
+                            if tx
+                                .send(Err(Status::internal(format!(
+                                    "Failed to create response: {}",
+                                    e
+                                ))))
+                                .await
+                                .is_err()
+                            {
                                 return;
                             }
                         }
@@ -250,13 +302,18 @@ impl MockReflectionProxy {
 
                 // Limit the number of messages we process to prevent infinite loops
                 if input_count >= 100 {
-                    warn!("Reached maximum input message limit (100) for bidirectional {}.{}", service_name, method_name);
+                    warn!(
+                        "Reached maximum input message limit (100) for bidirectional {}.{}",
+                        service_name, method_name
+                    );
                     break;
                 }
             }
 
-            info!("Bidirectional streaming completed for {}.{}: processed {} inputs, sent {} outputs", 
-                  service_name, method_name, input_count, output_count);
+            info!(
+                "Bidirectional streaming completed for {}.{}: processed {} inputs, sent {} outputs",
+                service_name, method_name, input_count, output_count
+            );
         });
 
         Ok(ReceiverStream::new(rx))
@@ -269,7 +326,10 @@ impl MockReflectionProxy {
         method_name: &str,
         mut request: Request<Streaming<DynamicMessage>>,
     ) -> Result<ReceiverStream<Result<DynamicMessage, Status>>, Status> {
-        debug!("Creating generic bidirectional mock stream for {}.{}", service_name, method_name);
+        debug!(
+            "Creating generic bidirectional mock stream for {}.{}",
+            service_name, method_name
+        );
 
         let (tx, rx) = mpsc::channel(10);
         let service_name = service_name.to_string();
@@ -284,21 +344,46 @@ impl MockReflectionProxy {
             // Read from input stream and respond to each message
             while let Ok(Some(_input_message)) = request.get_mut().message().await {
                 input_count += 1;
-                debug!("Received generic bidirectional input message {} for {}.{}", input_count, service_name, method_name);
+                debug!(
+                    "Received generic bidirectional input message {} for {}.{}",
+                    input_count, service_name, method_name
+                );
 
                 // For generic handling, send one response per input
                 output_count += 1;
-                
-                match Self::create_bidirectional_response_message(&cache, &service_name, &method_name, input_count, output_count, 0).await {
+
+                match Self::create_bidirectional_response_message(
+                    &cache,
+                    &service_name,
+                    &method_name,
+                    input_count,
+                    output_count,
+                    0,
+                )
+                .await
+                {
                     Ok(response_message) => {
                         if tx.send(Ok(response_message)).await.is_err() {
-                            debug!("Generic bidirectional stream receiver dropped for {}.{}", service_name, method_name);
+                            debug!(
+                                "Generic bidirectional stream receiver dropped for {}.{}",
+                                service_name, method_name
+                            );
                             return;
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to create generic bidirectional response for {}.{}: {}", service_name, method_name, e);
-                        if tx.send(Err(Status::internal(format!("Failed to create response: {}", e)))).await.is_err() {
+                        warn!(
+                            "Failed to create generic bidirectional response for {}.{}: {}",
+                            service_name, method_name, e
+                        );
+                        if tx
+                            .send(Err(Status::internal(format!(
+                                "Failed to create response: {}",
+                                e
+                            ))))
+                            .await
+                            .is_err()
+                        {
                             return;
                         }
                     }
@@ -309,7 +394,10 @@ impl MockReflectionProxy {
 
                 // Limit the number of messages for generic handling
                 if input_count >= 50 {
-                    warn!("Reached maximum input message limit (50) for generic bidirectional {}.{}", service_name, method_name);
+                    warn!(
+                        "Reached maximum input message limit (50) for generic bidirectional {}.{}",
+                        service_name, method_name
+                    );
                     break;
                 }
             }
@@ -330,17 +418,26 @@ impl MockReflectionProxy {
         output_sequence: usize,
         response_index: usize,
     ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
-        debug!("Creating bidirectional response message for {}.{} (input: {}, output: {}, index: {})", 
-               service_name, method_name, input_sequence, output_sequence, response_index);
+        debug!(
+            "Creating bidirectional response message for {}.{} (input: {}, output: {}, index: {})",
+            service_name, method_name, input_sequence, output_sequence, response_index
+        );
 
         // Try to get the proper response message descriptor from cache
         if let Ok(method_desc) = cache.get_method(service_name, method_name).await {
             let output_desc = method_desc.output();
             let mut msg = DynamicMessage::new(output_desc.clone());
-            
+
             // Populate response fields with bidirectional-specific data
-            Self::populate_bidirectional_response_fields(&mut msg, service_name, method_name, input_sequence, output_sequence, response_index);
-            
+            Self::populate_bidirectional_response_fields(
+                &mut msg,
+                service_name,
+                method_name,
+                input_sequence,
+                output_sequence,
+                response_index,
+            );
+
             Ok(msg)
         } else {
             // Fallback to generic message creation
@@ -362,23 +459,29 @@ impl MockReflectionProxy {
 
     /// Populate mock fields specifically for bidirectional streaming responses
     fn populate_bidirectional_response_fields(
-        msg: &mut DynamicMessage, 
-        service_name: &str, 
-        method_name: &str, 
+        msg: &mut DynamicMessage,
+        service_name: &str,
+        method_name: &str,
         input_sequence: usize,
         output_sequence: usize,
-        response_index: usize
+        response_index: usize,
     ) {
         let descriptor = msg.descriptor();
-        
+
         // Try to populate common field patterns for bidirectional streaming responses
         for field in descriptor.fields() {
             let field_name = field.name();
             match field_name {
                 "message" | "msg" | "response" | "data" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        let value = format!("Bidirectional response {} (input {}, index {}) from {}.{}", 
-                                           output_sequence, input_sequence, response_index, service_name, method_name);
+                        let value = format!(
+                            "Bidirectional response {} (input {}, index {}) from {}.{}",
+                            output_sequence,
+                            input_sequence,
+                            response_index,
+                            service_name,
+                            method_name
+                        );
                         msg.set_field(&field, prost_reflect::Value::String(value));
                     }
                 }
@@ -408,7 +511,7 @@ impl MockReflectionProxy {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    
+
                     if matches!(field.kind(), prost_reflect::Kind::Int64) {
                         msg.set_field(&field, prost_reflect::Value::I64(timestamp as i64));
                     } else if matches!(field.kind(), prost_reflect::Kind::Int32) {
@@ -417,12 +520,18 @@ impl MockReflectionProxy {
                 }
                 "service" | "service_name" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(&field, prost_reflect::Value::String(service_name.to_string()));
+                        msg.set_field(
+                            &field,
+                            prost_reflect::Value::String(service_name.to_string()),
+                        );
                     }
                 }
                 "method" | "method_name" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(&field, prost_reflect::Value::String(method_name.to_string()));
+                        msg.set_field(
+                            &field,
+                            prost_reflect::Value::String(method_name.to_string()),
+                        );
                     }
                 }
                 "is_final" | "final" | "last" => {
@@ -436,16 +545,31 @@ impl MockReflectionProxy {
                     // For other fields, try to set reasonable defaults based on type
                     match field.kind() {
                         prost_reflect::Kind::String => {
-                            msg.set_field(&field, prost_reflect::Value::String(format!("bidirectional_{}", field_name)));
+                            msg.set_field(
+                                &field,
+                                prost_reflect::Value::String(format!(
+                                    "bidirectional_{}",
+                                    field_name
+                                )),
+                            );
                         }
                         prost_reflect::Kind::Int32 => {
-                            msg.set_field(&field, prost_reflect::Value::I32(output_sequence as i32));
+                            msg.set_field(
+                                &field,
+                                prost_reflect::Value::I32(output_sequence as i32),
+                            );
                         }
                         prost_reflect::Kind::Int64 => {
-                            msg.set_field(&field, prost_reflect::Value::I64(output_sequence as i64));
+                            msg.set_field(
+                                &field,
+                                prost_reflect::Value::I64(output_sequence as i64),
+                            );
                         }
                         prost_reflect::Kind::Bool => {
-                            msg.set_field(&field, prost_reflect::Value::Bool(output_sequence % 2 == 0));
+                            msg.set_field(
+                                &field,
+                                prost_reflect::Value::Bool(output_sequence % 2 == 0),
+                            );
                         }
                         _ => {
                             // Skip complex types for now
@@ -469,20 +593,26 @@ impl MockReflectionProxy {
         // Collect all client messages
         let mut messages = Vec::new();
         let mut message_count = 0;
-        
+
         while let Ok(Some(message)) = request.get_mut().message().await {
             message_count += 1;
-            debug!("Received client message {} for {}.{}", message_count, service_name, method_name);
-            
+            debug!(
+                "Received client message {} for {}.{}",
+                message_count, service_name, method_name
+            );
+
             // Convert DynamicMessage to Any for processing
             match self.convert_dynamic_message_to_any(&message) {
                 Ok(any_message) => messages.push(any_message),
                 Err(e) => {
-                    warn!("Failed to convert message {} for {}.{}: {}", message_count, service_name, method_name, e);
+                    warn!(
+                        "Failed to convert message {} for {}.{}: {}",
+                        message_count, service_name, method_name, e
+                    );
                     // Continue processing other messages
                 }
             }
-            
+
             // Limit the number of messages we collect to prevent memory issues
             if message_count >= 1000 {
                 warn!("Reached maximum message limit (1000) for {}.{}", service_name, method_name);
@@ -490,16 +620,22 @@ impl MockReflectionProxy {
             }
         }
 
-        info!("Collected {} messages for client streaming {}.{}", messages.len(), service_name, method_name);
+        info!(
+            "Collected {} messages for client streaming {}.{}",
+            messages.len(),
+            service_name,
+            method_name
+        );
 
         // Create a mock request with the first message (if any) to pass to the service
         if let Some(first_message) = messages.first() {
             let _mock_request = Request::new(first_message.clone());
-            
+
             // Try to handle using the dynamic service's client streaming method
             // Since we can't easily convert between Streaming<DynamicMessage> and Streaming<Any>,
             // we'll create a mock response based on the collected messages
-            self.create_client_streaming_response(service_name, method_name, messages.len()).await
+            self.create_client_streaming_response(service_name, method_name, messages.len())
+                .await
         } else {
             // No messages received
             info!("No messages received for client streaming {}.{}", service_name, method_name);
@@ -514,11 +650,14 @@ impl MockReflectionProxy {
         method_name: &str,
     ) -> Result<Response<DynamicMessage>, Status> {
         debug!("Handling generic client streaming for {}.{}", service_name, method_name);
-        
+
         // For generic handling, we simulate processing without actually reading the stream
         // This is because we don't have the request parameter in this branch
-        info!("Creating generic client streaming response for {}.{}", service_name, method_name);
-        
+        info!(
+            "Creating generic client streaming response for {}.{}",
+            service_name, method_name
+        );
+
         self.create_client_streaming_response(service_name, method_name, 0).await
     }
 
@@ -529,21 +668,32 @@ impl MockReflectionProxy {
         method_name: &str,
         message_count: usize,
     ) -> Result<Response<DynamicMessage>, Status> {
-        debug!("Creating client streaming response for {}.{} with {} messages", service_name, method_name, message_count);
+        debug!(
+            "Creating client streaming response for {}.{} with {} messages",
+            service_name, method_name, message_count
+        );
 
         // Try to get the proper response message descriptor from cache
         if let Ok(method_desc) = self.cache.get_method(service_name, method_name).await {
             let output_desc = method_desc.output();
             let mut msg = DynamicMessage::new(output_desc.clone());
-            
+
             // Populate response fields with streaming-specific data
-            Self::populate_client_streaming_fields(&mut msg, service_name, method_name, message_count);
-            
+            Self::populate_client_streaming_fields(
+                &mut msg,
+                service_name,
+                method_name,
+                message_count,
+            );
+
             Ok(Response::new(msg))
         } else {
             // Fallback to generic message creation
-            warn!("Could not find method descriptor for {}.{}, using fallback", service_name, method_name);
-            
+            warn!(
+                "Could not find method descriptor for {}.{}, using fallback",
+                service_name, method_name
+            );
+
             let mock_data = format!(
                 "Processed {} messages for client streaming {}.{} at timestamp {}",
                 message_count,
@@ -557,22 +707,32 @@ impl MockReflectionProxy {
 
             match Self::create_placeholder_dynamic_message(&mock_data) {
                 Ok(msg) => Ok(Response::new(msg)),
-                Err(e) => Err(Status::internal(format!("Failed to create response message: {}", e)))
+                Err(e) => {
+                    Err(Status::internal(format!("Failed to create response message: {}", e)))
+                }
             }
         }
     }
 
     /// Populate mock fields specifically for client streaming responses
-    fn populate_client_streaming_fields(msg: &mut DynamicMessage, service_name: &str, method_name: &str, message_count: usize) {
+    fn populate_client_streaming_fields(
+        msg: &mut DynamicMessage,
+        service_name: &str,
+        method_name: &str,
+        message_count: usize,
+    ) {
         let descriptor = msg.descriptor();
-        
+
         // Try to populate common field patterns for client streaming responses
         for field in descriptor.fields() {
             let field_name = field.name();
             match field_name {
                 "message" | "msg" | "result" | "response" | "summary" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        let value = format!("Processed {} messages from client streaming {}.{}", message_count, service_name, method_name);
+                        let value = format!(
+                            "Processed {} messages from client streaming {}.{}",
+                            message_count, service_name, method_name
+                        );
                         msg.set_field(&field, prost_reflect::Value::String(value));
                     }
                 }
@@ -588,7 +748,7 @@ impl MockReflectionProxy {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    
+
                     if matches!(field.kind(), prost_reflect::Kind::Int64) {
                         msg.set_field(&field, prost_reflect::Value::I64(timestamp as i64));
                     } else if matches!(field.kind(), prost_reflect::Kind::Int32) {
@@ -597,12 +757,18 @@ impl MockReflectionProxy {
                 }
                 "service" | "service_name" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(&field, prost_reflect::Value::String(service_name.to_string()));
+                        msg.set_field(
+                            &field,
+                            prost_reflect::Value::String(service_name.to_string()),
+                        );
                     }
                 }
                 "method" | "method_name" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(&field, prost_reflect::Value::String(method_name.to_string()));
+                        msg.set_field(
+                            &field,
+                            prost_reflect::Value::String(method_name.to_string()),
+                        );
                     }
                 }
                 "success" | "ok" | "status" => {
@@ -614,7 +780,13 @@ impl MockReflectionProxy {
                     // For other fields, try to set reasonable defaults based on type
                     match field.kind() {
                         prost_reflect::Kind::String => {
-                            msg.set_field(&field, prost_reflect::Value::String(format!("client_streaming_{}", field_name)));
+                            msg.set_field(
+                                &field,
+                                prost_reflect::Value::String(format!(
+                                    "client_streaming_{}",
+                                    field_name
+                                )),
+                            );
                         }
                         prost_reflect::Kind::Int32 => {
                             msg.set_field(&field, prost_reflect::Value::I32(message_count as i32));
@@ -648,12 +820,19 @@ impl MockReflectionProxy {
         let method_name = method_name.to_string();
 
         let cache = self.cache.clone();
-        
+
         // Spawn a task to generate stream messages
         tokio::spawn(async move {
             // Generate a few mock messages
             for i in 0..3 {
-                match Self::create_mock_dynamic_message_with_cache(&cache, &service_name, &method_name, i).await {
+                match Self::create_mock_dynamic_message_with_cache(
+                    &cache,
+                    &service_name,
+                    &method_name,
+                    i,
+                )
+                .await
+                {
                     Ok(mock_message) => {
                         if tx.send(Ok(mock_message)).await.is_err() {
                             debug!("Stream receiver dropped for {}.{}", service_name, method_name);
@@ -661,8 +840,18 @@ impl MockReflectionProxy {
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to create mock message for {}.{}: {}", service_name, method_name, e);
-                        if tx.send(Err(Status::internal(format!("Failed to create mock message: {}", e)))).await.is_err() {
+                        warn!(
+                            "Failed to create mock message for {}.{}: {}",
+                            service_name, method_name, e
+                        );
+                        if tx
+                            .send(Err(Status::internal(format!(
+                                "Failed to create mock message: {}",
+                                e
+                            ))))
+                            .await
+                            .is_err()
+                        {
                             break; // Receiver dropped
                         }
                     }
@@ -689,21 +878,41 @@ impl MockReflectionProxy {
         let method_name = method_name.to_string();
 
         let cache = self.cache.clone();
-        
+
         // Spawn a task to generate generic stream messages
         tokio::spawn(async move {
             // Generate a few generic mock messages
             for i in 0..3 {
-                match Self::create_mock_dynamic_message_with_cache(&cache, &service_name, &method_name, i).await {
+                match Self::create_mock_dynamic_message_with_cache(
+                    &cache,
+                    &service_name,
+                    &method_name,
+                    i,
+                )
+                .await
+                {
                     Ok(mock_message) => {
                         if tx.send(Ok(mock_message)).await.is_err() {
-                            debug!("Stream receiver dropped for generic {}.{}", service_name, method_name);
+                            debug!(
+                                "Stream receiver dropped for generic {}.{}",
+                                service_name, method_name
+                            );
                             break; // Receiver dropped
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to create generic mock message for {}.{}: {}", service_name, method_name, e);
-                        if tx.send(Err(Status::internal(format!("Failed to create mock message: {}", e)))).await.is_err() {
+                        warn!(
+                            "Failed to create generic mock message for {}.{}: {}",
+                            service_name, method_name, e
+                        );
+                        if tx
+                            .send(Err(Status::internal(format!(
+                                "Failed to create mock message: {}",
+                                e
+                            ))))
+                            .await
+                            .is_err()
+                        {
                             break; // Receiver dropped
                         }
                     }
@@ -711,7 +920,10 @@ impl MockReflectionProxy {
                 // Add some delay between messages
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            debug!("Finished streaming {} generic messages for {}.{}", 3, service_name, method_name);
+            debug!(
+                "Finished streaming {} generic messages for {}.{}",
+                3, service_name, method_name
+            );
         });
 
         Ok(ReceiverStream::new(rx))
@@ -720,19 +932,19 @@ impl MockReflectionProxy {
     /// Create a mock DynamicMessage for streaming responses using cache
     async fn create_mock_dynamic_message_with_cache(
         cache: &DescriptorCache,
-        service_name: &str, 
-        method_name: &str, 
-        index: usize
+        service_name: &str,
+        method_name: &str,
+        index: usize,
     ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
         // Try to get the proper response message descriptor from cache
         if let Ok(method_desc) = cache.get_method(service_name, method_name).await {
             let output_desc = method_desc.output();
             // Create a proper DynamicMessage with the correct descriptor
             let mut msg = DynamicMessage::new(output_desc.clone());
-            
+
             // Try to populate some common fields if they exist
             Self::populate_mock_fields(&mut msg, service_name, method_name, index);
-            
+
             return Ok(msg);
         }
 
@@ -752,16 +964,24 @@ impl MockReflectionProxy {
     }
 
     /// Populate mock fields in a DynamicMessage
-    fn populate_mock_fields(msg: &mut DynamicMessage, service_name: &str, method_name: &str, index: usize) {
+    fn populate_mock_fields(
+        msg: &mut DynamicMessage,
+        service_name: &str,
+        method_name: &str,
+        index: usize,
+    ) {
         let descriptor = msg.descriptor();
-        
+
         // Try to populate common field patterns
         for field in descriptor.fields() {
             let field_name = field.name();
             match field_name {
                 "message" | "msg" | "text" | "content" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        let value = format!("Stream message {} from {}.{}", index, service_name, method_name);
+                        let value = format!(
+                            "Stream message {} from {}.{}",
+                            index, service_name, method_name
+                        );
                         msg.set_field(&field, prost_reflect::Value::String(value));
                     }
                 }
@@ -777,7 +997,7 @@ impl MockReflectionProxy {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    
+
                     if matches!(field.kind(), prost_reflect::Kind::Int64) {
                         msg.set_field(&field, prost_reflect::Value::I64(timestamp as i64));
                     } else if matches!(field.kind(), prost_reflect::Kind::Int32) {
@@ -786,19 +1006,28 @@ impl MockReflectionProxy {
                 }
                 "service" | "service_name" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(&field, prost_reflect::Value::String(service_name.to_string()));
+                        msg.set_field(
+                            &field,
+                            prost_reflect::Value::String(service_name.to_string()),
+                        );
                     }
                 }
                 "method" | "method_name" => {
                     if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(&field, prost_reflect::Value::String(method_name.to_string()));
+                        msg.set_field(
+                            &field,
+                            prost_reflect::Value::String(method_name.to_string()),
+                        );
                     }
                 }
                 _ => {
                     // For other fields, try to set reasonable defaults based on type
                     match field.kind() {
                         prost_reflect::Kind::String => {
-                            msg.set_field(&field, prost_reflect::Value::String(format!("mock_{}", field_name)));
+                            msg.set_field(
+                                &field,
+                                prost_reflect::Value::String(format!("mock_{}", field_name)),
+                            );
                         }
                         prost_reflect::Kind::Int32 => {
                             msg.set_field(&field, prost_reflect::Value::I32(index as i32));
@@ -819,7 +1048,9 @@ impl MockReflectionProxy {
     }
 
     /// Create a proper DynamicMessage with a custom MessageDescriptor
-    fn create_placeholder_dynamic_message(data: &str) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
+    fn create_placeholder_dynamic_message(
+        data: &str,
+    ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
         // First try to use well-known types as before for performance
         let pool = DescriptorPool::global();
         if let Some(value_desc) = pool.get_message_by_name("google.protobuf.Value") {
@@ -835,16 +1066,18 @@ impl MockReflectionProxy {
     }
 
     /// Create a custom DynamicMessage with a proper MessageDescriptor for streaming responses
-    fn create_custom_streaming_message(data: &str) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
+    fn create_custom_streaming_message(
+        data: &str,
+    ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
         // Use a static cache for the descriptor to avoid recreating it
         static CUSTOM_DESCRIPTOR: OnceLock<MessageDescriptor> = OnceLock::new();
-        
+
         let message_desc = CUSTOM_DESCRIPTOR.get_or_init(|| {
             use prost_reflect::prost_types::FileDescriptorProto;
-            
+
             // Create a custom descriptor pool for our mock messages
             let mut pool = DescriptorPool::new();
-            
+
             // Create a FileDescriptorProto for MockForge streaming messages
             let file_descriptor = FileDescriptorProto {
                 name: Some("mockforge/stream_response.proto".to_string()),
@@ -852,9 +1085,7 @@ impl MockReflectionProxy {
                 dependency: vec![],
                 public_dependency: vec![],
                 weak_dependency: vec![],
-                message_type: vec![
-                    Self::create_streaming_response_descriptor(),
-                ],
+                message_type: vec![Self::create_streaming_response_descriptor()],
                 enum_type: vec![],
                 service: vec![],
                 extension: vec![],
@@ -880,7 +1111,7 @@ impl MockReflectionProxy {
         if let Some(message_field) = message_desc.get_field_by_name("message") {
             msg.set_field(&message_field, prost_reflect::Value::String(data.to_string()));
         }
-        
+
         if let Some(timestamp_field) = message_desc.get_field_by_name("timestamp") {
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -902,7 +1133,9 @@ impl MockReflectionProxy {
 
     /// Create a DescriptorProto for the StreamResponse message
     fn create_streaming_response_descriptor() -> prost_reflect::prost_types::DescriptorProto {
-        use prost_reflect::prost_types::{DescriptorProto, FieldDescriptorProto, field_descriptor_proto};
+        use prost_reflect::prost_types::{
+            field_descriptor_proto, DescriptorProto, FieldDescriptorProto,
+        };
 
         DescriptorProto {
             name: Some("StreamResponse".to_string()),
@@ -987,9 +1220,12 @@ impl MockReflectionProxy {
     /// Convert DynamicMessage to Any for our service handlers
     fn convert_dynamic_message_to_any(&self, message: &DynamicMessage) -> Result<Any, Status> {
         use prost_reflect::prost::Message;
-        
-        debug!("Converting DynamicMessage to Any for type: {}", message.descriptor().full_name());
-        
+
+        debug!(
+            "Converting DynamicMessage to Any for type: {}",
+            message.descriptor().full_name()
+        );
+
         // Validate the message before conversion
         let descriptor = message.descriptor();
         if !descriptor.is_map_entry() && descriptor.fields().count() == 0 {
@@ -1025,20 +1261,19 @@ impl MockReflectionProxy {
         };
 
         debug!("Successfully converted DynamicMessage to Any with type_url: {}", type_url);
-        
+
         Ok(any_message)
     }
 
     /// Convert Any back to DynamicMessage for responses
     fn convert_any_to_dynamic_message(&self, any: &Any) -> Result<DynamicMessage, Status> {
-        
         debug!("Converting Any to DynamicMessage for type_url: {}", any.type_url);
-        
+
         // Validate the Any message
         if any.type_url.is_empty() {
             return Err(Status::invalid_argument("Any message has empty type_url"));
         }
-        
+
         if any.value.is_empty() {
             debug!("Any message has empty value, will create empty DynamicMessage");
         }
@@ -1088,9 +1323,13 @@ impl MockReflectionProxy {
     }
 
     /// Decode Any with a specific MessageDescriptor
-    fn decode_any_with_descriptor(&self, any: &Any, descriptor: MessageDescriptor) -> Result<DynamicMessage, Status> {
+    fn decode_any_with_descriptor(
+        &self,
+        any: &Any,
+        descriptor: MessageDescriptor,
+    ) -> Result<DynamicMessage, Status> {
         let type_name = descriptor.full_name().to_string();
-        
+
         match DynamicMessage::decode(descriptor, any.value.as_slice()) {
             Ok(message) => {
                 debug!("Successfully decoded Any to DynamicMessage for type: {}", type_name);
@@ -1100,28 +1339,35 @@ impl MockReflectionProxy {
                 warn!("Failed to decode Any for type {}: {}", type_name, decode_error);
                 Err(Status::invalid_argument(format!(
                     "Failed to decode Any message for type {}: {}",
-                    type_name,
-                    decode_error
+                    type_name, decode_error
                 )))
             }
         }
     }
 
     /// Create a fallback DynamicMessage when we can't find the proper descriptor
-    fn create_fallback_dynamic_message_from_any(&self, any: &Any) -> Result<DynamicMessage, Status> {
+    fn create_fallback_dynamic_message_from_any(
+        &self,
+        any: &Any,
+    ) -> Result<DynamicMessage, Status> {
         debug!("Creating fallback DynamicMessage from Any with type_url: {}", any.type_url);
-        
+
         // Try to create a meaningful message using our custom StreamResponse
         let data = if any.value.is_empty() {
             format!("Empty Any message with type: {}", any.type_url)
         } else {
             // Try to interpret the bytes as UTF-8 string for debugging
             match String::from_utf8(any.value.clone()) {
-                Ok(utf8_str) if utf8_str.len() < 1000 => { // Reasonable length limit
+                Ok(utf8_str) if utf8_str.len() < 1000 => {
+                    // Reasonable length limit
                     format!("Decoded Any message (type: {}): {}", any.type_url, utf8_str)
                 }
                 _ => {
-                    format!("Binary Any message (type: {}, {} bytes)", any.type_url, any.value.len())
+                    format!(
+                        "Binary Any message (type: {}, {} bytes)",
+                        any.type_url,
+                        any.value.len()
+                    )
                 }
             }
         };
@@ -1131,7 +1377,10 @@ impl MockReflectionProxy {
     }
 
     /// Generate mock stream messages for testing
-    async fn generate_mock_stream_messages(&self, _count: usize) -> Result<Vec<DynamicMessage>, Status> {
+    async fn generate_mock_stream_messages(
+        &self,
+        _count: usize,
+    ) -> Result<Vec<DynamicMessage>, Status> {
         // For now, return an error - proper implementation needs correct MessageDescriptor
         Err(Status::unimplemented("Mock stream message generation not yet implemented"))
     }
@@ -1146,7 +1395,10 @@ impl MockReflectionProxy {
 
         // For now, return an error since DynamicMessage creation is complex
         // In a full implementation, we would create proper DynamicMessage responses
-        Err(Status::unimplemented(format!("Mock response for {}.{} not yet implemented", service_name, method_name)))
+        Err(Status::unimplemented(format!(
+            "Mock response for {}.{} not yet implemented",
+            service_name, method_name
+        )))
     }
 
     /// Get the service registry

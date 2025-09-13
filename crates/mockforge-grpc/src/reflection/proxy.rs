@@ -1,24 +1,19 @@
 //! Main reflection proxy implementation
 
 use crate::reflection::{
-    cache::DescriptorCache,
-    client::ReflectionClient,
-    config::ProxyConfig,
+    cache::DescriptorCache, client::ReflectionClient, config::ProxyConfig,
     connection_pool::ConnectionPool,
 };
+use futures_util::Stream;
 #[cfg(feature = "data-faker")]
 use mockforge_data::{DataConfig, DataGenerator, SchemaDefinition};
 use prost_reflect::{DynamicMessage, ReflectMessage};
+use std::pin::Pin;
 use std::time::Duration;
-use tonic::{
-    transport::Endpoint,
-    Request, Response, Status, Streaming,
-};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
-use futures_util::Stream;
-use std::pin::Pin;
+use tonic::{transport::Endpoint, Request, Response, Status, Streaming};
 use tracing::{debug, warn};
 
 /// A reflection-based gRPC proxy that can forward requests to arbitrary services
@@ -96,7 +91,8 @@ impl ReflectionProxy {
         service_name: &str,
         method_name: &str,
         request: Request<DynamicMessage>,
-    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status> {
+    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status>
+    {
         // Check if service is allowed
         if !self.config.is_service_allowed(service_name) {
             return Err(Status::permission_denied(format!(
@@ -154,7 +150,8 @@ impl ReflectionProxy {
         service_name: &str,
         method_name: &str,
         request: Request<Streaming<DynamicMessage>>,
-    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status> {
+    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status>
+    {
         // Check if service is allowed
         if !self.config.is_service_allowed(service_name) {
             return Err(Status::permission_denied(format!(
@@ -196,29 +193,37 @@ impl ReflectionProxy {
         let method_name = method.name();
 
         // Create a mock response based on the method
-        let mock_response = self.generate_mock_response(&service_name, method_name, &method).await?;
+        let mock_response =
+            self.generate_mock_response(&service_name, method_name, &method).await?;
 
         // Create response with mock data and preserve metadata
         let mut response = Response::new(mock_response);
-        
+
         // Preserve original request metadata in the response (ASCII only for simplicity)
         let request_metadata = request.metadata();
         for entry in request_metadata.iter() {
             if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
                 // Only preserve certain metadata keys, avoiding system headers
-                if !key.as_str().starts_with(':') && 
-                   !key.as_str().starts_with("grpc-") &&
-                   !key.as_str().starts_with("te") &&
-                   !key.as_str().starts_with("content-type") {
+                if !key.as_str().starts_with(':')
+                    && !key.as_str().starts_with("grpc-")
+                    && !key.as_str().starts_with("te")
+                    && !key.as_str().starts_with("content-type")
+                {
                     response.metadata_mut().insert(key.clone(), value.clone());
                 }
             }
         }
 
         // Add mock-specific metadata
-        response.metadata_mut().insert("x-mockforge-service", service_name.parse().unwrap());
-        response.metadata_mut().insert("x-mockforge-method", method_name.parse().unwrap());
-        response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+        response
+            .metadata_mut()
+            .insert("x-mockforge-service", service_name.parse().unwrap());
+        response
+            .metadata_mut()
+            .insert("x-mockforge-method", method_name.parse().unwrap());
+        response
+            .metadata_mut()
+            .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
 
         Ok(response)
     }
@@ -239,7 +244,12 @@ impl ReflectionProxy {
         let mut response = DynamicMessage::new(output_descriptor.clone());
 
         // Generate mock data dynamically based on the proto structure
-        self.populate_dynamic_mock_response(&mut response, service_name, method_name, &output_descriptor)?;
+        self.populate_dynamic_mock_response(
+            &mut response,
+            service_name,
+            method_name,
+            &output_descriptor,
+        )?;
 
         Ok(response)
     }
@@ -272,8 +282,14 @@ impl ReflectionProxy {
         let metadata_fields = vec![
             ("mockforge_service", prost_reflect::Value::String(service_name.to_string())),
             ("mockforge_method", prost_reflect::Value::String(method_name.to_string())),
-            ("mockforge_timestamp", prost_reflect::Value::String(chrono::Utc::now().to_rfc3339())),
-            ("mockforge_source", prost_reflect::Value::String("MockForge Reflection Proxy".to_string())),
+            (
+                "mockforge_timestamp",
+                prost_reflect::Value::String(chrono::Utc::now().to_rfc3339()),
+            ),
+            (
+                "mockforge_source",
+                prost_reflect::Value::String("MockForge Reflection Proxy".to_string()),
+            ),
         ];
 
         for (field_name, value) in metadata_fields {
@@ -312,10 +328,16 @@ impl ReflectionProxy {
             let mut list_values = Vec::new();
             // Generate 1-3 mock values for the list
             let field_name_lower = field.name().to_lowercase();
-            let num_items = if field_name_lower.contains("list") || field_name_lower.contains("items") { 3 } else { 1 };
+            let num_items =
+                if field_name_lower.contains("list") || field_name_lower.contains("items") {
+                    3
+                } else {
+                    1
+                };
 
             for _ in 0..num_items {
-                let item_value = self.generate_single_field_value(field, service_name, method_name, depth);
+                let item_value =
+                    self.generate_single_field_value(field, service_name, method_name, depth);
                 list_values.push(item_value);
             }
 
@@ -337,7 +359,10 @@ impl ReflectionProxy {
         let field_type = field.kind();
 
         // Generate contextual mock data based on field name patterns
-        if field_name.contains("message") || field_name.contains("text") || field_name.contains("content") {
+        if field_name.contains("message")
+            || field_name.contains("text")
+            || field_name.contains("content")
+        {
             return prost_reflect::Value::String(format!(
                 "Mock response from {} for method {} at {}",
                 service_name,
@@ -347,7 +372,10 @@ impl ReflectionProxy {
         }
 
         if field_name.contains("id") {
-            return prost_reflect::Value::String(format!("mock_{}", chrono::Utc::now().timestamp()));
+            return prost_reflect::Value::String(format!(
+                "mock_{}",
+                chrono::Utc::now().timestamp()
+            ));
         }
 
         if field_name.contains("status") || field_name.contains("state") {
@@ -376,9 +404,7 @@ impl ReflectionProxy {
             prost_reflect::Kind::Float => prost_reflect::Value::F32(3.14),
             prost_reflect::Kind::Double => prost_reflect::Value::F64(3.14159),
             prost_reflect::Kind::Bool => prost_reflect::Value::Bool(true),
-            prost_reflect::Kind::Bytes => {
-                prost_reflect::Value::Bytes(b"mock_data".to_vec().into())
-            }
+            prost_reflect::Kind::Bytes => prost_reflect::Value::Bytes(b"mock_data".to_vec().into()),
             prost_reflect::Kind::Enum(enum_descriptor) => {
                 // Try to get the first enum value, or use a default
                 if let Some(first_value) = enum_descriptor.values().next() {
@@ -395,7 +421,12 @@ impl ReflectionProxy {
 
                 // Populate the nested message with mock values
                 for nested_field in message_descriptor.fields() {
-                    let mock_value = self.generate_mock_value_for_field_with_depth(&nested_field, service_name, method_name, depth + 1);
+                    let mock_value = self.generate_mock_value_for_field_with_depth(
+                        &nested_field,
+                        service_name,
+                        method_name,
+                        depth + 1,
+                    );
                     let _ = nested_message.set_field(&nested_field, mock_value);
                 }
 
@@ -410,11 +441,15 @@ impl ReflectionProxy {
         &self,
         method: prost_reflect::MethodDescriptor,
         request: Request<DynamicMessage>,
-    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status> {
+    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status>
+    {
         // Extract metadata from the original request
         let metadata = request.metadata();
-        debug!("Forwarding server streaming request for method: {} with {} metadata entries",
-               method.name(), metadata.len());
+        debug!(
+            "Forwarding server streaming request for method: {} with {} metadata entries",
+            method.name(),
+            metadata.len()
+        );
 
         #[cfg(feature = "data-faker")]
         {
@@ -424,7 +459,8 @@ impl ReflectionProxy {
 
             // Create a proper streaming response using ReceiverStream
             let (tx, rx) = mpsc::channel(32);
-            let stream = Box::pin(ReceiverStream::new(rx)) as Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>;
+            let stream = Box::pin(ReceiverStream::new(rx))
+                as Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>;
 
             // Spawn a task to send messages
             tokio::spawn(async move {
@@ -437,24 +473,31 @@ impl ReflectionProxy {
 
             // Preserve original request metadata in the response
             let mut response = Response::new(stream);
-            
+
             // Copy relevant metadata from the original request to the response (ASCII only for simplicity)
             for entry in metadata.iter() {
                 if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
                     // Only preserve certain metadata keys, avoiding system headers
-                    if !key.as_str().starts_with(':') && 
-                       !key.as_str().starts_with("grpc-") &&
-                       !key.as_str().starts_with("te") &&
-                       !key.as_str().starts_with("content-type") {
+                    if !key.as_str().starts_with(':')
+                        && !key.as_str().starts_with("grpc-")
+                        && !key.as_str().starts_with("te")
+                        && !key.as_str().starts_with("content-type")
+                    {
                         response.metadata_mut().insert(key.clone(), value.clone());
                     }
                 }
             }
-            
+
             // Add mock-specific metadata
-            response.metadata_mut().insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-method", method.name().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-method", method.name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
             response.metadata_mut().insert("x-mockforge-stream-count", "5".parse().unwrap());
 
             debug!("Generated server streaming response with {} messages", 5);
@@ -480,7 +523,7 @@ impl ReflectionProxy {
         {
             // Extract metadata from the original request before consuming it
             let request_metadata = request.metadata().clone();
-            
+
             // Process the streaming request and extract message data
             let mut stream = request.into_inner();
             let mut message_count = 0;
@@ -492,7 +535,11 @@ impl ReflectionProxy {
                 match message_result {
                     Ok(message) => {
                         message_count += 1;
-                        debug!("Processing client streaming message {} for method: {}", message_count, method.name());
+                        debug!(
+                            "Processing client streaming message {} for method: {}",
+                            message_count,
+                            method.name()
+                        );
 
                         // Extract data from the HelloRequest message
                         let input_descriptor = method.input();
@@ -507,13 +554,21 @@ impl ReflectionProxy {
                         }
 
                         // Extract the 'user_info' field (nested message)
-                        if let Some(user_info_field) = input_descriptor.get_field_by_name("user_info") {
+                        if let Some(user_info_field) =
+                            input_descriptor.get_field_by_name("user_info")
+                        {
                             let field_value = message.get_field(&user_info_field);
-                            if let prost_reflect::Value::Message(user_info_msg) = field_value.into_owned() {
+                            if let prost_reflect::Value::Message(user_info_msg) =
+                                field_value.into_owned()
+                            {
                                 // Extract user_id from user_info
-                                if let Some(user_id_field) = user_info_msg.descriptor().get_field_by_name("user_id") {
+                                if let Some(user_id_field) =
+                                    user_info_msg.descriptor().get_field_by_name("user_id")
+                                {
                                     let user_id_value = user_info_msg.get_field(&user_id_field);
-                                    if let prost_reflect::Value::String(user_id) = user_id_value.into_owned() {
+                                    if let prost_reflect::Value::String(user_id) =
+                                        user_id_value.into_owned()
+                                    {
                                         user_ids.push(user_id.clone());
                                         debug!("  - User ID: {}", user_id);
                                     }
@@ -524,7 +579,8 @@ impl ReflectionProxy {
                         // Extract the 'tags' field (repeated string)
                         if let Some(tags_field) = input_descriptor.get_field_by_name("tags") {
                             let field_value = message.get_field(&tags_field);
-                            if let prost_reflect::Value::List(tags_list) = field_value.into_owned() {
+                            if let prost_reflect::Value::List(tags_list) = field_value.into_owned()
+                            {
                                 for tag_value in tags_list {
                                     if let prost_reflect::Value::String(tag) = tag_value {
                                         all_tags.push(tag.clone());
@@ -536,13 +592,19 @@ impl ReflectionProxy {
                     }
                     Err(e) => {
                         warn!("Error receiving client streaming message: {}", e);
-                        return Err(Status::internal(format!("Error processing streaming request: {}", e)));
+                        return Err(Status::internal(format!(
+                            "Error processing streaming request: {}",
+                            e
+                        )));
                     }
                 }
             }
 
             debug!("Processed {} messages in client streaming request", message_count);
-            debug!("Collected data - Names: {:?}, User IDs: {:?}, Tags: {:?}", processed_names, user_ids, all_tags);
+            debug!(
+                "Collected data - Names: {:?}, User IDs: {:?}, Tags: {:?}",
+                processed_names, user_ids, all_tags
+            );
 
             // Generate a mock response based on the output descriptor, but enhance it with processed data
             let output_descriptor = method.output();
@@ -555,38 +617,55 @@ impl ReflectionProxy {
                     format!("Hello to all {} senders! Processed names: {}, with {} unique tags from {} users",
                            message_count, processed_names.join(", "), all_tags.len(), user_ids.len())
                 } else {
-                    format!("Hello! Processed {} messages with {} tags", message_count, all_tags.len())
+                    format!(
+                        "Hello! Processed {} messages with {} tags",
+                        message_count,
+                        all_tags.len()
+                    )
                 };
 
                 // Update the message field in the response
-                let _ = mock_response.set_field(&message_field, prost_reflect::Value::String(personalized_message));
+                let _ = mock_response
+                    .set_field(&message_field, prost_reflect::Value::String(personalized_message));
             }
 
             // Preserve original request metadata in the response
             let mut response = Response::new(mock_response);
-            
+
             // Copy relevant metadata from the original request to the response (ASCII only for simplicity)
             for entry in request_metadata.iter() {
                 if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
                     // Only preserve certain metadata keys, avoiding system headers
-                    if !key.as_str().starts_with(':') && 
-                       !key.as_str().starts_with("grpc-") &&
-                       !key.as_str().starts_with("te") &&
-                       !key.as_str().starts_with("content-type") {
+                    if !key.as_str().starts_with(':')
+                        && !key.as_str().starts_with("grpc-")
+                        && !key.as_str().starts_with("te")
+                        && !key.as_str().starts_with("content-type")
+                    {
                         response.metadata_mut().insert(key.clone(), value.clone());
                     }
                 }
             }
-            
+
             // Add mock-specific metadata
-            response.metadata_mut().insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-method", method.name().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-message-count", message_count.to_string().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-method", method.name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-message-count", message_count.to_string().parse().unwrap());
 
             let response = response;
 
-            debug!("Generated enhanced client streaming response with {} processed messages", message_count);
+            debug!(
+                "Generated enhanced client streaming response with {} processed messages",
+                message_count
+            );
             Ok(response)
         }
 
@@ -602,7 +681,8 @@ impl ReflectionProxy {
         &self,
         method: prost_reflect::MethodDescriptor,
         request: Request<Streaming<DynamicMessage>>,
-    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status> {
+    ) -> Result<Response<Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>>, Status>
+    {
         debug!("Forwarding bidirectional streaming request for method: {}", method.name());
 
         #[cfg(feature = "data-faker")]
@@ -618,7 +698,8 @@ impl ReflectionProxy {
 
             // Create streaming response using ReceiverStream
             let (tx, rx) = mpsc::channel(32);
-            let stream = Box::pin(ReceiverStream::new(rx)) as Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>;
+            let stream = Box::pin(ReceiverStream::new(rx))
+                as Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>;
 
             // Spawn a task to send messages
             tokio::spawn(async move {
@@ -631,25 +712,34 @@ impl ReflectionProxy {
 
             // Preserve original request metadata in the response
             let mut response = Response::new(stream);
-            
+
             // Copy relevant metadata from the original request to the response (ASCII only for simplicity)
             for entry in metadata.iter() {
                 if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
                     // Only preserve certain metadata keys, avoiding system headers
-                    if !key.as_str().starts_with(':') && 
-                       !key.as_str().starts_with("grpc-") &&
-                       !key.as_str().starts_with("te") &&
-                       !key.as_str().starts_with("content-type") {
+                    if !key.as_str().starts_with(':')
+                        && !key.as_str().starts_with("grpc-")
+                        && !key.as_str().starts_with("te")
+                        && !key.as_str().starts_with("content-type")
+                    {
                         response.metadata_mut().insert(key.clone(), value.clone());
                     }
                 }
             }
-            
+
             // Add mock-specific metadata
-            response.metadata_mut().insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-method", method.name().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
-            response.metadata_mut().insert("x-mockforge-stream-count", "10".parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-method", method.name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-stream-count", "10".parse().unwrap());
 
             // Process incoming stream concurrently
             let mut incoming_stream = request.into_inner();
@@ -659,7 +749,11 @@ impl ReflectionProxy {
                     match message_result {
                         Ok(_) => {
                             count += 1;
-                            debug!("Processed bidirectional message {} for method: {}", count, method.name());
+                            debug!(
+                                "Processed bidirectional message {} for method: {}",
+                                count,
+                                method.name()
+                            );
                         }
                         Err(e) => {
                             warn!("Error processing bidirectional message: {}", e);
@@ -698,7 +792,9 @@ impl ReflectionProxy {
         let mut generator = DataGenerator::new(schema_def, config)
             .map_err(|e| Status::internal(format!("Failed to create data generator: {}", e)))?;
 
-        let result = generator.generate().await
+        let result = generator
+            .generate()
+            .await
             .map_err(|e| Status::internal(format!("Failed to generate mock data: {}", e)))?;
 
         if let Some(data) = result.data.first() {
@@ -726,10 +822,14 @@ impl ReflectionProxy {
         let mut generator = DataGenerator::new(schema_def, config)
             .map_err(|e| Status::internal(format!("Failed to create data generator: {}", e)))?;
 
-        let result = generator.generate().await
+        let result = generator
+            .generate()
+            .await
             .map_err(|e| Status::internal(format!("Failed to generate mock data: {}", e)))?;
 
-        result.data.iter()
+        result
+            .data
+            .iter()
             .map(|data| self.json_to_dynamic_message(descriptor, data))
             .collect()
     }
@@ -768,9 +868,9 @@ impl ReflectionProxy {
             serde_json::Value::Null => {
                 // Return default value for the field type
                 match field.kind() {
-                    Kind::Message(message_descriptor) => {
-                        Ok(prost_reflect::Value::Message(DynamicMessage::new(message_descriptor.clone())))
-                    }
+                    Kind::Message(message_descriptor) => Ok(prost_reflect::Value::Message(
+                        DynamicMessage::new(message_descriptor.clone()),
+                    )),
                     Kind::Enum(enum_descriptor) => {
                         // Try to get the first enum value, or use 0 as default
                         if let Some(first_value) = enum_descriptor.values().next() {
@@ -797,42 +897,60 @@ impl ReflectionProxy {
                         if let Some(i) = n.as_i64() {
                             Ok(prost_reflect::Value::I32(i as i32))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to int32", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to int32",
+                                n
+                            )))
                         }
                     }
                     Kind::Int64 | Kind::Sint64 | Kind::Sfixed64 => {
                         if let Some(i) = n.as_i64() {
                             Ok(prost_reflect::Value::I64(i))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to int64", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to int64",
+                                n
+                            )))
                         }
                     }
                     Kind::Uint32 | Kind::Fixed32 => {
                         if let Some(i) = n.as_u64() {
                             Ok(prost_reflect::Value::U32(i as u32))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to uint32", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to uint32",
+                                n
+                            )))
                         }
                     }
                     Kind::Uint64 | Kind::Fixed64 => {
                         if let Some(i) = n.as_u64() {
                             Ok(prost_reflect::Value::U64(i))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to uint64", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to uint64",
+                                n
+                            )))
                         }
                     }
                     Kind::Float => {
                         if let Some(f) = n.as_f64() {
                             Ok(prost_reflect::Value::F32(f as f32))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to float", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to float",
+                                n
+                            )))
                         }
                     }
                     Kind::Double => {
                         if let Some(f) = n.as_f64() {
                             Ok(prost_reflect::Value::F64(f))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to double", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to double",
+                                n
+                            )))
                         }
                     }
                     _ => {
@@ -840,7 +958,10 @@ impl ReflectionProxy {
                         if let Some(i) = n.as_i64() {
                             Ok(prost_reflect::Value::I64(i))
                         } else {
-                            Err(Status::invalid_argument(format!("Cannot convert number {} to numeric type", n)))
+                            Err(Status::invalid_argument(format!(
+                                "Cannot convert number {} to numeric type",
+                                n
+                            )))
                         }
                     }
                 }
@@ -858,7 +979,11 @@ impl ReflectionProxy {
                             if let Ok(num) = s.parse::<i32>() {
                                 Ok(prost_reflect::Value::EnumNumber(num))
                             } else {
-                                warn!("Unknown enum value '{}' for field '{}', using default", s, field.name());
+                                warn!(
+                                    "Unknown enum value '{}' for field '{}', using default",
+                                    s,
+                                    field.name()
+                                );
                                 Ok(prost_reflect::Value::EnumNumber(0))
                             }
                         }
@@ -879,17 +1004,16 @@ impl ReflectionProxy {
 
                 Ok(prost_reflect::Value::List(list_values))
             }
-            serde_json::Value::Object(_obj) => {
-                match field.kind() {
-                    Kind::Message(message_descriptor) => {
-                        self.json_to_dynamic_message(&message_descriptor, json_value)
-                            .map(prost_reflect::Value::Message)
-                    }
-                    _ => {
-                        Err(Status::invalid_argument(format!("Cannot convert object to field {} of type {:?}", field.name(), field.kind())))
-                    }
-                }
-            }
+            serde_json::Value::Object(_obj) => match field.kind() {
+                Kind::Message(message_descriptor) => self
+                    .json_to_dynamic_message(&message_descriptor, json_value)
+                    .map(prost_reflect::Value::Message),
+                _ => Err(Status::invalid_argument(format!(
+                    "Cannot convert object to field {} of type {:?}",
+                    field.name(),
+                    field.kind()
+                ))),
+            },
         }
     }
 
@@ -910,11 +1034,9 @@ impl ReflectionProxy {
                     // For nested messages, use a generic object type
                     "object".to_string()
                 }
-                prost_reflect::Kind::Enum(_) => {
-                    "string".to_string()
-                }
+                prost_reflect::Kind::Enum(_) => "string".to_string(),
                 // Simplified type mapping - default to string for all scalar types
-                _ => "string".to_string()
+                _ => "string".to_string(),
             };
 
             let mut field_def = FieldDefinition::new(field_name, field_type);

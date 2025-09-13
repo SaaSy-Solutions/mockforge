@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig, init_global_logger};
+use mockforge_core::{
+    apply_env_overrides, init_global_logger, load_config_with_fallback, ServerConfig,
+};
 use mockforge_data::{dataset::DatasetMetadata, schema::templates, DataConfig, DataGenerator};
 use tracing::*;
 
@@ -327,7 +329,13 @@ async fn start_servers_with_config(
             // Expose admin mount prefix to HTTP builder (used to set env for skip prefixes as well)
             std::env::set_var("MOCKFORGE_ADMIN_MOUNT_PREFIX", &mount_path);
 
-            let mut app = mockforge_http::build_router_with_injectors(http_config.openapi_spec, opts, http_latency_injector, http_failure_injector.clone()).await;
+            let mut app = mockforge_http::build_router_with_injectors(
+                http_config.openapi_spec,
+                opts,
+                http_latency_injector,
+                http_failure_injector.clone(),
+            )
+            .await;
 
             // Compute server addresses for Admin state
             let http_addr: std::net::SocketAddr =
@@ -375,7 +383,14 @@ async fn start_servers_with_config(
                 response_template_expand: http_config.response_template_expand,
                 validation_status: http_config.validation_status,
             });
-            mockforge_http::start_with_injectors(http_config.port, http_config.openapi_spec, opts, http_latency_profile, http_failure_injector).await
+            mockforge_http::start_with_injectors(
+                http_config.port,
+                http_config.openapi_spec,
+                opts,
+                http_latency_profile,
+                http_failure_injector,
+            )
+            .await
         } {
             error!("HTTP server error: {}", e);
         }
@@ -405,15 +420,18 @@ async fn start_servers_with_config(
     };
     let grpc_task = tokio::spawn(async move {
         // Create gRPC config with environment variable support
-        let proto_dir = std::env::var("MOCKFORGE_PROTO_DIR")
-            .unwrap_or_else(|_| "proto".to_string());
+        let proto_dir =
+            std::env::var("MOCKFORGE_PROTO_DIR").unwrap_or_else(|_| "proto".to_string());
         let grpc_dynamic_config = mockforge_grpc::DynamicGrpcConfig {
             proto_dir,
             enable_reflection: false,
             excluded_services: Vec::new(),
         };
-        
-        if let Err(e) = mockforge_grpc::start_with_config(grpc_config.port, grpc_latency, grpc_dynamic_config).await {
+
+        if let Err(e) =
+            mockforge_grpc::start_with_config(grpc_config.port, grpc_latency, grpc_dynamic_config)
+                .await
+        {
             error!("gRPC server error: {}", e);
         }
     });

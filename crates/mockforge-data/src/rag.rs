@@ -2,12 +2,12 @@
 
 use crate::{schema::SchemaDefinition, DataConfig};
 use mockforge_core::Result;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
-use reqwest::Client;
-use tracing::debug;
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use tracing::debug;
 
 /// Supported LLM providers
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -248,7 +248,11 @@ impl RagEngine {
     }
 
     /// Retrieve relevant document chunks using semantic search or keyword search
-    async fn retrieve_relevant_chunks(&self, query: &str, limit: usize) -> Result<Vec<&DocumentChunk>> {
+    async fn retrieve_relevant_chunks(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<&DocumentChunk>> {
         if self.config.semantic_search_enabled {
             // Use semantic search
             let results = self.semantic_search(query, limit).await?;
@@ -308,16 +312,23 @@ impl RagEngine {
     async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         match &self.config.embedding_provider {
             EmbeddingProvider::OpenAI => self.generate_openai_embedding(text).await,
-            EmbeddingProvider::OpenAICompatible => self.generate_openai_compatible_embedding(text).await,
+            EmbeddingProvider::OpenAICompatible => {
+                self.generate_openai_compatible_embedding(text).await
+            }
         }
     }
 
     /// Generate embedding using OpenAI API
     async fn generate_openai_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| mockforge_core::Error::generic("OpenAI API key not configured"))?;
 
-        let endpoint = self.config.embedding_endpoint
+        let endpoint = self
+            .config
+            .embedding_endpoint
             .as_ref()
             .unwrap_or(&self.config.api_endpoint)
             .replace("chat/completions", "embeddings");
@@ -329,30 +340,35 @@ impl RagEngine {
 
         debug!("Generating embedding for text with OpenAI API");
 
-        let response = self.client
+        let response = self
+            .client
             .post(&endpoint)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| mockforge_core::Error::generic(format!("Embedding API request failed: {}", e)))?;
+            .map_err(|e| {
+                mockforge_core::Error::generic(format!("Embedding API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!("Embedding API error: {}", error_text)));
+            return Err(mockforge_core::Error::generic(format!(
+                "Embedding API error: {}",
+                error_text
+            )));
         }
 
-        let response_json: Value = response.json().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse embedding response: {}", e)))?;
+        let response_json: Value = response.json().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to parse embedding response: {}", e))
+        })?;
 
         if let Some(data) = response_json.get("data").and_then(|d| d.as_array()) {
-            if let Some(first_item) = data.get(0) {
+            if let Some(first_item) = data.first() {
                 if let Some(embedding) = first_item.get("embedding").and_then(|e| e.as_array()) {
-                    let embedding_vec: Vec<f32> = embedding
-                        .iter()
-                        .filter_map(|v| v.as_f64().map(|f| f as f32))
-                        .collect();
+                    let embedding_vec: Vec<f32> =
+                        embedding.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect();
                     return Ok(embedding_vec);
                 }
             }
@@ -363,7 +379,9 @@ impl RagEngine {
 
     /// Generate embedding using OpenAI-compatible API
     async fn generate_openai_compatible_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        let endpoint = self.config.embedding_endpoint
+        let endpoint = self
+            .config
+            .embedding_endpoint
             .as_ref()
             .unwrap_or(&self.config.api_endpoint)
             .replace("chat/completions", "embeddings");
@@ -375,7 +393,8 @@ impl RagEngine {
 
         debug!("Generating embedding for text with OpenAI-compatible API");
 
-        let mut request = self.client
+        let mut request = self
+            .client
             .post(&endpoint)
             .header("Content-Type", "application/json")
             .json(&request_body);
@@ -384,26 +403,27 @@ impl RagEngine {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| mockforge_core::Error::generic(format!("Embedding API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Embedding API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!("Embedding API error: {}", error_text)));
+            return Err(mockforge_core::Error::generic(format!(
+                "Embedding API error: {}",
+                error_text
+            )));
         }
 
-        let response_json: Value = response.json().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse embedding response: {}", e)))?;
+        let response_json: Value = response.json().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to parse embedding response: {}", e))
+        })?;
 
         if let Some(data) = response_json.get("data").and_then(|d| d.as_array()) {
-            if let Some(first_item) = data.get(0) {
+            if let Some(first_item) = data.first() {
                 if let Some(embedding) = first_item.get("embedding").and_then(|e| e.as_array()) {
-                    let embedding_vec: Vec<f32> = embedding
-                        .iter()
-                        .filter_map(|v| v.as_f64().map(|f| f as f32))
-                        .collect();
+                    let embedding_vec: Vec<f32> =
+                        embedding.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect();
                     return Ok(embedding_vec);
                 }
             }
@@ -417,7 +437,10 @@ impl RagEngine {
         debug!("Computing embeddings for {} chunks", self.chunks.len());
 
         // Collect chunks that need embeddings
-        let chunks_to_embed: Vec<(usize, String)> = self.chunks.iter().enumerate()
+        let chunks_to_embed: Vec<(usize, String)> = self
+            .chunks
+            .iter()
+            .enumerate()
             .filter(|(_, chunk)| chunk.embedding.is_empty())
             .map(|(idx, chunk)| (idx, chunk.content.clone()))
             .collect();
@@ -470,7 +493,10 @@ impl RagEngine {
 
     /// Call OpenAI API
     async fn call_openai(&self, prompt: &str) -> Result<String> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| mockforge_core::Error::generic("OpenAI API key not configured"))?;
 
         let request_body = serde_json::json!({
@@ -487,25 +513,32 @@ impl RagEngine {
 
         debug!("Calling OpenAI API with model: {}", self.config.model);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.config.api_endpoint)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| mockforge_core::Error::generic(format!("OpenAI API request failed: {}", e)))?;
+            .map_err(|e| {
+                mockforge_core::Error::generic(format!("OpenAI API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", error_text)));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                error_text
+            )));
         }
 
-        let response_json: Value = response.json().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse OpenAI response: {}", e)))?;
+        let response_json: Value = response.json().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to parse OpenAI response: {}", e))
+        })?;
 
         if let Some(choices) = response_json.get("choices").and_then(|c| c.as_array()) {
-            if let Some(choice) = choices.get(0) {
+            if let Some(choice) = choices.first() {
                 if let Some(message) = choice.get("message").and_then(|m| m.get("content")) {
                     if let Some(content) = message.as_str() {
                         return Ok(content.to_string());
@@ -519,8 +552,10 @@ impl RagEngine {
 
     /// Call Anthropic API
     async fn call_anthropic(&self, prompt: &str) -> Result<String> {
-        let api_key = self.config.api_key.as_ref()
-            .ok_or_else(|| mockforge_core::Error::generic("Anthropic API key not configured"))?;
+        let api_key =
+            self.config.api_key.as_ref().ok_or_else(|| {
+                mockforge_core::Error::generic("Anthropic API key not configured")
+            })?;
 
         let request_body = serde_json::json!({
             "model": self.config.model,
@@ -536,7 +571,8 @@ impl RagEngine {
 
         debug!("Calling Anthropic API with model: {}", self.config.model);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.config.api_endpoint)
             .header("x-api-key", api_key)
             .header("Content-Type", "application/json")
@@ -544,19 +580,25 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| mockforge_core::Error::generic(format!("Anthropic API request failed: {}", e)))?;
+            .map_err(|e| {
+                mockforge_core::Error::generic(format!("Anthropic API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!("Anthropic API error: {}", error_text)));
+            return Err(mockforge_core::Error::generic(format!(
+                "Anthropic API error: {}",
+                error_text
+            )));
         }
 
-        let response_json: Value = response.json().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse Anthropic response: {}", e)))?;
+        let response_json: Value = response.json().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to parse Anthropic response: {}", e))
+        })?;
 
         if let Some(content) = response_json.get("content") {
             if let Some(content_array) = content.as_array() {
-                if let Some(first_content) = content_array.get(0) {
+                if let Some(first_content) = content_array.first() {
                     if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
                         return Ok(text.to_string());
                     }
@@ -583,7 +625,8 @@ impl RagEngine {
 
         debug!("Calling OpenAI-compatible API with model: {}", self.config.model);
 
-        let mut request = self.client
+        let mut request = self
+            .client
             .post(&self.config.api_endpoint)
             .header("Content-Type", "application/json")
             .json(&request_body);
@@ -592,21 +635,27 @@ impl RagEngine {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| mockforge_core::Error::generic(format!("OpenAI-compatible API request failed: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("OpenAI-compatible API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!("OpenAI-compatible API error: {}", error_text)));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI-compatible API error: {}",
+                error_text
+            )));
         }
 
-        let response_json: Value = response.json().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse OpenAI-compatible response: {}", e)))?;
+        let response_json: Value = response.json().await.map_err(|e| {
+            mockforge_core::Error::generic(format!(
+                "Failed to parse OpenAI-compatible response: {}",
+                e
+            ))
+        })?;
 
         if let Some(choices) = response_json.get("choices").and_then(|c| c.as_array()) {
-            if let Some(choice) = choices.get(0) {
+            if let Some(choice) = choices.first() {
                 if let Some(message) = choice.get("message").and_then(|m| m.get("content")) {
                     if let Some(content) = message.as_str() {
                         return Ok(content.to_string());
@@ -628,21 +677,28 @@ impl RagEngine {
 
         debug!("Calling Ollama API with model: {}", self.config.model);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.config.api_endpoint)
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| mockforge_core::Error::generic(format!("Ollama API request failed: {}", e)))?;
+            .map_err(|e| {
+                mockforge_core::Error::generic(format!("Ollama API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!("Ollama API error: {}", error_text)));
+            return Err(mockforge_core::Error::generic(format!(
+                "Ollama API error: {}",
+                error_text
+            )));
         }
 
-        let response_json: Value = response.json().await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse Ollama response: {}", e)))?;
+        let response_json: Value = response.json().await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to parse Ollama response: {}", e))
+        })?;
 
         if let Some(response_text) = response_json.get("response").and_then(|r| r.as_str()) {
             return Ok(response_text.to_string());

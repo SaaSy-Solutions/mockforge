@@ -1,4 +1,4 @@
-use mockforge_data::{RagEngine, RagConfig, LlmProvider, EmbeddingProvider, DocumentChunk};
+use mockforge_data::{DocumentChunk, EmbeddingProvider, LlmProvider, RagConfig, RagEngine};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -41,10 +41,7 @@ mod rag_tests {
             "Machine learning is a subset of artificial intelligence".to_string(),
             HashMap::new(),
         );
-        engine.add_document(
-            "Rust is a systems programming language".to_string(),
-            HashMap::new(),
-        );
+        engine.add_document("Rust is a systems programming language".to_string(), HashMap::new());
 
         let results = engine.retrieve_relevant_chunks("machine learning", 5);
         assert!(results.is_ok());
@@ -60,8 +57,14 @@ mod rag_tests {
 
         let mut engine = RagEngine::new(config);
 
-        engine.add_document("AI and machine learning are transforming technology".to_string(), HashMap::new());
-        engine.add_document("Machine learning algorithms process data efficiently".to_string(), HashMap::new());
+        engine.add_document(
+            "AI and machine learning are transforming technology".to_string(),
+            HashMap::new(),
+        );
+        engine.add_document(
+            "Machine learning algorithms process data efficiently".to_string(),
+            HashMap::new(),
+        );
         engine.add_document("The weather is nice today".to_string(), HashMap::new());
 
         let results = engine.retrieve_relevant_chunks("machine learning", 5);
@@ -81,7 +84,10 @@ mod rag_tests {
         let mut engine = RagEngine::new(config);
 
         for i in 0..10 {
-            engine.add_document(format!("Document {} with machine learning content", i), HashMap::new());
+            engine.add_document(
+                format!("Document {} with machine learning content", i),
+                HashMap::new(),
+            );
         }
 
         let results = engine.retrieve_relevant_chunks("machine learning", 3);
