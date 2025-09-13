@@ -203,8 +203,7 @@ impl ProxyHandler {
         }
 
         // Build request
-        let mut request_builder = self.client
-            .request(method.clone(), &upstream_url);
+        let mut request_builder = self.client.request(method.clone(), &upstream_url);
 
         // Forward headers
         for header_name in &self.config.forward_headers {
@@ -254,7 +253,6 @@ pub struct ProxyResponse {
     /// Response body
     pub body: Vec<u8>,
 }
-
 
 #[cfg(test)]
 mod tests {

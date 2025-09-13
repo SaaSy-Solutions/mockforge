@@ -34,7 +34,8 @@ where
     if let Some(failure_injector) = &shared.failure_injector {
         if let Some((status_code, error_message)) = failure_injector.process_request(&op.tags) {
             let mut res = Response::new(axum::body::Body::from(error_message));
-            *res.status_mut() = StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            *res.status_mut() =
+                StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             return res;
         }
     }

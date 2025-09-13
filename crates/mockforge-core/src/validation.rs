@@ -1,9 +1,12 @@
 //! Schema validation logic for MockForge
 
-use crate::{Error, Result, openapi::{OpenApiSpec, OpenApiSecurityRequirement, OpenApiOperation}};
+use crate::{
+    openapi::{OpenApiOperation, OpenApiSecurityRequirement, OpenApiSpec},
+    Error, Result,
+};
 use jsonschema::{self, Draft, Validator as JSONSchema};
-use serde_json::{json, Value};
 use prost_reflect::DynamicMessage;
+use serde_json::{json, Value};
 
 /// Schema validator for different formats
 #[derive(Debug)]
@@ -89,7 +92,7 @@ impl Validator {
     pub fn is_implemented(&self) -> bool {
         match self {
             Self::JsonSchema(_) => true,
-            Self::OpenApi => true, // Now implemented with schema validation
+            Self::OpenApi => true,  // Now implemented with schema validation
             Self::Protobuf => true, // Now implemented with descriptor-based validation
         }
     }
@@ -184,8 +187,9 @@ pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
     }
 
     // Now perform actual schema validation if possible
-    if let Ok(_) = serde_json::from_value::<openapiv3::OpenAPI>(spec.clone()) {
-        let _spec_wrapper = OpenApiSpec::from_json(spec.clone()).unwrap_or_else(|_| OpenApiSpec::from_json(json!({})).unwrap());
+    if serde_json::from_value::<openapiv3::OpenAPI>(spec.clone()).is_ok() {
+        let _spec_wrapper = OpenApiSpec::from_json(spec.clone())
+            .unwrap_or_else(|_| OpenApiSpec::from_json(json!({})).unwrap());
 
         // Try to validate the data against the spec
         // For now, we'll do a basic check to see if the data structure is reasonable
@@ -200,9 +204,7 @@ pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
             ])
         }
     } else {
-        ValidationResult::failure(vec![
-            "Failed to parse OpenAPI specification".to_string()
-        ])
+        ValidationResult::failure(vec!["Failed to parse OpenAPI specification".to_string()])
     }
 }
 
@@ -231,14 +233,15 @@ pub fn validate_openapi_operation(
                 _ => None,
             };
 
-            if let Some(_) = operation {
+            if operation.is_some() {
                 // Note: Schema validation is handled in validate_openapi_with_path function
                 // This function focuses on basic spec structure validation
             } else {
                 errors.push(format!("Method {} not found for path {}", method, path));
             }
         } else {
-            errors.push(format!("Path {} contains a reference, not supported for validation", path));
+            errors
+                .push(format!("Path {} contains a reference, not supported for validation", path));
         }
     } else {
         errors.push(format!("Path {} not found in OpenAPI spec", path));
@@ -255,9 +258,7 @@ pub fn validate_openapi_operation(
 pub fn validate_protobuf(_data: &[u8], _descriptor_data: &[u8]) -> ValidationResult {
     // For now, return an error as protobuf validation is not yet fully implemented
     // This would require proper protobuf descriptor handling
-    ValidationResult::failure(vec![
-        "Protobuf validation is not yet fully implemented".to_string()
-    ])
+    ValidationResult::failure(vec!["Protobuf validation is not yet fully implemented".to_string()])
 }
 
 /// Validate protobuf data against a specific message descriptor
@@ -268,9 +269,7 @@ pub fn validate_protobuf_message(
     // Try to decode the data as the given message type
     match DynamicMessage::decode(message_descriptor.clone(), data) {
         Ok(_) => Ok(()),
-        Err(e) => {
-            Err(Error::validation(format!("Protobuf validation failed: {}", e)))
-        }
+        Err(e) => Err(Error::validation(format!("Protobuf validation failed: {}", e))),
     }
 }
 
@@ -282,9 +281,7 @@ pub fn validate_protobuf_with_type(
 ) -> ValidationResult {
     // For now, return an error as protobuf validation is not fully implemented
     // This would require proper protobuf descriptor handling
-    ValidationResult::failure(vec![
-        "Protobuf validation is not yet fully implemented".to_string()
-    ])
+    ValidationResult::failure(vec!["Protobuf validation is not yet fully implemented".to_string()])
 }
 
 /// Validate OpenAPI security requirements
@@ -296,9 +293,7 @@ pub fn validate_openapi_security(
 ) -> ValidationResult {
     match spec.validate_security_requirements(security_requirements, auth_header, api_key) {
         Ok(_) => ValidationResult::success(),
-        Err(e) => ValidationResult::failure(vec![
-            format!("Security validation failed: {}", e)
-        ]),
+        Err(e) => ValidationResult::failure(vec![format!("Security validation failed: {}", e)]),
     }
 }
 
@@ -314,24 +309,23 @@ pub fn validate_openapi_operation_security(
     let operations = spec.operations_for_path(path);
 
     // Find the specific operation
-    let operation = operations.iter().find(|(op_method, _)| {
-        op_method.to_uppercase() == method.to_uppercase()
-    });
+    let operation = operations
+        .iter()
+        .find(|(op_method, _)| op_method.to_uppercase() == method.to_uppercase());
 
     let operation = match operation {
         Some((_, op)) => op,
-        None => return ValidationResult::failure(vec![
-            format!("Operation not found: {} {}", method, path)
-        ]),
+        None => {
+            return ValidationResult::failure(vec![format!(
+                "Operation not found: {} {}",
+                method, path
+            )])
+        }
     };
 
     // Convert operation to OpenApiOperation for security validation
-    let openapi_operation = OpenApiOperation::from_operation(
-        method.to_string(),
-        path.to_string(),
-        operation,
-        spec,
-    );
+    let openapi_operation =
+        OpenApiOperation::from_operation(method.to_string(), path.to_string(), operation, spec);
 
     // Check operation-specific security first
     if !openapi_operation.security.is_empty() {

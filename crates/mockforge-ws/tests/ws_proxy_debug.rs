@@ -38,7 +38,8 @@ async fn debug_ws_proxy_basic() {
             }
 
             // Try to receive a message with timeout
-            match tokio::time::timeout(tokio::time::Duration::from_secs(5), ws_stream.next()).await {
+            match tokio::time::timeout(tokio::time::Duration::from_secs(5), ws_stream.next()).await
+            {
                 Ok(Some(Ok(msg))) => {
                     println!("Received message: {:?}", msg);
                 }

@@ -202,7 +202,11 @@ impl OpenApiSpec {
 
     /// Get a security scheme by name
     pub fn get_security_scheme(&self, name: &str) -> Option<&openapiv3::SecurityScheme> {
-        self.spec.components.as_ref()?.security_schemes.get(name)
+        self.spec
+            .components
+            .as_ref()?
+            .security_schemes
+            .get(name)
             .and_then(|scheme| match scheme {
                 ReferenceOr::Item(s) => Some(s),
                 ReferenceOr::Reference { .. } => None, // TODO: Handle references
@@ -235,8 +239,9 @@ impl OpenApiSpec {
         auth_header: Option<&str>,
         api_key: Option<&str>,
     ) -> Result<()> {
-        let scheme = self.get_security_scheme(&requirement.scheme)
-            .ok_or_else(|| Error::generic(format!("Security scheme '{}' not found", requirement.scheme)))?;
+        let scheme = self.get_security_scheme(&requirement.scheme).ok_or_else(|| {
+            Error::generic(format!("Security scheme '{}' not found", requirement.scheme))
+        })?;
 
         match scheme {
             openapiv3::SecurityScheme::APIKey { location, name, .. } => {
@@ -247,12 +252,14 @@ impl OpenApiSpec {
                             // In a real implementation, you might want to validate the key format
                             if header_value.is_empty() {
                                 return Err(Error::generic(format!(
-                                    "API key header '{}' is required but empty", name
+                                    "API key header '{}' is required but empty",
+                                    name
                                 )));
                             }
                         } else {
                             return Err(Error::generic(format!(
-                                "API key header '{}' is required", name
+                                "API key header '{}' is required",
+                                name
                             )));
                         }
                     }
@@ -261,13 +268,16 @@ impl OpenApiSpec {
                         // For now, we'll assume it's present if we have an API key
                         if api_key.is_none() || api_key.unwrap().is_empty() {
                             return Err(Error::generic(format!(
-                                "API key query parameter '{}' is required", name
+                                "API key query parameter '{}' is required",
+                                name
                             )));
                         }
                     }
                     openapiv3::APIKeyLocation::Cookie => {
                         // Cookie validation would require cookie parsing
-                        return Err(Error::generic("Cookie-based API key validation not implemented"));
+                        return Err(Error::generic(
+                            "Cookie-based API key validation not implemented",
+                        ));
                     }
                 }
             }
@@ -277,24 +287,29 @@ impl OpenApiSpec {
                         if let Some(header_value) = auth_header {
                             if header_value.is_empty() {
                                 return Err(Error::generic(format!(
-                                    "HTTP {} authentication header is required but empty", scheme
+                                    "HTTP {} authentication header is required but empty",
+                                    scheme
                                 )));
                             }
                             // For Bearer tokens, check if it starts with "Bearer "
-                            if scheme == "bearer" && !header_value.to_lowercase().starts_with("bearer ") {
+                            if scheme == "bearer"
+                                && !header_value.to_lowercase().starts_with("bearer ")
+                            {
                                 return Err(Error::generic(
-                                    "Bearer token must start with 'Bearer '"
+                                    "Bearer token must start with 'Bearer '",
                                 ));
                             }
                         } else {
                             return Err(Error::generic(format!(
-                                "HTTP {} authentication header is required", scheme
+                                "HTTP {} authentication header is required",
+                                scheme
                             )));
                         }
                     }
                     _ => {
                         return Err(Error::generic(format!(
-                            "HTTP authentication scheme '{}' not supported", scheme
+                            "HTTP authentication scheme '{}' not supported",
+                            scheme
                         )));
                     }
                 }
@@ -320,9 +335,11 @@ impl OpenApiSpec {
 
     /// Extract security requirements from global spec security
     pub fn get_global_security_requirements(&self) -> Vec<OpenApiSecurityRequirement> {
-        self.spec.security.iter()
+        self.spec
+            .security
+            .iter()
             .flatten()
-            .map(|req| OpenApiSecurityRequirement::from_security_requirement(req))
+            .map(OpenApiSecurityRequirement::from_security_requirement)
             .collect()
     }
 }
@@ -396,7 +413,7 @@ impl OpenApiOperation {
                 .security
                 .iter()
                 .flatten()
-                .map(|req| OpenApiSecurityRequirement::from_security_requirement(req))
+                .map(OpenApiSecurityRequirement::from_security_requirement)
                 .collect(),
         }
     }

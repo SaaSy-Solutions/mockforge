@@ -3,11 +3,11 @@
 //! This module handles parsing of .proto files and extracting service definitions
 //! to generate dynamic gRPC service implementations.
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::fs;
 use prost_reflect::DescriptorPool;
-use tracing::{debug, info, warn, error};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+use tracing::{debug, error, info, warn};
 
 /// A parsed proto service definition
 #[derive(Debug, Clone)]
@@ -55,7 +55,10 @@ impl ProtoParser {
     }
 
     /// Parse proto files from a directory
-    pub async fn parse_directory(&mut self, proto_dir: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn parse_directory(
+        &mut self,
+        proto_dir: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Parsing proto files from directory: {}", proto_dir);
 
         let proto_path = Path::new(proto_dir);
@@ -88,7 +91,10 @@ impl ProtoParser {
     }
 
     /// Discover proto files in a directory recursively
-    fn discover_proto_files(&self, dir: &Path) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    fn discover_proto_files(
+        &self,
+        dir: &Path,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let mut proto_files = Vec::new();
 
         if let Ok(entries) = fs::read_dir(dir) {
@@ -109,7 +115,10 @@ impl ProtoParser {
     }
 
     /// Parse a single proto file
-    async fn parse_proto_file(&mut self, proto_file: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn parse_proto_file(
+        &mut self,
+        proto_file: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         debug!("Parsing proto file: {}", proto_file);
 
         // For now, we'll use a simple approach that compiles the proto files

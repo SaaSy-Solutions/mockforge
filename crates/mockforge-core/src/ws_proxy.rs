@@ -126,7 +126,9 @@ fn axum_to_tungstenite(msg: AxumMessage) -> TungsteniteMessage {
         AxumMessage::Pong(data) => TungsteniteMessage::Pong(data),
         AxumMessage::Close(frame) => TungsteniteMessage::Close(frame.map(|f| {
             tokio_tungstenite::tungstenite::protocol::CloseFrame {
-                code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::from(u16::from(f.code)),
+                code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::from(
+                    f.code,
+                ),
                 reason: f.reason.to_string().into(),
             }
         })),
@@ -140,12 +142,12 @@ fn tungstenite_to_axum(msg: TungsteniteMessage) -> AxumMessage {
         TungsteniteMessage::Binary(data) => AxumMessage::Binary(data),
         TungsteniteMessage::Ping(data) => AxumMessage::Ping(data),
         TungsteniteMessage::Pong(data) => AxumMessage::Pong(data),
-        TungsteniteMessage::Close(frame) => AxumMessage::Close(frame.map(|f| {
-            axum::extract::ws::CloseFrame {
+        TungsteniteMessage::Close(frame) => {
+            AxumMessage::Close(frame.map(|f| axum::extract::ws::CloseFrame {
                 code: axum::extract::ws::CloseCode::from(u16::from(f.code)),
                 reason: f.reason.to_string().into(),
-            }
-        })),
+            }))
+        }
         TungsteniteMessage::Frame(_) => AxumMessage::Text("".to_string().into()), // Should not happen in normal operation
     }
 }
@@ -163,11 +165,7 @@ impl WsProxyHandler {
     }
 
     /// Proxy a WebSocket connection to the upstream service
-    pub async fn proxy_connection(
-        &self,
-        path: &str,
-        client_socket: WebSocket,
-    ) -> Result<()> {
+    pub async fn proxy_connection(&self, path: &str, client_socket: WebSocket) -> Result<()> {
         if !self.config.should_proxy(path) {
             return Err(Error::generic("WebSocket connection should not be proxied".to_string()));
         }
@@ -176,9 +174,10 @@ impl WsProxyHandler {
         let upstream_url = self.config.get_upstream_url(path);
 
         // Connect to upstream WebSocket server
-        let (upstream_socket, _) = tokio_tungstenite::connect_async(&upstream_url)
-            .await
-            .map_err(|e| Error::generic(format!("Failed to connect to upstream WebSocket: {}", e)))?;
+        let (upstream_socket, _) =
+            tokio_tungstenite::connect_async(&upstream_url).await.map_err(|e| {
+                Error::generic(format!("Failed to connect to upstream WebSocket: {}", e))
+            })?;
 
         info!("Connected to upstream WebSocket at {}", upstream_url);
 

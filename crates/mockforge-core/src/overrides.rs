@@ -1,8 +1,8 @@
 //! Overrides engine with templating helpers.
+use crate::templating::expand_tokens as core_expand_tokens;
 use globwalk::GlobWalkerBuilder;
 use json_patch::{AddOperation, PatchOperation, RemoveOperation, ReplaceOperation};
 use jsonptr::PointerBuf;
-use crate::templating::expand_tokens as core_expand_tokens;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -62,11 +62,12 @@ impl Overrides {
     /// Load overrides from glob patterns, with support for MOCKFORGE_HTTP_OVERRIDES_GLOB
     pub async fn load_from_globs(patterns: &[&str]) -> anyhow::Result<Self> {
         // Check for environment variable override
-        let patterns: Vec<String> = if let Ok(env_patterns) = std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB") {
-            env_patterns.split(',').map(|s| s.trim().to_string()).collect()
-        } else {
-            patterns.iter().map(|s| s.to_string()).collect()
-        };
+        let patterns: Vec<String> =
+            if let Ok(env_patterns) = std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB") {
+                env_patterns.split(',').map(|s| s.trim().to_string()).collect()
+            } else {
+                patterns.iter().map(|s| s.to_string()).collect()
+            };
 
         let mut rules = Vec::new();
         let mut regex_cache = HashMap::new();
@@ -93,7 +94,10 @@ impl Overrides {
                         // Compile regex patterns for performance
                         for target in &r.targets {
                             if target.starts_with("regex:") || target.starts_with("path:") {
-                                let pattern = target.strip_prefix("regex:").or_else(|| target.strip_prefix("path:")).unwrap();
+                                let pattern = target
+                                    .strip_prefix("regex:")
+                                    .or_else(|| target.strip_prefix("path:"))
+                                    .unwrap();
                                 if !regex_cache.contains_key(pattern) {
                                     if let Ok(regex) = Regex::new(pattern) {
                                         regex_cache.insert(pattern.to_string(), regex);
@@ -143,7 +147,7 @@ fn matches_target(
     op_id: &str,
     tags: &[String],
     path: &str,
-    regex_cache: &HashMap<String, Regex>
+    regex_cache: &HashMap<String, Regex>,
 ) -> bool {
     targets.iter().any(|t| {
         if let Some(rest) = t.strip_prefix("operation:") {
@@ -152,10 +156,10 @@ fn matches_target(
             tags.iter().any(|g| g == rest)
         } else if let Some(pattern) = t.strip_prefix("regex:") {
             // Match against operation ID
-            regex_cache.get(pattern).map_or(false, |re| re.is_match(op_id))
+            regex_cache.get(pattern).is_some_and(|re| re.is_match(op_id))
         } else if let Some(pattern) = t.strip_prefix("path:") {
             // Match against request path
-            regex_cache.get(pattern).map_or(false, |re| re.is_match(path))
+            regex_cache.get(pattern).is_some_and(|re| re.is_match(path))
         } else {
             false
         }
@@ -249,9 +253,7 @@ fn apply_merge_patch(doc: &mut Value, op: &PatchOp) {
         }
         PatchOp::Remove { path } => {
             if let Ok(pointer) = path.parse::<PointerBuf>() {
-                let ops = vec![PatchOperation::Remove(RemoveOperation {
-                    path: pointer,
-                })];
+                let ops = vec![PatchOperation::Remove(RemoveOperation { path: pointer })];
                 let _ = json_patch::patch(doc, &ops);
             }
         }
@@ -264,15 +266,15 @@ fn apply_merge_patch(doc: &mut Value, op: &PatchOp) {
 mod tests {
     use super::*;
     use serde_json::json;
-    use tempfile::TempDir;
     use std::fs::File;
     use std::io::Write;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_overrides_functionality() {
         let temp_dir = TempDir::new().unwrap();
         let override_file = temp_dir.path().join("test-overrides.yaml");
-        
+
         let override_content = r#"
 - targets: ["operation:getUser"]
   patch:
@@ -286,33 +288,28 @@ mod tests {
       path: /user/name
       value: "Jane Doe"
 "#;
-        
+
         let mut file = File::create(&override_file).unwrap();
         file.write_all(override_content.as_bytes()).unwrap();
-        
+
         // Directly load the file instead of using globs
         let text = std::fs::read_to_string(&override_file).unwrap();
         let rules: Vec<OverrideRule> = serde_yaml::from_str(&text).unwrap();
-        
+
         let overrides = Overrides {
             rules,
             regex_cache: HashMap::new(),
         };
-        
+
         let mut response = json!({
             "user": {
                 "id": 123,
                 "name": "John Doe"
             }
         });
-        
-        overrides.apply(
-            "getUser",
-            &[],
-            "/users/{id}",
-            &mut response,
-        );
-        
+
+        overrides.apply("getUser", &[], "/users/{id}", &mut response);
+
         // Check that the overrides were applied
         assert_eq!(response["user"]["name"], "Jane Doe");
         assert_eq!(response["metadata"]["requestId"], "test-request-id");

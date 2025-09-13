@@ -2,8 +2,8 @@
 //! Replay → Fail → Proxy → Mock → Record
 
 use crate::{
-    RequestFingerprint, ResponsePriority, ResponseSource,
-    RecordReplayHandler, FailureInjector, ProxyHandler, Error, Result
+    Error, FailureInjector, ProxyHandler, RecordReplayHandler, RequestFingerprint,
+    ResponsePriority, ResponseSource, Result,
 };
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
@@ -71,8 +71,11 @@ impl PriorityHttpHandler {
         let fingerprint = RequestFingerprint::new(method.clone(), uri, headers, body);
 
         // 1. REPLAY: Check if we have a recorded fixture
-        if let Some(recorded_request) = self.record_replay.replay_handler().load_fixture(&fingerprint).await? {
-            let content_type = recorded_request.response_headers
+        if let Some(recorded_request) =
+            self.record_replay.replay_handler().load_fixture(&fingerprint).await?
+        {
+            let content_type = recorded_request
+                .response_headers
                 .get("content-type")
                 .unwrap_or(&"application/json".to_string())
                 .clone();
@@ -89,7 +92,9 @@ impl PriorityHttpHandler {
 
         // 2. FAIL: Check for failure injection
         if let Some(ref failure_injector) = self.failure_injector {
-            if let Some((status_code, error_message)) = failure_injector.process_request(&fingerprint.tags()) {
+            if let Some((status_code, error_message)) =
+                failure_injector.process_request(&fingerprint.tags())
+            {
                 let error_response = serde_json::json!({
                     "error": error_message,
                     "injected_failure": true,
@@ -97,8 +102,11 @@ impl PriorityHttpHandler {
                 });
 
                 return Ok(PriorityResponse {
-                    source: ResponseSource::new(ResponsePriority::Fail, "failure_injection".to_string())
-                        .with_metadata("error_message".to_string(), error_message),
+                    source: ResponseSource::new(
+                        ResponsePriority::Fail,
+                        "failure_injection".to_string(),
+                    )
+                    .with_metadata("error_message".to_string(), error_message),
                     status_code,
                     headers: HashMap::new(),
                     body: serde_json::to_string(&error_response)?.into_bytes(),
@@ -109,8 +117,8 @@ impl PriorityHttpHandler {
 
         // 3. PROXY: Check if request should be proxied
         if let Some(ref proxy_handler) = self.proxy_handler {
-            if proxy_handler.config.should_proxy(&method, uri.path()) {
-                match proxy_handler.proxy_request(&method, uri, headers, body).await {
+            if proxy_handler.config.should_proxy(method, uri.path()) {
+                match proxy_handler.proxy_request(method, uri, headers, body).await {
                     Ok(proxy_response) => {
                         let mut response_headers = HashMap::new();
                         for (key, value) in proxy_response.headers.iter() {
@@ -126,8 +134,14 @@ impl PriorityHttpHandler {
                             .clone();
 
                         return Ok(PriorityResponse {
-                            source: ResponseSource::new(ResponsePriority::Proxy, "proxy".to_string())
-                                .with_metadata("upstream_url".to_string(), proxy_handler.config.get_upstream_url(uri.path())),
+                            source: ResponseSource::new(
+                                ResponsePriority::Proxy,
+                                "proxy".to_string(),
+                            )
+                            .with_metadata(
+                                "upstream_url".to_string(),
+                                proxy_handler.config.get_upstream_url(uri.path()),
+                            ),
                             status_code: proxy_response.status_code,
                             headers: response_headers,
                             body: proxy_response.body,
@@ -144,7 +158,9 @@ impl PriorityHttpHandler {
 
         // 4. MOCK: Generate mock response from OpenAPI spec
         if let Some(ref mock_generator) = self.mock_generator {
-            if let Some(mock_response) = mock_generator.generate_mock_response(&fingerprint, headers, body)? {
+            if let Some(mock_response) =
+                mock_generator.generate_mock_response(&fingerprint, headers, body)?
+            {
                 return Ok(PriorityResponse {
                     source: ResponseSource::new(ResponsePriority::Mock, "mock".to_string())
                         .with_metadata("generated_from".to_string(), "openapi_spec".to_string()),
@@ -157,7 +173,7 @@ impl PriorityHttpHandler {
         }
 
         // 5. RECORD: Record the request for future replay
-        if self.record_replay.record_handler().should_record(&method) {
+        if self.record_replay.record_handler().should_record(method) {
             // For now, return a default response and record it
             let default_response = serde_json::json!({
                 "message": "Request recorded for future replay",
@@ -169,13 +185,10 @@ impl PriorityHttpHandler {
             let status_code = 200;
 
             // Record the request
-            self.record_replay.record_handler().record_request(
-                &fingerprint,
-                status_code,
-                headers,
-                &response_body,
-                None,
-            ).await?;
+            self.record_replay
+                .record_handler()
+                .record_request(&fingerprint, status_code, headers, &response_body, None)
+                .await?;
 
             return Ok(PriorityResponse {
                 source: ResponseSource::new(ResponsePriority::Record, "record".to_string())
@@ -215,7 +228,9 @@ impl PriorityResponse {
 
         // Add headers
         for (key, value) in self.headers {
-            if let (Ok(header_name), Ok(header_value)) = (key.parse::<axum::http::HeaderName>(), value.parse::<axum::http::HeaderValue>()) {
+            if let (Ok(header_name), Ok(header_value)) =
+                (key.parse::<axum::http::HeaderName>(), value.parse::<axum::http::HeaderValue>())
+            {
                 response.headers_mut().insert(header_name, header_value);
             }
         }
@@ -276,7 +291,8 @@ mod tests {
         let fixtures_dir = temp_dir.path().to_path_buf();
 
         let record_replay = RecordReplayHandler::new(fixtures_dir, true, true, false);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
 
         let handler = PriorityHttpHandler::new(
             record_replay,

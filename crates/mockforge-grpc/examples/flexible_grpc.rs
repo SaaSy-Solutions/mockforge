@@ -3,7 +3,7 @@
 //! This example shows how to use MockForge's flexible gRPC system
 //! to discover and mock services from any proto files.
 
-use mockforge_grpc::{DynamicGrpcConfig, start_with_config};
+use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
 use std::env;
 
 #[tokio::main]

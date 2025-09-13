@@ -28,28 +28,28 @@ impl MethodMetrics {
             in_flight: AtomicUsize::new(0),
         }
     }
-    
+
     /// Record a successful request
     pub fn record_success(&self, duration_ms: u64) {
         self.success_count.fetch_add(1, Ordering::Relaxed);
         self.total_duration_ms.fetch_add(duration_ms, Ordering::Relaxed);
     }
-    
+
     /// Record a failed request
     pub fn record_error(&self) {
         self.error_count.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Increment in-flight requests
     pub fn increment_in_flight(&self) {
         self.in_flight.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Decrement in-flight requests
     pub fn decrement_in_flight(&self) {
         self.in_flight.fetch_sub(1, Ordering::Relaxed);
     }
-    
+
     /// Get a snapshot of the metrics
     pub fn snapshot(&self) -> MethodMetricsSnapshot {
         MethodMetricsSnapshot {
@@ -79,7 +79,7 @@ impl MethodMetricsSnapshot {
             self.total_duration_ms as f64 / self.success_count as f64
         }
     }
-    
+
     /// Calculate the success rate as a percentage
     pub fn success_rate(&self) -> f64 {
         let total = self.success_count + self.error_count;
@@ -105,12 +105,16 @@ impl MetricsRegistry {
             method_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     /// Get or create metrics for a specific service/method
-    pub async fn get_method_metrics(&self, service_name: &str, method_name: &str) -> Arc<MethodMetrics> {
+    pub async fn get_method_metrics(
+        &self,
+        service_name: &str,
+        method_name: &str,
+    ) -> Arc<MethodMetrics> {
         let key = format!("{}::{}", service_name, method_name);
         trace!("Getting metrics for method: {}", key);
-        
+
         // First, try to read the existing metrics
         {
             let metrics = self.method_metrics.read().await;
@@ -118,7 +122,7 @@ impl MetricsRegistry {
                 return metrics.clone();
             }
         }
-        
+
         // If they don't exist, acquire a write lock and create them
         let mut metrics = self.method_metrics.write().await;
         if let Some(metrics) = metrics.get(&key) {
@@ -131,30 +135,35 @@ impl MetricsRegistry {
             new_metrics
         }
     }
-    
+
     /// Get all method metrics snapshots
     pub async fn get_all_snapshots(&self) -> HashMap<String, MethodMetricsSnapshot> {
         let metrics = self.method_metrics.read().await;
         let mut snapshots = HashMap::new();
-        
+
         for (key, method_metrics) in metrics.iter() {
             snapshots.insert(key.clone(), method_metrics.snapshot());
         }
-        
+
         snapshots
     }
-    
+
     /// Get metrics snapshot for a specific service/method
-    pub async fn get_method_snapshot(&self, service_name: &str, method_name: &str) -> Option<MethodMetricsSnapshot> {
+    pub async fn get_method_snapshot(
+        &self,
+        service_name: &str,
+        method_name: &str,
+    ) -> Option<MethodMetricsSnapshot> {
         let key = format!("{}::{}", service_name, method_name);
         let metrics = self.method_metrics.read().await;
-        
+
         metrics.get(&key).map(|m| m.snapshot())
     }
 }
 
 /// Global metrics registry instance
-static GLOBAL_REGISTRY: once_cell::sync::Lazy<MetricsRegistry> = once_cell::sync::Lazy::new(MetricsRegistry::new);
+static GLOBAL_REGISTRY: once_cell::sync::Lazy<MetricsRegistry> =
+    once_cell::sync::Lazy::new(MetricsRegistry::new);
 
 /// Get the global metrics registry
 pub fn global_registry() -> &'static MetricsRegistry {

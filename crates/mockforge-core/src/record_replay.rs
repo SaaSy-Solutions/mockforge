@@ -1,7 +1,7 @@
 //! Record and replay functionality for HTTP requests and responses
 //! Implements the Replay and Record parts of the priority chain.
 
-use crate::{RequestFingerprint, Error, Result};
+use crate::{Error, RequestFingerprint, Result};
 use axum::http::{HeaderMap, Method};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,7 +46,7 @@ impl ReplayHandler {
     fn get_fixture_path(&self, fingerprint: &RequestFingerprint) -> PathBuf {
         let hash = fingerprint.to_hash();
         let method = fingerprint.method.to_lowercase();
-        let path_hash = fingerprint.path.replace('/', "_").replace(':', "_");
+        let path_hash = fingerprint.path.replace(['/', ':'], "_");
 
         self.fixtures_dir
             .join("http")
@@ -66,7 +66,10 @@ impl ReplayHandler {
     }
 
     /// Load a recorded request from fixture
-    pub async fn load_fixture(&self, fingerprint: &RequestFingerprint) -> Result<Option<RecordedRequest>> {
+    pub async fn load_fixture(
+        &self,
+        fingerprint: &RequestFingerprint,
+    ) -> Result<Option<RecordedRequest>> {
         if !self.enabled {
             return Ok(None);
         }
@@ -77,11 +80,13 @@ impl ReplayHandler {
             return Ok(None);
         }
 
-        let content = fs::read_to_string(&fixture_path).await
-            .map_err(|e| Error::generic(format!("Failed to read fixture {}: {}", fixture_path.display(), e)))?;
+        let content = fs::read_to_string(&fixture_path).await.map_err(|e| {
+            Error::generic(format!("Failed to read fixture {}: {}", fixture_path.display(), e))
+        })?;
 
-        let recorded_request: RecordedRequest = serde_json::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to parse fixture {}: {}", fixture_path.display(), e)))?;
+        let recorded_request: RecordedRequest = serde_json::from_str(&content).map_err(|e| {
+            Error::generic(format!("Failed to parse fixture {}: {}", fixture_path.display(), e))
+        })?;
 
         Ok(Some(recorded_request))
     }
@@ -129,7 +134,9 @@ impl RecordHandler {
         response_body: &str,
         metadata: Option<HashMap<String, String>>,
     ) -> Result<()> {
-        if !self.should_record(&Method::from_bytes(fingerprint.method.as_bytes()).unwrap_or(Method::GET)) {
+        if !self.should_record(
+            &Method::from_bytes(fingerprint.method.as_bytes()).unwrap_or(Method::GET),
+        ) {
             return Ok(());
         }
 
@@ -137,8 +144,9 @@ impl RecordHandler {
 
         // Create directory if it doesn't exist
         if let Some(parent) = fixture_path.parent() {
-            fs::create_dir_all(parent).await
-                .map_err(|e| Error::generic(format!("Failed to create directory {}: {}", parent.display(), e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                Error::generic(format!("Failed to create directory {}: {}", parent.display(), e))
+            })?;
         }
 
         // Convert response headers to HashMap
@@ -162,8 +170,9 @@ impl RecordHandler {
         let content = serde_json::to_string_pretty(&recorded_request)
             .map_err(|e| Error::generic(format!("Failed to serialize recorded request: {}", e)))?;
 
-        fs::write(&fixture_path, content).await
-            .map_err(|e| Error::generic(format!("Failed to write fixture {}: {}", fixture_path.display(), e)))?;
+        fs::write(&fixture_path, content).await.map_err(|e| {
+            Error::generic(format!("Failed to write fixture {}: {}", fixture_path.display(), e))
+        })?;
 
         tracing::info!("Recorded request to {}", fixture_path.display());
         Ok(())
@@ -173,7 +182,7 @@ impl RecordHandler {
     fn get_fixture_path(&self, fingerprint: &RequestFingerprint) -> PathBuf {
         let hash = fingerprint.to_hash();
         let method = fingerprint.method.to_lowercase();
-        let path_hash = fingerprint.path.replace('/', "_").replace(':', "_");
+        let path_hash = fingerprint.path.replace(['/', ':'], "_");
 
         self.fixtures_dir
             .join("http")
@@ -191,7 +200,12 @@ pub struct RecordReplayHandler {
 
 impl RecordReplayHandler {
     /// Create a new record/replay handler
-    pub fn new(fixtures_dir: PathBuf, replay_enabled: bool, record_enabled: bool, record_get_only: bool) -> Self {
+    pub fn new(
+        fixtures_dir: PathBuf,
+        replay_enabled: bool,
+        record_enabled: bool,
+        record_get_only: bool,
+    ) -> Self {
         Self {
             replay_handler: ReplayHandler::new(fixtures_dir.clone(), replay_enabled),
             record_handler: RecordHandler::new(fixtures_dir, record_enabled, record_get_only),
@@ -228,10 +242,11 @@ pub async fn list_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequest>> 
         .map_err(|e| Error::generic(format!("Failed to build glob walker: {}", e)))?;
 
     for entry in walker {
-        let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+        let entry =
+            entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
-        
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
             if let Ok(content) = fs::read_to_string(&path).await {
                 if let Ok(recorded_request) = serde_json::from_str::<RecordedRequest>(&content) {
                     fixtures.push(recorded_request);
@@ -260,19 +275,26 @@ pub async fn clean_old_fixtures(fixtures_dir: &Path, older_than_days: u32) -> Re
         return Ok(0);
     }
 
-    let mut entries = fs::read_dir(&http_dir).await
+    let mut entries = fs::read_dir(&http_dir)
+        .await
         .map_err(|e| Error::generic(format!("Failed to read fixtures directory: {}", e)))?;
 
-    while let Some(entry) = entries.next_entry().await
-        .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))? {
-
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+    {
         let path = entry.path();
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
             if let Ok(content) = fs::read_to_string(&path).await {
                 if let Ok(recorded_request) = serde_json::from_str::<RecordedRequest>(&content) {
                     if recorded_request.timestamp < cutoff_date {
                         if let Err(e) = fs::remove_file(&path).await {
-                            tracing::warn!("Failed to remove old fixture {}: {}", path.display(), e);
+                            tracing::warn!(
+                                "Failed to remove old fixture {}: {}",
+                                path.display(),
+                                e
+                            );
                         } else {
                             cleaned_count += 1;
                         }
@@ -304,14 +326,15 @@ pub async fn list_ready_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequ
         .map_err(|e| Error::generic(format!("Failed to build glob walker: {}", e)))?;
 
     for entry in walker {
-        let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+        let entry =
+            entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
-        
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
             if let Ok(content) = fs::read_to_string(&path).await {
                 if let Ok(recorded_request) = serde_json::from_str::<RecordedRequest>(&content) {
                     // Check if this is a ready-to-run fixture (has a smoke_test metadata flag)
-                    if recorded_request.metadata.get("smoke_test").map_or(false, |v| v == "true") {
+                    if recorded_request.metadata.get("smoke_test").is_some_and(|v| v == "true") {
                         fixtures.push(recorded_request);
                     }
                 }
@@ -333,10 +356,12 @@ pub async fn list_smoke_endpoints(fixtures_dir: &Path) -> Result<Vec<(String, St
     for fixture in fixtures {
         let method = fixture.fingerprint.method.clone();
         let path = fixture.fingerprint.path.clone();
-        let name = fixture.metadata.get("name")
+        let name = fixture
+            .metadata
+            .get("name")
             .cloned()
             .unwrap_or_else(|| format!("{} {}", method, path));
-        
+
         endpoints.push((method, path, name));
     }
 
@@ -346,7 +371,7 @@ pub async fn list_smoke_endpoints(fixtures_dir: &Path) -> Result<Vec<(String, St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Uri};
+    use axum::http::Uri;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -366,13 +391,11 @@ mod tests {
         let mut response_headers = HeaderMap::new();
         response_headers.insert("content-type", "application/json".parse().unwrap());
 
-        handler.record_handler().record_request(
-            &fingerprint,
-            200,
-            &response_headers,
-            r#"{"users": []}"#,
-            None,
-        ).await.unwrap();
+        handler
+            .record_handler()
+            .record_request(&fingerprint, 200, &response_headers, r#"{"users": []}"#, None)
+            .await
+            .unwrap();
 
         // Check if fixture exists
         assert!(handler.replay_handler().has_fixture(&fingerprint).await);
@@ -397,13 +420,17 @@ mod tests {
             let headers = HeaderMap::new();
             let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
 
-            handler.record_handler().record_request(
-                &fingerprint,
-                200,
-                &HeaderMap::new(),
-                &format!(r#"{{"id": {}}}"#, i),
-                None,
-            ).await.unwrap();
+            handler
+                .record_handler()
+                .record_request(
+                    &fingerprint,
+                    200,
+                    &HeaderMap::new(),
+                    &format!(r#"{{"id": {}}}"#, i),
+                    None,
+                )
+                .await
+                .unwrap();
         }
 
         // List fixtures

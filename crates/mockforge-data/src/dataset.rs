@@ -474,11 +474,7 @@ pub mod utils {
                     }
                 }
                 _ => {
-                    errors.push(format!(
-                        "Row {}: Expected object, got {}",
-                        row_index + 1,
-                        row
-                    ));
+                    errors.push(format!("Row {}: Expected object, got {}", row_index + 1, row));
                 }
             }
         }
@@ -492,7 +488,10 @@ pub mod utils {
     }
 
     /// Validate dataset size constraints
-    fn validate_dataset_size(dataset: &Dataset, schema: &SchemaDefinition) -> mockforge_core::Result<()> {
+    fn validate_dataset_size(
+        dataset: &Dataset,
+        schema: &SchemaDefinition,
+    ) -> mockforge_core::Result<()> {
         // Check if there are any size constraints in schema metadata
         if let Some(min_rows) = schema.metadata.get("min_rows") {
             if let Some(min_count) = min_rows.as_u64() {

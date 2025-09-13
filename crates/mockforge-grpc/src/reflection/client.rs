@@ -1,13 +1,13 @@
 //! gRPC reflection client for dynamically discovering services and methods.
 
-use prost_reflect::{DescriptorPool, ServiceDescriptor, prost_types, prost::Message};
+use prost_reflect::{prost::Message, prost_types, DescriptorPool, ServiceDescriptor};
 use tonic::{
     transport::{Channel, Endpoint},
     Status,
 };
 use tonic_reflection::pb::v1::{
-    server_reflection_client::ServerReflectionClient, ServerReflectionRequest,
-    server_reflection_response::MessageResponse,
+    server_reflection_client::ServerReflectionClient, server_reflection_response::MessageResponse,
+    ServerReflectionRequest,
 };
 use tracing::{debug, error, trace};
 
@@ -53,7 +53,9 @@ impl ReflectionClient {
                     error!("Failed to read reflection response: {}", e);
                     Status::internal(format!("Failed to read reflection response: {}", e))
                 })? {
-                    if let Some(MessageResponse::ListServicesResponse(services)) = reply.message_response {
+                    if let Some(MessageResponse::ListServicesResponse(services)) =
+                        reply.message_response
+                    {
                         trace!("Found {} services", services.service.len());
                         for service in services.service {
                             debug!("Found service: {}", service.name);
@@ -73,7 +75,10 @@ impl ReflectionClient {
             Self::get_file_descriptor_for_service(&mut client, &mut pool, service_name).await?;
         }
 
-        debug!("Created reflection client for endpoint with {} services", pool.services().count());
+        debug!(
+            "Created reflection client for endpoint with {} services",
+            pool.services().count()
+        );
 
         Ok(Self { channel, pool })
     }
@@ -104,23 +109,40 @@ impl ReflectionClient {
                     error!("Failed to read reflection response: {}", e);
                     Status::internal(format!("Failed to read reflection response: {}", e))
                 })? {
-                    if let Some(MessageResponse::FileDescriptorResponse(descriptor_response)) = reply.message_response {
-                        trace!("Found {} file descriptors for service {}", descriptor_response.file_descriptor_proto.len(), service_name);
+                    if let Some(MessageResponse::FileDescriptorResponse(descriptor_response)) =
+                        reply.message_response
+                    {
+                        trace!(
+                            "Found {} file descriptors for service {}",
+                            descriptor_response.file_descriptor_proto.len(),
+                            service_name
+                        );
                         for file_descriptor_proto in descriptor_response.file_descriptor_proto {
-                            match prost_types::FileDescriptorProto::decode(&*file_descriptor_proto) {
+                            match prost_types::FileDescriptorProto::decode(&*file_descriptor_proto)
+                            {
                                 Ok(file_descriptor) => {
-                                    if let Err(e) = pool.add_file_descriptor_proto(file_descriptor) {
-                                        error!("Failed to register file descriptor for service {}: {}", service_name, e);
+                                    if let Err(e) = pool.add_file_descriptor_proto(file_descriptor)
+                                    {
+                                        error!(
+                                            "Failed to register file descriptor for service {}: {}",
+                                            service_name, e
+                                        );
                                         return Err(Status::internal(format!(
                                             "Failed to register file descriptor for service {}: {}",
                                             service_name, e
                                         )));
                                     } else {
-                                        debug!("Registered file descriptor for service: {}", service_name);
+                                        debug!(
+                                            "Registered file descriptor for service: {}",
+                                            service_name
+                                        );
                                     }
                                 }
                                 Err(e) => {
-                                    error!("Failed to decode file descriptor for service {}: {}", service_name, e);
+                                    error!(
+                                        "Failed to decode file descriptor for service {}: {}",
+                                        service_name, e
+                                    );
                                     return Err(Status::data_loss(format!(
                                         "Failed to decode file descriptor for service {}: {}",
                                         service_name, e
@@ -133,7 +155,10 @@ impl ReflectionClient {
             }
             Err(e) => {
                 error!("Failed to get file descriptor for service {}: {}", service_name, e);
-                return Err(Status::internal(format!("Failed to get file descriptor for service {}: {}", service_name, e)));
+                return Err(Status::internal(format!(
+                    "Failed to get file descriptor for service {}: {}",
+                    service_name, e
+                )));
             }
         }
 

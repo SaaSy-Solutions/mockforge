@@ -64,10 +64,10 @@ impl CentralizedRequestLogger {
     /// Log a new request entry
     pub async fn log_request(&self, entry: RequestLogEntry) {
         let mut logs = self.logs.write().await;
-        
+
         // Add to front (most recent first)
         logs.push_front(entry);
-        
+
         // Maintain size limit
         while logs.len() > self.max_logs {
             logs.pop_back();
@@ -82,7 +82,11 @@ impl CentralizedRequestLogger {
     }
 
     /// Get logs filtered by server type
-    pub async fn get_logs_by_server(&self, server_type: &str, limit: Option<usize>) -> Vec<RequestLogEntry> {
+    pub async fn get_logs_by_server(
+        &self,
+        server_type: &str,
+        limit: Option<usize>,
+    ) -> Vec<RequestLogEntry> {
         let logs = self.logs.read().await;
         logs.iter()
             .filter(|log| log.server_type == server_type)
@@ -95,11 +99,11 @@ impl CentralizedRequestLogger {
     pub async fn get_request_counts_by_server(&self) -> HashMap<String, u64> {
         let logs = self.logs.read().await;
         let mut counts = HashMap::new();
-        
+
         for log in logs.iter() {
             *counts.entry(log.server_type.clone()).or_insert(0) += 1;
         }
-        
+
         counts
     }
 
@@ -111,7 +115,8 @@ impl CentralizedRequestLogger {
 }
 
 /// Global singleton instance of the centralized logger
-static GLOBAL_LOGGER: once_cell::sync::OnceCell<CentralizedRequestLogger> = once_cell::sync::OnceCell::new();
+static GLOBAL_LOGGER: once_cell::sync::OnceCell<CentralizedRequestLogger> =
+    once_cell::sync::OnceCell::new();
 
 /// Initialize the global request logger
 pub fn init_global_logger(max_logs: usize) -> &'static CentralizedRequestLogger {
@@ -131,6 +136,7 @@ pub async fn log_request_global(entry: RequestLogEntry) {
 }
 
 /// Helper to create HTTP request log entry
+#[allow(clippy::too_many_arguments)]
 pub fn create_http_log_entry(
     method: &str,
     path: &str,
@@ -189,6 +195,7 @@ pub fn create_websocket_log_entry(
 }
 
 /// Helper to create gRPC request log entry
+#[allow(clippy::too_many_arguments)]
 pub fn create_grpc_log_entry(
     service: &str,
     method: &str,
