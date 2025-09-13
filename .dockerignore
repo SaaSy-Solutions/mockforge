@@ -1,0 +1,51 @@
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Documentation
+book/
+docs/
+
+# Development files
+.git/
+.github/
+.gitignore
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+logs/
+
+# Test files and coverage
+lcov.info
+*.profraw
+
+# Screenshots and media
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Local configuration (use mounted volumes instead)
+config.yaml
+demo-config.yaml
+
+# Node modules (if any)
+node_modules/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Tools and scripts not needed in container
+tools/
+scripts/

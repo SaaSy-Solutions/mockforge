@@ -34,6 +34,55 @@ make build
 make install
 ```
 
+### Try the Examples
+
+MockForge comes with comprehensive examples to get you started quickly:
+
+```bash
+# Run with the included examples
+make run-example
+
+# Or use the configuration file
+cargo run -p mockforge-cli -- serve --config demo-config.yaml
+
+# Or run manually with environment variables
+MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin
+```
+
+See `examples/README.md` for detailed documentation on the example files.
+
+### Docker (Alternative Installation)
+
+MockForge can also be run using Docker for easy deployment:
+
+#### Quick Docker Start
+
+```bash
+# Using Docker Compose (recommended)
+make docker-compose-up
+
+# Or using Docker directly
+make docker-build && make docker-run
+```
+
+#### Manual Docker Commands
+
+```bash
+# Build the image
+docker build -t mockforge .
+
+# Run with examples
+docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+  -v $(pwd)/examples:/app/examples:ro \
+  -e MOCKFORGE_ADMIN_ENABLED=true \
+  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
+  mockforge
+```
+
+See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment options.
+
 ### Basic Usage
 
 ```bash
@@ -65,28 +114,89 @@ MOCKFORGE_ADMIN_ENABLED=true MOCKFORGE_HTTP_PORT=3000 cargo run -p mockforge-cli
 
 curl <http://localhost:3000/ping>
 
-## WS (scripted replay)
+## WebSocket (Scripted Replay)
 
-export MOCKFORGE_WS_REPLAY_FILE=mockforge/examples/ws-demo.jsonl
+MockForge supports scripted WebSocket interactions with template expansion and conditional responses.
 
-## then connect to ws://localhost:3001/ws and send "CLIENT_READY"
+### Quick Start
 
-Using websocat (command line tool):
+```bash
+# Set the replay file environment variable
+export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
+
+# Start the WebSocket server
+cargo run -p mockforge-cli -- serve --ws-port 3001
+```
+
+### Connect and Test
+
+**Using Node.js:**
+```javascript
+const WebSocket = require('ws');
+const ws = new WebSocket('ws://localhost:3001/ws');
+
+ws.on('open', () => {
+  console.log('Connected! Sending CLIENT_READY...');
+  ws.send('CLIENT_READY');
+});
+
+ws.on('message', (data) => {
+  console.log('Received:', data.toString());
+
+  // Auto-respond to expected prompts
+  if (data.toString().includes('ACK')) {
+    ws.send('ACK');
+  }
+  if (data.toString().includes('CONFIRMED')) {
+    ws.send('CONFIRMED');
+  }
+});
+
+ws.on('close', () => console.log('Connection closed'));
+```
+
+**Using websocat:**
+```bash
 websocat ws://localhost:3001/ws
-Then type CLIENT_READY and press Enter.
+# Then type: CLIENT_READY
+# The server will respond with scripted messages
+```
 
-Using wscat (Node.js tool):
+**Using wscat:**
+```bash
 wscat -c ws://localhost:3001/ws
-Then type CLIENT_READY and press Enter.
+# Then type: CLIENT_READY
+```
 
-Using JavaScript in browser console:
+**Browser Console:**
+```javascript
 const ws = new WebSocket('ws://localhost:3001/ws');
 ws.onopen = () => ws.send('CLIENT_READY');
 ws.onmessage = (event) => console.log('Received:', event.data);
+```
 
-Using curl (if server supports it):
-curl --include --no-buffer --header "Connection: Upgrade" --header "Upgrade: websocket" --header
-"Sec-WebSocket-Key: SGVsbG8sIHdvcmxkIQ==" --header "Sec-WebSocket-Version: 13" ws://localhost:3001/ws
+### Replay File Format
+
+WebSocket replay files use JSON Lines format with the following structure:
+
+```json
+{"ts":0,"dir":"out","text":"HELLO {{uuid}}","waitFor":"^CLIENT_READY$"}
+{"ts":10,"dir":"out","text":"{\\"type\\":\\"welcome\\",\\"sessionId\\":\\"{{uuid}}\\"}"}
+{"ts":20,"dir":"out","text":"{\\"type\\":\\"data\\",\\"value\\":\\"{{randInt 1 100}}\\"}","waitFor":"^ACK$"}
+```
+
+- `ts`: Timestamp in milliseconds for message timing
+- `dir`: Direction ("in" for received, "out" for sent)
+- `text`: Message content (supports template expansion)
+- `waitFor`: Optional regex pattern to wait for before sending
+
+### Template Expansion
+
+WebSocket messages support the same template expansion as HTTP responses:
+- `{{uuid}}` → Random UUID
+- `{{now}}` → Current timestamp
+- `{{now+1h}}` → Future timestamp
+- `{{randInt 1 100}}` → Random integer
 
 ## gRPC
 
@@ -322,7 +432,7 @@ mockforge/
 ├── config.example.yaml         # Configuration example
 ├── docs/                       # Project documentation
 ├── book/                       # mdBook documentation
-├── examples/                   # Example configurations
+├── examples/                   # Example configurations and test files
 ├── tools/                      # Development tools
 ├── scripts/                    # Setup and utility scripts
 ├── .github/                    # GitHub Actions and templates

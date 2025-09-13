@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
+use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig, init_global_logger};
 use mockforge_data::{dataset::DatasetMetadata, schema::templates, DataConfig, DataGenerator};
 use tracing::*;
 
@@ -404,7 +404,16 @@ async fn start_servers_with_config(
         None
     };
     let grpc_task = tokio::spawn(async move {
-        if let Err(e) = mockforge_grpc::start_with_latency(grpc_config.port, grpc_latency).await {
+        // Create gRPC config with environment variable support
+        let proto_dir = std::env::var("MOCKFORGE_PROTO_DIR")
+            .unwrap_or_else(|_| "proto".to_string());
+        let grpc_dynamic_config = mockforge_grpc::DynamicGrpcConfig {
+            proto_dir,
+            enable_reflection: false,
+            excluded_services: Vec::new(),
+        };
+        
+        if let Err(e) = mockforge_grpc::start_with_config(grpc_config.port, grpc_latency, grpc_dynamic_config).await {
             error!("gRPC server error: {}", e);
         }
     });
@@ -490,6 +499,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             latency_enabled,
             failures_enabled,
         } => {
+            // Initialize centralized request logger
+            init_global_logger(2000); // Keep last 2000 requests in memory
+            info!("Initialized centralized request logger");
+
             // Load configuration
             let mut server_config = if let Some(ref config_path) = config {
                 load_config_with_fallback(&config_path).await

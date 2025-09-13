@@ -13,6 +13,7 @@ pub mod priority_handler;
 pub mod proxy;
 pub mod record_replay;
 pub mod request_fingerprint;
+pub mod request_logger;
 pub mod routing;
 pub mod server_utils;
 pub mod templating;
@@ -28,6 +29,10 @@ pub use latency::LatencyProfile;
 pub use priority_handler::{PriorityHttpHandler, PriorityResponse, MockGenerator, MockResponse, SimpleMockGenerator};
 pub use record_replay::{RecordedRequest, ReplayHandler, RecordHandler, RecordReplayHandler, list_fixtures, clean_old_fixtures, list_ready_fixtures, list_smoke_endpoints};
 pub use request_fingerprint::{RequestFingerprint, ResponsePriority, ResponseSource, RequestHandlerResult};
+pub use request_logger::{
+    CentralizedRequestLogger, RequestLogEntry, init_global_logger, get_global_logger, 
+    log_request_global, create_http_log_entry, create_websocket_log_entry, create_grpc_log_entry
+};
 pub use openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec, OpenApiSecurityRequirement};
 pub use openapi_routes::{
     create_registry_from_file, create_registry_from_json, OpenApiRouteRegistry,

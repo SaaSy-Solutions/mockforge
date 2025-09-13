@@ -171,7 +171,7 @@ pub async fn start_dynamic_server(
     let service_names = registry_arc.service_names().clone();
 
     // Create HTTP router for status endpoints
-    let http_app = Router::new()
+    let http_app: Router = Router::new()
         .route("/", get({
             let service_names = service_names.clone();
             move || async move {
@@ -208,13 +208,86 @@ pub async fn start_dynamic_server(
     let http_listener = TcpListener::bind(http_addr).await?;
     info!("HTTP status server listening on {}", http_addr);
 
-    // Start gRPC server on a different port (port + 1)
-    let grpc_addr = mockforge_core::wildcard_socket_addr(port + 1);
-    info!("gRPC server would listen on {} (not yet implemented)", grpc_addr);
+    // Start actual gRPC server on the specified port
+    info!("Starting gRPC server on {} with {} discovered services", addr, registry_arc.service_names().len());
+    
+    // Log discovered services
+    for service_name in registry_arc.service_names() {
+        info!("  - Service: {}", service_name);
+    }
 
-    // For now, just run the HTTP server
-    // TODO: Implement actual gRPC server with registered services
-    axum::serve(http_listener, http_app).await?;
+    // For now, create a basic gRPC server that at least starts successfully
+    // Full implementation would require generating actual service implementations
+    use std::net::SocketAddr;
+    
+    let grpc_addr: SocketAddr = addr;
+    
+    info!("gRPC server listening on {} (basic implementation)", grpc_addr);
+    info!("Discovered services are logged but not yet fully implemented:");
+    for service_name in registry_arc.service_names() {
+        info!("  - {}", service_name);
+    }
+    
+    // Create a basic gRPC server with the discovered services
+    use crate::generated::greeter_server::{Greeter, GreeterServer};
+    use crate::generated::{HelloRequest, HelloReply};
+    use tonic::{Request, Response, Status};
+    
+    // Basic implementation of the Greeter service
+    #[derive(Debug, Default)]
+    pub struct MockGreeterService;
+    
+    #[tonic::async_trait]
+    impl Greeter for MockGreeterService {
+        type SayHelloStreamStream = futures::stream::Empty<Result<HelloReply, Status>>;
+        type ChatStream = futures::stream::Empty<Result<HelloReply, Status>>;
+        
+        async fn say_hello(
+            &self,
+            request: Request<HelloRequest>,
+        ) -> Result<Response<HelloReply>, Status> {
+            println!("Got a request: {:?}", request);
+            
+            let req = request.into_inner();
+            let reply = HelloReply {
+                message: format!("Hello {}! This is a mock response from MockForge", req.name),
+                metadata: None,
+                items: vec![],
+            };
+            
+            Ok(Response::new(reply))
+        }
+        
+        async fn say_hello_stream(
+            &self,
+            _request: Request<HelloRequest>,
+        ) -> Result<Response<Self::SayHelloStreamStream>, Status> {
+            Err(Status::unimplemented("say_hello_stream not yet implemented"))
+        }
+        
+        async fn say_hello_client_stream(
+            &self,
+            _request: Request<tonic::Streaming<HelloRequest>>,
+        ) -> Result<Response<HelloReply>, Status> {
+            Err(Status::unimplemented("say_hello_client_stream not yet implemented"))
+        }
+        
+        async fn chat(
+            &self,
+            _request: Request<tonic::Streaming<HelloRequest>>,
+        ) -> Result<Response<Self::ChatStream>, Status> {
+            Err(Status::unimplemented("chat not yet implemented"))
+        }
+    }
+    
+    let greeter = MockGreeterService::default();
+    
+    info!("gRPC server listening on {} with Greeter service", grpc_addr);
+    
+    Server::builder()
+        .add_service(GreeterServer::new(greeter))
+        .serve(grpc_addr)
+        .await?;
 
     Ok(())
 }

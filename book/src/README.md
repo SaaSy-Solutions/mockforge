@@ -28,13 +28,18 @@ cargo install mockforge-cli
 
 ```bash
 # Start a mock server with an OpenAPI spec
-mockforge --spec examples/openapi-demo.json --http-port 3000
+cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000
 
-# Add WebSocket support
-MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl mockforge --ws-port 3001
+# Add WebSocket support with replay file
+MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl cargo run -p mockforge-cli -- serve --ws-port 3001
 
-# Add gRPC support
-mockforge --grpc-port 50051
+# Full configuration with Admin UI
+MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin --admin-port 8080
+
+# Use configuration file
+cargo run -p mockforge-cli -- serve --config demo-config.yaml
 ```
 
 ### Docker
