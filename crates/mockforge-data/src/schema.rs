@@ -94,25 +94,39 @@ impl FieldDefinition {
             return Err(Error::generic(format!("Required field '{}' is null", self.name)));
         }
 
-        // Check type constraints
-        if let Some(expected_type) = self.constraints.get("type") {
-            if let Some(expected_str) = expected_type.as_str() {
-                let actual_type = match value {
-                    Value::String(_) => "string",
-                    Value::Number(_) => "number",
-                    Value::Bool(_) => "boolean",
-                    Value::Object(_) => "object",
-                    Value::Array(_) => "array",
-                    Value::Null => "null",
-                };
+        // Check type constraints - use field_type as primary, fall back to constraints
+        let expected_type = self.constraints.get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&self.field_type);
+            
+        let actual_type = match value {
+            Value::String(_) => "string",
+            Value::Number(_) => match expected_type {
+                "integer" => "integer",
+                _ => "number",
+            },
+            Value::Bool(_) => "boolean",
+            Value::Object(_) => "object", 
+            Value::Array(_) => "array",
+            Value::Null => "null",
+        };
 
-                if expected_str != actual_type {
-                    return Err(Error::generic(format!(
-                        "Field '{}' type mismatch: expected {}, got {}",
-                        self.name, expected_str, actual_type
-                    )));
-                }
-            }
+        // Normalize expected type for comparison
+        let normalized_expected = match expected_type {
+            "integer" => "integer",
+            "number" => "number", 
+            "string" => "string",
+            "boolean" => "boolean",
+            "object" => "object",
+            "array" => "array",
+            _ => expected_type,
+        };
+
+        if normalized_expected != actual_type && !(normalized_expected == "number" && actual_type == "integer") {
+            return Err(Error::generic(format!(
+                "Field '{}' type mismatch: expected {}, got {}",
+                self.name, normalized_expected, actual_type
+            )));
         }
 
         // Check min/max constraints for numbers
