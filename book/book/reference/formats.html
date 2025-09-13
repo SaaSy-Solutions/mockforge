@@ -183,6 +183,444 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h1>
+<p>MockForge supports various data formats for configuration, specifications, and data exchange. This reference documents all supported formats, their usage, and conversion utilities.</p>
+<h2 id="openapi-specifications"><a class="header" href="#openapi-specifications">OpenAPI Specifications</a></h2>
+<h3 id="json-format-primary"><a class="header" href="#json-format-primary">JSON Format (Primary)</a></h3>
+<p>MockForge primarily supports OpenAPI 3.0+ specifications in JSON format:</p>
+<pre><code class="language-json">{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "User API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "email": {"type": "string"}
+        }
+      }
+    }
+  }
+}
+</code></pre>
+<h3 id="yaml-format-alternative"><a class="header" href="#yaml-format-alternative">YAML Format (Alternative)</a></h3>
+<p>OpenAPI specifications can also be provided in YAML format:</p>
+<pre><code class="language-yaml">openapi: 3.0.3
+info:
+  title: User API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+</code></pre>
+<h3 id="conversion-between-formats"><a class="header" href="#conversion-between-formats">Conversion Between Formats</a></h3>
+<pre><code class="language-bash"># Convert JSON to YAML
+node -e "
+const fs = require('fs');
+const yaml = require('js-yaml');
+const spec = JSON.parse(fs.readFileSync('api.json', 'utf8'));
+fs.writeFileSync('api.yaml', yaml.dump(spec));
+"
+
+# Convert YAML to JSON
+node -e "
+const fs = require('fs');
+const yaml = require('js-yaml');
+const spec = yaml.load(fs.readFileSync('api.yaml', 'utf8'));
+fs.writeFileSync('api.json', JSON.stringify(spec, null, 2));
+"
+</code></pre>
+<h2 id="protocol-buffers"><a class="header" href="#protocol-buffers">Protocol Buffers</a></h2>
+<h3 id="proto-files"><a class="header" href="#proto-files">.proto Files</a></h3>
+<p>gRPC services use Protocol Buffer definitions:</p>
+<pre><code class="language-protobuf">syntax = "proto3";
+
+package myapp.user;
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc ListUsers(ListUsersRequest) returns (stream User);
+  rpc CreateUser(CreateUserRequest) returns (User);
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message User {
+  string user_id = 1;
+  string name = 2;
+  string email = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message ListUsersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+}
+</code></pre>
+<h3 id="generated-code"><a class="header" href="#generated-code">Generated Code</a></h3>
+<p>MockForge automatically generates Rust code from <code>.proto</code> files:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Generated code structure
+pub mod myapp {
+    pub mod user {
+        tonic::include_proto!("myapp.user");
+
+        // Generated service trait
+        #[tonic::async_trait]
+        pub trait UserService: Send + Sync + 'static {
+            async fn get_user(
+                &amp;self,
+                request: tonic::Request&lt;GetUserRequest&gt;,
+            ) -&gt; Result&lt;tonic::Response&lt;User&gt;, tonic::Status&gt;;
+
+            async fn list_users(
+                &amp;self,
+                request: tonic::Request&lt;ListUsersRequest&gt;,
+            ) -&gt; Result&lt;tonic::Response&lt;Self::ListUsersStream&gt;, tonic::Status&gt;;
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="websocket-replay-files"><a class="header" href="#websocket-replay-files">WebSocket Replay Files</a></h2>
+<h3 id="jsonl-format"><a class="header" href="#jsonl-format">JSONL Format</a></h3>
+<p>WebSocket interactions use JSON Lines format:</p>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to chat!","waitFor":"^HELLO$"}
+{"ts":1000,"dir":"out","text":"How can I help you?"}
+{"ts":2000,"dir":"out","text":"Please wait while I process your request..."}
+{"ts":5000,"dir":"out","text":"Here's your response: ..."}
+</code></pre>
+<h3 id="extended-jsonl-with-templates"><a class="header" href="#extended-jsonl-with-templates">Extended JSONL with Templates</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Session {{uuid}} started at {{now}}"}
+{"ts":1000,"dir":"out","text":"Connected to server {{server_id}}"}
+{"ts":2000,"dir":"out","text":"{{#if authenticated}}Welcome back!{{else}}Please authenticate{{/if}}"}
+</code></pre>
+<h3 id="binary-message-support"><a class="header" href="#binary-message-support">Binary Message Support</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","binary":true}
+{"ts":1000,"dir":"out","text":"Image data sent"}
+</code></pre>
+<h2 id="configuration-files"><a class="header" href="#configuration-files">Configuration Files</a></h2>
+<h3 id="yaml-configuration"><a class="header" href="#yaml-configuration">YAML Configuration</a></h3>
+<p>MockForge uses YAML for configuration files:</p>
+<pre><code class="language-yaml"># Server configuration
+server:
+  http_port: 3000
+  ws_port: 3001
+  grpc_port: 50051
+
+# Validation settings
+validation:
+  mode: enforce
+  aggregate_errors: false
+
+# Response processing
+response:
+  template_expand: true
+
+# Protocol-specific settings
+grpc:
+  proto_dir: "proto/"
+  enable_reflection: true
+
+websocket:
+  replay_file: "examples/demo.jsonl"
+</code></pre>
+<h3 id="json-configuration-alternative"><a class="header" href="#json-configuration-alternative">JSON Configuration (Alternative)</a></h3>
+<p>Configuration can also be provided as JSON:</p>
+<pre><code class="language-json">{
+  "server": {
+    "http_port": 3000,
+    "ws_port": 3001,
+    "grpc_port": 50051
+  },
+  "validation": {
+    "mode": "enforce",
+    "aggregate_errors": false
+  },
+  "response": {
+    "template_expand": true
+  },
+  "grpc": {
+    "proto_dir": "proto/",
+    "enable_reflection": true
+  },
+  "websocket": {
+    "replay_file": "examples/demo.jsonl"
+  }
+}
+</code></pre>
+<h2 id="data-generation-formats"><a class="header" href="#data-generation-formats">Data Generation Formats</a></h2>
+<h3 id="json-output"><a class="header" href="#json-output">JSON Output</a></h3>
+<p>Generated test data in JSON format:</p>
+<pre><code class="language-json">[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "created_at": "2025-09-12T10:00:00Z"
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "name": "Jane Smith",
+    "email": "jane.smith@example.com",
+    "created_at": "2025-09-12T11:00:00Z"
+  }
+]
+</code></pre>
+<h3 id="yaml-output"><a class="header" href="#yaml-output">YAML Output</a></h3>
+<p>Same data in YAML format:</p>
+<pre><code class="language-yaml">- id: 550e8400-e29b-41d4-a716-446655440000
+  name: John Doe
+  email: john.doe@example.com
+  created_at: '2025-09-12T10:00:00Z'
+- id: 550e8400-e29b-41d4-a716-446655440001
+  name: Jane Smith
+  email: jane.smith@example.com
+  created_at: '2025-09-12T11:00:00Z'
+</code></pre>
+<h3 id="csv-output"><a class="header" href="#csv-output">CSV Output</a></h3>
+<p>Tabular data in CSV format:</p>
+<pre><code class="language-csv">id,name,email,created_at
+550e8400-e29b-41d4-a716-446655440000,John Doe,john.doe@example.com,2025-09-12T10:00:00Z
+550e8400-e29b-41d4-a716-446655440001,Jane Smith,jane.smith@example.com,2025-09-12T11:00:00Z
+</code></pre>
+<h2 id="log-formats"><a class="header" href="#log-formats">Log Formats</a></h2>
+<h3 id="text-format-default"><a class="header" href="#text-format-default">Text Format (Default)</a></h3>
+<p>Human-readable log output:</p>
+<pre><code>2025-09-12T10:00:00Z INFO mockforge::http: Server started on 0.0.0.0:3000
+2025-09-12T10:00:01Z INFO mockforge::http: Request: GET /users
+2025-09-12T10:00:01Z DEBUG mockforge::template: Template expanded: {{uuid}} -&gt; 550e8400-e29b-41d4-a716-446655440000
+2025-09-12T10:00:01Z INFO mockforge::http: Response: 200 OK
+</code></pre>
+<h3 id="json-format"><a class="header" href="#json-format">JSON Format</a></h3>
+<p>Structured JSON logging:</p>
+<pre><code class="language-json">{"timestamp":"2025-09-12T10:00:00Z","level":"INFO","module":"mockforge::http","message":"Server started on 0.0.0.0:3000"}
+{"timestamp":"2025-09-12T10:00:01Z","level":"INFO","module":"mockforge::http","message":"Request: GET /users","method":"GET","path":"/users","user_agent":"curl/7.68.0"}
+{"timestamp":"2025-09-12T10:00:01Z","level":"DEBUG","module":"mockforge::template","message":"Template expanded","template":"{{uuid}}","result":"550e8400-e29b-41d4-a716-446655440000"}
+{"timestamp":"2025-09-12T10:00:01Z","level":"INFO","module":"mockforge::http","message":"Response: 200 OK","status":200,"duration_ms":15}
+</code></pre>
+<h2 id="template-syntax"><a class="header" href="#template-syntax">Template Syntax</a></h2>
+<h3 id="handlebars-templates"><a class="header" href="#handlebars-templates">Handlebars Templates</a></h3>
+<p>MockForge uses Handlebars-style templates:</p>
+<pre><code class="language-handlebars">{{variable}}
+{{object.property}}
+{{array.[0]}}
+{{#if condition}}content{{/if}}
+{{#each items}}{{this}}{{/each}}
+{{helper arg1 arg2}}
+</code></pre>
+<h3 id="built-in-helpers"><a class="header" href="#built-in-helpers">Built-in Helpers</a></h3>
+<pre><code class="language-handlebars">&lt;!-- Data generation --&gt;
+{{uuid}}                    &lt;!-- Random UUID --&gt;
+{{now}}                     &lt;!-- Current timestamp --&gt;
+{{now+1h}}                  &lt;!-- Future timestamp --&gt;
+{{randInt 1 100}}          &lt;!-- Random integer --&gt;
+{{randFloat 0.0 1.0}}      &lt;!-- Random float --&gt;
+{{randWord}}               &lt;!-- Random word --&gt;
+{{randSentence}}           &lt;!-- Random sentence --&gt;
+{{randParagraph}}          &lt;!-- Random paragraph --&gt;
+
+&lt;!-- Request context --&gt;
+{{request.path.id}}        &lt;!-- URL path parameter --&gt;
+{{request.query.limit}}    &lt;!-- Query parameter --&gt;
+{{request.header.auth}}    &lt;!-- HTTP header --&gt;
+{{request.body.name}}      &lt;!-- Request body field --&gt;
+
+&lt;!-- Logic helpers --&gt;
+{{#if user.authenticated}}
+  Welcome back, {{user.name}}!
+{{else}}
+  Please log in.
+{{/if}}
+
+{{#each users}}
+  &lt;li&gt;{{name}} - {{email}}&lt;/li&gt;
+{{/each}}
+</code></pre>
+<h2 id="conversion-utilities"><a class="header" href="#conversion-utilities">Conversion Utilities</a></h2>
+<h3 id="format-conversion-scripts"><a class="header" href="#format-conversion-scripts">Format Conversion Scripts</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# convert-format.sh - Convert between supported formats
+
+input_file=$1
+output_format=$2
+
+case $output_format in
+    "yaml")
+        python3 -c "
+import sys, yaml, json
+data = json.load(sys.stdin)
+yaml.dump(data, sys.stdout, default_flow_style=False)
+" &lt; "$input_file"
+        ;;
+    "json")
+        python3 -c "
+import sys, yaml, json
+data = yaml.safe_load(sys.stdin)
+json.dump(data, sys.stdout, indent=2)
+" &lt; "$input_file"
+        ;;
+    "xml")
+        python3 -c "
+import sys, json, dicttoxml
+data = json.load(sys.stdin)
+xml = dicttoxml.dicttoxml(data, custom_root='root', attr_type=False)
+print(xml.decode())
+" &lt; "$input_file"
+        ;;
+    *)
+        echo "Unsupported format: $output_format"
+        echo "Supported: yaml, json, xml"
+        exit 1
+        ;;
+esac
+</code></pre>
+<h3 id="validation-scripts"><a class="header" href="#validation-scripts">Validation Scripts</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# validate-format.sh - Validate file formats
+
+file=$1
+format=$(basename "$file" | sed 's/.*\.//')
+
+case $format in
+    "json")
+        python3 -c "
+import sys, json
+try:
+    json.load(sys.stdin)
+    print('✓ Valid JSON')
+except Exception as e:
+    print('✗ Invalid JSON:', e)
+    sys.exit(1)
+" &lt; "$file"
+        ;;
+    "yaml")
+        python3 -c "
+import sys, yaml
+try:
+    yaml.safe_load(sys.stdin)
+    print('✓ Valid YAML')
+except Exception as e:
+    print('✗ Invalid YAML:', e)
+    sys.exit(1)
+" &lt; "$file"
+        ;;
+    "xml")
+        python3 -c "
+import sys, xml.etree.ElementTree as ET
+try:
+    ET.parse(sys.stdin)
+    print('✓ Valid XML')
+except Exception as e:
+    print('✗ Invalid XML:', e)
+    sys.exit(1)
+" &lt; "$file"
+        ;;
+    *)
+        echo "Unsupported format: $format"
+        exit 1
+        ;;
+esac
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="choosing-the-right-format"><a class="header" href="#choosing-the-right-format">Choosing the Right Format</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Use Case</th><th>Recommended Format</th><th>Reason</th></tr></thead><tbody>
+<tr><td>API Specifications</td><td>OpenAPI YAML</td><td>More readable, better for version control</td></tr>
+<tr><td>Configuration</td><td>YAML</td><td>Human-readable, supports comments</td></tr>
+<tr><td>Data Exchange</td><td>JSON</td><td>Universally supported, compact</td></tr>
+<tr><td>Logs</td><td>JSON</td><td>Structured, searchable</td></tr>
+<tr><td>Templates</td><td>Handlebars</td><td>Expressive, logic support</td></tr>
+</tbody></table>
+</div>
+<h3 id="format-conversion-workflow"><a class="header" href="#format-conversion-workflow">Format Conversion Workflow</a></h3>
+<pre><code class="language-bash"># API development workflow
+# 1. Design API in YAML (readable)
+swagger-editor
+
+# 2. Convert to JSON for tools that require it
+./convert-format.sh api.yaml json &gt; api.json
+
+# 3. Validate both formats
+./validate-format.sh api.yaml
+./validate-format.sh api.json
+
+# 4. Generate documentation
+swagger-codegen generate -i api.yaml -l html -o docs/
+
+# 5. Commit YAML version (better diff)
+git add api.yaml
+</code></pre>
+<h3 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h3>
+<ul>
+<li><strong>JSON</strong>: Fastest parsing, smallest size</li>
+<li><strong>YAML</strong>: Slower parsing, larger size, better readability</li>
+<li><strong>XML</strong>: Slowest parsing, largest size, most verbose</li>
+<li><strong>Binary formats</strong>: Fastest for large data, not human-readable</li>
+</ul>
+<h3 id="compatibility-matrix"><a class="header" href="#compatibility-matrix">Compatibility Matrix</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Format</th><th>MockForge Support</th><th>Readability</th><th>Tool Support</th><th>Size</th></tr></thead><tbody>
+<tr><td>JSON</td><td>✅ Full</td><td>Medium</td><td>Excellent</td><td>Small</td></tr>
+<tr><td>YAML</td><td>✅ Full</td><td>High</td><td>Good</td><td>Medium</td></tr>
+<tr><td>XML</td><td>❌ None</td><td>Low</td><td>Good</td><td>Large</td></tr>
+<tr><td>Protocol Buffers</td><td>✅ gRPC only</td><td>Low</td><td>Limited</td><td>Small</td></tr>
+<tr><td>JSONL</td><td>✅ WebSocket</td><td>Medium</td><td>Basic</td><td>Medium</td></tr>
+</tbody></table>
+</div>
+<p>This format reference ensures you can work effectively with all data formats supported by MockForge across different use cases and workflows.</p>
 
                     </main>
 
@@ -213,22 +651,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

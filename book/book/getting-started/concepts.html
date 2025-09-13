@@ -183,6 +183,203 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="basic-concepts"><a class="header" href="#basic-concepts">Basic Concepts</a></h1>
+<p>Understanding MockForge’s core concepts will help you make the most of its capabilities. This guide explains the fundamental ideas behind MockForge’s design and functionality.</p>
+<h2 id="multi-protocol-architecture"><a class="header" href="#multi-protocol-architecture">Multi-Protocol Architecture</a></h2>
+<p>MockForge is designed to mock multiple communication protocols within a single, unified framework:</p>
+<h3 id="httprest-apis"><a class="header" href="#httprest-apis">HTTP/REST APIs</a></h3>
+<ul>
+<li><strong>OpenAPI/Swagger Support</strong>: Define API contracts using industry-standard OpenAPI specifications</li>
+<li><strong>Dynamic Response Generation</strong>: Generate realistic responses based on request parameters</li>
+<li><strong>Request/Response Matching</strong>: Route requests to appropriate mock responses based on HTTP methods, paths, and parameters</li>
+</ul>
+<h3 id="websocket-connections"><a class="header" href="#websocket-connections">WebSocket Connections</a></h3>
+<ul>
+<li><strong>Replay Mode</strong>: Simulate scripted message sequences from recorded interactions</li>
+<li><strong>Interactive Mode</strong>: Respond dynamically to client messages</li>
+<li><strong>State Management</strong>: Maintain connection state across message exchanges</li>
+</ul>
+<h3 id="grpc-services"><a class="header" href="#grpc-services">gRPC Services</a></h3>
+<ul>
+<li><strong>Protocol Buffer Integration</strong>: Mock services defined with .proto files</li>
+<li><strong>Dynamic Service Discovery</strong>: Automatically discover and compile .proto files</li>
+<li><strong>Streaming Support</strong>: Handle unary, server streaming, client streaming, and bidirectional streaming</li>
+<li><strong>Reflection Support</strong>: Built-in gRPC reflection for service discovery</li>
+</ul>
+<h2 id="response-generation-strategies"><a class="header" href="#response-generation-strategies">Response Generation Strategies</a></h2>
+<p>MockForge offers multiple approaches to generating mock responses:</p>
+<h3 id="1-static-responses"><a class="header" href="#1-static-responses">1. Static Responses</a></h3>
+<p>Define fixed response payloads that are returned for matching requests:</p>
+<pre><code class="language-json">{
+  "status": "success",
+  "data": {
+    "id": 123,
+    "name": "Example Item"
+  }
+}
+</code></pre>
+<h3 id="2-template-based-dynamic-responses"><a class="header" href="#2-template-based-dynamic-responses">2. Template-Based Dynamic Responses</a></h3>
+<p>Use template variables for dynamic content generation:</p>
+<pre><code class="language-json">{
+  "id": "{{uuid}}",
+  "timestamp": "{{now}}",
+  "randomValue": "{{randInt 1 100}}",
+  "userData": "{{request.body}}"
+}
+</code></pre>
+<h3 id="3-scenario-based-responses"><a class="header" href="#3-scenario-based-responses">3. Scenario-Based Responses</a></h3>
+<p>Define complex interaction scenarios with conditional logic and state management.</p>
+<h2 id="template-system"><a class="header" href="#template-system">Template System</a></h2>
+<p>MockForge’s template system enables dynamic content generation using Handlebars-style syntax:</p>
+<h3 id="built-in-template-functions"><a class="header" href="#built-in-template-functions">Built-in Template Functions</a></h3>
+<h4 id="data-generation"><a class="header" href="#data-generation">Data Generation</a></h4>
+<ul>
+<li><code>{{uuid}}</code> - Generate unique UUID v4 identifiers</li>
+<li><code>{{now}}</code> - Current timestamp in ISO 8601 format</li>
+<li><code>{{now+1h}}</code> - Future timestamps with offset support</li>
+<li><code>{{randInt min max}}</code> - Random integers within a range</li>
+<li><code>{{randFloat min max}}</code> - Random floating-point numbers</li>
+</ul>
+<h4 id="request-data-access"><a class="header" href="#request-data-access">Request Data Access</a></h4>
+<ul>
+<li><code>{{request.body}}</code> - Access complete request body</li>
+<li><code>{{request.body.field}}</code> - Access specific JSON fields</li>
+<li><code>{{request.path.param}}</code> - Access URL path parameters</li>
+<li><code>{{request.query.param}}</code> - Access query string parameters</li>
+<li><code>{{request.header.name}}</code> - Access HTTP headers</li>
+</ul>
+<h4 id="conditional-logic"><a class="header" href="#conditional-logic">Conditional Logic</a></h4>
+<ul>
+<li><code>{{#if condition}}content{{/if}}</code> - Conditional content rendering</li>
+<li><code>{{#each array}}item{{/each}}</code> - Iterate over arrays</li>
+</ul>
+<h3 id="template-expansion-control"><a class="header" href="#template-expansion-control">Template Expansion Control</a></h3>
+<p>Templates are only processed when explicitly enabled:</p>
+<pre><code class="language-bash"># Enable template expansion
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+</code></pre>
+<p>This security feature prevents accidental template processing in production environments.</p>
+<h2 id="configuration-hierarchy"><a class="header" href="#configuration-hierarchy">Configuration Hierarchy</a></h2>
+<p>MockForge supports multiple configuration methods with clear precedence:</p>
+<h3 id="1-command-line-arguments-highest-priority"><a class="header" href="#1-command-line-arguments-highest-priority">1. Command Line Arguments (Highest Priority)</a></h3>
+<pre><code class="language-bash">mockforge serve --http-port 3000 --ws-port 3001 --spec api.json
+</code></pre>
+<h3 id="2-environment-variables"><a class="header" href="#2-environment-variables">2. Environment Variables</a></h3>
+<pre><code class="language-bash">MOCKFORGE_HTTP_PORT=3000
+MOCKFORGE_WS_PORT=3001
+MOCKFORGE_OPENAPI_SPEC=api.json
+</code></pre>
+<h3 id="3-configuration-files-lowest-priority"><a class="header" href="#3-configuration-files-lowest-priority">3. Configuration Files (Lowest Priority)</a></h3>
+<pre><code class="language-yaml"># config.yaml
+server:
+  http_port: 3000
+  ws_port: 3001
+spec: api.json
+</code></pre>
+<h2 id="server-modes"><a class="header" href="#server-modes">Server Modes</a></h2>
+<h3 id="development-mode"><a class="header" href="#development-mode">Development Mode</a></h3>
+<ul>
+<li><strong>Template Expansion</strong>: Enabled by default for dynamic content</li>
+<li><strong>Verbose Logging</strong>: Detailed request/response logging</li>
+<li><strong>Admin UI</strong>: Enabled for visual server management</li>
+<li><strong>CORS</strong>: Permissive cross-origin requests</li>
+</ul>
+<h3 id="production-mode"><a class="header" href="#production-mode">Production Mode</a></h3>
+<ul>
+<li><strong>Template Expansion</strong>: Disabled by default for security</li>
+<li><strong>Minimal Logging</strong>: Essential information only</li>
+<li><strong>Performance Optimized</strong>: Reduced overhead for high-throughput scenarios</li>
+</ul>
+<h2 id="request-matching"><a class="header" href="#request-matching">Request Matching</a></h2>
+<p>MockForge uses a sophisticated matching system to route requests to appropriate responses:</p>
+<h3 id="http-request-matching"><a class="header" href="#http-request-matching">HTTP Request Matching</a></h3>
+<ol>
+<li><strong>Method Matching</strong>: GET, POST, PUT, DELETE, PATCH</li>
+<li><strong>Path Matching</strong>: Exact path or parameterized routes</li>
+<li><strong>Query Parameter Matching</strong>: Optional query string conditions</li>
+<li><strong>Header Matching</strong>: Conditional responses based on request headers</li>
+<li><strong>Body Matching</strong>: Match against request payload structure</li>
+</ol>
+<h3 id="priority-order"><a class="header" href="#priority-order">Priority Order</a></h3>
+<ol>
+<li>Most specific match first (method + path + query + headers + body)</li>
+<li>Fall back to less specific matches</li>
+<li>Default response for unmatched requests</li>
+</ol>
+<h2 id="state-management"><a class="header" href="#state-management">State Management</a></h2>
+<p>For complex scenarios, MockForge supports maintaining state across requests:</p>
+<h3 id="session-state"><a class="header" href="#session-state">Session State</a></h3>
+<ul>
+<li><strong>Connection-specific data</strong> persists across WebSocket messages</li>
+<li><strong>HTTP session cookies</strong> maintain state between requests</li>
+<li><strong>Scenario progression</strong> tracks interaction flow</li>
+</ul>
+<h3 id="global-state"><a class="header" href="#global-state">Global State</a></h3>
+<ul>
+<li><strong>Shared data</strong> accessible across all connections</li>
+<li><strong>Configuration updates</strong> applied dynamically</li>
+<li><strong>Metrics and counters</strong> maintained server-wide</li>
+</ul>
+<h2 id="extensibility"><a class="header" href="#extensibility">Extensibility</a></h2>
+<p>MockForge is designed for extension through multiple mechanisms:</p>
+<h3 id="custom-response-generators"><a class="header" href="#custom-response-generators">Custom Response Generators</a></h3>
+<p>Implement custom logic for generating complex responses based on business rules.</p>
+<h3 id="plugin-system"><a class="header" href="#plugin-system">Plugin System</a></h3>
+<p>Extend functionality through compiled plugins for specialized use cases.</p>
+<h3 id="configuration-extensions"><a class="header" href="#configuration-extensions">Configuration Extensions</a></h3>
+<p>Add custom configuration options for domain-specific requirements.</p>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<h3 id="template-injection-prevention"><a class="header" href="#template-injection-prevention">Template Injection Prevention</a></h3>
+<ul>
+<li>Templates are disabled by default in production</li>
+<li>Explicit opt-in required for template processing</li>
+<li>Input validation prevents malicious template injection</li>
+</ul>
+<h3 id="access-control"><a class="header" href="#access-control">Access Control</a></h3>
+<ul>
+<li>Configurable CORS policies</li>
+<li>Request rate limiting options</li>
+<li>Authentication simulation support</li>
+</ul>
+<h3 id="data-privacy"><a class="header" href="#data-privacy">Data Privacy</a></h3>
+<ul>
+<li>Request/response logging controls</li>
+<li>Sensitive data masking capabilities</li>
+<li>Compliance-friendly configuration options</li>
+</ul>
+<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
+<h3 id="throughput"><a class="header" href="#throughput">Throughput</a></h3>
+<ul>
+<li><strong>HTTP APIs</strong>: 10,000+ requests/second (depending on response complexity)</li>
+<li><strong>WebSocket</strong>: 1,000+ concurrent connections</li>
+<li><strong>Memory Usage</strong>: Minimal overhead per connection</li>
+</ul>
+<h3 id="scalability"><a class="header" href="#scalability">Scalability</a></h3>
+<ul>
+<li><strong>Horizontal Scaling</strong>: Multiple instances behind load balancer</li>
+<li><strong>Resource Efficiency</strong>: Low CPU and memory footprint</li>
+<li><strong>Concurrent Users</strong>: Support for thousands of simultaneous connections</li>
+</ul>
+<h2 id="integration-patterns"><a class="header" href="#integration-patterns">Integration Patterns</a></h2>
+<p>MockForge works well in various development and testing scenarios:</p>
+<h3 id="api-development"><a class="header" href="#api-development">API Development</a></h3>
+<ul>
+<li><strong>Contract-First Development</strong>: Mock APIs before implementation</li>
+<li><strong>Parallel Development</strong>: Frontend and backend teams work independently</li>
+<li><strong>Integration Testing</strong>: Validate API contracts between services</li>
+</ul>
+<h3 id="microservices-testing"><a class="header" href="#microservices-testing">Microservices Testing</a></h3>
+<ul>
+<li><strong>Service Virtualization</strong>: Mock dependent services during testing</li>
+<li><strong>Chaos Engineering</strong>: Simulate service failures and latency</li>
+<li><strong>Load Testing</strong>: Generate realistic traffic patterns</li>
+</ul>
+<h3 id="cicd-pipelines"><a class="header" href="#cicd-pipelines">CI/CD Pipelines</a></h3>
+<ul>
+<li><strong>Automated Testing</strong>: Mock external dependencies in test environments</li>
+<li><strong>Deployment Validation</strong>: Verify application behavior with mock services</li>
+<li><strong>Performance Benchmarking</strong>: Consistent test conditions across environments</li>
+</ul>
+<p>This foundation will help you understand how to effectively use MockForge for your specific use case. The following guides provide detailed instructions for configuring and using each protocol and feature.</p>
 
                     </main>
 
@@ -213,22 +410,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

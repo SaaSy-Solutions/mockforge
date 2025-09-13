@@ -183,6 +183,394 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="http-mocking"><a class="header" href="#http-mocking">HTTP Mocking</a></h1>
+<p>MockForge provides comprehensive HTTP API mocking capabilities with OpenAPI specification support, dynamic response generation, and advanced request matching. This guide covers everything you need to create realistic REST API mocks.</p>
+<h2 id="openapi-integration"><a class="header" href="#openapi-integration">OpenAPI Integration</a></h2>
+<p>MockForge uses OpenAPI (formerly Swagger) specifications as the foundation for HTTP API mocking. This industry-standard approach ensures your mocks accurately reflect real API contracts.</p>
+<h3 id="loading-openapi-specifications"><a class="header" href="#loading-openapi-specifications">Loading OpenAPI Specifications</a></h3>
+<pre><code class="language-bash"># Load from JSON file
+mockforge serve --spec api-spec.json --http-port 3000
+
+# Load from YAML file
+mockforge serve --spec api-spec.yaml --http-port 3000
+
+# Load from URL
+mockforge serve --spec https://api.example.com/openapi.json --http-port 3000
+</code></pre>
+<h3 id="openapi-specification-structure"><a class="header" href="#openapi-specification-structure">OpenAPI Specification Structure</a></h3>
+<p>MockForge supports OpenAPI 3.0+ specifications with the following key components:</p>
+<ul>
+<li><strong>Paths</strong>: API endpoint definitions</li>
+<li><strong>Methods</strong>: HTTP verbs (GET, POST, PUT, DELETE, PATCH)</li>
+<li><strong>Parameters</strong>: Path, query, and header parameters</li>
+<li><strong>Request Bodies</strong>: JSON/XML payload schemas</li>
+<li><strong>Responses</strong>: Status codes and response schemas</li>
+<li><strong>Components</strong>: Reusable schemas and examples</li>
+</ul>
+<h3 id="example-openapi-specification"><a class="header" href="#example-openapi-specification">Example OpenAPI Specification</a></h3>
+<pre><code class="language-yaml">openapi: 3.0.3
+info:
+  title: User Management API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      summary: List users
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users/{id}:
+    get:
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+    UserInput:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+</code></pre>
+<h2 id="dynamic-response-generation"><a class="header" href="#dynamic-response-generation">Dynamic Response Generation</a></h2>
+<p>MockForge generates realistic responses automatically based on your OpenAPI schemas, with support for dynamic data through templates.</p>
+<h3 id="automatic-response-generation"><a class="header" href="#automatic-response-generation">Automatic Response Generation</a></h3>
+<p>For basic use cases, MockForge can generate responses directly from your OpenAPI schemas:</p>
+<pre><code class="language-bash"># Start server with automatic response generation
+mockforge serve --spec api-spec.json --http-port 3000
+</code></pre>
+<p>This generates:</p>
+<ul>
+<li><strong>UUIDs</strong> for ID fields</li>
+<li><strong>Random data</strong> for string/number fields</li>
+<li><strong>Current timestamps</strong> for date-time fields</li>
+<li><strong>Valid email addresses</strong> for email fields</li>
+</ul>
+<h3 id="template-enhanced-responses"><a class="header" href="#template-enhanced-responses">Template-Enhanced Responses</a></h3>
+<p>For more control, use MockForge’s template system in your OpenAPI examples:</p>
+<pre><code class="language-yaml">paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              example:
+                users:
+                  - id: "{{uuid}}"
+                    name: "John Doe"
+                    email: "john@example.com"
+                    createdAt: "{{now}}"
+                    lastLogin: "{{now-1d}}"
+                  - id: "{{uuid}}"
+                    name: "Jane Smith"
+                    email: "jane@example.com"
+                    createdAt: "{{now-7d}}"
+                    lastLogin: "{{now-2h}}"
+</code></pre>
+<h3 id="template-functions"><a class="header" href="#template-functions">Template Functions</a></h3>
+<h4 id="data-generation-templates"><a class="header" href="#data-generation-templates">Data Generation Templates</a></h4>
+<ul>
+<li><code>{{uuid}}</code> - Generate unique UUID</li>
+<li><code>{{now}}</code> - Current timestamp</li>
+<li><code>{{now+1h}}</code> - Future timestamp</li>
+<li><code>{{now-1d}}</code> - Past timestamp</li>
+<li><code>{{randInt 1 100}}</code> - Random integer</li>
+<li><code>{{randFloat 0.0 1.0}}</code> - Random float</li>
+</ul>
+<h4 id="request-data-templates"><a class="header" href="#request-data-templates">Request Data Templates</a></h4>
+<ul>
+<li><code>{{request.path.id}}</code> - Access path parameters</li>
+<li><code>{{request.query.limit}}</code> - Access query parameters</li>
+<li><code>{{request.header.Authorization}}</code> - Access headers</li>
+<li><code>{{request.body.name}}</code> - Access request body fields</li>
+</ul>
+<h2 id="request-matching-and-routing"><a class="header" href="#request-matching-and-routing">Request Matching and Routing</a></h2>
+<p>MockForge uses sophisticated matching to route requests to appropriate responses.</p>
+<h3 id="matching-priority"><a class="header" href="#matching-priority">Matching Priority</a></h3>
+<ol>
+<li><strong>Exact Path + Method Match</strong></li>
+<li><strong>Parameterized Path Match</strong> (e.g., <code>/users/{id}</code>)</li>
+<li><strong>Query Parameter Conditions</strong></li>
+<li><strong>Header-Based Conditions</strong></li>
+<li><strong>Request Body Matching</strong></li>
+<li><strong>Default Response</strong> (catch-all)</li>
+</ol>
+<h3 id="path-parameter-handling"><a class="header" href="#path-parameter-handling">Path Parameter Handling</a></h3>
+<pre><code class="language-yaml">/users/{id}:
+  get:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        content:
+          application/json:
+            example:
+              id: "{{request.path.id}}"
+              name: "User {{request.path.id}}"
+              retrievedAt: "{{now}}"
+</code></pre>
+<h3 id="query-parameter-filtering"><a class="header" href="#query-parameter-filtering">Query Parameter Filtering</a></h3>
+<pre><code class="language-yaml">/users:
+  get:
+    parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [active, inactive]
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 10
+    responses:
+      '200':
+        content:
+          application/json:
+            example: "{{#if (eq request.query.status 'active')}}active_users{{else}}all_users{{/if}}"
+</code></pre>
+<h2 id="response-scenarios"><a class="header" href="#response-scenarios">Response Scenarios</a></h2>
+<p>MockForge supports multiple response scenarios for testing different conditions.</p>
+<h3 id="success-responses"><a class="header" href="#success-responses">Success Responses</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    description: Success
+    content:
+      application/json:
+        example:
+          status: "success"
+          data: { ... }
+</code></pre>
+<h3 id="error-responses"><a class="header" href="#error-responses">Error Responses</a></h3>
+<pre><code class="language-yaml">responses:
+  '400':
+    description: Bad Request
+    content:
+      application/json:
+        example:
+          error: "INVALID_INPUT"
+          message: "The provided input is invalid"
+  '404':
+    description: Not Found
+    content:
+      application/json:
+        example:
+          error: "NOT_FOUND"
+          message: "Resource not found"
+  '500':
+    description: Internal Server Error
+    content:
+      application/json:
+        example:
+          error: "INTERNAL_ERROR"
+          message: "An unexpected error occurred"
+</code></pre>
+<h3 id="conditional-responses"><a class="header" href="#conditional-responses">Conditional Responses</a></h3>
+<p>Use templates to return different responses based on request data:</p>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example: |
+          {{#if (eq request.query.format 'detailed')}}
+          {
+            "id": "{{uuid}}",
+            "name": "Detailed User",
+            "email": "user@example.com",
+            "profile": {
+              "bio": "Detailed user profile",
+              "preferences": { ... }
+            }
+          }
+          {{else}}
+          {
+            "id": "{{uuid}}",
+            "name": "Basic User",
+            "email": "user@example.com"
+          }
+          {{/if}}
+</code></pre>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="response-latency-simulation"><a class="header" href="#response-latency-simulation">Response Latency Simulation</a></h3>
+<pre><code class="language-bash"># Add random latency (100-500ms)
+MOCKFORGE_LATENCY_ENABLED=true \
+MOCKFORGE_LATENCY_MIN_MS=100 \
+MOCKFORGE_LATENCY_MAX_MS=500 \
+mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="failure-injection"><a class="header" href="#failure-injection">Failure Injection</a></h3>
+<pre><code class="language-bash"># Enable random failures (10% chance)
+MOCKFORGE_FAILURES_ENABLED=true \
+MOCKFORGE_FAILURE_RATE=0.1 \
+mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="requestresponse-recording"><a class="header" href="#requestresponse-recording">Request/Response Recording</a></h3>
+<pre><code class="language-bash"># Record all HTTP interactions
+MOCKFORGE_RECORD_ENABLED=true \
+mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="response-replay"><a class="header" href="#response-replay">Response Replay</a></h3>
+<pre><code class="language-bash"># Replay recorded responses
+MOCKFORGE_REPLAY_ENABLED=true \
+mockforge serve --spec api-spec.json
+</code></pre>
+<h2 id="testing-your-mocks"><a class="header" href="#testing-your-mocks">Testing Your Mocks</a></h2>
+<h3 id="manual-testing-with-curl"><a class="header" href="#manual-testing-with-curl">Manual Testing with curl</a></h3>
+<pre><code class="language-bash"># Test GET endpoint
+curl http://localhost:3000/users
+
+# Test POST endpoint
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test User", "email": "test@example.com"}'
+
+# Test path parameters
+curl http://localhost:3000/users/123
+
+# Test query parameters
+curl "http://localhost:3000/users?limit=5&amp;status=active"
+
+# Test error scenarios
+curl http://localhost:3000/users/999  # Should return 404
+</code></pre>
+<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-api.sh
+
+BASE_URL="http://localhost:3000"
+
+echo "Testing User API..."
+
+# Test user creation
+USER_RESPONSE=$(curl -s -X POST $BASE_URL/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test User", "email": "test@example.com"}')
+
+echo "Created user: $USER_RESPONSE"
+
+# Extract user ID (assuming response contains id)
+USER_ID=$(echo $USER_RESPONSE | jq -r '.id')
+
+# Test user retrieval
+RETRIEVED_USER=$(curl -s $BASE_URL/users/$USER_ID)
+echo "Retrieved user: $RETRIEVED_USER"
+
+# Test user listing
+USER_LIST=$(curl -s $BASE_URL/users)
+echo "User list: $USER_LIST"
+
+echo "API tests completed!"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="openapi-specification-tips"><a class="header" href="#openapi-specification-tips">OpenAPI Specification Tips</a></h3>
+<ol>
+<li><strong>Use descriptive operation IDs</strong> for better organization</li>
+<li><strong>Include examples</strong> in your OpenAPI spec for consistent responses</li>
+<li><strong>Define reusable components</strong> for common schemas</li>
+<li><strong>Use appropriate HTTP status codes</strong> for different scenarios</li>
+<li><strong>Document all parameters</strong> clearly</li>
+</ol>
+<h3 id="template-usage-guidelines"><a class="header" href="#template-usage-guidelines">Template Usage Guidelines</a></h3>
+<ol>
+<li><strong>Enable templates only when needed</strong> for security</li>
+<li><strong>Use meaningful template variables</strong> for maintainability</li>
+<li><strong>Test template expansion</strong> thoroughly</li>
+<li><strong>Avoid complex logic in templates</strong> - keep it simple</li>
+</ol>
+<h3 id="response-design-principles"><a class="header" href="#response-design-principles">Response Design Principles</a></h3>
+<ol>
+<li><strong>Match real API behavior</strong> as closely as possible</li>
+<li><strong>Include appropriate error responses</strong> for testing</li>
+<li><strong>Use consistent data formats</strong> across endpoints</li>
+<li><strong>Consider pagination</strong> for list endpoints</li>
+<li><strong>Include metadata</strong> like timestamps and request IDs</li>
+</ol>
+<h3 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h3>
+<ol>
+<li><strong>Use static responses</strong> when dynamic data isn’t needed</li>
+<li><strong>Limit template complexity</strong> to maintain response times</li>
+<li><strong>Configure appropriate timeouts</strong> for your use case</li>
+<li><strong>Monitor memory usage</strong> with large response payloads</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>Templates not expanding</strong>: Ensure <code>MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true</code></p>
+<p><strong>OpenAPI spec not loading</strong>: Check file path and JSON/YAML syntax</p>
+<p><strong>Wrong response returned</strong>: Verify request matching rules and parameter handling</p>
+<p><strong>Performance issues</strong>: Reduce template complexity or use static responses</p>
+<p><strong>Port conflicts</strong>: Change default ports with <code>--http-port</code> option</p>
+<p>For more advanced HTTP mocking features, see the following guides:</p>
+<ul>
+<li><a href="http-mocking/openapi.html">OpenAPI Integration</a> - Advanced OpenAPI features</li>
+<li><a href="http-mocking/custom-responses.html">Custom Responses</a> - Complex response scenarios</li>
+<li><a href="http-mocking/dynamic-data.html">Dynamic Data</a> - Advanced templating techniques</li>
+</ul>
 
                     </main>
 
@@ -213,22 +601,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

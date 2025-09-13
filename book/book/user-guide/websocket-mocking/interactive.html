@@ -183,6 +183,328 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h1>
+<p>Interactive mode enables dynamic, real-time WebSocket communication where MockForge responds intelligently to client messages. Unlike replay mode’s predetermined sequences, interactive mode supports complex conversational patterns, state management, and adaptive responses based on client input.</p>
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
+<h3 id="dynamic-response-logic"><a class="header" href="#dynamic-response-logic">Dynamic Response Logic</a></h3>
+<p>Interactive mode evaluates client messages and generates contextually appropriate responses using conditional logic, pattern matching, and state tracking.</p>
+<h3 id="state-management"><a class="header" href="#state-management">State Management</a></h3>
+<p>Connections maintain state across messages, enabling complex interactions like authentication flows, game mechanics, and multi-step processes.</p>
+<h3 id="message-processing-pipeline"><a class="header" href="#message-processing-pipeline">Message Processing Pipeline</a></h3>
+<ol>
+<li><strong>Receive</strong> client message</li>
+<li><strong>Parse</strong> and validate input</li>
+<li><strong>Evaluate</strong> conditions and state</li>
+<li><strong>Generate</strong> appropriate response</li>
+<li><strong>Update</strong> connection state</li>
+</ol>
+<h2 id="basic-interactive-setup"><a class="header" href="#basic-interactive-setup">Basic Interactive Setup</a></h2>
+<h3 id="simple-echo-server"><a class="header" href="#simple-echo-server">Simple Echo Server</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Echo server ready. Send me a message!"}
+{"ts":0,"dir":"in","text":".*","response":"You said: {{request.ws.message}}"}
+</code></pre>
+<h3 id="command-processor"><a class="header" href="#command-processor">Command Processor</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Available commands: HELP, TIME, ECHO &lt;message&gt;, QUIT"}
+{"ts":0,"dir":"in","text":"^HELP$","response":"Commands: HELP, TIME, ECHO &lt;msg&gt;, QUIT"}
+{"ts":0,"dir":"in","text":"^TIME$","response":"Current time: {{now}}"}
+{"ts":0,"dir":"in","text":"^ECHO (.+)$","response":"Echo: {{request.ws.message.match(/^ECHO (.+)$/)[1]}}"}
+{"ts":0,"dir":"in","text":"^QUIT$","response":"Goodbye!","close":true}
+</code></pre>
+<h2 id="advanced-interactive-patterns"><a class="header" href="#advanced-interactive-patterns">Advanced Interactive Patterns</a></h2>
+<h3 id="authentication-flow"><a class="header" href="#authentication-flow">Authentication Flow</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome! Please login with: LOGIN &lt;username&gt; &lt;password&gt;"}
+{"ts":0,"dir":"in","text":"^LOGIN (\\w+) (\\w+)$","response":"Authenticating {{request.ws.message.match(/^LOGIN (\\w+) (\\w+)$/)[1]}}...","state":"authenticating"}
+{"ts":1000,"dir":"out","text":"Login successful! Welcome, {{request.ws.state.username}}!","condition":"{{request.ws.state.authenticating}}"}
+{"ts":0,"dir":"out","text":"Login failed. Try again.","condition":"{{!request.ws.state.authenticating}}"}
+</code></pre>
+<h3 id="state-based-conversations"><a class="header" href="#state-based-conversations">State-Based Conversations</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to the survey bot. What's your name?","state":"awaiting_name"}
+{"ts":0,"dir":"in","text":".+","response":"Nice to meet you, {{request.ws.message}}! How old are you?","state":"awaiting_age","condition":"{{request.ws.state.awaiting_name}}"}
+{"ts":0,"dir":"in","text":"^\\d+$","response":"Thanks! You're {{request.ws.message}} years old. Survey complete!","state":"complete","condition":"{{request.ws.state.awaiting_age}}"}
+{"ts":0,"dir":"in","text":".*","response":"Please enter a valid age (numbers only).","condition":"{{request.ws.state.awaiting_age}}"}
+</code></pre>
+<h3 id="game-mechanics"><a class="header" href="#game-mechanics">Game Mechanics</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to Number Guessing Game! I'm thinking of a number between 1-100.","state":"playing","game":{"target":42,"attempts":0}}
+{"ts":0,"dir":"in","text":"^GUESS (\\d+)$","condition":"{{request.ws.state.playing}}","response":"{{#if (eq (parseInt request.ws.message.match(/^GUESS (\\d+)$/) [1]) request.ws.state.game.target)}}You won in {{request.ws.state.game.attempts + 1}} attempts!{{else}}{{#if (gt (parseInt request.ws.message.match(/^GUESS (\\d+)$/) [1]) request.ws.state.game.target)}}Too high!{{else}}Too low!{{/if}} Try again.{{/if}}","state":"{{#if (eq (parseInt request.ws.message.match(/^GUESS (\\d+)$/) [1]) request.ws.state.game.target)}}won{{else}}playing{{/if}}","game":{"target":"{{request.ws.state.game.target}}","attempts":"{{request.ws.state.game.attempts + 1}}"}}
+</code></pre>
+<h2 id="message-processing-syntax"><a class="header" href="#message-processing-syntax">Message Processing Syntax</a></h2>
+<h3 id="input-patterns"><a class="header" href="#input-patterns">Input Patterns</a></h3>
+<p>Interactive mode uses regex patterns to match client messages:</p>
+<pre><code class="language-jsonl">// Exact match
+{"dir":"in","text":"hello","response":"Hi there!"}
+
+// Case-insensitive match
+{"dir":"in","text":"(?i)hello","response":"Hi there!"}
+
+// Pattern with capture groups
+{"dir":"in","text":"^NAME (.+)$","response":"Hello, {{request.ws.message.match(/^NAME (.+)$/)[1]}}!"}
+
+// Optional elements
+{"dir":"in","text":"^(HELP|help|\\?)$","response":"Available commands: ..."}
+</code></pre>
+<h3 id="response-templates"><a class="header" href="#response-templates">Response Templates</a></h3>
+<p>Responses support the full MockForge template system:</p>
+<pre><code class="language-jsonl">{"dir":"in","text":".*","response":"Message received at {{now}}: {{request.ws.message}} (length: {{request.ws.message.length}})"}
+</code></pre>
+<h3 id="conditions"><a class="header" href="#conditions">Conditions</a></h3>
+<p>Use template conditions to control when rules apply:</p>
+<pre><code class="language-jsonl">{"dir":"in","text":".*","condition":"{{request.ws.state.authenticated}}","response":"Welcome back!"}
+{"dir":"in","text":".*","condition":"{{!request.ws.state.authenticated}}","response":"Please authenticate first."}
+</code></pre>
+<h3 id="state-updates"><a class="header" href="#state-updates">State Updates</a></h3>
+<p>Modify connection state based on interactions:</p>
+<pre><code class="language-jsonl">// Set simple state
+{"dir":"in","text":"START","response":"Starting...","state":"active"}
+
+// Update complex state
+{"dir":"in","text":"SCORE","response":"Current score: {{request.ws.state.score}}","state":"playing","score":"{{request.ws.state.score + 10}}"}
+</code></pre>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="multi-message-conversations"><a class="header" href="#multi-message-conversations">Multi-Message Conversations</a></h3>
+<pre><code class="language-jsonl">// Step 1: Greeting
+{"ts":0,"dir":"out","text":"Hello! What's your favorite color?"}
+{"ts":0,"dir":"in","text":".+","response":"{{request.ws.message}} is a great choice! What's your favorite food?","state":"asked_color","color":"{{request.ws.message}}","next":"food"}
+
+// Step 2: Follow-up
+{"ts":0,"dir":"out","text":"Based on your preferences, I recommend: ...","condition":"{{request.ws.state.next === 'complete'}}"}
+{"ts":0,"dir":"in","text":".+","condition":"{{request.ws.state.next === 'food'}}","response":"Perfect! You like {{request.ws.state.color}} and {{request.ws.message}}. Here's a recommendation...","state":"complete"}
+</code></pre>
+<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Enter a command:"}
+{"ts":0,"dir":"in","text":"","response":"Empty input not allowed. Try again."}
+{"ts":0,"dir":"in","text":"^.{100,}$","response":"Input too long (max 99 characters). Please shorten."}
+{"ts":0,"dir":"in","text":"^INVALID.*","response":"Unknown command. Type HELP for available commands."}
+{"ts":0,"dir":"in","text":".*","response":"Processing: {{request.ws.message}}"}
+</code></pre>
+<h3 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"in","text":".*","condition":"{{request.ws.state.messageCount &lt; 10}}","response":"Message {{request.ws.state.messageCount + 1}}: {{request.ws.message}}","messageCount":"{{request.ws.state.messageCount + 1}}"}
+{"ts":0,"dir":"in","text":".*","condition":"{{request.ws.state.messageCount &gt;= 10}}","response":"Rate limit exceeded. Please wait."}
+</code></pre>
+<h3 id="session-management"><a class="header" href="#session-management">Session Management</a></h3>
+<pre><code class="language-jsonl">// Initialize session
+{"ts":0,"dir":"out","text":"Session started: {{uuid}}","sessionId":"{{uuid}}","startTime":"{{now}}","messageCount":0}
+
+// Track activity
+{"ts":0,"dir":"in","text":".*","response":"Received","messageCount":"{{request.ws.state.messageCount + 1}}","lastActivity":"{{now}}","condition":"{{request.ws.state.active}}"}
+</code></pre>
+<h2 id="template-functions-for-interactive-mode"><a class="header" href="#template-functions-for-interactive-mode">Template Functions for Interactive Mode</a></h2>
+<h3 id="message-analysis"><a class="header" href="#message-analysis">Message Analysis</a></h3>
+<pre><code class="language-jsonl">// Message properties
+{"dir":"in","text":".*","response":"Length: {{request.ws.message.length}}, Uppercase: {{request.ws.message.toUpperCase()}}"}
+</code></pre>
+<h3 id="state-queries"><a class="header" href="#state-queries">State Queries</a></h3>
+<pre><code class="language-jsonl">// Check state existence
+{"condition":"{{request.ws.state.userId}}","response":"Logged in as: {{request.ws.state.userId}}"}
+{"condition":"{{!request.ws.state.userId}}","response":"Please log in first."}
+
+// State comparisons
+{"condition":"{{request.ws.state.score &gt; 100}}","response":"High score achieved!"}
+{"condition":"{{request.ws.state.level === 'expert'}}","response":"Expert mode enabled."}
+</code></pre>
+<h3 id="time-based-logic"><a class="header" href="#time-based-logic">Time-based Logic</a></h3>
+<pre><code class="language-jsonl">// Session timeout
+{"condition":"{{request.ws.state.lastActivity &amp;&amp; (now - request.ws.state.lastActivity) &gt; 300000}}","response":"Session expired. Please reconnect.","close":true}
+
+// Time-based greetings
+{"response":"{{#if (gte (now.getHours()) 18)}}Good evening!{{else if (gte (now.getHours()) 12)}}Good afternoon!{{else}}Good morning!{{/if}}"}
+</code></pre>
+<h2 id="creating-interactive-scenarios"><a class="header" href="#creating-interactive-scenarios">Creating Interactive Scenarios</a></h2>
+<h3 id="from-scratch"><a class="header" href="#from-scratch">From Scratch</a></h3>
+<pre><code class="language-bash"># Create a new interactive scenario
+cat &gt; interactive-chat.jsonl &lt;&lt; 'EOF'
+{"ts":0,"dir":"out","text":"ChatBot: Hello! How can I help you today?"}
+{"ts":0,"dir":"in","text":"(?i).*help.*","response":"ChatBot: I can answer questions, tell jokes, or just chat. What would you like?"}
+{"ts":0,"dir":"in","text":"(?i).*joke.*","response":"ChatBot: Why did the computer go to the doctor? It had a virus! 😂"}
+{"ts":0,"dir":"in","text":"(?i).*bye.*","response":"ChatBot: Goodbye! Have a great day! 👋","close":true}
+{"ts":0,"dir":"in","text":".*","response":"ChatBot: I'm not sure how to respond to that. Try asking for help!"}
+EOF
+</code></pre>
+<h3 id="from-existing-logs"><a class="header" href="#from-existing-logs">From Existing Logs</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# convert-logs-to-interactive.sh
+
+# Extract conversation patterns from logs
+grep "USER:" chat.log | sed 's/.*USER: //' | sort | uniq &gt; user_patterns.txt
+grep "BOT:" chat.log | sed 's/.*BOT: //' | sort | uniq &gt; bot_responses.txt
+
+# Generate interactive rules
+paste user_patterns.txt bot_responses.txt | while IFS=$'\t' read -r user bot; do
+  echo "{\"dir\":\"in\",\"text\":\"$(echo "$user" | sed 's/[^a-zA-Z0-9]/\\&amp;/g')\",\"response\":\"$bot\"}"
+done &gt; interactive-from-logs.jsonl
+</code></pre>
+<h3 id="testing-interactive-scenarios"><a class="header" href="#testing-interactive-scenarios">Testing Interactive Scenarios</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-interactive.sh
+
+echo "Testing interactive WebSocket scenario..."
+
+# Start MockForge with interactive file
+mockforge serve --ws-replay-file interactive-test.jsonl &amp;
+SERVER_PID=$!
+sleep 2
+
+# Test conversation flow
+node -e "
+const WebSocket = require('ws');
+const ws = new WebSocket('ws://localhost:3001/ws');
+
+const conversation = [
+  'Hello',
+  'Tell me a joke',
+  'What can you do?',
+  'Goodbye'
+];
+
+let step = 0;
+
+ws.on('open', () =&gt; {
+  console.log('Connected, starting conversation...');
+  ws.send(conversation[step++]);
+});
+
+ws.on('message', (data) =&gt; {
+  const response = data.toString();
+  console.log('Bot:', response);
+
+  if (step &lt; conversation.length) {
+    setTimeout(() =&gt; {
+      ws.send(conversation[step++]);
+    }, 1000);
+  } else {
+    ws.close();
+  }
+});
+
+ws.on('close', () =&gt; {
+  console.log('Conversation complete');
+  process.exit(0);
+});
+
+ws.on('error', (err) =&gt; {
+  console.error('Error:', err);
+  process.exit(1);
+});
+"
+
+# Cleanup
+kill $SERVER_PID
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="design-principles"><a class="header" href="#design-principles">Design Principles</a></h3>
+<ol>
+<li><strong>Clear Conversation Flow</strong>: Design conversations with clear paths and expectations</li>
+<li><strong>Graceful Error Handling</strong>: Provide helpful responses for unexpected input</li>
+<li><strong>State Consistency</strong>: Keep state updates predictable and logical</li>
+<li><strong>Performance Awareness</strong>: Avoid complex regex or template processing</li>
+</ol>
+<h3 id="pattern-guidelines"><a class="header" href="#pattern-guidelines">Pattern Guidelines</a></h3>
+<ol>
+<li><strong>Specific to General</strong>: Order patterns from most specific to most general</li>
+<li><strong>Anchored Regex</strong>: Use <code>^</code> and <code>$</code> to avoid partial matches</li>
+<li><strong>Case Handling</strong>: Consider case sensitivity in user input</li>
+<li><strong>Input Validation</strong>: Validate and sanitize user input</li>
+</ol>
+<h3 id="state-management-1"><a class="header" href="#state-management-1">State Management</a></h3>
+<ol>
+<li><strong>Minimal State</strong>: Store only necessary information in connection state</li>
+<li><strong>State Validation</strong>: Verify state consistency across interactions</li>
+<li><strong>State Cleanup</strong>: Clear state when conversations end</li>
+<li><strong>State Persistence</strong>: Consider state requirements for reconnection scenarios</li>
+</ol>
+<h3 id="debugging-interactive-scenarios"><a class="header" href="#debugging-interactive-scenarios">Debugging Interactive Scenarios</a></h3>
+<ol>
+<li><strong>Verbose Logging</strong>: Enable detailed WebSocket logging</li>
+<li><strong>State Inspection</strong>: Log state changes during conversations</li>
+<li><strong>Pattern Testing</strong>: Test regex patterns independently</li>
+<li><strong>Flow Tracing</strong>: Track conversation paths through state changes</li>
+</ol>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="customer-support-chat"><a class="header" href="#customer-support-chat">Customer Support Chat</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to support! How can I help you? (Type your question or 'menu' for options)"}
+{"ts":0,"dir":"in","text":"(?i)menu","response":"Options: 1) Password reset 2) Billing 3) Technical issue 4) Other","state":"menu"}
+{"ts":0,"dir":"in","text":"(?i).*password.*","response":"I'll help you reset your password. What's your email address?","state":"password_reset","issue":"password"}
+{"ts":0,"dir":"in","text":"(?i).*billing.*","response":"For billing questions, please visit our billing portal at billing.example.com","state":"billing"}
+{"ts":0,"dir":"in","text":".*","response":"Thanks for your question: '{{request.ws.message}}'. A support agent will respond shortly. Your ticket ID is: {{uuid}}"}
+</code></pre>
+<h3 id="e-commerce-assistant"><a class="header" href="#e-commerce-assistant">E-commerce Assistant</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to our store! What are you looking for?","state":"browsing"}
+{"ts":0,"dir":"in","text":"(?i).*shirt.*","response":"We have various shirts: casual, formal, graphic. Which style interests you?","state":"shirt_selection","category":"shirts"}
+{"ts":0,"dir":"in","text":"(?i).*size.*","response":"Available sizes: S, M, L, XL. Which size would you like?","state":"size_selection","condition":"{{request.ws.state.category}}"}
+{"ts":0,"dir":"in","text":"(?i)(S|M|L|XL)","condition":"{{request.ws.state.size_selection}}","response":"Great! Adding {{request.ws.state.category}} in size {{request.ws.message.toUpperCase()}} to cart. Would you like to checkout or continue shopping?","state":"checkout_ready"}
+</code></pre>
+<h3 id="game-server"><a class="header" href="#game-server">Game Server</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to the game server! Choose your character: WARRIOR, MAGE, ROGUE","state":"character_select"}
+{"ts":0,"dir":"in","text":"(?i)^(warrior|mage|rogue)$","response":"Excellent choice! You selected {{request.ws.message.toUpperCase()}}. Your adventure begins now...","state":"playing","character":"{{request.ws.message.toLowerCase()}}","health":100,"level":1}
+{"ts":0,"dir":"in","text":"(?i)stats","condition":"{{request.ws.state.playing}}","response":"Character: {{request.ws.state.character}}, Level: {{request.ws.state.level}}, Health: {{request.ws.state.health}}"}
+{"ts":0,"dir":"in","text":"(?i)fight","condition":"{{request.ws.state.playing}}","response":"You encounter a monster! Roll for attack... {{randInt 1 20}}! {{#if (gte (randInt 1 20) 10)}}Victory!{{else}}Defeat!{{/if}}"}
+</code></pre>
+<h2 id="integration-examples"><a class="header" href="#integration-examples">Integration Examples</a></h2>
+<h3 id="with-testing-frameworks"><a class="header" href="#with-testing-frameworks">With Testing Frameworks</a></h3>
+<pre><code class="language-javascript">// test-interactive.js
+const WebSocket = require('ws');
+
+class InteractiveWebSocketTester {
+  constructor(url) {
+    this.url = url;
+    this.ws = null;
+  }
+
+  async connect() {
+    return new Promise((resolve, reject) =&gt; {
+      this.ws = new WebSocket(this.url);
+      this.ws.on('open', () =&gt; resolve());
+      this.ws.on('error', reject);
+    });
+  }
+
+  async sendAndExpect(message, expectedResponse) {
+    return new Promise((resolve, reject) =&gt; {
+      const timeout = setTimeout(() =&gt; reject(new Error('Timeout')), 5000);
+
+      this.ws.send(message);
+      this.ws.once('message', (data) =&gt; {
+        clearTimeout(timeout);
+        const response = data.toString();
+        if (response === expectedResponse) {
+          resolve(response);
+        } else {
+          reject(new Error(`Expected "${expectedResponse}", got "${response}"`));
+        }
+      });
+    });
+  }
+
+  close() {
+    if (this.ws) this.ws.close();
+  }
+}
+
+module.exports = InteractiveWebSocketTester;
+</code></pre>
+<h3 id="load-testing-interactive-scenarios"><a class="header" href="#load-testing-interactive-scenarios">Load Testing Interactive Scenarios</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# load-test-interactive.sh
+
+CONCURRENT_USERS=50
+DURATION=300
+
+echo "Load testing interactive WebSocket with $CONCURRENT_USERS concurrent users for ${DURATION}s"
+
+# Start MockForge
+mockforge serve --ws-replay-file interactive-load-test.jsonl &amp;
+SERVER_PID=$!
+sleep 2
+
+# Run load test
+node load-test-interactive.js $CONCURRENT_USERS $DURATION
+
+# Generate report
+echo "Generating performance report..."
+node analyze-results.js
+
+# Cleanup
+kill $SERVER_PID
+</code></pre>
+<p>Interactive mode transforms MockForge from a simple message player into an intelligent conversation partner, enabling sophisticated testing scenarios that adapt to client behavior and maintain complex interaction state.</p>
 
                     </main>
 
@@ -213,22 +535,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

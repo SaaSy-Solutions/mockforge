@@ -183,6 +183,157 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<p>Get MockForge running in under 5 minutes with this hands-on guide. We’ll create a mock API server and test it with real HTTP requests.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Ensure MockForge is <a href="installation.html">installed</a> and available in your PATH.</p>
+<h2 id="step-1-start-a-basic-http-mock-server"><a class="header" href="#step-1-start-a-basic-http-mock-server">Step 1: Start a Basic HTTP Mock Server</a></h2>
+<p>MockForge can serve mock APIs defined in OpenAPI specifications. Let’s use the included example:</p>
+<pre><code class="language-bash"># Navigate to the MockForge directory (if building from source)
+cd mockforge
+
+# Start the server with the demo OpenAPI spec
+mockforge serve --spec examples/openapi-demo.json --http-port 3000
+</code></pre>
+<p>You should see output like:</p>
+<pre><code>MockForge v0.1.0 starting...
+HTTP server listening on 0.0.0.0:3000
+OpenAPI spec loaded from examples/openapi-demo.json
+Ready to serve requests at http://localhost:3000
+</code></pre>
+<h2 id="step-2-test-your-mock-api"><a class="header" href="#step-2-test-your-mock-api">Step 2: Test Your Mock API</a></h2>
+<p>Open a new terminal and test the API endpoints:</p>
+<pre><code class="language-bash"># Health check endpoint
+curl http://localhost:3000/ping
+</code></pre>
+<p>Expected response:</p>
+<pre><code class="language-json">{
+  "status": "pong",
+  "timestamp": "2025-09-12T17:20:01.512504405+00:00",
+  "requestId": "550e8400-e29b-41d4-a716-446655440000"
+}
+</code></pre>
+<pre><code class="language-bash"># List users endpoint
+curl http://localhost:3000/users
+</code></pre>
+<p>Expected response:</p>
+<pre><code class="language-json">[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "createdAt": "2025-09-12T17:20:01.512504405+00:00",
+    "active": true
+  }
+]
+</code></pre>
+<pre><code class="language-bash"># Create a new user
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Jane Smith", "email": "jane@example.com"}'
+</code></pre>
+<pre><code class="language-bash"># Get user by ID (path parameter)
+curl http://localhost:3000/users/123
+</code></pre>
+<h2 id="step-3-enable-template-expansion"><a class="header" href="#step-3-enable-template-expansion">Step 3: Enable Template Expansion</a></h2>
+<p>MockForge supports dynamic content generation. Enable template expansion for more realistic data:</p>
+<pre><code class="language-bash"># Stop the current server (Ctrl+C), then restart with templates enabled
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+mockforge serve --spec examples/openapi-demo.json --http-port 3000
+</code></pre>
+<p>Now test the endpoints again - you’ll see different UUIDs and timestamps each time!</p>
+<h2 id="step-4-add-websocket-support"><a class="header" href="#step-4-add-websocket-support">Step 4: Add WebSocket Support</a></h2>
+<p>MockForge can also mock WebSocket connections. Let’s add WebSocket support to our server:</p>
+<pre><code class="language-bash"># Stop the server, then restart with WebSocket support
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
+mockforge serve --spec examples/openapi-demo.json --ws-port 3001 --http-port 3000
+</code></pre>
+<h2 id="step-5-test-websocket-connection"><a class="header" href="#step-5-test-websocket-connection">Step 5: Test WebSocket Connection</a></h2>
+<p>Test the WebSocket endpoint (requires Node.js or a WebSocket client):</p>
+<pre><code class="language-bash"># Using Node.js
+node -e "
+const WebSocket = require('ws');
+const ws = new WebSocket('ws://localhost:3001/ws');
+ws.on('open', () =&gt; {
+  console.log('Connected! Sending CLIENT_READY...');
+  ws.send('CLIENT_READY');
+});
+ws.on('message', (data) =&gt; {
+  console.log('Received:', data.toString());
+  if (data.toString().includes('ACK')) {
+    ws.send('ACK');
+  }
+  if (data.toString().includes('CONFIRMED')) {
+    ws.send('CONFIRMED');
+  }
+});
+ws.on('close', () =&gt; console.log('Connection closed'));
+"
+</code></pre>
+<p>Expected WebSocket message flow:</p>
+<ol>
+<li>Send <code>CLIENT_READY</code></li>
+<li>Receive welcome message with session ID</li>
+<li>Receive data message, respond with <code>ACK</code></li>
+<li>Receive heartbeat messages</li>
+<li>Receive notification, respond with <code>CONFIRMED</code></li>
+</ol>
+<h2 id="step-6-enable-admin-ui-optional"><a class="header" href="#step-6-enable-admin-ui-optional">Step 6: Enable Admin UI (Optional)</a></h2>
+<p>For a visual interface to manage your mock server:</p>
+<pre><code class="language-bash"># Stop the server, then restart with admin UI
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
+mockforge serve --spec examples/openapi-demo.json \
+  --admin --admin-port 8080 \
+  --http-port 3000 --ws-port 3001
+</code></pre>
+<p>Access the admin interface at: http://localhost:8080</p>
+<h2 id="step-7-using-configuration-files"><a class="header" href="#step-7-using-configuration-files">Step 7: Using Configuration Files</a></h2>
+<p>Instead of environment variables, you can use a configuration file:</p>
+<pre><code class="language-bash"># Stop the server, then start with config file
+mockforge serve --config demo-config.yaml
+</code></pre>
+<h2 id="step-8-docker-alternative"><a class="header" href="#step-8-docker-alternative">Step 8: Docker Alternative</a></h2>
+<p>If you prefer Docker:</p>
+<pre><code class="language-bash"># Build and run with Docker
+docker build -t mockforge .
+docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
+  -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+  -e MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
+  mockforge
+</code></pre>
+<h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
+<p>Congratulations! You now have a fully functional mock server running. Here are some next steps:</p>
+<ul>
+<li>Learn about <a href="concepts.html">Basic Concepts</a> to understand how MockForge works</li>
+<li>Explore <a href="../user-guide/http-mocking.html">HTTP Mocking</a> for advanced REST API features</li>
+<li>Try <a href="../user-guide/websocket-mocking.html">WebSocket Mocking</a> for real-time communication</li>
+<li>Check out the <a href="../user-guide/admin-ui.html">Admin UI</a> for visual management</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server won’t start</a></h3>
+<ul>
+<li>Check if ports 3000, 3001, or 8080 are already in use</li>
+<li>Verify the OpenAPI spec file path is correct</li>
+<li>Ensure MockForge is properly installed</li>
+</ul>
+<h3 id="template-variables-not-working"><a class="header" href="#template-variables-not-working">Template variables not working</a></h3>
+<ul>
+<li>Make sure <code>MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true</code> is set</li>
+<li>Check that template syntax <code>{{variable}}</code> is used correctly</li>
+</ul>
+<h3 id="websocket-connection-fails"><a class="header" href="#websocket-connection-fails">WebSocket connection fails</a></h3>
+<ul>
+<li>Verify WebSocket port (default 3001) is accessible</li>
+<li>Check that <code>MOCKFORGE_WS_REPLAY_FILE</code> points to a valid replay file</li>
+<li>Ensure the replay file uses the correct JSONL format</li>
+</ul>
+<h3 id="need-help"><a class="header" href="#need-help">Need help?</a></h3>
+<ul>
+<li>Check the <a href="../../examples/README.html">examples README</a> for detailed testing scripts</li>
+<li>Review <a href="../configuration/files.html">Configuration Files</a> for advanced setup</li>
+<li>Visit the <a href="../reference/troubleshooting.html">Troubleshooting</a> guide</li>
+</ul>
 
                     </main>
 
@@ -213,22 +364,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

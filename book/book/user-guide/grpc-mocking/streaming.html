@@ -183,6 +183,442 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="streaming"><a class="header" href="#streaming">Streaming</a></h1>
+<p>gRPC supports four fundamental communication patterns, with three involving streaming. MockForge provides comprehensive support for all streaming patterns, enabling realistic testing of real-time and batch data scenarios.</p>
+<h2 id="streaming-patterns"><a class="header" href="#streaming-patterns">Streaming Patterns</a></h2>
+<h3 id="unary-request--response"><a class="header" href="#unary-request--response">Unary (Request → Response)</a></h3>
+<p>Standard request-response pattern - one message in, one message out.</p>
+<h3 id="server-streaming-request--stream-of-responses"><a class="header" href="#server-streaming-request--stream-of-responses">Server Streaming (Request → Stream of Responses)</a></h3>
+<p>Single request initiates a stream of responses from server to client.</p>
+<h3 id="client-streaming-stream-of-requests--response"><a class="header" href="#client-streaming-stream-of-requests--response">Client Streaming (Stream of Requests → Response)</a></h3>
+<p>Client sends multiple messages, server responds once with aggregated result.</p>
+<h3 id="bidirectional-streaming-stream--stream"><a class="header" href="#bidirectional-streaming-stream--stream">Bidirectional Streaming (Stream ↔ Stream)</a></h3>
+<p>Both client and server can send messages independently and simultaneously.</p>
+<h2 id="server-streaming"><a class="header" href="#server-streaming">Server Streaming</a></h2>
+<h3 id="basic-server-streaming"><a class="header" href="#basic-server-streaming">Basic Server Streaming</a></h3>
+<pre><code class="language-protobuf">service NotificationService {
+  rpc Subscribe(SubscribeRequest) returns (stream Notification);
+}
+
+message SubscribeRequest {
+  repeated string topics = 1;
+  SubscriptionType type = 2;
+}
+
+message Notification {
+  string topic = 1;
+  string message = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  Severity severity = 4;
+}
+
+enum SubscriptionType {
+  REALTIME = 0;
+  BATCH = 1;
+}
+
+enum Severity {
+  INFO = 0;
+  WARNING = 1;
+  ERROR = 2;
+  CRITICAL = 3;
+}
+</code></pre>
+<h3 id="mockforge-configuration"><a class="header" href="#mockforge-configuration">MockForge Configuration</a></h3>
+<p>Server streaming generates multiple responses based on configuration:</p>
+<pre><code class="language-jsonl">// Basic server streaming - fixed number of responses
+{"ts":0,"dir":"out","text":"{\"topic\":\"system\",\"message\":\"Connected\",\"severity\":\"INFO\"}"}
+{"ts":1000,"dir":"out","text":"{\"topic\":\"user\",\"message\":\"New user registered\",\"severity\":\"INFO\"}"}
+{"ts":2000,"dir":"out","text":"{\"topic\":\"payment\",\"message\":\"Payment processed\",\"severity\":\"INFO\"}"}
+{"ts":3000,"dir":"out","text":"{\"topic\":\"system\",\"message\":\"Maintenance scheduled\",\"severity\":\"WARNING\"}"}
+</code></pre>
+<h3 id="dynamic-server-streaming"><a class="header" href="#dynamic-server-streaming">Dynamic Server Streaming</a></h3>
+<pre><code class="language-jsonl">// Template-based dynamic responses
+{"ts":0,"dir":"out","text":"{\"topic\":\"{{request.topics[0]}}\",\"message\":\"Subscribed to {{request.topics.length}} topics\",\"timestamp\":\"{{now}}\"}"}
+{"ts":1000,"dir":"out","text":"{\"topic\":\"{{randFromArray request.topics}}\",\"message\":\"{{randParagraph}}\",\"timestamp\":\"{{now}}\"}"}
+{"ts":2000,"dir":"out","text":"{\"topic\":\"{{randFromArray request.topics}}\",\"message\":\"{{randSentence}}\",\"timestamp\":\"{{now}}\"}"}
+{"ts":5000,"dir":"out","text":"{\"topic\":\"system\",\"message\":\"Stream ending\",\"timestamp\":\"{{now}}\"}"}
+</code></pre>
+<h3 id="testing-server-streaming"><a class="header" href="#testing-server-streaming">Testing Server Streaming</a></h3>
+<h4 id="using-grpcurl"><a class="header" href="#using-grpcurl">Using grpcurl</a></h4>
+<pre><code class="language-bash"># Test server streaming
+grpcurl -plaintext -d '{"topics": ["user", "payment"], "type": "REALTIME"}' \
+  localhost:50051 myapp.NotificationService/Subscribe
+</code></pre>
+<h4 id="using-nodejs"><a class="header" href="#using-nodejs">Using Node.js</a></h4>
+<pre><code class="language-javascript">const grpc = require('@grpc/grpc-js');
+const protoLoader = require('@grpc/proto-loader');
+
+const packageDefinition = protoLoader.loadSync('proto/notification.proto');
+const proto = grpc.loadPackageDefinition(packageDefinition);
+
+const client = new proto.myapp.NotificationService(
+  'localhost:50051',
+  grpc.credentials.createInsecure()
+);
+
+const call = client.Subscribe({
+  topics: ['user', 'payment'],
+  type: 'REALTIME'
+});
+
+call.on('data', (notification) =&gt; {
+  console.log('Notification:', notification);
+});
+
+call.on('end', () =&gt; {
+  console.log('Stream ended');
+});
+
+call.on('error', (error) =&gt; {
+  console.error('Error:', error);
+});
+</code></pre>
+<h2 id="client-streaming"><a class="header" href="#client-streaming">Client Streaming</a></h2>
+<h3 id="basic-client-streaming"><a class="header" href="#basic-client-streaming">Basic Client Streaming</a></h3>
+<pre><code class="language-protobuf">service UploadService {
+  rpc UploadFile(stream FileChunk) returns (UploadResponse);
+}
+
+message FileChunk {
+  bytes data = 1;
+  int32 sequence = 2;
+  bool is_last = 3;
+}
+
+message UploadResponse {
+  string file_id = 1;
+  int64 total_size = 2;
+  string checksum = 3;
+  UploadStatus status = 4;
+}
+
+enum UploadStatus {
+  SUCCESS = 0;
+  FAILED = 1;
+  PARTIAL = 2;
+}
+</code></pre>
+<h3 id="mockforge-configuration-1"><a class="header" href="#mockforge-configuration-1">MockForge Configuration</a></h3>
+<p>Client streaming processes multiple incoming messages and returns a single response:</p>
+<pre><code class="language-jsonl">// Client streaming - processes multiple chunks
+{"ts":0,"dir":"in","text":".*","response":"{\"file_id\":\"{{uuid}}\",\"total_size\":1024,\"status\":\"SUCCESS\"}"}
+</code></pre>
+<h3 id="advanced-client-streaming"><a class="header" href="#advanced-client-streaming">Advanced Client Streaming</a></h3>
+<pre><code class="language-jsonl">// Process chunks and maintain state
+{"ts":0,"dir":"in","text":"{\"sequence\":0}","response":"Chunk 0 received","state":"uploading","chunks":1}
+{"ts":0,"dir":"in","text":"{\"sequence\":1}","response":"Chunk 1 received","chunks":"{{request.ws.state.chunks + 1}}"}
+{"ts":0,"dir":"in","text":"{\"is_last\":true}","response":"{\"file_id\":\"{{uuid}}\",\"total_size\":\"{{request.ws.state.chunks * 1024}}\",\"status\":\"SUCCESS\"}"}
+</code></pre>
+<h3 id="testing-client-streaming"><a class="header" href="#testing-client-streaming">Testing Client Streaming</a></h3>
+<h4 id="using-grpcurl-1"><a class="header" href="#using-grpcurl-1">Using grpcurl</a></h4>
+<pre><code class="language-bash"># Send multiple messages for client streaming
+echo '{"data": "chunk1", "sequence": 0}' | \
+grpcurl -plaintext -d @ localhost:50051 myapp.UploadService/UploadFile
+
+echo '{"data": "chunk2", "sequence": 1}' | \
+grpcurl -plaintext -d @ localhost:50051 myapp.UploadService/UploadFile
+
+echo '{"data": "chunk3", "sequence": 2, "is_last": true}' | \
+grpcurl -plaintext -d @ localhost:50051 myapp.UploadService/UploadFile
+</code></pre>
+<h4 id="using-python"><a class="header" href="#using-python">Using Python</a></h4>
+<pre><code class="language-python">import grpc
+from upload_pb2 import FileChunk
+from upload_pb2_grpc import UploadServiceStub
+
+def generate_chunks():
+    # Simulate file chunks
+    chunks = [
+        b"chunk1",
+        b"chunk2",
+        b"chunk3"
+    ]
+
+    for i, chunk in enumerate(chunks):
+        yield FileChunk(
+            data=chunk,
+            sequence=i,
+            is_last=(i == len(chunks) - 1)
+        )
+
+channel = grpc.insecure_channel('localhost:50051')
+stub = UploadServiceStub(channel)
+
+response = stub.UploadFile(generate_chunks())
+print(f"Upload result: {response}")
+</code></pre>
+<h2 id="bidirectional-streaming"><a class="header" href="#bidirectional-streaming">Bidirectional Streaming</a></h2>
+<h3 id="basic-bidirectional-streaming"><a class="header" href="#basic-bidirectional-streaming">Basic Bidirectional Streaming</a></h3>
+<pre><code class="language-protobuf">service ChatService {
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+}
+
+message ChatMessage {
+  string user_id = 1;
+  string content = 2;
+  MessageType type = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+enum MessageType {
+  TEXT = 0;
+  JOIN = 1;
+  LEAVE = 2;
+  SYSTEM = 3;
+}
+</code></pre>
+<h3 id="mockforge-configuration-2"><a class="header" href="#mockforge-configuration-2">MockForge Configuration</a></h3>
+<p>Bidirectional streaming handles both incoming and outgoing messages:</p>
+<pre><code class="language-jsonl">// Welcome message on connection
+{"ts":0,"dir":"out","text":"{\"user_id\":\"system\",\"content\":\"Welcome to chat!\",\"type\":\"SYSTEM\"}"}
+
+// Handle join messages
+{"ts":0,"dir":"in","text":"{\"type\":\"JOIN\"}","response":"{\"user_id\":\"system\",\"content\":\"{{request.ws.message.user_id}} joined the chat\",\"type\":\"SYSTEM\"}"}
+
+// Handle text messages
+{"ts":0,"dir":"in","text":"{\"type\":\"TEXT\"}","response":"{\"user_id\":\"{{request.ws.message.user_id}}\",\"content\":\"{{request.ws.message.content}}\",\"type\":\"TEXT\"}"}
+
+// Handle leave messages
+{"ts":0,"dir":"in","text":"{\"type\":\"LEAVE\"}","response":"{\"user_id\":\"system\",\"content\":\"{{request.ws.message.user_id}} left the chat\",\"type\":\"SYSTEM\"}"}
+
+// Periodic system messages
+{"ts":30000,"dir":"out","text":"{\"user_id\":\"system\",\"content\":\"Server uptime: {{randInt 1 24}} hours\",\"type\":\"SYSTEM\"}"}
+</code></pre>
+<h3 id="advanced-bidirectional-patterns"><a class="header" href="#advanced-bidirectional-patterns">Advanced Bidirectional Patterns</a></h3>
+<pre><code class="language-jsonl">// State-aware responses
+{"ts":0,"dir":"in","text":".*","condition":"{{!request.ws.state.authenticated}}","response":"Please authenticate first"}
+{"ts":0,"dir":"in","text":"AUTH","response":"Authenticated","state":"authenticated"}
+
+{"ts":0,"dir":"in","text":".*","condition":"{{request.ws.state.authenticated}}","response":"{{request.ws.message}}"}
+
+{"ts":0,"dir":"in","text":"HELP","response":"Available commands: MSG, QUIT, STATUS"}
+{"ts":0,"dir":"in","text":"STATUS","response":"Connected users: {{randInt 1 50}}"}
+{"ts":0,"dir":"in","text":"QUIT","response":"Goodbye!","close":true}
+</code></pre>
+<h3 id="testing-bidirectional-streaming"><a class="header" href="#testing-bidirectional-streaming">Testing Bidirectional Streaming</a></h3>
+<h4 id="using-nodejs-1"><a class="header" href="#using-nodejs-1">Using Node.js</a></h4>
+<pre><code class="language-javascript">const grpc = require('@grpc/grpc-js');
+const protoLoader = require('@grpc/proto-loader');
+
+const packageDefinition = protoLoader.loadSync('proto/chat.proto');
+const proto = grpc.loadPackageDefinition(packageDefinition);
+
+const client = new proto.myapp.ChatService(
+  'localhost:50051',
+  grpc.credentials.createInsecure()
+);
+
+const call = client.Chat();
+
+// Handle incoming messages
+call.on('data', (message) =&gt; {
+  console.log('Received:', message);
+});
+
+// Send messages
+setInterval(() =&gt; {
+  call.write({
+    user_id: 'user123',
+    content: 'Hello from client',
+    type: 'TEXT'
+  });
+}, 2000);
+
+// Send join message
+call.write({
+  user_id: 'user123',
+  content: 'Joined chat',
+  type: 'JOIN'
+});
+
+// Handle stream end
+call.on('end', () =&gt; {
+  console.log('Stream ended');
+});
+
+// Close after 30 seconds
+setTimeout(() =&gt; {
+  call.write({
+    user_id: 'user123',
+    content: 'Leaving chat',
+    type: 'LEAVE'
+  });
+  call.end();
+}, 30000);
+</code></pre>
+<h2 id="streaming-configuration"><a class="header" href="#streaming-configuration">Streaming Configuration</a></h2>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># Streaming behavior
+MOCKFORGE_GRPC_STREAM_TIMEOUT=30000        # Stream timeout in ms
+MOCKFORGE_GRPC_MAX_STREAM_MESSAGES=1000    # Max messages per stream
+MOCKFORGE_GRPC_STREAM_BUFFER_SIZE=1024     # Buffer size for streaming
+
+# Response timing
+MOCKFORGE_GRPC_LATENCY_MIN_MS=10          # Minimum response latency
+MOCKFORGE_GRPC_LATENCY_MAX_MS=100         # Maximum response latency
+</code></pre>
+<h3 id="stream-control-templates"><a class="header" href="#stream-control-templates">Stream Control Templates</a></h3>
+<pre><code class="language-jsonl">// Conditional streaming
+{"ts":0,"dir":"out","text":"Starting stream","condition":"{{request.stream_enabled}}"}
+{"ts":1000,"dir":"out","text":"Stream data","condition":"{{request.ws.state.active}}"}
+{"ts":0,"dir":"out","text":"Stream ended","condition":"{{request.ws.message.type === 'END'}}","close":true}
+
+// Dynamic intervals
+{"ts":"{{randInt 1000 5000}}","dir":"out","text":"Random interval message"}
+{"ts":"{{request.interval || 2000}}","dir":"out","text":"Custom interval message"}
+</code></pre>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<pre><code class="language-jsonl">// Limit message history
+{"ts":0,"dir":"in","text":".*","condition":"{{(request.ws.state.messageCount || 0) &lt; 100}}","response":"Message received","messageCount":"{{(request.ws.state.messageCount || 0) + 1}}"}
+{"ts":0,"dir":"in","text":".*","condition":"{{(request.ws.state.messageCount || 0) &gt;= 100}}","response":"Message limit reached"}
+</code></pre>
+<h3 id="connection-limits"><a class="header" href="#connection-limits">Connection Limits</a></h3>
+<pre><code class="language-jsonl">// Global connection tracking (requires custom implementation)
+{"ts":0,"dir":"out","text":"Connection {{request.ws.connectionId}} established"}
+{"ts":300000,"dir":"out","text":"Connection timeout","close":true}
+</code></pre>
+<h3 id="load-balancing"><a class="header" href="#load-balancing">Load Balancing</a></h3>
+<pre><code class="language-jsonl">// Simulate load balancer behavior
+{"ts":"{{randInt 100 1000}}","dir":"out","text":"Response from server {{randInt 1 3}}"}
+{"ts":"{{randInt 2000 5000}}","dir":"out","text":"Health check from server {{randInt 1 3}}"}
+</code></pre>
+<h2 id="error-handling-in-streams"><a class="header" href="#error-handling-in-streams">Error Handling in Streams</a></h2>
+<h3 id="stream-errors"><a class="header" href="#stream-errors">Stream Errors</a></h3>
+<pre><code class="language-jsonl">// Handle invalid messages
+{"ts":0,"dir":"in","text":"","response":"Empty message not allowed"}
+{"ts":0,"dir":"in","text":".{500,}","response":"Message too long (max 500 chars)"}
+
+// Simulate network errors
+{"ts":5000,"dir":"out","text":"Network error occurred","error":true,"close":true}
+</code></pre>
+<h3 id="recovery-patterns"><a class="header" href="#recovery-patterns">Recovery Patterns</a></h3>
+<pre><code class="language-jsonl">// Automatic reconnection
+{"ts":0,"dir":"out","text":"Connection lost, attempting reconnect..."}
+{"ts":2000,"dir":"out","text":"Reconnected successfully"}
+{"ts":100,"dir":"out","text":"Resuming stream from message {{request.ws.state.lastMessageId}}"}
+</code></pre>
+<h2 id="testing-strategies"><a class="header" href="#testing-strategies">Testing Strategies</a></h2>
+<h3 id="unit-testing-streams"><a class="header" href="#unit-testing-streams">Unit Testing Streams</a></h3>
+<pre><code class="language-javascript">// test-streaming.js
+const { expect } = require('chai');
+
+describe('gRPC Streaming', () =&gt; {
+  it('should handle server streaming', (done) =&gt; {
+    const call = client.subscribeNotifications({ topics: ['test'] });
+
+    let messageCount = 0;
+    call.on('data', (notification) =&gt; {
+      messageCount++;
+      expect(notification).to.have.property('topic');
+      expect(notification).to.have.property('message');
+    });
+
+    call.on('end', () =&gt; {
+      expect(messageCount).to.be.greaterThan(0);
+      done();
+    });
+
+    // End test after 5 seconds
+    setTimeout(() =&gt; call.cancel(), 5000);
+  });
+
+  it('should handle client streaming', (done) =&gt; {
+    const call = client.uploadFile((error, response) =&gt; {
+      expect(error).to.be.null;
+      expect(response).to.have.property('file_id');
+      expect(response.status).to.equal('SUCCESS');
+      done();
+    });
+
+    // Send test chunks
+    call.write({ data: Buffer.from('test'), sequence: 0 });
+    call.write({ data: Buffer.from('data'), sequence: 1, is_last: true });
+    call.end();
+  });
+});
+</code></pre>
+<h3 id="load-testing"><a class="header" href="#load-testing">Load Testing</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# load-test-streams.sh
+
+CONCURRENT_STREAMS=10
+DURATION=60
+
+echo "Load testing $CONCURRENT_STREAMS concurrent streams for ${DURATION}s"
+
+for i in $(seq 1 $CONCURRENT_STREAMS); do
+  node stream-client.js &amp;
+done
+
+# Wait for test duration
+sleep $DURATION
+
+# Kill all clients
+pkill -f stream-client.js
+
+echo "Load test completed"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="stream-design"><a class="header" href="#stream-design">Stream Design</a></h3>
+<ol>
+<li><strong>Appropriate Patterns</strong>: Choose the right streaming pattern for your use case</li>
+<li><strong>Message Size</strong>: Keep individual messages reasonably sized</li>
+<li><strong>Heartbeat Messages</strong>: Include periodic keepalive messages for long-running streams</li>
+<li><strong>Error Recovery</strong>: Implement proper error handling and recovery mechanisms</li>
+</ol>
+<h3 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h3>
+<ol>
+<li><strong>Buffering</strong>: Use appropriate buffer sizes for your throughput requirements</li>
+<li><strong>Compression</strong>: Enable compression for large message streams</li>
+<li><strong>Connection Reuse</strong>: Reuse connections when possible</li>
+<li><strong>Resource Limits</strong>: Set appropriate limits on concurrent streams and message rates</li>
+</ol>
+<h3 id="monitoring-and-debugging"><a class="header" href="#monitoring-and-debugging">Monitoring and Debugging</a></h3>
+<ol>
+<li><strong>Stream Metrics</strong>: Monitor stream duration, message counts, and error rates</li>
+<li><strong>Logging</strong>: Enable detailed logging for debugging streaming issues</li>
+<li><strong>Tracing</strong>: Implement request tracing across stream messages</li>
+<li><strong>Health Checks</strong>: Regular health checks for long-running streams</li>
+</ol>
+<h3 id="client-compatibility"><a class="header" href="#client-compatibility">Client Compatibility</a></h3>
+<ol>
+<li><strong>Protocol Versions</strong>: Ensure compatibility with different gRPC versions</li>
+<li><strong>Language Support</strong>: Test with multiple client language implementations</li>
+<li><strong>Network Conditions</strong>: Test under various network conditions (latency, packet loss)</li>
+<li><strong>Browser Support</strong>: Consider WebSocket fallback for web clients</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-streaming-issues"><a class="header" href="#common-streaming-issues">Common Streaming Issues</a></h3>
+<p><strong>Stream doesn’t start</strong>: Check proto file definitions and service registration</p>
+<p><strong>Messages not received</strong>: Verify message encoding and template syntax</p>
+<p><strong>Stream hangs</strong>: Check for proper stream termination and timeout settings</p>
+<p><strong>Performance degradation</strong>: Monitor resource usage and adjust buffer sizes</p>
+<p><strong>Client disconnects</strong>: Implement proper heartbeat and reconnection logic</p>
+<h3 id="debug-commands"><a class="header" href="#debug-commands">Debug Commands</a></h3>
+<pre><code class="language-bash"># Monitor active streams
+grpcurl -plaintext localhost:50051 list
+
+# Check stream status
+netstat -tlnp | grep :50051
+
+# View stream logs
+tail -f mockforge.log | grep -E "(stream|grpc)"
+
+# Test basic connectivity
+grpcurl -plaintext localhost:50051 grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo
+</code></pre>
+<h3 id="performance-profiling"><a class="header" href="#performance-profiling">Performance Profiling</a></h3>
+<pre><code class="language-bash"># Profile gRPC performance
+cargo flamegraph --bin mockforge-cli -- serve --grpc-port 50051
+
+# Monitor system resources
+htop -p $(pgrep mockforge)
+
+# Network monitoring
+iftop -i lo
+</code></pre>
+<p>Streaming patterns enable powerful real-time communication scenarios. MockForge’s comprehensive streaming support allows you to create sophisticated mock environments that accurately simulate production streaming services for thorough testing and development.</p>
 
                     </main>
 
@@ -213,22 +649,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

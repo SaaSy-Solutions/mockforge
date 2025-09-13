@@ -183,6 +183,333 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="websocket-mocking"><a class="header" href="#websocket-mocking">WebSocket Mocking</a></h1>
+<p>MockForge provides comprehensive WebSocket connection mocking with support for both scripted replay scenarios and interactive real-time communication. This enables testing of WebSocket-based applications, real-time APIs, and event-driven systems.</p>
+<h2 id="websocket-mocking-modes"><a class="header" href="#websocket-mocking-modes">WebSocket Mocking Modes</a></h2>
+<p>MockForge supports two primary WebSocket mocking approaches:</p>
+<h3 id="1-replay-mode-scripted"><a class="header" href="#1-replay-mode-scripted">1. Replay Mode (Scripted)</a></h3>
+<p>Pre-recorded message sequences that play back on schedule, simulating server behavior with precise timing control.</p>
+<h3 id="2-interactive-mode-real-time"><a class="header" href="#2-interactive-mode-real-time">2. Interactive Mode (Real-time)</a></h3>
+<p>Dynamic responses based on client messages, enabling complex interactive scenarios and stateful communication.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="basic-websocket-setup"><a class="header" href="#basic-websocket-setup">Basic WebSocket Setup</a></h3>
+<pre><code class="language-bash"># Start MockForge with WebSocket support
+mockforge serve --ws-port 3001 --ws-replay-file ws-scenario.jsonl
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># WebSocket configuration
+MOCKFORGE_WS_ENABLED=true                    # Enable WebSocket support (default: false)
+MOCKFORGE_WS_PORT=3001                       # WebSocket server port
+MOCKFORGE_WS_BIND=0.0.0.0                    # Bind address
+MOCKFORGE_WS_REPLAY_FILE=path/to/file.jsonl  # Path to replay file
+MOCKFORGE_WS_PATH=/ws                         # WebSocket endpoint path (default: /ws)
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true      # Enable template processing
+</code></pre>
+<h3 id="command-line-options"><a class="header" href="#command-line-options">Command Line Options</a></h3>
+<pre><code class="language-bash">mockforge serve \
+  --ws-port 3001 \
+  --ws-replay-file examples/ws-demo.jsonl \
+  --ws-path /websocket
+</code></pre>
+<h2 id="replay-mode"><a class="header" href="#replay-mode">Replay Mode</a></h2>
+<p>Replay mode uses JSONL-formatted files to define scripted message sequences with precise timing control.</p>
+<h3 id="replay-file-format"><a class="header" href="#replay-file-format">Replay File Format</a></h3>
+<p>Each line in the replay file is a JSON object with the following structure:</p>
+<pre><code class="language-json">{
+  "ts": 0,
+  "dir": "out",
+  "text": "Hello, client!",
+  "waitFor": "^CLIENT_READY$"
+}
+</code></pre>
+<h3 id="field-definitions"><a class="header" href="#field-definitions">Field Definitions</a></h3>
+<ul>
+<li><strong><code>ts</code></strong> (number, required): Timestamp offset in milliseconds from connection start</li>
+<li><strong><code>dir</code></strong> (string, required): Message direction
+<ul>
+<li><code>"out"</code> - Message sent from server to client</li>
+<li><code>"in"</code> - Expected message from client (for validation)</li>
+</ul>
+</li>
+<li><strong><code>text</code></strong> (string, required): Message content (supports templates)</li>
+<li><strong><code>waitFor</code></strong> (string, optional): Regular expression to wait for before proceeding</li>
+</ul>
+<h3 id="basic-replay-example"><a class="header" href="#basic-replay-example">Basic Replay Example</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome to MockForge WebSocket server","waitFor":"^HELLO$"}
+{"ts":1000,"dir":"out","text":"Connection established"}
+{"ts":2000,"dir":"out","text":"Sending data: 42"}
+{"ts":3000,"dir":"out","text":"Goodbye"}
+</code></pre>
+<h3 id="advanced-replay-features"><a class="header" href="#advanced-replay-features">Advanced Replay Features</a></h3>
+<h4 id="template-support"><a class="header" href="#template-support">Template Support</a></h4>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Session {{uuid}} started at {{now}}"}
+{"ts":1000,"dir":"out","text":"Random value: {{randInt 1 100}}"}
+{"ts":2000,"dir":"out","text":"Future event at {{now+5m}}"}
+</code></pre>
+<h4 id="interactive-elements"><a class="header" href="#interactive-elements">Interactive Elements</a></h4>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Please authenticate","waitFor":"^AUTH .+$"}
+{"ts":100,"dir":"out","text":"Authentication successful"}
+{"ts":200,"dir":"out","text":"Choose option (A/B/C)","waitFor":"^(A|B|C)$"}
+</code></pre>
+<h4 id="complex-message-structures"><a class="header" href="#complex-message-structures">Complex Message Structures</a></h4>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"{\"type\":\"welcome\",\"user\":{\"id\":\"{{uuid}}\",\"name\":\"John\"}}"}
+{"ts":1000,"dir":"out","text":"{\"type\":\"data\",\"payload\":{\"items\":[{\"id\":1,\"value\":\"{{randInt 10 99}}\"},{\"id\":2,\"value\":\"{{randInt 100 999}}\"}]}}"}
+</code></pre>
+<h3 id="replay-file-management"><a class="header" href="#replay-file-management">Replay File Management</a></h3>
+<h4 id="creating-replay-files"><a class="header" href="#creating-replay-files">Creating Replay Files</a></h4>
+<pre><code class="language-bash"># Record from live WebSocket connection
+# (Feature in development - manual creation for now)
+
+# Create from application logs
+# Extract WebSocket messages and convert to JSONL format
+
+# Generate programmatically
+node -e "
+const fs = require('fs');
+const messages = [
+  {ts: 0, dir: 'out', text: 'HELLO', waitFor: '^HI$'},
+  {ts: 1000, dir: 'out', text: 'DATA: 42'}
+];
+fs.writeFileSync('replay.jsonl', messages.map(JSON.stringify).join('\n'));
+"
+</code></pre>
+<h4 id="validation"><a class="header" href="#validation">Validation</a></h4>
+<pre><code class="language-bash"># Validate replay file syntax
+node -e "
+const fs = require('fs');
+const lines = fs.readFileSync('replay.jsonl', 'utf8').split('\n');
+lines.forEach((line, i) =&gt; {
+  if (line.trim()) {
+    try {
+      const msg = JSON.parse(line);
+      if (!msg.ts || !msg.dir || !msg.text) {
+        console.log(\`Line \${i+1}: Missing required fields\`);
+      }
+    } catch (e) {
+      console.log(\`Line \${i+1}: Invalid JSON\`);
+    }
+  }
+});
+console.log('Validation complete');
+"
+</code></pre>
+<h2 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h2>
+<p>Interactive mode enables dynamic responses based on client messages, supporting complex conversational patterns and state management.</p>
+<h3 id="basic-interactive-setup"><a class="header" href="#basic-interactive-setup">Basic Interactive Setup</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"What is your name?","waitFor":"^NAME .+$"}
+{"ts":100,"dir":"out","text":"Hello {{request.ws.lastMessage.match(/^NAME (.+)$/)[1]}}!"}
+</code></pre>
+<h3 id="state-management"><a class="header" href="#state-management">State Management</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome! Type 'START' to begin","waitFor":"^START$"}
+{"ts":100,"dir":"out","text":"Game started. Score: 0","state":"playing"}
+{"ts":200,"dir":"out","text":"Choose: ROCK/PAPER/SCISSORS","waitFor":"^(ROCK|PAPER|SCISSORS)$"}
+{"ts":300,"dir":"out","text":"You chose {{request.ws.lastMessage}}. I chose ROCK. You win!","waitFor":"^PLAY_AGAIN$"}
+</code></pre>
+<h3 id="conditional-logic"><a class="header" href="#conditional-logic">Conditional Logic</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Enter command","waitFor":".+","condition":"{{request.ws.message.length &gt; 0}}"}
+{"ts":100,"dir":"out","text":"Processing: {{request.ws.message}}"}
+{"ts":200,"dir":"out","text":"Command completed"}
+</code></pre>
+<h2 id="testing-websocket-connections"><a class="header" href="#testing-websocket-connections">Testing WebSocket Connections</a></h2>
+<h3 id="using-websocket-clients"><a class="header" href="#using-websocket-clients">Using WebSocket Clients</a></h3>
+<h4 id="nodejs-client"><a class="header" href="#nodejs-client">Node.js Client</a></h4>
+<pre><code class="language-javascript">const WebSocket = require('ws');
+
+const ws = new WebSocket('ws://localhost:3001/ws');
+
+ws.on('open', () =&gt; {
+  console.log('Connected to MockForge WebSocket');
+  ws.send('CLIENT_READY');
+});
+
+ws.on('message', (data) =&gt; {
+  const message = data.toString();
+  console.log('Received:', message);
+
+  // Auto-respond to common prompts
+  if (message.includes('ACK')) {
+    ws.send('ACK');
+  }
+  if (message.includes('CONFIRMED')) {
+    ws.send('CONFIRMED');
+  }
+  if (message.includes('AUTH')) {
+    ws.send('AUTH token123');
+  }
+});
+
+ws.on('close', () =&gt; {
+  console.log('Connection closed');
+});
+
+ws.on('error', (err) =&gt; {
+  console.error('WebSocket error:', err);
+});
+</code></pre>
+<h4 id="browser-javascript"><a class="header" href="#browser-javascript">Browser JavaScript</a></h4>
+<pre><code class="language-javascript">const ws = new WebSocket('ws://localhost:3001/ws');
+
+ws.onopen = () =&gt; {
+  console.log('Connected');
+  ws.send('CLIENT_READY');
+};
+
+ws.onmessage = (event) =&gt; {
+  console.log('Received:', event.data);
+  // Handle server messages
+};
+
+ws.onclose = () =&gt; {
+  console.log('Connection closed');
+};
+</code></pre>
+<h4 id="command-line-tools"><a class="header" href="#command-line-tools">Command Line Tools</a></h4>
+<pre><code class="language-bash"># Using websocat
+websocat ws://localhost:3001/ws
+
+# Using curl (WebSocket support experimental)
+curl --include \
+     --no-buffer \
+     --header "Connection: Upgrade" \
+     --header "Upgrade: websocket" \
+     --header "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==" \
+     --header "Sec-WebSocket-Version: 13" \
+     ws://localhost:3001/ws
+</code></pre>
+<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-websocket.sh
+
+echo "Testing WebSocket connection..."
+
+# Test with Node.js
+node -e "
+const WebSocket = require('ws');
+const ws = new WebSocket('ws://localhost:3001/ws');
+
+ws.on('open', () =&gt; {
+  console.log('✓ Connection established');
+  ws.send('CLIENT_READY');
+});
+
+ws.on('message', (data) =&gt; {
+  console.log('✓ Message received:', data.toString());
+  ws.close();
+});
+
+ws.on('close', () =&gt; {
+  console.log('✓ Connection closed successfully');
+  process.exit(0);
+});
+
+ws.on('error', (err) =&gt; {
+  console.error('✗ WebSocket error:', err);
+  process.exit(1);
+});
+
+// Timeout after 10 seconds
+setTimeout(() =&gt; {
+  console.error('✗ Test timeout');
+  process.exit(1);
+}, 10000);
+"
+</code></pre>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="connection-pooling"><a class="header" href="#connection-pooling">Connection Pooling</a></h3>
+<pre><code class="language-bash"># Support multiple concurrent connections
+MOCKFORGE_WS_MAX_CONNECTIONS=100
+MOCKFORGE_WS_CONNECTION_TIMEOUT=30000
+</code></pre>
+<h3 id="message-filtering"><a class="header" href="#message-filtering">Message Filtering</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"in","text":".*","filter":"{{request.ws.message.startsWith('VALID_')}}"}
+{"ts":100,"dir":"out","text":"Valid message received"}
+</code></pre>
+<h3 id="error-simulation"><a class="header" href="#error-simulation">Error Simulation</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Error occurred","error":"true","code":1006}
+{"ts":100,"dir":"out","text":"Connection will close","close":"true"}
+</code></pre>
+<h3 id="binary-message-support"><a class="header" href="#binary-message-support">Binary Message Support</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"AQIDBAU=","binary":"true"}
+{"ts":1000,"dir":"out","text":"Binary data sent"}
+</code></pre>
+<h2 id="integration-patterns"><a class="header" href="#integration-patterns">Integration Patterns</a></h2>
+<h3 id="real-time-applications"><a class="header" href="#real-time-applications">Real-time Applications</a></h3>
+<ul>
+<li><strong>Chat Applications</strong>: Mock user conversations and bot responses</li>
+<li><strong>Live Updates</strong>: Simulate real-time data feeds and notifications</li>
+<li><strong>Gaming</strong>: Mock multiplayer game state and player interactions</li>
+</ul>
+<h3 id="api-testing"><a class="header" href="#api-testing">API Testing</a></h3>
+<ul>
+<li><strong>WebSocket APIs</strong>: Test GraphQL subscriptions and real-time queries</li>
+<li><strong>Event Streams</strong>: Mock server-sent events and push notifications</li>
+<li><strong>Live Dashboards</strong>: Simulate real-time metrics and monitoring data</li>
+</ul>
+<h3 id="development-workflows"><a class="header" href="#development-workflows">Development Workflows</a></h3>
+<ul>
+<li><strong>Frontend Development</strong>: Mock WebSocket backends during UI development</li>
+<li><strong>Integration Testing</strong>: Test WebSocket handling in microservices</li>
+<li><strong>Load Testing</strong>: Simulate thousands of concurrent WebSocket connections</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="replay-file-organization"><a class="header" href="#replay-file-organization">Replay File Organization</a></h3>
+<ol>
+<li><strong>Modular Files</strong>: Break complex scenarios into smaller, focused replay files</li>
+<li><strong>Version Control</strong>: Keep replay files in Git for collaboration</li>
+<li><strong>Documentation</strong>: Comment complex scenarios with clear descriptions</li>
+<li><strong>Validation</strong>: Always validate replay files before deployment</li>
+</ol>
+<h3 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h3>
+<ol>
+<li><strong>Message Volume</strong>: Limit concurrent connections based on system resources</li>
+<li><strong>Memory Usage</strong>: Monitor memory usage with large replay files</li>
+<li><strong>Timing Accuracy</strong>: Consider system clock precision for time-sensitive scenarios</li>
+<li><strong>Connection Limits</strong>: Set appropriate connection pool sizes</li>
+</ol>
+<h3 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h3>
+<ol>
+<li><strong>Input Validation</strong>: Validate all client messages in interactive mode</li>
+<li><strong>Rate Limiting</strong>: Implement connection rate limits for production</li>
+<li><strong>Authentication</strong>: Mock authentication handshakes appropriately</li>
+<li><strong>Data Sanitization</strong>: Avoid exposing sensitive data in replay files</li>
+</ol>
+<h3 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h3>
+<ol>
+<li><strong>Verbose Logging</strong>: Enable detailed WebSocket logging for troubleshooting</li>
+<li><strong>Connection Monitoring</strong>: Track connection lifecycle and message flow</li>
+<li><strong>Replay Debugging</strong>: Step through replay files manually</li>
+<li><strong>Client Compatibility</strong>: Test with multiple WebSocket client libraries</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>Connection fails</strong>: Check that WebSocket port is not blocked by firewall</p>
+<p><strong>Messages not received</strong>: Verify replay file path and JSONL format</p>
+<p><strong>Templates not expanding</strong>: Ensure <code>MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true</code></p>
+<p><strong>Timing issues</strong>: Check system clock and timestamp calculations</p>
+<h3 id="debug-commands"><a class="header" href="#debug-commands">Debug Commands</a></h3>
+<pre><code class="language-bash"># Check WebSocket port
+netstat -tlnp | grep :3001
+
+# Monitor connections
+ss -tlnp | grep :3001
+
+# Test basic connectivity
+curl -I http://localhost:3001/health  # If HTTP health endpoint exists
+</code></pre>
+<h3 id="log-analysis"><a class="header" href="#log-analysis">Log Analysis</a></h3>
+<pre><code class="language-bash"># View WebSocket logs
+tail -f mockforge.log | grep -i websocket
+
+# Count connections
+grep "WebSocket connection" mockforge.log | wc -l
+
+# Find errors
+grep -i "websocket.*error" mockforge.log
+</code></pre>
+<p>For detailed implementation guides, see:</p>
+<ul>
+<li><a href="websocket-mocking/replay.html">Replay Mode</a> - Advanced scripted scenarios</li>
+<li><a href="websocket-mocking/interactive.html">Interactive Mode</a> - Dynamic real-time communication</li>
+</ul>
 
                     </main>
 
@@ -213,22 +540,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>
