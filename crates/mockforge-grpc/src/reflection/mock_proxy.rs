@@ -27,7 +27,7 @@ pub struct MockReflectionProxy {
     config: ProxyConfig,
     /// Timeout for requests
     timeout_duration: Duration,
-    /// Connection pool for gRPC channels (kept for future use)
+    /// Connection pool for gRPC channels
     connection_pool: ConnectionPool,
     /// Registry of dynamic services for mock responses
     service_registry: Arc<ServiceRegistry>,
