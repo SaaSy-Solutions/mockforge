@@ -105,7 +105,8 @@ pub async fn start_with_latency_and_proxy(
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("WS listening on {} with latency injection and proxy support", addr);
 
-    let latency_injector = latency_profile.map(|profile| LatencyInjector::new(profile, Default::default()));
+    let latency_injector =
+        latency_profile.map(|profile| LatencyInjector::new(profile, Default::default()));
 
     let app = if let Some(injector) = latency_injector {
         router_with_latency_and_proxy(injector, ws_proxy_handler)
