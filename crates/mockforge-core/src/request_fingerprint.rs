@@ -100,10 +100,15 @@ impl RequestFingerprint {
         self.method.hash(&mut hasher);
         self.path.hash(&mut hasher);
         self.query.hash(&mut hasher);
-        for (k, v) in &self.headers {
+        
+        // Sort headers to ensure deterministic hash
+        let mut sorted_headers: Vec<_> = self.headers.iter().collect();
+        sorted_headers.sort_by_key(|(k, _)| *k);
+        for (k, v) in sorted_headers {
             k.hash(&mut hasher);
             v.hash(&mut hasher);
         }
+        
         self.body_hash.hash(&mut hasher);
         format!("{:x}", hasher.finish())
     }
@@ -215,8 +220,19 @@ mod tests {
         let fingerprint1 = RequestFingerprint::new(method.clone(), &uri, &headers, None);
         let fingerprint2 = RequestFingerprint::new(method, &uri, &headers, None);
 
+        // String representations should be identical
         assert_eq!(fingerprint1.to_string(), fingerprint2.to_string());
+        
+        // Hashes should be identical within the same run (DefaultHasher is randomized between runs)
+        // The important thing is that the same fingerprint produces the same hash
+        assert_eq!(fingerprint1.to_hash(), fingerprint1.to_hash());
+        assert_eq!(fingerprint2.to_hash(), fingerprint2.to_hash());
+        
+        // And that identical fingerprints produce the same hash
         assert_eq!(fingerprint1.to_hash(), fingerprint2.to_hash());
+        
+        // Also test that the actual structure comparison works
+        assert_eq!(fingerprint1, fingerprint2);
     }
 
     #[test]

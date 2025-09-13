@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use tracing::debug;
 
 /// Supported LLM providers
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum LlmProvider {
     /// OpenAI GPT models
@@ -24,7 +24,7 @@ pub enum LlmProvider {
 }
 
 /// Supported embedding providers
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum EmbeddingProvider {
     /// OpenAI text-embedding-ada-002
@@ -264,7 +264,7 @@ impl RagEngine {
     }
 
     /// Perform keyword-based search (fallback)
-    fn keyword_search(&self, query: &str, limit: usize) -> Vec<&DocumentChunk> {
+    pub fn keyword_search(&self, query: &str, limit: usize) -> Vec<&DocumentChunk> {
         self.chunks
             .iter()
             .filter(|chunk| {
@@ -755,6 +755,16 @@ impl RagEngine {
     /// Get number of indexed schemas
     pub fn schema_count(&self) -> usize {
         self.schema_kb.len()
+    }
+
+    /// Get chunk by index
+    pub fn get_chunk(&self, index: usize) -> Option<&DocumentChunk> {
+        self.chunks.get(index)
+    }
+
+    /// Check if schema exists in knowledge base
+    pub fn has_schema(&self, name: &str) -> bool {
+        self.schema_kb.contains_key(name)
     }
 }
 

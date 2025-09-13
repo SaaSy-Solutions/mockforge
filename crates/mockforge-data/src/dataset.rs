@@ -45,6 +45,23 @@ pub struct DatasetMetadata {
     pub tags: HashMap<String, String>,
 }
 
+impl Default for DatasetMetadata {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            description: None,
+            schema_name: String::new(),
+            row_count: 0,
+            config: DataConfig::default(),
+            created_at: chrono::Utc::now(),
+            generation_time_ms: 0,
+            format: OutputFormat::Json,
+            file_size_bytes: None,
+            tags: HashMap::new(),
+        }
+    }
+}
+
 impl DatasetMetadata {
     /// Create new metadata
     pub fn new(
@@ -252,6 +269,16 @@ impl Dataset {
 
         let metadata = self.metadata.clone();
         Self::new(metadata, mapped_data)
+    }
+
+    /// Validate this dataset against a schema
+    pub fn validate_against_schema(&self, schema: &SchemaDefinition) -> Result<Vec<String>> {
+        utils::validate_dataset_against_schema(self, schema)
+    }
+
+    /// Validate this dataset with detailed results
+    pub fn validate_with_details(&self, schema: &SchemaDefinition) -> DatasetValidationResult {
+        utils::validate_dataset_with_details(self, schema)
     }
 }
 
@@ -521,7 +548,7 @@ pub mod utils {
     }
 
     /// Validate dataset and return detailed result
-    pub fn validate_with_details(
+    pub fn validate_dataset_with_details(
         dataset: &Dataset,
         schema: &SchemaDefinition,
     ) -> DatasetValidationResult {

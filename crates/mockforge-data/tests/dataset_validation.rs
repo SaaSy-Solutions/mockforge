@@ -1,4 +1,4 @@
-use mockforge_data::{Dataset, DatasetValidationResult, FieldDefinition, SchemaDefinition};
+use mockforge_data::{Dataset, FieldDefinition, SchemaDefinition};
 use serde_json::json;
 
 #[cfg(test)]
@@ -18,7 +18,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         assert!(errors.unwrap().is_empty());
     }
@@ -36,7 +36,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         assert!(!error_list.is_empty());
@@ -55,7 +55,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         assert!(!error_list.is_empty());
@@ -74,7 +74,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         assert!(!error_list.is_empty());
@@ -96,7 +96,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         assert!(errors.unwrap().is_empty());
     }
@@ -114,7 +114,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let result = Dataset::validate_with_details(&dataset, &schema);
+        let result = dataset.validate_with_details(&schema);
 
         assert!(!result.valid);
         assert!(!result.errors.is_empty());
@@ -137,7 +137,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         assert!(!error_list.is_empty());
@@ -160,7 +160,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         // Should have error for the tags field being wrong type
@@ -175,7 +175,7 @@ mod dataset_validation_tests {
         let data = vec![];
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         assert!(errors.unwrap().is_empty());
     }
@@ -191,7 +191,7 @@ mod dataset_validation_tests {
 
         let dataset = Dataset::new(Default::default(), data);
 
-        let errors = Dataset::validate_dataset_against_schema(&dataset, &schema);
+        let errors = dataset.validate_against_schema(&schema);
         assert!(errors.is_ok());
         let error_list = errors.unwrap();
         assert!(!error_list.is_empty());

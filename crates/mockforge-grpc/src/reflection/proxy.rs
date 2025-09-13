@@ -401,8 +401,8 @@ impl ReflectionProxy {
             }
             prost_reflect::Kind::Int32 => prost_reflect::Value::I32(42),
             prost_reflect::Kind::Int64 => prost_reflect::Value::I64(42),
-            prost_reflect::Kind::Float => prost_reflect::Value::F32(3.14),
-            prost_reflect::Kind::Double => prost_reflect::Value::F64(3.14159),
+            prost_reflect::Kind::Float => prost_reflect::Value::F32(std::f32::consts::PI),
+            prost_reflect::Kind::Double => prost_reflect::Value::F64(std::f64::consts::PI),
             prost_reflect::Kind::Bool => prost_reflect::Value::Bool(true),
             prost_reflect::Kind::Bytes => prost_reflect::Value::Bytes(b"mock_data".to_vec().into()),
             prost_reflect::Kind::Enum(enum_descriptor) => {

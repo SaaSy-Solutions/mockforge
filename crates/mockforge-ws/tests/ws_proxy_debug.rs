@@ -1,5 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
-use mockforge_core::ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
+use mockforge_core::ws_proxy::{WsProxyConfig, WsProxyHandler};
 use tokio_tungstenite::tungstenite::protocol::Message;
 
 #[tokio::test]
