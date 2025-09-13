@@ -27,6 +27,8 @@ pub fn create_admin_router(
             // Dedicated admin API endpoints (avoiding user route conflicts)
             .route("/__mockforge/dashboard", get(get_dashboard))
             .route("/__mockforge/health", get(get_health))
+            .route("/__mockforge/routes", get(get_routes))
+            .route("/admin/server-info", get(get_server_info))
             .route("/__mockforge/logs", get(get_logs))
             .route("/__mockforge/metrics", get(get_metrics))
             .route("/__mockforge/config", get(get_config))

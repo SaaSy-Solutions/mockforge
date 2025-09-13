@@ -15,12 +15,18 @@ class MockForgeAdmin {
         // Toast notification system
         this.toastContainer = null;
         this.activeToasts = new Set();
+        // Auto-refresh properties
+        this.refreshInterval = null;
+        this.refreshRate = 3000; // 3 seconds
+        this.isVisible = true;
+        this.lastSeenRequestIds = new Set();
         this.init();
     }
 
     init() {
         this.initializeToastContainer();
         this.bindEvents();
+        this.setupAutoRefresh();
         this.loadDashboard();
     }
 
@@ -323,6 +329,10 @@ class MockForgeAdmin {
     }
 
     api(path) {
+        // All __mockforge API endpoints are now available on the admin server
+        if (path.startsWith('__mockforge/')) {
+            return `${this.getBasePath()}${path.replace(/^\/+/, '')}`;
+        }
         const base = this.getBasePath();
         return `${base.replace(/\/+$/, '/')}${path.replace(/^\/+/, '')}`;
     }
@@ -340,7 +350,52 @@ class MockForgeAdmin {
         }
     }
 
+    // Auto-refresh setup
+    setupAutoRefresh() {
+        // Handle page visibility changes to pause/resume refresh when tab is not visible
+        document.addEventListener('visibilitychange', () => {
+            this.isVisible = !document.hidden;
+            if (this.isVisible) {
+                // Resume refresh when tab becomes visible
+                this.startAutoRefresh();
+            } else {
+                // Pause refresh when tab is hidden
+                this.stopAutoRefresh();
+            }
+        });
+
+        // Start initial auto-refresh
+        this.startAutoRefresh();
+    }
+
+    startAutoRefresh() {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+        }
+        
+        this.refreshInterval = setInterval(() => {
+            if (this.isVisible && this.currentTab === 'dashboard') {
+                this.loadDashboard();
+            }
+        }, this.refreshRate);
+    }
+
+    stopAutoRefresh() {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
+        }
+    }
+
     updateDashboard(data) {
+        // Extract HTTP server address for API calls
+        if (data.servers) {
+            const httpServer = data.servers.find(s => s.server_type === 'HTTP');
+            if (httpServer && httpServer.address) {
+                this.httpServerAddr = httpServer.address;
+            }
+        }
+
         // Update system status
         if (data.system) {
             document.getElementById('uptime').textContent = this.formatDuration(data.system.uptime_seconds || 0);
@@ -350,9 +405,9 @@ class MockForgeAdmin {
 
         // Update server statuses
         if (data.servers) {
-            this.updateServerStatus('http-status', data.servers.find(s => s.server_type === 'HTTP'));
-            this.updateServerStatus('ws-status', data.servers.find(s => s.server_type === 'WebSocket'));
-            this.updateServerStatus('grpc-status', data.servers.find(s => s.server_type === 'gRPC'));
+            this.updateServerStatus('http-status', 'HTTP', data.servers.find(s => s.server_type === 'HTTP'));
+            this.updateServerStatus('ws-status', 'WebSocket', data.servers.find(s => s.server_type === 'WebSocket'));
+            this.updateServerStatus('grpc-status', 'gRPC', data.servers.find(s => s.server_type === 'gRPC'));
         }
 
         // Update recent requests
@@ -361,9 +416,20 @@ class MockForgeAdmin {
         }
     }
 
-    updateServerStatus(elementId, server) {
+    updateServerStatus(elementId, serverType, server) {
         const el = document.getElementById(elementId);
         if (!el) return;
+        
+        // Update server name with port
+        const serverItem = el.closest('.server-item');
+        const nameEl = serverItem?.querySelector('.server-name');
+        if (nameEl && server && server.address) {
+            // Extract port from address (e.g., "127.0.0.1:3000" -> "3000")
+            const port = server.address.split(':').pop();
+            nameEl.textContent = `${serverType} :${port}`;
+        } else if (nameEl) {
+            nameEl.textContent = serverType;
+        }
 
         if (server && server.running) {
             el.className = 'server-status status-running';
@@ -383,19 +449,59 @@ class MockForgeAdmin {
             return;
         }
 
-        container.innerHTML = logs.map(log => `
-            <div class="table-row">
-                <span>${this.formatTime(log.timestamp)}</span>
-                <span>${log.method}</span>
-                <span>${log.path}</span>
-                <span class="status-${log.status_code}">${log.status_code}</span>
-                <span>${log.response_time_ms}ms</span>
-            </div>
-        `).join('');
+        // Identify new requests
+        const newRequestIds = new Set();
+        
+        container.innerHTML = logs.map(log => {
+            // Generate a unique ID for this request (using timestamp + method + path as key)
+            const requestKey = `${log.timestamp}_${log.method}_${log.path}_${log.status_code}`;
+            const isNewRequest = !this.lastSeenRequestIds.has(requestKey);
+            
+            if (isNewRequest) {
+                newRequestIds.add(requestKey);
+            }
+            
+            return `
+                <div class="table-row${isNewRequest ? ' new-request' : ''}">
+                    <span>${this.formatTime(log.timestamp)}</span>
+                    <span>${log.method}</span>
+                    <span>${log.path}</span>
+                    <span class="status-${log.status_code}">${log.status_code}</span>
+                    <span>${log.response_time_ms}ms</span>
+                </div>
+            `;
+        }).join('');
+        
+        // Update our tracking set with all current request keys
+        this.lastSeenRequestIds.clear();
+        logs.forEach(log => {
+            const requestKey = `${log.timestamp}_${log.method}_${log.path}_${log.status_code}`;
+            this.lastSeenRequestIds.add(requestKey);
+        });
+        
+        // Remove new-request class after animation
+        if (newRequestIds.size > 0) {
+            setTimeout(() => {
+                container.querySelectorAll('.new-request').forEach(row => {
+                    row.classList.remove('new-request');
+                });
+            }, 2000); // Remove highlight after 2 seconds
+        }
     }
 
     async loadTabContent(tabName) {
+        // Update current tab for auto-refresh logic
+        this.currentTab = tabName;
+        
+        // Restart auto-refresh if on dashboard tab
+        if (tabName === 'dashboard') {
+            this.startAutoRefresh();
+        }
+        
         switch (tabName) {
+            case 'dashboard':
+                this.loadDashboard();
+                break;
             case 'routes':
                 this.loadRoutes();
                 break;

@@ -1,6 +1,7 @@
 pub mod latency_profiles;
 pub mod op_middleware;
 pub mod replay_listing;
+pub mod request_logging;
 pub mod schema_diff;
 
 use axum::http::StatusCode;
@@ -129,6 +130,8 @@ pub async fn build_router_with_injectors(
     // Smoke test endpoints
     .route("/__mockforge/smoke", get(get_smoke_test_index))
     .route("/__mockforge/smoke/run", get(run_smoke_tests))
+    // Add request logging middleware
+    .layer(axum::middleware::from_fn(request_logging::log_http_requests))
 }
 
 /// Serve a provided router on the given port.
@@ -136,9 +139,15 @@ pub async fn serve_router(
     port: u16,
     app: Router,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::net::SocketAddr;
+    
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("HTTP listening on {}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
+    
+    axum::serve(
+        tokio::net::TcpListener::bind(addr).await?,
+        app.into_make_service_with_connect_info::<SocketAddr>()
+    ).await?;
     Ok(())
 }
 

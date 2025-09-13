@@ -8,6 +8,12 @@ use mockforge_core::LatencyProfile;
 pub mod reflection;
 pub mod dynamic;
 
+// Include generated proto code
+pub mod generated {
+    // Include all generated proto files
+    tonic::include_proto!("mockforge.greeter");
+}
+
 pub use reflection::{ProxyConfig, ReflectionProxy, MockReflectionProxy};
 pub use dynamic::{
     DynamicGrpcConfig,

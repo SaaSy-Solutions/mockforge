@@ -1,2 +1,6 @@
 {"ts":0,"dir":"out","text":"HELLO {{uuid}} at {{now+1m}}","waitFor":"^CLIENT_READY$"}
-{"ts":10,"dir":"out","text":"{\\"type\\":\\"data\\",\\"id\\":\\"{{randInt 10 99}}\\"}"}
+{"ts":10,"dir":"out","text":"{\\"type\\":\\"welcome\\",\\"message\\":\\"WebSocket connection established\\",\\"sessionId\\":\\"{{uuid}}\\",\\"timestamp\\":\\"{{now}}\\"}"}
+{"ts":15,"dir":"out","text":"{\\"type\\":\\"data\\",\\"id\\":\\"{{randInt 10 99}}\\",\\"value\\":\\"{{randInt 100 999}}\\",\\"timestamp\\":\\"{{now}}\\"}","waitFor":"^ACK$"}
+{"ts":25,"dir":"out","text":"{\\"type\\":\\"heartbeat\\",\\"timestamp\\":\\"{{now}}\\"}"}
+{"ts":30,"dir":"out","text":"{\\"type\\":\\"notification\\",\\"title\\":\\"System Update\\",\\"message\\":\\"Server maintenance scheduled\\",\\"timestamp\\":\\"{{now+1h}}\\"}","waitFor":"^CONFIRMED$"}
+{"ts":40,"dir":"out","text":"{\\"type\\":\\"data\\",\\"id\\":\\"{{randInt 100 199}}\\",\\"value\\":\\"{{randInt 1000 9999}}\\",\\"timestamp\\":\\"{{now}}\\"}"}

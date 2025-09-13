@@ -1,8 +1,107 @@
 
 {
     "openapi": "3.0.3",
-    "info": { "title": "Demo", "version": "1.0.0" },
+    "info": {
+      "title": "MockForge Demo API",
+      "version": "1.0.0",
+      "description": "A comprehensive demo of MockForge's OpenAPI mocking capabilities"
+    },
+    "servers": [
+      {
+        "url": "http://localhost:3000",
+        "description": "Local development server"
+      }
+    ],
     "paths": {
-      "/ping": { "get": { "operationId": "ping", "responses": { "200": { "description": "ok" } } } }
+      "/ping": {
+        "get": {
+          "operationId": "ping",
+          "summary": "Health check endpoint",
+          "description": "Returns a simple pong response with timestamp",
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "status": "pong",
+                    "timestamp": "{{now}}",
+                    "requestId": "{{uuid}}"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/users": {
+        "get": {
+          "operationId": "getUsers",
+          "summary": "Get all users",
+          "description": "Returns a list of users with generated data",
+          "parameters": [
+            {
+              "name": "limit",
+              "in": "query",
+              "schema": { "type": "integer", "default": 10 },
+              "description": "Number of users to return"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "List of users",
+              "content": {
+                "application/json": {
+                  "example": [
+                    {
+                      "id": "{{uuid}}",
+                      "name": "John Doe",
+                      "email": "john@example.com",
+                      "createdAt": "{{now}}",
+                      "active": true
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "operationId": "createUser",
+          "summary": "Create a new user",
+          "description": "Creates a new user with the provided data",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "email": { "type": "string" }
+                  },
+                  "required": ["name", "email"]
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "User created successfully",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "id": "{{uuid}}",
+                    "name": "{{request.body.name}}",
+                    "email": "{{request.body.email}}",
+                    "createdAt": "{{now}}",
+                    "active": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }

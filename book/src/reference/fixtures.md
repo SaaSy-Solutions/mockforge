@@ -81,7 +81,29 @@ The Admin UI provides a graphical interface for managing fixtures and running sm
 
 The following environment variables control fixture and smoke test behavior:
 
+### Core Settings
 - `MOCKFORGE_FIXTURES_DIR` - Directory where fixtures are stored (default: `./fixtures`)
 - `MOCKFORGE_RECORD_ENABLED` - Enable recording of requests (default: `false`)
-- `MOCKFORGE_RECORD_GET_ONLY` - Record only GET requests (default: `false`)
 - `MOCKFORGE_REPLAY_ENABLED` - Enable replay of recorded requests (default: `false`)
+
+### Recording Options
+- `MOCKFORGE_RECORD_GET_ONLY` - Record only GET requests (default: `false`)
+- `MOCKFORGE_LATENCY_ENABLED` - Include latency in recorded fixtures (default: `true`)
+- `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` - Expand templates when recording (default: `false`)
+
+### Validation and Testing
+- `MOCKFORGE_REQUEST_VALIDATION` - Validation level during recording (default: `enforce`)
+- `MOCKFORGE_RESPONSE_VALIDATION` - Validate responses during replay (default: `false`)
+
+### Configuration File Support
+You can also configure fixtures through YAML:
+
+```yaml
+# In your configuration file
+core:
+  fixtures:
+    dir: "./fixtures"
+    record_enabled: false
+    replay_enabled: false
+    record_get_only: false
+```

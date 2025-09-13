@@ -15,7 +15,7 @@ additional-css = ["custom.css"]
 additional-js = ["custom.js"]
 fold.enable = true
 fold.level = 1
-curly-quotes = true
+smart-punctuation = true
 mathjax-support = false
 
 [output.html.search]
@@ -33,18 +33,18 @@ editable = true
 copy-js = true
 line-numbers = true
 
-[output.linkcheck]
-follow-web-links = false
-exclude = [".*github\\.com.*"]
-cache-timeout = 3600
+# [output.linkcheck]
+# follow-web-links = false
+# exclude = [".*github\\.com.*"]
+# cache-timeout = 3600
 
 [preprocessor.toc]
 command = "mdbook-toc"
 renderer = ["html"]
 
-[preprocessor.links]
-command = "mdbook-linkcheck"
-renderer = ["html"]
+# [preprocessor.links]
+# command = "mdbook-linkcheck"
+# renderer = ["html"]
 
 [preprocessor.mermaid]
 command = "mdbook-mermaid"

@@ -2,7 +2,7 @@
 
 use axum::{
     extract::{Query, State},
-    http,
+    http::{self, StatusCode},
     response::{Html, IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
@@ -555,14 +555,33 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     let system_metrics = state.get_system_metrics().await;
     let config = state.get_config().await;
 
-    // Get recent logs (last 10)
-    let recent_logs = {
+    // Get recent logs from centralized logger
+    let recent_logs = if let Some(global_logger) = mockforge_core::get_global_logger() {
+        // Get logs from centralized logger
+        let centralized_logs = global_logger.get_recent_logs(Some(20)).await;
+        
+        // Convert to RequestLog format for admin UI
+        centralized_logs.into_iter().map(|log| RequestLog {
+            id: log.id,
+            timestamp: log.timestamp,
+            method: log.method,
+            path: log.path,
+            status_code: log.status_code,
+            response_time_ms: log.response_time_ms,
+            client_ip: log.client_ip,
+            user_agent: log.user_agent,
+            headers: log.headers,
+            response_size_bytes: log.response_size_bytes,
+            error_message: log.error_message,
+        }).collect()
+    } else {
+        // Fallback to local logs if centralized logger not available
         let logs = state.logs.read().await;
         logs.iter()
             .rev()
             .take(10)
             .cloned()
-            .collect::<Vec<_>>()
+            .collect()
     };
 
     let system_info = SystemInfo {
@@ -640,6 +659,39 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     Json(ApiResponse::success(dashboard))
 }
 
+/// Get routes by proxying to HTTP server
+pub async fn get_routes(State(state): State<AdminState>) -> impl IntoResponse {
+    if let Some(http_addr) = state.http_server_addr {
+        // Try to fetch routes from the HTTP server
+        let url = format!("http://{}/__mockforge/routes", http_addr);
+        match reqwest::get(&url).await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.text().await {
+                        Ok(body) => {
+                            return (StatusCode::OK, [("content-type", "application/json")], body);
+                        }
+                        Err(_) => {}
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    // Fallback: return empty routes
+    (StatusCode::OK, [("content-type", "application/json")], r#"{"routes":[]}"#.to_string())
+}
+
+/// Get server info (HTTP server address for API calls)
+pub async fn get_server_info(State(state): State<AdminState>) -> Json<serde_json::Value> {
+    Json(json!({
+        "http_server": state.http_server_addr.map(|addr| addr.to_string()),
+        "ws_server": state.ws_server_addr.map(|addr| addr.to_string()),
+        "grpc_server": state.grpc_server_addr.map(|addr| addr.to_string())
+    }))
+}
+
 /// Get health check status
 pub async fn get_health() -> Json<HealthCheck> {
     Json(
@@ -670,8 +722,49 @@ pub async fn get_logs(
         filter.limit = Some(limit);
     }
 
-    // Get real filtered logs from state
-    let logs = state.get_logs_filtered(&filter).await;
+    // Get logs from centralized logger (same as dashboard)
+    let logs = if let Some(global_logger) = mockforge_core::get_global_logger() {
+        // Get logs from centralized logger
+        let centralized_logs = global_logger.get_recent_logs(filter.limit).await;
+        
+        // Convert to RequestLog format and apply filters
+        centralized_logs.into_iter()
+            .filter(|log| {
+                if let Some(ref method) = filter.method {
+                    if log.method != *method {
+                        return false;
+                    }
+                }
+                if let Some(ref path_pattern) = filter.path_pattern {
+                    if !log.path.contains(path_pattern) {
+                        return false;
+                    }
+                }
+                if let Some(status) = filter.status_code {
+                    if log.status_code != status {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|log| RequestLog {
+                id: log.id,
+                timestamp: log.timestamp,
+                method: log.method,
+                path: log.path,
+                status_code: log.status_code,
+                response_time_ms: log.response_time_ms,
+                client_ip: log.client_ip,
+                user_agent: log.user_agent,
+                headers: log.headers,
+                response_size_bytes: log.response_size_bytes,
+                error_message: log.error_message,
+            })
+            .collect()
+    } else {
+        // Fallback to local logs if centralized logger not available
+        state.get_logs_filtered(&filter).await
+    };
 
     Json(ApiResponse::success(logs))
 }
@@ -1763,6 +1856,7 @@ pub async fn get_env_vars() -> Json<ApiResponse<HashMap<String, String>>> {
     let mut env_vars = HashMap::new();
 
     let relevant_vars = [
+        // Core functionality
         "MOCKFORGE_LATENCY_ENABLED",
         "MOCKFORGE_FAILURES_ENABLED",
         "MOCKFORGE_PROXY_ENABLED",
@@ -1771,6 +1865,44 @@ pub async fn get_env_vars() -> Json<ApiResponse<HashMap<String, String>>> {
         "MOCKFORGE_LOG_LEVEL",
         "MOCKFORGE_CONFIG_FILE",
         "RUST_LOG",
+
+        // HTTP server configuration
+        "MOCKFORGE_HTTP_PORT",
+        "MOCKFORGE_HTTP_HOST",
+        "MOCKFORGE_HTTP_OPENAPI_SPEC",
+        "MOCKFORGE_CORS_ENABLED",
+        "MOCKFORGE_REQUEST_TIMEOUT_SECS",
+
+        // WebSocket server configuration
+        "MOCKFORGE_WS_PORT",
+        "MOCKFORGE_WS_HOST",
+        "MOCKFORGE_WS_REPLAY_FILE",
+        "MOCKFORGE_WS_CONNECTION_TIMEOUT_SECS",
+
+        // gRPC server configuration
+        "MOCKFORGE_GRPC_PORT",
+        "MOCKFORGE_GRPC_HOST",
+
+        // Admin UI configuration
+        "MOCKFORGE_ADMIN_ENABLED",
+        "MOCKFORGE_ADMIN_PORT",
+        "MOCKFORGE_ADMIN_HOST",
+        "MOCKFORGE_ADMIN_MOUNT_PATH",
+        "MOCKFORGE_ADMIN_API_ENABLED",
+
+        // Template and validation
+        "MOCKFORGE_RESPONSE_TEMPLATE_EXPAND",
+        "MOCKFORGE_REQUEST_VALIDATION",
+        "MOCKFORGE_AGGREGATE_ERRORS",
+        "MOCKFORGE_RESPONSE_VALIDATION",
+        "MOCKFORGE_VALIDATION_STATUS",
+
+        // Data generation
+        "MOCKFORGE_RAG_ENABLED",
+        "MOCKFORGE_FAKE_TOKENS",
+
+        // Other settings
+        "MOCKFORGE_FIXTURES_DIR",
     ];
 
     for var_name in &relevant_vars {

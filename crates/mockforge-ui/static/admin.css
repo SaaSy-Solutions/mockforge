@@ -239,6 +239,22 @@ body {
   border-bottom: none;
 }
 
+.new-request {
+  background-color: #dbeafe !important;
+  animation: highlightNewRequest 2s ease-out;
+}
+
+@keyframes highlightNewRequest {
+  0% {
+    background-color: #3b82f6;
+    color: white;
+  }
+  100% {
+    background-color: #dbeafe;
+    color: inherit;
+  }
+}
+
 .status-200, .status-201 {
   color: var(--success-color);
   font-weight: 600;

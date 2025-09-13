@@ -59,13 +59,13 @@ doc: ## Generate API documentation
 	cargo doc --workspace --no-deps --open
 
 book: ## Build mdBook documentation
-	mdbook build
+	cd book && PATH="$(HOME)/.cargo/bin:$(PATH)" mdbook build
 
 book-serve: ## Serve mdBook documentation locally
-	mdbook serve
+	cd book && PATH="$(HOME)/.cargo/bin:$(PATH)" mdbook serve
 
 book-deploy: ## Deploy documentation to GitHub Pages
-	mdbook build
+	cd book && PATH="$(HOME)/.cargo/bin:$(PATH)" mdbook build
 	@echo "Documentation built. Use GitHub Actions to deploy to Pages."
 
 # Security
@@ -106,14 +106,39 @@ install: ## Install the CLI tool locally
 
 # Examples
 run-example: ## Run with example configuration
-	MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false cargo run -p mockforge-cli -- --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051
+	MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051 --admin --admin-port 8080
 
 # Docker
 docker-build: ## Build Docker image
 	docker build -t mockforge .
 
-docker-run: ## Run Docker container
-	docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 mockforge
+docker-run: ## Run Docker container with basic configuration
+	docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+		-e MOCKFORGE_ADMIN_ENABLED=true \
+		-e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+		mockforge
+
+docker-compose-up: ## Start services with docker-compose
+	docker-compose up -d
+
+docker-compose-down: ## Stop services with docker-compose
+	docker-compose down
+
+docker-compose-logs: ## View logs from docker-compose services
+	docker-compose logs -f
+
+docker-compose-build: ## Build and start services with docker-compose
+	docker-compose up -d --build
+
+docker-clean: ## Remove Docker images and containers
+	docker-compose down --volumes --remove-orphans
+	docker system prune -f
+	docker image rm mockforge 2>/dev/null || true
+
+docker-dev: ## Start development environment with hot reload
+	docker-compose -f docker-compose.dev.yml up -d --build 2>/dev/null || \
+	echo "Development docker-compose not found. Using standard setup..." && \
+	$(MAKE) docker-compose-up
 
 # Utility
 deps-update: ## Update dependencies

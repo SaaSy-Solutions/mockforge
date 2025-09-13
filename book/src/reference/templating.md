@@ -6,6 +6,7 @@ MockForge supports lightweight templating across HTTP responses, overrides, and 
 
 - Environment: `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true|false` (default: false)
 - Config: `http.response_template_expand: true|false`
+- CLI: `--response-template-expand`
 - Determinism: `MOCKFORGE_FAKE_TOKENS=false` disables faker token expansion.
 
 ## Time Tokens
@@ -19,10 +20,20 @@ MockForge supports lightweight templating across HTTP responses, overrides, and 
 - `{{rand.int}}` — random integer in [0, 1_000_000].
 - `{{rand.float}}` — random float in [0,1).
 - `{{randInt a b}}` / `{{rand.int a b}}` — random integer between a and b (order-agnostic, negatives allowed).
+  - Examples: `{{randInt 10 99}}`, `{{randInt -5 5}}`.
 
 ## UUID
 
 - `{{uuid}}` — UUID v4.
+
+## Request Data Access
+
+- `{{request.body.field}}` — Access fields from request body JSON.
+  - Example: `{{request.body.name}}` extracts the `name` field from request body.
+- `{{request.path.param}}` — Access path parameters.
+  - Example: `{{request.path.id}}` extracts the `id` path parameter.
+- `{{request.query.param}}` — Access query parameters.
+  - Example: `{{request.query.limit}}` extracts the `limit` query parameter.
 
 ## Faker Tokens
 
