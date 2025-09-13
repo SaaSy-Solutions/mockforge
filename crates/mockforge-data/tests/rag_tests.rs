@@ -42,7 +42,8 @@ mod rag_tests {
             "Machine learning is a subset of artificial intelligence".to_string(),
             HashMap::new(),
         );
-        let _ = engine.add_document("Rust is a systems programming language".to_string(), HashMap::new());
+        let _ = engine
+            .add_document("Rust is a systems programming language".to_string(), HashMap::new());
 
         let chunks = engine.keyword_search("machine learning", 5);
         assert_eq!(chunks.len(), 1);

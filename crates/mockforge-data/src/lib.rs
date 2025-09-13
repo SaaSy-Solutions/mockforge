@@ -32,9 +32,12 @@ pub struct DataConfig {
     pub format: OutputFormat,
 }
 
-fn default_rows() -> usize { 100 }
-fn default_rag_context_length() -> usize { 1000 }
-
+fn default_rows() -> usize {
+    100
+}
+fn default_rag_context_length() -> usize {
+    1000
+}
 
 /// Output format for generated data
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]

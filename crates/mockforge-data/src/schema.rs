@@ -95,10 +95,12 @@ impl FieldDefinition {
         }
 
         // Check type constraints - use field_type as primary, fall back to constraints
-        let expected_type = self.constraints.get("type")
+        let expected_type = self
+            .constraints
+            .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or(&self.field_type);
-            
+
         let actual_type = match value {
             Value::String(_) => "string",
             Value::Number(_) => match expected_type {
@@ -106,7 +108,7 @@ impl FieldDefinition {
                 _ => "number",
             },
             Value::Bool(_) => "boolean",
-            Value::Object(_) => "object", 
+            Value::Object(_) => "object",
             Value::Array(_) => "array",
             Value::Null => "null",
         };
@@ -114,7 +116,7 @@ impl FieldDefinition {
         // Normalize expected type for comparison
         let normalized_expected = match expected_type {
             "integer" => "integer",
-            "number" => "number", 
+            "number" => "number",
             "string" => "string",
             "boolean" => "boolean",
             "object" => "object",
@@ -122,7 +124,9 @@ impl FieldDefinition {
             _ => expected_type,
         };
 
-        if normalized_expected != actual_type && !(normalized_expected == "number" && actual_type == "integer") {
+        if normalized_expected != actual_type
+            && !(normalized_expected == "number" && actual_type == "integer")
+        {
             return Err(Error::generic(format!(
                 "Field '{}' type mismatch: expected {}, got {}",
                 self.name, normalized_expected, actual_type
