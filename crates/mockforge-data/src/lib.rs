@@ -16,37 +16,32 @@ pub use rag::{EmbeddingProvider, LlmProvider, RagConfig, RagEngine, SearchResult
 pub use schema::{FieldDefinition, SchemaDefinition};
 
 /// Data generation configuration
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub struct DataConfig {
     /// Number of rows to generate
+    #[serde(default = "default_rows")]
     pub rows: usize,
     /// Random seed for reproducible generation
     pub seed: Option<u64>,
     /// Enable RAG mode
     pub rag_enabled: bool,
     /// Maximum RAG context length
+    #[serde(default = "default_rag_context_length")]
     pub rag_context_length: usize,
     /// Output format
     pub format: OutputFormat,
 }
 
-impl Default for DataConfig {
-    fn default() -> Self {
-        Self {
-            rows: 100,
-            seed: None,
-            rag_enabled: false,
-            rag_context_length: 1000,
-            format: OutputFormat::Json,
-        }
-    }
-}
+fn default_rows() -> usize { 100 }
+fn default_rag_context_length() -> usize { 1000 }
+
 
 /// Output format for generated data
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     /// JSON format
+    #[default]
     Json,
     /// JSON Lines format
     JsonLines,

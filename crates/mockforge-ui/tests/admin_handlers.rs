@@ -1,15 +1,11 @@
-use axum::{extract::State, http};
 use mockforge_ui::handlers::*;
 use mockforge_ui::models::*;
-use serde_json::json;
 use std::collections::HashMap;
 
 #[cfg(test)]
 mod admin_handlers_tests {
     use super::*;
     use chrono::Utc;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
 
     fn create_test_state() -> AdminState {
         AdminState::new(
@@ -133,6 +129,7 @@ mod admin_handlers_tests {
             method: Some("GET".to_string()),
             path_pattern: None,
             status_code: None,
+            hours_ago: None,
             limit: Some(10),
         };
 
@@ -145,6 +142,7 @@ mod admin_handlers_tests {
             method: None,
             path_pattern: Some("users".to_string()),
             status_code: None,
+            hours_ago: None,
             limit: Some(10),
         };
 
@@ -157,6 +155,7 @@ mod admin_handlers_tests {
             method: None,
             path_pattern: None,
             status_code: Some(201),
+            hours_ago: None,
             limit: Some(10),
         };
 
@@ -169,6 +168,7 @@ mod admin_handlers_tests {
             method: None,
             path_pattern: None,
             status_code: None,
+            hours_ago: None,
             limit: Some(2),
         };
 
