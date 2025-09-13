@@ -183,6 +183,84 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,
+and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
+<h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
+<h3 id="added"><a class="header" href="#added">Added</a></h3>
+<ul>
+<li>
+<p>OpenAPI request validation (path/query/header/cookie/body) with deep $ref resolution and composite schemas (oneOf/anyOf/allOf).</p>
+</li>
+<li>
+<p>Validation modes: <code>disabled</code>, <code>warn</code>, <code>enforce</code>, with aggregate error reporting and detailed error objects.</p>
+</li>
+<li>
+<p>Runtime Admin UI panel to view/toggle validation mode and per-route overrides; Admin API endpoint <code>/__mockforge/validation</code>.</p>
+</li>
+<li>
+<p>CLI flags and config options to control validation (including <code>skip_admin_validation</code> and per-route <code>validation_overrides</code>).</p>
+</li>
+<li>
+<p>New e2e tests for 2xx/422 request validation and response example expansion across HTTP routes.</p>
+</li>
+<li>
+<p>Templating reference docs and examples; WS templating tests and demo update.</p>
+</li>
+<li>
+<p>Initial release of MockForge</p>
+</li>
+<li>
+<p>HTTP API mocking with OpenAPI support</p>
+</li>
+<li>
+<p>gRPC service mocking with Protocol Buffers</p>
+</li>
+<li>
+<p>WebSocket connection mocking with replay functionality</p>
+</li>
+<li>
+<p>CLI tool for easy local development</p>
+</li>
+<li>
+<p>Admin UI for managing mock servers</p>
+</li>
+<li>
+<p>Comprehensive documentation with mdBook</p>
+</li>
+<li>
+<p>GitHub Actions CI/CD pipeline</p>
+</li>
+<li>
+<p>Security audit integration</p>
+</li>
+<li>
+<p>Pre-commit hooks for code quality</p>
+</li>
+</ul>
+<h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<ul>
+<li>HTTP handlers now perform request validation before routing; invalid requests return 400 with structured details (when <code>enforce</code>).</li>
+<li>Bump <code>jsonschema</code> to 0.33 and adapt validator API; enable draft selection and format checks internally.</li>
+<li>Improve route registry and OpenAPI parameter parsing, including styles/explode and array coercion for query/header/cookie parameters.</li>
+</ul>
+<h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
+<ul>
+<li>N/A</li>
+</ul>
+<h3 id="removed"><a class="header" href="#removed">Removed</a></h3>
+<ul>
+<li>N/A</li>
+</ul>
+<h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
+<ul>
+<li>Resolve admin mount prefix from config and exclude admin routes from validation when configured.</li>
+<li>Various small correctness fixes in OpenAPI schema mapping and parameter handling; clearer error messages.</li>
+</ul>
+<h3 id="security"><a class="header" href="#security">Security</a></h3>
+<ul>
+<li>N/A</li>
+</ul>
 
                     </main>
 
@@ -207,22 +285,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

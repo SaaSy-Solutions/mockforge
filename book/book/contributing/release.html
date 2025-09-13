@@ -183,6 +183,496 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="release-process"><a class="header" href="#release-process">Release Process</a></h1>
+<p>This guide outlines the complete process for releasing new versions of MockForge, from planning through deployment and post-release activities.</p>
+<h2 id="release-planning"><a class="header" href="#release-planning">Release Planning</a></h2>
+<h3 id="version-numbering"><a class="header" href="#version-numbering">Version Numbering</a></h3>
+<p>MockForge follows <a href="https://semver.org/">Semantic Versioning</a> (SemVer):</p>
+<pre><code>MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]
+
+Examples:
+- 1.0.0 (stable release)
+- 1.1.0 (minor release with new features)
+- 1.1.1 (patch release with bug fixes)
+- 2.0.0-alpha.1 (pre-release)
+- 1.0.0+20230912 (build metadata)
+</code></pre>
+<h4 id="when-to-increment"><a class="header" href="#when-to-increment">When to Increment</a></h4>
+<ul>
+<li><strong>MAJOR</strong> (X.0.0): Breaking changes to public API</li>
+<li><strong>MINOR</strong> (X.Y.0): New features, backward compatible</li>
+<li><strong>PATCH</strong> (X.Y.Z): Bug fixes, backward compatible</li>
+</ul>
+<h3 id="release-types"><a class="header" href="#release-types">Release Types</a></h3>
+<h4 id="major-releases"><a class="header" href="#major-releases">Major Releases</a></h4>
+<ul>
+<li>Breaking API changes</li>
+<li>Major feature additions</li>
+<li>Architectural changes</li>
+<li>Extended testing period (2-4 weeks beta)</li>
+</ul>
+<h4 id="minor-releases"><a class="header" href="#minor-releases">Minor Releases</a></h4>
+<ul>
+<li>New features and enhancements</li>
+<li>Backward compatible API changes</li>
+<li>Standard testing period (1-2 weeks)</li>
+</ul>
+<h4 id="patch-releases"><a class="header" href="#patch-releases">Patch Releases</a></h4>
+<ul>
+<li>Critical bug fixes</li>
+<li>Security patches</li>
+<li>Documentation updates</li>
+<li>Minimal testing period (3-5 days)</li>
+</ul>
+<h4 id="pre-releases"><a class="header" href="#pre-releases">Pre-releases</a></h4>
+<ul>
+<li>Alpha/Beta/RC versions</li>
+<li>Feature previews</li>
+<li>Breaking change previews</li>
+<li>Limited distribution</li>
+</ul>
+<h2 id="pre-release-checklist"><a class="header" href="#pre-release-checklist">Pre-Release Checklist</a></h2>
+<h3 id="1-code-quality-verification"><a class="header" href="#1-code-quality-verification">1. Code Quality Verification</a></h3>
+<pre><code class="language-bash"># Run complete test suite
+make test
+
+# Run integration tests
+make test-integration
+
+# Run E2E tests
+make test-e2e
+
+# Check code quality
+make lint
+make format-check
+
+# Security audit
+cargo audit
+
+# Check for unused dependencies
+cargo +nightly udeps
+
+# Performance benchmarks
+make benchmark
+</code></pre>
+<h3 id="2-documentation-updates"><a class="header" href="#2-documentation-updates">2. Documentation Updates</a></h3>
+<pre><code class="language-bash"># Update CHANGELOG.md with release notes
+# Update version numbers in documentation
+# Build and test documentation
+make docs
+make docs-serve
+
+# Test documentation links
+mdbook test
+</code></pre>
+<h3 id="3-version-bump"><a class="header" href="#3-version-bump">3. Version Bump</a></h3>
+<pre><code class="language-bash"># Update version in Cargo.toml files
+# Update version in package metadata
+# Update version in documentation
+
+# Example version bump script
+#!/bin/bash
+NEW_VERSION=$1
+
+# Update workspace Cargo.toml
+sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" Cargo.toml
+
+# Update all crate Cargo.toml files
+find crates -name "Cargo.toml" -exec sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" {} \;
+
+# Update README and documentation version references
+sed -i "s/mockforge [0-9]\+\.[0-9]\+\.[0-9]\+/mockforge $NEW_VERSION/g" README.md
+</code></pre>
+<h3 id="4-branch-management"><a class="header" href="#4-branch-management">4. Branch Management</a></h3>
+<pre><code class="language-bash"># Create release branch
+git checkout -b release/v$NEW_VERSION
+
+# Cherry-pick approved commits
+# Or merge from develop/main
+
+# Tag the release
+git tag -a v$NEW_VERSION -m "Release version $NEW_VERSION"
+
+# Push branch and tag
+git push origin release/v$NEW_VERSION
+git push origin v$NEW_VERSION
+</code></pre>
+<h2 id="release-build-process"><a class="header" href="#release-build-process">Release Build Process</a></h2>
+<h3 id="1-build-verification"><a class="header" href="#1-build-verification">1. Build Verification</a></h3>
+<pre><code class="language-bash"># Clean build
+cargo clean
+
+# Build all targets
+cargo build --release --all-targets
+
+# Build specific platforms if needed
+cargo build --release --target x86_64-unknown-linux-gnu
+cargo build --release --target x86_64-apple-darwin
+cargo build --release --target x86_64-pc-windows-msvc
+
+# Test release build
+./target/release/mockforge-cli --version
+</code></pre>
+<h3 id="2-binary-distribution"><a class="header" href="#2-binary-distribution">2. Binary Distribution</a></h3>
+<h4 id="linuxmacos-packages"><a class="header" href="#linuxmacos-packages">Linux/macOS Packages</a></h4>
+<pre><code class="language-bash"># Strip debug symbols
+strip target/release/mockforge-cli
+
+# Create distribution archives
+VERSION=1.0.0
+tar -czf mockforge-v${VERSION}-x86_64-linux.tar.gz \
+  -C target/release mockforge-cli
+
+tar -czf mockforge-v${VERSION}-x86_64-macos.tar.gz \
+  -C target/release mockforge-cli
+</code></pre>
+<h4 id="debian-packages"><a class="header" href="#debian-packages">Debian Packages</a></h4>
+<pre><code class="language-bash"># Install cargo-deb
+cargo install cargo-deb
+
+# Build .deb package
+cargo deb
+
+# Test package installation
+sudo dpkg -i target/debian/mockforge_*.deb
+</code></pre>
+<h4 id="docker-images"><a class="header" href="#docker-images">Docker Images</a></h4>
+<pre><code class="language-dockerfile"># Dockerfile.release
+FROM rust:1.70-slim AS builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update &amp;&amp; apt-get install -y ca-certificates &amp;&amp; rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/mockforge-cli /usr/local/bin/mockforge-cli
+EXPOSE 3000 3001 50051 8080
+CMD ["mockforge-cli", "serve"]
+</code></pre>
+<pre><code class="language-bash"># Build and push Docker image
+docker build -f Dockerfile.release -t mockforge:$VERSION .
+docker tag mockforge:$VERSION mockforge:latest
+docker push mockforge:$VERSION
+docker push mockforge:latest
+</code></pre>
+<h3 id="3-cross-platform-builds"><a class="header" href="#3-cross-platform-builds">3. Cross-Platform Builds</a></h3>
+<pre><code class="language-bash"># Use cross for cross-compilation
+cargo install cross
+
+# Build for different architectures
+cross build --release --target aarch64-unknown-linux-gnu
+cross build --release --target x86_64-unknown-linux-musl
+
+# Create release archives for each platform
+for target in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin x86_64-pc-windows-msvc; do
+  cross build --release --target $target
+  if [[ $target == *"windows"* ]]; then
+    zip -j mockforge-$VERSION-$target.zip target/$target/release/mockforge-cli.exe
+  else
+    tar -czf mockforge-$VERSION-$target.tar.gz -C target/$target/release mockforge-cli
+  fi
+done
+</code></pre>
+<h2 id="release-deployment"><a class="header" href="#release-deployment">Release Deployment</a></h2>
+<h3 id="1-github-release"><a class="header" href="#1-github-release">1. GitHub Release</a></h3>
+<pre><code class="language-bash"># Create GitHub release (manual or automated)
+gh release create v$VERSION \
+  --title "MockForge v$VERSION" \
+  --notes-file release-notes.md \
+  --draft
+
+# Upload release assets
+gh release upload v$VERSION \
+  mockforge-v$VERSION-x86_64-linux.tar.gz \
+  mockforge-v$VERSION-x86_64-macos.tar.gz \
+  mockforge-v$VERSION-x86_64-windows.zip \
+  mockforge_$VERSION_amd64.deb
+
+# Publish release
+gh release edit v$VERSION --draft=false
+</code></pre>
+<h3 id="2-package-registries"><a class="header" href="#2-package-registries">2. Package Registries</a></h3>
+<h4 id="cratesio-publication"><a class="header" href="#cratesio-publication">Crates.io Publication</a></h4>
+<pre><code class="language-bash"># Publish all crates to crates.io
+# Note: Must be done in dependency order
+
+# Publish core first
+cd crates/mockforge-core
+cargo publish
+
+# Then other crates
+cd ../mockforge-http
+cargo publish
+
+cd ../mockforge-ws
+cargo publish
+
+cd ../mockforge-grpc
+cargo publish
+
+cd ../mockforge-data
+cargo publish
+
+cd ../mockforge-ui
+cargo publish
+
+# Finally CLI
+cd ../mockforge-cli
+cargo publish
+</code></pre>
+<h4 id="docker-hub"><a class="header" href="#docker-hub">Docker Hub</a></h4>
+<pre><code class="language-bash"># Tag and push Docker images
+docker tag mockforge:$VERSION mockforge/mockforge:$VERSION
+docker tag mockforge:$VERSION mockforge/mockforge:latest
+
+docker push mockforge/mockforge:$VERSION
+docker push mockforge/mockforge:latest
+</code></pre>
+<h3 id="3-homebrew-macos"><a class="header" href="#3-homebrew-macos">3. Homebrew (macOS)</a></h3>
+<pre><code class="language-ruby"># Formula/mockforge.rb
+class Mockforge &lt; Formula
+  desc "Advanced API Mocking Platform"
+  homepage "https://github.com/SaaSy-Solutions/mockforge"
+  url "https://github.com/SaaSy-Solutions/mockforge/releases/download/v#{version}/mockforge-v#{version}-x86_64-macos.tar.gz"
+  sha256 "..."
+
+  def install
+    bin.install "mockforge-cli"
+  end
+
+  test do
+    system "#{bin}/mockforge-cli", "--version"
+  end
+end
+</code></pre>
+<h3 id="4-package-managers"><a class="header" href="#4-package-managers">4. Package Managers</a></h3>
+<h4 id="apt-repository-ubuntudebian"><a class="header" href="#apt-repository-ubuntudebian">APT Repository (Ubuntu/Debian)</a></h4>
+<pre><code class="language-bash"># Set up PPA or repository
+# Upload .deb packages
+# Update package indices
+</code></pre>
+<h4 id="snapcraft"><a class="header" href="#snapcraft">Snapcraft</a></h4>
+<pre><code class="language-yaml"># snapcraft.yaml
+name: mockforge
+version: '1.0.0'
+summary: Advanced API Mocking Platform
+description: |
+  MockForge is a comprehensive API mocking platform supporting HTTP, WebSocket, and gRPC protocols.
+
+grade: stable
+confinement: strict
+
+apps:
+  mockforge:
+    command: mockforge-cli
+    plugs: [network, network-bind]
+
+parts:
+  mockforge:
+    plugin: rust
+    source: .
+    build-packages: [pkg-config, libssl-dev]
+</code></pre>
+<h2 id="post-release-activities"><a class="header" href="#post-release-activities">Post-Release Activities</a></h2>
+<h3 id="1-announcement"><a class="header" href="#1-announcement">1. Announcement</a></h3>
+<h4 id="github-release-notes"><a class="header" href="#github-release-notes">GitHub Release Notes</a></h4>
+<pre><code class="language-markdown">## What's New in MockForge v1.0.0
+
+### 🚀 Major Features
+- Multi-protocol support (HTTP, WebSocket, gRPC)
+- Advanced templating system
+- Web-based admin UI
+- Comprehensive testing framework
+
+### 🐛 Bug Fixes
+- Fixed template rendering performance
+- Resolved WebSocket connection stability
+- Improved error messages
+
+### 📚 Documentation
+- Complete API reference
+- Getting started guides
+- Troubleshooting documentation
+
+### 🤝 Contributors
+Special thanks to all contributors!
+
+### 🔗 Links
+- [Documentation](https://docs.mockforge.dev)
+- [GitHub Repository](https://github.com/SaaSy-Solutions/mockforge)
+- [Issue Tracker](https://github.com/SaaSy-Solutions/mockforge/issues)
+</code></pre>
+<h4 id="social-media--community"><a class="header" href="#social-media--community">Social Media &amp; Community</a></h4>
+<pre><code class="language-bash"># Post to social media
+# Update Discord/Slack channels
+# Send email newsletter
+# Update website/blog
+</code></pre>
+<h3 id="2-monitoring--support"><a class="header" href="#2-monitoring--support">2. Monitoring &amp; Support</a></h3>
+<h4 id="release-health-checks"><a class="header" href="#release-health-checks">Release Health Checks</a></h4>
+<pre><code class="language-bash"># Monitor installation success
+# Check for immediate bug reports
+# Monitor CI/CD pipelines
+# Track adoption metrics
+
+# Example monitoring script
+#!/bin/bash
+VERSION=$1
+
+# Check GitHub release downloads
+gh release view v$VERSION --json assets -q '.assets[].downloadCount'
+
+# Check crates.io download stats
+curl -s "https://crates.io/api/v1/crates/mockforge-cli/downloads" | jq '.versions[0].downloads'
+
+# Monitor error reports
+gh issue list --label bug --state open --limit 10
+</code></pre>
+<h4 id="support-channels"><a class="header" href="#support-channels">Support Channels</a></h4>
+<ul>
+<li><strong>GitHub Issues</strong>: Bug reports and feature requests</li>
+<li><strong>GitHub Discussions</strong>: General questions and support</li>
+<li><strong>Discord/Slack</strong>: Real-time community support</li>
+<li><strong>Documentation</strong>: Self-service troubleshooting</li>
+</ul>
+<h3 id="3-follow-up-releases"><a class="header" href="#3-follow-up-releases">3. Follow-up Releases</a></h3>
+<h4 id="hotfix-process"><a class="header" href="#hotfix-process">Hotfix Process</a></h4>
+<p>For critical issues discovered post-release:</p>
+<pre><code class="language-bash"># Create hotfix branch from release tag
+git checkout -b hotfix/critical-bug-fix v1.0.0
+
+# Apply fix
+# Write test
+# Update CHANGELOG
+
+# Create patch release
+NEW_VERSION=1.0.1
+git tag -a v$NEW_VERSION
+git push origin v$NEW_VERSION
+
+# Deploy hotfix
+</code></pre>
+<h3 id="4-analytics--metrics"><a class="header" href="#4-analytics--metrics">4. Analytics &amp; Metrics</a></h3>
+<h4 id="release-metrics"><a class="header" href="#release-metrics">Release Metrics</a></h4>
+<ul>
+<li>Download counts across platforms</li>
+<li>Installation success rates</li>
+<li>User adoption and usage patterns</li>
+<li>Performance benchmarks vs previous versions</li>
+<li>Community feedback and sentiment</li>
+</ul>
+<h4 id="continuous-improvement"><a class="header" href="#continuous-improvement">Continuous Improvement</a></h4>
+<pre><code class="language-yaml"># Post-release retrospective template
+## Release Summary
+- Version: v1.0.0
+- Release Date: YYYY-MM-DD
+- Duration: X weeks
+
+## What Went Well
+- [ ] Smooth release process
+- [ ] No critical bugs found
+- [ ] Good community reception
+
+## Areas for Improvement
+- [ ] Documentation could be clearer
+- [ ] Testing took longer than expected
+- [ ] More platform support needed
+
+## Action Items
+- [ ] Improve release documentation
+- [ ] Automate more of the process
+- [ ] Add more platform builds
+</code></pre>
+<h2 id="release-automation"><a class="header" href="#release-automation">Release Automation</a></h2>
+<h3 id="github-actions-release-workflow"><a class="header" href="#github-actions-release-workflow">GitHub Actions Release Workflow</a></h3>
+<pre><code class="language-yaml"># .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" &gt;&gt; $GITHUB_ENV
+
+    - name: Build release binaries
+      run: |
+        cargo build --release
+        strip target/release/mockforge-cli
+
+    - name: Create release archives
+      run: |
+        tar -czf mockforge-${VERSION}-linux-x64.tar.gz -C target/release mockforge-cli
+        zip mockforge-${VERSION}-linux-x64.zip target/release/mockforge-cli
+
+    - name: Create GitHub release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: MockForge ${{ env.VERSION }}
+        body: |
+          ## What's New
+
+          See [CHANGELOG.md](CHANGELOG.md) for details.
+
+          ## Downloads
+
+          - Linux x64: [mockforge-${{ env.VERSION }}-linux-x64.tar.gz](mockforge-${{ env.VERSION }}-linux-x64.tar.gz)
+        draft: false
+        prerelease: false
+
+    - name: Upload release assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./mockforge-${{ env.VERSION }}-linux-x64.tar.gz
+        asset_name: mockforge-${{ env.VERSION }}-linux-x64.tar.gz
+        asset_content_type: application/gzip
+</code></pre>
+<h3 id="automated-publishing"><a class="header" href="#automated-publishing">Automated Publishing</a></h3>
+<pre><code class="language-yaml"># Publish to crates.io on release
+- name: Publish to crates.io
+  run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+  if: startsWith(github.ref, 'refs/tags/')
+
+# Build and push Docker image
+- name: Build and push Docker image
+  uses: docker/build-push-action@v3
+  with:
+    context: .
+    push: true
+    tags: mockforge/mockforge:${{ env.VERSION }},mockforge/mockforge:latest
+</code></pre>
+<h2 id="emergency-releases"><a class="header" href="#emergency-releases">Emergency Releases</a></h2>
+<h3 id="security-vulnerabilities"><a class="header" href="#security-vulnerabilities">Security Vulnerabilities</a></h3>
+<p>For security issues requiring immediate release:</p>
+<ol>
+<li><strong>Assess Severity</strong>: Determine CVSS score and impact</li>
+<li><strong>Develop Fix</strong>: Create minimal fix with comprehensive tests</li>
+<li><strong>Bypass Normal Process</strong>: Skip extended testing for critical security fixes</li>
+<li><strong>Accelerated Release</strong>: 24-48 hour release cycle</li>
+<li><strong>Public Disclosure</strong>: Coordinate with security community</li>
+</ol>
+<h3 id="critical-bug-fixes"><a class="header" href="#critical-bug-fixes">Critical Bug Fixes</a></h3>
+<p>For show-stopping bugs affecting production:</p>
+<ol>
+<li><strong>Immediate Assessment</strong>: Evaluate user impact and severity</li>
+<li><strong>Rapid Development</strong>: 1-2 day fix development</li>
+<li><strong>Limited Testing</strong>: Focus on regression and critical path tests</li>
+<li><strong>Fast-Track Release</strong>: 3-5 day release cycle</li>
+</ol>
+<p>This comprehensive release process ensures MockForge releases are reliable, well-tested, and properly distributed across all supported platforms and package managers.</p>
 
                     </main>
 
@@ -213,22 +703,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

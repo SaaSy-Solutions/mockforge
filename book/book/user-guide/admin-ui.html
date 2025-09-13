@@ -183,6 +183,252 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="admin-ui"><a class="header" href="#admin-ui">Admin UI</a></h1>
+<p>MockForge provides a comprehensive web-based Admin UI for managing and monitoring your mock servers. The Admin UI offers real-time insights, configuration management, and debugging tools to make mock server management effortless.</p>
+<h2 id="accessing-the-admin-ui"><a class="header" href="#accessing-the-admin-ui">Accessing the Admin UI</a></h2>
+<p>The Admin UI is automatically available when you start MockForge with the <code>--admin</code> flag:</p>
+<pre><code class="language-bash"># Start with Admin UI enabled
+mockforge serve --spec api-spec.json --admin --admin-port 8080 --http-port 3000
+</code></pre>
+<p>The Admin UI will be available at: <strong>http://localhost:8080</strong> (default port)</p>
+<h3 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h3>
+<pre><code class="language-bash"># Custom admin port
+mockforge serve --admin --admin-port 9090
+
+# Disable admin UI (default)
+mockforge serve --spec api-spec.json --no-admin
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># Enable/disable admin UI
+MOCKFORGE_ADMIN_ENABLED=true
+
+# Set admin UI port
+MOCKFORGE_ADMIN_PORT=8080
+
+# Set admin UI bind address (default: 0.0.0.0)
+MOCKFORGE_ADMIN_BIND=127.0.0.1
+</code></pre>
+<h2 id="interface-overview"><a class="header" href="#interface-overview">Interface Overview</a></h2>
+<p>The Admin UI features a clean, modern interface with the following main sections:</p>
+<h3 id="navigation-tabs"><a class="header" href="#navigation-tabs">Navigation Tabs</a></h3>
+<ul>
+<li><strong>Dashboard</strong> - System overview and real-time metrics</li>
+<li><strong>Routes</strong> - API endpoint management and testing</li>
+<li><strong>Fixtures</strong> - Recorded request/response management</li>
+<li><strong>Logs</strong> - Request/response logging and debugging</li>
+<li><strong>Configuration</strong> - Runtime configuration management</li>
+<li><strong>Metrics</strong> - Performance monitoring and analytics</li>
+<li><strong>Files</strong> - File system access for configuration files</li>
+</ul>
+<h3 id="status-indicators"><a class="header" href="#status-indicators">Status Indicators</a></h3>
+<p>The header displays real-time system status:</p>
+<ul>
+<li><strong>● Healthy</strong> - All systems operational</li>
+<li><strong>● Warning</strong> - Minor issues detected</li>
+<li><strong>● Error</strong> - Critical issues requiring attention</li>
+</ul>
+<h2 id="dashboard"><a class="header" href="#dashboard">Dashboard</a></h2>
+<p>The Dashboard provides a comprehensive overview of your MockForge instance:</p>
+<h3 id="system-status"><a class="header" href="#system-status">System Status</a></h3>
+<ul>
+<li><strong>Uptime</strong> - How long the server has been running</li>
+<li><strong>Memory Usage</strong> - Current memory consumption</li>
+<li><strong>CPU Usage</strong> - Current CPU utilization</li>
+<li><strong>Active Connections</strong> - Number of open connections</li>
+</ul>
+<h3 id="recent-activity"><a class="header" href="#recent-activity">Recent Activity</a></h3>
+<ul>
+<li><strong>Latest Requests</strong> - Most recent API calls with timestamps</li>
+<li><strong>Response Times</strong> - Average response latency</li>
+<li><strong>Error Rate</strong> - Percentage of failed requests</li>
+</ul>
+<h3 id="quick-actions"><a class="header" href="#quick-actions">Quick Actions</a></h3>
+<ul>
+<li><strong>Restart Server</strong> - Gracefully restart the mock server</li>
+<li><strong>Clear Logs</strong> - Remove all accumulated logs</li>
+<li><strong>Export Configuration</strong> - Download current config as YAML</li>
+</ul>
+<h2 id="routes-management"><a class="header" href="#routes-management">Routes Management</a></h2>
+<p>The Routes tab provides detailed API endpoint management:</p>
+<h3 id="route-listing"><a class="header" href="#route-listing">Route Listing</a></h3>
+<ul>
+<li>View all configured API routes</li>
+<li>Filter by HTTP method, path pattern, or response status</li>
+<li>Sort by request count, response time, or error rate</li>
+</ul>
+<h3 id="route-details"><a class="header" href="#route-details">Route Details</a></h3>
+<p>For each route, view:</p>
+<ul>
+<li><strong>Request Count</strong> - Total requests served</li>
+<li><strong>Average Response Time</strong> - Performance metrics</li>
+<li><strong>Success/Error Rates</strong> - Reliability statistics</li>
+<li><strong>Recent Requests</strong> - Last 10 requests with details</li>
+</ul>
+<h3 id="route-testing"><a class="header" href="#route-testing">Route Testing</a></h3>
+<ul>
+<li><strong>Interactive Tester</strong> - Send test requests directly from the UI</li>
+<li><strong>Request Builder</strong> - Construct complex requests with headers, query params, and body</li>
+<li><strong>Response Preview</strong> - See exactly what would be returned</li>
+</ul>
+<h3 id="route-overrides"><a class="header" href="#route-overrides">Route Overrides</a></h3>
+<ul>
+<li><strong>Temporary Overrides</strong> - Modify responses without changing configuration</li>
+<li><strong>Conditional Responses</strong> - Set up A/B testing scenarios</li>
+<li><strong>Failure Injection</strong> - Simulate errors for testing resilience</li>
+</ul>
+<h2 id="fixtures-management"><a class="header" href="#fixtures-management">Fixtures Management</a></h2>
+<p>The Fixtures tab manages recorded request/response pairs:</p>
+<h3 id="fixture-browser"><a class="header" href="#fixture-browser">Fixture Browser</a></h3>
+<ul>
+<li><strong>Search and Filter</strong> - Find fixtures by endpoint, method, or content</li>
+<li><strong>Categorization</strong> - Group fixtures by API version or feature</li>
+<li><strong>Tagging</strong> - Add custom tags for organization</li>
+</ul>
+<h3 id="fixture-operations"><a class="header" href="#fixture-operations">Fixture Operations</a></h3>
+<ul>
+<li><strong>View Details</strong> - Inspect request/response pairs in detail</li>
+<li><strong>Edit Responses</strong> - Modify recorded responses</li>
+<li><strong>Export/Import</strong> - Backup and restore fixture collections</li>
+<li><strong>Bulk Operations</strong> - Apply changes to multiple fixtures</li>
+</ul>
+<h3 id="recording-controls"><a class="header" href="#recording-controls">Recording Controls</a></h3>
+<ul>
+<li><strong>Start/Stop Recording</strong> - Control when new fixtures are captured</li>
+<li><strong>Recording Filters</strong> - Only record specific endpoints or request types</li>
+<li><strong>Storage Management</strong> - Configure fixture retention and cleanup</li>
+</ul>
+<h2 id="logging-and-debugging"><a class="header" href="#logging-and-debugging">Logging and Debugging</a></h2>
+<p>The Logs tab provides comprehensive request/response monitoring:</p>
+<h3 id="log-viewer"><a class="header" href="#log-viewer">Log Viewer</a></h3>
+<ul>
+<li><strong>Real-time Updates</strong> - See requests as they happen</li>
+<li><strong>Filtering Options</strong> - Filter by endpoint, status code, or time range</li>
+<li><strong>Search Functionality</strong> - Find specific requests or responses</li>
+</ul>
+<h3 id="log-details"><a class="header" href="#log-details">Log Details</a></h3>
+<p>For each log entry:</p>
+<ul>
+<li><strong>Full Request</strong> - Headers, body, and metadata</li>
+<li><strong>Full Response</strong> - Status, headers, and body</li>
+<li><strong>Timing Information</strong> - Request/response duration</li>
+<li><strong>Error Details</strong> - Stack traces and error context</li>
+</ul>
+<h3 id="log-management"><a class="header" href="#log-management">Log Management</a></h3>
+<ul>
+<li><strong>Export Logs</strong> - Download logs in various formats</li>
+<li><strong>Log Rotation</strong> - Automatic cleanup of old logs</li>
+<li><strong>Log Levels</strong> - Adjust verbosity for debugging</li>
+</ul>
+<h2 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h2>
+<p>The Configuration tab allows runtime configuration changes:</p>
+<h3 id="current-configuration"><a class="header" href="#current-configuration">Current Configuration</a></h3>
+<ul>
+<li><strong>View Active Config</strong> - See all current settings</li>
+<li><strong>Configuration Sources</strong> - Understand precedence (CLI &gt; Env &gt; File)</li>
+<li><strong>Validation Status</strong> - Check configuration validity</li>
+</ul>
+<h3 id="configuration-editor"><a class="header" href="#configuration-editor">Configuration Editor</a></h3>
+<ul>
+<li><strong>Live Editing</strong> - Modify settings without restart</li>
+<li><strong>Validation</strong> - Real-time syntax and semantic validation</li>
+<li><strong>Change History</strong> - Track configuration modifications</li>
+</ul>
+<h3 id="configuration-templates"><a class="header" href="#configuration-templates">Configuration Templates</a></h3>
+<ul>
+<li><strong>Save/Load Templates</strong> - Reuse common configurations</li>
+<li><strong>Environment Profiles</strong> - Different configs for dev/staging/prod</li>
+<li><strong>Backup/Restore</strong> - Version control for configurations</li>
+</ul>
+<h2 id="metrics-and-analytics"><a class="header" href="#metrics-and-analytics">Metrics and Analytics</a></h2>
+<p>The Metrics tab provides detailed performance analytics:</p>
+<h3 id="performance-metrics"><a class="header" href="#performance-metrics">Performance Metrics</a></h3>
+<ul>
+<li><strong>Response Time Distribution</strong> - P50, P95, P99 latencies</li>
+<li><strong>Throughput</strong> - Requests per second over time</li>
+<li><strong>Error Rate Trends</strong> - Track reliability over time</li>
+</ul>
+<h3 id="endpoint-analytics"><a class="header" href="#endpoint-analytics">Endpoint Analytics</a></h3>
+<ul>
+<li><strong>Top Endpoints</strong> - Most frequently called routes</li>
+<li><strong>Slowest Endpoints</strong> - Performance bottlenecks</li>
+<li><strong>Error-prone Endpoints</strong> - Routes with high failure rates</li>
+</ul>
+<h3 id="system-metrics"><a class="header" href="#system-metrics">System Metrics</a></h3>
+<ul>
+<li><strong>Resource Usage</strong> - CPU, memory, disk over time</li>
+<li><strong>Connection Pool</strong> - Database connection utilization</li>
+<li><strong>Cache Hit Rates</strong> - Effectiveness of response caching</li>
+</ul>
+<h2 id="file-system-access"><a class="header" href="#file-system-access">File System Access</a></h2>
+<p>The Files tab provides access to configuration and data files:</p>
+<h3 id="file-browser"><a class="header" href="#file-browser">File Browser</a></h3>
+<ul>
+<li><strong>Navigate Directory Structure</strong> - Browse the file system</li>
+<li><strong>File Type Detection</strong> - Syntax highlighting for different file types</li>
+<li><strong>Quick Access</strong> - Bookmarks for frequently used directories</li>
+</ul>
+<h3 id="file-editor"><a class="header" href="#file-editor">File Editor</a></h3>
+<ul>
+<li><strong>In-browser Editing</strong> - Edit configuration files directly</li>
+<li><strong>Syntax Validation</strong> - Catch errors before saving</li>
+<li><strong>Version Control Integration</strong> - Commit changes with Git</li>
+</ul>
+<h3 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h3>
+<ul>
+<li><strong>Upload/Download</strong> - Transfer files to/from the server</li>
+<li><strong>Backup Operations</strong> - Create and restore backups</li>
+<li><strong>Permission Management</strong> - Control file access</li>
+</ul>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="auto-refresh"><a class="header" href="#auto-refresh">Auto-Refresh</a></h3>
+<ul>
+<li><strong>Configurable Intervals</strong> - Set refresh rates from 1 second to 5 minutes</li>
+<li><strong>Smart Updates</strong> - Only refresh when data has changed</li>
+<li><strong>Background Updates</strong> - Continue working while data refreshes</li>
+</ul>
+<h3 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h3>
+<ul>
+<li><strong>Navigation</strong> - Tab switching with keyboard shortcuts</li>
+<li><strong>Actions</strong> - Quick access to common operations</li>
+<li><strong>Search</strong> - Global search across all tabs</li>
+</ul>
+<h3 id="themes-and-customization"><a class="header" href="#themes-and-customization">Themes and Customization</a></h3>
+<ul>
+<li><strong>Light/Dark Mode</strong> - Choose your preferred theme</li>
+<li><strong>Layout Options</strong> - Customize dashboard layout</li>
+<li><strong>Color Schemes</strong> - Personalize the interface</li>
+</ul>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<h3 id="access-control"><a class="header" href="#access-control">Access Control</a></h3>
+<ul>
+<li><strong>Authentication</strong> - Optional login requirements</li>
+<li><strong>Authorization</strong> - Role-based access control</li>
+<li><strong>IP Restrictions</strong> - Limit access to specific networks</li>
+</ul>
+<h3 id="data-protection"><a class="header" href="#data-protection">Data Protection</a></h3>
+<ul>
+<li><strong>Sensitive Data Masking</strong> - Hide passwords and tokens in logs</li>
+<li><strong>Encryption</strong> - Secure data transmission</li>
+<li><strong>Audit Logging</strong> - Track all administrative actions</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>Admin UI not loading</strong>: Check that <code>--admin</code> flag is used and port 8080 is accessible</p>
+<p><strong>Slow performance</strong>: Reduce auto-refresh interval or disable real-time updates</p>
+<p><strong>Missing data</strong>: Ensure proper permissions for file system access</p>
+<p><strong>Configuration not applying</strong>: Some changes may require server restart</p>
+<h3 id="debug-tools"><a class="header" href="#debug-tools">Debug Tools</a></h3>
+<ul>
+<li><strong>Network Inspector</strong> - Monitor all HTTP requests</li>
+<li><strong>Console Logs</strong> - JavaScript debugging information</li>
+<li><strong>Performance Profiler</strong> - Identify UI performance bottlenecks</li>
+</ul>
+<h3 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h3>
+<ul>
+<li><strong>Built-in Help</strong> - Press <code>?</code> for keyboard shortcuts</li>
+<li><strong>Tooltips</strong> - Hover over UI elements for explanations</li>
+<li><strong>Context Help</strong> - Right-click for contextual help menus</li>
+</ul>
+<p>The Admin UI transforms MockForge from a simple mock server into a powerful development and testing platform, providing the visibility and control needed for professional API mocking workflows.</p>
 
                     </main>
 
@@ -213,22 +459,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

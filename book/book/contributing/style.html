@@ -182,7 +182,476 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="code-style"><a class="header" href="#code-style">Code Style</a></h1>
+                        <h1 id="code-style-guide"><a class="header" href="#code-style-guide">Code Style Guide</a></h1>
+<p>This guide outlines the coding standards and style guidelines for MockForge development. Consistent code style improves readability, maintainability, and collaboration.</p>
+<h2 id="rust-code-style"><a class="header" href="#rust-code-style">Rust Code Style</a></h2>
+<p>MockForge follows the official Rust style guidelines with some project-specific conventions.</p>
+<h3 id="formatting"><a class="header" href="#formatting">Formatting</a></h3>
+<p>Use <code>rustfmt</code> for automatic code formatting:</p>
+<pre><code class="language-bash"># Format all code
+cargo fmt
+
+# Check formatting without modifying files
+cargo fmt --check
+</code></pre>
+<h3 id="linting"><a class="header" href="#linting">Linting</a></h3>
+<p>Use <code>clippy</code> for additional code quality checks:</p>
+<pre><code class="language-bash"># Run clippy with project settings
+cargo clippy
+
+# Run with pedantic mode for stricter checks
+cargo clippy -- -W clippy::pedantic
+</code></pre>
+<h3 id="naming-conventions"><a class="header" href="#naming-conventions">Naming Conventions</a></h3>
+<h4 id="functions-and-variables"><a class="header" href="#functions-and-variables">Functions and Variables</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: snake_case for functions and variables
+fn process_user_data(user_id: i32, data: &amp;str) -&gt; Result&lt;User, Error&gt; {
+    let processed_data = validate_and_clean(data)?;
+    let user_record = create_user_record(user_id, &amp;processed_data)?;
+    Ok(user_record)
+}
+
+// Bad: camelCase or PascalCase
+fn processUserData(userId: i32, data: &amp;str) -&gt; Result&lt;User, Error&gt; {
+    let ProcessedData = validate_and_clean(data)?;
+    let userRecord = create_user_record(userId, &amp;ProcessedData)?;
+    Ok(userRecord)
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="types-and-traits"><a class="header" href="#types-and-traits">Types and Traits</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: PascalCase for types
+pub struct HttpServer {
+    config: ServerConfig,
+    router: Router,
+}
+
+pub trait RequestHandler {
+    fn handle_request(&amp;self, request: Request) -&gt; Response;
+}
+
+// Bad: snake_case for types
+pub struct http_server {
+    config: ServerConfig,
+    router: Router,
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="constants"><a class="header" href="#constants">Constants</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: SCREAMING_SNAKE_CASE for constants
+const MAX_CONNECTIONS: usize = 1000;
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+// Bad: camelCase or PascalCase
+const maxConnections: usize = 1000;
+const DefaultTimeoutSecs: u64 = 30;
+<span class="boring">}</span></code></pre></pre>
+<h4 id="modules-and-files"><a class="header" href="#modules-and-files">Modules and Files</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: snake_case for module names
+pub mod request_handler;
+pub mod template_engine;
+
+// File: request_handler.rs
+// Module: request_handler
+<span class="boring">}</span></code></pre></pre>
+<h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
+<h4 id="function-documentation"><a class="header" href="#function-documentation">Function Documentation</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Processes a user request and returns a response.
+///
+/// This function handles the complete request processing pipeline:
+/// 1. Validates the request data
+/// 2. Applies business logic
+/// 3. Returns appropriate response
+///
+/// # Arguments
+///
+/// * `user_id` - The ID of the user making the request
+/// * `request_data` - The request payload as JSON
+///
+/// # Returns
+///
+/// Returns a `Result&lt;Response, Error&gt;` where:
+/// - `Ok(response)` contains the successful response
+/// - `Err(error)` contains details about what went wrong
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The user ID is invalid
+/// - The request data is malformed
+/// - Database operations fail
+///
+/// # Examples
+///
+/// ```rust
+/// let user_id = 123;
+/// let request_data = r#"{"action": "update_profile"}"#;
+/// let response = process_user_request(user_id, request_data)?;
+/// assert_eq!(response.status(), 200);
+/// ```
+pub fn process_user_request(user_id: i32, request_data: &amp;str) -&gt; Result&lt;Response, Error&gt; {
+    // Implementation
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="module-documentation"><a class="header" href="#module-documentation">Module Documentation</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>//! # HTTP Server Module
+//!
+//! This module provides HTTP server functionality for MockForge,
+//! including request routing, middleware support, and response handling.
+//!
+//! ## Architecture
+//!
+//! The HTTP server uses axum as the underlying web framework and provides:
+//! - OpenAPI specification integration
+//! - Template-based response generation
+//! - Middleware for logging and validation
+//!
+//! ## Example
+//!
+//! ```rust
+//! use mockforge_http::HttpServer;
+//!
+//! let server = HttpServer::new(config);
+//! server.serve("127.0.0.1:3000").await?;
+//! ```
+<span class="boring">}</span></code></pre></pre>
+<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
+<h4 id="custom-error-types"><a class="header" href="#custom-error-types">Custom Error Types</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum MockForgeError {
+    #[error("Configuration error: {message}")]
+    Config { message: String },
+
+    #[error("I/O error: {source}")]
+    Io {
+        #[from]
+        source: std::io::Error,
+    },
+
+    #[error("Template rendering error: {message}")]
+    Template { message: String },
+
+    #[error("HTTP error: {status} - {message}")]
+    Http { status: u16, message: String },
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="result-types"><a class="header" href="#result-types">Result Types</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Use Result&lt;T, MockForgeError&gt; for fallible operations
+pub fn load_config(path: &amp;Path) -&gt; Result&lt;Config, MockForgeError&gt; {
+    let content = fs::read_to_string(path)
+        .map_err(|e| MockForgeError::Io { source: e })?;
+
+    let config: Config = serde_yaml::from_str(&amp;content)
+        .map_err(|e| MockForgeError::Config {
+            message: format!("Failed to parse YAML: {}", e),
+        })?;
+
+    Ok(config)
+}
+
+// Bad: Using Option when you should use Result
+pub fn load_config_bad(path: &amp;Path) -&gt; Option&lt;Config&gt; {
+    // This loses error information
+    None
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="async-code"><a class="header" href="#async-code">Async Code</a></h3>
+<h4 id="async-function-signatures"><a class="header" href="#async-function-signatures">Async Function Signatures</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Clear async function signatures
+pub async fn process_request(request: Request) -&gt; Result&lt;Response, Error&gt; {
+    let data = validate_request(&amp;request).await?;
+    let result = process_data(data).await?;
+    Ok(create_response(result))
+}
+
+// Bad: Unclear async boundaries
+pub fn process_request(request: Request) -&gt; impl Future&lt;Output = Result&lt;Response, Error&gt;&gt; {
+    async move {
+        // Implementation
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="tokio-usage"><a class="header" href="#tokio-usage">Tokio Usage</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use tokio::sync::{Mutex, RwLock};
+
+// Good: Use appropriate synchronization primitives
+pub struct SharedState {
+    data: RwLock&lt;HashMap&lt;String, String&gt;&gt;,
+    counter: Mutex&lt;i64&gt;,
+}
+
+impl SharedState {
+    pub async fn get_data(&amp;self, key: &amp;str) -&gt; Option&lt;String&gt; {
+        let data = self.data.read().await;
+        data.get(key).cloned()
+    }
+
+    pub async fn increment_counter(&amp;self) -&gt; i64 {
+        let mut counter = self.counter.lock().await;
+        *counter += 1;
+        *counter
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
+<h4 id="unit-test-structure"><a class="header" href="#unit-test-structure">Unit Test Structure</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_function_basic_case() {
+        // Given
+        let input = "test input";
+        let expected = "expected output";
+
+        // When
+        let result = process_input(input);
+
+        // Then
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_function_error_case() {
+        // Given
+        let input = "";
+
+        // When
+        let result = process_input(input);
+
+        // Then
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn test_async_function() {
+        // Given
+        let client = create_test_client().await;
+
+        // When
+        let response = client.make_request().await.unwrap();
+
+        // Then
+        assert_eq!(response.status(), 200);
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="test-organization"><a class="header" href="#test-organization">Test Organization</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// tests/integration_tests.rs
+#[cfg(test)]
+mod integration_tests {
+    use mockforge_core::config::MockForgeConfig;
+
+    #[tokio::test]
+    async fn test_full_http_flow() {
+        // Test complete request/response cycle
+        let server = TestServer::new().await;
+        let client = TestClient::new(server.url());
+
+        let response = client.get("/api/users").await;
+        assert_eq!(response.status(), 200);
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h3>
+<h4 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Use references when possible
+pub fn process_data(data: &amp;str) -&gt; Result&lt;String, Error&gt; {
+    // Avoid cloning unless necessary
+    if data.is_empty() {
+        return Err(Error::EmptyInput);
+    }
+    Ok(data.to_uppercase())
+}
+
+// Good: Use Cow for flexible ownership
+use std::borrow::Cow;
+
+pub fn normalize_string&lt;'a&gt;(input: &amp;'a str) -&gt; Cow&lt;'a, str&gt; {
+    if input.chars().all(|c| c.is_lowercase()) {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(input.to_lowercase())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="zero-cost-abstractions"><a class="header" href="#zero-cost-abstractions">Zero-Cost Abstractions</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Use iterators for memory efficiency
+pub fn find_active_users(users: &amp;[User]) -&gt; impl Iterator&lt;Item = &amp;User&gt; {
+    users.iter().filter(|user| user.is_active)
+}
+
+// Bad: Collect into Vec unnecessarily
+pub fn find_active_users_bad(users: &amp;[User]) -&gt; Vec&lt;&amp;User&gt; {
+    users.iter().filter(|user| user.is_active).collect()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="project-specific-conventions"><a class="header" href="#project-specific-conventions">Project-Specific Conventions</a></h2>
+<h3 id="configuration-handling"><a class="header" href="#configuration-handling">Configuration Handling</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Use builder pattern for complex configuration
+#[derive(Debug, Clone)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub tls: Option&lt;TlsConfig&gt;,
+}
+
+impl Default for ServerConfig {
+    fn default() -&gt; Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+            tls: None,
+        }
+    }
+}
+
+impl ServerConfig {
+    pub fn builder() -&gt; ServerConfigBuilder {
+        ServerConfigBuilder::default()
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use tracing::{info, warn, error, debug, instrument};
+
+// Good: Use structured logging
+#[instrument(skip(config))]
+pub async fn start_server(config: &amp;ServerConfig) -&gt; Result&lt;(), Error&gt; {
+    info!("Starting server", host = %config.host, port = config.port);
+
+    if let Err(e) = setup_server(config).await {
+        error!("Failed to start server", error = %e);
+        return Err(e);
+    }
+
+    info!("Server started successfully");
+    Ok(())
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Use feature flags for optional functionality
+#[cfg(feature = "grpc")]
+pub mod grpc {
+    // gRPC-specific code
+}
+
+#[cfg(feature = "websocket")]
+pub mod websocket {
+    // WebSocket-specific code
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="code-review-checklist"><a class="header" href="#code-review-checklist">Code Review Checklist</a></h2>
+<p>Before submitting code for review, ensure:</p>
+<ul>
+<li><input disabled="" type="checkbox"/>
+Code is formatted with <code>cargo fmt</code></li>
+<li><input disabled="" type="checkbox"/>
+No clippy warnings remain</li>
+<li><input disabled="" type="checkbox"/>
+All tests pass</li>
+<li><input disabled="" type="checkbox"/>
+Documentation is updated</li>
+<li><input disabled="" type="checkbox"/>
+No TODO comments left in production code</li>
+<li><input disabled="" type="checkbox"/>
+Error messages are user-friendly</li>
+<li><input disabled="" type="checkbox"/>
+Performance considerations are addressed</li>
+<li><input disabled="" type="checkbox"/>
+Security implications are reviewed</li>
+</ul>
+<h2 id="tools-and-automation"><a class="header" href="#tools-and-automation">Tools and Automation</a></h2>
+<h3 id="pre-commit-hooks"><a class="header" href="#pre-commit-hooks">Pre-commit Hooks</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# .git/hooks/pre-commit
+
+# Format code
+cargo fmt --check
+if [ $? -ne 0 ]; then
+    echo "Code is not formatted. Run 'cargo fmt' to fix."
+    exit 1
+fi
+
+# Run clippy
+cargo clippy -- -D warnings
+if [ $? -ne 0 ]; then
+    echo "Clippy found issues. Fix them before committing."
+    exit 1
+fi
+
+# Run tests
+cargo test
+if [ $? -ne 0 ]; then
+    echo "Tests are failing. Fix them before committing."
+    exit 1
+fi
+</code></pre>
+<h3 id="ci-configuration"><a class="header" href="#ci-configuration">CI Configuration</a></h3>
+<pre><code class="language-yaml"># .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Check formatting
+      run: cargo fmt --check
+
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+
+    - name: Run tests
+      run: cargo test --verbose
+
+    - name: Run security audit
+      run: cargo audit
+</code></pre>
+<p>This style guide ensures MockForge maintains high code quality and consistency across the entire codebase. Following these guidelines makes the code more readable, maintainable, and collaborative.</p>
 
                     </main>
 
@@ -213,22 +682,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

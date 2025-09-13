@@ -183,6 +183,381 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="configuration-schema"><a class="header" href="#configuration-schema">Configuration Schema</a></h1>
+<p>MockForge supports comprehensive configuration through YAML files. This schema reference documents all available configuration options, their types, defaults, and usage examples.</p>
+<h2 id="file-format"><a class="header" href="#file-format">File Format</a></h2>
+<p>Configuration files use YAML format with the following structure:</p>
+<pre><code class="language-yaml"># Top-level configuration sections
+server:        # Server port and binding configuration
+admin:         # Admin UI settings
+validation:    # Request validation settings
+response:      # Response processing options
+chaos:         # Chaos engineering features
+grpc:          # gRPC-specific settings
+websocket:     # WebSocket-specific settings
+logging:       # Logging configuration
+</code></pre>
+<h2 id="server-configuration"><a class="header" href="#server-configuration">Server Configuration</a></h2>
+<h3 id="serverhttp_port-integer-default-3000"><a class="header" href="#serverhttp_port-integer-default-3000"><code>server.http_port</code> (integer, default: 3000)</a></h3>
+<p>HTTP server port for REST API endpoints.</p>
+<pre><code class="language-yaml">server:
+  http_port: 8080
+</code></pre>
+<h3 id="serverws_port-integer-default-3001"><a class="header" href="#serverws_port-integer-default-3001"><code>server.ws_port</code> (integer, default: 3001)</a></h3>
+<p>WebSocket server port for real-time connections.</p>
+<pre><code class="language-yaml">server:
+  ws_port: 8081
+</code></pre>
+<h3 id="servergrpc_port-integer-default-50051"><a class="header" href="#servergrpc_port-integer-default-50051"><code>server.grpc_port</code> (integer, default: 50051)</a></h3>
+<p>gRPC server port for protocol buffer services.</p>
+<pre><code class="language-yaml">server:
+  grpc_port: 9090
+</code></pre>
+<h3 id="serverbind-string-default-0000"><a class="header" href="#serverbind-string-default-0000"><code>server.bind</code> (string, default: “0.0.0.0”)</a></h3>
+<p>Network interface to bind servers to.</p>
+<pre><code class="language-yaml">server:
+  bind: "127.0.0.1"  # Bind to localhost only
+</code></pre>
+<h2 id="admin-ui-configuration"><a class="header" href="#admin-ui-configuration">Admin UI Configuration</a></h2>
+<h3 id="adminenabled-boolean-default-false"><a class="header" href="#adminenabled-boolean-default-false"><code>admin.enabled</code> (boolean, default: false)</a></h3>
+<p>Enable the web-based admin interface.</p>
+<pre><code class="language-yaml">admin:
+  enabled: true
+</code></pre>
+<h3 id="adminport-integer-default-8080"><a class="header" href="#adminport-integer-default-8080"><code>admin.port</code> (integer, default: 8080)</a></h3>
+<p>Port for the admin UI server.</p>
+<pre><code class="language-yaml">admin:
+  port: 9090
+</code></pre>
+<h3 id="adminembedded-boolean-default-false"><a class="header" href="#adminembedded-boolean-default-false"><code>admin.embedded</code> (boolean, default: false)</a></h3>
+<p>Embed admin UI under the main HTTP server instead of running standalone.</p>
+<pre><code class="language-yaml">admin:
+  embedded: true
+</code></pre>
+<h3 id="adminmount_path-string-default-admin"><a class="header" href="#adminmount_path-string-default-admin"><code>admin.mount_path</code> (string, default: “/admin”)</a></h3>
+<p>URL path where embedded admin UI is accessible.</p>
+<pre><code class="language-yaml">admin:
+  embedded: true
+  mount_path: "/mockforge-admin"
+</code></pre>
+<h3 id="adminstandalone-boolean-default-true"><a class="header" href="#adminstandalone-boolean-default-true"><code>admin.standalone</code> (boolean, default: true)</a></h3>
+<p>Force standalone admin UI server (overrides embedded setting).</p>
+<pre><code class="language-yaml">admin:
+  standalone: true
+</code></pre>
+<h3 id="admindisable_api-boolean-default-false"><a class="header" href="#admindisable_api-boolean-default-false"><code>admin.disable_api</code> (boolean, default: false)</a></h3>
+<p>Disable admin API endpoints while keeping the UI interface.</p>
+<pre><code class="language-yaml">admin:
+  disable_api: false
+</code></pre>
+<h2 id="validation-configuration"><a class="header" href="#validation-configuration">Validation Configuration</a></h2>
+<h3 id="validationmode-string-default-enforce"><a class="header" href="#validationmode-string-default-enforce"><code>validation.mode</code> (string, default: “enforce”)</a></h3>
+<p>Request validation mode. Options: “off”, “warn”, “enforce”</p>
+<pre><code class="language-yaml">validation:
+  mode: warn  # Log warnings but allow invalid requests
+</code></pre>
+<h3 id="validationaggregate_errors-boolean-default-false"><a class="header" href="#validationaggregate_errors-boolean-default-false"><code>validation.aggregate_errors</code> (boolean, default: false)</a></h3>
+<p>Combine multiple validation errors into a single JSON array response.</p>
+<pre><code class="language-yaml">validation:
+  aggregate_errors: true
+</code></pre>
+<h3 id="validationvalidate_responses-boolean-default-false"><a class="header" href="#validationvalidate_responses-boolean-default-false"><code>validation.validate_responses</code> (boolean, default: false)</a></h3>
+<p>Validate response payloads against OpenAPI schemas (warn-only).</p>
+<pre><code class="language-yaml">validation:
+  validate_responses: true
+</code></pre>
+<h3 id="validationstatus_code-integer-default-400"><a class="header" href="#validationstatus_code-integer-default-400"><code>validation.status_code</code> (integer, default: 400)</a></h3>
+<p>HTTP status code to return for validation errors.</p>
+<pre><code class="language-yaml">validation:
+  status_code: 422  # Use 422 Unprocessable Entity
+</code></pre>
+<h3 id="validationskip_admin_validation-boolean-default-true"><a class="header" href="#validationskip_admin_validation-boolean-default-true"><code>validation.skip_admin_validation</code> (boolean, default: true)</a></h3>
+<p>Skip validation for admin UI routes.</p>
+<pre><code class="language-yaml">validation:
+  skip_admin_validation: true
+</code></pre>
+<h3 id="validationoverrides-object"><a class="header" href="#validationoverrides-object"><code>validation.overrides</code> (object)</a></h3>
+<p>Per-route validation overrides.</p>
+<pre><code class="language-yaml">validation:
+  overrides:
+    "/api/users": "off"      # Disable validation for this route
+    "/api/admin/**": "warn"  # Warning mode for admin routes
+</code></pre>
+<h2 id="response-configuration"><a class="header" href="#response-configuration">Response Configuration</a></h2>
+<h3 id="responsetemplate_expand-boolean-default-false"><a class="header" href="#responsetemplate_expand-boolean-default-false"><code>response.template_expand</code> (boolean, default: false)</a></h3>
+<p>Enable template variable expansion in responses.</p>
+<pre><code class="language-yaml">response:
+  template_expand: true
+</code></pre>
+<h3 id="responsecaching-object"><a class="header" href="#responsecaching-object"><code>response.caching</code> (object)</a></h3>
+<p>Response caching configuration.</p>
+<pre><code class="language-yaml">response:
+  caching:
+    enabled: true
+    ttl_seconds: 300
+    max_size_mb: 100
+</code></pre>
+<h2 id="chaos-engineering"><a class="header" href="#chaos-engineering">Chaos Engineering</a></h2>
+<h3 id="chaoslatency_enabled-boolean-default-false"><a class="header" href="#chaoslatency_enabled-boolean-default-false"><code>chaos.latency_enabled</code> (boolean, default: false)</a></h3>
+<p>Enable response latency simulation.</p>
+<pre><code class="language-yaml">chaos:
+  latency_enabled: true
+</code></pre>
+<h3 id="chaoslatency_min_ms-integer-default-0"><a class="header" href="#chaoslatency_min_ms-integer-default-0"><code>chaos.latency_min_ms</code> (integer, default: 0)</a></h3>
+<p>Minimum response latency in milliseconds.</p>
+<pre><code class="language-yaml">chaos:
+  latency_min_ms: 100
+</code></pre>
+<h3 id="chaoslatency_max_ms-integer-default-1000"><a class="header" href="#chaoslatency_max_ms-integer-default-1000"><code>chaos.latency_max_ms</code> (integer, default: 1000)</a></h3>
+<p>Maximum response latency in milliseconds.</p>
+<pre><code class="language-yaml">chaos:
+  latency_max_ms: 2000
+</code></pre>
+<h3 id="chaosfailures_enabled-boolean-default-false"><a class="header" href="#chaosfailures_enabled-boolean-default-false"><code>chaos.failures_enabled</code> (boolean, default: false)</a></h3>
+<p>Enable random failure injection.</p>
+<pre><code class="language-yaml">chaos:
+  failures_enabled: true
+</code></pre>
+<h3 id="chaosfailure_rate-float-default-00"><a class="header" href="#chaosfailure_rate-float-default-00"><code>chaos.failure_rate</code> (float, default: 0.0)</a></h3>
+<p>Probability of random failures (0.0 to 1.0).</p>
+<pre><code class="language-yaml">chaos:
+  failure_rate: 0.05  # 5% failure rate
+</code></pre>
+<h3 id="chaosfailure_status_codes-array-of-integers"><a class="header" href="#chaosfailure_status_codes-array-of-integers"><code>chaos.failure_status_codes</code> (array of integers)</a></h3>
+<p>HTTP status codes to return for injected failures.</p>
+<pre><code class="language-yaml">chaos:
+  failure_status_codes: [500, 502, 503, 504]
+</code></pre>
+<h2 id="grpc-configuration"><a class="header" href="#grpc-configuration">gRPC Configuration</a></h2>
+<h3 id="grpcproto_dir-string-default-proto"><a class="header" href="#grpcproto_dir-string-default-proto"><code>grpc.proto_dir</code> (string, default: “proto/”)</a></h3>
+<p>Directory containing Protocol Buffer files.</p>
+<pre><code class="language-yaml">grpc:
+  proto_dir: "my-protos/"
+</code></pre>
+<h3 id="grpcenable_reflection-boolean-default-true"><a class="header" href="#grpcenable_reflection-boolean-default-true"><code>grpc.enable_reflection</code> (boolean, default: true)</a></h3>
+<p>Enable gRPC server reflection for service discovery.</p>
+<pre><code class="language-yaml">grpc:
+  enable_reflection: true
+</code></pre>
+<h3 id="grpcexcluded_services-array-of-strings"><a class="header" href="#grpcexcluded_services-array-of-strings"><code>grpc.excluded_services</code> (array of strings)</a></h3>
+<p>gRPC services to exclude from automatic registration.</p>
+<pre><code class="language-yaml">grpc:
+  excluded_services:
+    - "grpc.reflection.v1alpha.ServerReflection"
+</code></pre>
+<h3 id="grpcmax_message_size-integer-default-4194304"><a class="header" href="#grpcmax_message_size-integer-default-4194304"><code>grpc.max_message_size</code> (integer, default: 4194304)</a></h3>
+<p>Maximum message size in bytes (4MB default).</p>
+<pre><code class="language-yaml">grpc:
+  max_message_size: 8388608  # 8MB
+</code></pre>
+<h3 id="grpcconcurrency_limit-integer-default-32"><a class="header" href="#grpcconcurrency_limit-integer-default-32"><code>grpc.concurrency_limit</code> (integer, default: 32)</a></h3>
+<p>Maximum concurrent requests per connection.</p>
+<pre><code class="language-yaml">grpc:
+  concurrency_limit: 64
+</code></pre>
+<h2 id="websocket-configuration"><a class="header" href="#websocket-configuration">WebSocket Configuration</a></h2>
+<h3 id="websocketreplay_file-string"><a class="header" href="#websocketreplay_file-string"><code>websocket.replay_file</code> (string)</a></h3>
+<p>Path to WebSocket replay file for scripted interactions.</p>
+<pre><code class="language-yaml">websocket:
+  replay_file: "examples/ws-demo.jsonl"
+</code></pre>
+<h3 id="websocketmax_connections-integer-default-1000"><a class="header" href="#websocketmax_connections-integer-default-1000"><code>websocket.max_connections</code> (integer, default: 1000)</a></h3>
+<p>Maximum concurrent WebSocket connections.</p>
+<pre><code class="language-yaml">websocket:
+  max_connections: 500
+</code></pre>
+<h3 id="websocketmessage_timeout-integer-default-30000"><a class="header" href="#websocketmessage_timeout-integer-default-30000"><code>websocket.message_timeout</code> (integer, default: 30000)</a></h3>
+<p>Timeout for WebSocket messages in milliseconds.</p>
+<pre><code class="language-yaml">websocket:
+  message_timeout: 60000
+</code></pre>
+<h3 id="websocketheartbeat_interval-integer-default-30000"><a class="header" href="#websocketheartbeat_interval-integer-default-30000"><code>websocket.heartbeat_interval</code> (integer, default: 30000)</a></h3>
+<p>Heartbeat interval for long-running connections.</p>
+<pre><code class="language-yaml">websocket:
+  heartbeat_interval: 45000
+</code></pre>
+<h2 id="logging-configuration"><a class="header" href="#logging-configuration">Logging Configuration</a></h2>
+<h3 id="logginglevel-string-default-info"><a class="header" href="#logginglevel-string-default-info"><code>logging.level</code> (string, default: “info”)</a></h3>
+<p>Log level. Options: “error”, “warn”, “info”, “debug”, “trace”</p>
+<pre><code class="language-yaml">logging:
+  level: debug
+</code></pre>
+<h3 id="loggingformat-string-default-text"><a class="header" href="#loggingformat-string-default-text"><code>logging.format</code> (string, default: “text”)</a></h3>
+<p>Log output format. Options: “text”, “json”</p>
+<pre><code class="language-yaml">logging:
+  format: json
+</code></pre>
+<h3 id="loggingfile-string"><a class="header" href="#loggingfile-string"><code>logging.file</code> (string)</a></h3>
+<p>Path to log file (if not specified, logs to stdout).</p>
+<pre><code class="language-yaml">logging:
+  file: "/var/log/mockforge.log"
+</code></pre>
+<h3 id="loggingmax_size_mb-integer-default-10"><a class="header" href="#loggingmax_size_mb-integer-default-10"><code>logging.max_size_mb</code> (integer, default: 10)</a></h3>
+<p>Maximum log file size in megabytes before rotation.</p>
+<pre><code class="language-yaml">logging:
+  max_size_mb: 50
+</code></pre>
+<h3 id="loggingmax_files-integer-default-5"><a class="header" href="#loggingmax_files-integer-default-5"><code>logging.max_files</code> (integer, default: 5)</a></h3>
+<p>Maximum number of rotated log files to keep.</p>
+<pre><code class="language-yaml">logging:
+  max_files: 10
+</code></pre>
+<h2 id="complete-configuration-example"><a class="header" href="#complete-configuration-example">Complete Configuration Example</a></h2>
+<pre><code class="language-yaml"># Complete MockForge configuration example
+server:
+  http_port: 3000
+  ws_port: 3001
+  grpc_port: 50051
+  bind: "0.0.0.0"
+
+admin:
+  enabled: true
+  port: 8080
+  embedded: false
+  standalone: true
+
+validation:
+  mode: enforce
+  aggregate_errors: false
+  validate_responses: false
+  status_code: 400
+
+response:
+  template_expand: true
+
+chaos:
+  latency_enabled: false
+  failures_enabled: false
+
+grpc:
+  proto_dir: "proto/"
+  enable_reflection: true
+  max_message_size: 4194304
+
+websocket:
+  replay_file: "examples/ws-demo.jsonl"
+  max_connections: 1000
+
+logging:
+  level: info
+  format: text
+</code></pre>
+<h2 id="configuration-precedence"><a class="header" href="#configuration-precedence">Configuration Precedence</a></h2>
+<p>Configuration values are applied in order of priority (highest to lowest):</p>
+<ol>
+<li><strong>Command-line arguments</strong> - Override all other settings</li>
+<li><strong>Environment variables</strong> - Override config file settings</li>
+<li><strong>Configuration file</strong> - Default values from YAML file</li>
+<li><strong>Compiled defaults</strong> - Built-in fallback values</li>
+</ol>
+<h2 id="environment-variable-mapping"><a class="header" href="#environment-variable-mapping">Environment Variable Mapping</a></h2>
+<p>All configuration options can be set via environment variables using the <code>MOCKFORGE_</code> prefix with underscore-separated paths:</p>
+<pre><code class="language-bash"># Server configuration
+export MOCKFORGE_SERVER_HTTP_PORT=8080
+export MOCKFORGE_SERVER_BIND="127.0.0.1"
+
+# Admin UI
+export MOCKFORGE_ADMIN_ENABLED=true
+export MOCKFORGE_ADMIN_PORT=9090
+
+# Validation
+export MOCKFORGE_VALIDATION_MODE=warn
+export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+
+# Protocol-specific
+export MOCKFORGE_GRPC_PROTO_DIR="my-protos/"
+export MOCKFORGE_WEBSOCKET_REPLAY_FILE="replay.jsonl"
+</code></pre>
+<h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
+<p>MockForge validates configuration files at startup and reports errors clearly:</p>
+<pre><code class="language-bash"># Validate configuration without starting server
+mockforge-cli validate-config config.yaml
+
+# Check for deprecated options
+mockforge-cli validate-config --check-deprecated config.yaml
+</code></pre>
+<h2 id="hot-reloading"><a class="header" href="#hot-reloading">Hot Reloading</a></h2>
+<p>Some configuration options support runtime updates without restart:</p>
+<ul>
+<li>Validation mode changes</li>
+<li>Template expansion toggle</li>
+<li>Admin UI settings</li>
+<li>Logging level adjustments</li>
+</ul>
+<pre><code class="language-bash"># Update validation mode at runtime
+curl -X POST http://localhost:8080/__mockforge/config \
+  -H "Content-Type: application/json" \
+  -d '{"validation": {"mode": "warn"}}'
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="development-configuration"><a class="header" href="#development-configuration">Development Configuration</a></h3>
+<pre><code class="language-yaml"># development.yaml
+server:
+  http_port: 3000
+  ws_port: 3001
+
+admin:
+  enabled: true
+  embedded: true
+
+validation:
+  mode: warn
+
+response:
+  template_expand: true
+
+logging:
+  level: debug
+</code></pre>
+<h3 id="production-configuration"><a class="header" href="#production-configuration">Production Configuration</a></h3>
+<pre><code class="language-yaml"># production.yaml
+server:
+  http_port: 8080
+  bind: "127.0.0.1"
+
+admin:
+  enabled: true
+  standalone: true
+  port: 9090
+
+validation:
+  mode: enforce
+
+chaos:
+  latency_enabled: false
+  failures_enabled: false
+
+logging:
+  level: warn
+  file: "/var/log/mockforge.log"
+</code></pre>
+<h3 id="testing-configuration"><a class="header" href="#testing-configuration">Testing Configuration</a></h3>
+<pre><code class="language-yaml"># test.yaml
+server:
+  http_port: 3000
+
+validation:
+  mode: off
+
+response:
+  template_expand: true
+
+logging:
+  level: debug
+</code></pre>
+<h2 id="migration-guide"><a class="header" href="#migration-guide">Migration Guide</a></h2>
+<h3 id="upgrading-from-cli-only-configuration"><a class="header" href="#upgrading-from-cli-only-configuration">Upgrading from CLI-only Configuration</a></h3>
+<p>If migrating from command-line only configuration:</p>
+<ol>
+<li>Create a <code>config.yaml</code> file with your current settings</li>
+<li>Test the configuration with <code>mockforge-cli validate-config</code></li>
+<li>Gradually move settings from environment variables to the config file</li>
+<li>Update deployment scripts to use the config file</li>
+</ol>
+<h3 id="version-compatibility"><a class="header" href="#version-compatibility">Version Compatibility</a></h3>
+<p>Configuration options may change between versions. Check the changelog for breaking changes and use the validation command to identify deprecated options:</p>
+<pre><code class="language-bash">mockforge-cli validate-config --check-deprecated config.yaml
+</code></pre>
+<p>This schema provides comprehensive control over MockForge’s behavior across all protocols and features.</p>
 
                     </main>
 
@@ -213,22 +588,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

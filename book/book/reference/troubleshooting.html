@@ -183,6 +183,496 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
+<p>This guide helps you diagnose and resolve common issues with MockForge. If you’re experiencing problems, follow the steps below to identify and fix the issue.</p>
+<h2 id="quick-diagnosis"><a class="header" href="#quick-diagnosis">Quick Diagnosis</a></h2>
+<h3 id="check-server-status"><a class="header" href="#check-server-status">Check Server Status</a></h3>
+<p>First, verify that MockForge is running and accessible:</p>
+<pre><code class="language-bash"># Check if processes are running
+ps aux | grep mockforge
+
+# Check listening ports
+netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+
+# Test basic connectivity
+curl -I http://localhost:3000/health 2&gt;/dev/null || echo "HTTP server not responding"
+curl -I http://localhost:8080/health 2&gt;/dev/null || echo "Admin UI not responding"
+</code></pre>
+<h3 id="check-logs"><a class="header" href="#check-logs">Check Logs</a></h3>
+<p>Enable verbose logging to see detailed information:</p>
+<pre><code class="language-bash"># Run with debug logging
+RUST_LOG=mockforge=debug mockforge serve --spec api-spec.yaml
+
+# View recent logs
+tail -f mockforge.log
+
+# Filter logs by component
+grep "ERROR" mockforge.log
+grep "WARN" mockforge.log
+</code></pre>
+<h2 id="http-api-issues"><a class="header" href="#http-api-issues">HTTP API Issues</a></h2>
+<h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server Won’t Start</a></h3>
+<p><strong>Symptoms</strong>: <code>mockforge serve</code> exits immediately with error</p>
+<p><strong>Common causes and solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Port already in use</strong>:</p>
+<pre><code class="language-bash"># Find what's using the port
+lsof -i :3000
+
+# Kill conflicting process
+kill -9 &lt;PID&gt;
+
+# Or use different port
+mockforge serve --http-port 3001
+</code></pre>
+</li>
+<li>
+<p><strong>Invalid OpenAPI specification</strong>:</p>
+<pre><code class="language-bash"># Validate YAML syntax
+yamllint api-spec.yaml
+
+# Validate OpenAPI structure
+swagger-cli validate api-spec.yaml
+
+# Test with minimal spec
+mockforge serve --spec examples/openapi-demo.json
+</code></pre>
+</li>
+<li>
+<p><strong>File permissions</strong>:</p>
+<pre><code class="language-bash"># Check file access
+ls -la api-spec.yaml
+
+# Fix permissions if needed
+chmod 644 api-spec.yaml
+</code></pre>
+</li>
+</ol>
+<h3 id="404-errors-for-valid-routes"><a class="header" href="#404-errors-for-valid-routes">404 Errors for Valid Routes</a></h3>
+<p><strong>Symptoms</strong>: API returns 404 for endpoints that should exist</p>
+<p><strong>Possible causes</strong>:</p>
+<ol>
+<li>
+<p><strong>OpenAPI spec not loaded correctly</strong>:</p>
+<pre><code class="language-bash"># Check if spec was loaded
+grep "OpenAPI spec loaded" mockforge.log
+
+# Verify file path
+ls -la api-spec.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Path matching issues</strong>:</p>
+<ul>
+<li>Ensure paths in spec match request URLs</li>
+<li>Check for trailing slashes</li>
+<li>Verify HTTP methods match</li>
+</ul>
+</li>
+<li>
+<p><strong>Template expansion disabled</strong>:</p>
+<pre><code class="language-bash"># Enable template expansion
+mockforge serve --response-template-expand --spec api-spec.yaml
+</code></pre>
+</li>
+</ol>
+<h3 id="template-variables-not-working"><a class="header" href="#template-variables-not-working">Template Variables Not Working</a></h3>
+<p><strong>Symptoms</strong>: <code>{{variable}}</code> appears literally in responses</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Enable template expansion</strong>:</p>
+<pre><code class="language-bash"># Via command line
+mockforge serve --response-template-expand --spec api-spec.yaml
+
+# Via environment variable
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.yaml
+
+# Via config file
+echo "response:\n  template_expand: true" &gt; config.yaml
+mockforge serve --config config.yaml --spec api-spec.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Check template syntax</strong>:</p>
+<ul>
+<li>Use <code>{{variable}}</code> not <code>${variable}</code></li>
+<li>Ensure variables are defined in spec examples</li>
+<li>Check for typos in variable names</li>
+</ul>
+</li>
+</ol>
+<h3 id="validation-errors"><a class="header" href="#validation-errors">Validation Errors</a></h3>
+<p><strong>Symptoms</strong>: Requests return 400/422 with validation errors</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Adjust validation mode</strong>:</p>
+<pre><code class="language-bash"># Disable validation
+mockforge serve --validation off --spec api-spec.yaml
+
+# Use warning mode
+mockforge serve --validation warn --spec api-spec.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Fix request format</strong>:</p>
+<ul>
+<li>Ensure Content-Type header matches request body format</li>
+<li>Verify required fields are present</li>
+<li>Check parameter formats match OpenAPI spec</li>
+</ul>
+</li>
+</ol>
+<h2 id="websocket-issues"><a class="header" href="#websocket-issues">WebSocket Issues</a></h2>
+<h3 id="connection-fails"><a class="header" href="#connection-fails">Connection Fails</a></h3>
+<p><strong>Symptoms</strong>: WebSocket client cannot connect</p>
+<p><strong>Common causes</strong>:</p>
+<ol>
+<li>
+<p><strong>Wrong port or path</strong>:</p>
+<pre><code class="language-bash"># Check WebSocket port
+netstat -tlnp | grep :3001
+
+# Test connection
+websocat ws://localhost:3001/ws
+</code></pre>
+</li>
+<li>
+<p><strong>Replay file not found</strong>:</p>
+<pre><code class="language-bash"># Check file exists
+ls -la ws-replay.jsonl
+
+# Run without replay file
+mockforge serve --ws-port 3001  # No replay file specified
+</code></pre>
+</li>
+</ol>
+<h3 id="messages-not-received"><a class="header" href="#messages-not-received">Messages Not Received</a></h3>
+<p><strong>Symptoms</strong>: WebSocket connection established but no messages</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Check replay file format</strong>:</p>
+<pre><code class="language-bash"># Validate JSONL syntax
+node -e "
+const fs = require('fs');
+const lines = fs.readFileSync('ws-replay.jsonl', 'utf8').split('\n');
+lines.forEach((line, i) =&gt; {
+  if (line.trim()) {
+    try { JSON.parse(line); }
+    catch (e) { console.log(\`Line \${i+1}: \${e.message}\`); }
+  }
+});
+"
+</code></pre>
+</li>
+<li>
+<p><strong>Verify message timing</strong>:</p>
+<ul>
+<li>Check <code>ts</code> values are in milliseconds</li>
+<li>Ensure messages have required fields (<code>ts</code>, <code>dir</code>, <code>text</code>)</li>
+</ul>
+</li>
+</ol>
+<h3 id="interactive-mode-issues"><a class="header" href="#interactive-mode-issues">Interactive Mode Issues</a></h3>
+<p><strong>Symptoms</strong>: Client messages not triggering responses</p>
+<p><strong>Debug steps</strong>:</p>
+<ol>
+<li>
+<p><strong>Check regex patterns</strong>:</p>
+<pre><code class="language-bash"># Test regex patterns
+node -e "
+const pattern = '^HELLO';
+const test = 'HELLO world';
+console.log('Match:', test.match(new RegExp(pattern)));
+"
+</code></pre>
+</li>
+<li>
+<p><strong>Verify state management</strong>:</p>
+<ul>
+<li>Check that state variables are properly set</li>
+<li>Ensure conditional logic is correct</li>
+</ul>
+</li>
+</ol>
+<h2 id="grpc-issues"><a class="header" href="#grpc-issues">gRPC Issues</a></h2>
+<h3 id="service-not-found"><a class="header" href="#service-not-found">Service Not Found</a></h3>
+<p><strong>Symptoms</strong>: <code>grpcurl list</code> shows no services</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Check proto directory</strong>:</p>
+<pre><code class="language-bash"># Verify proto files exist
+find proto/ -name "*.proto"
+
+# Check directory path
+MOCKFORGE_PROTO_DIR=proto/ mockforge serve --grpc-port 50051
+</code></pre>
+</li>
+<li>
+<p><strong>Compilation errors</strong>:</p>
+<pre><code class="language-bash"># Check for proto compilation errors
+cargo build --verbose 2&gt;&amp;1 | grep -i proto
+</code></pre>
+</li>
+<li>
+<p><strong>Reflection disabled</strong>:</p>
+<pre><code class="language-bash"># Enable gRPC reflection
+MOCKFORGE_GRPC_REFLECTION_ENABLED=true mockforge serve --grpc-port 50051
+</code></pre>
+</li>
+</ol>
+<h3 id="method-calls-fail"><a class="header" href="#method-calls-fail">Method Calls Fail</a></h3>
+<p><strong>Symptoms</strong>: gRPC calls return errors</p>
+<p><strong>Debug steps</strong>:</p>
+<ol>
+<li>
+<p><strong>Check service definition</strong>:</p>
+<pre><code class="language-bash"># List service methods
+grpcurl -plaintext localhost:50051 describe mockforge.user.UserService
+</code></pre>
+</li>
+<li>
+<p><strong>Validate request format</strong>:</p>
+<pre><code class="language-bash"># Test with verbose output
+grpcurl -plaintext -v -d '{"user_id": "123"}' localhost:50051 mockforge.user.UserService/GetUser
+</code></pre>
+</li>
+<li>
+<p><strong>Check proto compatibility</strong>:</p>
+<ul>
+<li>Ensure client and server use same proto definitions</li>
+<li>Verify message field names and types match</li>
+</ul>
+</li>
+</ol>
+<h2 id="admin-ui-issues"><a class="header" href="#admin-ui-issues">Admin UI Issues</a></h2>
+<h3 id="ui-not-loading"><a class="header" href="#ui-not-loading">UI Not Loading</a></h3>
+<p><strong>Symptoms</strong>: Browser shows connection error</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Check admin port</strong>:</p>
+<pre><code class="language-bash"># Verify port is listening
+curl -I http://localhost:8080 2&gt;/dev/null || echo "Admin UI not accessible"
+
+# Try different port
+mockforge serve --admin --admin-port 9090
+</code></pre>
+</li>
+<li>
+<p><strong>CORS issues</strong>:</p>
+<ul>
+<li>Admin UI should work from any origin by default</li>
+<li>Check browser console for CORS errors</li>
+</ul>
+</li>
+<li>
+<p><strong>Embedded vs standalone</strong>:</p>
+<pre><code class="language-bash"># Force standalone mode
+mockforge serve --admin --admin-standalone
+
+# Or embedded mode
+mockforge serve --admin --admin-embed
+</code></pre>
+</li>
+</ol>
+<h3 id="api-endpoints-not-working"><a class="header" href="#api-endpoints-not-working">API Endpoints Not Working</a></h3>
+<p><strong>Symptoms</strong>: UI loads but API calls fail</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Check admin API</strong>:</p>
+<pre><code class="language-bash"># Test admin API directly
+curl http://localhost:8080/__mockforge/status
+</code></pre>
+</li>
+<li>
+<p><strong>Enable admin API</strong>:</p>
+<pre><code class="language-bash"># Ensure admin API is not disabled
+mockforge serve --admin  # Don't use --disable-admin-api
+</code></pre>
+</li>
+</ol>
+<h2 id="configuration-issues"><a class="header" href="#configuration-issues">Configuration Issues</a></h2>
+<h3 id="config-file-not-loading"><a class="header" href="#config-file-not-loading">Config File Not Loading</a></h3>
+<p><strong>Symptoms</strong>: Settings from config file are ignored</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Validate YAML syntax</strong>:</p>
+<pre><code class="language-bash"># Check YAML format
+python3 -c "import yaml; yaml.safe_load(open('config.yaml'))"
+
+# Or use yamllint
+yamllint config.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Check file path</strong>:</p>
+<pre><code class="language-bash"># Use absolute path
+mockforge serve --config /full/path/to/config.yaml
+
+# Verify file permissions
+ls -la config.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Environment variable override</strong>:</p>
+<ul>
+<li>Remember that environment variables override config file settings</li>
+<li>Command-line arguments override both</li>
+</ul>
+</li>
+</ol>
+<h3 id="environment-variables-not-working"><a class="header" href="#environment-variables-not-working">Environment Variables Not Working</a></h3>
+<p><strong>Symptoms</strong>: Environment variables are ignored</p>
+<p><strong>Common issues</strong>:</p>
+<ol>
+<li>
+<p><strong>Shell not reloaded</strong>:</p>
+<pre><code class="language-bash"># Export variable and reload shell
+export MOCKFORGE_HTTP_PORT=3001
+exec $SHELL
+</code></pre>
+</li>
+<li>
+<p><strong>Variable name typos</strong>:</p>
+<pre><code class="language-bash"># Check variable is set
+echo $MOCKFORGE_HTTP_PORT
+
+# List all MockForge variables
+env | grep MOCKFORGE
+</code></pre>
+</li>
+</ol>
+<h2 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h2>
+<h3 id="high-memory-usage"><a class="header" href="#high-memory-usage">High Memory Usage</a></h3>
+<p><strong>Symptoms</strong>: MockForge consumes excessive memory</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Reduce concurrent connections</strong>:</p>
+<pre><code class="language-bash"># Limit connection pool
+MOCKFORGE_MAX_CONNECTIONS=100 mockforge serve
+</code></pre>
+</li>
+<li>
+<p><strong>Disable unnecessary features</strong>:</p>
+<pre><code class="language-bash"># Run with minimal features
+mockforge serve --validation off --response-template-expand false
+</code></pre>
+</li>
+<li>
+<p><strong>Monitor resource usage</strong>:</p>
+<pre><code class="language-bash"># Check memory usage
+ps aux | grep mockforge
+
+# Monitor over time
+htop -p $(pgrep mockforge)
+</code></pre>
+</li>
+</ol>
+<h3 id="slow-response-times"><a class="header" href="#slow-response-times">Slow Response Times</a></h3>
+<p><strong>Symptoms</strong>: API responses are slow</p>
+<p><strong>Debug steps</strong>:</p>
+<ol>
+<li>
+<p><strong>Enable latency logging</strong>:</p>
+<pre><code class="language-bash">RUST_LOG=mockforge=debug mockforge serve --spec api-spec.yaml 2&gt;&amp;1 | grep -i latency
+</code></pre>
+</li>
+<li>
+<p><strong>Check template complexity</strong>:</p>
+<ul>
+<li>Complex templates can slow response generation</li>
+<li>Consider caching for frequently used templates</li>
+</ul>
+</li>
+<li>
+<p><strong>Profile performance</strong>:</p>
+<pre><code class="language-bash"># Use cargo flamegraph for profiling
+cargo flamegraph --bin mockforge-cli -- serve --spec api-spec.yaml
+</code></pre>
+</li>
+</ol>
+<h2 id="docker-issues"><a class="header" href="#docker-issues">Docker Issues</a></h2>
+<h3 id="container-wont-start"><a class="header" href="#container-wont-start">Container Won’t Start</a></h3>
+<p><strong>Symptoms</strong>: Docker container exits immediately</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Check container logs</strong>:</p>
+<pre><code class="language-bash">docker logs &lt;container-id&gt;
+
+# Run with verbose output
+docker run --rm mockforge mockforge serve --spec api-spec.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Volume mounting issues</strong>:</p>
+<pre><code class="language-bash"># Ensure spec file is accessible
+docker run -v $(pwd)/api-spec.yaml:/app/api-spec.yaml \
+  mockforge mockforge serve --spec /app/api-spec.yaml
+</code></pre>
+</li>
+<li>
+<p><strong>Port conflicts</strong>:</p>
+<pre><code class="language-bash"># Use different ports
+docker run -p 3001:3000 -p 3002:3001 mockforge
+</code></pre>
+</li>
+</ol>
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<h3 id="log-analysis"><a class="header" href="#log-analysis">Log Analysis</a></h3>
+<pre><code class="language-bash"># Extract error patterns
+grep "ERROR" mockforge.log | head -10
+
+# Find recent issues
+tail -100 mockforge.log | grep -E "(ERROR|WARN)"
+
+# Count error types
+grep "ERROR" mockforge.log | sed 's/.*ERROR //' | sort | uniq -c | sort -nr
+</code></pre>
+<h3 id="debug-commands"><a class="header" href="#debug-commands">Debug Commands</a></h3>
+<pre><code class="language-bash"># Full system information
+echo "=== System Info ==="
+uname -a
+echo "=== Rust Version ==="
+rustc --version
+echo "=== Cargo Version ==="
+cargo --version
+echo "=== Running Processes ==="
+ps aux | grep mockforge
+echo "=== Listening Ports ==="
+netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+echo "=== Disk Space ==="
+df -h
+echo "=== Memory Usage ==="
+free -h
+</code></pre>
+<h3 id="community-support"><a class="header" href="#community-support">Community Support</a></h3>
+<p>If you can’t resolve the issue:</p>
+<ol>
+<li><strong>Check existing issues</strong>: Search GitHub issues for similar problems</li>
+<li><strong>Create a minimal reproduction</strong>: Isolate the issue with minimal configuration</li>
+<li><strong>Include debug information</strong>: Attach logs, configuration, and system details</li>
+<li><strong>Use descriptive titles</strong>: Clearly describe the problem in issue titles</li>
+</ol>
+<h3 id="emergency-stop"><a class="header" href="#emergency-stop">Emergency Stop</a></h3>
+<p>If MockForge is causing issues:</p>
+<pre><code class="language-bash"># Kill all MockForge processes
+pkill -f mockforge
+
+# Kill specific process
+kill -9 &lt;mockforge-pid&gt;
+
+# Clean up any leftover files
+rm -f mockforge.log
+</code></pre>
+<p>This troubleshooting guide covers the most common issues. For more specific problems, check the logs and consider creating an issue on GitHub with detailed information about your setup and the problem you’re experiencing.</p>
 
                     </main>
 
@@ -213,22 +703,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

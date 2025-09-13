@@ -183,6 +183,409 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="building-from-source"><a class="header" href="#building-from-source">Building from Source</a></h1>
+<p>This guide covers building MockForge from source code, including prerequisites, build processes, and troubleshooting common build issues.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Before building MockForge, ensure you have the required development tools installed.</p>
+<h3 id="system-requirements"><a class="header" href="#system-requirements">System Requirements</a></h3>
+<ul>
+<li><strong>Rust</strong>: Version 1.70.0 or later</li>
+<li><strong>Cargo</strong>: Included with Rust</li>
+<li><strong>Git</strong>: For cloning the repository</li>
+<li><strong>C/C++ Compiler</strong>: For native dependencies</li>
+</ul>
+<h3 id="platform-specific-requirements"><a class="header" href="#platform-specific-requirements">Platform-Specific Requirements</a></h3>
+<h4 id="linux-ubuntudebian"><a class="header" href="#linux-ubuntudebian">Linux (Ubuntu/Debian)</a></h4>
+<pre><code class="language-bash"># Install build essentials
+sudo apt update
+sudo apt install build-essential pkg-config libssl-dev
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+</code></pre>
+<h4 id="macos"><a class="header" href="#macos">macOS</a></h4>
+<pre><code class="language-bash"># Install Xcode command line tools
+xcode-select --install
+
+# Install Homebrew (optional, for additional tools)
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+</code></pre>
+<h4 id="windows"><a class="header" href="#windows">Windows</a></h4>
+<pre><code class="language-powershell"># Install Visual Studio Build Tools
+# Download from: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+# Install Rust
+# Download from: https://rustup.rs/
+# Or use winget: winget install --id Rustlang.Rustup
+</code></pre>
+<h3 id="rust-setup-verification"><a class="header" href="#rust-setup-verification">Rust Setup Verification</a></h3>
+<pre><code class="language-bash"># Verify Rust installation
+rustc --version
+cargo --version
+
+# Update to latest stable
+rustup update stable
+</code></pre>
+<h2 id="cloning-the-repository"><a class="header" href="#cloning-the-repository">Cloning the Repository</a></h2>
+<pre><code class="language-bash"># Clone the repository
+git clone https://github.com/SaaSy-Solutions/mockforge.git
+cd mockforge
+
+# Initialize submodules (if any)
+git submodule update --init --recursive
+</code></pre>
+<h2 id="build-process"><a class="header" href="#build-process">Build Process</a></h2>
+<h3 id="basic-build"><a class="header" href="#basic-build">Basic Build</a></h3>
+<pre><code class="language-bash"># Build all crates in debug mode (default)
+cargo build
+
+# Build in release mode for production
+cargo build --release
+
+# Build specific crate
+cargo build -p mockforge-cli
+</code></pre>
+<h3 id="build-outputs"><a class="header" href="#build-outputs">Build Outputs</a></h3>
+<p>After building, binaries are available in:</p>
+<pre><code class="language-bash"># Debug builds
+target/debug/mockforge-cli
+
+# Release builds
+target/release/mockforge-cli
+</code></pre>
+<h3 id="build-features"><a class="header" href="#build-features">Build Features</a></h3>
+<p>MockForge supports conditional compilation features:</p>
+<pre><code class="language-bash"># Build with all features enabled
+cargo build --all-features
+
+# Build with specific features
+cargo build --features "grpc,websocket"
+
+# List available features
+cargo metadata --format-version 1 | jq '.packages[] | select(.name == "mockforge-cli") | .features'
+</code></pre>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<h3 id="development-builds"><a class="header" href="#development-builds">Development Builds</a></h3>
+<pre><code class="language-bash"># Quick development builds
+cargo build
+
+# Run tests during development
+cargo test
+
+# Run specific tests
+cargo test --package mockforge-core --lib
+</code></pre>
+<h3 id="watch-mode-development"><a class="header" href="#watch-mode-development">Watch Mode Development</a></h3>
+<pre><code class="language-bash"># Install cargo-watch for automatic rebuilds
+cargo install cargo-watch
+
+# Watch for changes and rebuild
+cargo watch -x build
+
+# Watch and run tests
+cargo watch -x test
+
+# Watch and run specific binary
+cargo watch -x "run --bin mockforge-cli -- --help"
+</code></pre>
+<h3 id="ide-setup"><a class="header" href="#ide-setup">IDE Setup</a></h3>
+<h4 id="vs-code"><a class="header" href="#vs-code">VS Code</a></h4>
+<p>Install recommended extensions:</p>
+<ul>
+<li><code>rust-lang.rust-analyzer</code></li>
+<li><code>ms-vscode.vscode-json</code></li>
+<li><code>redhat.vscode-yaml</code></li>
+</ul>
+<h4 id="intellijclion"><a class="header" href="#intellijclion">IntelliJ/CLion</a></h4>
+<p>Install Rust plugin through marketplace.</p>
+<h3 id="debugging"><a class="header" href="#debugging">Debugging</a></h3>
+<pre><code class="language-bash"># Build with debug symbols
+cargo build
+
+# Run with debugger
+rust-gdb target/debug/mockforge-cli
+
+# Or use lldb on macOS
+rust-lldb target/debug/mockforge-cli
+</code></pre>
+<h2 id="advanced-build-options"><a class="header" href="#advanced-build-options">Advanced Build Options</a></h2>
+<h3 id="cross-compilation"><a class="header" href="#cross-compilation">Cross-Compilation</a></h3>
+<pre><code class="language-bash"># Install cross-compilation targets
+rustup target add x86_64-unknown-linux-musl
+rustup target add aarch64-unknown-linux-gnu
+
+# Build for different architectures
+cargo build --target x86_64-unknown-linux-musl
+cargo build --target aarch64-unknown-linux-gnu
+</code></pre>
+<h3 id="custom-linker"><a class="header" href="#custom-linker">Custom Linker</a></h3>
+<pre><code class="language-bash"># Use mold linker for faster linking (Linux)
+sudo apt install mold
+export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
+cargo build
+</code></pre>
+<h3 id="build-caching"><a class="header" href="#build-caching">Build Caching</a></h3>
+<pre><code class="language-bash"># Use sccache for faster rebuilds
+cargo install sccache
+export RUSTC_WRAPPER=sccache
+cargo build
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
+<pre><code class="language-bash"># Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run specific test
+cargo test test_name
+
+# Run tests for specific package
+cargo test -p mockforge-core
+
+# Run integration tests
+cargo test --test integration
+
+# Run with release optimizations
+cargo test --release
+</code></pre>
+<h3 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h3>
+<pre><code class="language-bash"># Install cargo-tarpaulin
+cargo install cargo-tarpaulin
+
+# Generate coverage report
+cargo tarpaulin --out Html
+
+# Open coverage report
+open tarpaulin-report.html
+</code></pre>
+<h3 id="benchmarking"><a class="header" href="#benchmarking">Benchmarking</a></h3>
+<pre><code class="language-bash"># Run benchmarks
+cargo bench
+
+# Run specific benchmark
+cargo bench benchmark_name
+</code></pre>
+<h2 id="code-quality"><a class="header" href="#code-quality">Code Quality</a></h2>
+<h3 id="linting"><a class="header" href="#linting">Linting</a></h3>
+<pre><code class="language-bash"># Run clippy lints
+cargo clippy
+
+# Run with pedantic mode
+cargo clippy -- -W clippy::pedantic
+
+# Auto-fix some issues
+cargo clippy --fix
+</code></pre>
+<h3 id="formatting"><a class="header" href="#formatting">Formatting</a></h3>
+<pre><code class="language-bash"># Check code formatting
+cargo fmt --check
+
+# Auto-format code
+cargo fmt
+</code></pre>
+<h3 id="security-auditing"><a class="header" href="#security-auditing">Security Auditing</a></h3>
+<pre><code class="language-bash"># Install cargo-audit
+cargo install cargo-audit
+
+# Audit dependencies for security vulnerabilities
+cargo audit
+</code></pre>
+<h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
+<h3 id="building-documentation"><a class="header" href="#building-documentation">Building Documentation</a></h3>
+<pre><code class="language-bash"># Build API documentation
+cargo doc
+
+# Open documentation in browser
+cargo doc --open
+
+# Build documentation with private items
+cargo doc --document-private-items
+
+# Build for specific package
+cargo doc -p mockforge-core
+</code></pre>
+<h3 id="building-mdbook"><a class="header" href="#building-mdbook">Building mdBook</a></h3>
+<pre><code class="language-bash"># Install mdbook
+cargo install mdbook
+
+# Build the documentation
+mdbook build
+
+# Serve documentation locally
+mdbook serve
+</code></pre>
+<h2 id="packaging-and-distribution"><a class="header" href="#packaging-and-distribution">Packaging and Distribution</a></h2>
+<h3 id="creating-releases"><a class="header" href="#creating-releases">Creating Releases</a></h3>
+<pre><code class="language-bash"># Create a release build
+cargo build --release
+
+# Strip debug symbols (Linux/macOS)
+strip target/release/mockforge-cli
+
+# Create distribution archive
+tar -czf mockforge-v0.1.0-x86_64-linux.tar.gz \
+  -C target/release mockforge-cli
+
+# Create Debian package
+cargo install cargo-deb
+cargo deb
+</code></pre>
+<h3 id="docker-builds"><a class="header" href="#docker-builds">Docker Builds</a></h3>
+<pre><code class="language-bash"># Build Docker image
+docker build -t mockforge .
+
+# Build with buildkit for faster builds
+DOCKER_BUILDKIT=1 docker build -t mockforge .
+
+# Multi-stage build for smaller images
+docker build -f Dockerfile.multi-stage -t mockforge .
+</code></pre>
+<h2 id="troubleshooting-build-issues"><a class="header" href="#troubleshooting-build-issues">Troubleshooting Build Issues</a></h2>
+<h3 id="common-problems"><a class="header" href="#common-problems">Common Problems</a></h3>
+<h4 id="compilation-errors"><a class="header" href="#compilation-errors">Compilation Errors</a></h4>
+<p><strong>Problem</strong>: <code>error[E0432]: unresolved import</code></p>
+<p><strong>Solution</strong>: Check that dependencies are properly specified in <code>Cargo.toml</code></p>
+<pre><code class="language-bash"># Update dependencies
+cargo update
+
+# Clean and rebuild
+cargo clean
+cargo build
+</code></pre>
+<h4 id="linker-errors"><a class="header" href="#linker-errors">Linker Errors</a></h4>
+<p><strong>Problem</strong>: <code>undefined reference to...</code></p>
+<p><strong>Solution</strong>: Install system dependencies</p>
+<pre><code class="language-bash"># Ubuntu/Debian
+sudo apt install libssl-dev pkg-config
+
+# macOS
+brew install openssl pkg-config
+</code></pre>
+<h4 id="out-of-memory"><a class="header" href="#out-of-memory">Out of Memory</a></h4>
+<p><strong>Problem</strong>: <code>fatal error: Killed signal terminated program cc1</code></p>
+<p><strong>Solution</strong>: Increase available memory or reduce parallelism</p>
+<pre><code class="language-bash"># Reduce parallel jobs
+cargo build --jobs 1
+
+# Or set memory limits
+export CARGO_BUILD_JOBS=2
+</code></pre>
+<h4 id="slow-builds"><a class="header" href="#slow-builds">Slow Builds</a></h4>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Use incremental compilation
+export CARGO_INCREMENTAL=1
+
+# Use faster linker
+export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
+
+# Use build cache
+cargo install sccache
+export RUSTC_WRAPPER=sccache
+</code></pre>
+<h3 id="platform-specific-issues"><a class="header" href="#platform-specific-issues">Platform-Specific Issues</a></h3>
+<h4 id="windows-1"><a class="header" href="#windows-1">Windows</a></h4>
+<pre><code class="language-powershell"># Install Windows SDK if missing
+# Download from: https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/
+
+# Use different target for static linking
+cargo build --target x86_64-pc-windows-msvc
+</code></pre>
+<h4 id="macos-1"><a class="header" href="#macos-1">macOS</a></h4>
+<pre><code class="language-bash"># Install missing headers
+open /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg
+
+# Or reinstall command line tools
+sudo rm -rf /Library/Developer/CommandLineTools
+xcode-select --install
+</code></pre>
+<h4 id="linux"><a class="header" href="#linux">Linux</a></h4>
+<pre><code class="language-bash"># Install additional development libraries
+sudo apt install libclang-dev llvm-dev
+
+# For cross-compilation
+sudo apt install gcc-aarch64-linux-gnu
+</code></pre>
+<h3 id="network-issues"><a class="header" href="#network-issues">Network Issues</a></h3>
+<pre><code class="language-bash"># Clear cargo cache
+cargo clean
+rm -rf ~/.cargo/registry/cache
+rm -rf ~/.cargo/git/checkouts
+
+# Use different registry
+export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+</code></pre>
+<h3 id="dependency-conflicts"><a class="header" href="#dependency-conflicts">Dependency Conflicts</a></h3>
+<pre><code class="language-bash"># Update Cargo.lock
+cargo update
+
+# Resolve conflicts
+cargo update -p package-name
+
+# Use cargo-tree to visualize dependencies
+cargo install cargo-tree
+cargo tree
+</code></pre>
+<h2 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h2>
+<h3 id="release-builds"><a class="header" href="#release-builds">Release Builds</a></h3>
+<pre><code class="language-bash"># Optimized release build
+cargo build --release
+
+# With Link-Time Optimization (LTO)
+export RUSTFLAGS="-C opt-level=3 -C lto=fat -C codegen-units=1"
+cargo build --release
+</code></pre>
+<h3 id="profile-guided-optimization-pgo"><a class="header" href="#profile-guided-optimization-pgo">Profile-Guided Optimization (PGO)</a></h3>
+<pre><code class="language-bash"># Build with instrumentation
+export RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data"
+cargo build --release
+
+# Run instrumented binary with representative workload
+./target/release/mockforge-cli serve --spec examples/openapi-demo.json &amp;
+sleep 10
+curl -s http://localhost:3000/users &gt; /dev/null
+pkill mockforge-cli
+
+# Build optimized version
+export RUSTFLAGS="-Cprofile-use=/tmp/pgo-data"
+cargo build --release
+</code></pre>
+<h2 id="contributing-to-the-build-system"><a class="header" href="#contributing-to-the-build-system">Contributing to the Build System</a></h2>
+<h3 id="adding-new-dependencies"><a class="header" href="#adding-new-dependencies">Adding New Dependencies</a></h3>
+<pre><code class="language-toml"># Add to workspace Cargo.toml
+[workspace.dependencies]
+new-dependency = "1.0"
+
+# Use in crate Cargo.toml
+[dependencies]
+new-dependency = { workspace = true }
+</code></pre>
+<h3 id="adding-build-scripts"><a class="header" href="#adding-build-scripts">Adding Build Scripts</a></h3>
+<pre><pre class="playground"><code class="language-rust">// build.rs
+fn main() {
+    // Generate code or check dependencies
+    println!("cargo:rerun-if-changed=proto/");
+    tonic_build::compile_protos("proto/service.proto").unwrap();
+}</code></pre></pre>
+<h3 id="custom-build-profiles"><a class="header" href="#custom-build-profiles">Custom Build Profiles</a></h3>
+<pre><code class="language-toml"># In Cargo.toml
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+</code></pre>
+<p>This comprehensive build guide ensures developers can successfully compile, test, and contribute to MockForge across different platforms and development environments.</p>
 
                     </main>
 
@@ -213,22 +616,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

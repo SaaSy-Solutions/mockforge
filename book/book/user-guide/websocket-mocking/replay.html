@@ -183,6 +183,363 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="replay-mode"><a class="header" href="#replay-mode">Replay Mode</a></h1>
+<p>Replay mode provides precise, scripted WebSocket message sequences that execute on a predetermined schedule. This mode is ideal for testing deterministic scenarios, reproducing specific interaction patterns, and validating client behavior against known server responses.</p>
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
+<h3 id="message-timeline"><a class="header" href="#message-timeline">Message Timeline</a></h3>
+<p>Replay files define a sequence of messages that execute based on timestamps relative to connection establishment. Each message has a precise timing offset ensuring consistent playback.</p>
+<h3 id="deterministic-execution"><a class="header" href="#deterministic-execution">Deterministic Execution</a></h3>
+<p>Replay scenarios execute identically each time, making them perfect for:</p>
+<ul>
+<li>Automated testing</li>
+<li>Regression testing</li>
+<li>Client behavior validation</li>
+<li>Demo environments</li>
+</ul>
+<h2 id="replay-file-structure"><a class="header" href="#replay-file-structure">Replay File Structure</a></h2>
+<h3 id="jsonl-format"><a class="header" href="#jsonl-format">JSONL Format</a></h3>
+<p>Replay files use JSON Lines format where each line contains a complete JSON object representing a single message or directive.</p>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Welcome message"}
+{"ts":1000,"dir":"out","text":"Data update","waitFor":"^ACK$"}
+{"ts":2000,"dir":"out","text":"Connection closing"}
+</code></pre>
+<h3 id="message-object-schema"><a class="header" href="#message-object-schema">Message Object Schema</a></h3>
+<pre><code class="language-typescript">interface ReplayMessage {
+  ts: number;           // Timestamp offset in milliseconds
+  dir: "out" | "in";    // Message direction
+  text: string;         // Message content
+  waitFor?: string;     // Optional regex pattern to wait for
+  binary?: boolean;     // Binary message flag
+  close?: boolean;      // Close connection after this message
+  error?: boolean;      // Send as error frame
+}
+</code></pre>
+<h2 id="basic-replay-examples"><a class="header" href="#basic-replay-examples">Basic Replay Examples</a></h2>
+<h3 id="simple-chat-simulation"><a class="header" href="#simple-chat-simulation">Simple Chat Simulation</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Chat server connected. Welcome!"}
+{"ts":500,"dir":"out","text":"Type 'hello' to start chatting","waitFor":"^hello$"}
+{"ts":100,"dir":"out","text":"Hello! How can I help you today?"}
+{"ts":2000,"dir":"out","text":"Are you still there?","waitFor":".*"}
+{"ts":500,"dir":"out","text":"Thanks for chatting! Goodbye."}
+</code></pre>
+<h3 id="api-status-monitoring"><a class="header" href="#api-status-monitoring">API Status Monitoring</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"{\"type\":\"status\",\"message\":\"Monitor connected\"}"}
+{"ts":1000,"dir":"out","text":"{\"type\":\"metrics\",\"cpu\":45,\"memory\":67}"}
+{"ts":2000,"dir":"out","text":"{\"type\":\"metrics\",\"cpu\":42,\"memory\":68}"}
+{"ts":3000,"dir":"out","text":"{\"type\":\"metrics\",\"cpu\":47,\"memory\":66}"}
+{"ts":4000,"dir":"out","text":"{\"type\":\"alert\",\"level\":\"warning\",\"message\":\"High CPU usage\"}"}
+</code></pre>
+<h3 id="game-state-synchronization"><a class="header" href="#game-state-synchronization">Game State Synchronization</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"{\"action\":\"game_start\",\"player_id\":\"{{uuid}}\",\"game_id\":\"{{uuid}}\"}"}
+{"ts":1000,"dir":"out","text":"{\"action\":\"state_update\",\"position\":{\"x\":10,\"y\":20},\"score\":0}"}
+{"ts":2000,"dir":"out","text":"{\"action\":\"enemy_spawn\",\"enemy_id\":\"{{uuid}}\",\"position\":{\"x\":50,\"y\":30}}"}
+{"ts":1500,"dir":"out","text":"{\"action\":\"powerup\",\"type\":\"speed\",\"position\":{\"x\":25,\"y\":15}}"}
+{"ts":3000,"dir":"out","text":"{\"action\":\"game_over\",\"final_score\":1250,\"reason\":\"timeout\"}"}
+</code></pre>
+<h2 id="advanced-replay-techniques"><a class="header" href="#advanced-replay-techniques">Advanced Replay Techniques</a></h2>
+<h3 id="conditional-branching"><a class="header" href="#conditional-branching">Conditional Branching</a></h3>
+<p>While replay mode is inherently linear, you can simulate branching using multiple replay files and external logic:</p>
+<pre><code class="language-jsonl">// File: login-success.jsonl
+{"ts":0,"dir":"out","text":"Login successful","waitFor":"^ready$"}
+{"ts":100,"dir":"out","text":"Welcome to your dashboard"}
+
+// File: login-failed.jsonl
+{"ts":0,"dir":"out","text":"Invalid credentials"}
+{"ts":500,"dir":"out","text":"Connection will close","close":true}
+</code></pre>
+<h3 id="template-integration"><a class="header" href="#template-integration">Template Integration</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Session {{uuid}} established at {{now}}"}
+{"ts":1000,"dir":"out","text":"Your lucky number is: {{randInt 1 100}}"}
+{"ts":2000,"dir":"out","text":"Next maintenance window: {{now+24h}}"}
+{"ts":3000,"dir":"out","text":"Server load: {{randInt 20 80}}%"}
+</code></pre>
+<h3 id="binary-message-support"><a class="header" href="#binary-message-support">Binary Message Support</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","binary":true}
+{"ts":1000,"dir":"out","text":"Image sent successfully"}
+</code></pre>
+<h3 id="error-simulation"><a class="header" href="#error-simulation">Error Simulation</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Connection established"}
+{"ts":5000,"dir":"out","text":"Internal server error","error":true}
+{"ts":1000,"dir":"out","text":"Attempting reconnection..."}
+{"ts":2000,"dir":"out","text":"Reconnection failed","close":true}
+</code></pre>
+<h2 id="creating-replay-files"><a class="header" href="#creating-replay-files">Creating Replay Files</a></h2>
+<h3 id="manual-creation"><a class="header" href="#manual-creation">Manual Creation</a></h3>
+<pre><code class="language-bash"># Create a new replay file
+cat &gt; chat-replay.jsonl &lt;&lt; 'EOF'
+{"ts":0,"dir":"out","text":"Welcome to support chat!"}
+{"ts":1000,"dir":"out","text":"How can I help you today?","waitFor":".*"}
+{"ts":500,"dir":"out","text":"Thanks for your question. Let me check..."}
+{"ts":2000,"dir":"out","text":"I found the solution! Here's what you need to do:"}
+{"ts":1000,"dir":"out","text":"1. Go to settings\n2. Click preferences\n3. Enable feature X"}
+{"ts":3000,"dir":"out","text":"Does this solve your issue?","waitFor":"^(yes|no)$"}
+{"ts":500,"dir":"out","text":"Great! Glad I could help. Have a nice day!"}
+EOF
+</code></pre>
+<h3 id="from-application-logs"><a class="header" href="#from-application-logs">From Application Logs</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# extract-websocket-logs.sh
+
+# Extract WebSocket messages from application logs
+grep "WEBSOCKET_MSG" app.log | \
+  # Parse log entries and convert to JSONL
+  awk '{
+    # Extract timestamp, direction, and message
+    match($0, /([0-9]+).*dir=([^ ]*).*msg=(.*)/, arr)
+    printf "{\"ts\":%d,\"dir\":\"%s\",\"text\":\"%s\"}\n", arr[1], arr[2], arr[3]
+  }' &gt; replay-from-logs.jsonl
+</code></pre>
+<h3 id="programmatic-generation"><a class="header" href="#programmatic-generation">Programmatic Generation</a></h3>
+<pre><code class="language-javascript">// generate-replay.js
+const fs = require('fs');
+
+function generateHeartbeatReplay(interval = 30000, duration = 300000) {
+  const messages = [];
+  const messageCount = duration / interval;
+
+  for (let i = 0; i &lt; messageCount; i++) {
+    messages.push({
+      ts: i * interval,
+      dir: "out",
+      text: JSON.stringify({
+        type: "heartbeat",
+        timestamp: `{{now+${i * interval}ms}}`,
+        sequence: i + 1
+      })
+    });
+  }
+
+  fs.writeFileSync('heartbeat-replay.jsonl',
+    messages.map(JSON.stringify).join('\n'));
+}
+
+generateHeartbeatReplay();
+</code></pre>
+<pre><code class="language-python"># generate-replay.py
+import json
+import random
+
+def generate_data_stream(count=100, interval=1000):
+    messages = []
+    for i in range(count):
+        messages.append({
+            "ts": i * interval,
+            "dir": "out",
+            "text": json.dumps({
+                "type": "data_point",
+                "id": f"{{{{uuid}}}}",
+                "value": random.randint(1, 100),
+                "timestamp": f"{{{{now+{i * interval}ms}}}}}"
+            })
+        })
+    return messages
+
+# Write to file
+with open('data-stream-replay.jsonl', 'w') as f:
+    for msg in generate_data_stream():
+        f.write(json.dumps(msg) + '\n')
+</code></pre>
+<h2 id="validation-and-testing"><a class="header" href="#validation-and-testing">Validation and Testing</a></h2>
+<h3 id="replay-file-validation"><a class="header" href="#replay-file-validation">Replay File Validation</a></h3>
+<pre><code class="language-bash"># Validate JSONL syntax
+node -e "
+const fs = require('fs');
+const lines = fs.readFileSync('replay.jsonl', 'utf8').split('\n');
+let valid = true;
+
+lines.forEach((line, i) =&gt; {
+  if (line.trim()) {
+    try {
+      const msg = JSON.parse(line);
+      if (!msg.ts || !msg.dir || !msg.text) {
+        console.log(\`Line \${i+1}: Missing required fields\`);
+        valid = false;
+      }
+      if (typeof msg.ts !== 'number' || msg.ts &lt; 0) {
+        console.log(\`Line \${i+1}: Invalid timestamp\`);
+        valid = false;
+      }
+      if (!['in', 'out'].includes(msg.dir)) {
+        console.log(\`Line \${i+1}: Invalid direction\`);
+        valid = false;
+      }
+    } catch (e) {
+      console.log(\`Line \${i+1}: Invalid JSON - \${e.message}\`);
+      valid = false;
+    }
+  }
+});
+
+console.log(valid ? '✓ Replay file is valid' : '✗ Replay file has errors');
+"
+</code></pre>
+<h3 id="timing-analysis"><a class="header" href="#timing-analysis">Timing Analysis</a></h3>
+<pre><code class="language-bash"># Analyze replay timing
+node -e "
+const fs = require('fs');
+const messages = fs.readFileSync('replay.jsonl', 'utf8')
+  .split('\n')
+  .filter(line =&gt; line.trim())
+  .map(line =&gt; JSON.parse(line));
+
+const timings = messages.map((msg, i) =&gt; ({
+  index: i + 1,
+  ts: msg.ts,
+  interval: i &gt; 0 ? msg.ts - messages[i-1].ts : 0
+}));
+
+console.log('Timing Analysis:');
+timings.forEach(t =&gt; {
+  console.log(\`Message \${t.index}: \${t.ts}ms (interval: \${t.interval}ms)\`);
+});
+
+const totalDuration = Math.max(...messages.map(m =&gt; m.ts));
+console.log(\`Total duration: \${totalDuration}ms (\${(totalDuration/1000).toFixed(1)}s)\`);
+"
+</code></pre>
+<h3 id="functional-testing"><a class="header" href="#functional-testing">Functional Testing</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-replay.sh
+
+REPLAY_FILE=$1
+WS_URL="ws://localhost:3001/ws"
+
+echo "Testing replay file: $REPLAY_FILE"
+
+# Validate file exists and is readable
+if [ ! -f "$REPLAY_FILE" ]; then
+  echo "✗ Replay file not found"
+  exit 1
+fi
+
+# Basic syntax check
+if ! node -e "
+  const fs = require('fs');
+  const content = fs.readFileSync('$REPLAY_FILE', 'utf8');
+  const lines = content.split('\n').filter(l =&gt; l.trim());
+  lines.forEach((line, i) =&gt; {
+    try {
+      JSON.parse(line);
+    } catch (e) {
+      console.error(\`Line \${i+1}: \${e.message}\`);
+      process.exit(1);
+    }
+  });
+  console.log(\`✓ Valid JSONL: \${lines.length} messages\`);
+"; then
+  echo "✗ Syntax validation failed"
+  exit 1
+fi
+
+echo "✓ Replay file validation passed"
+echo "Ready to test with: mockforge serve --ws-replay-file $REPLAY_FILE"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="file-organization"><a class="header" href="#file-organization">File Organization</a></h3>
+<ol>
+<li>
+<p><strong>Descriptive Names</strong>: Use clear, descriptive filenames</p>
+<pre><code>user-authentication-flow.jsonl
+real-time-data-stream.jsonl
+error-handling-scenarios.jsonl
+</code></pre>
+</li>
+<li>
+<p><strong>Modular Scenarios</strong>: Break complex interactions into focused files</p>
+<pre><code>login-flow.jsonl
+main-interaction.jsonl
+logout-flow.jsonl
+</code></pre>
+</li>
+<li>
+<p><strong>Version Control</strong>: Keep replay files in Git with meaningful commit messages</p>
+</li>
+</ol>
+<h3 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h3>
+<ol>
+<li><strong>Message Batching</strong>: Group related messages with minimal intervals</li>
+<li><strong>Memory Management</strong>: Monitor memory usage with large replay files</li>
+<li><strong>Connection Limits</strong>: Consider concurrent connection impact</li>
+</ol>
+<h3 id="maintenance"><a class="header" href="#maintenance">Maintenance</a></h3>
+<ol>
+<li><strong>Regular Updates</strong>: Keep replay files synchronized with application changes</li>
+<li><strong>Documentation</strong>: Comment complex scenarios inline</li>
+<li><strong>Versioning</strong>: Tag replay files with application versions</li>
+</ol>
+<h3 id="debugging"><a class="header" href="#debugging">Debugging</a></h3>
+<ol>
+<li><strong>Verbose Logging</strong>: Enable detailed WebSocket logging during development</li>
+<li><strong>Step-through Testing</strong>: Test replay files incrementally</li>
+<li><strong>Timing Verification</strong>: Validate message timing against expectations</li>
+</ol>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="authentication-flow"><a class="header" href="#authentication-flow">Authentication Flow</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"Please authenticate","waitFor":"^AUTH .+$"}
+{"ts":100,"dir":"out","text":"Authenticating..."}
+{"ts":500,"dir":"out","text":"Authentication successful"}
+{"ts":200,"dir":"out","text":"Welcome back, user!"}
+</code></pre>
+<h3 id="streaming-data"><a class="header" href="#streaming-data">Streaming Data</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"{\"type\":\"stream_start\",\"stream_id\":\"{{uuid}}\"}"}
+{"ts":100,"dir":"out","text":"{\"type\":\"data\",\"value\":{{randInt 1 100}}}"}
+{"ts":100,"dir":"out","text":"{\"type\":\"data\",\"value\":{{randInt 1 100}}}"}
+{"ts":100,"dir":"out","text":"{\"type\":\"data\",\"value\":{{randInt 1 100}}}"}
+{"ts":5000,"dir":"out","text":"{\"type\":\"stream_end\",\"total_messages\":3}"}
+</code></pre>
+<h3 id="error-recovery"><a class="header" href="#error-recovery">Error Recovery</a></h3>
+<pre><code class="language-jsonl">{"ts":0,"dir":"out","text":"System operational"}
+{"ts":30000,"dir":"out","text":"Warning: High load detected"}
+{"ts":10000,"dir":"out","text":"Error: Service unavailable","error":true}
+{"ts":5000,"dir":"out","text":"Attempting recovery..."}
+{"ts":10000,"dir":"out","text":"Recovery successful"}
+{"ts":1000,"dir":"out","text":"System back to normal"}
+</code></pre>
+<h2 id="integration-with-cicd"><a class="header" href="#integration-with-cicd">Integration with CI/CD</a></h2>
+<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
+<pre><code class="language-yaml"># .github/workflows/test.yml
+name: WebSocket Tests
+on: [push, pull_request]
+
+jobs:
+  websocket-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm install ws
+      - name: Start MockForge
+        run: |
+          cargo install mockforge-cli
+          mockforge serve --ws-replay-file examples/ws-demo.jsonl &amp;
+          sleep 2
+      - name: Run WebSocket tests
+        run: node test-websocket.js
+</code></pre>
+<h3 id="performance-benchmarking"><a class="header" href="#performance-benchmarking">Performance Benchmarking</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# benchmark-replay.sh
+
+CONCURRENT_CONNECTIONS=100
+DURATION=60
+
+echo "Benchmarking WebSocket replay with $CONCURRENT_CONNECTIONS connections for ${DURATION}s"
+
+# Start MockForge
+mockforge serve --ws-replay-file benchmark-replay.jsonl &amp;
+SERVER_PID=$!
+sleep 2
+
+# Run benchmark
+node benchmark-websocket.js $CONCURRENT_CONNECTIONS $DURATION
+
+# Cleanup
+kill $SERVER_PID
+</code></pre>
+<p>This comprehensive approach to replay mode ensures reliable, deterministic WebSocket testing scenarios that can be easily created, validated, and maintained as part of your testing infrastructure.</p>
 
                     </main>
 
@@ -213,22 +570,6 @@
 
         </div>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>
