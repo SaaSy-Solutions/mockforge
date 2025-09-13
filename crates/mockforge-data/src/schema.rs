@@ -113,16 +113,8 @@ impl FieldDefinition {
             Value::Null => "null",
         };
 
-        // Normalize expected type for comparison
-        let normalized_expected = match expected_type {
-            "integer" => "integer",
-            "number" => "number",
-            "string" => "string",
-            "boolean" => "boolean",
-            "object" => "object",
-            "array" => "array",
-            _ => expected_type,
-        };
+        // Use expected_type directly - all expected values should match actual values
+        let normalized_expected = expected_type;
 
         if normalized_expected != actual_type
             && !(normalized_expected == "number" && actual_type == "integer")
