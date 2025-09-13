@@ -181,7 +181,7 @@ impl ReflectionProxy {
     async fn forward_unary_impl(
         &self,
         method: prost_reflect::MethodDescriptor,
-        _request: Request<DynamicMessage>,
+        request: Request<DynamicMessage>,
     ) -> Result<Response<DynamicMessage>, Status> {
         // Real implementation for mock server:
         // 1. Look up mock responses based on the service/method
@@ -198,8 +198,22 @@ impl ReflectionProxy {
         // Create a mock response based on the method
         let mock_response = self.generate_mock_response(&service_name, method_name, &method).await?;
 
-        // Create response with mock data
+        // Create response with mock data and preserve metadata
         let mut response = Response::new(mock_response);
+        
+        // Preserve original request metadata in the response (ASCII only for simplicity)
+        let request_metadata = request.metadata();
+        for entry in request_metadata.iter() {
+            if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                // Only preserve certain metadata keys, avoiding system headers
+                if !key.as_str().starts_with(':') && 
+                   !key.as_str().starts_with("grpc-") &&
+                   !key.as_str().starts_with("te") &&
+                   !key.as_str().starts_with("content-type") {
+                    response.metadata_mut().insert(key.clone(), value.clone());
+                }
+            }
+        }
 
         // Add mock-specific metadata
         response.metadata_mut().insert("x-mockforge-service", service_name.parse().unwrap());
@@ -421,7 +435,27 @@ impl ReflectionProxy {
                 }
             });
 
-            let response = Response::new(stream);
+            // Preserve original request metadata in the response
+            let mut response = Response::new(stream);
+            
+            // Copy relevant metadata from the original request to the response (ASCII only for simplicity)
+            for entry in metadata.iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                    // Only preserve certain metadata keys, avoiding system headers
+                    if !key.as_str().starts_with(':') && 
+                       !key.as_str().starts_with("grpc-") &&
+                       !key.as_str().starts_with("te") &&
+                       !key.as_str().starts_with("content-type") {
+                        response.metadata_mut().insert(key.clone(), value.clone());
+                    }
+                }
+            }
+            
+            // Add mock-specific metadata
+            response.metadata_mut().insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-method", method.name().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-stream-count", "5".parse().unwrap());
 
             debug!("Generated server streaming response with {} messages", 5);
             Ok(response)
@@ -444,6 +478,9 @@ impl ReflectionProxy {
 
         #[cfg(feature = "data-faker")]
         {
+            // Extract metadata from the original request before consuming it
+            let request_metadata = request.metadata().clone();
+            
             // Process the streaming request and extract message data
             let mut stream = request.into_inner();
             let mut message_count = 0;
@@ -525,9 +562,29 @@ impl ReflectionProxy {
                 let _ = mock_response.set_field(&message_field, prost_reflect::Value::String(personalized_message));
             }
 
-            let response = Response::new(mock_response);
+            // Preserve original request metadata in the response
+            let mut response = Response::new(mock_response);
+            
+            // Copy relevant metadata from the original request to the response (ASCII only for simplicity)
+            for entry in request_metadata.iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                    // Only preserve certain metadata keys, avoiding system headers
+                    if !key.as_str().starts_with(':') && 
+                       !key.as_str().starts_with("grpc-") &&
+                       !key.as_str().starts_with("te") &&
+                       !key.as_str().starts_with("content-type") {
+                        response.metadata_mut().insert(key.clone(), value.clone());
+                    }
+                }
+            }
+            
+            // Add mock-specific metadata
+            response.metadata_mut().insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-method", method.name().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-message-count", message_count.to_string().parse().unwrap());
 
-            // Metadata preservation simplified for now
+            let response = response;
 
             debug!("Generated enhanced client streaming response with {} processed messages", message_count);
             Ok(response)
@@ -550,6 +607,11 @@ impl ReflectionProxy {
 
         #[cfg(feature = "data-faker")]
         {
+            // Extract metadata from the original request before consuming it
+            let metadata = request.metadata();
+            debug!("Forwarding bidirectional streaming request for method: {} with {} metadata entries",
+                   method.name(), metadata.len());
+
             // Generate mock bidirectional streaming responses
             let output_descriptor = method.output();
             let messages = self.generate_mock_stream_messages(&output_descriptor, 10).await?;
@@ -567,7 +629,27 @@ impl ReflectionProxy {
                 }
             });
 
-            let response = Response::new(stream);
+            // Preserve original request metadata in the response
+            let mut response = Response::new(stream);
+            
+            // Copy relevant metadata from the original request to the response (ASCII only for simplicity)
+            for entry in metadata.iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                    // Only preserve certain metadata keys, avoiding system headers
+                    if !key.as_str().starts_with(':') && 
+                       !key.as_str().starts_with("grpc-") &&
+                       !key.as_str().starts_with("te") &&
+                       !key.as_str().starts_with("content-type") {
+                        response.metadata_mut().insert(key.clone(), value.clone());
+                    }
+                }
+            }
+            
+            // Add mock-specific metadata
+            response.metadata_mut().insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-method", method.name().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-stream-count", "10".parse().unwrap());
 
             // Process incoming stream concurrently
             let mut incoming_stream = request.into_inner();
