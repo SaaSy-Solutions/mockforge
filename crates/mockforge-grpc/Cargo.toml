@@ -27,6 +27,7 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data", optional = true }
+fake = { version = "3.0", optional = true }
 chrono = { workspace = true }
 tempfile = "3.0"
 
@@ -35,7 +36,7 @@ tonic-prost-build = "0.14"
 
 [features]
 default = ["data-faker"]
-data-faker = ["mockforge-data"]
+data-faker = ["mockforge-data", "fake"]
 
 [[example]]
 name = "flexible_grpc"
