@@ -12,6 +12,12 @@ pub struct ConnectionPool {
     channels: Arc<Mutex<HashMap<String, Channel>>>,
 }
 
+impl Default for ConnectionPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConnectionPool {
     /// Create a new connection pool
     pub fn new() -> Self {

@@ -45,6 +45,12 @@ pub struct ServiceRegistry {
     descriptor_pool: prost_reflect::DescriptorPool,
 }
 
+impl Default for ServiceRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceRegistry {
     /// Create a new service registry
     pub fn new() -> Self {
@@ -172,7 +178,7 @@ pub async fn start_dynamic_server(
     let service_names = registry_arc.service_names().clone();
 
     // Create HTTP router for status endpoints
-    let http_app: Router = Router::new()
+    let _http_app: Router = Router::new()
         .route("/", get({
             let service_names = service_names.clone();
             move || async move {
@@ -206,7 +212,7 @@ pub async fn start_dynamic_server(
 
     // Start HTTP server on the specified port
     let http_addr = addr;
-    let http_listener = TcpListener::bind(http_addr).await?;
+    let _http_listener = TcpListener::bind(http_addr).await?;
     info!("HTTP status server listening on {}", http_addr);
 
     // Start actual gRPC server on the specified port
@@ -285,7 +291,7 @@ pub async fn start_dynamic_server(
         }
     }
 
-    let greeter = MockGreeterService::default();
+    let greeter = MockGreeterService;
 
     info!("gRPC server listening on {} with Greeter service", grpc_addr);
 

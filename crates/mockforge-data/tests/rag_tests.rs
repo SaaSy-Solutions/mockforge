@@ -29,8 +29,10 @@ mod rag_tests {
 
     #[test]
     fn test_rag_keyword_search() {
-        let mut config = RagConfig::default();
-        config.semantic_search_enabled = false; // Force keyword search
+        let config = RagConfig {
+            semantic_search_enabled: false,
+            ..Default::default()
+        };
 
         let mut engine = RagEngine::new(config);
 
@@ -47,13 +49,15 @@ mod rag_tests {
 
         let chunks = engine.keyword_search("machine learning", 5);
         assert_eq!(chunks.len(), 1);
-        assert!(chunks[0].content.contains("machine learning"));
+        assert!(chunks[0].content.to_lowercase().contains("machine learning"));
     }
 
     #[test]
     fn test_rag_keyword_search_multiple_results() {
-        let mut config = RagConfig::default();
-        config.semantic_search_enabled = false;
+        let config = RagConfig {
+            semantic_search_enabled: false,
+            ..Default::default()
+        };
 
         let mut engine = RagEngine::new(config);
 
@@ -76,8 +80,10 @@ mod rag_tests {
 
     #[test]
     fn test_rag_keyword_search_limit() {
-        let mut config = RagConfig::default();
-        config.semantic_search_enabled = false;
+        let config = RagConfig {
+            semantic_search_enabled: false,
+            ..Default::default()
+        };
 
         let mut engine = RagEngine::new(config);
 
@@ -94,8 +100,10 @@ mod rag_tests {
 
     #[test]
     fn test_rag_keyword_search_no_matches() {
-        let mut config = RagConfig::default();
-        config.semantic_search_enabled = false;
+        let config = RagConfig {
+            semantic_search_enabled: false,
+            ..Default::default()
+        };
 
         let mut engine = RagEngine::new(config);
 

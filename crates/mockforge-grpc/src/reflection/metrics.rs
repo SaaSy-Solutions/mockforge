@@ -19,6 +19,12 @@ pub struct MethodMetrics {
     pub in_flight: AtomicUsize,
 }
 
+impl Default for MethodMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MethodMetrics {
     pub fn new() -> Self {
         Self {
@@ -96,6 +102,12 @@ impl MethodMetricsSnapshot {
 pub struct MetricsRegistry {
     /// Metrics for each service/method combination
     method_metrics: Arc<RwLock<HashMap<String, Arc<MethodMetrics>>>>,
+}
+
+impl Default for MetricsRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsRegistry {

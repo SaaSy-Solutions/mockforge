@@ -14,6 +14,12 @@ pub struct DescriptorCache {
     cache: Arc<RwLock<ServiceDescriptorCache>>,
 }
 
+impl Default for DescriptorCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DescriptorCache {
     /// Create a new descriptor cache
     pub fn new() -> Self {
@@ -42,7 +48,7 @@ impl DescriptorCache {
         trace!("Getting method from cache: {}::{}", service_name, method_name);
 
         let cache = self.cache.read().await;
-        cache.get_method(service_name, method_name).map(|m| m.clone())
+        cache.get_method(service_name, method_name).cloned()
     }
 
     /// Get a service descriptor from the cache with proper error handling
@@ -50,7 +56,7 @@ impl DescriptorCache {
         trace!("Getting service from cache: {}", service_name);
 
         let cache = self.cache.read().await;
-        cache.get_service_with_error(service_name).map(|s| s.clone())
+        cache.get_service_with_error(service_name).cloned()
     }
 
     /// Check if a service exists in the cache
