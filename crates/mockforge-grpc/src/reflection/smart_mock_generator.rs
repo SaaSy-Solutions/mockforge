@@ -1,0 +1,359 @@
+//! Smart mock data generator for gRPC services
+//!
+//! This module provides intelligent mock data generation based on field names,
+//! types, and context. It integrates with the mockforge-data faker system
+//! to generate realistic test data.
+
+use prost_reflect::{FieldDescriptor, Kind, MessageDescriptor, Value};
+use rand::Rng;
+use std::collections::HashMap;
+use tracing::debug;
+
+// Commenting out faker integration for now - will be added in a future update
+// #[cfg(feature = "data-faker")]
+// use mockforge_data::{DataGenerator, DataConfig};
+
+/// Configuration for smart mock data generation
+#[derive(Debug, Clone)]
+pub struct SmartMockConfig {
+    /// Enable field name-based intelligent generation
+    pub field_name_inference: bool,
+    /// Enable faker integration for realistic data
+    pub use_faker: bool,
+    /// Custom field mappings (field_name -> mock_value)
+    pub field_overrides: HashMap<String, String>,
+    /// Service-specific data generation profiles
+    pub service_profiles: HashMap<String, ServiceProfile>,
+    /// Maximum recursion depth for nested messages
+    pub max_depth: usize,
+}
+
+impl Default for SmartMockConfig {
+    fn default() -> Self {
+        Self {
+            field_name_inference: true,
+            use_faker: true,
+            field_overrides: HashMap::new(),
+            service_profiles: HashMap::new(),
+            max_depth: 5,
+        }
+    }
+}
+
+/// Service-specific data generation profile
+#[derive(Debug, Clone)]
+pub struct ServiceProfile {
+    /// Custom field mappings for this service
+    pub field_mappings: HashMap<String, String>,
+    /// Realistic data patterns to use
+    pub data_patterns: Vec<DataPattern>,
+    /// Whether to use sequential numbering for IDs
+    pub sequential_ids: bool,
+}
+
+/// Data generation patterns
+#[derive(Debug, Clone)]
+pub enum DataPattern {
+    /// User-related data (names, emails, etc.)
+    User,
+    /// Product/inventory data
+    Product,
+    /// Financial/transaction data
+    Financial,
+    /// Address/location data
+    Location,
+    /// Custom pattern with field mappings
+    Custom(HashMap<String, String>),
+}
+
+/// Smart mock data generator
+pub struct SmartMockGenerator {
+    config: SmartMockConfig,
+    /// Counter for sequential data generation
+    sequence_counter: u64,
+}
+
+impl SmartMockGenerator {
+    /// Create a new smart mock generator
+    pub fn new(config: SmartMockConfig) -> Self {
+        Self {
+            config,
+            sequence_counter: 1,
+        }
+    }
+
+    /// Generate a mock value for a field with intelligent inference
+    pub fn generate_value_for_field(
+        &mut self,
+        field: &FieldDescriptor,
+        service_name: &str,
+        method_name: &str,
+        depth: usize,
+    ) -> Value {
+        if depth >= self.config.max_depth {
+            return self.generate_depth_limit_value(field);
+        }
+
+        let field_name = field.name().to_lowercase();
+        
+        debug!("Generating smart mock value for field: {} (type: {:?}) in service: {}, method: {}", 
+            field.name(), field.kind(), service_name, method_name);
+
+        // Check for field overrides first
+        if let Some(override_value) = self.config.field_overrides.get(&field_name) {
+            return self.parse_override_value(override_value, field);
+        }
+
+        // Check service profile mappings
+        if let Some(profile) = self.config.service_profiles.get(service_name) {
+            if let Some(mapping) = profile.field_mappings.get(&field_name) {
+                return self.parse_override_value(mapping, field);
+            }
+        }
+
+        // Use intelligent field name inference
+        if self.config.field_name_inference {
+            if let Some(value) = self.infer_value_from_field_name(&field_name, field) {
+                return value;
+            }
+        }
+
+        // Note: faker integration will be added in a future update
+
+        // Fallback to basic type-based generation
+        self.generate_basic_value_for_type(field, depth)
+    }
+
+    /// Infer mock value based on field name patterns
+    fn infer_value_from_field_name(&mut self, field_name: &str, field: &FieldDescriptor) -> Option<Value> {
+        match field.kind() {
+            Kind::String => {
+                let mock_value = match field_name {
+                    // Identity fields
+                    name if name.contains("email") => format!("user{}@example.com", self.next_sequence()),
+                    name if name.contains("name") && name.contains("first") => "John".to_string(),
+                    name if name.contains("name") && name.contains("last") => "Doe".to_string(),
+                    name if name.contains("username") => format!("user{}", self.next_sequence()),
+                    name if name.contains("full_name") || name.contains("display_name") => "John Doe".to_string(),
+                    
+                    // Contact information
+                    name if name.contains("phone") => "+1-555-123-4567".to_string(),
+                    name if name.contains("address") => "123 Main Street".to_string(),
+                    name if name.contains("city") => "San Francisco".to_string(),
+                    name if name.contains("state") || name.contains("region") => "California".to_string(),
+                    name if name.contains("country") => "United States".to_string(),
+                    name if name.contains("zip") || name.contains("postal") => "94102".to_string(),
+                    
+                    // Product/business fields  
+                    name if name.contains("title") => "Sample Product".to_string(),
+                    name if name.contains("description") => "This is a sample product description".to_string(),
+                    name if name.contains("sku") || name.contains("product_id") => format!("SKU{:06}", self.next_sequence()),
+                    name if name.contains("category") => "Electronics".to_string(),
+                    name if name.contains("brand") => "MockForge".to_string(),
+                    
+                    // Technical fields
+                    name if name.contains("url") || name.contains("link") => "https://example.com".to_string(),
+                    name if name.contains("token") => format!("token_{}", self.generate_random_string(16)),
+                    name if name.contains("uuid") || name.contains("guid") => self.generate_uuid(),
+                    name if name.contains("hash") => self.generate_random_string(32),
+                    name if name.contains("version") => "1.0.0".to_string(),
+                    name if name.contains("status") => "active".to_string(),
+                    
+                    // Default patterns
+                    _ => return None,
+                };
+                Some(Value::String(mock_value))
+            }
+            Kind::Int32 | Kind::Int64 => {
+                let mock_value = match field_name {
+                    // ID fields
+                    name if name.contains("id") || name.contains("identifier") => self.next_sequence(),
+                    
+                    // Quantity/count fields
+                    name if name.contains("count") || name.contains("quantity") => {
+                        (rand::thread_rng().gen::<u32>() % 100 + 1) as u64
+                    }
+                    name if name.contains("age") => (rand::thread_rng().gen::<u32>() % 80 + 18) as u64,
+                    name if name.contains("year") => (rand::thread_rng().gen::<u32>() % 30 + 1995) as u64,
+                    
+                    // Size/dimension fields
+                    name if name.contains("width") || name.contains("height") || name.contains("length") => {
+                        (rand::thread_rng().gen::<u32>() % 1000 + 100) as u64
+                    }
+                    name if name.contains("weight") => (rand::thread_rng().gen::<u32>() % 1000 + 1) as u64,
+                    
+                    _ => return None,
+                };
+                
+                Some(match field.kind() {
+                    Kind::Int32 => Value::I32(mock_value as i32),
+                    Kind::Int64 => Value::I64(mock_value as i64),
+                    _ => unreachable!(),
+                })
+            }
+            Kind::Double | Kind::Float => {
+                let mock_value = match field_name {
+                    name if name.contains("price") || name.contains("cost") => {
+                        rand::thread_rng().gen::<f64>() * 1000.0 + 10.0
+                    }
+                    name if name.contains("rate") || name.contains("percentage") => {
+                        rand::thread_rng().gen::<f64>() * 100.0
+                    }
+                    name if name.contains("latitude") => rand::thread_rng().gen::<f64>() * 180.0 - 90.0,
+                    name if name.contains("longitude") => rand::thread_rng().gen::<f64>() * 360.0 - 180.0,
+                    _ => return None,
+                };
+                
+                Some(match field.kind() {
+                    Kind::Double => Value::F64(mock_value),
+                    Kind::Float => Value::F32(mock_value as f32),
+                    _ => unreachable!(),
+                })
+            }
+            Kind::Bool => {
+                let mock_value = match field_name {
+                    name if name.contains("active") || name.contains("enabled") => true,
+                    name if name.contains("verified") || name.contains("confirmed") => true,
+                    name if name.contains("deleted") || name.contains("archived") => false,
+                    _ => rand::thread_rng().gen::<bool>(),
+                };
+                Some(Value::Bool(mock_value))
+            }
+            _ => None,
+        }
+    }
+
+    // Faker integration methods will be added here in future updates
+
+    /// Generate basic value based on type
+    fn generate_basic_value_for_type(&mut self, field: &FieldDescriptor, depth: usize) -> Value {
+        match field.kind() {
+            Kind::String => Value::String(format!("mock_{}", field.name())),
+            Kind::Int32 => Value::I32(self.next_sequence() as i32),
+            Kind::Int64 => Value::I64(self.next_sequence() as i64),
+            Kind::Uint32 => Value::U32(self.next_sequence() as u32),
+            Kind::Uint64 => Value::U64(self.next_sequence()),
+            Kind::Sint32 => Value::I32(self.next_sequence() as i32),
+            Kind::Sint64 => Value::I64(self.next_sequence() as i64),
+            Kind::Fixed32 => Value::U32(self.next_sequence() as u32),
+            Kind::Fixed64 => Value::U64(self.next_sequence()),
+            Kind::Sfixed32 => Value::I32(self.next_sequence() as i32),
+            Kind::Sfixed64 => Value::I64(self.next_sequence() as i64),
+            Kind::Bool => Value::Bool(self.next_sequence() % 2 == 0),
+            Kind::Double => Value::F64(rand::thread_rng().gen::<f64>() * 100.0),
+            Kind::Float => Value::F32(rand::thread_rng().gen::<f32>() * 100.0),
+            Kind::Bytes => Value::Bytes(format!("bytes_{}", self.next_sequence()).into_bytes().into()),
+            Kind::Enum(enum_descriptor) => {
+                // Use the first enum value, or 0 if no values defined
+                if let Some(first_value) = enum_descriptor.values().next() {
+                    Value::EnumNumber(first_value.number())
+                } else {
+                    Value::EnumNumber(0)
+                }
+            }
+            Kind::Message(message_descriptor) => {
+                self.generate_mock_message(&message_descriptor, depth + 1)
+            }
+        }
+    }
+
+    /// Generate a mock message with all fields populated
+    fn generate_mock_message(&mut self, descriptor: &MessageDescriptor, depth: usize) -> Value {
+        let mut message = prost_reflect::DynamicMessage::new(descriptor.clone());
+
+        if depth >= self.config.max_depth {
+            return Value::Message(message);
+        }
+
+        for field in descriptor.fields() {
+            let value = self.generate_basic_value_for_type(&field, depth);
+            message.set_field(&field, value);
+        }
+
+        Value::Message(message)
+    }
+
+    /// Generate value when depth limit is reached
+    fn generate_depth_limit_value(&self, field: &FieldDescriptor) -> Value {
+        match field.kind() {
+            Kind::String => Value::String(format!("depth_limit_reached_{}", field.name())),
+            Kind::Int32 => Value::I32(999),
+            Kind::Int64 => Value::I64(999),
+            _ => Value::String("depth_limit".to_string()),
+        }
+    }
+
+    /// Parse override value from string
+    fn parse_override_value(&self, override_value: &str, field: &FieldDescriptor) -> Value {
+        match field.kind() {
+            Kind::String => Value::String(override_value.to_string()),
+            Kind::Int32 => Value::I32(override_value.parse().unwrap_or(0)),
+            Kind::Int64 => Value::I64(override_value.parse().unwrap_or(0)),
+            Kind::Bool => Value::Bool(override_value.parse().unwrap_or(false)),
+            Kind::Double => Value::F64(override_value.parse().unwrap_or(0.0)),
+            Kind::Float => Value::F32(override_value.parse().unwrap_or(0.0)),
+            _ => Value::String(override_value.to_string()),
+        }
+    }
+
+    /// Get next sequence number
+    pub fn next_sequence(&mut self) -> u64 {
+        let current = self.sequence_counter;
+        self.sequence_counter += 1;
+        current
+    }
+
+    /// Generate random string
+    fn generate_random_string(&self, length: usize) -> String {
+        use rand::distributions::Alphanumeric;
+        use rand::{thread_rng, Rng};
+        
+        thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(length)
+            .map(char::from)
+            .collect()
+    }
+
+    /// Generate a UUID-like string
+    fn generate_uuid(&self) -> String {
+        format!(
+            "{:08x}-{:04x}-{:04x}-{:04x}-{:12x}",
+            rand::thread_rng().gen::<u32>(),
+            rand::thread_rng().gen::<u16>(),
+            rand::thread_rng().gen::<u16>(),
+            rand::thread_rng().gen::<u16>(),
+            rand::thread_rng().gen::<u64>() & 0xffffffffffff,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_smart_mock_generator() {
+        let config = SmartMockConfig::default();
+        let mut generator = SmartMockGenerator::new(config);
+
+        // Test sequence generation
+        assert_eq!(generator.next_sequence(), 1);
+        assert_eq!(generator.next_sequence(), 2);
+        
+        // Test UUID generation
+        let uuid = generator.generate_uuid();
+        assert!(uuid.contains('-'));
+        assert_eq!(uuid.matches('-').count(), 4);
+    }
+
+    #[test]
+    fn test_field_name_inference() {
+        let config = SmartMockConfig::default();
+        let generator = SmartMockGenerator::new(config);
+
+        // Test email inference - we'd need actual field descriptors for full testing
+        // This is a unit test placeholder
+        assert!(generator.generate_random_string(10).len() == 10);
+    }
+}

@@ -6,10 +6,11 @@
 use crate::dynamic::ServiceRegistry;
 use crate::reflection::{
     cache::DescriptorCache, config::ProxyConfig, connection_pool::ConnectionPool,
+    smart_mock_generator::{SmartMockGenerator, SmartMockConfig},
 };
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, ReflectMessage};
 use prost_types::Any;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -29,6 +30,8 @@ pub struct MockReflectionProxy {
     connection_pool: ConnectionPool,
     /// Registry of dynamic services for mock responses
     service_registry: Arc<ServiceRegistry>,
+    /// Smart mock data generator for intelligent field population
+    smart_generator: Arc<Mutex<SmartMockGenerator>>,
 }
 
 impl MockReflectionProxy {
@@ -53,6 +56,7 @@ impl MockReflectionProxy {
             timeout_duration: Duration::from_secs(30),
             connection_pool: ConnectionPool::new(),
             service_registry,
+            smart_generator: Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default()))),
         })
     }
 
@@ -240,6 +244,7 @@ impl MockReflectionProxy {
         let service_name = service_name.to_string();
         let method_name = method_name.to_string();
         let cache = self.cache.clone();
+        let smart_generator = Arc::clone(&self.smart_generator);
 
         // Spawn a task to handle bidirectional streaming
         tokio::spawn(async move {
@@ -267,6 +272,7 @@ impl MockReflectionProxy {
                         input_count,
                         output_count,
                         response_idx,
+                        &smart_generator,
                     )
                     .await
                     {
@@ -336,6 +342,7 @@ impl MockReflectionProxy {
         let service_name = service_name.to_string();
         let method_name = method_name.to_string();
         let cache = self.cache.clone();
+        let smart_generator = Arc::clone(&self.smart_generator);
 
         // Spawn a task to handle generic bidirectional streaming
         tokio::spawn(async move {
@@ -360,6 +367,7 @@ impl MockReflectionProxy {
                     input_count,
                     output_count,
                     0,
+                    &smart_generator,
                 )
                 .await
                 {
@@ -418,6 +426,7 @@ impl MockReflectionProxy {
         input_sequence: usize,
         output_sequence: usize,
         response_index: usize,
+        smart_generator: &Arc<Mutex<SmartMockGenerator>>,
     ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
         debug!(
             "Creating bidirectional response message for {}.{} (input: {}, output: {}, index: {})",
@@ -437,6 +446,7 @@ impl MockReflectionProxy {
                 input_sequence,
                 output_sequence,
                 response_index,
+                smart_generator,
             );
 
             Ok(msg)
@@ -458,7 +468,7 @@ impl MockReflectionProxy {
         }
     }
 
-    /// Populate mock fields specifically for bidirectional streaming responses
+    /// Populate mock fields specifically for bidirectional streaming responses using smart generation
     fn populate_bidirectional_response_fields(
         msg: &mut DynamicMessage,
         service_name: &str,
@@ -466,117 +476,62 @@ impl MockReflectionProxy {
         input_sequence: usize,
         output_sequence: usize,
         response_index: usize,
+        smart_generator: &Arc<Mutex<SmartMockGenerator>>,
     ) {
         let descriptor = msg.descriptor();
 
-        // Try to populate common field patterns for bidirectional streaming responses
+        // Use smart generator for bidirectional streaming context
         for field in descriptor.fields() {
-            let field_name = field.name();
-            match field_name {
-                "message" | "msg" | "response" | "data" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        let value = format!(
-                            "Bidirectional response {} (input {}, index {}) from {}.{}",
-                            output_sequence,
-                            input_sequence,
-                            response_index,
-                            service_name,
-                            method_name
-                        );
-                        msg.set_field(&field, prost_reflect::Value::String(value));
-                    }
-                }
-                "sequence" | "seq" | "response_id" | "output_sequence" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(output_sequence as i32));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(output_sequence as i64));
-                    }
-                }
-                "input_sequence" | "request_id" | "input_id" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(input_sequence as i32));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(input_sequence as i64));
-                    }
-                }
-                "response_index" | "index" | "part" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(response_index as i32));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(response_index as i64));
-                    }
-                }
-                "timestamp" | "time" | "created_at" => {
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-
-                    if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(timestamp as i64));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(timestamp as i32));
-                    }
-                }
-                "service" | "service_name" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(
-                            &field,
-                            prost_reflect::Value::String(service_name.to_string()),
-                        );
-                    }
-                }
-                "method" | "method_name" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(
-                            &field,
-                            prost_reflect::Value::String(method_name.to_string()),
-                        );
-                    }
-                }
-                "is_final" | "final" | "last" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Bool) {
-                        // Mark as final if this is the last response for this input (index 1 when there are 2 responses)
-                        let is_final = response_index > 0;
-                        msg.set_field(&field, prost_reflect::Value::Bool(is_final));
-                    }
-                }
-                _ => {
-                    // For other fields, try to set reasonable defaults based on type
-                    match field.kind() {
-                        prost_reflect::Kind::String => {
-                            msg.set_field(
-                                &field,
-                                prost_reflect::Value::String(format!(
-                                    "bidirectional_{}",
-                                    field_name
-                                )),
-                            );
-                        }
-                        prost_reflect::Kind::Int32 => {
-                            msg.set_field(
-                                &field,
-                                prost_reflect::Value::I32(output_sequence as i32),
-                            );
-                        }
-                        prost_reflect::Kind::Int64 => {
-                            msg.set_field(
-                                &field,
-                                prost_reflect::Value::I64(output_sequence as i64),
-                            );
-                        }
-                        prost_reflect::Kind::Bool => {
-                            msg.set_field(
-                                &field,
-                                prost_reflect::Value::Bool(output_sequence % 2 == 0),
-                            );
-                        }
-                        _ => {
-                            // Skip complex types for now
+            if let Ok(mut generator) = smart_generator.lock() {
+                // Generate value with intelligent inference for bidirectional streaming
+                let value = generator.generate_value_for_field(&field, service_name, method_name, 0);
+                
+                // Override specific fields for bidirectional streaming context
+                let field_name = field.name();
+                match field_name {
+                    "sequence" | "seq" | "response_id" | "output_sequence" => {
+                        if matches!(field.kind(), prost_reflect::Kind::Int32) {
+                            msg.set_field(&field, prost_reflect::Value::I32(output_sequence as i32));
+                        } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
+                            msg.set_field(&field, prost_reflect::Value::I64(output_sequence as i64));
+                        } else {
+                            msg.set_field(&field, value);
                         }
                     }
+                    "input_sequence" | "request_id" | "input_id" => {
+                        if matches!(field.kind(), prost_reflect::Kind::Int32) {
+                            msg.set_field(&field, prost_reflect::Value::I32(input_sequence as i32));
+                        } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
+                            msg.set_field(&field, prost_reflect::Value::I64(input_sequence as i64));
+                        } else {
+                            msg.set_field(&field, value);
+                        }
+                    }
+                    "response_index" | "index" | "part" => {
+                        if matches!(field.kind(), prost_reflect::Kind::Int32) {
+                            msg.set_field(&field, prost_reflect::Value::I32(response_index as i32));
+                        } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
+                            msg.set_field(&field, prost_reflect::Value::I64(response_index as i64));
+                        } else {
+                            msg.set_field(&field, value);
+                        }
+                    }
+                    "is_final" | "final" | "last" => {
+                        if matches!(field.kind(), prost_reflect::Kind::Bool) {
+                            // Mark as final if this is the last response for this input
+                            let is_final = response_index > 0;
+                            msg.set_field(&field, prost_reflect::Value::Bool(is_final));
+                        } else {
+                            msg.set_field(&field, value);
+                        }
+                    }
+                    _ => {
+                        msg.set_field(&field, value);
+                    }
                 }
+            } else {
+                // Fallback if lock fails
+                Self::populate_field_fallback(msg, &field, output_sequence);
             }
         }
     }
@@ -685,6 +640,7 @@ impl MockReflectionProxy {
                 service_name,
                 method_name,
                 message_count,
+                &self.smart_generator,
             );
 
             Ok(Response::new(msg))
@@ -715,94 +671,41 @@ impl MockReflectionProxy {
         }
     }
 
-    /// Populate mock fields specifically for client streaming responses
+    /// Populate mock fields specifically for client streaming responses using smart generation
     fn populate_client_streaming_fields(
         msg: &mut DynamicMessage,
         service_name: &str,
         method_name: &str,
         message_count: usize,
+        smart_generator: &Arc<Mutex<SmartMockGenerator>>,
     ) {
         let descriptor = msg.descriptor();
 
-        // Try to populate common field patterns for client streaming responses
+        // Use smart generator for client streaming context
         for field in descriptor.fields() {
-            let field_name = field.name();
-            match field_name {
-                "message" | "msg" | "result" | "response" | "summary" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        let value = format!(
-                            "Processed {} messages from client streaming {}.{}",
-                            message_count, service_name, method_name
-                        );
-                        msg.set_field(&field, prost_reflect::Value::String(value));
-                    }
-                }
-                "count" | "message_count" | "total" | "processed" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(message_count as i32));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(message_count as i64));
-                    }
-                }
-                "timestamp" | "time" | "processed_at" => {
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-
-                    if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(timestamp as i64));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(timestamp as i32));
-                    }
-                }
-                "service" | "service_name" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(
-                            &field,
-                            prost_reflect::Value::String(service_name.to_string()),
-                        );
-                    }
-                }
-                "method" | "method_name" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(
-                            &field,
-                            prost_reflect::Value::String(method_name.to_string()),
-                        );
-                    }
-                }
-                "success" | "ok" | "status" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Bool) {
-                        msg.set_field(&field, prost_reflect::Value::Bool(true));
-                    }
-                }
-                _ => {
-                    // For other fields, try to set reasonable defaults based on type
-                    match field.kind() {
-                        prost_reflect::Kind::String => {
-                            msg.set_field(
-                                &field,
-                                prost_reflect::Value::String(format!(
-                                    "client_streaming_{}",
-                                    field_name
-                                )),
-                            );
-                        }
-                        prost_reflect::Kind::Int32 => {
+            if let Ok(mut generator) = smart_generator.lock() {
+                // Generate value with intelligent inference for client streaming
+                let value = generator.generate_value_for_field(&field, service_name, method_name, 0);
+                
+                // Override specific fields for client streaming context
+                let field_name = field.name();
+                match field_name {
+                    "count" | "message_count" | "total" | "processed" => {
+                        if matches!(field.kind(), prost_reflect::Kind::Int32) {
                             msg.set_field(&field, prost_reflect::Value::I32(message_count as i32));
-                        }
-                        prost_reflect::Kind::Int64 => {
+                        } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
                             msg.set_field(&field, prost_reflect::Value::I64(message_count as i64));
-                        }
-                        prost_reflect::Kind::Bool => {
-                            msg.set_field(&field, prost_reflect::Value::Bool(message_count > 0));
-                        }
-                        _ => {
-                            // Skip complex types for now
+                        } else {
+                            msg.set_field(&field, value);
                         }
                     }
+                    _ => {
+                        msg.set_field(&field, value);
+                    }
                 }
+            } else {
+                // Fallback if lock fails
+                Self::populate_field_fallback(msg, &field, message_count);
             }
         }
     }
@@ -821,6 +724,7 @@ impl MockReflectionProxy {
         let method_name = method_name.to_string();
 
         let cache = self.cache.clone();
+        let smart_generator = Arc::clone(&self.smart_generator);
 
         // Spawn a task to generate stream messages
         tokio::spawn(async move {
@@ -831,6 +735,7 @@ impl MockReflectionProxy {
                     &service_name,
                     &method_name,
                     i,
+                    &smart_generator,
                 )
                 .await
                 {
@@ -879,6 +784,7 @@ impl MockReflectionProxy {
         let method_name = method_name.to_string();
 
         let cache = self.cache.clone();
+        let smart_generator = Arc::clone(&self.smart_generator);
 
         // Spawn a task to generate generic stream messages
         tokio::spawn(async move {
@@ -889,6 +795,7 @@ impl MockReflectionProxy {
                     &service_name,
                     &method_name,
                     i,
+                    &smart_generator,
                 )
                 .await
                 {
@@ -936,6 +843,7 @@ impl MockReflectionProxy {
         service_name: &str,
         method_name: &str,
         index: usize,
+        smart_generator: &Arc<Mutex<SmartMockGenerator>>,
     ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
         // Try to get the proper response message descriptor from cache
         if let Ok(method_desc) = cache.get_method(service_name, method_name).await {
@@ -944,7 +852,7 @@ impl MockReflectionProxy {
             let mut msg = DynamicMessage::new(output_desc.clone());
 
             // Try to populate some common fields if they exist
-            Self::populate_mock_fields(&mut msg, service_name, method_name, index);
+            Self::populate_mock_fields(&mut msg, service_name, method_name, index, smart_generator);
 
             return Ok(msg);
         }
@@ -964,86 +872,45 @@ impl MockReflectionProxy {
         Self::create_placeholder_dynamic_message(&mock_data)
     }
 
-    /// Populate mock fields in a DynamicMessage
+    /// Populate mock fields in a DynamicMessage using smart generation
     fn populate_mock_fields(
         msg: &mut DynamicMessage,
         service_name: &str,
         method_name: &str,
         index: usize,
+        smart_generator: &Arc<Mutex<SmartMockGenerator>>,
     ) {
         let descriptor = msg.descriptor();
 
-        // Try to populate common field patterns
+        // Use smart generator for all fields
         for field in descriptor.fields() {
-            let field_name = field.name();
-            match field_name {
-                "message" | "msg" | "text" | "content" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        let value = format!(
-                            "Stream message {} from {}.{}",
-                            index, service_name, method_name
-                        );
-                        msg.set_field(&field, prost_reflect::Value::String(value));
-                    }
-                }
-                "id" | "index" | "sequence" | "seq" => {
-                    if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(index as i32));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(index as i64));
-                    }
-                }
-                "timestamp" | "time" | "created_at" => {
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
+            if let Ok(mut generator) = smart_generator.lock() {
+                let value = generator.generate_value_for_field(&field, service_name, method_name, 0);
+                msg.set_field(&field, value);
+            } else {
+                // Fallback to basic generation if lock fails
+                Self::populate_field_fallback(msg, &field, index);
+            }
+        }
+    }
 
-                    if matches!(field.kind(), prost_reflect::Kind::Int64) {
-                        msg.set_field(&field, prost_reflect::Value::I64(timestamp as i64));
-                    } else if matches!(field.kind(), prost_reflect::Kind::Int32) {
-                        msg.set_field(&field, prost_reflect::Value::I32(timestamp as i32));
-                    }
-                }
-                "service" | "service_name" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(
-                            &field,
-                            prost_reflect::Value::String(service_name.to_string()),
-                        );
-                    }
-                }
-                "method" | "method_name" => {
-                    if matches!(field.kind(), prost_reflect::Kind::String) {
-                        msg.set_field(
-                            &field,
-                            prost_reflect::Value::String(method_name.to_string()),
-                        );
-                    }
-                }
-                _ => {
-                    // For other fields, try to set reasonable defaults based on type
-                    match field.kind() {
-                        prost_reflect::Kind::String => {
-                            msg.set_field(
-                                &field,
-                                prost_reflect::Value::String(format!("mock_{}", field_name)),
-                            );
-                        }
-                        prost_reflect::Kind::Int32 => {
-                            msg.set_field(&field, prost_reflect::Value::I32(index as i32));
-                        }
-                        prost_reflect::Kind::Int64 => {
-                            msg.set_field(&field, prost_reflect::Value::I64(index as i64));
-                        }
-                        prost_reflect::Kind::Bool => {
-                            msg.set_field(&field, prost_reflect::Value::Bool(index % 2 == 0));
-                        }
-                        _ => {
-                            // Skip complex types for now
-                        }
-                    }
-                }
+    /// Fallback field population when smart generator is unavailable
+    fn populate_field_fallback(msg: &mut DynamicMessage, field: &prost_reflect::FieldDescriptor, index: usize) {
+        match field.kind() {
+            prost_reflect::Kind::String => {
+                msg.set_field(field, prost_reflect::Value::String(format!("mock_{}", field.name())));
+            }
+            prost_reflect::Kind::Int32 => {
+                msg.set_field(field, prost_reflect::Value::I32(index as i32));
+            }
+            prost_reflect::Kind::Int64 => {
+                msg.set_field(field, prost_reflect::Value::I64(index as i64));
+            }
+            prost_reflect::Kind::Bool => {
+                msg.set_field(field, prost_reflect::Value::Bool(index % 2 == 0));
+            }
+            _ => {
+                // Skip complex types for now
             }
         }
     }
