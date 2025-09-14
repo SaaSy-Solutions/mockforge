@@ -9,10 +9,14 @@ pub mod config;
 pub mod connection_pool;
 pub mod descriptor;
 pub mod error_handling;
+pub mod integration_tests;
 pub mod metrics;
 pub mod mock_proxy;
 pub mod proxy;
+pub mod rag_synthesis;
+pub mod schema_graph;
 pub mod smart_mock_generator;
+pub mod validation_framework;
 
 pub use client::ReflectionClient;
 pub use config::ProxyConfig;

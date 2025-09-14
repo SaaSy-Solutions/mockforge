@@ -5,7 +5,8 @@
 //! to generate realistic test data.
 
 use prost_reflect::{FieldDescriptor, Kind, MessageDescriptor, Value};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -29,6 +30,10 @@ pub struct SmartMockConfig {
     pub service_profiles: HashMap<String, ServiceProfile>,
     /// Maximum recursion depth for nested messages
     pub max_depth: usize,
+    /// Deterministic seed for reproducible data generation
+    pub seed: Option<u64>,
+    /// Whether to use deterministic generation for stable fixtures
+    pub deterministic: bool,
 }
 
 impl Default for SmartMockConfig {
@@ -39,6 +44,8 @@ impl Default for SmartMockConfig {
             field_overrides: HashMap::new(),
             service_profiles: HashMap::new(),
             max_depth: 5,
+            seed: None,
+            deterministic: false,
         }
     }
 }
@@ -77,6 +84,8 @@ pub struct SmartMockGenerator {
     /// Enhanced faker for realistic data generation
     #[cfg(feature = "data-faker")]
     faker: Option<EnhancedFaker>,
+    /// Seeded random number generator for deterministic generation
+    rng: Option<StdRng>,
 }
 
 impl SmartMockGenerator {
@@ -89,11 +98,56 @@ impl SmartMockGenerator {
             None
         };
 
+        // Initialize seeded RNG if deterministic mode is enabled
+        let rng = if config.deterministic {
+            let seed = config.seed.unwrap_or(42); // Default seed if none provided
+            Some(StdRng::seed_from_u64(seed))
+        } else {
+            None
+        };
+
         Self {
             config,
             sequence_counter: 1,
             #[cfg(feature = "data-faker")]
             faker,
+            rng,
+        }
+    }
+
+    /// Create a new deterministic generator with a specific seed
+    pub fn new_with_seed(mut config: SmartMockConfig, seed: u64) -> Self {
+        config.seed = Some(seed);
+        config.deterministic = true;
+        Self::new(config)
+    }
+
+    /// Reset the generator to its initial state (useful for reproducible tests)
+    pub fn reset(&mut self) {
+        self.sequence_counter = 1;
+        if let Some(seed) = self.config.seed {
+            self.rng = Some(StdRng::seed_from_u64(seed));
+        }
+    }
+
+    /// Generate a deterministic random number
+    fn next_random<T>(&mut self) -> T
+    where
+        rand::distributions::Standard: rand::distributions::Distribution<T>,
+    {
+        if let Some(ref mut rng) = self.rng {
+            rng.gen()
+        } else {
+            rand::random()
+        }
+    }
+
+    /// Generate a deterministic random number within a range
+    fn next_random_range(&mut self, min: i64, max: i64) -> i64 {
+        if let Some(ref mut rng) = self.rng {
+            rng.gen_range(min..=max)
+        } else {
+            rand::thread_rng().gen_range(min..=max)
         }
     }
 
@@ -229,16 +283,16 @@ impl SmartMockGenerator {
                     
                     // Quantity/count fields
                     name if name.contains("count") || name.contains("quantity") => {
-                        (rand::thread_rng().gen::<u32>() % 100 + 1) as u64
+                        (self.next_random::<u32>() % 100 + 1) as u64
                     }
-                    name if name.contains("age") => (rand::thread_rng().gen::<u32>() % 80 + 18) as u64,
-                    name if name.contains("year") => (rand::thread_rng().gen::<u32>() % 30 + 1995) as u64,
+                    name if name.contains("age") => (self.next_random::<u32>() % 80 + 18) as u64,
+                    name if name.contains("year") => (self.next_random::<u32>() % 30 + 1995) as u64,
                     
                     // Size/dimension fields
                     name if name.contains("width") || name.contains("height") || name.contains("length") => {
-                        (rand::thread_rng().gen::<u32>() % 1000 + 100) as u64
+                        (self.next_random::<u32>() % 1000 + 100) as u64
                     }
-                    name if name.contains("weight") => (rand::thread_rng().gen::<u32>() % 1000 + 1) as u64,
+                    name if name.contains("weight") => (self.next_random::<u32>() % 1000 + 1) as u64,
                     
                     _ => return None,
                 };
@@ -252,13 +306,13 @@ impl SmartMockGenerator {
             Kind::Double | Kind::Float => {
                 let mock_value = match field_name {
                     name if name.contains("price") || name.contains("cost") => {
-                        rand::thread_rng().gen::<f64>() * 1000.0 + 10.0
+                        self.next_random::<f64>() * 1000.0 + 10.0
                     }
                     name if name.contains("rate") || name.contains("percentage") => {
-                        rand::thread_rng().gen::<f64>() * 100.0
+                        self.next_random::<f64>() * 100.0
                     }
-                    name if name.contains("latitude") => rand::thread_rng().gen::<f64>() * 180.0 - 90.0,
-                    name if name.contains("longitude") => rand::thread_rng().gen::<f64>() * 360.0 - 180.0,
+                    name if name.contains("latitude") => self.next_random::<f64>() * 180.0 - 90.0,
+                    name if name.contains("longitude") => self.next_random::<f64>() * 360.0 - 180.0,
                     _ => return None,
                 };
                 
@@ -273,7 +327,7 @@ impl SmartMockGenerator {
                     name if name.contains("active") || name.contains("enabled") => true,
                     name if name.contains("verified") || name.contains("confirmed") => true,
                     name if name.contains("deleted") || name.contains("archived") => false,
-                    _ => rand::thread_rng().gen::<bool>(),
+                    _ => self.next_random::<bool>(),
                 };
                 Some(Value::Bool(mock_value))
             }
@@ -431,8 +485,8 @@ impl SmartMockGenerator {
             Kind::Sfixed32 => Value::I32(self.next_sequence() as i32),
             Kind::Sfixed64 => Value::I64(self.next_sequence() as i64),
             Kind::Bool => Value::Bool(self.next_sequence() % 2 == 0),
-            Kind::Double => Value::F64(rand::thread_rng().gen::<f64>() * 100.0),
-            Kind::Float => Value::F32(rand::thread_rng().gen::<f32>() * 100.0),
+            Kind::Double => Value::F64(self.next_random::<f64>() * 100.0),
+            Kind::Float => Value::F32(self.next_random::<f32>() * 100.0),
             Kind::Bytes => Value::Bytes(format!("bytes_{}", self.next_sequence()).into_bytes().into()),
             Kind::Enum(enum_descriptor) => {
                 // Use the first enum value, or 0 if no values defined
@@ -495,26 +549,33 @@ impl SmartMockGenerator {
     }
 
     /// Generate random string
-    fn generate_random_string(&self, length: usize) -> String {
+    pub fn generate_random_string(&mut self, length: usize) -> String {
         use rand::distributions::Alphanumeric;
         use rand::{thread_rng, Rng};
         
-        thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(length)
-            .map(char::from)
-            .collect()
+        if let Some(ref mut rng) = self.rng {
+            rng.sample_iter(&Alphanumeric)
+                .take(length)
+                .map(char::from)
+                .collect()
+        } else {
+            thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(length)
+                .map(char::from)
+                .collect()
+        }
     }
 
     /// Generate a UUID-like string
-    fn generate_uuid(&self) -> String {
+    pub fn generate_uuid(&mut self) -> String {
         format!(
             "{:08x}-{:04x}-{:04x}-{:04x}-{:12x}",
-            rand::thread_rng().gen::<u32>(),
-            rand::thread_rng().gen::<u16>(),
-            rand::thread_rng().gen::<u16>(),
-            rand::thread_rng().gen::<u16>(),
-            rand::thread_rng().gen::<u64>() & 0xffffffffffff,
+            self.next_random::<u32>(),
+            self.next_random::<u16>(),
+            self.next_random::<u16>(),
+            self.next_random::<u16>(),
+            self.next_random::<u64>() & 0xffffffffffff,
         )
     }
 
@@ -557,11 +618,119 @@ mod tests {
     #[test]
     fn test_field_name_inference() {
         let config = SmartMockConfig::default();
-        let generator = SmartMockGenerator::new(config);
+        let mut generator = SmartMockGenerator::new(config);
 
         // Test email inference - we'd need actual field descriptors for full testing
         // This is a unit test placeholder
         assert!(generator.generate_random_string(10).len() == 10);
+    }
+
+    #[test]
+    fn test_deterministic_seeding() {
+        // Create two generators with the same seed
+        let config1 = SmartMockConfig {
+            seed: Some(12345),
+            deterministic: true,
+            ..Default::default()
+        };
+        let config2 = SmartMockConfig {
+            seed: Some(12345),
+            deterministic: true,
+            ..Default::default()
+        };
+        
+        let mut gen1 = SmartMockGenerator::new(config1);
+        let mut gen2 = SmartMockGenerator::new(config2);
+        
+        // Generate same values with same seed
+        assert_eq!(gen1.generate_uuid(), gen2.generate_uuid());
+        assert_eq!(gen1.generate_random_string(10), gen2.generate_random_string(10));
+        
+        // Test that different seeds produce different values
+        let config3 = SmartMockConfig {
+            seed: Some(54321),
+            deterministic: true,
+            ..Default::default()
+        };
+        let mut gen3 = SmartMockGenerator::new(config3);
+        
+        // Reset first generator
+        gen1.reset();
+        gen3.reset();
+        
+        // Should produce different values with different seeds
+        assert_ne!(gen1.generate_uuid(), gen3.generate_uuid());
+    }
+    
+    #[test]
+    fn test_new_with_seed() {
+        let config = SmartMockConfig::default();
+        let mut gen1 = SmartMockGenerator::new_with_seed(config.clone(), 999);
+        let mut gen2 = SmartMockGenerator::new_with_seed(config, 999);
+        
+        // Both should be deterministic and produce same results
+        assert!(gen1.config.deterministic);
+        assert!(gen2.config.deterministic);
+        assert_eq!(gen1.config.seed, Some(999));
+        assert_eq!(gen2.config.seed, Some(999));
+        
+        let uuid1 = gen1.generate_uuid();
+        let uuid2 = gen2.generate_uuid();
+        assert_eq!(uuid1, uuid2);
+    }
+    
+    #[test]
+    fn test_generator_reset() {
+        let mut config = SmartMockConfig::default();
+        config.seed = Some(777);
+        config.deterministic = true;
+        
+        let mut generator = SmartMockGenerator::new(config);
+        
+        // Generate some values
+        let uuid1 = generator.generate_uuid();
+        let seq1 = generator.next_sequence();
+        let seq2 = generator.next_sequence();
+        
+        assert_eq!(seq1, 1);
+        assert_eq!(seq2, 2);
+        
+        // Reset and verify we get same values again
+        generator.reset();
+        let uuid2 = generator.generate_uuid();
+        let seq3 = generator.next_sequence();
+        let seq4 = generator.next_sequence();
+        
+        assert_eq!(uuid1, uuid2);  // Same UUID after reset
+        assert_eq!(seq3, 1);       // Sequence counter reset
+        assert_eq!(seq4, 2);
+    }
+    
+    #[test]
+    fn test_deterministic_vs_non_deterministic() {
+        // Non-deterministic generator
+        let mut gen_random = SmartMockGenerator::new(SmartMockConfig::default());
+        
+        // Deterministic generator
+        let mut gen_deterministic = SmartMockGenerator::new_with_seed(
+            SmartMockConfig::default(),
+            42
+        );
+        
+        // Generate multiple UUIDs - deterministic should be repeatable
+        let det_uuid1 = gen_deterministic.generate_uuid();
+        let det_uuid2 = gen_deterministic.generate_uuid();
+        
+        gen_deterministic.reset();
+        let det_uuid1_repeat = gen_deterministic.generate_uuid();
+        let det_uuid2_repeat = gen_deterministic.generate_uuid();
+        
+        // Deterministic should be the same after reset
+        assert_eq!(det_uuid1, det_uuid1_repeat);
+        assert_eq!(det_uuid2, det_uuid2_repeat);
+        
+        // Just verify random generator works (can't test randomness reliably)
+        let _random_uuid = gen_random.generate_uuid();
     }
 
     #[cfg(feature = "data-faker")]
