@@ -17,11 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.rust == 'nightly' }}
     env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
-      SCCACHE_CACHE_SIZE: "2G"
       CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: "2G"
     strategy:
       fail-fast: false
       matrix:
@@ -43,8 +41,22 @@ jobs:
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-    - name: Setup sccache (GHA backend)
-      uses: mozilla-actions/sccache-action@v0.0.5
+    - name: Install sccache
+      run: |
+        SCCACHE_VERSION=0.10.0
+        SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        curl -L "$SCCACHE_URL" | tar xz
+        sudo mv sccache-*/sccache /usr/local/bin/
+        sccache --version
+
+    - name: Cache sccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/sccache
+        key: sccache-${{ matrix.rust }}-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          sccache-${{ matrix.rust }}-${{ runner.os }}-
+          sccache-${{ matrix.rust }}-
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -70,10 +82,6 @@ jobs:
     - name: Check documentation
       run: cargo doc --workspace --no-deps
       if: matrix.rust == 'stable'
-
-    - name: sccache stats
-      if: always()
-      run: sccache --show-stats || true
 
   security-audit:
     name: Security Audit
@@ -128,11 +136,9 @@ jobs:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
     env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
-      SCCACHE_CACHE_SIZE: "2G"
       CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
@@ -145,18 +151,27 @@ jobs:
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-    - name: Setup sccache (GHA backend)
-      uses: mozilla-actions/sccache-action@v0.0.5
+    - name: Install sccache
+      run: |
+        SCCACHE_VERSION=0.10.0
+        SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+        curl -L "$SCCACHE_URL" | tar xz
+        sudo mv sccache-*/sccache /usr/local/bin/
+        sccache --version
+
+    - name: Cache sccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/sccache
+        key: msrv-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          msrv-sccache-${{ runner.os }}-
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
     - name: Check MSRV compatibility
       run: cargo check --workspace
-
-    - name: sccache stats
-      if: always()
-      run: sccache --show-stats || true
 
   typos:
     name: Spell Check
