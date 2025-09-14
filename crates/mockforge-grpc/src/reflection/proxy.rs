@@ -194,8 +194,7 @@ impl ReflectionProxy {
         let method_name = method.name();
 
         // Create a mock response based on the method
-        let mock_response =
-            self.generate_mock_response(service_name, method_name, &method).await?;
+        let mock_response = self.generate_mock_response(service_name, method_name, &method).await?;
 
         // Create response with mock data and preserve metadata
         let mut response = Response::new(mock_response);
