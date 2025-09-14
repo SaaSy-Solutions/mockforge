@@ -12,6 +12,7 @@ pub mod error_handling;
 pub mod metrics;
 pub mod mock_proxy;
 pub mod proxy;
+pub mod smart_mock_generator;
 
 pub use client::ReflectionClient;
 pub use config::ProxyConfig;

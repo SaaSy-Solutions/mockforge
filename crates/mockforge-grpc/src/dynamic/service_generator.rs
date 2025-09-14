@@ -2,15 +2,80 @@
 //!
 //! This module generates actual gRPC service implementations from parsed proto definitions.
 
-use crate::dynamic::proto_parser::ProtoService;
+use crate::dynamic::proto_parser::{ProtoService, ProtoParser};
+use crate::reflection::smart_mock_generator::{SmartMockGenerator, SmartMockConfig};
 use mockforge_core::latency::LatencyInjector;
+use prost_reflect::DescriptorPool;
 use prost_types::Any;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{debug, info, warn};
+
+/// Service factory for creating enhanced gRPC services from proto files
+pub struct EnhancedServiceFactory;
+
+impl EnhancedServiceFactory {
+    /// Create services from a proto directory with enhanced capabilities
+    pub async fn create_services_from_proto_dir(
+        proto_dir: &str,
+        latency_injector: Option<LatencyInjector>,
+        smart_config: SmartMockConfig,
+    ) -> Result<Vec<DynamicGrpcService>, Box<dyn std::error::Error + Send + Sync>> {
+        info!("Creating enhanced services from proto directory: {}", proto_dir);
+
+        // Parse proto files with full protoc support
+        let mut parser = ProtoParser::new();
+        parser.parse_directory(proto_dir).await?;
+
+        let mut services = Vec::new();
+
+        // Store services info before consuming parser
+        let services_info: Vec<(String, ProtoService)> = parser.services().iter()
+            .map(|(name, service)| (name.clone(), service.clone()))
+            .collect();
+        
+        // Create enhanced services for each parsed service
+        for (service_name, proto_service) in services_info {
+            debug!("Creating enhanced service: {}", service_name);
+
+            // Create a new parser instance for each service (we'll improve this later)
+            let mut service_parser = ProtoParser::new();
+            let _ = service_parser.parse_directory(proto_dir).await; // Re-parse for now
+
+            let service = DynamicGrpcService::new_enhanced(
+                proto_service,
+                latency_injector.clone(),
+                Some(service_parser),
+                smart_config.clone(),
+            );
+
+            services.push(service);
+        }
+
+        info!("Created {} enhanced services", services.len());
+        Ok(services)
+    }
+
+    /// Create a single service from proto service definition
+    pub fn create_service_from_proto(
+        proto_service: ProtoService,
+        latency_injector: Option<LatencyInjector>,
+        proto_parser: Option<ProtoParser>,
+        smart_config: SmartMockConfig,
+    ) -> DynamicGrpcService {
+        if proto_parser.is_some() {
+            info!("Creating enhanced service: {}", proto_service.name);
+            DynamicGrpcService::new_enhanced(proto_service, latency_injector, proto_parser, smart_config)
+        } else {
+            info!("Creating basic service: {}", proto_service.name);
+            DynamicGrpcService::new(proto_service, latency_injector)
+        }
+    }
+}
 
 /// A dynamically generated gRPC service
 pub struct DynamicGrpcService {
@@ -20,6 +85,10 @@ pub struct DynamicGrpcService {
     latency_injector: Option<LatencyInjector>,
     /// Mock responses for each method
     mock_responses: HashMap<String, MockResponse>,
+    /// Proto parser with descriptor pool for advanced type support
+    proto_parser: Option<ProtoParser>,
+    /// Smart mock generator for intelligent data generation
+    smart_generator: Arc<Mutex<SmartMockGenerator>>,
 }
 
 /// Configuration for mock responses
@@ -50,6 +119,42 @@ impl DynamicGrpcService {
             service,
             latency_injector,
             mock_responses,
+            proto_parser: None,
+            smart_generator: Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default()))),
+        }
+    }
+
+    /// Create a new enhanced dynamic gRPC service with proto parser and smart generator
+    pub fn new_enhanced(
+        service: ProtoService,
+        latency_injector: Option<LatencyInjector>,
+        proto_parser: Option<ProtoParser>,
+        smart_config: SmartMockConfig,
+    ) -> Self {
+        let mut mock_responses = HashMap::new();
+        let smart_generator = Arc::new(Mutex::new(SmartMockGenerator::new(smart_config)));
+
+        // Generate enhanced mock responses for each method using smart generator
+        for method in &service.methods {
+            let response = if proto_parser.is_some() {
+                Self::generate_enhanced_mock_response(
+                    &method.name,
+                    &method.output_type,
+                    &service.name,
+                    &smart_generator,
+                )
+            } else {
+                Self::generate_mock_response(&method.name, &method.output_type)
+            };
+            mock_responses.insert(method.name.clone(), response);
+        }
+
+        Self {
+            service,
+            latency_injector,
+            mock_responses,
+            proto_parser,
+            smart_generator,
         }
     }
 
@@ -75,6 +180,103 @@ impl DynamicGrpcService {
             error_message: None,
             error_code: None,
         }
+    }
+
+    /// Generate an enhanced mock response using smart generator
+    fn generate_enhanced_mock_response(
+        method_name: &str,
+        output_type: &str,
+        service_name: &str,
+        smart_generator: &Arc<Mutex<SmartMockGenerator>>,
+    ) -> MockResponse {
+        debug!("Generating enhanced mock response for {}.{}", service_name, method_name);
+
+        // Use smart generator for more realistic responses
+        let response_json = if let Ok(mut generator) = smart_generator.lock() {
+            // Create sample fields based on common gRPC response patterns
+            let mut fields = HashMap::new();
+            
+            // Add common response fields based on method name
+            match method_name.to_lowercase().as_str() {
+                name if name.contains("hello") || name.contains("greet") => {
+                    fields.insert("message".to_string(), "greeting".to_string());
+                    fields.insert("name".to_string(), "user_name".to_string());
+                    fields.insert("timestamp".to_string(), "timestamp".to_string());
+                }
+                name if name.contains("list") || name.contains("get") => {
+                    fields.insert("id".to_string(), "identifier".to_string());
+                    fields.insert("data".to_string(), "response_data".to_string());
+                    fields.insert("count".to_string(), "total_count".to_string());
+                }
+                name if name.contains("create") || name.contains("add") => {
+                    fields.insert("id".to_string(), "new_id".to_string());
+                    fields.insert("status".to_string(), "status".to_string());
+                    fields.insert("message".to_string(), "success_message".to_string());
+                }
+                name if name.contains("update") || name.contains("modify") => {
+                    fields.insert("updated".to_string(), "updated_fields".to_string());
+                    fields.insert("version".to_string(), "version_number".to_string());
+                    fields.insert("status".to_string(), "status".to_string());
+                }
+                name if name.contains("delete") || name.contains("remove") => {
+                    fields.insert("deleted".to_string(), "deleted_status".to_string());
+                    fields.insert("message".to_string(), "confirmation_message".to_string());
+                }
+                _ => {
+                    // Generic response structure
+                    fields.insert("result".to_string(), "result_data".to_string());
+                    fields.insert("status".to_string(), "status".to_string());
+                    fields.insert("message".to_string(), "response_message".to_string());
+                }
+            }
+
+            // Generate JSON response using field patterns
+            let mut json_parts = Vec::new();
+            for (field_name, field_type) in fields {
+                let mock_value = match field_type.as_str() {
+                    "greeting" => format!("\"Hello from enhanced MockForge service {}!\"", service_name),
+                    "user_name" => "\"MockForge User\"".to_string(),
+                    "timestamp" => format!("\"{}\"", std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()),
+                    "identifier" | "new_id" => format!("{}", generator.next_sequence()),
+                    "total_count" => "42".to_string(),
+                    "status" => "\"success\"".to_string(),
+                    "success_message" => format!("\"Successfully processed {} request\"", method_name),
+                    "confirmation_message" => format!("\"Operation {} completed successfully\"", method_name),
+                    "version_number" => "\"1.0.0\"".to_string(),
+                    "updated_status" | "deleted_status" => "true".to_string(),
+                    _ => format!("\"Enhanced mock data for {}\"", field_type),
+                };
+                json_parts.push(format!("\"{}\": {}", field_name, mock_value));
+            }
+
+            format!("{{{}}}", json_parts.join(", "))
+        } else {
+            // Fallback to basic response if generator lock fails
+            format!(
+                r#"{{"result": "Enhanced mock response for {}", "type": "{}"}}"#,
+                method_name, output_type
+            )
+        };
+
+        MockResponse {
+            response_json,
+            simulate_error: false,
+            error_message: None,
+            error_code: None,
+        }
+    }
+
+    /// Get the descriptor pool if available
+    pub fn descriptor_pool(&self) -> Option<&DescriptorPool> {
+        self.proto_parser.as_ref().map(|parser| parser.pool())
+    }
+
+    /// Get the smart generator for external use
+    pub fn smart_generator(&self) -> &Arc<Mutex<SmartMockGenerator>> {
+        &self.smart_generator
     }
 
     /// Handle a unary request

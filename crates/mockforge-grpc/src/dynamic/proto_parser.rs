@@ -6,8 +6,10 @@
 use prost_reflect::DescriptorPool;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tracing::{debug, error, info, warn};
+use tempfile::TempDir;
 
 /// A parsed proto service definition
 #[derive(Debug, Clone)]
@@ -43,6 +45,10 @@ pub struct ProtoParser {
     pool: DescriptorPool,
     /// Map of service names to their definitions
     services: HashMap<String, ProtoService>,
+    /// Include paths for proto compilation
+    include_paths: Vec<PathBuf>,
+    /// Temporary directory for compilation artifacts
+    temp_dir: Option<TempDir>,
 }
 
 impl ProtoParser {
@@ -51,6 +57,18 @@ impl ProtoParser {
         Self {
             pool: DescriptorPool::new(),
             services: HashMap::new(),
+            include_paths: vec![],
+            temp_dir: None,
+        }
+    }
+
+    /// Create a new proto parser with include paths
+    pub fn with_include_paths(include_paths: Vec<PathBuf>) -> Self {
+        Self {
+            pool: DescriptorPool::new(),
+            services: HashMap::new(),
+            include_paths,
+            temp_dir: None,
         }
     }
 
@@ -83,8 +101,12 @@ impl ProtoParser {
             }
         }
 
-        // Extract services from the descriptor pool
-        self.extract_services()?;
+        // Extract services from the descriptor pool only if there are any services in the pool
+        if self.pool.services().count() > 0 {
+            self.extract_services()?;
+        } else {
+            debug!("No services found in descriptor pool, keeping mock services");
+        }
 
         info!("Successfully parsed {} services", self.services.len());
         Ok(())
@@ -115,27 +137,106 @@ impl ProtoParser {
         Ok(proto_files)
     }
 
-    /// Parse a single proto file
+    /// Parse a single proto file using protoc compilation
     async fn parse_proto_file(
         &mut self,
         proto_file: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         debug!("Parsing proto file: {}", proto_file);
 
-        // For now, we'll use a simple approach that compiles the proto files
-        // and then reads the generated descriptor set
-        // In a full implementation, we would use prost-build or similar
+        // Create temporary directory for compilation artifacts if not exists
+        if self.temp_dir.is_none() {
+            self.temp_dir = Some(TempDir::new()?);
+        }
 
-        // This is a placeholder - in reality, we would need to:
-        // 1. Compile the proto files using prost-build
-        // 2. Read the generated descriptor set
-        // 3. Parse the descriptor set into our internal format
+        let temp_dir = self.temp_dir.as_ref().unwrap();
+        let descriptor_path = temp_dir.path().join("descriptors.bin");
 
-        // For now, we'll create a mock service based on the greeter.proto
+        // Try real protoc compilation first
+        match self.compile_with_protoc(proto_file, &descriptor_path).await {
+            Ok(()) => {
+                // Load the compiled descriptor set into the pool
+                let descriptor_bytes = fs::read(&descriptor_path)?;
+                match self.pool.decode_file_descriptor_set(&*descriptor_bytes) {
+                    Ok(()) => {
+                        info!("Successfully compiled and loaded proto file: {}", proto_file);
+                        // Extract services from the descriptor pool if successful
+                        if self.pool.services().count() > 0 {
+                            self.extract_services()?;
+                        }
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        warn!("Failed to decode descriptor set, falling back to mock: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to compile with protoc, falling back to mock: {}", e);
+            }
+        }
+
+        // Fallback to mock service for testing
         if proto_file.contains("gretter.proto") || proto_file.contains("greeter.proto") {
+            debug!("Adding mock greeter service for {}", proto_file);
             self.add_mock_greeter_service();
         }
 
+        Ok(())
+    }
+
+    /// Compile proto file using protoc
+    async fn compile_with_protoc(
+        &self,
+        proto_file: &str,
+        output_path: &Path,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        debug!("Compiling proto file with protoc: {}", proto_file);
+
+        // Build protoc command
+        let mut cmd = Command::new("protoc");
+        
+        // Add include paths
+        for include_path in &self.include_paths {
+            cmd.arg("-I").arg(include_path);
+        }
+        
+        // Add proto file's directory as include path
+        if let Some(parent_dir) = Path::new(proto_file).parent() {
+            cmd.arg("-I").arg(parent_dir);
+        }
+        
+        // Add well-known types include path (common protoc installation paths)
+        let well_known_paths = [
+            "/usr/local/include",
+            "/usr/include", 
+            "/opt/homebrew/include",
+        ];
+        
+        for path in &well_known_paths {
+            if Path::new(path).exists() {
+                cmd.arg("-I").arg(path);
+            }
+        }
+
+        // Set output path and format
+        cmd.arg("--descriptor_set_out")
+            .arg(output_path)
+            .arg("--include_imports")
+            .arg("--include_source_info")
+            .arg(proto_file);
+
+        debug!("Running protoc command: {:?}", cmd);
+
+        // Execute protoc
+        let output = cmd.output()?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("protoc failed: {}", stderr).into());
+        }
+
+        info!("Successfully compiled proto file with protoc: {}", proto_file);
         Ok(())
     }
 
@@ -182,8 +283,52 @@ impl ProtoParser {
 
     /// Extract services from the descriptor pool
     fn extract_services(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // This would extract services from the actual descriptor pool
-        // For now, we're using the mock service
+        debug!("Extracting services from descriptor pool");
+
+        // Clear existing services (except mock ones)
+        let mock_services: HashMap<String, ProtoService> = self.services
+            .drain()
+            .filter(|(name, _)| name.contains("mockforge.greeter"))
+            .collect();
+
+        self.services = mock_services;
+
+        // Extract services from the descriptor pool
+        for service_descriptor in self.pool.services() {
+            let service_name = service_descriptor.full_name().to_string();
+            let package_name = service_descriptor.parent_file().package_name().to_string();
+            let short_name = service_descriptor.name().to_string();
+
+            debug!("Found service: {} in package: {}", service_name, package_name);
+
+            // Extract methods for this service
+            let mut methods = Vec::new();
+            for method_descriptor in service_descriptor.methods() {
+                let method = ProtoMethod {
+                    name: method_descriptor.name().to_string(),
+                    input_type: method_descriptor.input().full_name().to_string(),
+                    output_type: method_descriptor.output().full_name().to_string(),
+                    client_streaming: method_descriptor.is_client_streaming(),
+                    server_streaming: method_descriptor.is_server_streaming(),
+                };
+                
+                debug!("  Found method: {} ({} -> {})", 
+                    method.name, method.input_type, method.output_type);
+                
+                methods.push(method);
+            }
+
+            let service = ProtoService {
+                name: service_name.clone(),
+                package: package_name,
+                short_name,
+                methods,
+            };
+
+            self.services.insert(service_name, service);
+        }
+
+        info!("Extracted {} services from descriptor pool", self.services.len());
         Ok(())
     }
 
