@@ -1,6 +1,7 @@
 use axum::Router;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
+use std::net::SocketAddr;
 
 #[tokio::test]
 async fn returns_202_when_present() {
@@ -19,7 +20,11 @@ async fn returns_202_when_present() {
             .await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let server = tokio::spawn(async move { 
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap() 
+    });
     let client = reqwest::Client::new();
     let url = format!("http://{}/accept", addr);
     let res = client.get(&url).send().await.unwrap();
@@ -44,7 +49,11 @@ async fn returns_204_with_empty_body() {
             .await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let server = tokio::spawn(async move { 
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap() 
+    });
     let client = reqwest::Client::new();
     let url = format!("http://{}/nocontent", addr);
     let res = client.get(&url).send().await.unwrap();

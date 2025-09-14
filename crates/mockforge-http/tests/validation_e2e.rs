@@ -33,7 +33,11 @@ async fn toggling_validation_mode_runtime() {
     // Bind on random port
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let server = tokio::spawn(async move { 
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap() 
+    });
 
     // Invalid request should 400 under enforce
     let client = reqwest::Client::new();
