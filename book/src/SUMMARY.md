@@ -17,6 +17,7 @@
 - [gRPC Mocking](user-guide/grpc-mocking.md)
   - [Protocol Buffers](user-guide/grpc-mocking/protobuf.md)
   - [Streaming](user-guide/grpc-mocking/streaming.md)
+  - [Advanced Data Synthesis](user-guide/grpc-mocking/advanced-data-synthesis.md)
 - [WebSocket Mocking](user-guide/websocket-mocking.md)
   - [Replay Mode](user-guide/websocket-mocking/replay.md)
   - [Interactive Mode](user-guide/websocket-mocking/interactive.md)

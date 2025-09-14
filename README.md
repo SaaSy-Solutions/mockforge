@@ -11,8 +11,14 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 ## ✨ Features
 
 - **Multi-Protocol Support**: HTTP REST APIs, gRPC services, and WebSocket connections
-- **Synthetic Data Generation**: Generate realistic test data with faker primitives and RAG (Retrieval-Augmented Generation)
+- **Advanced Data Synthesis**: Intelligent mock data generation with:
+  - **Smart Field Inference**: Automatic data type detection from field names
+  - **Deterministic Seeding**: Reproducible test fixtures for stable testing
+  - **RAG-Driven Generation**: Context-aware data using domain knowledge
+  - **Relationship Awareness**: Foreign key detection and cross-reference validation
+  - **Schema Graph Extraction**: Automatic relationship discovery from protobuf schemas
 - **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
+- **Cross-Endpoint Validation**: Ensure referential integrity across different endpoints
 - **Admin UI**: Modern web-based interface for managing mock servers and viewing metrics
 - **Configuration Management**: Flexible configuration via YAML/JSON files with environment variable overrides
 - **Built-in Data Templates**: Pre-configured schemas for common data types (users, products, orders)

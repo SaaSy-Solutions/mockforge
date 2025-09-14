@@ -11,6 +11,7 @@ MockForge's gRPC mocking system offers:
 - **Streaming Support**: Full support for unary, server streaming, client streaming, and bidirectional streaming
 - **Reflection Support**: Built-in gRPC reflection for service discovery and testing
 - **Template Integration**: Use MockForge's template system for dynamic response generation
+- **Advanced Data Synthesis**: Intelligent mock data generation with deterministic seeding, relationship awareness, and RAG-driven domain knowledge
 
 ## Quick Start
 
@@ -540,3 +541,4 @@ grep -i "grpc.*error" mockforge.log
 For detailed implementation guides, see:
 - [Protocol Buffers](grpc-mocking/protobuf.md) - Working with .proto files
 - [Streaming](grpc-mocking/streaming.md) - Advanced streaming patterns
+- [Advanced Data Synthesis](grpc-mocking/advanced-data-synthesis.md) - Intelligent data generation with RAG and validation

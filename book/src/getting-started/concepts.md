@@ -54,6 +54,13 @@ Use template variables for dynamic content generation:
 ### 3. Scenario-Based Responses
 Define complex interaction scenarios with conditional logic and state management.
 
+### 4. Advanced Data Synthesis (gRPC)
+For gRPC services, MockForge provides sophisticated data synthesis capabilities:
+- **Smart Field Inference**: Automatically detects data types from field names (emails, phones, IDs)
+- **Deterministic Generation**: Reproducible test data with seeded randomness
+- **Relationship Awareness**: Maintains referential integrity across related entities
+- **RAG-Driven Generation**: Uses domain knowledge for contextually appropriate data
+
 ## Template System
 
 MockForge's template system enables dynamic content generation using Handlebars-style syntax:

@@ -1685,6 +1685,7 @@ dependencies = [
  "prost-reflect",
  "prost-types 0.14.1",
  "rand 0.8.5",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",
