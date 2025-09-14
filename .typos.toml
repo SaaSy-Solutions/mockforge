@@ -1,6 +1,7 @@
 [files]
 extend-exclude = [
   "target/**",
+  "book/book/**",
 ]
 
 [default]
@@ -16,3 +17,4 @@ Nm = "Nm"
 Ns = "Ns"
 typ = "typ"
 ot = "ot"
+wrk = "wrk"
