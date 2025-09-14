@@ -694,18 +694,12 @@ pub async fn get_routes(State(state): State<AdminState>) -> impl IntoResponse {
     if let Some(http_addr) = state.http_server_addr {
         // Try to fetch routes from the HTTP server
         let url = format!("http://{}/__mockforge/routes", http_addr);
-        match reqwest::get(&url).await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    match response.text().await {
-                        Ok(body) => {
-                            return (StatusCode::OK, [("content-type", "application/json")], body);
-                        }
-                        Err(_) => {}
-                    }
+        if let Ok(response) = reqwest::get(&url).await {
+            if response.status().is_success() {
+                if let Ok(body) = response.text().await {
+                    return (StatusCode::OK, [("content-type", "application/json")], body);
                 }
             }
-            Err(_) => {}
         }
     }
 
@@ -1071,7 +1065,7 @@ async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
 
         // Send SIGTERM to parent process to trigger restart
         let output = Command::new("kill")
-            .args(&["-TERM", &parent_pid.to_string()])
+            .args(["-TERM", &parent_pid.to_string()])
             .output()
             .map_err(|e| Error::generic(format!("Failed to send signal: {}", e)))?;
 
@@ -1283,7 +1277,7 @@ pub fn route_has_fixtures(method: &str, path: &str) -> bool {
 
     // Check HTTP fixtures
     let method_lower = method.to_lowercase();
-    let path_hash = path.replace('/', "_").replace(':', "_");
+    let path_hash = path.replace(['/', ':'], "_");
     let http_fixtures_path = fixtures_path.join("http").join(&method_lower).join(&path_hash);
 
     if http_fixtures_path.exists() {
@@ -1626,7 +1620,7 @@ fn extract_fingerprint(
     // Try to extract from file path (common pattern: method_path_hash.json)
     if let Some(file_name) = file_path.file_stem().and_then(|s| s.to_str()) {
         // Look for hash pattern at the end of filename
-        if let Some(hash) = file_name.split('_').last() {
+        if let Some(hash) = file_name.split('_').next_back() {
             if hash.len() >= 8 && hash.chars().all(|c| c.is_alphanumeric()) {
                 return Ok(hash.to_string());
             }
@@ -2337,7 +2331,7 @@ async fn execute_single_smoke_test(
     match response {
         Ok(resp) => {
             let status_code = resp.status().as_u16();
-            if status_code >= 200 && status_code < 400 {
+            if (200..400).contains(&status_code) {
                 Ok((status_code, response_time_ms))
             } else {
                 Err(Error::generic(format!(

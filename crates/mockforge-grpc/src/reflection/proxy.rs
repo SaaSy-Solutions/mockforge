@@ -27,6 +27,7 @@ pub struct ReflectionProxy {
     /// Timeout for requests
     timeout_duration: Duration,
     /// Connection pool for gRPC channels
+    #[allow(dead_code)]
     connection_pool: ConnectionPool,
 }
 
@@ -194,7 +195,7 @@ impl ReflectionProxy {
 
         // Create a mock response based on the method
         let mock_response =
-            self.generate_mock_response(&service_name, method_name, &method).await?;
+            self.generate_mock_response(service_name, method_name, &method).await?;
 
         // Create response with mock data and preserve metadata
         let mut response = Response::new(mock_response);
@@ -275,7 +276,7 @@ impl ReflectionProxy {
             let mock_value = self.generate_mock_value_for_field(&field, service_name, method_name);
 
             // Try to set the field (ignore errors if field doesn't exist or is wrong type)
-            let _ = response.set_field(&field, mock_value);
+            response.set_field(&field, mock_value);
         }
 
         // Always try to add some common metadata fields if they don't exist
@@ -293,7 +294,7 @@ impl ReflectionProxy {
         ];
 
         for (field_name, value) in metadata_fields {
-            let _ = response.set_field_by_name(field_name, value);
+            response.set_field_by_name(field_name, value);
         }
 
         Ok(())
@@ -427,7 +428,7 @@ impl ReflectionProxy {
                         method_name,
                         depth + 1,
                     );
-                    let _ = nested_message.set_field(&nested_field, mock_value);
+                    nested_message.set_field(&nested_field, mock_value);
                 }
 
                 prost_reflect::Value::Message(nested_message)
@@ -625,7 +626,7 @@ impl ReflectionProxy {
                 };
 
                 // Update the message field in the response
-                let _ = mock_response
+                mock_response
                     .set_field(&message_field, prost_reflect::Value::String(personalized_message));
             }
 

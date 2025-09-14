@@ -25,6 +25,7 @@ pub struct MockReflectionProxy {
     /// Timeout for requests
     timeout_duration: Duration,
     /// Connection pool for gRPC channels
+    #[allow(dead_code)]
     connection_pool: ConnectionPool,
     /// Registry of dynamic services for mock responses
     service_registry: Arc<ServiceRegistry>,
@@ -960,7 +961,7 @@ impl MockReflectionProxy {
                 .as_secs()
         );
 
-        Ok(Self::create_placeholder_dynamic_message(&mock_data)?)
+        Self::create_placeholder_dynamic_message(&mock_data)
     }
 
     /// Populate mock fields in a DynamicMessage
@@ -1284,7 +1285,7 @@ impl MockReflectionProxy {
             type_part
         } else if any.type_url.contains('/') {
             // Handle other URL formats
-            any.type_url.split('/').last().unwrap_or(&any.type_url)
+            any.type_url.split('/').next_back().unwrap_or(&any.type_url)
         } else {
             // Fallback: use the entire type_url as type name
             &any.type_url
@@ -1377,6 +1378,7 @@ impl MockReflectionProxy {
     }
 
     /// Generate mock stream messages for testing
+    #[allow(dead_code)]
     async fn generate_mock_stream_messages(
         &self,
         _count: usize,

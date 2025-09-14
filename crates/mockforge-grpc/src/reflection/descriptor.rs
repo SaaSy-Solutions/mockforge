@@ -13,6 +13,12 @@ pub struct ServiceDescriptorCache {
     methods: HashMap<(String, String), MethodDescriptor>,
 }
 
+impl Default for ServiceDescriptorCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceDescriptorCache {
     /// Create a new empty cache
     pub fn new() -> Self {

@@ -91,6 +91,7 @@ impl ProtoParser {
     }
 
     /// Discover proto files in a directory recursively
+    #[allow(clippy::only_used_in_recursion)]
     fn discover_proto_files(
         &self,
         dir: &Path,
@@ -216,7 +217,6 @@ impl Default for ProtoParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[tokio::test]
     async fn test_parse_proto_file() {
