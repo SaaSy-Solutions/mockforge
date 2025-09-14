@@ -9,9 +9,12 @@ use rand::Rng;
 use std::collections::HashMap;
 use tracing::debug;
 
-// Commenting out faker integration for now - will be added in a future update
-// #[cfg(feature = "data-faker")]
-// use mockforge_data::{DataGenerator, DataConfig};
+#[cfg(feature = "data-faker")]
+use mockforge_data::faker::EnhancedFaker;
+
+// Re-export fake for direct use
+#[cfg(feature = "data-faker")]
+use fake::{Fake, faker::name::en::{FirstName, LastName}};
 
 /// Configuration for smart mock data generation
 #[derive(Debug, Clone)]
@@ -71,14 +74,26 @@ pub struct SmartMockGenerator {
     config: SmartMockConfig,
     /// Counter for sequential data generation
     sequence_counter: u64,
+    /// Enhanced faker for realistic data generation
+    #[cfg(feature = "data-faker")]
+    faker: Option<EnhancedFaker>,
 }
 
 impl SmartMockGenerator {
     /// Create a new smart mock generator
     pub fn new(config: SmartMockConfig) -> Self {
+        #[cfg(feature = "data-faker")]
+        let faker = if config.use_faker {
+            Some(EnhancedFaker::new())
+        } else {
+            None
+        };
+
         Self {
             config,
             sequence_counter: 1,
+            #[cfg(feature = "data-faker")]
+            faker,
         }
     }
 
@@ -118,7 +133,13 @@ impl SmartMockGenerator {
             }
         }
 
-        // Note: faker integration will be added in a future update
+        // Use faker system if available
+        #[cfg(feature = "data-faker")]
+        if self.config.use_faker && self.faker.is_some() {
+            if let Some(value) = self.generate_with_faker_safe(field) {
+                return value;
+            }
+        }
 
         // Fallback to basic type-based generation
         self.generate_basic_value_for_type(field, depth)
@@ -129,12 +150,49 @@ impl SmartMockGenerator {
         match field.kind() {
             Kind::String => {
                 let mock_value = match field_name {
-                    // Identity fields
-                    name if name.contains("email") => format!("user{}@example.com", self.next_sequence()),
-                    name if name.contains("name") && name.contains("first") => "John".to_string(),
-                    name if name.contains("name") && name.contains("last") => "Doe".to_string(),
+                    // Identity fields - enhanced with more realistic fallbacks
+                    name if name.contains("email") => {
+                        // Use faker first, fallback to pattern
+                        #[cfg(feature = "data-faker")]
+                        if let Some(faker) = &mut self.faker {
+                            faker.email()
+                        } else {
+                            format!("user{}@example.com", self.next_sequence())
+                        }
+                        #[cfg(not(feature = "data-faker"))]
+                        format!("user{}@example.com", self.next_sequence())
+                    },
+                    name if name.contains("name") && name.contains("first") => {
+                        #[cfg(feature = "data-faker")]
+                        if let Some(_faker) = &mut self.faker {
+                            FirstName().fake()
+                        } else {
+                            "John".to_string()
+                        }
+                        #[cfg(not(feature = "data-faker"))]
+                        "John".to_string()
+                    },
+                    name if name.contains("name") && name.contains("last") => {
+                        #[cfg(feature = "data-faker")]
+                        if let Some(_faker) = &mut self.faker {
+                            LastName().fake()
+                        } else {
+                            "Doe".to_string()
+                        }
+                        #[cfg(not(feature = "data-faker"))]
+                        "Doe".to_string()
+                    },
                     name if name.contains("username") => format!("user{}", self.next_sequence()),
-                    name if name.contains("full_name") || name.contains("display_name") => "John Doe".to_string(),
+                    name if name.contains("full_name") || name.contains("display_name") => {
+                        #[cfg(feature = "data-faker")]
+                        if let Some(faker) = &mut self.faker {
+                            faker.name()
+                        } else {
+                            "John Doe".to_string()
+                        }
+                        #[cfg(not(feature = "data-faker"))]
+                        "John Doe".to_string()
+                    },
                     
                     // Contact information
                     name if name.contains("phone") => "+1-555-123-4567".to_string(),
@@ -223,7 +281,140 @@ impl SmartMockGenerator {
         }
     }
 
-    // Faker integration methods will be added here in future updates
+    /// Generate value using the enhanced faker system (safe version)
+    #[cfg(feature = "data-faker")]
+    fn generate_with_faker_safe(&mut self, field: &FieldDescriptor) -> Option<Value> {
+        let faker = self.faker.as_mut()?;
+        let field_name = field.name().to_lowercase();
+        
+        match field.kind() {
+            Kind::String => {
+                let fake_data = match field_name.as_str() {
+                    // Email patterns
+                    name if name.contains("email") => faker.email(),
+                    
+                    // Name patterns
+                    name if name.contains("first") && name.contains("name") => {
+                        FirstName().fake()
+                    },
+                    name if name.contains("last") && name.contains("name") => {
+                        LastName().fake()
+                    },
+                    name if name.contains("name") && !name.contains("file") && !name.contains("path") => {
+                        faker.name()
+                    },
+                    
+                    // Contact patterns
+                    name if name.contains("phone") || name.contains("mobile") => faker.phone(),
+                    name if name.contains("address") => faker.address(),
+                    
+                    // Company/Organization patterns
+                    name if name.contains("company") || name.contains("organization") => faker.company(),
+                    
+                    // Web/Internet patterns
+                    name if name.contains("url") || name.contains("website") => faker.url(),
+                    name if name.contains("ip") => faker.ip_address(),
+                    
+                    // ID/UUID patterns
+                    name if name.contains("uuid") || name.contains("guid") => faker.uuid(),
+                    
+                    // Date patterns
+                    name if name.contains("date") || name.contains("time") || name.contains("created") || name.contains("updated") => {
+                        faker.date_iso()
+                    },
+                    
+                    // Color patterns
+                    name if name.contains("color") || name.contains("colour") => faker.color(),
+                    
+                    // Default: use the field name inference for other patterns
+                    _ => return None,
+                };
+
+                Some(Value::String(fake_data))
+            }
+            
+            Kind::Int32 | Kind::Int64 => {
+                let fake_value = match field_name.as_str() {
+                    // Age patterns
+                    name if name.contains("age") => faker.int_range(18, 90),
+                    
+                    // Year patterns
+                    name if name.contains("year") => faker.int_range(1990, 2024),
+                    
+                    // Count/quantity patterns
+                    name if name.contains("count") || name.contains("quantity") || name.contains("amount") => {
+                        faker.int_range(1, 1000)
+                    },
+                    
+                    // Port numbers
+                    name if name.contains("port") => faker.int_range(1024, 65535),
+                    
+                    // Default: use sequence for IDs or random for others
+                    name if name.contains("id") || name.contains("identifier") => self.next_sequence() as i64,
+                    _ => faker.int_range(1, 100),
+                };
+
+                Some(match field.kind() {
+                    Kind::Int32 => Value::I32(fake_value as i32),
+                    Kind::Int64 => Value::I64(fake_value),
+                    _ => unreachable!(),
+                })
+            }
+            
+            Kind::Double | Kind::Float => {
+                let fake_value = match field_name.as_str() {
+                    // Price/money patterns
+                    name if name.contains("price") || name.contains("cost") || name.contains("amount") => {
+                        faker.float_range(1.0, 1000.0)
+                    },
+                    
+                    // Percentage/rate patterns
+                    name if name.contains("rate") || name.contains("percent") => {
+                        faker.float_range(0.0, 100.0)
+                    },
+                    
+                    // Geographic coordinates
+                    name if name.contains("latitude") || name.contains("lat") => {
+                        faker.float_range(-90.0, 90.0)
+                    },
+                    name if name.contains("longitude") || name.contains("lng") || name.contains("lon") => {
+                        faker.float_range(-180.0, 180.0)
+                    },
+                    
+                    // Default random float
+                    _ => faker.float_range(0.0, 100.0),
+                };
+
+                Some(match field.kind() {
+                    Kind::Double => Value::F64(fake_value),
+                    Kind::Float => Value::F32(fake_value as f32),
+                    _ => unreachable!(),
+                })
+            }
+            
+            Kind::Bool => {
+                let probability = match field_name.as_str() {
+                    // Usually true patterns
+                    name if name.contains("active") || name.contains("enabled") || name.contains("verified") => 0.8,
+                    
+                    // Usually false patterns  
+                    name if name.contains("deleted") || name.contains("archived") || name.contains("disabled") => 0.2,
+                    
+                    // Default 50/50
+                    _ => 0.5,
+                };
+
+                Some(Value::Bool(faker.boolean(probability)))
+            }
+            
+            _ => None,
+        }
+    }
+
+    #[cfg(not(feature = "data-faker"))]
+    fn generate_with_faker_safe(&mut self, _field: &FieldDescriptor) -> Option<Value> {
+        None
+    }
 
     /// Generate basic value based on type
     fn generate_basic_value_for_type(&mut self, field: &FieldDescriptor, depth: usize) -> Value {
@@ -326,6 +517,22 @@ impl SmartMockGenerator {
             rand::thread_rng().gen::<u64>() & 0xffffffffffff,
         )
     }
+
+    /// Get configuration for external inspection
+    pub fn config(&self) -> &SmartMockConfig {
+        &self.config
+    }
+
+    /// Check if faker is enabled and available
+    #[cfg(feature = "data-faker")]
+    pub fn is_faker_enabled(&self) -> bool {
+        self.config.use_faker && self.faker.is_some()
+    }
+
+    #[cfg(not(feature = "data-faker"))]
+    pub fn is_faker_enabled(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -355,5 +562,20 @@ mod tests {
         // Test email inference - we'd need actual field descriptors for full testing
         // This is a unit test placeholder
         assert!(generator.generate_random_string(10).len() == 10);
+    }
+
+    #[cfg(feature = "data-faker")]
+    #[test]
+    fn test_faker_integration() {
+        let mut config = SmartMockConfig::default();
+        config.use_faker = true;
+        let mut generator = SmartMockGenerator::new(config);
+
+        // Test that faker is initialized
+        assert!(generator.faker.is_some());
+
+        // Test sequence generation still works
+        assert_eq!(generator.next_sequence(), 1);
+        assert_eq!(generator.next_sequence(), 2);
     }
 }
