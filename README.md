@@ -2,6 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/mockforge.svg)](https://crates.io/crates/mockforge)
 [![Documentation](https://docs.rs/mockforge/badge.svg)](https://docs.rs/mockforge)
+[![Book](https://img.shields.io/badge/book-read%20online-blue.svg)](https://saasy-solutions.github.io/mockforge/)
 [![CI](https://github.com/SaaSy-Solutions/mockforge/workflows/CI/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
@@ -17,6 +18,19 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 - **Built-in Data Templates**: Pre-configured schemas for common data types (users, products, orders)
 - **Extensible Architecture**: Plugin system for custom response generators and data sources
 - **Production Ready**: Comprehensive testing, security audits, and automated releases
+
+## 📖 Documentation
+
+For comprehensive documentation, tutorials, and guides:
+
+**[📚 Read the MockForge Book](https://saasy-solutions.github.io/mockforge/)**
+
+The documentation covers:
+- Getting started guide and installation
+- Detailed configuration options
+- API reference for all protocols (HTTP, gRPC, WebSocket)  
+- Advanced features and examples
+- Contributing guidelines
 
 ## 🚀 Quick Start
 
