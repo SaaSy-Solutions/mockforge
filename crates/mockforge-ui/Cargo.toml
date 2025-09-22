@@ -18,7 +18,7 @@ tower-http = { workspace = true }
 mime_guess = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 mockforge-core = { path = "../mockforge-core" }
 mockforge-http = { path = "../mockforge-http" }
 mockforge-ws = { path = "../mockforge-ws" }
