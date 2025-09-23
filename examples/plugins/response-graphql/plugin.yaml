@@ -1,0 +1,43 @@
+id: "response-graphql"
+name: "GraphQL Response Generator Plugin"
+description: "Generates mock GraphQL responses based on query analysis"
+version: "0.1.0"
+author:
+  name: "MockForge Team"
+  email: "team@mockforge.dev"
+homepage: "https://github.com/mockforge/plugins"
+repository: "https://github.com/mockforge/plugins/response-graphql"
+
+types:
+  - "response"
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 20971520  # 20MB
+    max_cpu_percent: 0.2        # 20% CPU
+
+config_schema:
+  type: object
+  properties:
+    schema_file:
+      type: string
+      description: "Path to GraphQL schema file (optional)"
+    enable_introspection:
+      type: boolean
+      description: "Enable GraphQL introspection queries"
+      default: true
+    mock_data_complexity:
+      type: string
+      description: "Data complexity level: simple, medium, complex"
+      enum: ["simple", "medium", "complex"]
+      default: "medium"
+  required: []
+
+dependencies: []

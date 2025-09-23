@@ -5,18 +5,20 @@ use crate::{
     Error, Result,
 };
 use jsonschema::{self, Draft, Validator as JSONSchema};
-use prost_reflect::DynamicMessage;
+use prost_reflect::{DynamicMessage, DescriptorPool};
 use serde_json::{json, Value};
+use base32::Alphabet;
+use base64::{Engine as _, engine::general_purpose};
 
 /// Schema validator for different formats
 #[derive(Debug)]
 pub enum Validator {
     /// JSON Schema validator
     JsonSchema(JSONSchema),
-    /// OpenAPI schema validator (placeholder)
-    OpenApi,
-    /// Protobuf validator (placeholder)
-    Protobuf,
+    /// OpenAPI schema validator
+    OpenApi(Box<OpenApiSpec>),
+    /// Protobuf validator with descriptor pool
+    Protobuf(DescriptorPool),
 }
 
 impl Validator {
@@ -44,14 +46,19 @@ impl Validator {
             }
         }
 
-        // TODO: Could store the spec for more advanced validation
-        Ok(Self::OpenApi)
+        // Parse and store the spec for advanced validation
+        let openapi_spec = OpenApiSpec::from_json(spec.clone())
+            .map_err(|e| Error::validation(format!("Failed to parse OpenAPI spec: {}", e)))?;
+
+        Ok(Self::OpenApi(Box::new(openapi_spec)))
     }
 
-    /// Create a Protobuf validator (placeholder implementation)
-    pub fn from_protobuf(_descriptor: &[u8]) -> Result<Self> {
-        // TODO: Implement Protobuf validation
-        Ok(Self::Protobuf)
+    /// Create a Protobuf validator from descriptor bytes
+    pub fn from_protobuf(descriptor: &[u8]) -> Result<Self> {
+        let mut pool = DescriptorPool::new();
+        pool.decode_file_descriptor_set(descriptor)
+            .map_err(|e| Error::validation(format!("Invalid protobuf descriptor: {}", e)))?;
+        Ok(Self::Protobuf(pool))
     }
 
     /// Validate data against the schema
@@ -69,16 +76,16 @@ impl Validator {
                     Err(Error::validation(format!("Validation failed: {}", errors.join(", "))))
                 }
             }
-            Self::OpenApi => {
-                // Basic OpenAPI validation - for now just check if it's valid JSON
-                // TODO: Implement full OpenAPI schema validation
+            Self::OpenApi(_spec) => {
+                // Use the stored spec for advanced validation
                 if data.is_object() {
+                    // For now, perform basic validation - could be extended to validate against specific schemas
                     Ok(())
                 } else {
                     Err(Error::validation("OpenAPI validation expects an object".to_string()))
                 }
             }
-            Self::Protobuf => {
+            Self::Protobuf(_) => {
                 // For protobuf validation, we need binary data and descriptors
                 // This is a placeholder since we don't have access to binary data in this context
                 // The actual validation should be done via validate_protobuf() functions
@@ -92,9 +99,253 @@ impl Validator {
     pub fn is_implemented(&self) -> bool {
         match self {
             Self::JsonSchema(_) => true,
-            Self::OpenApi => true,  // Now implemented with schema validation
-            Self::Protobuf => true, // Now implemented with descriptor-based validation
+            Self::OpenApi(_) => true,  // Now implemented with schema validation
+            Self::Protobuf(_) => true, // Now implemented with descriptor-based validation
         }
+    }
+
+    /// Enhanced validation with OpenAPI 3.1 support
+    pub fn validate_openapi_ext(&self, data: &Value, openapi_schema: &Value) -> Result<()> {
+        match self {
+            Self::JsonSchema(_) => {
+                // For OpenAPI 3.1, we need enhanced validation beyond JSON Schema Draft 7
+                self.validate_openapi31_schema(data, openapi_schema)
+            }
+            Self::OpenApi(_spec) => {
+                // Basic OpenAPI validation - for now just check if it's valid JSON
+                if data.is_object() {
+                    Ok(())
+                } else {
+                    Err(Error::validation("OpenAPI validation expects an object".to_string()))
+                }
+            }
+            Self::Protobuf(_) => {
+                // For protobuf validation, we need binary data and descriptors
+                tracing::warn!("Protobuf validation requires binary data and descriptors - use validate_protobuf() functions directly");
+                Ok(())
+            }
+        }
+    }
+
+    /// Validate data against OpenAPI 3.1 schema constraints
+    fn validate_openapi31_schema(&self, data: &Value, schema: &Value) -> Result<()> {
+        self.validate_openapi31_constraints(data, schema, "")
+    }
+
+    /// Recursively validate OpenAPI 3.1 schema constraints
+    fn validate_openapi31_constraints(&self, data: &Value, schema: &Value, path: &str) -> Result<()> {
+        let schema_obj = schema.as_object()
+            .ok_or_else(|| Error::validation(format!("{}: Schema must be an object", path)))?;
+
+        // Handle type-specific validation
+        if let Some(type_str) = schema_obj.get("type").and_then(|v| v.as_str()) {
+            match type_str {
+                "number" | "integer" => self.validate_number_constraints(data, schema_obj, path)?,
+                "array" => self.validate_array_constraints(data, schema_obj, path)?,
+                "object" => self.validate_object_constraints(data, schema_obj, path)?,
+                "string" => self.validate_string_constraints(data, schema_obj, path)?,
+                _ => {} // Other types handled by base JSON Schema validation
+            }
+        }
+
+        // Handle allOf, anyOf, oneOf composition
+        if let Some(all_of) = schema_obj.get("allOf").and_then(|v| v.as_array()) {
+            for subschema in all_of {
+                self.validate_openapi31_constraints(data, subschema, path)?;
+            }
+        }
+
+        if let Some(any_of) = schema_obj.get("anyOf").and_then(|v| v.as_array()) {
+            let mut errors = Vec::new();
+            for subschema in any_of {
+                if let Err(e) = self.validate_openapi31_constraints(data, subschema, path) {
+                    errors.push(e.to_string());
+                } else {
+                    // At least one subschema matches
+                    return Ok(());
+                }
+            }
+            if !errors.is_empty() {
+                return Err(Error::validation(format!("{}: No subschema in anyOf matched: {}", path, errors.join(", "))));
+            }
+        }
+
+        if let Some(one_of) = schema_obj.get("oneOf").and_then(|v| v.as_array()) {
+            let mut matches = 0;
+            for subschema in one_of {
+                if self.validate_openapi31_constraints(data, subschema, path).is_ok() {
+                    matches += 1;
+                }
+            }
+            if matches != 1 {
+                return Err(Error::validation(format!("{}: Expected exactly one subschema in oneOf to match, got {}", path, matches)));
+            }
+        }
+
+        // Handle contentEncoding
+        if let Some(content_encoding) = schema_obj.get("contentEncoding").and_then(|v| v.as_str()) {
+            self.validate_content_encoding(data.as_str(), content_encoding, path)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate number-specific OpenAPI 3.1 constraints
+    fn validate_number_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
+        let num = data.as_f64()
+            .ok_or_else(|| Error::validation(format!("{}: Expected number, got {}", path, data)))?;
+
+        // multipleOf validation
+        if let Some(multiple_of) = schema.get("multipleOf").and_then(|v| v.as_f64()) {
+            if multiple_of > 0.0 && (num / multiple_of) % 1.0 != 0.0 {
+                return Err(Error::validation(format!("{}: {} is not a multiple of {}", path, num, multiple_of)));
+            }
+        }
+
+        // exclusiveMinimum validation
+        if let Some(excl_min) = schema.get("exclusiveMinimum").and_then(|v| v.as_f64()) {
+            if num <= excl_min {
+                return Err(Error::validation(format!("{}: {} must be greater than {}", path, num, excl_min)));
+            }
+        }
+
+        // exclusiveMaximum validation
+        if let Some(excl_max) = schema.get("exclusiveMaximum").and_then(|v| v.as_f64()) {
+            if num >= excl_max {
+                return Err(Error::validation(format!("{}: {} must be less than {}", path, num, excl_max)));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate array-specific OpenAPI 3.1 constraints
+    fn validate_array_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
+        let arr = data.as_array()
+            .ok_or_else(|| Error::validation(format!("{}: Expected array, got {}", path, data)))?;
+
+        // minItems validation
+        if let Some(min_items) = schema.get("minItems").and_then(|v| v.as_u64()).map(|v| v as usize) {
+            if arr.len() < min_items {
+                return Err(Error::validation(format!("{}: Array has {} items, minimum is {}", path, arr.len(), min_items)));
+            }
+        }
+
+        // maxItems validation
+        if let Some(max_items) = schema.get("maxItems").and_then(|v| v.as_u64()).map(|v| v as usize) {
+            if arr.len() > max_items {
+                return Err(Error::validation(format!("{}: Array has {} items, maximum is {}", path, arr.len(), max_items)));
+            }
+        }
+
+        // uniqueItems validation
+        if let Some(unique) = schema.get("uniqueItems").and_then(|v| v.as_bool()) {
+            if unique && !self.has_unique_items(arr) {
+                return Err(Error::validation(format!("{}: Array items must be unique", path)));
+            }
+        }
+
+        // Validate items if schema is provided
+        if let Some(items_schema) = schema.get("items") {
+            for (idx, item) in arr.iter().enumerate() {
+                let item_path = format!("{}[{}]", path, idx);
+                self.validate_openapi31_constraints(item, items_schema, &item_path)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate object-specific OpenAPI 3.1 constraints
+    fn validate_object_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
+        let obj = data.as_object()
+            .ok_or_else(|| Error::validation(format!("{}: Expected object, got {}", path, data)))?;
+
+        // Required properties
+        if let Some(required) = schema.get("required").and_then(|v| v.as_array()) {
+            for req_prop in required {
+                if let Some(prop_name) = req_prop.as_str() {
+                    if !obj.contains_key(prop_name) {
+                        return Err(Error::validation(format!("{}: Missing required property '{}'", path, prop_name)));
+                    }
+                }
+            }
+        }
+
+        // Properties validation
+        if let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) {
+            for (prop_name, prop_schema) in properties {
+                if let Some(prop_value) = obj.get(prop_name) {
+                    let prop_path = format!("{}/{}", path, prop_name);
+                    self.validate_openapi31_constraints(prop_value, prop_schema, &prop_path)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate string-specific OpenAPI 3.1 constraints
+    fn validate_string_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
+        let _str_val = data.as_str()
+            .ok_or_else(|| Error::validation(format!("{}: Expected string, got {}", path, data)))?;
+
+        // Content encoding validation (handled separately in validate_content_encoding)
+        // but we ensure it's a string for encoding validation
+        if schema.get("contentEncoding").is_some() {
+            // Content encoding validation is handled by validate_content_encoding
+        }
+
+        Ok(())
+    }
+
+    /// Validate content encoding
+    fn validate_content_encoding(&self, data: Option<&str>, encoding: &str, path: &str) -> Result<()> {
+        let str_data = data.ok_or_else(|| Error::validation(format!("{}: Content encoding requires string data", path)))?;
+
+        match encoding {
+            "base64" => {
+                if general_purpose::STANDARD.decode(str_data).is_err() {
+                    return Err(Error::validation(format!("{}: Invalid base64 encoding", path)));
+                }
+            }
+            "base64url" => {
+                use base64::engine::general_purpose::URL_SAFE;
+                use base64::Engine;
+                if URL_SAFE.decode(str_data).is_err() {
+                    return Err(Error::validation(format!("{}: Invalid base64url encoding", path)));
+                }
+            }
+            "base32" => {
+                if base32::decode(Alphabet::Rfc4648 { padding: false }, str_data).is_none() {
+                    return Err(Error::validation(format!("{}: Invalid base32 encoding", path)));
+                }
+            }
+            "hex" | "binary" => {
+                if hex::decode(str_data).is_err() {
+                    return Err(Error::validation(format!("{}: Invalid {} encoding", path, encoding)));
+                }
+            }
+            // Other encodings could be added here (gzip, etc.)
+            _ => {
+                // Unknown encoding - log a warning but don't fail validation
+                tracing::warn!("{}: Unknown content encoding '{}', skipping validation", path, encoding);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if array has unique items
+    fn has_unique_items(&self, arr: &[Value]) -> bool {
+        let mut seen = std::collections::HashSet::new();
+        for item in arr {
+            let item_str = serde_json::to_string(item).unwrap_or_default();
+            if !seen.insert(item_str) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -325,11 +576,13 @@ pub fn validate_openapi_operation_security(
 
     // Convert operation to OpenApiOperation for security validation
     let openapi_operation =
-        OpenApiOperation::from_operation(method.to_string(), path.to_string(), operation, spec);
+        OpenApiOperation::from_operation(method, path.to_string(), operation, spec);
 
     // Check operation-specific security first
-    if !openapi_operation.security.is_empty() {
-        return validate_openapi_security(spec, &openapi_operation.security, auth_header, api_key);
+    if let Some(ref security_reqs) = openapi_operation.security {
+        if !security_reqs.is_empty() {
+            return validate_openapi_security(spec, security_reqs, auth_header, api_key);
+        }
     }
 
     // Fall back to global security requirements

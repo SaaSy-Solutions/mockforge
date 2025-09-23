@@ -1,0 +1,67 @@
+[package]
+name = "mockforge-plugin-loader"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords = ["plugin", "loader", "wasm", "security", "sandbox"]
+categories = ["development-tools", "api-bindings"]
+description = "Plugin loader with security sandboxing and validation for MockForge"
+
+[dependencies]
+# Plugin core types and traits
+mockforge-plugin-core = { path = "../mockforge-plugin-core" }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Async runtime
+tokio = { workspace = true, features = ["fs"] }
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utility libraries
+uuid.workspace = true
+regex.workspace = true
+
+# WebAssembly runtime for plugin execution
+wasmtime = "25.0"
+wasmtime-wasi = "25.0"
+wasmparser = "0.215"
+
+# Plugin communication
+wit-bindgen = "0.34"
+
+# Async traits
+async-trait = "0.1"
+
+# Additional utilities
+rand.workspace = true
+url.workspace = true
+serde_yaml.workspace = true
+urlencoding.workspace = true
+base64.workspace = true
+
+# Path expansion
+shellexpand = "2.1"
+
+# Date/time handling
+chrono.workspace = true
+
+# Cryptography for plugin validation
+ring = "0.17"
+hex.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3.0"

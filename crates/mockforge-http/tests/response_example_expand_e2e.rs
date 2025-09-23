@@ -29,7 +29,7 @@ async fn media_example_token_expansion_toggle() {
         response_template_expand: false,
         validation_status: None,
     });
-    let app: Router = build_router(Some(path.to_string_lossy().to_string()), opts).await;
+    let app: Router = build_router(Some(path.to_string_lossy().to_string()), opts, None).await;
 
     // Bind server
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

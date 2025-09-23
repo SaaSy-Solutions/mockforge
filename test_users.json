@@ -1,0 +1,37 @@
+[
+  {
+    "active": false,
+    "created_at": "1942-04-01T20:25:37.093419052+00:00",
+    "email": "alexie60@gmail.com",
+    "id": "7834c4c3-771e-4100-a060-975ba302b0be",
+    "name": "Aurelia Ward"
+  },
+  {
+    "active": true,
+    "created_at": "1733-09-15T13:14:08.268832847+00:00",
+    "email": "jacinto_aut@yahoo.com",
+    "id": "2ae1edd5-1a20-405c-948f-a3b07cc627b0",
+    "name": "Daphney Runte"
+  },
+  {
+    "active": false,
+    "created_at": "2110-06-22T23:09:13.767794127+00:00",
+    "email": "kade_voluptatem@hotmail.com",
+    "id": "c5e3933e-efa4-4ce3-a582-59153c4eb887",
+    "name": "Charles Schroeder"
+  },
+  {
+    "active": false,
+    "created_at": "2157-02-25T04:43:22.502205370+00:00",
+    "email": "moshe_laudantium@gmail.com",
+    "id": "bd4831eb-6ad2-4bde-9fd7-32c075580d0c",
+    "name": "Brandyn Cummerata"
+  },
+  {
+    "active": false,
+    "created_at": "2162-03-27T20:35:37.626056701+00:00",
+    "email": "marianne_totam@hotmail.com",
+    "id": "89db4d29-1ec7-4e25-87ac-18190a80a526",
+    "name": "Eveline Mohr"
+  }
+]

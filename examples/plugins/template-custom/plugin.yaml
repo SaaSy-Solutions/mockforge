@@ -1,0 +1,39 @@
+id: "template-custom"
+name: "Custom Template Functions Plugin"
+description: "Provides custom template functions for MockForge including business logic helpers"
+version: "0.1.0"
+author:
+  name: "MockForge Team"
+  email: "team@mockforge.dev"
+homepage: "https://github.com/mockforge/plugins"
+repository: "https://github.com/mockforge/plugins/template-custom"
+
+types:
+  - "template"
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 15728640  # 15MB
+    max_cpu_percent: 0.15       # 15% CPU
+
+config_schema:
+  type: object
+  properties:
+    business_domain:
+      type: string
+      description: "Business domain for generating domain-specific data"
+      default: "ecommerce"
+    enable_advanced_functions:
+      type: boolean
+      description: "Enable advanced template functions"
+      default: true
+  required: []
+
+dependencies: []

@@ -1,0 +1,309 @@
+# Advanced MockForge Template Features
+# Demonstrating encryption, chain context, and complex templating scenarios
+
+# ==============================================================================
+# ENCRYPTION TEMPLATES
+# ==============================================================================
+# Templates support end-to-end encryption for sensitive data
+# Uses AES-256-GCM encryption with configurable keys
+
+encryption_examples:
+  # Basic encryption with default key
+  user_with_encrypted_ssn:
+    method: POST
+    path: /api/users
+    request:
+      body:
+        user:
+          id: "{{uuid}}"
+          email: "{{faker.email}}"
+          # Encrypt sensitive data
+          ssn: "{{encrypt '123-45-6789'}}"
+          credit_card: "{{encrypt '4242424242424242'}}"
+          created_at: "{{now}}"
+
+  response:
+    body:
+      user:
+        id: "{{uuid}}"
+        email: "{{faker.email}}"
+        # Response can decrypt or keep encrypted based on needs
+        ssn: "{{decrypt 'encrypted_ssn_from_request'}}"
+        status: "created"
+
+  # Encryption with custom key
+  custom_key_encryption:
+    method: POST
+    path: /api/secure-data
+    request:
+      headers:
+        X-Encryption-Key: "custom_key_2024"
+      body:
+        data:
+          # Use custom key for encryption
+          secret: "{{encrypt custom_key_2024 'classified information'}}"
+          timestamp: "{{now}}"
+
+# ==============================================================================
+# CHAIN CONTEXT TEMPLATES
+# ==============================================================================
+# Chain context allows passing data between chained requests
+# Access previous response data using {{chain.path.to.value}} syntax
+
+chained_api_workflow:
+  # Step 1: Create a user
+  create_user:
+    method: POST
+    path: /api/users
+    request:
+      body:
+        user:
+          email: "{{faker.email}}"
+          name: "{{faker.name}}"
+    response:
+      extract:
+        user_id: "user.id"  # Extract for use in next request
+
+  # Step 2: Create a post for that user
+  create_post:
+    method: POST
+    path: /api/users/{{chain.user_id}}/posts  # Use extracted user_id
+    request:
+      headers:
+        Authorization: "Bearer {{chain.auth_token}}"  # Use auth token from context
+      body:
+        post:
+          title: "{{faker.sentence}}"
+          content: "{{faker.paragraph}}"
+          author_id: "{{chain.user_id}}"  # Reference user_id again
+          tags: ["{{faker.word}}", "{{faker.word}}"]
+    response:
+      extract:
+        post_id: "post.id"
+
+  # Step 3: Add comments to the post
+  add_comment:
+    method: POST
+    path: /api/posts/{{chain.post_id}}/comments
+    request:
+      headers:
+        Authorization: "Bearer {{chain.auth_token}}"
+      body:
+        comment:
+          content: "{{faker.sentence}}"
+          author_id: "{{chain.user_id}}"
+          post_id: "{{chain.post_id}}"
+
+# ==============================================================================
+# COMPLEX TEMPLATE COMBINATIONS
+# ==============================================================================
+
+complex_ecommerce_scenario:
+  # Multi-step e-commerce transaction with all features
+  checkout_flow:
+    method: POST
+    path: /api/checkout
+    request:
+      headers:
+        X-Request-ID: "{{uuid}}"
+        X-Timestamp: "{{now}}"
+      body:
+        order:
+          id: "{{uuid}}"
+          customer:
+            id: "{{uuid}}"
+            email: "{{faker.email}}"
+            payment_method:
+              type: "credit_card"
+              token: "{{encrypt '4111111111111111'}}"  # Encrypted card
+              expiry: "{{randInt 1 12}}/{{randInt 2025 2030}}"
+          items:
+            - id: "{{uuid}}"
+              name: "{{faker.word}} Laptop"
+              price: "{{randInt 500 2000}}.{{randInt 00 99}}"
+              quantity: "{{randInt 1 3}}"
+          shipping:
+            address: "{{faker.address}}"
+            method: "express"
+            estimated_delivery: "{{now+2d}}"
+          billing:
+            address: "{{faker.address}}"
+            tax_amount: "{{randInt 10 100}}.{{randInt 00 99}}"
+          metadata:
+            session_id: "{{uuid}}"
+            user_agent: "MockBrowser/{{randInt 1 5}}.{{randInt 0 9}}"
+            ip_address: "{{faker.ip}}"
+
+  response:
+    status: 200
+    headers:
+      X-Order-ID: "{{uuid}}"
+      X-Processing-Time: "{{randInt 100 500}}ms"
+    body:
+      order:
+        id: "{{uuid}}"
+        status: "confirmed"
+        confirmation_number: "CONF-{{randInt 100000 999999}}"
+        estimated_delivery: "{{now+2d}}"
+        tracking:
+          carrier: "{{faker.company}}"
+          tracking_number: "{{uuid}}"
+        payment:
+          status: "authorized"
+          transaction_id: "{{uuid}}"
+          amount: "{{randInt 500 2000}}.{{randInt 00 99}}"
+
+# ==============================================================================
+# CONDITIONAL TEMPLATES WITH CONTEXT
+# ==============================================================================
+
+conditional_responses:
+  # Different responses based on chain context
+  user_profile:
+    method: GET
+    path: /api/users/{{chain.user_id}}
+    request:
+      headers:
+        Authorization: "Bearer {{chain.auth_token}}"
+    response:
+      # Use chain context to determine response
+      status: "{{chain.user_status == 'active' ? 200 : 403}}"
+      body: |
+        {
+          "user": {
+            "id": "{{chain.user_id}}",
+            "email": "{{chain.user_email}}",
+            "status": "{{chain.user_status}}",
+            "profile": {
+              "name": "{{faker.name}}",
+              "avatar": "{{faker.url}}/avatars/{{randInt 1 100}}.jpg",
+              "bio": "{{faker.paragraph}}"
+            },
+            "stats": {
+              "posts_count": "{{randInt 0 100}}",
+              "followers_count": "{{randInt 10 10000}}",
+              "following_count": "{{randInt 50 500}}"
+            },
+            "last_login": "{{now-{{randInt 1 30}}d}}"
+          }
+        }
+
+# ==============================================================================
+# BULK OPERATIONS WITH TEMPLATES
+# ==============================================================================
+
+bulk_user_creation:
+  method: POST
+  path: /api/users/bulk
+  request:
+    body:
+      users:
+        - id: "{{uuid}}"
+          email: "{{faker.email}}"
+          name: "{{faker.name}}"
+          created_at: "{{now}}"
+          role: "user"
+          preferences:
+            theme: "{{faker.color}}"
+            notifications: "{{randInt 0 1}}"
+        - id: "{{uuid}}"
+          email: "{{faker.email}}"
+          name: "{{faker.name}}"
+          created_at: "{{now}}"
+          role: "user"
+          preferences:
+            theme: "{{faker.color}}"
+            notifications: "{{randInt 0 1}}"
+        - id: "{{uuid}}"
+          email: "{{faker.email}}"
+          name: "{{faker.name}}"
+          created_at: "{{now}}"
+          role: "admin"
+          preferences:
+            theme: "{{faker.color}}"
+            notifications: "1"
+
+  response:
+    status: 201
+    body:
+      created_users:
+        - id: "{{uuid}}"
+          status: "created"
+        - id: "{{uuid}}"
+          status: "created"
+        - id: "{{uuid}}"
+          status: "created"
+      summary:
+        total_created: "3"
+        timestamp: "{{now}}"
+
+# ==============================================================================
+# TIME-BASED TEMPLATES WITH OFFSETS
+# ==============================================================================
+
+temporal_data_generation:
+  # Generate data with various time offsets
+  analytics_report:
+    method: GET
+    path: /api/analytics/daily
+    request:
+      query_params:
+        date: "{{now}}"
+        from: "{{now-7d}}"
+        to: "{{now-1d}}"
+    response:
+      body:
+        report:
+          date_range:
+            from: "{{now-7d}}"
+            to: "{{now-1d}}"
+          metrics:
+            - date: "{{now-7d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+            - date: "{{now-6d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+            - date: "{{now-5d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+            - date: "{{now-4d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+            - date: "{{now-3d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+            - date: "{{now-2d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+            - date: "{{now-1d}}"
+              users: "{{randInt 1000 5000}}"
+              sessions: "{{randInt 1500 8000}}"
+              pageviews: "{{randInt 5000 20000}}"
+          generated_at: "{{now}}"
+
+# ==============================================================================
+# CONFIGURATION EXAMPLES
+# ==============================================================================
+
+# Enable/disable faker tokens based on environment
+conditional_faker:
+  method: POST
+  path: /api/test-data
+  request:
+    body:
+      # These will only work if MOCKFORGE_FAKE_TOKENS is enabled
+      user:
+        email: "{{faker.email}}"
+        name: "{{faker.name}}"
+        address: "{{faker.address}}"
+      # These always work
+      id: "{{uuid}}"
+      timestamp: "{{now}}"
+      random_value: "{{randInt 1 100}}"

@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run
 
 # Default target
 help: ## Show this help message
@@ -153,6 +153,23 @@ outdated: ## Check for outdated dependencies
 # Spell check
 spellcheck: ## Check for typos
 	typos
+
+# Workspace sync targets
+sync-git: ## Sync workspaces to a git repository directory
+	@echo "Syncing workspaces to git repository..."
+	@cargo run -p mockforge-cli -- workspace sync --target-dir ./git-sync --structure nested --include-meta
+
+sync-dropbox: ## Sync workspaces to Dropbox directory
+	@echo "Syncing workspaces to Dropbox..."
+	@cargo run -p mockforge-cli -- workspace sync --target-dir ~/Dropbox/MockForge --structure grouped --force
+
+sync-selective: ## Sync specific workspaces to a directory
+	@echo "Syncing selected workspaces..."
+	@cargo run -p mockforge-cli -- workspace sync --target-dir ./selected-sync --strategy selective --workspaces "workspace1,workspace2"
+
+sync-dry-run: ## Preview what would be synced without actually doing it
+	@echo "Dry run - preview sync..."
+	@cargo run -p mockforge-cli -- workspace sync --target-dir ./preview-sync --dry-run
 
 # Pre-commit checks (run before committing)
 pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks

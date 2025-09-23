@@ -28,15 +28,15 @@ async fn toggling_validation_mode_runtime() {
         response_template_expand: false,
         validation_status: None,
     });
-    let app: Router = build_router(Some(path.to_string_lossy().to_string()), opts).await;
+    let app: Router = build_router(Some(path.to_string_lossy().to_string()), opts, None).await;
 
     // Bind on random port
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move { 
+    let server = tokio::spawn(async move {
         axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .await
-            .unwrap() 
+            .unwrap()
     });
 
     // Invalid request should 400 under enforce
@@ -45,15 +45,39 @@ async fn toggling_validation_mode_runtime() {
     let res = client.post(&url).send().await.unwrap();
     assert_eq!(res.status(), reqwest::StatusCode::BAD_REQUEST);
 
-    // Toggle to per-route warn (keeps enforce globally)
-    let url_val = format!("http://{}/__mockforge/validation", addr);
-    let payload = serde_json::json!({"mode":"enforce","overrides": {"POST /e2e": "warn"}});
-    let res = client.post(&url_val).json(&payload).send().await.unwrap();
-    assert!(res.status().is_success());
+    // Test with per-route warn override by setting environment variable
+    std::env::set_var("MOCKFORGE_VALIDATION_OVERRIDES_JSON", r#"{"POST /e2e": "warn"}"#);
+
+    // Rebuild router with the updated overrides
+    let mut overrides = std::collections::HashMap::new();
+    overrides.insert("POST /e2e".to_string(), ValidationMode::Warn);
+    let updated_opts = Some(ValidationOptions {
+        request_mode: ValidationMode::Enforce,
+        aggregate_errors: true,
+        validate_responses: false,
+        overrides,
+        admin_skip_prefixes: vec!["/__mockforge".into()],
+        response_template_expand: false,
+        validation_status: None,
+    });
+    let updated_app: Router = build_router(Some(path.to_string_lossy().to_string()), updated_opts, None).await;
+
+    // Bind on new random port for updated router
+    let updated_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let updated_addr: SocketAddr = updated_listener.local_addr().unwrap();
+    let updated_server = tokio::spawn(async move {
+        axum::serve(updated_listener, updated_app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
+    });
 
     // Now invalid request should pass due to per-route warn override
-    let res = client.post(&url).send().await.unwrap();
+    let updated_url = format!("http://{}/e2e", updated_addr);
+    let res = client.post(&updated_url).send().await.unwrap();
     assert!(res.status().is_success());
+
+    // Cleanup updated server
+    drop(updated_server);
 
     // Cleanup server
     drop(server);

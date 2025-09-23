@@ -6,6 +6,89 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
 
+/// Authentication configuration for HTTP requests
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// JWT configuration
+    pub jwt: Option<JwtConfig>,
+    /// OAuth2 configuration
+    pub oauth2: Option<OAuth2Config>,
+    /// Basic auth configuration
+    pub basic_auth: Option<BasicAuthConfig>,
+    /// API key configuration
+    pub api_key: Option<ApiKeyConfig>,
+    /// Whether to require authentication for all requests
+    pub require_auth: bool,
+}
+
+/// JWT authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JwtConfig {
+    /// JWT secret key for HMAC algorithms
+    pub secret: Option<String>,
+    /// RSA public key PEM for RSA algorithms
+    pub rsa_public_key: Option<String>,
+    /// ECDSA public key PEM for ECDSA algorithms
+    pub ecdsa_public_key: Option<String>,
+    /// Expected issuer
+    pub issuer: Option<String>,
+    /// Expected audience
+    pub audience: Option<String>,
+    /// Supported algorithms (defaults to HS256, RS256, ES256)
+    pub algorithms: Vec<String>,
+}
+
+/// OAuth2 configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuth2Config {
+    /// OAuth2 client ID
+    pub client_id: String,
+    /// OAuth2 client secret
+    pub client_secret: String,
+    /// Token introspection URL
+    pub introspection_url: String,
+    /// Authorization server URL
+    pub auth_url: Option<String>,
+    /// Token URL
+    pub token_url: Option<String>,
+    /// Expected token type
+    pub token_type_hint: Option<String>,
+}
+
+/// Basic authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BasicAuthConfig {
+    /// Username/password pairs
+    pub credentials: HashMap<String, String>,
+}
+
+/// API key configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyConfig {
+    /// Expected header name (default: X-API-Key)
+    pub header_name: String,
+    /// Expected query parameter name
+    pub query_name: Option<String>,
+    /// Valid API keys
+    pub keys: Vec<String>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            jwt: None,
+            oauth2: None,
+            basic_auth: None,
+            api_key: Some(ApiKeyConfig {
+                header_name: "X-API-Key".to_string(),
+                query_name: None,
+                keys: vec![],
+            }),
+            require_auth: false,
+        }
+    }
+}
+
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServerConfig {
@@ -17,6 +100,8 @@ pub struct ServerConfig {
     pub grpc: GrpcConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
+    /// Request chaining configuration
+    pub chaining: ChainingConfig,
     /// Core MockForge configuration
     pub core: CoreConfig,
     /// Logging configuration
@@ -54,6 +139,8 @@ pub struct HttpConfig {
     pub validation_overrides: std::collections::HashMap<String, String>,
     /// When embedding Admin UI under HTTP, skip validation for the mounted prefix
     pub skip_admin_validation: bool,
+    /// Authentication configuration
+    pub auth: Option<AuthConfig>,
 }
 
 impl Default for HttpConfig {
@@ -71,6 +158,7 @@ impl Default for HttpConfig {
             validation_status: None,
             validation_overrides: std::collections::HashMap::new(),
             skip_admin_validation: true,
+            auth: None,
         }
     }
 }
@@ -191,6 +279,30 @@ impl Default for LoggingConfig {
             file_path: None,
             max_file_size_mb: 10,
             max_files: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChainingConfig {
+    /// Enable request chaining
+    pub enabled: bool,
+    /// Maximum chain length to prevent infinite loops
+    pub max_chain_length: usize,
+    /// Global timeout for chain execution in seconds
+    pub global_timeout_secs: u64,
+    /// Enable parallel execution when dependencies allow
+    pub enable_parallel_execution: bool,
+}
+
+impl Default for ChainingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_chain_length: 20,
+            global_timeout_secs: 300,
+            enable_parallel_execution: false,
         }
     }
 }
@@ -370,6 +482,65 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
     if let Ok(failures_enabled) = std::env::var("MOCKFORGE_FAILURES_ENABLED") {
         let enabled = failures_enabled == "1" || failures_enabled.eq_ignore_ascii_case("true");
         config.core.failures_enabled = enabled;
+    }
+
+    if let Ok(overrides_enabled) = std::env::var("MOCKFORGE_OVERRIDES_ENABLED") {
+        let enabled = overrides_enabled == "1" || overrides_enabled.eq_ignore_ascii_case("true");
+        config.core.overrides_enabled = enabled;
+    }
+
+    if let Ok(traffic_shaping_enabled) = std::env::var("MOCKFORGE_TRAFFIC_SHAPING_ENABLED") {
+        let enabled = traffic_shaping_enabled == "1" || traffic_shaping_enabled.eq_ignore_ascii_case("true");
+        config.core.traffic_shaping_enabled = enabled;
+    }
+
+    // Traffic shaping overrides
+    if let Ok(bandwidth_enabled) = std::env::var("MOCKFORGE_BANDWIDTH_ENABLED") {
+        let enabled = bandwidth_enabled == "1" || bandwidth_enabled.eq_ignore_ascii_case("true");
+        config.core.traffic_shaping.bandwidth.enabled = enabled;
+    }
+
+    if let Ok(max_bytes_per_sec) = std::env::var("MOCKFORGE_BANDWIDTH_MAX_BYTES_PER_SEC") {
+        if let Ok(bytes) = max_bytes_per_sec.parse() {
+            config.core.traffic_shaping.bandwidth.max_bytes_per_sec = bytes;
+            config.core.traffic_shaping.bandwidth.enabled = true;
+        }
+    }
+
+    if let Ok(burst_capacity) = std::env::var("MOCKFORGE_BANDWIDTH_BURST_CAPACITY_BYTES") {
+        if let Ok(bytes) = burst_capacity.parse() {
+            config.core.traffic_shaping.bandwidth.burst_capacity_bytes = bytes;
+        }
+    }
+
+    if let Ok(burst_loss_enabled) = std::env::var("MOCKFORGE_BURST_LOSS_ENABLED") {
+        let enabled = burst_loss_enabled == "1" || burst_loss_enabled.eq_ignore_ascii_case("true");
+        config.core.traffic_shaping.burst_loss.enabled = enabled;
+    }
+
+    if let Ok(burst_probability) = std::env::var("MOCKFORGE_BURST_LOSS_PROBABILITY") {
+        if let Ok(prob) = burst_probability.parse::<f64>() {
+            config.core.traffic_shaping.burst_loss.burst_probability = prob.clamp(0.0, 1.0);
+            config.core.traffic_shaping.burst_loss.enabled = true;
+        }
+    }
+
+    if let Ok(burst_duration) = std::env::var("MOCKFORGE_BURST_LOSS_DURATION_MS") {
+        if let Ok(ms) = burst_duration.parse() {
+            config.core.traffic_shaping.burst_loss.burst_duration_ms = ms;
+        }
+    }
+
+    if let Ok(loss_rate) = std::env::var("MOCKFORGE_BURST_LOSS_RATE") {
+        if let Ok(rate) = loss_rate.parse::<f64>() {
+            config.core.traffic_shaping.burst_loss.loss_rate_during_burst = rate.clamp(0.0, 1.0);
+        }
+    }
+
+    if let Ok(recovery_time) = std::env::var("MOCKFORGE_BURST_LOSS_RECOVERY_MS") {
+        if let Ok(ms) = recovery_time.parse() {
+            config.core.traffic_shaping.burst_loss.recovery_time_ms = ms;
+        }
     }
 
     // Logging overrides

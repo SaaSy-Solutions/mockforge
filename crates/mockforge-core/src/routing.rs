@@ -86,6 +86,18 @@ impl RouteRegistry {
         Ok(())
     }
 
+    /// Clear all routes
+    pub fn clear(&mut self) {
+        self.http_routes.clear();
+        self.ws_routes.clear();
+        self.grpc_routes.clear();
+    }
+
+    /// Add a generic route (alias for add_http_route)
+    pub fn add_route(&mut self, route: Route) -> Result<()> {
+        self.add_http_route(route)
+    }
+
     /// Add a gRPC route
     pub fn add_grpc_route(&mut self, service: String, route: Route) -> Result<()> {
         self.grpc_routes.entry(service).or_default().push(route);

@@ -5,6 +5,8 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -92,7 +94,7 @@ jobs:
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
-    
+
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
@@ -182,3 +184,172 @@ jobs:
 
     - name: Check typos
       uses: crate-ci/typos@master
+
+  build-binaries:
+    name: Build Release Binaries
+    runs-on: ${{ matrix.os }}
+    needs: [test, security-audit, typos]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: "2G"
+      # Set reproducible build flag
+      SOURCE_DATE_EPOCH: ${{ github.event.repository.updated_at }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            name: linux-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: macOS-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: macOS-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install protoc (protobuf compiler) on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+    - name: Install protoc (protobuf compiler) on macOS
+      if: runner.os == 'macOS'
+      run: brew install protobuf
+
+    - name: Install protoc (protobuf compiler) on Windows
+      if: runner.os == 'Windows'
+      run: choco install protoc
+
+    - name: Install sccache
+      run: |
+        SCCACHE_VERSION=0.10.0
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -L "$SCCACHE_URL" | tar xz
+          sudo mv sccache-*/sccache /usr/local/bin/
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-apple-darwin.tar.gz"
+          curl -L "$SCCACHE_URL" | tar xz
+          sudo mv sccache-*/sccache /usr/local/bin/
+        elif [ "$RUNNER_OS" == "Windows" ]; then
+          SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-pc-windows-msvc.tar.gz"
+          curl -L "$SCCACHE_URL" -o sccache.tar.gz
+          tar xf sccache.tar.gz
+          cp sccache-*/sccache.exe /usr/local/bin/
+        fi
+        sccache --version
+
+    - name: Cache sccache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/sccache
+          ~\.cache\sccache
+        key: sccache-build-${{ matrix.target }}-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ matrix.target }}
+
+    - name: Build binary
+      run: cargo build --bin mockforge --release --target ${{ matrix.target }}
+
+    - name: Set binary name
+      id: set-name
+      run: |
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          echo "binary_name=mockforge.exe" >> $GITHUB_OUTPUT
+        else
+          echo "binary_name=mockforge" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Move binary to dist directory
+      run: |
+        mkdir -p dist
+        cp target/${{ matrix.target }}/release/${{ steps.set-name.outputs.binary_name }} dist/${{ matrix.name }}-${{ steps.set-name.outputs.binary_name }}
+
+    - name: Generate SBOM
+      run: |
+        cargo install cargo-cyclonedx
+        cargo cyclonedx --target ${{ matrix.target }}
+        mv bom.xml dist/${{ matrix.name }}-sbom.xml
+
+    - name: Upload binary artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mockforge-${{ matrix.name }}
+        path: |
+          dist/${{ matrix.name }}-${{ steps.set-name.outputs.binary_name }}
+          dist/${{ matrix.name }}-sbom.xml
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build-binaries
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create release archive
+      run: |
+        mkdir -p release
+        # Move binaries from artifacts/
+        find artifacts -name "*mockforge*" -type f -exec cp {} release/ \;
+        # Move example configs
+        cp config.example.yaml release/config.example.yaml
+        cp config.dev.yaml release/config.dev.yaml
+        cp config.prod.yaml release/config.prod.yaml
+        ls -la release/
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Changes
+
+          *See the [changelog](CHANGELOG.md) for details.*
+
+          ## Downloads
+
+          - [Linux x64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mockforge-linux-x64-mockforge)
+          - [Linux ARM64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mockforge-linux-arm64-mockforge)
+          - [macOS x64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mockforge-macOS-x64-mockforge)
+          - [macOS ARM64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mockforge-macOS-arm64-mockforge)
+          - [Windows x64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mockforge-windows-x64-mockforge.exe)
+
+          ## Files
+
+          - Binaries for all supported platforms
+          - Example configuration files
+          - SBOM (Software Bill of Materials)
+        files: release/*

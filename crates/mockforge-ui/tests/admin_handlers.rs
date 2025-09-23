@@ -8,10 +8,17 @@ mod admin_handlers_tests {
     use chrono::Utc;
 
     fn create_test_state() -> AdminState {
+        use mockforge_core::{init_global_logger, CentralizedRequestLogger};
+        use std::sync::Arc;
+
+        let logger = Arc::new(init_global_logger(1000).clone());
         AdminState::new(
             Some("127.0.0.1:3000".parse().unwrap()),
             Some("127.0.0.1:3001".parse().unwrap()),
             Some("127.0.0.1:50051".parse().unwrap()),
+            None, // graphql_server_addr
+            true, // api_enabled
+            logger,
         )
     }
 

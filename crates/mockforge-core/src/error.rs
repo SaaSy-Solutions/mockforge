@@ -41,6 +41,18 @@ pub enum Error {
 
     #[error("Generic error: {0}")]
     Generic(String),
+
+    #[error("Encryption error: {0}")]
+    Encryption(#[from] crate::encryption::EncryptionError),
+
+    #[error("JavaScript error: {0}")]
+    JavaScript(#[from] rquickjs::Error),
+}
+
+impl From<String> for Error {
+    fn from(message: String) -> Self {
+        Self::Generic(message)
+    }
 }
 
 impl Error {

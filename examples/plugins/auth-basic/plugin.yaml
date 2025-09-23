@@ -1,0 +1,46 @@
+id: "auth-basic"
+name: "Basic Authentication Plugin"
+description: "Provides HTTP Basic Authentication support for MockForge"
+version: "0.1.0"
+author:
+  name: "MockForge Team"
+  email: "team@mockforge.dev"
+homepage: "https://github.com/mockforge/plugins"
+repository: "https://github.com/mockforge/plugins/auth-basic"
+
+types:
+  - "auth"
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 10485760  # 10MB
+    max_cpu_percent: 0.1        # 10% CPU
+
+config_schema:
+  type: object
+  properties:
+    realm:
+      type: string
+      description: "Authentication realm name"
+      default: "MockForge"
+    users:
+      type: array
+      description: "List of users with passwords"
+      items:
+        type: object
+        properties:
+          username:
+            type: string
+          password:
+            type: string
+        required: ["username", "password"]
+  required: ["users"]
+
+dependencies: []

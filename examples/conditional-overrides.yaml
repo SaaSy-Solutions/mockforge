@@ -1,0 +1,114 @@
+# Example conditional overrides configuration demonstrating JSONPath and XPath filtering
+# This file shows how to use the new 'when' condition field to apply overrides
+# only when specific criteria are met
+
+# Example 1: JSONPath filtering on response body
+# Only apply override if the user has an admin role
+- targets: ["operation:getUser"]
+  when: "$.user.role"  # Checks if user.role exists in response
+  patch:
+    - op: add
+      path: /metadata/adminAccess
+      value: true
+    - op: replace
+      path: /user/permissions
+      value: ["read", "write", "admin"]
+
+# Example 2: Header-based conditions
+# Only apply override for requests with specific authorization
+- targets: ["tag:Payments"]
+  when: "header[authorization]=Bearer admin-token"
+  patch:
+    - op: replace
+      path: /payment/fee
+      value: 0  # No fees for admin users
+
+# Example 3: Query parameter conditions
+# Only apply override for requests with specific query parameters
+- targets: ["operation:getOrders"]
+  when: "query[status]=pending"
+  patch:
+    - op: add
+      path: /orders/0/priority
+      value: "HIGH"
+    - op: add
+      path: /orders/0/sla
+      value: "2 hours"
+
+# Example 4: Method-based conditions
+# Only apply override for POST requests
+- targets: ["path:/api/users"]
+  when: "method=POST"
+  patch:
+    - op: add
+      path: /user/createdAt
+      value: "{{now}}"
+    - op: add
+      path: /user/id
+      value: "{{uuid}}"
+
+# Example 5: Complex JSONPath with array filtering
+# Only apply override if there are items in the cart with price > 100
+- targets: ["operation:getCart"]
+  when: "$.cart.items[?(@.price > 100)]"
+  patch:
+    - op: add
+      path: /cart/discountEligible
+      value: true
+    - op: replace
+      path: /cart/total
+      value: "{{cart.total * 0.9}}"  # 10% discount
+
+# Example 6: XPath filtering for XML responses
+# Only apply override for urgent orders in XML API
+- targets: ["path:/api/xml/orders"]
+  when: "/order[@status='urgent']"
+  patch:
+    - op: replace
+      path: /order/priority
+      value: "CRITICAL"
+    - op: add
+      path: /order/escalationRequired
+      value: true
+
+# Example 7: XPath with text content checking
+# Only apply override if order contains specific text
+- targets: ["path:/api/xml/orders"]
+  when: "//notes/text()"
+  patch:
+    - op: add
+      path: /order/reviewRequired
+      value: true
+
+# Example 8: Logical AND condition
+# Only apply override if user is admin AND request is from mobile
+- targets: ["operation:getDashboard"]
+  when: "AND($.user.role=admin,header[user-agent]=*Mobile*)"
+  patch:
+    - op: add
+      path: /dashboard/adminPanel
+      value: true
+    - op: add
+      path: /dashboard/mobileLayout
+      value: true
+
+# Example 9: Logical OR condition
+# Only apply override if it's either a test environment OR debug header is present
+- targets: ["operation:getConfig"]
+  when: "OR(header[x-debug]=true,query[env]=test)"
+  patch:
+    - op: add
+      path: /config/debugMode
+      value: true
+    - op: replace
+      path: /config/logLevel
+      value: "DEBUG"
+
+# Example 10: NOT condition
+# Only apply override if user is NOT an admin
+- targets: ["operation:getUser"]
+  when: "NOT($.user.role=admin)"
+  patch:
+    - op: add
+      path: /user/restrictedAccess
+      value: true

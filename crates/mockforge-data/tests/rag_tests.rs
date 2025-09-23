@@ -210,6 +210,18 @@ mod rag_tests {
     }
 
     #[test]
+    fn test_rag_config_with_timeout_and_retries() {
+        let config = RagConfig {
+            request_timeout_seconds: 60,
+            max_retries: 5,
+            ..Default::default()
+        };
+
+        assert_eq!(config.request_timeout_seconds, 60);
+        assert_eq!(config.max_retries, 5);
+    }
+
+    #[test]
     fn test_rag_multiple_schema_fields() {
         let config = RagConfig::default();
         let mut engine = RagEngine::new(config);

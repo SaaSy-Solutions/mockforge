@@ -14,18 +14,18 @@ async fn serves_root_and_assets_and_health() {
         .unwrap();
     assert!(res.status().is_success());
 
-    // /admin.css
+    // /assets/index.css
     let res = app
         .clone()
-        .oneshot(Request::builder().uri("/admin.css").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert!(res.status().is_success());
 
-    // /admin.js
+    // /assets/index.js
     let res = app
         .clone()
-        .oneshot(Request::builder().uri("/admin.js").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert!(res.status().is_success());
@@ -53,18 +53,18 @@ async fn works_under_mount_prefix() {
         .unwrap();
     assert!(res.status().is_success());
 
-    // /admin/admin.css
+    // /admin/assets/index.css
     let res = app
         .clone()
-        .oneshot(Request::builder().uri("/admin/admin.css").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/admin/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert!(res.status().is_success());
 
-    // /admin/admin.js
+    // /admin/assets/index.js
     let res = app
         .clone()
-        .oneshot(Request::builder().uri("/admin/admin.js").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/admin/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert!(res.status().is_success());

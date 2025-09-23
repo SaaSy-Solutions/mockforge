@@ -1,0 +1,78 @@
+# Example MockForge configuration with authentication
+# This file demonstrates how to configure various authentication schemes
+
+server:
+  http:
+    port: 3000
+    host: "0.0.0.0"
+    openapi_spec: "./api-spec.yaml"
+
+    # Authentication configuration
+    auth:
+      # Require authentication for all requests
+      require_auth: true
+
+      # JWT configuration
+      jwt:
+        # HMAC secret for HS256 tokens
+        secret: "your-jwt-secret-key"
+        # Or use RSA public key (PEM format)
+        # rsa_public_key: |
+        #   -----BEGIN PUBLIC KEY-----
+        #   MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+        #   -----END PUBLIC KEY-----
+        # Expected issuer
+        issuer: "https://your-issuer.com"
+        # Expected audience
+        audience: "your-api"
+        # Supported algorithms (leave empty for all)
+        algorithms: ["HS256", "RS256"]
+
+      # OAuth2 configuration
+      oauth2:
+        client_id: "your-oauth2-client-id"
+        client_secret: "your-oauth2-client-secret"
+        introspection_url: "https://your-oauth2-server.com/introspect"
+        auth_url: "https://your-oauth2-server.com/auth"
+        token_url: "https://your-oauth2-server.com/token"
+        token_type_hint: "access_token"
+
+      # Basic authentication
+      basic_auth:
+        credentials:
+          admin: "admin-password"
+          user: "user-password"
+          readonly: "readonly-password"
+
+      # API key configuration
+      api_key:
+        # Header name for API keys
+        header_name: "X-API-Key"
+        # Optional query parameter name
+        query_name: "api_key"
+        # List of valid API keys
+        keys:
+          - "api-key-1"
+          - "api-key-2"
+          - "sk_live_123456789"
+
+  # Other server configurations...
+  logging:
+    level: "info"
+
+# Example usage:
+#
+# JWT Bearer token:
+# curl -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..." \
+#      http://localhost:3000/api/users
+#
+# Basic auth:
+# curl -H "Authorization: Basic YWRtaW46YWRtaW4=" \
+#      http://localhost:3000/api/users
+#
+# API key in header:
+# curl -H "X-API-Key: api-key-1" \
+#      http://localhost:3000/api/users
+#
+# API key in query:
+# curl "http://localhost:3000/api/users?api_key=api-key-1"

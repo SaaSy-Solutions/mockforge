@@ -1,0 +1,48 @@
+{
+  "id": "simple-auth-chain",
+  "name": "Simple Authentication Chain",
+  "description": "A simple chain demonstrating basic authentication flow",
+  "config": {
+    "enabled": true,
+    "maxChainLength": 5,
+    "globalTimeoutSecs": 30,
+    "enableParallelExecution": false
+  },
+  "links": [
+    {
+      "request": {
+        "id": "login",
+        "method": "POST",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "username": "testuser",
+          "password": "password123"
+        }
+      },
+      "extract": {
+        "user_id": "body.id"
+      },
+      "storeAs": "login_response"
+    },
+    {
+      "request": {
+        "id": "get_user",
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/posts/{{chain.login_response.body.id}}",
+        "dependsOn": ["login"]
+      },
+      "storeAs": "user_data"
+    }
+  ],
+  "variables": {
+    "api_base": "https://jsonplaceholder.typicode.com"
+  },
+  "tags": [
+    "simple",
+    "demo",
+    "authentication"
+  ]
+}

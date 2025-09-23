@@ -18,6 +18,8 @@ pub struct PriorityHttpHandler {
     proxy_handler: Option<ProxyHandler>,
     /// Mock response generator (from OpenAPI spec)
     mock_generator: Option<Box<dyn MockGenerator + Send + Sync>>,
+    /// OpenAPI spec for tag extraction
+    openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
 }
 
 /// Trait for mock response generation
@@ -57,6 +59,24 @@ impl PriorityHttpHandler {
             failure_injector,
             proxy_handler,
             mock_generator,
+            openapi_spec: None,
+        }
+    }
+
+    /// Create a new priority HTTP handler with OpenAPI spec
+    pub fn new_with_openapi(
+        record_replay: RecordReplayHandler,
+        failure_injector: Option<FailureInjector>,
+        proxy_handler: Option<ProxyHandler>,
+        mock_generator: Option<Box<dyn MockGenerator + Send + Sync>>,
+        openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
+    ) -> Self {
+        Self {
+            record_replay,
+            failure_injector,
+            proxy_handler,
+            mock_generator,
+            openapi_spec,
         }
     }
 
@@ -92,8 +112,13 @@ impl PriorityHttpHandler {
 
         // 2. FAIL: Check for failure injection
         if let Some(ref failure_injector) = self.failure_injector {
+            let tags = if let Some(ref spec) = self.openapi_spec {
+                fingerprint.openapi_tags(spec).unwrap_or_else(|| fingerprint.tags())
+            } else {
+                fingerprint.tags()
+            };
             if let Some((status_code, error_message)) =
-                failure_injector.process_request(&fingerprint.tags())
+                failure_injector.process_request(&tags)
             {
                 let error_response = serde_json::json!({
                     "error": error_message,
@@ -144,7 +169,7 @@ impl PriorityHttpHandler {
                             ),
                             status_code: proxy_response.status_code,
                             headers: response_headers,
-                            body: proxy_response.body,
+                            body: proxy_response.body.unwrap_or_default(),
                             content_type,
                         });
                     }
@@ -294,11 +319,12 @@ mod tests {
         let mock_generator =
             Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
 
-        let handler = PriorityHttpHandler::new(
+        let handler = PriorityHttpHandler::new_with_openapi(
             record_replay,
             None, // No failure injection
             None, // No proxy
             Some(mock_generator),
+            None, // No OpenAPI spec
         );
 
         let method = Method::GET;

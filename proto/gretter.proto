@@ -1,0 +1,46 @@
+syntax = "proto3";
+package mockforge.greeter;
+
+service Greeter {
+  rpc SayHello(HelloRequest) returns (HelloReply);
+  rpc SayHelloStream(HelloRequest) returns (stream HelloReply);
+  rpc SayHelloClientStream(stream HelloRequest) returns (HelloReply);
+  rpc Chat(stream HelloRequest) returns (stream HelloReply);
+}
+
+message HelloRequest {
+  string name = 1;
+  UserInfo user_info = 2;
+  repeated string tags = 3;
+}
+
+message HelloReply {
+  string message = 1;
+  ResponseMetadata metadata = 2;
+  repeated Item items = 3;
+}
+
+message UserInfo {
+  string user_id = 1;
+  string email = 2;
+  Status status = 3;
+}
+
+message ResponseMetadata {
+  string request_id = 1;
+  int64 timestamp = 2;
+  bool success = 3;
+}
+
+message Item {
+  string id = 1;
+  string name = 2;
+  int32 count = 3;
+}
+
+enum Status {
+  UNKNOWN = 0;
+  ACTIVE = 1;
+  INACTIVE = 2;
+  SUSPENDED = 3;
+}

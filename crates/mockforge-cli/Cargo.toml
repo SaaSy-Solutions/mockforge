@@ -1,18 +1,34 @@
 [package]
 name = "mockforge-cli"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CLI interface for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "mockforge"
+path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-tokio = { workspace = true }
+clap = { version = "4", features = ["derive", "std"] }
+tokio = { workspace = true, features = ["signal"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
 mockforge-http = { path = "../mockforge-http" }
 mockforge-ws = { path = "../mockforge-ws" }
 mockforge-grpc = { path = "../mockforge-grpc" }
-mockforge-data = { path = "../mockforge-data" }
-mockforge-ui = { path = "../mockforge-ui" }
+mockforge-graphql = { path = "../mockforge-graphql" }
+ mockforge-data = { path = "../mockforge-data" }
+ mockforge-ui = { path = "../mockforge-ui" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+url = { workspace = true }
+regex = "1.10"
+base64 = { workspace = true }
+axum = { workspace = true }
+hyper = { workspace = true }

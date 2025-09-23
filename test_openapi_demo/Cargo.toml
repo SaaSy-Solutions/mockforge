@@ -1,0 +1,13 @@
+[package]
+name = "test-openapi"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test-openapi"
+path = "src/main.rs"
+
+[dependencies]
+mockforge-core = { path = "../crates/mockforge-core" }
+tokio = "1.0"
+serde_json = "1.0"

@@ -1,13 +1,37 @@
 //! RAG (Retrieval-Augmented Generation) for enhanced data synthesis
+//!
+//! This module has been refactored into sub-modules for better organization:
+//! - config: RAG configuration and settings management
+//! - engine: Core RAG engine and retrieval logic
+//! - providers: LLM and embedding provider integrations
+//! - storage: Document storage and vector indexing
+//! - utils: Utility functions and helpers for RAG operations
 
+// Re-export sub-modules for backward compatibility
+pub mod config;
+pub mod engine;
+pub mod providers;
+pub mod storage;
+pub mod utils;
+
+// Re-export commonly used types
+pub use config::*;
+pub use engine::*;
+pub use providers::*;
+pub use storage::*;
+pub use utils::*;
+
+// Legacy imports for compatibility
 use crate::{schema::SchemaDefinition, DataConfig};
 use mockforge_core::Result;
-use reqwest::Client;
+use reqwest::{Client, ClientBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use tracing::debug;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::{debug, warn};
 
 /// Supported LLM providers
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,6 +87,11 @@ pub struct RagConfig {
     pub similarity_threshold: f64,
     /// Maximum number of chunks to retrieve for semantic search
     pub max_chunks: usize,
+
+    /// Request timeout in seconds
+    pub request_timeout_seconds: u64,
+    /// Maximum number of retries for failed requests
+    pub max_retries: usize,
 }
 
 impl Default for RagConfig {
@@ -81,6 +110,8 @@ impl Default for RagConfig {
             embedding_endpoint: None,
             similarity_threshold: 0.7,
             max_chunks: 5,
+            request_timeout_seconds: 30,
+            max_retries: 3,
         }
     }
 }
@@ -123,11 +154,19 @@ pub struct RagEngine {
 impl RagEngine {
     /// Create a new RAG engine
     pub fn new(config: RagConfig) -> Self {
+        let client = ClientBuilder::new()
+            .timeout(Duration::from_secs(config.request_timeout_seconds))
+            .build()
+            .unwrap_or_else(|e| {
+                warn!("Failed to create HTTP client with timeout, using default: {}", e);
+                Client::new()
+            });
+
         Self {
             config,
             chunks: Vec::new(),
             schema_kb: HashMap::new(),
-            client: Client::new(),
+            client,
         }
     }
 
@@ -193,17 +232,67 @@ impl RagEngine {
             return Err(mockforge_core::Error::generic("RAG is not enabled in config"));
         }
 
+        // Validate RAG configuration before proceeding
+        if self.config.api_key.is_none() {
+            return Err(mockforge_core::Error::generic(
+                "RAG is enabled but no API key is configured. Please set MOCKFORGE_RAG_API_KEY or provide --rag-api-key"
+            ));
+        }
+
         let mut results = Vec::new();
+        let mut failed_rows = 0;
 
         // Generate prompts for each row
         for i in 0..config.rows {
-            let prompt = self.build_generation_prompt(schema, i).await?;
-            let generated_data = self.call_llm(&prompt).await?;
-            let parsed_data = self.parse_llm_response(&generated_data)?;
-            results.push(parsed_data);
+            match self.generate_single_row_with_rag(schema, i).await {
+                Ok(data) => results.push(data),
+                Err(e) => {
+                    failed_rows += 1;
+                    warn!("Failed to generate RAG data for row {}: {}", i, e);
+
+                    // If too many rows fail, return an error
+                    if failed_rows > config.rows / 4 { // Allow up to 25% failure rate
+                        return Err(mockforge_core::Error::generic(
+                            format!("Too many RAG generation failures ({} out of {} rows failed). Check API configuration and network connectivity.", failed_rows, config.rows)
+                        ));
+                    }
+
+                    // For failed rows, generate fallback data
+                    let fallback_data = self.generate_fallback_data(schema);
+                    results.push(fallback_data);
+                }
+            }
+        }
+
+        if failed_rows > 0 {
+            warn!("RAG generation completed with {} failed rows out of {}", failed_rows, config.rows);
         }
 
         Ok(results)
+    }
+
+    /// Generate a single row using RAG
+    async fn generate_single_row_with_rag(&self, schema: &SchemaDefinition, row_index: usize) -> Result<Value> {
+        let prompt = self.build_generation_prompt(schema, row_index).await?;
+        let generated_data = self.call_llm(&prompt).await?;
+        self.parse_llm_response(&generated_data)
+    }
+
+    /// Generate fallback data when RAG fails
+    fn generate_fallback_data(&self, schema: &SchemaDefinition) -> Value {
+        let mut obj = serde_json::Map::new();
+
+        for field in &schema.fields {
+            let value = match field.field_type.as_str() {
+                "string" => Value::String("sample_data".to_string()),
+                "integer" | "number" => Value::Number(42.into()),
+                "boolean" => Value::Bool(true),
+                _ => Value::String("sample_data".to_string()),
+            };
+            obj.insert(field.name.clone(), value);
+        }
+
+        Value::Object(obj)
     }
 
     /// Build a generation prompt with retrieved context
@@ -481,8 +570,29 @@ impl RagEngine {
         }
     }
 
-    /// Call LLM API with provider-specific implementation
+    /// Call LLM API with provider-specific implementation and retry logic
     async fn call_llm(&self, prompt: &str) -> Result<String> {
+        let mut last_error = None;
+
+        for attempt in 0..=self.config.max_retries {
+            match self.call_llm_single_attempt(prompt).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    last_error = Some(e);
+                    if attempt < self.config.max_retries {
+                        let delay = Duration::from_millis(500 * (attempt + 1) as u64);
+                        warn!("LLM API call failed (attempt {}), retrying in {:?}: {:?}", attempt + 1, delay, last_error);
+                        sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| mockforge_core::Error::generic("All LLM API retry attempts failed")))
+    }
+
+    /// Single attempt to call LLM API with provider-specific implementation
+    async fn call_llm_single_attempt(&self, prompt: &str) -> Result<String> {
         match &self.config.provider {
             LlmProvider::OpenAI => self.call_openai(prompt).await,
             LlmProvider::Anthropic => self.call_anthropic(prompt).await,
@@ -775,7 +885,7 @@ impl Default for RagEngine {
 }
 
 /// RAG-enhanced data generation utilities
-pub mod utils {
+pub mod rag_utils {
     use super::*;
 
     /// Create a RAG engine with common business domain knowledge

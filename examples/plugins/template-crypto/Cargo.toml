@@ -1,0 +1,18 @@
+[package]
+name = "mockforge-plugin-template-crypto"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mockforge-plugin-core = { path = "../../../crates/mockforge-plugin-core" }
+wit-bindgen = "0.34"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.21"
+rand = "0.8"
+hex = "0.4"

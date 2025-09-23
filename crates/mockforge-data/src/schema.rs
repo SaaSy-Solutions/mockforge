@@ -118,6 +118,19 @@ impl FieldDefinition {
 
         if normalized_expected != actual_type
             && !(normalized_expected == "number" && actual_type == "integer")
+            && !(normalized_expected == "float" && actual_type == "number")
+            && !(normalized_expected == "uuid" && actual_type == "string")
+            && !(normalized_expected == "email" && actual_type == "string")
+            && !(normalized_expected == "name" && actual_type == "string")
+            && !(normalized_expected == "address" && actual_type == "string")
+            && !(normalized_expected == "phone" && actual_type == "string")
+            && !(normalized_expected == "company" && actual_type == "string")
+            && !(normalized_expected == "url" && actual_type == "string")
+            && !(normalized_expected == "ip" && actual_type == "string")
+            && !(normalized_expected == "color" && actual_type == "string")
+            && !(normalized_expected == "date" && actual_type == "string")
+            && !(normalized_expected == "datetime" && actual_type == "string")
+            && !(normalized_expected == "paragraph" && actual_type == "string")
         {
             return Err(Error::generic(format!(
                 "Field '{}' type mismatch: expected {}, got {}",

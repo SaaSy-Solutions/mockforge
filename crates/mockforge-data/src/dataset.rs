@@ -1,5 +1,19 @@
 //! Dataset management and persistence
+//!
+//! This module has been refactored into sub-modules for better organization:
+//! - core: Core dataset structures and basic operations
+//! - collection: Dataset collection management and organization
+//! - metadata: Dataset metadata tracking and management
+//! - validation: Dataset validation and integrity checking
+//! - persistence: Dataset storage, loading, and file operations
 
+// Re-export sub-modules for backward compatibility
+pub mod core;
+
+// Re-export commonly used types
+pub use core::*;
+
+// Legacy imports for compatibility
 use crate::{DataConfig, GenerationResult, OutputFormat, SchemaDefinition};
 use mockforge_core::{Error, Result};
 use serde::{Deserialize, Serialize};

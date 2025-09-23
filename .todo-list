@@ -1,0 +1,14 @@
+- [x] Analyze existing codebase and sync system
+- [x] Extend workspace model to include sync configuration (directory, enable/disable, monitoring)
+- [x] Implement file system watcher for bidirectional sync monitoring
+- [x] Add sync direction detection (workspace→directory vs directory→workspace)
+- [x] Create confirmation dialog system for directory→workspace changes
+- [x] Implement real-time background sync service
+ - [x] Add environment filtering for sharable environments
+ - [x] Extend CLI with auto-sync daemon mode
+ - [x] Create Workspace Settings UI dialog for sync configuration
+ - [x] Add sync status indicators and controls to UI
+ - [x] Implement "Open Workspace from Directory" functionality
+ - [x] Add sync setup during workspace creation flow
+ - [x] Create comprehensive tests for bidirectional sync functionality
+ - [x] Update documentation with complete sync feature examples

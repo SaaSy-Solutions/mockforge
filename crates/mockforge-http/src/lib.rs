@@ -1,135 +1,181 @@
+pub mod auth;
+pub mod chain_handlers;
 pub mod latency_profiles;
 pub mod op_middleware;
 pub mod replay_listing;
 pub mod request_logging;
-pub mod schema_diff;
+pub mod sse;
 
-use axum::http::StatusCode;
 use axum::Router;
-use axum::{routing::get, Json};
-use mockforge_core::openapi_routes::{
-    get_last_validation_error, get_validation_errors, ValidationOptions,
-};
-use mockforge_core::{latency::LatencyInjector, load_config, save_config, LatencyProfile};
-use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
+use axum::middleware::from_fn_with_state;
+use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
+use mockforge_core::latency::LatencyInjector;
+use mockforge_core::LatencyProfile;
+use mockforge_core::TrafficShaper;
+use mockforge_core::openapi::OpenApiSpec;
+use mockforge_core::openapi_routes::ValidationOptions;
+use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
-use serde::{Deserialize, Serialize};
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
-pub async fn build_router(spec_path: Option<String>, options: Option<ValidationOptions>) -> Router {
-    build_router_with_latency(spec_path, options, None).await
-}
-
-/// Build the base HTTP router with latency injection support
-pub async fn build_router_with_latency(
-    spec_path: Option<String>,
-    options: Option<ValidationOptions>,
-    latency_injector: Option<LatencyInjector>,
-) -> Router {
-    build_router_with_injectors(spec_path, options, latency_injector, None).await
-}
-
-/// Build the base HTTP router with both latency and failure injection support
-pub async fn build_router_with_injectors(
-    spec_path: Option<String>,
-    mut options: Option<ValidationOptions>,
-    latency_injector: Option<LatencyInjector>,
-    failure_injector: Option<mockforge_core::FailureInjector>,
-) -> Router {
-    // If richer faker is available, register provider once (idempotent)
-    #[cfg(feature = "data-faker")]
-    {
-        register_core_faker_provider();
-    }
+pub async fn build_router(spec_path: Option<String>, options: Option<ValidationOptions>, failure_config: Option<FailureConfig>) -> Router {
     // Set up the basic router
     let mut app = Router::new();
 
     // If an OpenAPI spec is provided, integrate it
-    if let Some(spec) = spec_path {
-        match OpenApiSpec::from_file(&spec).await {
+    if let Some(spec_path) = spec_path {
+        match OpenApiSpec::from_file(&spec_path).await {
             Ok(openapi) => {
-                info!("Loaded OpenAPI spec from {}", spec);
-                // Add admin skip prefixes based on config via env (mount path) and internal admin API prefix
-                if let Some(ref mut opts) = options {
-                    if let Ok(pref) = std::env::var("MOCKFORGE_ADMIN_MOUNT_PREFIX") {
-                        if !pref.is_empty() {
-                            opts.admin_skip_prefixes.push(pref);
-                        }
-                    }
-                    opts.admin_skip_prefixes.push("/__mockforge".to_string());
-                }
-                let registry = if let Some(mut opts) = options.clone() {
-                    // Thread env overrides for new options if present
-                    if let Ok(s) = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND") {
-                        if s == "1" || s.eq_ignore_ascii_case("true") {
-                            opts.response_template_expand = true;
-                        }
-                    }
-                    if let Ok(s) = std::env::var("MOCKFORGE_VALIDATION_STATUS") {
-                        if let Ok(c) = s.parse::<u16>() {
-                            opts.validation_status = Some(c);
-                        }
-                    }
+                info!("Loaded OpenAPI spec from {}", spec_path);
+                let registry = if let Some(opts) = options {
                     OpenApiRouteRegistry::new_with_options(openapi, opts)
                 } else {
                     OpenApiRouteRegistry::new_with_env(openapi)
                 };
 
-                // Clone registry for routes listing before moving it to build_router
-                let routes_registry = registry.clone();
-
-                // Build router with latency and failure injection if provided
-                if let Some(injector) = latency_injector {
-                    app = registry.build_router_with_injectors(injector, failure_injector);
+                app = if let Some(failure_config) = &failure_config {
+                    let failure_injector = FailureInjector::new(Some(failure_config.clone()), true);
+                    registry.build_router_with_injectors(LatencyInjector::default(), Some(failure_injector))
                 } else {
-                    app = registry.build_router();
-                }
-
-                // Expose routes listing for Admin UI
-                if let Some(_opts) = options {
-                    let routes_json = routes_registry
-                        .routes()
-                        .iter()
-                        .map(|r| serde_json::json!({"method": r.method, "path": r.path}))
-                        .collect::<Vec<_>>();
-                    let handler = move || {
-                        let data = routes_json.clone();
-                        async move { Json(serde_json::json!({"routes": data})) }
-                    };
-                    app = app.route("/__mockforge/routes", get(handler));
-                }
+                    registry.build_router()
+                };
             }
             Err(e) => {
-                warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec, e);
-                // Fall back to basic router
+                warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec_path, e);
             }
         }
     }
 
-    // Add basic health check endpoint if not already provided by OpenAPI spec
-    app.route(
+    // Add basic health check endpoint
+    app = app.route(
         "/health",
         axum::routing::get(|| async {
             use mockforge_core::server_utils::health::HealthStatus;
             axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
         }),
     )
-    // Admin: runtime validation toggle
-    .route("/__mockforge/validation", get(get_validation).post(set_validation))
-    // Admin: fetch last validation error
-    .route("/__mockforge/validation/last_error", get(get_last_error))
-    .route("/__mockforge/validation/history", get(get_error_history))
-    // Admin: download config and overrides YAML
-    .route("/__mockforge/config.yaml", get(download_config_yaml))
-    .route("/__mockforge/validation/patch.yaml", get(download_overrides_yaml))
-    // Smoke test endpoints
-    .route("/__mockforge/smoke", get(get_smoke_test_index))
-    .route("/__mockforge/smoke/run", get(run_smoke_tests))
-    // Add request logging middleware
-    .layer(axum::middleware::from_fn(request_logging::log_http_requests))
+    // Add SSE endpoints
+    .merge(sse::sse_router());
+
+    app
 }
+
+
+/// Build the base HTTP router with authentication and latency support
+pub async fn build_router_with_auth_and_latency(
+    _spec_path: Option<String>,
+    _options: Option<()>,
+    _auth_config: Option<mockforge_core::config::AuthConfig>,
+    _latency_injector: Option<LatencyInjector>,
+) -> Router {
+    // For now, just use the basic router. Full auth and latency support can be added later.
+    build_router(None, None, None).await
+}
+
+/// Build the base HTTP router with latency injection support
+pub async fn build_router_with_latency(
+    _spec_path: Option<String>,
+    _options: Option<ValidationOptions>,
+    _latency_injector: Option<LatencyInjector>,
+) -> Router {
+    // For now, fall back to basic router since injectors are complex to implement
+    build_router(None, None, None).await
+}
+
+
+/// Build the base HTTP router with authentication support
+pub async fn build_router_with_auth(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    auth_config: Option<mockforge_core::config::AuthConfig>,
+) -> Router {
+    use crate::auth::{AuthState, auth_middleware, create_oauth2_client};
+    use std::sync::Arc;
+
+    // If richer faker is available, register provider once (idempotent)
+    #[cfg(feature = "data-faker")]
+    {
+        register_core_faker_provider();
+    }
+
+    // Set up authentication state
+    let spec = if let Some(spec_path) = &spec_path {
+        match mockforge_core::openapi::OpenApiSpec::from_file(&spec_path).await {
+            Ok(spec) => Some(Arc::new(spec)),
+            Err(e) => {
+                warn!("Failed to load OpenAPI spec for auth: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Create OAuth2 client if configured
+    let oauth2_client = if let Some(auth_config) = &auth_config {
+        if let Some(oauth2_config) = &auth_config.oauth2 {
+            match create_oauth2_client(oauth2_config) {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    warn!("Failed to create OAuth2 client: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let auth_state = AuthState {
+        config: auth_config.unwrap_or_default(),
+        spec,
+        oauth2_client,
+    };
+
+    // Set up the basic router with auth state
+    let mut app = Router::new().with_state(auth_state.clone());
+
+    // If an OpenAPI spec is provided, integrate it
+    if let Some(spec_path) = spec_path {
+        match OpenApiSpec::from_file(&spec_path).await {
+            Ok(openapi) => {
+                info!("Loaded OpenAPI spec from {}", spec_path);
+                let registry = if let Some(opts) = options {
+                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                } else {
+                    OpenApiRouteRegistry::new_with_env(openapi)
+                };
+
+                app = registry.build_router();
+            }
+            Err(e) => {
+                warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec_path, e);
+            }
+        }
+    }
+
+    // Add basic health check endpoint
+    app = app.route(
+        "/health",
+        axum::routing::get(|| async {
+            use mockforge_core::server_utils::health::HealthStatus;
+            axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
+        }),
+    )
+    // Add SSE endpoints
+    .merge(sse::sse_router())
+    // Add authentication middleware (before logging)
+    .layer(axum::middleware::from_fn_with_state(auth_state.clone(), auth_middleware))
+    // Add request logging middleware
+    .layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    app
+}
+
 
 /// Serve a provided router on the given port.
 pub async fn serve_router(
@@ -158,6 +204,31 @@ pub async fn start(
     start_with_latency(port, spec_path, options, None).await
 }
 
+/// Start HTTP server with authentication and latency support
+pub async fn start_with_auth_and_latency(
+    port: u16,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    auth_config: Option<mockforge_core::config::AuthConfig>,
+    latency_profile: Option<LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    start_with_auth_and_injectors(port, spec_path, options, auth_config, latency_profile, None).await
+}
+
+/// Start HTTP server with authentication and injectors support
+pub async fn start_with_auth_and_injectors(
+    port: u16,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    auth_config: Option<mockforge_core::config::AuthConfig>,
+    latency_profile: Option<LatencyProfile>,
+    failure_injector: Option<mockforge_core::FailureInjector>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // For now, ignore latency and failure injectors and just use auth
+    let app = build_router_with_auth(spec_path, options, auth_config).await;
+    serve_router(port, app).await
+}
+
 /// Start HTTP server with latency injection support
 pub async fn start_with_latency(
     port: u16,
@@ -172,6 +243,54 @@ pub async fn start_with_latency(
     serve_router(port, app).await
 }
 
+/// Build the base HTTP router with chaining support
+pub async fn build_router_with_chains(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
+) -> Router {
+    use axum::{routing::{get, post, put, delete}, Router};
+    use crate::chain_handlers::create_chain_state;
+    use std::sync::Arc;
+
+    // Create chain registry and execution engine
+    let chain_config = circling_config.unwrap_or_default();
+    let registry = Arc::new(mockforge_core::request_chaining::RequestChainRegistry::new(chain_config.clone()));
+    let engine = Arc::new(mockforge_core::chain_execution::ChainExecutionEngine::new(registry.clone(), chain_config));
+    let chain_state = create_chain_state(registry, engine);
+
+    // Start with basic router
+    let mut app = build_router(spec_path, options, None).await;
+
+    // Add chain management endpoints
+    app = app.nest(
+        "/__mockforge/chains",
+        Router::new()
+            .route("/", get(chain_handlers::list_chains))
+            .route("/", post(chain_handlers::create_chain))
+            .route("/:id", get(chain_handlers::get_chain))
+            .route("/:id", put(chain_handlers::update_chain))
+            .route("/:id", delete(chain_handlers::delete_chain))
+            .route("/:id/execute", post(chain_handlers::execute_chain))
+            .route("/:id/validate", post(chain_handlers::validate_chain))
+            .route("/:id/history", get(chain_handlers::get_chain_history))
+            .with_state(chain_state)
+    );
+
+    app
+}
+
+/// Start HTTP server with chaining support
+pub async fn start_with_chains(
+    port: u16,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    chain_config: Option<mockforge_core::request_chaining::ChainConfig>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let app = build_router_with_chains(spec_path, options, chain_config).await;
+    serve_router(port, app).await
+}
+
 /// Start HTTP server with both latency and failure injection support
 pub async fn start_with_injectors(
     port: u16,
@@ -180,228 +299,80 @@ pub async fn start_with_injectors(
     latency_profile: Option<LatencyProfile>,
     failure_injector: Option<mockforge_core::FailureInjector>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let latency_injector =
-        latency_profile.map(|profile| LatencyInjector::new(profile, Default::default()));
-
-    let app =
-        build_router_with_injectors(spec_path, options, latency_injector, failure_injector).await;
+    // For now, ignore latency and failure injectors and just use basic router
+    let app = build_router(spec_path, options, None).await;
     serve_router(port, app).await
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ValidationSettings {
-    mode: Option<String>,
-    aggregate_errors: Option<bool>,
-    validate_responses: Option<bool>,
-    overrides: Option<serde_json::Map<String, serde_json::Value>>,
-    config_path: Option<String>,
-}
+/// Build router with traffic shaping support
+pub async fn build_router_with_traffic_shaping(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    traffic_shaper: Option<TrafficShaper>,
+    traffic_shaping_enabled: bool,
+) -> Router {
+    use crate::op_middleware::Shared;
+    use crate::latency_profiles::LatencyProfiles;
+    use mockforge_core::Overrides;
 
-async fn get_validation() -> Json<ValidationSettings> {
-    let mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok();
-    let aggregate_errors = std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
-        .ok()
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-    let validate_responses = std::env::var("MOCKFORGE_RESPONSE_VALIDATION")
-        .ok()
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-    let overrides = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v.as_object().cloned());
-    let config_path = std::env::var("MOCKFORGE_CONFIG_PATH").ok();
-    Json(ValidationSettings {
-        mode,
-        aggregate_errors,
-        validate_responses,
-        overrides,
-        config_path,
-    })
-}
+    let shared = Shared {
+        profiles: LatencyProfiles::default(),
+        overrides: Overrides::default(),
+        failure_injector: None,
+        traffic_shaper: traffic_shaper.clone(),
+        overrides_enabled: false,
+        traffic_shaping_enabled,
+    };
 
-async fn set_validation(Json(payload): Json<ValidationSettings>) -> Json<serde_json::Value> {
-    if let Some(mode) = payload.mode {
-        std::env::set_var("MOCKFORGE_REQUEST_VALIDATION", mode);
-    }
-    if let Some(agg) = payload.aggregate_errors {
-        std::env::set_var("MOCKFORGE_AGGREGATE_ERRORS", if agg { "true" } else { "false" });
-    }
-    if let Some(resp) = payload.validate_responses {
-        std::env::set_var("MOCKFORGE_RESPONSE_VALIDATION", if resp { "true" } else { "false" });
-    }
-    if let Some(map) = payload.overrides {
-        let json = serde_json::Value::Object(map);
-        if let Ok(s) = serde_json::to_string(&json) {
-            std::env::set_var("MOCKFORGE_VALIDATION_OVERRIDES_JSON", s);
-        }
-    }
-    // Optionally persist to config file if MOCKFORGE_CONFIG_PATH is set
-    if let Ok(cfg_path) = std::env::var("MOCKFORGE_CONFIG_PATH") {
-        if let Ok(mut cfg) = load_config(&cfg_path).await {
-            if let Ok(mode) = std::env::var("MOCKFORGE_REQUEST_VALIDATION") {
-                cfg.http.request_validation = mode;
+    // Start with basic router
+    let mut app = Router::new();
+
+    // If an OpenAPI spec is provided, integrate it
+    if let Some(spec) = spec_path {
+        match OpenApiSpec::from_file(&spec).await {
+            Ok(openapi) => {
+                info!("Loaded OpenAPI spec from {}", spec);
+                let registry = if let Some(opts) = options {
+                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                } else {
+                    OpenApiRouteRegistry::new_with_env(openapi)
+                };
+                app = registry.build_router();
             }
-            if let Ok(agg) = std::env::var("MOCKFORGE_AGGREGATE_ERRORS") {
-                cfg.http.aggregate_validation_errors =
-                    agg == "1" || agg.eq_ignore_ascii_case("true");
-            }
-            if let Ok(rv) = std::env::var("MOCKFORGE_RESPONSE_VALIDATION") {
-                cfg.http.validate_responses = rv == "1" || rv.eq_ignore_ascii_case("true");
-            }
-            if let Ok(over_json) = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON") {
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&over_json) {
-                    if let Some(obj) = val.as_object() {
-                        cfg.http.validation_overrides.clear();
-                        for (k, v) in obj {
-                            if let Some(s) = v.as_str() {
-                                cfg.http.validation_overrides.insert(k.clone(), s.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-            let _ = save_config(&cfg_path, &cfg).await;
-        }
-    }
-    Json(serde_json::json!({"status":"ok"}))
-}
-
-async fn get_last_error() -> Json<serde_json::Value> {
-    if let Some(err) = get_last_validation_error() {
-        Json(err)
-    } else {
-        Json(serde_json::json!({"error":"none"}))
-    }
-}
-
-async fn get_error_history() -> Json<serde_json::Value> {
-    let items = get_validation_errors();
-    Json(serde_json::json!({"errors": items}))
-}
-
-async fn download_config_yaml() -> axum::response::Response {
-    if let Ok(path) = std::env::var("MOCKFORGE_CONFIG_PATH") {
-        if let Ok(cfg) = load_config(&path).await {
-            if let Ok(yaml) = serde_yaml::to_string(&cfg) {
-                return axum::response::Response::builder()
-                    .status(StatusCode::OK)
-                    .header(axum::http::header::CONTENT_TYPE, "application/x-yaml")
-                    .header(
-                        axum::http::header::CONTENT_DISPOSITION,
-                        "attachment; filename=mockforge.config.yaml",
-                    )
-                    .body(axum::body::Body::from(yaml))
-                    .unwrap();
+            Err(e) => {
+                warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec, e);
             }
         }
     }
-    axum::response::Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(axum::body::Body::from("Config not available"))
-        .unwrap()
-}
 
-async fn download_overrides_yaml() -> axum::response::Response {
-    // Compose YAML snippet with validation settings + overrides
-    let mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").unwrap_or_else(|_| "enforce".into());
-    let agg = std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(true);
-    let resp = std::env::var("MOCKFORGE_RESPONSE_VALIDATION")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    let overrides = std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .unwrap_or(serde_json::json!({}));
-    let mut y = String::new();
-    use std::fmt::Write as _;
-    let _ = writeln!(&mut y, "http:");
-    let _ = writeln!(&mut y, "  request_validation: \"{}\"", mode);
-    let _ =
-        writeln!(&mut y, "  aggregate_validation_errors: {}", if agg { "true" } else { "false" });
-    let _ = writeln!(&mut y, "  validate_responses: {}", if resp { "true" } else { "false" });
-    let _ = writeln!(&mut y, "  validation_overrides:");
-    if let Some(map) = overrides.as_object() {
-        for (k, v) in map {
-            let mode = v.as_str().unwrap_or("enforce");
-            let _ = writeln!(&mut y, "    \"{}\": \"{}\"", k, mode);
-        }
+    // Add basic health check endpoint
+    app = app.route(
+        "/health",
+        axum::routing::get(|| async {
+            use mockforge_core::server_utils::health::HealthStatus;
+            axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
+        }),
+    )
+    // Add SSE endpoints
+    .merge(sse::sse_router());
+
+    // If traffic shaping is enabled, apply traffic shaping middleware to all routes
+    if traffic_shaping_enabled && traffic_shaper.is_some() {
+        use crate::op_middleware::add_shared_extension;
+        app = app.layer(from_fn_with_state(shared.clone(), add_shared_extension));
     }
-    axum::response::Response::builder()
-        .status(StatusCode::OK)
-        .header(axum::http::header::CONTENT_TYPE, "application/x-yaml")
-        .header(
-            axum::http::header::CONTENT_DISPOSITION,
-            "attachment; filename=validation.overrides.yaml",
-        )
-        .body(axum::body::Body::from(y))
-        .unwrap()
+
+    app
 }
 
-/// Get smoke test index listing
-async fn get_smoke_test_index() -> Json<serde_json::Value> {
-    use mockforge_core::list_smoke_endpoints;
-    use std::path::Path;
-
-    // Get fixtures directory from environment or use default
-    let fixtures_dir =
-        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "./fixtures".to_string());
-
-    let fixtures_path = Path::new(&fixtures_dir);
-
-    // Get smoke endpoints
-    let endpoints = list_smoke_endpoints(fixtures_path).await.unwrap_or_else(|_| vec![]);
-
-    // Format as JSON response
-    let endpoints_json: Vec<serde_json::Value> = endpoints
-        .into_iter()
-        .map(|(method, path, name)| {
-            serde_json::json!({
-                "method": method,
-                "path": path,
-                "name": name
-            })
-        })
-        .collect();
-
-    Json(serde_json::json!({
-        "endpoints": endpoints_json,
-        "count": endpoints_json.len()
-    }))
-}
-
-/// Run smoke tests
-async fn run_smoke_tests() -> Json<serde_json::Value> {
-    use mockforge_core::list_ready_fixtures;
-    use std::path::Path;
-
-    // Get fixtures directory from environment or use default
-    let fixtures_dir =
-        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "./fixtures".to_string());
-
-    let fixtures_path = Path::new(&fixtures_dir);
-
-    // Get ready fixtures
-    let fixtures = list_ready_fixtures(fixtures_path).await.unwrap_or_else(|_| vec![]);
-
-    // Format as JSON response
-    let fixtures_json: Vec<serde_json::Value> = fixtures
-        .into_iter()
-        .map(|fixture| {
-            serde_json::json!({
-                "method": fixture.fingerprint.method,
-                "path": fixture.fingerprint.path,
-                "timestamp": fixture.timestamp,
-                "status_code": fixture.status_code,
-                "name": fixture.metadata.get("name").cloned().unwrap_or("Unnamed test".to_string())
-            })
-        })
-        .collect();
-
-    Json(serde_json::json!({
-        "fixtures": fixtures_json,
-        "count": fixtures_json.len(),
-        "status": "success"
-    }))
+/// Start HTTP server with traffic shaping support
+pub async fn start_with_traffic_shaping(
+    port: u16,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    traffic_shaper: Option<TrafficShaper>,
+    traffic_shaping_enabled: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let app = build_router_with_traffic_shaping(spec_path, options, traffic_shaper, traffic_shaping_enabled).await;
+    serve_router(port, app).await
 }

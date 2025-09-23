@@ -1,0 +1,33 @@
+[package]
+name = "mockforge-graphql"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# GraphQL implementation - simplified for basic functionality
+async-graphql = { version = "7.0", features = ["apollo_tracing"] }
+async-graphql-axum = "7.0"
+
+# Workspace dependencies
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+once_cell = { workspace = true }
+
+# MockForge core
+mockforge-core = { path = "../mockforge-core" }
+
+# Optional data generation support
+mockforge-data = { path = "../mockforge-data", optional = true }
+
+[features]
+default = ["data-faker"]
+data-faker = ["mockforge-data"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

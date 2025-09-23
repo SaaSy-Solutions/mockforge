@@ -1,0 +1,204 @@
+# MockForge Template Examples
+# Demonstrating dynamic value generation with template tags
+
+# Example 1: User Registration API with Dynamic Data
+user_registration:
+  method: POST
+  path: /api/users
+  request:
+    headers:
+      Content-Type: application/json
+      X-Request-ID: "{{uuid}}"  # Unique request identifier
+    body:
+      user:
+        id: "{{uuid}}"  # Generate unique user ID
+        email: "{{faker.email}}"  # Fake email address
+        name: "{{faker.name}}"  # Fake full name
+        created_at: "{{now}}"  # Current timestamp
+        profile:
+          avatar_url: "{{faker.url}}/avatars/{{randInt 1 1000}}.jpg"
+          bio: "{{faker.sentence}}"
+
+  response:
+    status: 201
+    headers:
+      Content-Type: application/json
+      X-Request-ID: "{{uuid}}"  # Echo back request ID
+    body:
+      user:
+        id: "{{uuid}}"
+        email: "{{faker.email}}"
+        created_at: "{{now}}"
+        updated_at: "{{now}}"
+
+# Example 2: Order Creation with Time-Based Data
+order_creation:
+  method: POST
+  path: /api/orders
+  request:
+    body:
+      order:
+        id: "{{uuid}}"
+        customer_id: "{{uuid}}"
+        items:
+          - product_id: "{{uuid}}"
+            quantity: "{{randInt 1 5}}"
+            price: "{{rand.float}}"
+        total_amount: "{{randInt 10 500}}.{{randInt 00 99}}"
+        order_date: "{{now}}"
+        estimated_delivery: "{{now+3d}}"  # 3 days from now
+
+# Example 3: Analytics Event Tracking
+analytics_event:
+  method: POST
+  path: /api/analytics/events
+  request:
+    headers:
+      X-API-Key: "{{uuid}}"
+      X-Timestamp: "{{now}}"
+    body:
+      event:
+        id: "{{uuid}}"
+        type: "{{faker.word}}"
+        timestamp: "{{now}}"
+        user_id: "{{uuid}}"
+        session_id: "{{uuid}}"
+        properties:
+          page_url: "{{faker.url}}/{{faker.word}}"
+          user_agent: "Mozilla/5.0 ({{faker.word}}) {{faker.word}}/{{randInt 1 10}}.{{randInt 0 9}}"
+          ip_address: "{{faker.ip}}"
+          referrer: "{{faker.url}}"
+
+# Example 4: Payment Processing with Encrypted Data
+payment_processing:
+  method: POST
+  path: /api/payments
+  request:
+    headers:
+      Authorization: "Bearer {{uuid}}"
+    body:
+      payment:
+        id: "{{uuid}}"
+        amount: "{{randInt 100 10000}}.{{randInt 00 99}}"
+        currency: "USD"
+        card_token: "{{encrypt '4242424242424242'}}"  # Encrypted card number
+        customer_id: "{{uuid}}"
+        timestamp: "{{now}}"
+        metadata:
+          order_id: "{{uuid}}"
+          description: "{{faker.sentence}}"
+
+  response:
+    body:
+      payment:
+        id: "{{uuid}}"
+        status: "processed"
+        transaction_id: "{{uuid}}"
+        processed_at: "{{now}}"
+        card_last_four: "{{encrypt '4242'}}"
+
+# Example 5: Notification System with Dynamic Recipients
+send_notification:
+  method: POST
+  path: /api/notifications
+  request:
+    body:
+      notification:
+        id: "{{uuid}}"
+        type: "email"
+        recipient:
+          email: "{{faker.email}}"
+          name: "{{faker.name}}"
+        subject: "Welcome to {{faker.company}}!"
+        message: "{{faker.paragraph}}"
+        sent_at: "{{now}}"
+        tracking_id: "{{uuid}}"
+
+# Example 6: File Upload with Metadata
+file_upload:
+  method: POST
+  path: /api/files/upload
+  request:
+    headers:
+      Content-Type: multipart/form-data
+      X-Upload-ID: "{{uuid}}"
+    body:
+      metadata:
+        file_id: "{{uuid}}"
+        filename: "document_{{randInt 1000 9999}}.pdf"
+        size: "{{randInt 1024 10485760}}"  # 1KB to 10MB
+        mime_type: "application/pdf"
+        uploaded_by: "{{uuid}}"
+        uploaded_at: "{{now}}"
+        checksum: "{{uuid}}"  # In real scenarios, this would be actual hash
+        tags:
+          - "{{faker.word}}"
+          - "{{faker.color}}"
+
+# Example 7: API Rate Limiting with Time Windows
+rate_limited_request:
+  method: GET
+  path: /api/rate-limited
+  request:
+    headers:
+      X-API-Key: "{{uuid}}"
+      X-Timestamp: "{{now}}"
+    response:
+      status: 200
+      headers:
+        X-Rate-Limit-Remaining: "{{randInt 0 100}}"
+        X-Rate-Limit-Reset: "{{now+1h}}"  # Reset in 1 hour
+      body:
+        data: "{{faker.paragraph}}"
+        request_id: "{{uuid}}"
+        timestamp: "{{now}}"
+
+# Example 8: Chain Context Example (for request chaining)
+chained_request:
+  method: POST
+  path: /api/users/{{chain.user_id}}/posts
+  request:
+    headers:
+      Authorization: "Bearer {{chain.auth_token}}"
+    body:
+      post:
+        id: "{{uuid}}"
+        title: "{{faker.sentence}}"
+        content: "{{faker.paragraph}}"
+        author_id: "{{chain.user_id}}"
+        created_at: "{{now}}"
+        tags:
+          - "{{faker.word}}"
+          - "{{faker.word}}"
+
+# Example 9: WebSocket Message with Real-time Data
+websocket_message:
+  type: "message"
+  payload:
+    id: "{{uuid}}"
+    timestamp: "{{now}}"
+    user_id: "{{uuid}}"
+    message_type: "chat"
+    content: "{{faker.sentence}}"
+    metadata:
+      client_version: "{{randInt 1 5}}.{{randInt 0 9}}.{{randInt 0 9}}"
+      session_duration: "{{randInt 60 3600}}"  # 1 minute to 1 hour
+
+# Example 10: Error Response with Dynamic Context
+error_response:
+  status: 500
+  headers:
+    Content-Type: application/json
+    X-Error-ID: "{{uuid}}"
+  body:
+    error:
+      id: "{{uuid}}"
+      code: "INTERNAL_SERVER_ERROR"
+      message: "An unexpected error occurred while processing your request"
+      timestamp: "{{now}}"
+      request_id: "{{uuid}}"
+      details:
+        service: "{{faker.word}}_service"
+        version: "{{randInt 1 3}}.{{randInt 0 9}}.{{randInt 0 9}}"
+        environment: "{{faker.word}}"
+        trace_id: "{{uuid}}"

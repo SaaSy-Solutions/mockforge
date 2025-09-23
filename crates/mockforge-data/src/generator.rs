@@ -1,6 +1,6 @@
 //! Data generator implementation
 
-use crate::{faker::EnhancedFaker, schema::SchemaDefinition, DataConfig, GenerationResult};
+use crate::{faker::EnhancedFaker, rag::{RagEngine, RagConfig}, schema::SchemaDefinition, DataConfig, GenerationResult};
 use mockforge_core::Result;
 use std::time::Instant;
 
@@ -15,6 +15,8 @@ pub struct DataGenerator {
     faker: EnhancedFaker,
     /// Seeded RNG if seed was provided
     seeded_rng: Option<rand::rngs::StdRng>,
+    /// RAG engine for enhanced generation
+    rag_engine: Option<RagEngine>,
 }
 
 impl DataGenerator {
@@ -28,27 +30,47 @@ impl DataGenerator {
             None
         };
 
+        // Initialize RAG engine if enabled
+        let rag_engine = if config.rag_enabled {
+            let rag_config = RagConfig::default();
+            let mut engine = RagEngine::new(rag_config);
+            // Add schema to knowledge base
+            engine.add_schema(&schema)?;
+            Some(engine)
+        } else {
+            None
+        };
+
         Ok(Self {
             schema,
             config,
             faker,
             seeded_rng,
+            rag_engine,
         })
     }
 
     /// Generate data according to the configuration
     pub async fn generate(&mut self) -> Result<GenerationResult> {
         let start_time = Instant::now();
-        let mut data = Vec::with_capacity(self.config.rows);
 
-        for _ in 0..self.config.rows {
-            let row = self.schema.generate_row(&mut self.faker)?;
-            data.push(row);
+        // Use RAG-enhanced generation if enabled
+        if let Some(rag_engine) = &mut self.rag_engine {
+            let data = rag_engine.generate_with_rag(&self.schema, &self.config).await?;
+            let generation_time = start_time.elapsed().as_millis();
+            Ok(GenerationResult::new(data, generation_time))
+        } else {
+            // Use standard faker-based generation
+            let mut data = Vec::with_capacity(self.config.rows);
+
+            for _ in 0..self.config.rows {
+                let row = self.schema.generate_row(&mut self.faker)?;
+                data.push(row);
+            }
+
+            let generation_time = start_time.elapsed().as_millis();
+            Ok(GenerationResult::new(data, generation_time))
         }
-
-        let generation_time = start_time.elapsed().as_millis();
-
-        Ok(GenerationResult::new(data, generation_time))
     }
 
     /// Generate data with relationships resolved
@@ -110,7 +132,7 @@ impl DataGenerator {
 
     /// Update configuration
     pub fn update_config(&mut self, config: DataConfig) -> Result<()> {
-        self.config = config;
+        self.config = config.clone();
 
         // Re-seed if needed
         if let Some(seed) = self.config.seed {
@@ -120,7 +142,41 @@ impl DataGenerator {
             self.seeded_rng = None;
         }
 
+        // Update RAG engine if RAG is enabled/disabled
+        if config.rag_enabled {
+            if self.rag_engine.is_none() {
+                let rag_config = RagConfig::default();
+                let mut engine = RagEngine::new(rag_config);
+                engine.add_schema(&self.schema)?;
+                self.rag_engine = Some(engine);
+            }
+        } else {
+            self.rag_engine = None;
+        }
+
         Ok(())
+    }
+
+    /// Configure RAG settings
+    pub fn configure_rag(&mut self, rag_config: RagConfig) -> Result<()> {
+        if let Some(engine) = &mut self.rag_engine {
+            engine.update_config(rag_config);
+        } else {
+            let mut engine = RagEngine::new(rag_config);
+            engine.add_schema(&self.schema)?;
+            self.rag_engine = Some(engine);
+        }
+        Ok(())
+    }
+
+    /// Get RAG engine reference
+    pub fn rag_engine(&self) -> Option<&RagEngine> {
+        self.rag_engine.as_ref()
+    }
+
+    /// Get mutable RAG engine reference
+    pub fn rag_engine_mut(&mut self) -> Option<&mut RagEngine> {
+        self.rag_engine.as_mut()
     }
 }
 

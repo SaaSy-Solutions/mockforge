@@ -59,6 +59,7 @@
 - [Configuration Schema](reference/config-schema.md)
 - [Supported Formats](reference/formats.md)
 - [Templating Reference](reference/templating.md)
+- [Request Chaining](reference/chaining.md)
 - [Fixtures and Smoke Testing](reference/fixtures.md)
 - [Troubleshooting](reference/troubleshooting.md)
 - [FAQ](reference/faq.md)

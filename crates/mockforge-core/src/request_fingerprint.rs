@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use openapiv3;
 
 /// Request fingerprint for unique identification
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -113,10 +114,9 @@ impl RequestFingerprint {
         format!("{:x}", hasher.finish())
     }
 
-    /// Get tags for the request (extracted from path for now)
+    /// Get tags for the request (extracted from path as fallback)
     pub fn tags(&self) -> Vec<String> {
-        // For now, extract tags from the path
-        // In a real implementation, this would come from OpenAPI operation tags
+        // Extract tags from the path as fallback when OpenAPI spec is not available
         let mut tags = Vec::new();
 
         // Extract path segments as potential tags
@@ -130,6 +130,46 @@ impl RequestFingerprint {
         tags.push(self.method.to_lowercase());
 
         tags
+    }
+
+    /// Get tags for the request from OpenAPI operation if available
+    pub fn openapi_tags(&self, spec: &crate::openapi::spec::OpenApiSpec) -> Option<Vec<String>> {
+        // Find the operation that matches this fingerprint
+        if let Some(operation) = self.find_operation(spec) {
+            let mut tags = operation.tags.clone();
+            if let Some(operation_id) = &operation.operation_id {
+                tags.push(operation_id.clone());
+            }
+            Some(tags)
+        } else {
+            None
+        }
+    }
+
+    /// Find the OpenAPI operation that matches this fingerprint
+    fn find_operation<'a>(&self, spec: &'a crate::openapi::spec::OpenApiSpec) -> Option<&'a openapiv3::Operation> {
+        // Look for the path in the spec
+        if let Some(path_item) = spec.spec.paths.paths.get(&self.path) {
+            if let Some(item) = path_item.as_item() {
+                // Find the operation for the method
+                let operation = match self.method.as_str() {
+                    "GET" => &item.get,
+                    "POST" => &item.post,
+                    "PUT" => &item.put,
+                    "DELETE" => &item.delete,
+                    "PATCH" => &item.patch,
+                    "HEAD" => &item.head,
+                    "OPTIONS" => &item.options,
+                    "TRACE" => &item.trace,
+                    _ => &None,
+                };
+                operation.as_ref()
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -241,5 +281,46 @@ mod tests {
         assert!(ResponsePriority::Fail < ResponsePriority::Proxy);
         assert!(ResponsePriority::Proxy < ResponsePriority::Mock);
         assert!(ResponsePriority::Mock < ResponsePriority::Record);
+    }
+
+    #[test]
+    fn test_openapi_tags() {
+        use crate::openapi::spec::OpenApiSpec;
+
+        let spec_json = r#"
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/api/users": {
+                    "get": {
+                        "tags": ["users", "admin"],
+                        "operationId": "getUsers",
+                        "responses": {
+                            "200": {
+                                "description": "Success"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "#;
+
+        let spec = OpenApiSpec::from_json(serde_json::from_str(spec_json).unwrap()).unwrap();
+        let method = Method::GET;
+        let uri = Uri::from_static("/api/users");
+        let headers = HeaderMap::new();
+
+        let fingerprint = RequestFingerprint::new(method.clone(), &uri, &headers, None);
+
+        let tags = fingerprint.openapi_tags(&spec).unwrap();
+        assert_eq!(tags, vec!["users", "admin", "getUsers"]);
+
+        // Test fallback when no operation found
+        let uri2 = Uri::from_static("/api/posts");
+        let fingerprint2 = RequestFingerprint::new(method, &uri2, &headers, None);
+        let tags2 = fingerprint2.openapi_tags(&spec);
+        assert!(tags2.is_none());
     }
 }

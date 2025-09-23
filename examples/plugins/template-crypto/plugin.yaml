@@ -1,0 +1,76 @@
+plugin:
+  id: "template-crypto"
+  version: "0.1.0"
+  name: "Crypto Template Plugin"
+  description: "Provides encryption, decryption, hashing, and secure random data generation functions for templates"
+  types: ["template"]
+  author:
+    name: "MockForge Team"
+    email: "plugins@mockforge.dev"
+  homepage: "https://mockforge.dev/plugins/template-crypto"
+  repository: "https://github.com/mockforge/plugins/template-crypto"
+  license: "MIT OR Apache-2.0"
+  keywords: ["crypto", "encryption", "hashing", "random", "security"]
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 67108864  # 64MB (for crypto operations)
+    max_cpu_time_ms: 5000       # 5 seconds
+
+dependencies: []
+
+configuration:
+  schema:
+    type: object
+    properties:
+      default_key:
+        type: string
+        description: "Default encryption key as hex string (32 bytes)"
+        pattern: "^[0-9a-fA-F]{64}$"
+      key_derivation:
+        type: object
+        properties:
+          algorithm:
+            type: string
+            enum: ["argon2id"]
+            default: "argon2id"
+          memory_cost_kib:
+            type: integer
+            minimum: 8192
+            maximum: 2097152
+            default: 65536
+            description: "Memory cost in KiB"
+          time_cost:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 3
+            description: "Time cost (iterations)"
+          parallelism:
+            type: integer
+            minimum: 1
+            maximum: 16
+            default: 4
+            description: "Parallelism factor"
+      random_limits:
+        type: object
+        properties:
+          max_bytes:
+            type: integer
+            minimum: 1
+            maximum: 65536
+            default: 1024
+            description: "Maximum random bytes to generate"
+          max_string_length:
+            type: integer
+            minimum: 1
+            maximum: 4096
+            default: 256
+            description: "Maximum random string length"

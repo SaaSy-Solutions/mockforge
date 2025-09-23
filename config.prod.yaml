@@ -1,0 +1,46 @@
+# Production configuration for MockForge
+# This configuration is optimized for production with secure and performance-focused settings
+
+# HTTP server configuration
+http:
+  port: 8080
+  host: "0.0.0.0"  # Bind to all interfaces in production
+  cors_enabled: false  # Disable CORS in production for security
+  request_timeout_secs: 10  # Shorter timeout for performance
+  # Strict validation in production
+  request_validation: "enforce"
+  aggregate_validation_errors: false  # Don't aggregate errors in prod for better security
+  validate_responses: false
+  response_template_expand: false  # Don't expand templates in production
+  skip_admin_validation: true
+
+# WebSocket server configuration
+websocket:
+  port: 8081
+  host: "0.0.0.0"
+  connection_timeout_secs: 60  # Shorter connections in prod
+
+# gRPC server configuration
+grpc:
+  port: 9090  # Different port than dev
+  host: "0.0.0.0"
+
+# Admin UI configuration (disabled in prod for security)
+admin:
+  enabled: false
+  port: 9091
+  host: "127.0.0.1"
+  auth_required: true
+  api_enabled: false
+
+# Core MockForge configuration
+core:
+  latency_enabled: false  # Don't add artificial latency in production
+  failures_enabled: false  # Don't inject artificial failures in production
+
+logging:
+  level: "info"  # Less verbose in production
+  json_format: true  # JSON logging for better production logging infrastructure
+  file_path: null  # Don't write to file in production (use system logging)
+  max_file_size_mb: 100
+  max_files: 10

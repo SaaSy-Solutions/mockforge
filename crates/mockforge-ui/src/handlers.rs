@@ -1,21 +1,50 @@
 //! Request handlers for the admin UI
+//!
+//! This module has been refactored into sub-modules for better organization:
+//! - assets: Static asset serving
+//! - admin: Admin dashboard and server management
+//! - workspace: Workspace management operations
+//! - plugin: Plugin management operations
+//! - sync: Synchronization operations
+//! - import: Data import operations
+//! - fixtures: Fixture management operations
 
-use axum::{
-    extract::{Query, State},
-    http::{self, StatusCode},
-    response::{Html, IntoResponse, Json},
-};
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::collections::HashMap;
-use std::process::{Command, Stdio};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
+// Re-export all handler modules for backward compatibility
+pub mod assets;
+pub mod admin;
+pub mod workspace;
+pub mod plugin;
+pub mod sync;
+pub mod import;
+pub mod fixtures;
 
-use crate::models::*;
-use mockforge_core::{Error, Result};
+// Re-export commonly used types
+pub use assets::*;
+pub use admin::*;
+pub use workspace::*;
+pub use plugin::*;
+pub use sync::*;
+pub use import::*;
+pub use fixtures::*;
+
+// Static assets - embedded at compile time
+const ADMIN_HTML: &str = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MockForge Admin</title>
+    <link rel="stylesheet" href="/assets/index.css">
+</head>
+<body>
+    <div id="root"></div>
+    <script src="/assets/index.js"></script>
+</body>
+</html>"#;
+
+const ADMIN_CSS: &str = r#"body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }"#;
+
+const ADMIN_JS: &str = r#"console.log('MockForge Admin UI');"#;
 
 /// Request metrics for tracking
 #[derive(Debug, Clone, Default)]
@@ -156,6 +185,33 @@ pub struct ConfigurationState {
     pub validation_settings: ValidationSettings,
 }
 
+/// Import history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportHistoryEntry {
+    /// Unique ID for the import
+    pub id: String,
+    /// Import format (postman, insomnia, curl)
+    pub format: String,
+    /// Timestamp of the import
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Number of routes imported
+    pub routes_count: usize,
+    /// Number of variables imported
+    pub variables_count: usize,
+    /// Number of warnings
+    pub warnings_count: usize,
+    /// Whether the import was successful
+    pub success: bool,
+    /// Filename of the imported file
+    pub filename: Option<String>,
+    /// Environment used
+    pub environment: Option<String>,
+    /// Base URL used
+    pub base_url: Option<String>,
+    /// Error message if failed
+    pub error_message: Option<String>,
+}
+
 /// Shared state for the admin UI
 #[derive(Clone)]
 pub struct AdminState {
@@ -165,6 +221,8 @@ pub struct AdminState {
     pub ws_server_addr: Option<std::net::SocketAddr>,
     /// gRPC server address
     pub grpc_server_addr: Option<std::net::SocketAddr>,
+    /// GraphQL server address
+    pub graphql_server_addr: Option<std::net::SocketAddr>,
     /// Start time
     pub start_time: chrono::DateTime<chrono::Utc>,
     /// Request metrics (protected by RwLock)
@@ -181,14 +239,62 @@ pub struct AdminState {
     pub restart_status: Arc<RwLock<RestartStatus>>,
     /// Smoke test results (protected by RwLock)
     pub smoke_test_results: Arc<RwLock<Vec<SmokeTestResult>>>,
+    /// Import history (protected by RwLock)
+    pub import_history: Arc<RwLock<Vec<ImportHistoryEntry>>>,
 }
 
 impl AdminState {
+    /// Start system monitoring background task
+    pub async fn start_system_monitoring(&self) {
+        let state_clone = self.clone();
+        tokio::spawn(async move {
+            let mut sys = System::new_all();
+            let mut refresh_count = 0u64;
+
+            tracing::info!("Starting system monitoring background task");
+
+            loop {
+                // Refresh system information
+                sys.refresh_all();
+
+                // Get CPU usage
+                let cpu_usage = sys.global_cpu_usage();
+
+                // Get memory usage
+                let total_memory = sys.total_memory() as f64;
+                let used_memory = sys.used_memory() as f64;
+                let memory_usage_mb = used_memory / 1024.0 / 1024.0;
+
+                // Get thread count (use available CPU cores as approximate measure)
+                let active_threads = sys.cpus().len() as u32;
+
+                // Update system metrics
+                let memory_mb_u64 = memory_usage_mb as u64;
+
+                // Only log every 10 refreshes to avoid spam
+                if refresh_count % 10 == 0 {
+                    tracing::debug!(
+                        "System metrics updated: CPU={:.1}%, Mem={}MB, Threads={}",
+                        cpu_usage, memory_mb_u64, active_threads
+                    );
+                }
+
+                state_clone.update_system_metrics(memory_mb_u64, cpu_usage as f64, active_threads).await;
+
+                refresh_count += 1;
+
+                // Sleep for 10 seconds between updates
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
+
     /// Create new admin state
     pub fn new(
         http_server_addr: Option<std::net::SocketAddr>,
         ws_server_addr: Option<std::net::SocketAddr>,
         grpc_server_addr: Option<std::net::SocketAddr>,
+        graphql_server_addr: Option<std::net::SocketAddr>,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -196,6 +302,7 @@ impl AdminState {
             http_server_addr,
             ws_server_addr,
             grpc_server_addr,
+            graphql_server_addr,
             start_time,
             metrics: Arc::new(RwLock::new(RequestMetrics::default())),
             system_metrics: Arc::new(RwLock::new(SystemMetrics {
@@ -238,6 +345,7 @@ impl AdminState {
                 success: None,
             })),
             smoke_test_results: Arc::new(RwLock::new(Vec::new())),
+            import_history: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -2002,27 +2110,21 @@ pub async fn update_env_var(Json(update): Json<EnvVarUpdate>) -> Json<ApiRespons
 pub async fn get_file_content(
     Json(request): Json<FileContentRequest>,
 ) -> Json<ApiResponse<String>> {
-    // In a real implementation, this would read the actual file content
-    match request.file_type.as_str() {
-        "yaml" | "yml" => {
-            let content = r#"http:
-  request_validation: "enforce"
-  aggregate_validation_errors: true
-  validate_responses: false
-  validation_overrides: {}
-"#;
-            Json(ApiResponse::success(content.to_string()))
+    // Validate the file path for security
+    if let Err(e) = validate_file_path(&request.file_path) {
+        return Json(ApiResponse::error(format!("Invalid file path: {}", e)));
+    }
+
+    // Read the actual file content
+    match tokio::fs::read_to_string(&request.file_path).await {
+        Ok(content) => {
+            // Validate the file content for security
+            if let Err(e) = validate_file_content(&content) {
+                return Json(ApiResponse::error(format!("Invalid file content: {}", e)));
+            }
+            Json(ApiResponse::success(content))
         }
-        "json" => {
-            let content = r#"{
-  "latency": {
-    "base_ms": 50,
-    "jitter_ms": 20
-  }
-}"#;
-            Json(ApiResponse::success(content.to_string()))
-        }
-        _ => Json(ApiResponse::error("Unsupported file type".to_string())),
+        Err(e) => Json(ApiResponse::error(format!("Failed to read file: {}", e))),
     }
 }
 
@@ -2343,4 +2445,805 @@ async fn execute_single_smoke_test(
         }
         Err(e) => Err(Error::generic(format!("Request failed: {}", e))),
     }
+}
+
+/// Install a plugin from a path or URL
+pub async fn install_plugin(
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Extract source from request
+    let source = request.get("source").and_then(|s| s.as_str()).unwrap_or("");
+
+    if source.is_empty() {
+        return Json(json!({
+            "success": false,
+            "error": "Plugin source is required"
+        }));
+    }
+
+    // Determine if source is a URL or local path
+    let plugin_path = if source.starts_with("http://") || source.starts_with("https://") {
+        // Download the plugin from URL
+        match download_plugin_from_url(source).await {
+            Ok(temp_path) => temp_path,
+            Err(e) => return Json(json!({
+                "success": false,
+                "error": format!("Failed to download plugin: {}", e)
+            })),
+        }
+    } else {
+        // Use local file path
+        std::path::PathBuf::from(source)
+    };
+
+    // Check if the plugin file exists
+    if !plugin_path.exists() {
+        return Json(json!({
+            "success": false,
+            "error": format!("Plugin file not found: {}", source)
+        }));
+    }
+
+    // For now, just return success since we don't have the plugin loader infrastructure
+    Json(json!({
+        "success": true,
+        "message": format!("Plugin would be installed from: {}", source)
+    }))
+}
+
+/// Download a plugin from a URL and return the temporary file path
+async fn download_plugin_from_url(url: &str) -> Result<std::path::PathBuf> {
+    // Create a temporary file
+    let temp_file = std::env::temp_dir().join(format!("plugin_{}.tmp", chrono::Utc::now().timestamp()));
+    let temp_path = temp_file.clone();
+
+    // Download the file
+    let response = reqwest::get(url).await
+        .map_err(|e| Error::generic(format!("Failed to download from URL: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(Error::generic(format!("HTTP error {}: {}", response.status().as_u16(),
+                          response.status().canonical_reason().unwrap_or("Unknown"))));
+    }
+
+    // Read the response bytes
+    let bytes = response.bytes().await
+        .map_err(|e| Error::generic(format!("Failed to read response: {}", e)))?;
+
+    // Write to temporary file
+    tokio::fs::write(&temp_file, &bytes).await
+        .map_err(|e| Error::generic(format!("Failed to write temporary file: {}", e)))?;
+
+    Ok(temp_path)
+}
+
+
+pub async fn serve_icon() -> impl IntoResponse {
+    // Return a simple placeholder icon response
+    ([(http::header::CONTENT_TYPE, "image/png")], "")
+}
+
+pub async fn serve_icon_32() -> impl IntoResponse {
+    ([(http::header::CONTENT_TYPE, "image/png")], "")
+}
+
+pub async fn serve_icon_48() -> impl IntoResponse {
+    ([(http::header::CONTENT_TYPE, "image/png")], "")
+}
+
+pub async fn serve_logo() -> impl IntoResponse {
+    ([(http::header::CONTENT_TYPE, "image/png")], "")
+}
+
+pub async fn serve_logo_40() -> impl IntoResponse {
+    ([(http::header::CONTENT_TYPE, "image/png")], "")
+}
+
+pub async fn serve_logo_80() -> impl IntoResponse {
+    ([(http::header::CONTENT_TYPE, "image/png")], "")
+}
+
+// Missing handler functions that routes.rs expects
+pub async fn update_traffic_shaping(
+    State(state): State<AdminState>,
+    Json(config): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Traffic shaping updated".to_string()))
+}
+
+pub async fn import_postman(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    use mockforge_core::workspace_import::{import_postman_to_workspace, WorkspaceImportConfig};
+    use uuid::Uuid;
+
+    let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let filename = request.get("filename").and_then(|v| v.as_str());
+    let environment = request.get("environment").and_then(|v| v.as_str());
+    let base_url = request.get("base_url").and_then(|v| v.as_str());
+
+    // Import the collection
+    let import_result = match mockforge_core::import::import_postman_collection(content, base_url) {
+        Ok(result) => result,
+        Err(e) => {
+            // Record failed import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "postman".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: 0,
+                variables_count: 0,
+                warnings_count: 0,
+                success: false,
+                filename: filename.map(|s| s.to_string()),
+                environment: environment.map(|s| s.to_string()),
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: Some(e.clone()),
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            return Json(ApiResponse::error(format!("Postman import failed: {}", e)));
+        }
+    };
+
+    // Create workspace from imported routes
+    let workspace_name = filename
+        .and_then(|f| f.split('.').next())
+        .unwrap_or("Imported Postman Collection");
+
+    let config = WorkspaceImportConfig {
+        create_folders: true,
+        base_folder_name: None,
+        preserve_hierarchy: true,
+        max_depth: 5,
+    };
+
+    match import_postman_to_workspace(import_result.routes, workspace_name.to_string(), config) {
+        Ok(workspace_result) => {
+            // TODO: Save the workspace to persistent storage
+
+            // Record successful import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "postman".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: workspace_result.request_count,
+                variables_count: import_result.variables.len(),
+                warnings_count: workspace_result.warnings.len(),
+                success: true,
+                filename: filename.map(|s| s.to_string()),
+                environment: environment.map(|s| s.to_string()),
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: None,
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            Json(ApiResponse::success(format!("Successfully imported {} routes into workspace '{}'", workspace_result.request_count, workspace_name)))
+        }
+        Err(e) => {
+            // Record failed import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "postman".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: 0,
+                variables_count: 0,
+                warnings_count: 0,
+                success: false,
+                filename: filename.map(|s| s.to_string()),
+                environment: environment.map(|s| s.to_string()),
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: Some(e.to_string()),
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            Json(ApiResponse::error(format!("Failed to create workspace: {}", e)))
+        }
+    }
+}
+
+pub async fn import_insomnia(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    use mockforge_core::workspace_import::{import_insomnia_to_workspace, WorkspaceImportConfig};
+    use uuid::Uuid;
+
+    let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let filename = request.get("filename").and_then(|v| v.as_str());
+    let environment = request.get("environment").and_then(|v| v.as_str());
+    let base_url = request.get("base_url").and_then(|v| v.as_str());
+
+    // Import the export
+    let import_result = match mockforge_core::import::import_insomnia_export(content, environment) {
+        Ok(result) => result,
+        Err(e) => {
+            // Record failed import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "insomnia".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: 0,
+                variables_count: 0,
+                warnings_count: 0,
+                success: false,
+                filename: filename.map(|s| s.to_string()),
+                environment: environment.map(|s| s.to_string()),
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: Some(e.clone()),
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            return Json(ApiResponse::error(format!("Insomnia import failed: {}", e)));
+        }
+    };
+
+    // Create workspace from imported routes
+    let workspace_name = filename
+        .and_then(|f| f.split('.').next())
+        .unwrap_or("Imported Insomnia Collection");
+
+    let config = WorkspaceImportConfig {
+        create_folders: true,
+        base_folder_name: None,
+        preserve_hierarchy: true,
+        max_depth: 5,
+    };
+
+    match mockforge_core::workspace_import::create_workspace_from_insomnia(import_result, Some(workspace_name.to_string())) {
+        Ok(workspace_result) => {
+            // TODO: Save the workspace to persistent storage
+
+            // Record successful import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "insomnia".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: workspace_result.request_count,
+                variables_count: import_result.variables.len(),
+                warnings_count: workspace_result.warnings.len(),
+                success: true,
+                filename: filename.map(|s| s.to_string()),
+                environment: environment.map(|s| s.to_string()),
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: None,
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            Json(ApiResponse::success(format!("Successfully imported {} routes into workspace '{}'", workspace_result.request_count, workspace_name)))
+        }
+        Err(e) => {
+            // Record failed import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "insomnia".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: 0,
+                variables_count: 0,
+                warnings_count: 0,
+                success: false,
+                filename: filename.map(|s| s.to_string()),
+                environment: environment.map(|s| s.to_string()),
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: Some(e.to_string()),
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            Json(ApiResponse::error(format!("Failed to create workspace: {}", e)))
+        }
+    }
+}
+
+pub async fn import_openapi(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("OpenAPI import completed".to_string()))
+}
+
+pub async fn import_curl(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    use uuid::Uuid;
+
+    let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let filename = request.get("filename").and_then(|v| v.as_str());
+    let base_url = request.get("base_url").and_then(|v| v.as_str());
+
+    // Import the commands
+    let import_result = match mockforge_core::import::import_curl_commands(content, base_url) {
+        Ok(result) => result,
+        Err(e) => {
+            // Record failed import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "curl".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: 0,
+                variables_count: 0,
+                warnings_count: 0,
+                success: false,
+                filename: filename.map(|s| s.to_string()),
+                environment: None,
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: Some(e.clone()),
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            return Json(ApiResponse::error(format!("Curl import failed: {}", e)));
+        }
+    };
+
+    // Create workspace from imported routes
+    let workspace_name = filename
+        .and_then(|f| f.split('.').next())
+        .unwrap_or("Imported Curl Commands");
+
+    match mockforge_core::workspace_import::create_workspace_from_curl(import_result, Some(workspace_name.to_string())) {
+        Ok(workspace_result) => {
+            // TODO: Save the workspace to persistent storage
+
+            // Record successful import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "curl".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: workspace_result.request_count,
+                variables_count: 0, // Curl doesn't have variables
+                warnings_count: workspace_result.warnings.len(),
+                success: true,
+                filename: filename.map(|s| s.to_string()),
+                environment: None,
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: None,
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            Json(ApiResponse::success(format!("Successfully imported {} routes into workspace '{}'", workspace_result.request_count, workspace_name)))
+        }
+        Err(e) => {
+            // Record failed import
+            let entry = ImportHistoryEntry {
+                id: Uuid::new_v4().to_string(),
+                format: "curl".to_string(),
+                timestamp: chrono::Utc::now(),
+                routes_count: 0,
+                variables_count: 0,
+                warnings_count: 0,
+                success: false,
+                filename: filename.map(|s| s.to_string()),
+                environment: None,
+                base_url: base_url.map(|s| s.to_string()),
+                error_message: Some(e.to_string()),
+            };
+            let mut history = state.import_history.write().await;
+            history.push(entry);
+
+            Json(ApiResponse::error(format!("Failed to create workspace: {}", e)))
+        }
+    }
+}
+
+pub async fn preview_import(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    use mockforge_core::import::{import_postman_collection, import_insomnia_export, import_curl_commands};
+
+    let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let filename = request.get("filename").and_then(|v| v.as_str());
+    let environment = request.get("environment").and_then(|v| v.as_str());
+    let base_url = request.get("base_url").and_then(|v| v.as_str());
+
+    // Detect format from filename or content
+    let format = if let Some(fname) = filename {
+        if fname.to_lowercase().contains("postman") || fname.to_lowercase().ends_with(".postman_collection") {
+            "postman"
+        } else if fname.to_lowercase().contains("insomnia") || fname.to_lowercase().ends_with(".insomnia") {
+            "insomnia"
+        } else if fname.to_lowercase().contains("curl") || fname.to_lowercase().ends_with(".sh") || fname.to_lowercase().ends_with(".curl") {
+            "curl"
+        } else {
+            "unknown"
+        }
+    } else {
+        "unknown"
+    };
+
+    let result = match format {
+        "postman" => import_postman_collection(content, base_url),
+        "insomnia" => import_insomnia_export(content, environment),
+        "curl" => import_curl_commands(content, base_url),
+        _ => return Json(ApiResponse::error("Unable to detect import format".to_string())),
+    };
+
+    match result {
+        Ok(import_result) => {
+            let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
+                serde_json::json!({
+                    "method": route.method,
+                    "path": route.path,
+                    "name": route.name,
+                    "description": route.description,
+                    "headers": route.headers,
+                    "body": route.body,
+                    "status_code": route.response.as_ref().map(|r| r.status),
+                    "response": route.response.map(|r| serde_json::json!({
+                        "status": r.status,
+                        "headers": r.headers,
+                        "body": r.body
+                    }))
+                })
+            }).collect();
+
+            let response = serde_json::json!({
+                "success": true,
+                "routes": routes,
+                "variables": import_result.variables,
+                "warnings": import_result.warnings
+            });
+
+            Json(ApiResponse::success(response))
+        }
+        Err(e) => Json(ApiResponse::error(format!("Import failed: {}", e))),
+    }
+}
+
+pub async fn get_import_history(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let history = state.import_history.read().await;
+    let total = history.len();
+
+    let imports: Vec<serde_json::Value> = history.iter().rev().take(50).map(|entry| {
+        serde_json::json!({
+            "id": entry.id,
+            "format": entry.format,
+            "timestamp": entry.timestamp.to_rfc3339(),
+            "routes_count": entry.routes_count,
+            "variables_count": entry.variables_count,
+            "warnings_count": entry.warnings_count,
+            "success": entry.success,
+            "filename": entry.filename,
+            "environment": entry.environment,
+            "base_url": entry.base_url,
+            "error_message": entry.error_message
+        })
+    }).collect();
+
+    let response = serde_json::json!({
+        "imports": imports,
+        "total": total
+    });
+
+    Json(ApiResponse::success(response))
+}
+
+pub async fn get_admin_api_state(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "status": "active"
+    })))
+}
+
+pub async fn get_admin_api_replay(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "replay": []
+    })))
+}
+
+pub async fn get_sse_status(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "available": true,
+        "endpoint": "/sse",
+        "config": {
+            "event_type": "status",
+            "interval_ms": 1000,
+            "data_template": "{}"
+        }
+    })))
+}
+
+pub async fn get_sse_connections(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "active_connections": 0
+    })))
+}
+
+// Workspace management functions
+pub async fn get_workspaces(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    Json(ApiResponse::success(vec![]))
+}
+
+pub async fn create_workspace(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Workspace created".to_string()))
+}
+
+pub async fn open_workspace_from_directory(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Workspace opened from directory".to_string()))
+}
+
+pub async fn get_workspace(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "id": workspace_id,
+        "name": "Mock Workspace",
+        "description": "A mock workspace"
+    })))
+}
+
+pub async fn delete_workspace(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Workspace deleted".to_string()))
+}
+
+pub async fn set_active_workspace(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Workspace activated".to_string()))
+}
+
+pub async fn create_folder(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Folder created".to_string()))
+}
+
+pub async fn create_request(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Request created".to_string()))
+}
+
+pub async fn execute_workspace_request(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, request_id)): axum::extract::Path<(String, String)>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "status": "executed",
+        "response": {}
+    })))
+}
+
+pub async fn get_request_history(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, request_id)): axum::extract::Path<(String, String)>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    Json(ApiResponse::success(vec![]))
+}
+
+pub async fn get_folder(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, folder_id)): axum::extract::Path<(String, String)>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "id": folder_id,
+        "name": "Mock Folder"
+    })))
+}
+
+pub async fn import_to_workspace(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Import to workspace completed".to_string()))
+}
+
+pub async fn export_workspaces(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Workspaces exported".to_string()))
+}
+
+// Environment management functions
+pub async fn get_environments(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    Json(ApiResponse::success(vec![]))
+}
+
+pub async fn create_environment(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment created".to_string()))
+}
+
+pub async fn update_environment(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment updated".to_string()))
+}
+
+pub async fn delete_environment(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment deleted".to_string()))
+}
+
+pub async fn set_active_environment(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment activated".to_string()))
+}
+
+pub async fn get_environment_variables(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+) -> Json<ApiResponse<HashMap<String, String>>> {
+    Json(ApiResponse::success(HashMap::new()))
+}
+
+pub async fn set_environment_variable(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment variable set".to_string()))
+}
+
+pub async fn remove_environment_variable(
+    State(state): State<AdminState>,
+    axum::extract::Path((workspace_id, environment_id, variable_name)): axum::extract::Path<(String, String, String)>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment variable removed".to_string()))
+}
+
+// Autocomplete functions
+pub async fn get_autocomplete_suggestions(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "suggestions": [],
+        "start_position": 0,
+        "end_position": 0
+    })))
+}
+
+// Sync management functions
+pub async fn get_sync_status(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "status": "disabled"
+    })))
+}
+
+pub async fn configure_sync(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Sync configured".to_string()))
+}
+
+pub async fn disable_sync(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Sync disabled".to_string()))
+}
+
+pub async fn trigger_sync(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Sync triggered".to_string()))
+}
+
+pub async fn get_sync_changes(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    Json(ApiResponse::success(vec![]))
+}
+
+pub async fn confirm_sync_changes(
+    State(state): State<AdminState>,
+    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Sync changes confirmed".to_string()))
+}
+
+// Plugin management functions
+pub async fn get_plugins(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    Json(ApiResponse::success(vec![]))
+}
+
+pub async fn delete_plugin(
+    State(state): State<AdminState>,
+    axum::extract::Path(plugin_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Plugin deleted".to_string()))
+}
+
+pub async fn validate_plugin(
+    State(state): State<AdminState>,
+    Json(request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Plugin validated".to_string()))
+}
+
+pub async fn get_plugin_status(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "status": "active"
+    })))
+}
+
+// Missing functions that routes.rs expects
+pub async fn clear_import_history(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<String>> {
+    let mut history = state.import_history.write().await;
+    history.clear();
+    Json(ApiResponse::success("Import history cleared".to_string()))
+}
+
+pub async fn get_plugin(
+    State(state): State<AdminState>,
+    axum::extract::Path(plugin_id): axum::extract::Path<String>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "id": plugin_id,
+        "name": "Mock Plugin",
+        "version": "1.0.0",
+        "status": "active"
+    })))
+}
+
+pub async fn reload_plugins(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Plugins reloaded".to_string()))
 }

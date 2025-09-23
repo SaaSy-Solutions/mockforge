@@ -22,6 +22,7 @@ fastrand = "2.0"
 itertools = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
 reqwest = { workspace = true }
+async-trait = "0.1"
 
 # For vector operations and similarity calculations
 ndarray = "0.15"

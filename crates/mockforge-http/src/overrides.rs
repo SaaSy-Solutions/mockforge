@@ -1,6 +1,7 @@
 //! Overrides engine with templating helpers.
 use globwalk::GlobWalkerBuilder;
 use json_patch::{patch, AddOperation, PatchOperation, RemoveOperation, ReplaceOperation};
+use mockforge_core::conditions::{evaluate_condition, ConditionContext, ConditionError};
 use mockforge_core::templating::expand_tokens as core_expand_tokens;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -108,9 +109,32 @@ impl Overrides {
     }
 
     pub fn apply(&self, operation_id: &str, tags: &[String], path: &str, body: &mut Value) {
+        self.apply_with_context(operation_id, tags, path, body, &ConditionContext::new())
+    }
+
+    /// Apply overrides with condition evaluation
+    pub fn apply_with_context(&self, operation_id: &str, tags: &[String], path: &str, body: &mut Value, context: &ConditionContext) {
         for r in &self.rules {
             if !matches_target(&r.targets, operation_id, tags, path, &self.regex_cache) {
                 continue;
+            }
+
+            // Evaluate condition if present
+            if let Some(ref condition) = r.when {
+                match evaluate_condition(condition, context) {
+                    Ok(true) => {
+                        // Condition passed, continue with patch application
+                    }
+                    Ok(false) => {
+                        // Condition failed, skip this rule
+                        continue;
+                    }
+                    Err(e) => {
+                        // Log condition evaluation error but don't fail the entire override process
+                        tracing::warn!("Failed to evaluate condition '{}': {}", condition, e);
+                        continue;
+                    }
+                }
             }
 
             // Apply patches based on mode

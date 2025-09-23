@@ -1,0 +1,104 @@
+# Example Request Chain Configuration
+---
+id: user-workflow-chain
+name: User Management Workflow
+description: |
+  A complete user management workflow that demonstrates request chaining:
+  1. Login to get authentication token
+  2. Create a new user profile
+  3. Update user settings
+  4. Verify the user was created
+config:
+  enabled: true
+  maxChainLength: 10
+  globalTimeoutSecs: 60
+  enableParallelExecution: false
+
+links:
+  # Step 1: Authentication - Login to get access token
+  - request:
+      id: login
+      method: POST
+      url: https://api.example.com/auth/login
+      headers:
+        Content-Type: application/json
+      body:
+        email: "{{faker.email}}"
+        password: "secure-password"
+    extract:
+      token: body.access_token
+    storeAs: auth_response
+    dependsOn: []
+
+  # Step 2: Create user profile
+  - request:
+      id: create_user
+      method: POST
+      url: https://api.example.com/users
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer {{chain.auth_response.body.access_token}}"
+      body:
+        name: "{{faker.name}}"
+        email: "{{chain.auth_response.body.email}}"  # Reuse email from login
+        department: "Engineering"
+    extract:
+      user_id: body.id
+      user_name: body.name
+    storeAs: user_create_response
+    dependsOn:
+      - login
+
+  # Step 3: Update user preferences (run in parallel with other dependent requests)
+  - request:
+      id: update_preferences
+      method: PUT
+      url: https://api.example.com/users/{{chain.user_create_response.body.id}}/preferences
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer {{chain.auth_response.body.access_token}}"
+      body:
+        theme: dark
+        notifications: true
+        language: en
+    storeAs: preferences_update
+    dependsOn:
+      - create_user
+
+  # Step 4: Create user role assignment
+  - request:
+      id: assign_role
+      method: POST
+      url: https://api.example.com/users/{{chain.user_create_response.body.id}}/roles
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer {{chain.auth_response.body.access_token}}"
+      body:
+        role: developer
+        permissions:
+          - read
+          - write
+    storeAs: role_assignment
+    dependsOn:
+      - create_user
+
+  # Step 5: Verify user creation by fetching the user
+  - request:
+      id: verify_user
+      method: GET
+      url: https://api.example.com/users/{{chain.user_create_response.body.id}}
+      headers:
+        Authorization: "Bearer {{chain.auth_response.body.access_token}}"
+    storeAs: user_verification
+    expectedStatus: [200]
+    dependsOn:
+      - create_user
+
+variables:
+  base_url: https://api.example.com
+  api_version: v1
+
+tags:
+  - authentication
+  - user-management
+  - workflow

@@ -1,0 +1,55 @@
+[package]
+name = "mockforge-plugin-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords = ["plugin", "wasm", "mock", "api", "extensible"]
+categories = ["development-tools", "api-bindings"]
+description = "Core plugin interfaces and types for MockForge extensible architecture"
+
+[dependencies]
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Async runtime
+tokio.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# HTTP types (for auth and response plugins)
+axum.workspace = true
+hyper.workspace = true
+
+# Utility libraries
+uuid.workspace = true
+chrono.workspace = true
+
+# WebAssembly runtime for plugin execution
+wasmtime = "25.0"
+wasmtime-wasi = "25.0"
+
+# Plugin communication
+wit-bindgen = "0.34"
+
+# Async traits
+async-trait = "0.1"
+
+# Additional utilities
+rand.workspace = true
+url.workspace = true
+regex.workspace = true
+serde_yaml.workspace = true
+urlencoding.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+

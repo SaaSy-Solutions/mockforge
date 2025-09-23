@@ -56,6 +56,8 @@ admin:
 core:
   latency_enabled: true
   failures_enabled: false
+  overrides_enabled: true
+  traffic_shaping_enabled: false  # Enable traffic shaping (bandwidth + burst loss)
   # Failure injection configuration
   failure_config:
     global_error_rate: 0.0  # Global error rate (0.0 to 1.0)
@@ -91,6 +93,46 @@ core:
     tag_overrides:
       auth: 100
       analytics: 200
+
+  # Traffic shaping configuration
+  traffic_shaping:
+    # Bandwidth throttling configuration
+    bandwidth:
+      enabled: false
+      max_bytes_per_sec: 1048576  # 1 MB/s (0 = unlimited)
+      burst_capacity_bytes: 10485760  # 10 MB burst capacity
+      tag_overrides:
+        # High-priority endpoints get higher bandwidth
+        "high-priority": 5242880  # 5 MB/s for high-priority requests
+        "streaming": 10485760     # 10 MB/s for streaming endpoints
+
+    # Burst loss configuration (simulates intermittent connectivity issues)
+    burst_loss:
+      enabled: false
+      burst_probability: 0.1  # 10% chance of entering loss burst
+      burst_duration_ms: 5000  # 5 second bursts
+      loss_rate_during_burst: 0.5  # 50% packet loss during burst
+      recovery_time_ms: 30000  # 30 second recovery between bursts
+      tag_overrides:
+        # Unstable mobile connection simulation
+        "mobile":
+          burst_probability: 0.3
+          burst_duration_ms: 10000
+          loss_rate_during_burst: 0.8
+          recovery_time_ms: 60000
+        # Satellite connection with longer delays
+        "satellite":
+          burst_probability: 0.2
+          burst_duration_ms: 15000
+          loss_rate_during_burst: 0.6
+          recovery_time_ms: 120000
+
+# Example environment variables for traffic shaping:
+# MOCKFORGE_TRAFFIC_SHAPING_ENABLED=true
+# MOCKFORGE_BANDWIDTH_ENABLED=true
+# MOCKFORGE_BANDWIDTH_MAX_BYTES_PER_SEC=1048576
+# MOCKFORGE_BURST_LOSS_ENABLED=true
+# MOCKFORGE_BURST_LOSS_PROBABILITY=0.1
 
 # Logging configuration
 logging:
@@ -129,8 +171,9 @@ data:
 
 # Request/Response overrides (optional external file)
 # Can be loaded from a separate file: overrides: "config/overrides.yaml"
-# Example overrides configuration:
+# Example overrides configuration with conditional filtering:
 # - targets: ["operation:getUser"]
+#   when: "$.user.role"  # Only apply if user has a role field
 #   patch:
 #     - op: add
 #       path: /metadata/requestId
@@ -142,7 +185,20 @@ data:
 #       path: /user/score
 #       value: "{{rand.float}}"
 # - targets: ["tag:Payments"]
+#   when: "header[authorization]=Bearer admin-token"  # Only apply for admin users
 #   patch:
 #     - op: replace
 #       path: /payment/status
 #       value: "FAILED"
+# - targets: ["operation:getOrder"]
+#   when: "$.request.query.status=pending"  # Only apply for pending orders
+#   patch:
+#     - op: add
+#       path: /order/processingDelay
+#       value: "2 hours"
+# - targets: ["path:/api/xml/*"]
+#   when: "/order[@status='urgent']"  # XPath for XML responses
+#   patch:
+#     - op: replace
+#       path: /order/priority
+#       value: "HIGH"

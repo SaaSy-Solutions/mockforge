@@ -1,0 +1,41 @@
+[package]
+name = "mockforge-plugin-response-graphql"
+version = "0.1.0"
+edition = "2021"
+authors = ["MockForge Team"]
+description = "Example GraphQL response generator plugin for MockForge"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Plugin core types and traits
+mockforge-plugin-core = { path = "../../../crates/mockforge-plugin-core" }
+
+# WebAssembly bindings
+wit-bindgen = "0.34"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# GraphQL parsing
+graphql-parser = "0.4"
+regex.workspace = true
+
+# Random number generation
+rand.workspace = true
+
+# Date/time handling
+chrono.workspace = true
+
+# Async traits
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio.workspace = true

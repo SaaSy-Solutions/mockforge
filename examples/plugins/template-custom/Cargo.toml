@@ -1,0 +1,33 @@
+[package]
+name = "mockforge-plugin-template-custom"
+version = "0.1.0"
+edition = "2021"
+authors = ["MockForge Team"]
+description = "Example custom template plugin for MockForge"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Plugin core types and traits
+mockforge-plugin-core = { path = "../../../crates/mockforge-plugin-core" }
+
+# WebAssembly bindings
+wit-bindgen = "0.34"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Utility libraries
+uuid.workspace = true
+chrono.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

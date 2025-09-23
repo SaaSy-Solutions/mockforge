@@ -1,0 +1,15 @@
+//! Authentication state management
+//!
+//! This module handles the authentication state containing configuration
+//! and runtime data needed for authentication operations.
+
+use std::sync::Arc;
+use mockforge_core::{config::AuthConfig, OpenApiSpec};
+
+/// Authentication middleware state
+#[derive(Clone)]
+pub struct AuthState {
+    pub config: AuthConfig,
+    pub spec: Option<Arc<OpenApiSpec>>,
+    pub oauth2_client: Option<oauth2::basic::BasicClient>,
+}

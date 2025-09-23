@@ -1,0 +1,62 @@
+plugin:
+  id: "auth-jwt"
+  version: "0.1.0"
+  name: "JWT Authentication Plugin"
+  description: "Provides JWT-based authentication with configurable token validation and claims extraction"
+  types: ["auth"]
+  author:
+    name: "MockForge Team"
+    email: "plugins@mockforge.dev"
+  homepage: "https://mockforge.dev/plugins/auth-jwt"
+  repository: "https://github.com/mockforge/plugins/auth-jwt"
+  license: "MIT OR Apache-2.0"
+  keywords: ["authentication", "jwt", "security", "tokens"]
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 16777216  # 16MB
+    max_cpu_time_ms: 1000       # 1 second
+
+dependencies: []
+
+configuration:
+  schema:
+    type: object
+    properties:
+      verification_key:
+        type: string
+        description: "Public key or secret for token verification"
+        examples: ["your-secret-key", "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"]
+      algorithms:
+        type: array
+        items:
+          type: string
+          enum: ["HS256", "RS256", "ES256"]
+        default: ["HS256", "RS256"]
+        description: "Supported JWT algorithms"
+      required_issuer:
+        type: string
+        description: "Required token issuer (optional)"
+      required_audience:
+        type: string
+        description: "Required token audience (optional)"
+      clock_skew_seconds:
+        type: integer
+        default: 300
+        minimum: 0
+        maximum: 3600
+        description: "Clock skew tolerance in seconds"
+      extract_claims:
+        type: array
+        items:
+          type: string
+        default: ["sub", "email", "roles", "permissions"]
+        description: "Custom claims to extract from tokens"
+    required: ["verification_key"]

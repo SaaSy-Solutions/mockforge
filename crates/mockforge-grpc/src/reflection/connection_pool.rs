@@ -54,3 +54,11 @@ impl ConnectionPool {
         Ok(channel)
     }
 }
+
+impl Clone for ConnectionPool {
+    fn clone(&self) -> Self {
+        Self {
+            channels: self.channels.clone(),
+        }
+    }
+}

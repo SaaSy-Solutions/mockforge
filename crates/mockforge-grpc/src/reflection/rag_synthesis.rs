@@ -289,6 +289,8 @@ impl RagDataSynthesizer {
             embedding_endpoint: None,
             similarity_threshold: config.similarity_threshold,
             max_chunks: config.max_documents,
+            request_timeout_seconds: 30,
+            max_retries: 3,
         };
 
         Ok(RagEngine::new(rag_config))

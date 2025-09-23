@@ -4,3 +4,7 @@
 {"ts":25,"dir":"out","text":"{\\"type\\":\\"heartbeat\\",\\"timestamp\\":\\"{{now}}\\"}"}
 {"ts":30,"dir":"out","text":"{\\"type\\":\\"notification\\",\\"title\\":\\"System Update\\",\\"message\\":\\"Server maintenance scheduled\\",\\"timestamp\\":\\"{{now+1h}}\\"}","waitFor":"^CONFIRMED$"}
 {"ts":40,"dir":"out","text":"{\\"type\\":\\"data\\",\\"id\\":\\"{{randInt 100 199}}\\",\\"value\\":\\"{{randInt 1000 9999}}\\",\\"timestamp\\":\\"{{now}}\\"}"}
+{"ts":50,"dir":"out","text":"{\\"type\\":\\"user_update\\",\\"userId\\":\\"{{uuid}}\\",\\"status\\":\\"online\\",\\"timestamp\\":\\"{{now}}\\"}","waitFor":"$.type"}
+{"ts":60,"dir":"out","text":"{\\"type\\":\\"order_update\\",\\"orderId\\":\\"ORD-{{randInt 1000 9999}}\\",\\"status\\":\\"shipped\\",\\"timestamp\\":\\"{{now}}\\"}","waitFor":"$.status"}
+{"ts":70,"dir":"out","text":"{\\"type\\":\\"chat_message\\",\\"from\\":\\"system\\",\\"message\\":\\"Welcome to the chat!\\",\\"timestamp\\":\\"{{now}}\\"}","waitFor":"$.from"}
+{"ts":80,"dir":"out","text":"{\\"type\\":\\"system_alert\\",\\"level\\":\\"info\\",\\"message\\":\\"Server restarted successfully\\",\\"timestamp\\":\\"{{now}}\\"}","waitFor":"$.level"}

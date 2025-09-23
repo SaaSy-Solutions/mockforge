@@ -128,23 +128,91 @@ pub struct ProxyConfig {
     pub requests_proxied: u64,
 }
 
+/// Bandwidth configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BandwidthConfig {
+    /// Whether bandwidth throttling is enabled
+    pub enabled: bool,
+    /// Maximum bandwidth in bytes per second
+    pub max_bytes_per_sec: u64,
+    /// Burst capacity in bytes
+    pub burst_capacity_bytes: u64,
+    /// Tag-based overrides
+    pub tag_overrides: HashMap<String, u64>,
+}
+
+/// Burst loss configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BurstLossConfig {
+    /// Whether burst loss is enabled
+    pub enabled: bool,
+    /// Probability of entering burst (0.0 to 1.0)
+    pub burst_probability: f64,
+    /// Duration of burst in milliseconds
+    pub burst_duration_ms: u64,
+    /// Loss rate during burst (0.0 to 1.0)
+    pub loss_rate_during_burst: f64,
+    /// Recovery time between bursts in milliseconds
+    pub recovery_time_ms: u64,
+    /// Tag-based overrides
+    pub tag_overrides: HashMap<String, BurstLossOverride>,
+}
+
+/// Burst loss override for specific tags
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BurstLossOverride {
+    pub burst_probability: f64,
+    pub burst_duration_ms: u64,
+    pub loss_rate_during_burst: f64,
+    pub recovery_time_ms: u64,
+}
+
+/// Traffic shaping configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficShapingConfig {
+    /// Whether traffic shaping is enabled
+    pub enabled: bool,
+    /// Bandwidth configuration
+    pub bandwidth: BandwidthConfig,
+    /// Burst loss configuration
+    pub burst_loss: BurstLossConfig,
+}
+
+/// Simple metrics data for admin dashboard
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimpleMetricsData {
+    /// Total requests served
+    pub total_requests: u64,
+    /// Active requests currently being processed
+    pub active_requests: u64,
+    /// Average response time in milliseconds
+    pub average_response_time: f64,
+    /// Error rate (0.0 to 1.0)
+    pub error_rate: f64,
+}
+
+/// Dashboard system information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardSystemInfo {
+    /// Operating system
+    pub os: String,
+    /// Architecture
+    pub arch: String,
+    /// Uptime in seconds
+    pub uptime: u64,
+    /// Memory usage in bytes
+    pub memory_usage: u64,
+}
+
 /// Dashboard data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DashboardData {
+    /// Server information
+    pub server_info: ServerInfo,
     /// System information
-    pub system: SystemInfo,
-    /// Server statuses
-    pub servers: Vec<ServerStatus>,
-    /// Route information
-    pub routes: Vec<RouteInfo>,
-    /// Recent request logs (last 100)
-    pub recent_logs: Vec<RequestLog>,
-    /// Latency profile
-    pub latency_profile: LatencyProfile,
-    /// Fault configuration
-    pub fault_config: FaultConfig,
-    /// Proxy configuration
-    pub proxy_config: ProxyConfig,
+    pub system_info: DashboardSystemInfo,
+    /// Metrics data
+    pub metrics: SimpleMetricsData,
 }
 
 /// API response wrapper
@@ -272,6 +340,23 @@ pub struct ValidationUpdate {
     pub overrides: Option<HashMap<String, String>>,
 }
 
+/// Log entry for admin UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    /// Request timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// HTTP status code
+    pub status: u16,
+    /// HTTP method
+    pub method: String,
+    /// Request URL/path
+    pub url: String,
+    /// Response time in milliseconds
+    pub response_time: u64,
+    /// Response size in bytes
+    pub size: u64,
+}
+
 /// Health check response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthCheck {
@@ -311,4 +396,381 @@ impl HealthCheck {
         self.services.insert(name, status);
         self
     }
+}
+
+/// Workspace summary information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceSummary {
+    /// Workspace ID
+    pub id: String,
+    /// Workspace name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// Whether this is the active workspace
+    pub active: bool,
+    /// Number of folders
+    pub folder_count: usize,
+    /// Number of requests
+    pub request_count: usize,
+    /// Created timestamp
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Updated timestamp
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Folder summary information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderSummary {
+    /// Folder ID
+    pub id: String,
+    /// Folder name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// Parent folder ID (None if root)
+    pub parent_id: Option<String>,
+    /// Number of subfolders
+    pub subfolder_count: usize,
+    /// Number of requests
+    pub request_count: usize,
+    /// Created timestamp
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Updated timestamp
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Request summary information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestSummary {
+    /// Request ID
+    pub id: String,
+    /// Request name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// HTTP method
+    pub method: String,
+    /// Request path
+    pub path: String,
+    /// Response status code
+    pub status_code: u16,
+    /// Created timestamp
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Updated timestamp
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Workspace detailed information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceDetail {
+    /// Workspace summary
+    pub summary: WorkspaceSummary,
+    /// Root folders
+    pub folders: Vec<FolderSummary>,
+    /// Root requests
+    pub requests: Vec<RequestSummary>,
+}
+
+/// Folder detailed information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderDetail {
+    /// Folder summary
+    pub summary: FolderSummary,
+    /// Subfolders
+    pub subfolders: Vec<FolderSummary>,
+    /// Requests in this folder
+    pub requests: Vec<RequestSummary>,
+}
+
+/// Create workspace request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkspaceRequest {
+    /// Workspace name
+    pub name: String,
+    /// Description (optional)
+    pub description: Option<String>,
+}
+
+/// Create folder request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateFolderRequest {
+    /// Folder name
+    pub name: String,
+    /// Description (optional)
+    pub description: Option<String>,
+    /// Parent folder ID (optional)
+    pub parent_id: Option<String>,
+}
+
+/// Create request request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRequestRequest {
+    /// Request name
+    pub name: String,
+    /// Description (optional)
+    pub description: Option<String>,
+    /// HTTP method
+    pub method: String,
+    /// Request path
+    pub path: String,
+    /// Response status code
+    pub status_code: Option<u16>,
+    /// Response body
+    pub response_body: Option<String>,
+    /// Folder ID (optional)
+    pub folder_id: Option<String>,
+}
+
+/// Import to workspace request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportToWorkspaceRequest {
+    /// Import format (postman, insomnia, curl)
+    pub format: String,
+    /// Import data (file content or URL)
+    pub data: String,
+    /// Folder ID to import into (optional)
+    pub folder_id: Option<String>,
+    /// Whether to create folders from import structure
+    pub create_folders: Option<bool>,
+    /// Indices of routes to import (for selective import)
+    pub selected_routes: Option<Vec<usize>>,
+}
+
+/// Export workspaces request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportWorkspacesRequest {
+    /// Workspace IDs to export
+    pub workspace_ids: Vec<String>,
+}
+
+/// Workspace export data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceExportData {
+    /// Exported workspaces
+    pub workspaces: Vec<mockforge_core::Workspace>,
+    /// Export version
+    pub version: String,
+    /// Export timestamp
+    pub exported_at: chrono::DateTime<chrono::Utc>,
+    /// Exporter version
+    pub exporter_version: String,
+}
+
+/// Environment color information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentColor {
+    /// Hex color code (e.g., "#FF5733")
+    pub hex: String,
+    /// Optional color name for accessibility
+    pub name: Option<String>,
+}
+
+/// Environment summary information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentSummary {
+    /// Environment ID
+    pub id: String,
+    /// Environment name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// Color for visual distinction
+    pub color: Option<EnvironmentColor>,
+    /// Number of variables
+    pub variable_count: usize,
+    /// Whether this is the active environment
+    pub active: bool,
+    /// Whether this is the global environment
+    pub is_global: bool,
+    /// Created timestamp
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Updated timestamp
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Environment variable information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentVariable {
+    /// Variable name
+    pub name: String,
+    /// Variable value
+    pub value: String,
+    /// Whether this variable is from the global environment
+    pub from_global: bool,
+}
+
+/// Create environment request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateEnvironmentRequest {
+    /// Environment name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+}
+
+/// Update environment request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateEnvironmentRequest {
+    /// Environment name
+    pub name: Option<String>,
+    /// Description
+    pub description: Option<String>,
+    /// Color
+    pub color: Option<EnvironmentColor>,
+}
+
+/// Set variable request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetVariableRequest {
+    /// Variable name
+    pub name: String,
+    /// Variable value
+    pub value: String,
+}
+
+/// Directory sync configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncConfig {
+    /// Enable directory syncing for this workspace
+    pub enabled: bool,
+    /// Target directory for sync (relative or absolute path)
+    pub target_directory: Option<String>,
+    /// Directory structure to use (flat, nested, grouped)
+    pub directory_structure: SyncDirectoryStructure,
+    /// Auto-sync direction (one-way workspace→directory, bidirectional, or manual)
+    pub sync_direction: SyncDirection,
+    /// Whether to include metadata files
+    pub include_metadata: bool,
+    /// Filesystem monitoring enabled for real-time sync
+    pub realtime_monitoring: bool,
+    /// Custom filename pattern for exported files
+    pub filename_pattern: String,
+    /// Regular expression for excluding workspaces/requests
+    pub exclude_pattern: Option<String>,
+    /// Force overwrite existing files during sync
+    pub force_overwrite: bool,
+}
+
+/// Directory structure options for sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SyncDirectoryStructure {
+    /// All workspaces in flat structure: workspace-name.yaml
+    Flat,
+    /// Nested by workspace: workspaces/{name}/workspace.yaml + requests/
+    Nested,
+    /// Grouped by type: requests/, responses/, metadata/
+    Grouped,
+}
+
+/// Sync direction options
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SyncDirection {
+    /// Manual sync only (one-off operations)
+    Manual,
+    /// One-way: workspace changes sync silently to directory
+    WorkspaceToDirectory,
+    /// Bidirectional: changes in either direction trigger sync
+    Bidirectional,
+}
+
+impl From<mockforge_core::workspace::SyncDirection> for SyncDirection {
+    fn from(core: mockforge_core::workspace::SyncDirection) -> Self {
+        match core {
+            mockforge_core::workspace::SyncDirection::Manual => Self::Manual,
+            mockforge_core::workspace::SyncDirection::WorkspaceToDirectory => Self::WorkspaceToDirectory,
+            mockforge_core::workspace::SyncDirection::Bidirectional => Self::Bidirectional,
+        }
+    }
+}
+
+/// Sync status information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncStatus {
+    /// Workspace ID
+    pub workspace_id: String,
+    /// Whether sync is enabled
+    pub enabled: bool,
+    /// Target directory
+    pub target_directory: Option<String>,
+    /// Current sync direction
+    pub sync_direction: SyncDirection,
+    /// Whether real-time monitoring is active
+    pub realtime_monitoring: bool,
+    /// Last sync timestamp
+    pub last_sync: Option<chrono::DateTime<chrono::Utc>>,
+    /// Sync status message
+    pub status: String,
+}
+
+/// Sync change information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncChange {
+    /// Change type
+    pub change_type: String,
+    /// File path
+    pub path: String,
+    /// Change description
+    pub description: String,
+    /// Whether this change requires confirmation
+    pub requires_confirmation: bool,
+}
+
+/// Configure sync request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigureSyncRequest {
+    /// Target directory
+    pub target_directory: String,
+    /// Sync direction
+    pub sync_direction: SyncDirection,
+    /// Enable real-time monitoring
+    pub realtime_monitoring: bool,
+    /// Directory structure
+    pub directory_structure: Option<SyncDirectoryStructure>,
+    /// Filename pattern
+    pub filename_pattern: Option<String>,
+}
+
+/// Confirm sync changes request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfirmSyncChangesRequest {
+    /// Workspace ID
+    pub workspace_id: String,
+    /// Changes to confirm
+    pub changes: Vec<SyncChange>,
+    /// Whether to apply all changes
+    pub apply_all: bool,
+}
+
+/// Autocomplete suggestion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutocompleteSuggestion {
+    /// Suggestion text
+    pub text: String,
+    /// Suggestion type (e.g., "variable", "template")
+    pub kind: String,
+    /// Optional description
+    pub description: Option<String>,
+}
+
+/// Autocomplete request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutocompleteRequest {
+    /// Current input text
+    pub input: String,
+    /// Cursor position in the text
+    pub cursor_position: usize,
+    /// Context type (e.g., "header", "body", "url")
+    pub context: Option<String>,
+}
+
+/// Autocomplete response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutocompleteResponse {
+    /// List of suggestions
+    pub suggestions: Vec<AutocompleteSuggestion>,
+    /// Start position of the token being completed
+    pub start_position: usize,
+    /// End position of the token being completed
+    pub end_position: usize,
 }

@@ -195,6 +195,41 @@ ws.onopen = () => ws.send('CLIENT_READY');
 ws.onmessage = (event) => console.log('Received:', event.data);
 ```
 
+### Advanced Message Matching with JSONPath
+
+MockForge supports JSONPath queries for sophisticated WebSocket message matching:
+
+```json
+[
+  {"waitFor": "^CLIENT_READY$", "text": "Welcome!"},
+  {"waitFor": "$.type", "text": "Type received"},
+  {"waitFor": "$.user.id", "text": "User authenticated"},
+  {"waitFor": "$.order.status", "text": "Order status updated"}
+]
+```
+
+**JSONPath Examples:**
+- `$.type` - Wait for any message with a `type` property
+- `$.user.id` - Wait for messages with user ID
+- `$.order.status` - Wait for order status updates
+- `$.items[0].name` - Wait for first item name
+
+**JSON Message Testing:**
+```javascript
+const ws = new WebSocket('ws://localhost:3001/ws');
+
+// Send JSON messages that match JSONPath patterns
+ws.onopen = () => {
+  ws.send(JSON.stringify({type: 'login'}));           // Matches $.type
+  ws.send(JSON.stringify({user: {id: '123'}}));       // Matches $.user.id
+  ws.send(JSON.stringify({order: {status: 'paid'}})); // Matches $.order.status
+};
+
+ws.onmessage = (event) => console.log('Response:', event.data);
+```
+
+See `examples/README-websocket-jsonpath.md` for complete documentation.
+
 ### Replay File Format
 
 WebSocket replay files use JSON Lines format with the following structure:
@@ -221,6 +256,158 @@ WebSocket messages support the same template expansion as HTTP responses:
 ## gRPC
 
 grpcurl -plaintext -proto crates/mockforge-grpc/proto/gretter.proto -d '{"name":"Ray"}' localhost:50051 mockforge.greeter.Greeter/SayHello
+
+### 🚀 HTTP Bridge for gRPC Services
+
+MockForge now includes an advanced **HTTP Bridge** that automatically converts gRPC services to REST APIs, eliminating the need for separate gRPC and HTTP implementations.
+
+#### Features
+
+- **Automatic Discovery**: Scans `.proto` files and creates REST endpoints for all gRPC services
+- **JSON ↔ Protobuf Conversion**: Full bidirectional conversion between JSON and protobuf messages
+- **OpenAPI Documentation**: Auto-generated OpenAPI/Swagger specs for all bridged services
+- **Streaming Support**: Server-Sent Events (SSE) for server streaming and bidirectional communication
+- **Statistics & Monitoring**: Built-in request metrics and health checks
+
+#### Quick Start
+
+```bash
+# Start gRPC server with HTTP bridge
+cargo run -p mockforge-cli -- serve --config config.dev.yaml --admin
+```
+
+The bridge will automatically:
+1. Discover services from proto files
+2. Create REST endpoints at `/api/{service}/{method}`
+3. Generate OpenAPI docs at `/api/docs`
+4. Provide health monitoring at `/api/health`
+
+#### Example Usage
+
+**gRPC Service:**
+```protobuf
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+```
+
+**HTTP Bridge Endpoints:**
+```bash
+# Create user (POST)
+curl -X POST http://localhost:3000/api/userservice/createuser \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John Doe", "email": "john@example.com"}'
+
+# Get user (POST - gRPC semantics)
+curl -X POST http://localhost:3000/api/userservice/getuser \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "123"}'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "user_id": "123",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "created_at": "2025-01-01T00:00:00Z"
+  },
+  "error": null,
+  "metadata": {
+    "x-mockforge-service": "userservice",
+    "x-mockforge-method": "createuser"
+  }
+}
+```
+
+#### Configuration
+
+Enable the HTTP bridge by modifying your config:
+
+```yaml
+grpc:
+  dynamic:
+    enabled: true
+    proto_dir: "proto"          # Directory containing .proto files
+    enable_reflection: true     # Enable gRPC reflection
+    http_bridge:
+      enabled: true             # Enable HTTP bridge
+      base_path: "/api"         # Base path for REST endpoints
+      enable_cors: true         # Enable CORS
+      timeout_seconds: 30       # Request timeout
+```
+
+Or via environment variables:
+```bash
+export MOCKFORGE_GRPC_DYNAMIC_ENABLED=true
+export MOCKFORGE_GRPC_HTTP_BRIDGE_ENABLED=true
+export MOCKFORGE_GRPC_PROTO_DIR=proto
+```
+
+#### Bridge Endpoints
+
+- **`GET /api/health`** - Health check
+- **`GET /api/stats`** - Request statistics and metrics
+- **`GET /api/services`** - List available gRPC services
+- **`GET /api/docs`** - OpenAPI 3.0 documentation
+- **`/api/{service}/{method}`** - Automatically generated REST endpoints
+
+#### Streaming Support
+
+For gRPC streaming methods, the bridge provides:
+
+```bash
+# Server streaming endpoint
+curl -N http://localhost:3000/api/chat/streammessages \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "tech"}'
+```
+
+Returns server-sent events:
+```javascript
+data: {"event_type":"message","data":{"text":"Hello!"},"metadata":{}}
+event: message
+
+data: {"event_type":"message","data":{"text":"How can I help?"},"metadata":{}}
+event: message
+```
+
+#### OpenAPI Integration
+
+The bridge auto-generates comprehensive OpenAPI documentation:
+
+```bash
+# Access interactive API docs
+open http://localhost:3000/api/docs
+
+# Get OpenAPI JSON spec
+curl http://localhost:3000/api/docs
+```
+
+Features:
+- Automatic schema generation from protobuf definitions
+- Example requests and responses
+- Streaming method documentation
+- Method tags and descriptions
+
+#### Advanced Features
+
+- **Bidirectional Streaming**: Full support for client ↔ server streaming via WebSockets-in-disguise
+- **Metadata Preservation**: Passes gRPC metadata as HTTP headers
+- **Error Handling**: Comprehensive error responses with detailed messages
+- **Metrics**: Request counting, latency tracking, and failure rates
+- **Security**: Configurable CORS and request validation
+
+#### Use Cases
+
+1. **Frontend Development**: Test gRPC APIs with familiar HTTP tools
+2. **API Gateways**: Expose gRPC services as REST APIs
+3. **Mixed Environments**: Support for both gRPC and HTTP clients
+4. **Development Tools**: Use Postman, curl, or any HTTP client
+5. **Documentation**: Auto-generated API docs for gRPC services
 
 ## 🎯 Data Generation
 

@@ -2,7 +2,7 @@
 //!
 //! This module generates actual gRPC service implementations from parsed proto definitions.
 
-use crate::dynamic::proto_parser::{ProtoService, ProtoParser};
+use crate::dynamic::proto_parser::{ProtoService, ProtoParser, ProtoMethod};
 use crate::reflection::smart_mock_generator::{SmartMockGenerator, SmartMockConfig};
 use mockforge_core::latency::LatencyInjector;
 use prost_reflect::DescriptorPool;
@@ -37,7 +37,7 @@ impl EnhancedServiceFactory {
         let services_info: Vec<(String, ProtoService)> = parser.services().iter()
             .map(|(name, service)| (name.clone(), service.clone()))
             .collect();
-        
+
         // Create enhanced services for each parsed service
         for (service_name, proto_service) in services_info {
             debug!("Creating enhanced service: {}", service_name);
@@ -195,7 +195,7 @@ impl DynamicGrpcService {
         let response_json = if let Ok(mut generator) = smart_generator.lock() {
             // Create sample fields based on common gRPC response patterns
             let mut fields = HashMap::new();
-            
+
             // Add common response fields based on method name
             match method_name.to_lowercase().as_str() {
                 name if name.contains("hello") || name.contains("greet") => {
@@ -591,7 +591,7 @@ impl DynamicGrpcService {
                 }
             }
 
-            info!("Bidirectional streaming completed for method: {}: processed {} inputs, sent {} outputs", 
+            info!("Bidirectional streaming completed for method: {}: processed {} inputs, sent {} outputs",
                   method_name, input_count, output_count);
         });
 
@@ -694,5 +694,15 @@ impl DynamicGrpcService {
             mock_response.error_message = Some(error_message.to_string());
             mock_response.error_code = Some(error_code);
         }
+    }
+
+    /// Get the service methods
+    pub fn methods(&self) -> &Vec<ProtoMethod> {
+        &self.service.methods
+    }
+
+    /// Get the service package
+    pub fn package(&self) -> &str {
+        &self.service.package
     }
 }

@@ -1,0 +1,1 @@
+{"service":"UserService","method":"GetUsers","fingerprint":{"service":"UserService","method":"GetUsers"},"timestamp":"2024-01-15T12:00:00Z","smoke_test":true}

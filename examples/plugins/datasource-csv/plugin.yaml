@@ -1,0 +1,58 @@
+id: "datasource-csv"
+name: "CSV Data Source Plugin"
+description: "Provides access to CSV files as mock data sources"
+version: "0.1.0"
+author:
+  name: "MockForge Team"
+  email: "team@mockforge.dev"
+homepage: "https://github.com/mockforge/plugins"
+repository: "https://github.com/mockforge/plugins/datasource-csv"
+
+types:
+  - "datasource"
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: true
+    allow_write: false
+    allowed_paths: ["*.csv"]
+  resources:
+    max_memory_bytes: 26214400  # 25MB
+    max_cpu_percent: 0.25       # 25% CPU
+
+config_schema:
+  type: object
+  properties:
+    csv_files:
+      type: array
+      description: "List of CSV files to load"
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "Dataset name for this CSV file"
+          path:
+            type: string
+            description: "Path to the CSV file"
+          has_headers:
+            type: boolean
+            description: "Whether the CSV file has headers"
+            default: true
+        required: ["name", "path"]
+    cache_enabled:
+      type: boolean
+      description: "Enable data caching for performance"
+      default: true
+    max_rows_per_query:
+      type: integer
+      description: "Maximum rows to return per query"
+      default: 1000
+      minimum: 1
+      maximum: 10000
+  required: ["csv_files"]
+
+dependencies: []

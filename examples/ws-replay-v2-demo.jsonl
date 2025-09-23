@@ -1,0 +1,12 @@
+{"step_id":"init","ts":0,"dir":"out","text":"HELLO {{uuid}} at {{now+1m}}","wait_for":"^CLIENT_READY$","timeout_ms":5000}
+{"step_id":"welcome","ts":10,"dir":"out","text":"{\"type\":\"welcome\",\"message\":\"WebSocket connection established\",\"sessionId\":\"{{uuid}}\",\"timestamp\":\"{{now}}\"}"}
+{"step_id":"wait_heartbeat","ts":15,"dir":"out","text":"{\"type\":\"data\",\"id\":\"{{randInt 10 99}}\",\"value\":\"{{randInt 100 999}}\",\"timestamp\":\"{{now}}\"}","wait_for":"^ACK$","on_match":[{"pattern":"ACK","goto_step":"heartbeat_mode"},{"pattern":"NACK","goto_step":"error_mode"}],"timeout_ms":30000}
+{"step_id":"heartbeat_mode","ts":25,"dir":"out","text":"{\"type\":\"heartbeat\",\"timestamp\":\"{{now}}\"}"}
+{"step_id":"normal_flow","ts":30,"dir":"in","assertions":[{"pattern":"$.type","expected":true,"description":"Message must have type field"},{"pattern":"$.userId","expected":true,"description":"Message must have userId"}],"on_match":[{"pattern":"$.action:\\\"close\\\"","goto_step":"cleanup"}],"branches":{"close":"cleanup","error":"error_mode"},"next_step":"data_exchange"}
+{"step_id":"data_exchange","ts":40,"dir":"out","text":"{\"type\":\"data\",\"id\":\"{{randInt 100 199}}\",\"value\":\"{{randInt 1000 9999}}\",\"timestamp\":\"{{now}}\"}","wait_for":"$.type"}
+{"step_id":"user_status","ts":50,"dir":"out","text":"{\"type\":\"user_update\",\"userId\":\"{{uuid}}\",\"status\":\"online\",\"timestamp\":\"{{now}}\"}","wait_for":"$.status"}
+{"step_id":"send_order","ts":60,"dir":"out","text":"{\"type\":\"order_update\",\"orderId\":\"ORD-{{randInt 1000 9999}}\",\"status\":\"shipped\",\"timestamp\":\"{{now}}\"}","wait_for":"$.status"}
+{"step_id":"chat_message","ts":70,"dir":"out","text":"{\"type\":\"chat_message\",\"from\":\"system\",\"message\":\"Welcome to the chat!\",\"timestamp\":\"{{now}}\"}","wait_for":"$.from"}
+{"step_id":"system_alert","ts":80,"dir":"out","text":"{\"type\":\"system_alert\",\"level\":\"info\",\"message\":\"Server restarted successfully\",\"timestamp\":\"{{now}}\"}","wait_for":"$.level"}
+{"step_id":"cleanup","ts":85,"dir":"out","text":"{\"type\":\"goodbye\",\"message\":\"Session ended\",\"timestamp\":\"{{now}}\"}"}
+{"step_id":"error_mode","ts":0,"dir":"out","text":"{\"type\":\"error\",\"message\":\"An error occurred\",\"timestamp\":\"{{now}}\"}"}

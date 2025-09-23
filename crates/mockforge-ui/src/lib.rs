@@ -18,9 +18,10 @@ pub async fn start_admin_server(
     http_server_addr: Option<SocketAddr>,
     ws_server_addr: Option<SocketAddr>,
     grpc_server_addr: Option<SocketAddr>,
+    graphql_server_addr: Option<SocketAddr>,
     api_enabled: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = create_admin_router(http_server_addr, ws_server_addr, grpc_server_addr, api_enabled);
+    let app = create_admin_router(http_server_addr, ws_server_addr, grpc_server_addr, graphql_server_addr, api_enabled);
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);
 
@@ -30,17 +31,17 @@ pub async fn start_admin_server(
     Ok(())
 }
 
-/// Get admin UI HTML content
+/// Get React UI HTML content
 pub fn get_admin_html() -> &'static str {
-    include_str!("../static/admin.html")
+    include_str!("../ui/dist/index.html")
 }
 
-/// Get admin UI CSS content
+/// Get React UI CSS content
 pub fn get_admin_css() -> &'static str {
-    include_str!("../static/admin.css")
+    include_str!("../ui/dist/assets/index.css")
 }
 
-/// Get admin UI JavaScript content
+/// Get React UI JavaScript content
 pub fn get_admin_js() -> &'static str {
-    include_str!("../static/admin.js")
+    include_str!("../ui/dist/assets/index.js")
 }

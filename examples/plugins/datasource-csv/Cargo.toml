@@ -1,0 +1,34 @@
+[package]
+name = "mockforge-plugin-datasource-csv"
+version = "0.1.0"
+edition = "2021"
+authors = ["MockForge Team"]
+description = "Example CSV data source plugin for MockForge"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Plugin core types and traits
+mockforge-plugin-core = { path = "../../../crates/mockforge-plugin-core" }
+
+# WebAssembly bindings
+wit-bindgen = "0.34"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# CSV parsing
+csv = "1.3"
+
+# Utility libraries
+uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
