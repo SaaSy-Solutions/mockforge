@@ -202,13 +202,6 @@ async fn start_grpc_only_server(
     // Create a gRPC server with the mock proxy
     let mut server_builder = Server::builder();
 
-    // Add reflection service if enabled
-    if config.enable_reflection {
-        // TODO: Implement proper reflection service setup with current tonic-reflection API
-        // The prost-reflect API has changed and encode_file_descriptor_set is no longer available
-        warn!("gRPC reflection service temporarily disabled due to API changes");
-    }
-
     // Start actual gRPC server on the specified port
     info!(
         "Starting gRPC server on {} with {} discovered services",
@@ -289,10 +282,26 @@ async fn start_grpc_only_server(
 
     info!("gRPC server listening on {} with Greeter service", grpc_addr);
 
-    server_builder
-        .add_service(GreeterServer::new(greeter))
-        .serve(grpc_addr)
-        .await?;
+    // Build the server with services
+    let mut router = server_builder.add_service(GreeterServer::new(greeter));
+
+    // Add reflection service if enabled
+    if config.enable_reflection {
+        // Build reflection service from the descriptor pool
+        let encoded_fd_set = registry_arc.descriptor_pool().encode_to_vec();
+        let reflection_service = ReflectionBuilder::configure()
+            .register_encoded_file_descriptor_set(&encoded_fd_set)
+            .build_v1()
+            .map_err(|e| {
+                error!("Failed to build reflection service: {}", e);
+                Box::<dyn std::error::Error + Send + Sync>::from(format!("Failed to build reflection service: {}", e))
+            })?;
+
+        router = router.add_service(reflection_service);
+        info!("gRPC reflection service enabled");
+    }
+
+    router.serve(grpc_addr).await?;
 
     Ok(())
 }
