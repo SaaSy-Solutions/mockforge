@@ -94,8 +94,13 @@ impl MockReflectionProxy {
     }
 
     /// Extract service and method names from a request
-    fn extract_service_method_from_request<T>(&self, request: &Request<T>) -> Result<(String, String), Status> {
-        let path = request.uri().path();
+    pub fn extract_service_method_from_request<T>(&self, request: &Request<T>) -> Result<(String, String), Status> {
+        // Try to get path from metadata (gRPC path header)
+        let path = request.metadata().get("path")
+            .or_else(|| request.metadata().get(":path"))
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| Status::invalid_argument("Missing path in request"))?;
+
         if !path.starts_with('/') {
             return Err(Status::invalid_argument("Invalid request path"));
         }
@@ -118,8 +123,8 @@ impl MockReflectionProxy {
         // Get the method descriptor
         let method_descriptor = self
             .cache()
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Generate a mock response message
         let response_message = self.generate_mock_message(method_descriptor.output())?;
@@ -143,8 +148,8 @@ impl MockReflectionProxy {
         // Get the method descriptor
         let method_descriptor = self
             .cache()
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Create a channel for streaming responses
         let (tx, rx) = mpsc::channel(4);
@@ -154,11 +159,11 @@ impl MockReflectionProxy {
         let output_descriptor = method_descriptor.output();
 
         tokio::spawn(async move {
-            for i in 0..3 {
+            for _i in 0..3 {
                 // Generate a mock response message
                 if let Ok(message) = Self::generate_mock_message_with_generator(
                     &smart_generator,
-                    output_descriptor,
+                    output_descriptor.clone(),
                 ) {
                     if tx.send(Ok(message)).await.is_err() {
                         break; // Receiver dropped
@@ -190,8 +195,8 @@ impl MockReflectionProxy {
         // Get the method descriptor
         let method_descriptor = self
             .cache()
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Generate a mock response message
         let response_message = self.generate_mock_message(method_descriptor.output())?;
@@ -215,8 +220,8 @@ impl MockReflectionProxy {
         // Get the method descriptor
         let method_descriptor = self
             .cache()
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Create a channel for streaming responses
         let (tx, rx) = mpsc::channel(4);
@@ -226,11 +231,11 @@ impl MockReflectionProxy {
         let output_descriptor = method_descriptor.output();
 
         tokio::spawn(async move {
-            for i in 0..5 {
+            for _i in 0..5 {
                 // Generate a mock response message
                 if let Ok(message) = Self::generate_mock_message_with_generator(
                     &smart_generator,
-                    output_descriptor,
+                    output_descriptor.clone(),
                 ) {
                     if tx.send(Ok(message)).await.is_err() {
                         break; // Receiver dropped
@@ -340,7 +345,7 @@ impl MockReflectionProxy {
             Status::internal("Failed to acquire lock on smart generator")
         })?;
 
-        smart_generator.generate_message(&descriptor)
+        Ok(smart_generator.generate_message(&descriptor))
     }
 
     /// Generate a mock message with a specific generator
@@ -352,6 +357,6 @@ impl MockReflectionProxy {
             Status::internal("Failed to acquire lock on smart generator")
         })?;
 
-        smart_generator.generate_message(&descriptor)
+        Ok(smart_generator.generate_message(&descriptor))
     }
 }

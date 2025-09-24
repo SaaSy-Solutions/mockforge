@@ -1,34 +1,39 @@
 //! Configuration for the reflection proxy
 
 use crate::reflection::error_handling::ErrorConfig;
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use mockforge_core::overrides::Overrides;
+use std::collections::{HashMap, HashSet};
+use mockforge_core::{overrides::Overrides, openapi_routes::ValidationMode};
 
 /// Configuration for the reflection proxy
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ProxyConfig {
     /// List of allowed services (if empty, all services are allowed)
-    #[serde(default)]
     pub allowlist: HashSet<String>,
     /// List of denied services (takes precedence over allowlist)
-    #[serde(default)]
     pub denylist: HashSet<String>,
     /// Whether to require services to be explicitly allowed
-    #[serde(default)]
     pub require_explicit_allow: bool,
     /// gRPC port for connection pooling
-    #[serde(default = "default_grpc_port")]
     pub grpc_port: u16,
     /// Error handling configuration
-    #[serde(default)]
     pub error_config: Option<ErrorConfig>,
     /// Response transformation configuration
-    #[serde(default)]
     pub response_transform: ResponseTransformConfig,
     /// Upstream endpoint for request forwarding
-    #[serde(default)]
     pub upstream_endpoint: Option<String>,
+    /// Seed for deterministic mock data generation
+    pub mock_seed: Option<u64>,
+    /// Request timeout in seconds
+    pub request_timeout_seconds: u64,
+    /// Admin skip prefixes
+    #[serde(default)]
+    pub admin_skip_prefixes: Vec<String>,
+    /// Validation mode overrides
+    #[serde(default)]
+    pub overrides: HashMap<String, ValidationMode>,
+    /// Default request mode
+    #[serde(default)]
+    pub request_mode: ValidationMode,
 }
 
 /// Default gRPC port
@@ -36,8 +41,13 @@ fn default_grpc_port() -> u16 {
     50051
 }
 
+/// Default request timeout in seconds
+fn default_request_timeout_seconds() -> u64 {
+    30
+}
+
 /// Configuration for response transformations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ResponseTransformConfig {
     /// Enable response transformations
     #[serde(default)]
@@ -46,7 +56,7 @@ pub struct ResponseTransformConfig {
     #[serde(default)]
     pub custom_headers: std::collections::HashMap<String, String>,
     /// Response body overrides using the override system
-    #[serde(default)]
+    #[serde(skip)]
     pub overrides: Option<Overrides>,
     /// Enable response validation
     #[serde(default)]
@@ -74,6 +84,11 @@ impl Default for ProxyConfig {
             error_config: None,
             response_transform: ResponseTransformConfig::default(),
             upstream_endpoint: None,
+            mock_seed: None,
+            request_timeout_seconds: default_request_timeout_seconds(),
+            admin_skip_prefixes: Vec::new(),
+            overrides: HashMap::new(),
+            request_mode: ValidationMode::default(),
         }
     }
 }

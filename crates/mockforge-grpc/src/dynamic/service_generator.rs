@@ -279,6 +279,11 @@ impl DynamicGrpcService {
         &self.smart_generator
     }
 
+    /// Get the service definition
+    pub fn service(&self) -> &ProtoService {
+        &self.service
+    }
+
     /// Handle a unary request
     pub async fn handle_unary(
         &self,
@@ -670,11 +675,6 @@ impl DynamicGrpcService {
     /// Get the service name
     pub fn service_name(&self) -> &str {
         &self.service.name
-    }
-
-    /// Get the service definition
-    pub fn service(&self) -> &ProtoService {
-        &self.service
     }
 
     /// Set a custom mock response for a method

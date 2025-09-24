@@ -12,10 +12,11 @@ use std::time::Duration;
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use tonic::{Request, Streaming};
+use tonic::{Request, Response, Status, Streaming};
 use prost_reflect::DynamicMessage;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
+use crate::reflection::smart_mock_generator::SmartMockGenerator;
 
 /// Stream handler for server-sent events
 pub struct StreamHandler;
@@ -270,7 +271,7 @@ impl StreamHandler {
         }
 
         // Create a channel for the client stream
-        let (client_tx, client_rx) = mpsc::channel(10);
+        let (client_tx, client_rx) = mpsc::channel::<Result<prost_reflect::DynamicMessage, tonic::Status>>(10);
 
         // Create the request with the client stream
         let request = Request::new(ReceiverStream::new(client_rx));
@@ -288,110 +289,28 @@ impl StreamHandler {
             drop(client_tx_clone);
         });
 
-        // Call the bidirectional streaming method
-        match Err::<(), _>("Bidirectional streaming not implemented".to_string()) {
-            Ok(response) => {
-                let mut response_stream = response.into_inner();
-                let mut response_count = 0;
+        // Get the method descriptor
+        let method_descriptor = proxy
+            .cache()
+            .get_method(service_name, method_name)
+            .await?;
 
-                // Read responses from the gRPC stream
-                while let Some(response_result) = response_stream.next().await {
-                    match response_result {
-                        Ok(dynamic_msg) => {
-                            response_count += 1;
+        // For bidirectional streaming, we need to handle both directions
+        // This is a simplified implementation that sends a single mock response
+        let smart_generator = proxy.smart_generator().clone();
+        let output_descriptor = method_descriptor.output();
 
-                            // Convert protobuf response to JSON
-                            match converter.protobuf_to_json(&output_descriptor, &dynamic_msg) {
-                                Ok(json_response) => {
-                                    let response_msg = StreamingMessage {
-                                        event_type: "grpc_response".to_string(),
-                                        data: json_response,
-                                        metadata: vec![
-                                            ("sequence".to_string(), response_count.to_string()),
-                                            ("message_type".to_string(), "response".to_string()),
-                                        ].into_iter().collect(),
-                                    };
-
-                                    if let Ok(json_str) = serde_json::to_string(&response_msg) {
-                                        if tx.send(Ok(axum::response::sse::Event::default()
-                                            .event("grpc_response")
-                                            .data(json_str))).await.is_err() {
-                                            break; // Client disconnected
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!("Failed to convert gRPC response to JSON: {}", e);
-                                    let error_msg = StreamingMessage {
-                                        event_type: "conversion_error".to_string(),
-                                        data: serde_json::json!({
-                                            "message": format!("Failed to convert response {}: {}", response_count, e)
-                                        }),
-                                        metadata: vec![
-                                            ("error_type".to_string(), "conversion".to_string()),
-                                            ("sequence".to_string(), response_count.to_string()),
-                                        ].into_iter().collect(),
-                                    };
-                                    if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                                        let _ = tx.send(Ok(axum::response::sse::Event::default()
-                                            .event("error")
-                                            .data(json_str))).await;
-                                    }
-                                }
-                            }
-                        }
-                        Err(status) => {
-                            // Send error event
-                            let error_msg = StreamingMessage {
-                                event_type: "grpc_error".to_string(),
-                                data: serde_json::json!({
-                                    "message": format!("gRPC error: {}", status.message()),
-                                    "code": status.code() as i32
-                                }),
-                                metadata: vec![
-                                    ("error_type".to_string(), "grpc".to_string()),
-                                ].into_iter().collect(),
-                            };
-                            if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                                let _ = tx.send(Ok(axum::response::sse::Event::default()
-                                    .event("error")
-                                    .data(json_str))).await;
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // Send stream end event
-                let end_msg = StreamingMessage {
-                    event_type: "bidirectional_stream_end".to_string(),
-                    data: serde_json::json!({
-                        "message": "Bidirectional streaming session completed",
-                        "statistics": {
-                            "responses_received": response_count
-                        }
-                    }),
-                    metadata: vec![
-                        ("session_status".to_string(), "completed".to_string()),
-                    ].into_iter().collect(),
-                };
-
-                if let Ok(json_str) = serde_json::to_string(&end_msg) {
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event("stream_end")
-                        .data(json_str))).await;
-                }
-            }
-            Err(status) => {
-                // Send error event for failed stream creation
+        // Generate a single mock response for now
+        let mock_response = match smart_generator.lock() {
+            Ok(mut gen) => gen.generate_message(&output_descriptor),
+            Err(e) => {
                 let error_msg = StreamingMessage {
-                    event_type: "stream_error".to_string(),
+                    event_type: "error".to_string(),
                     data: serde_json::json!({
-                        "message": format!("Failed to create bidirectional stream: {}", status.message()),
-                        "code": status.code() as i32
+                        "message": format!("Failed to acquire smart generator lock: {}", e)
                     }),
                     metadata: vec![
-                        ("error_type".to_string(), "stream_creation".to_string()),
+                        ("error_type".to_string(), "lock".to_string()),
                     ].into_iter().collect(),
                 };
                 if let Ok(json_str) = serde_json::to_string(&error_msg) {
@@ -399,8 +318,64 @@ impl StreamHandler {
                         .event("error")
                         .data(json_str))).await;
                 }
-                return Err(Box::new(status));
+                return Ok(());
             }
+        };
+
+        // Convert to JSON and send
+        match converter.protobuf_to_json(&output_descriptor, &mock_response) {
+            Ok(json_response) => {
+                let response_msg = StreamingMessage {
+                    event_type: "grpc_response".to_string(),
+                    data: json_response,
+                    metadata: vec![
+                        ("sequence".to_string(), "1".to_string()),
+                        ("message_type".to_string(), "response".to_string()),
+                    ].into_iter().collect(),
+                };
+
+                if let Ok(json_str) = serde_json::to_string(&response_msg) {
+                    let _ = tx.send(Ok(axum::response::sse::Event::default()
+                        .event("grpc_response")
+                        .data(json_str))).await;
+                }
+            }
+            Err(e) => {
+                let error_msg = StreamingMessage {
+                    event_type: "conversion_error".to_string(),
+                    data: serde_json::json!({
+                        "message": format!("Failed to convert response to JSON: {}", e)
+                    }),
+                    metadata: vec![
+                        ("error_type".to_string(), "conversion".to_string()),
+                    ].into_iter().collect(),
+                };
+                if let Ok(json_str) = serde_json::to_string(&error_msg) {
+                    let _ = tx.send(Ok(axum::response::sse::Event::default()
+                        .event("error")
+                        .data(json_str))).await;
+                }
+            }
+        }
+
+        // Send stream end event
+        let end_msg = StreamingMessage {
+            event_type: "bidirectional_stream_end".to_string(),
+            data: serde_json::json!({
+                "message": "Bidirectional streaming session completed",
+                "statistics": {
+                    "responses_sent": 1
+                }
+            }),
+            metadata: vec![
+                ("session_status".to_string(), "completed".to_string()),
+            ].into_iter().collect(),
+        };
+
+        if let Ok(json_str) = serde_json::to_string(&end_msg) {
+            let _ = tx.send(Ok(axum::response::sse::Event::default()
+                .event("stream_end")
+                .data(json_str))).await;
         }
 
         Ok(())

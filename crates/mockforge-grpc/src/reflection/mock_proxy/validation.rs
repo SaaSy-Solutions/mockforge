@@ -5,7 +5,7 @@
 
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
 use prost_reflect::{DynamicMessage, MessageDescriptor};
-use prost_types::value::Kind;
+use prost_reflect::ReflectMessage;
 use serde_json::Value;
 use tonic::{Request, Status};
 use tracing::{debug, warn};
@@ -15,22 +15,19 @@ use prost_reflect::prost::Message;
 
 impl MockReflectionProxy {
     /// Validate a request against the service method schema
-    pub async fn validate_request<T>(
+    pub async fn validate_request(
         &self,
-        request: &Request<T>,
+        request: &Request<DynamicMessage>,
         service_name: &str,
         method_name: &str,
     ) -> Result<(), Status>
-    where
-        T: Message,
     {
         debug!("Validating request for {}/{}", service_name, method_name);
 
         // Get method descriptor for validation
         let method_descriptor = self
             .cache
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)?;
 
         // Get expected input descriptor
         let expected_descriptor = method_descriptor.input();
@@ -48,14 +45,17 @@ impl MockReflectionProxy {
         }
 
         // Convert the typed message to DynamicMessage for field validation
+        let method_descriptor = self.cache.get_method(service_name, method_name)?;
+        let expected_descriptor = method_descriptor.input();
+
         let dynamic_message = DynamicMessage::decode(
-            expected_descriptor.clone(),
-            &request.get_ref().encode_to_vec(),
+            expected_descriptor,
+            request.get_ref().encode_to_vec(),
         )
         .map_err(|e| Status::invalid_argument(format!("Failed to decode request as DynamicMessage: {}", e)))?;
 
         // Validate field types and presence
-        Self::validate_dynamic_message_fields(&dynamic_message, expected_descriptor, "request")?;
+        Self::validate_dynamic_message_fields(&dynamic_message, &expected_descriptor, "request")?;
 
         debug!("Request validation passed for {}/{}", service_name, method_name);
         Ok(())
@@ -73,8 +73,7 @@ impl MockReflectionProxy {
         // Get method descriptor for validation
         let method_descriptor = self
             .cache
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)?;
 
         // Validate response against protobuf schema
         let expected_descriptor = method_descriptor.output();
@@ -104,26 +103,27 @@ impl MockReflectionProxy {
         let (service_name, method_name) = self.extract_service_method_from_request(&request)?;
 
         // Validate that the service and method exist
-        if !self.cache.has_service(&service_name) {
+        let contains_service = self.cache.contains_service(&service_name).await;
+        if !contains_service {
             return Err(Status::not_found(format!("Service {} not found", service_name)));
         }
 
-        if !self.cache.has_method(&service_name, &method_name) {
+        if self.cache.get_method(&service_name, &method_name).await.is_err() {
             return Err(Status::not_found(format!("Method {} not found in service {}", method_name, service_name)));
         }
 
-        Ok((service_name, method_name, request))
+        Ok((service_name.to_string(), method_name.to_string(), request))
     }
 
     /// Check if a service method should be processed by this proxy
-    pub fn can_handle_service_method(&self, service_name: &str, method_name: &str) -> bool {
+    pub async fn can_handle_service_method(&self, service_name: &str, method_name: &str) -> bool {
         // Check if service exists in cache
-        if !self.cache.has_service(service_name) {
+        if !self.cache.contains_service(service_name).await {
             return false;
         }
 
         // Check if method exists in service
-        if !self.cache.has_method(service_name, method_name) {
+        if !self.cache.contains_method(service_name, method_name).await {
             return false;
         }
 
@@ -143,8 +143,8 @@ impl MockReflectionProxy {
         // Check if method exists in cache
         let cached_descriptor = self
             .cache
-            .get_method_descriptor(service_name, method_name)
-            .ok_or_else(|| Status::not_found("Method not found in cache"))?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Compare input/output types
         if input_descriptor.full_name() != cached_descriptor.input().full_name() {
@@ -165,7 +165,7 @@ impl MockReflectionProxy {
 
         // Validate field compatibility and check for breaking changes
         Self::check_message_compatibility(cached_descriptor.input(), &input_descriptor, "input")?;
-        Self::check_message_compatibility(cached_descriptor.output(), &output_descriptor, "output")?;
+        Self::check_message_compatibility(&cached_descriptor.output(), &output_descriptor, "output")?;
 
         debug!("Signature validation passed for {}/{}", service_name, method_name);
         Ok(())
@@ -223,20 +223,20 @@ impl MockReflectionProxy {
 
         for field in descriptor.fields() {
             let field_name = field.name();
-            let field_number = field.number();
 
-            if let Some(value) = message.get_field(field_number) {
+            if let Some(value) = message.get_field(&field) {
+                let value_ref = value.as_ref();
                 // Check if the value kind matches the field kind
-                if !Self::value_matches_kind(&value, field.kind()) {
+                if !Self::value_matches_kind(value_ref, field.kind()) {
                     return Err(Status::invalid_argument(format!(
                         "{} field '{}' has incorrect type: expected {:?}, got {:?}",
-                        context, field_name, field.kind(), value
+                        context, field_name, field.kind(), value_ref
                     )));
                 }
 
                 // For nested messages, recursively validate
-                if let (Kind::Message(expected_msg), Value::Message(nested_msg)) = (field.kind(), &value) {
-                    Self::validate_dynamic_message_fields(nested_msg, &expected_msg, &format!("{}.{}", context, field_name))?;
+                if let (Kind::Message(expected_msg), Value::Message(nested_msg)) = (field.kind(), *value_ref) {
+                    Self::validate_dynamic_message_fields(&nested_msg, &expected_msg, &format!("{}.{}", context, field_name))?;
                 }
             } else {
                 // In proto3, fields are optional, so missing is ok
@@ -249,7 +249,7 @@ impl MockReflectionProxy {
 
     /// Check if a Value matches a Kind
     fn value_matches_kind(value: &Value, kind: Kind) -> bool {
-        match (value, kind) {
+        match (*value, kind) {
             (Value::Bool(_), Kind::Bool) => true,
             (Value::I32(_) | Value::I64(_), Kind::Int32 | Kind::Int64 | Kind::Sint32 | Kind::Sint64 | Kind::Sfixed32 | Kind::Sfixed64) => true,
             (Value::U32(_) | Value::U64(_), Kind::Uint32 | Kind::Uint64 | Kind::Fixed32 | Kind::Fixed64) => true,
@@ -259,7 +259,7 @@ impl MockReflectionProxy {
             (Value::Bytes(_), Kind::Bytes) => true,
             (Value::Message(_), Kind::Message(_)) => true,
             (Value::Enum(_, _), Kind::Enum(_)) => true,
-            (Value::List(_), Kind::Message(_)) => false, // Lists are for repeated, but Kind::Message is for nested
+            (Value::List(_), Kind::Message(_)) => true, // Lists are for repeated messages
             _ => false,
         }
     }

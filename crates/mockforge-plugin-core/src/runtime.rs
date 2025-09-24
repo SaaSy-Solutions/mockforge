@@ -345,11 +345,12 @@ impl PluginInstance {
         let alloc_func = self.instance.get_func(&mut self.store, "alloc")
             .ok_or_else(|| PluginError::execution("WASM module must export an 'alloc' function for memory allocation"))?;
 
-        let input_ptr = alloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_len)])
+        let mut alloc_result = [wasmtime::Val::I32(0)];
+        alloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
             .map_err(|e| PluginError::execution(&format!("Failed to allocate memory for input: {}", e)))?;
 
-        let input_ptr = match input_ptr.get(0) {
-            Some(wasmtime::Val::I32(ptr)) => *ptr,
+        let input_ptr = match alloc_result[0] {
+            wasmtime::Val::I32(ptr) => ptr,
             _ => return Err(PluginError::execution("alloc function did not return a valid pointer")),
         };
 
@@ -361,17 +362,18 @@ impl PluginInstance {
             .map_err(|e| PluginError::execution(&format!("Failed to write input to WASM memory: {}", e)))?;
 
         // Call the plugin function with the input pointer and length
-        let result = func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)])
+        let mut func_result = [wasmtime::Val::I32(0), wasmtime::Val::I32(0)];
+        func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut func_result)
             .map_err(|e| PluginError::execution(&format!("Failed to call WASM function '{}': {}", function_name, e)))?;
 
         // Extract the return values (assuming the function returns (ptr, len))
-        let output_ptr = match result.get(0) {
-            Some(wasmtime::Val::I32(ptr)) => *ptr,
+        let output_ptr = match func_result[0] {
+            wasmtime::Val::I32(ptr) => ptr,
             _ => return Err(PluginError::execution(&format!("Function '{}' did not return a valid output pointer", function_name))),
         };
 
-        let output_len = match result.get(1) {
-            Some(wasmtime::Val::I32(len)) => *len,
+        let output_len = match func_result[1] {
+            wasmtime::Val::I32(len) => len,
             _ => return Err(PluginError::execution(&format!("Function '{}' did not return a valid output length", function_name))),
         };
 
@@ -381,9 +383,9 @@ impl PluginInstance {
             .map_err(|e| PluginError::execution(&format!("Failed to read output from WASM memory: {}", e)))?;
 
         // Deallocate the memory if there's a dealloc function
-        if let Ok(dealloc_func) = self.instance.get_func(&mut self.store, "dealloc") {
-            let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)]);
-            let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(output_ptr), wasmtime::Val::I32(output_len)]);
+        if let Some(dealloc_func) = self.instance.get_func(&mut self.store, "dealloc") {
+            let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut []);
+            let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(output_ptr), wasmtime::Val::I32(output_len)], &mut []);
         }
 
         Ok(output_bytes)

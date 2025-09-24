@@ -77,4 +77,14 @@ impl ServiceDescriptorCache {
     pub fn contains_method(&self, service_name: &str, method_name: &str) -> bool {
         self.methods.contains_key(&(service_name.to_string(), method_name.to_string()))
     }
+
+    /// Get the number of cached services
+    pub fn service_count(&self) -> usize {
+        self.services.len()
+    }
+
+    /// Get the number of cached methods
+    pub fn method_count(&self) -> usize {
+        self.methods.len()
+    }
 }

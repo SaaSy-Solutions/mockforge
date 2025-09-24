@@ -72,7 +72,15 @@ impl DescriptorCache {
     }
 
     /// Populate the cache from a descriptor pool
-    pub async fn populate_from_pool(&self, pool: &DescriptorPool) {
+    pub async fn populate_from_pool(&self, pool: Option<&DescriptorPool>) {
+        let pool = match pool {
+            Some(pool) => pool,
+            None => {
+                debug!("No descriptor pool provided, skipping cache population");
+                return;
+            }
+        };
+
         trace!("Populating cache from descriptor pool");
 
         let mut cache = self.cache.write().await;
@@ -81,5 +89,17 @@ impl DescriptorCache {
         }
 
         debug!("Populated cache with {} services", pool.services().count());
+    }
+
+    /// Get the number of cached services
+    pub async fn service_count(&self) -> usize {
+        let cache = self.cache.read().await;
+        cache.service_count()
+    }
+
+    /// Get the number of cached methods across all services
+    pub async fn method_count(&self) -> usize {
+        let cache = self.cache.read().await;
+        cache.method_count()
     }
 }

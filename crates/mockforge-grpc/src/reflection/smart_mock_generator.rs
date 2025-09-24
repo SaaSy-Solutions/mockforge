@@ -4,7 +4,7 @@
 //! types, and context. It integrates with the mockforge-data faker system
 //! to generate realistic test data.
 
-use prost_reflect::{FieldDescriptor, Kind, MessageDescriptor, Value};
+use prost_reflect::{DynamicMessage, FieldDescriptor, Kind, MessageDescriptor, Value};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use std::collections::HashMap;
@@ -546,6 +546,14 @@ impl SmartMockGenerator {
         let current = self.sequence_counter;
         self.sequence_counter += 1;
         current
+    }
+
+    /// Generate a mock message for the given descriptor
+    pub fn generate_message(&mut self, descriptor: &MessageDescriptor) -> DynamicMessage {
+        match self.generate_mock_message(descriptor, 0) {
+            Value::Message(msg) => msg,
+            _ => panic!("generate_mock_message should always return a Message Value"),
+        }
     }
 
     /// Generate random string

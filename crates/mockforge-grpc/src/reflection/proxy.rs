@@ -40,7 +40,7 @@ impl ReflectionProxy {
         let cache = DescriptorCache::new();
 
         // Populate cache from the client's descriptor pool
-        cache.populate_from_pool(client.pool()).await;
+        cache.populate_from_pool(Some(client.pool())).await;
 
         Ok(Self {
             _client: client,

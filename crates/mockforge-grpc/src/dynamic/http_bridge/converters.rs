@@ -484,7 +484,14 @@ impl ProtobufJsonConverter {
             Map(map) => {
                 let mut json_obj = serde_json::Map::new();
                 for (key, value) in map {
-                    let json_key = self.convert_protobuf_value_to_json(field, key)?;
+                    let json_key = match key {
+                        prost_reflect::MapKey::String(s) => serde_json::Value::String(s),
+                        prost_reflect::MapKey::I32(i) => serde_json::Value::Number(i.into()),
+                        prost_reflect::MapKey::I64(i) => serde_json::Value::Number(i.into()),
+                        prost_reflect::MapKey::Bool(b) => serde_json::Value::Bool(b),
+                        prost_reflect::MapKey::U32(u) => serde_json::Value::Number(u.into()),
+                        prost_reflect::MapKey::U64(u) => serde_json::Value::Number(u.into()),
+                    };
                     let json_value = self.convert_protobuf_value_to_json(field, value)?;
                     // JSON object keys must be strings
                     let key_str = match json_key {

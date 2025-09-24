@@ -118,7 +118,7 @@ impl HttpBridge {
         config: HttpBridgeConfig,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let route_generator = RouteGenerator::new(config.clone());
-        let converter = ProtobufJsonConverter::new(proxy.descriptor_pool().clone());
+        let converter = ProtobufJsonConverter::new(proxy.service_registry.descriptor_pool().clone());
         let available_services = proxy.service_names();
 
         let stats = BridgeStats {
@@ -188,7 +188,7 @@ impl HttpBridge {
         router = router.route(&self.config.route_pattern, get(Self::handle_generic_bridge_request));
 
         let available_services = registry.service_names();
-        let total_methods = registry.services.values().map(|s| s.service.methods.len()).sum::<usize>();
+        let total_methods = registry.services.values().map(|s| s.service().methods.len()).sum::<usize>();
         info!("Created HTTP bridge router with {} services and {} dynamic endpoints",
               available_services.len(), total_methods);
 
@@ -259,7 +259,7 @@ impl HttpBridge {
         let registry = state.proxy.service_registry();
         let service_opt = registry.get(service_name);
         let method_info = if let Some(service) = service_opt {
-            service.service.methods.iter()
+            service.service().methods.iter()
                 .find(|m| m.name == *method_name)
         } else {
             let error_response = BridgeResponse::<Value> {
@@ -352,7 +352,7 @@ impl HttpBridge {
             let proxy = state.proxy.clone();
             let converter = state.converter.clone();
 
-            async move {
+            Box::pin(async move {
                 // Update stats
                 {
                     let mut stats = stats.lock().unwrap();
@@ -396,7 +396,7 @@ impl HttpBridge {
                         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)).into_response()
                     }
                 }
-            }
+            })
         })
     }
 
@@ -426,7 +426,7 @@ impl HttpBridge {
 
         // Extract services from the service registry
         let services: HashMap<String, ProtoService> = bridge.proxy.service_registry().services.iter()
-            .map(|(name, dyn_service)| (name.clone(), dyn_service.service.clone()))
+            .map(|(name, dyn_service)| (name.clone(), dyn_service.service().clone()))
             .collect();
 
         // Generate OpenAPI spec using the route generator

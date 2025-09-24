@@ -4,9 +4,10 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tonic::Status;
 use tracing::{debug, error, warn};
+use serde::{Deserialize, Serialize};
 
 /// Configuration for error handling and retries
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorConfig {
     /// Maximum number of retries for failed requests
     pub max_retries: u32,

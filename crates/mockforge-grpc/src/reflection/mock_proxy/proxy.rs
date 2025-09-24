@@ -59,11 +59,11 @@ impl MockReflectionProxy {
         let cache = DescriptorCache::new();
 
         // Populate cache from service registry's descriptor pool
-        if let Some(pool) = service_registry.descriptor_pool() {
-            cache.populate_from_pool(pool);
-        }
+        cache.populate_from_pool(Some(service_registry.descriptor_pool())).await;
 
         let connection_pool = ConnectionPool::new();
+
+        let timeout_duration = Duration::from_secs(config.request_timeout_seconds);
 
         let smart_generator = Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig {
             field_name_inference: true,
@@ -78,7 +78,7 @@ impl MockReflectionProxy {
         Ok(Self {
             cache,
             config,
-            timeout_duration: Duration::from_secs(config.request_timeout_seconds.unwrap_or(30)),
+            timeout_duration,
             connection_pool,
             service_registry,
             smart_generator,
@@ -102,18 +102,20 @@ impl MockReflectionProxy {
         &self.service_registry
     }
 
+    /// Get the list of service names
+    pub fn service_names(&self) -> Vec<String> {
+        self.service_registry.service_names()
+    }
+
     /// Get the smart mock generator
     pub fn smart_generator(&self) -> &Arc<Mutex<SmartMockGenerator>> {
         &self.smart_generator
     }
 
     /// Check if a service method should be mocked
-    pub fn should_mock_service_method(&self, service_name: &str, method_name: &str) -> bool {
-        // Check if service is in registry and should be mocked
-        self.service_registry
-            .get_service(service_name)
-            .map(|service| service.should_mock_method(method_name))
-            .unwrap_or(false)
+    pub fn should_mock_service_method(&self, service_name: &str, _method_name: &str) -> bool {
+        // Check if service is in registry
+        self.service_registry.get(service_name).is_some()
     }
 
     /// Get the timeout duration for requests
@@ -124,10 +126,8 @@ impl MockReflectionProxy {
     /// Update the proxy configuration
     pub fn update_config(&mut self, config: ProxyConfig) {
         self.config = config;
-        // Update timeout if changed
-        if let Some(timeout) = self.config.request_timeout_seconds {
-            self.timeout_duration = Duration::from_secs(timeout);
-        }
+        // Update timeout
+        self.timeout_duration = Duration::from_secs(self.config.request_timeout_seconds);
     }
 
     /// Create a connection guard that tracks active connections
@@ -139,10 +139,10 @@ impl MockReflectionProxy {
     }
 
     /// Get statistics about the proxy
-    pub fn get_stats(&self) -> ProxyStats {
+    pub async fn get_stats(&self) -> ProxyStats {
         ProxyStats {
-            cached_services: self.cache.service_count(),
-            cached_methods: self.cache.method_count(),
+            cached_services: self.cache.service_count().await,
+            cached_methods: self.cache.method_count().await,
             registered_services: self.service_registry.service_names().len(),
             total_requests: self.total_requests.load(Ordering::Relaxed) as u64,
             active_connections: self.active_connections.load(Ordering::Relaxed),
