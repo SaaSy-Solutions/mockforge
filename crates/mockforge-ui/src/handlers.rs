@@ -27,6 +27,9 @@ pub use sync::*;
 pub use import::*;
 pub use fixtures::*;
 
+// Import workspace persistence
+use mockforge_core::workspace_persistence::WorkspacePersistence;
+
 // Static assets - embedded at compile time
 const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
@@ -241,6 +244,8 @@ pub struct AdminState {
     pub smoke_test_results: Arc<RwLock<Vec<SmokeTestResult>>>,
     /// Import history (protected by RwLock)
     pub import_history: Arc<RwLock<Vec<ImportHistoryEntry>>>,
+    /// Workspace persistence
+    pub workspace_persistence: Arc<WorkspacePersistence>,
 }
 
 impl AdminState {
@@ -346,6 +351,7 @@ impl AdminState {
             })),
             smoke_test_results: Arc::new(RwLock::new(Vec::new())),
             import_history: Arc::new(RwLock::new(Vec::new())),
+            workspace_persistence: Arc::new(WorkspacePersistence::new("./workspaces")),
         }
     }
 
@@ -2602,7 +2608,11 @@ pub async fn import_postman(
 
     match import_postman_to_workspace(import_result.routes, workspace_name.to_string(), config) {
         Ok(workspace_result) => {
-            // TODO: Save the workspace to persistent storage
+            // Save the workspace to persistent storage
+            if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
+                tracing::error!("Failed to save workspace: {}", e);
+                return Json(ApiResponse::error(format!("Import succeeded but failed to save workspace: {}", e)));
+            }
 
             // Record successful import
             let entry = ImportHistoryEntry {
@@ -2697,7 +2707,11 @@ pub async fn import_insomnia(
 
     match mockforge_core::workspace_import::create_workspace_from_insomnia(import_result, Some(workspace_name.to_string())) {
         Ok(workspace_result) => {
-            // TODO: Save the workspace to persistent storage
+            // Save the workspace to persistent storage
+            if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
+                tracing::error!("Failed to save workspace: {}", e);
+                return Json(ApiResponse::error(format!("Import succeeded but failed to save workspace: {}", e)));
+            }
 
             // Record successful import
             let entry = ImportHistoryEntry {
@@ -2790,7 +2804,11 @@ pub async fn import_curl(
 
     match mockforge_core::workspace_import::create_workspace_from_curl(import_result, Some(workspace_name.to_string())) {
         Ok(workspace_result) => {
-            // TODO: Save the workspace to persistent storage
+            // Save the workspace to persistent storage
+            if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
+                tracing::error!("Failed to save workspace: {}", e);
+                return Json(ApiResponse::error(format!("Import succeeded but failed to save workspace: {}", e)));
+            }
 
             // Record successful import
             let entry = ImportHistoryEntry {
