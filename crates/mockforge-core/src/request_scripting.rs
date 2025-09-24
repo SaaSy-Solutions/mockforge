@@ -48,6 +48,7 @@ pub struct ScriptEngine {
     semaphore: Arc<Semaphore>,
 }
 
+#[allow(dead_code)]
 impl ScriptEngine {
     /// Create a new script engine
     pub fn new() -> Self {
@@ -196,15 +197,9 @@ impl ScriptEngine {
     ) -> Result<()> {
         add_global_functions_static(ctx, global, script_context)
     }
-
-    // TODO: Add more utility functions as needed:
-    // - HTTP request helpers
-    // - JSON parsing/formatting utilities
-    // - Date/time manipulation functions
-    // - Cryptographic functions
-    // - Data validation helpers
 }
 
+#[allow(dead_code)]
 /// Extract return value from script execution
 fn extract_return_value<'js>(
     ctx: &Ctx<'js>,
@@ -249,6 +244,7 @@ fn extract_return_value_static<'js>(
     }
 }
 
+#[allow(dead_code)]
 /// Extract modified variables from the script context
 fn extract_modified_variables<'js>(
     ctx: &Ctx<'js>,
@@ -323,6 +319,7 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
     }
 }
 
+#[allow(dead_code)]
 /// Execute script with timeout
 fn eval_script_with_timeout<'js>(
     ctx: &Ctx<'js>,
@@ -490,6 +487,160 @@ fn add_global_functions_static<'js>(
         }
     })?;
     global.set("stringify", stringify_func)?;
+
+    // Add crypto utilities
+    let crypto_obj = Object::new(ctx.clone())?;
+
+    let base64_encode_func = Function::new(ctx.clone(), |input: String| -> String {
+        use base64::{Engine as _, engine::general_purpose};
+        general_purpose::STANDARD.encode(input)
+    })?;
+    crypto_obj.set("base64Encode", base64_encode_func)?;
+
+    let base64_decode_func = Function::new(ctx.clone(), |input: String| -> String {
+        use base64::{Engine as _, engine::general_purpose};
+        general_purpose::STANDARD.decode(input).map(|bytes| String::from_utf8_lossy(&bytes).to_string()).unwrap_or_else(|_| "".to_string())
+    })?;
+    crypto_obj.set("base64Decode", base64_decode_func)?;
+
+    let sha256_func = Function::new(ctx.clone(), |input: String| -> String {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(input);
+        hex::encode(hasher.finalize())
+    })?;
+    crypto_obj.set("sha256", sha256_func)?;
+
+    let random_bytes_func = Function::new(ctx.clone(), |length: usize| -> String {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let bytes: Vec<u8> = (0..length).map(|_| rng.random()).collect();
+        hex::encode(bytes)
+    })?;
+    crypto_obj.set("randomBytes", random_bytes_func)?;
+
+    global.set("crypto", crypto_obj)?;
+
+    // Add date/time utilities
+    let date_obj = Object::new(ctx.clone())?;
+
+    let now_func = Function::new(ctx.clone(), || -> String {
+        chrono::Utc::now().to_rfc3339()
+    })?;
+    date_obj.set("now", now_func)?;
+
+    let format_func = Function::new(ctx.clone(), |timestamp: String, format: String| -> String {
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&timestamp) {
+            dt.format(&format).to_string()
+        } else {
+            "".to_string()
+        }
+    })?;
+    date_obj.set("format", format_func)?;
+
+    let parse_func = Function::new(ctx.clone(), |date_str: String, format: String| -> String {
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&date_str, &format) {
+            dt.and_utc().to_rfc3339()
+        } else {
+            "".to_string()
+        }
+    })?;
+    date_obj.set("parse", parse_func)?;
+
+    let add_days_func = Function::new(ctx.clone(), |timestamp: String, days: i64| -> String {
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&timestamp) {
+            (dt + chrono::Duration::days(days)).to_rfc3339()
+        } else {
+            "".to_string()
+        }
+    })?;
+    date_obj.set("addDays", add_days_func)?;
+
+    global.set("date", date_obj)?;
+
+    // Add validation utilities
+    let validate_obj = Object::new(ctx.clone())?;
+
+    let email_func = Function::new(ctx.clone(), |email: String| -> bool {
+        // Simple email regex validation
+        let email_regex = regex::Regex::new(r"^[^@]+@[^@]+\.[^@]+$").unwrap();
+        email_regex.is_match(&email)
+    })?;
+    validate_obj.set("email", email_func)?;
+
+    let url_func = Function::new(ctx.clone(), |url_str: String| -> bool {
+        url::Url::parse(&url_str).is_ok()
+    })?;
+    validate_obj.set("url", url_func)?;
+
+    let regex_func = Function::new(ctx.clone(), |pattern: String, text: String| -> bool {
+        regex::Regex::new(&pattern).map(|re| re.is_match(&text)).unwrap_or(false)
+    })?;
+    validate_obj.set("regex", regex_func)?;
+
+    global.set("validate", validate_obj)?;
+
+    // Add JSON utilities
+    let json_obj = Object::new(ctx.clone())?;
+
+    let json_parse_func = Function::new(ctx.clone(), |json_str: String| -> String {
+        match serde_json::from_str::<serde_json::Value>(&json_str) {
+            Ok(value) => serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string()),
+            Err(_) => "null".to_string(),
+        }
+    })?;
+    json_obj.set("parse", json_parse_func)?;
+
+    let json_stringify_func = Function::new(ctx.clone(), |value: String| -> String {
+        // Assume input is already valid JSON or a simple value
+        value
+    })?;
+    json_obj.set("stringify", json_stringify_func)?;
+
+    let json_validate_func = Function::new(ctx.clone(), |json_str: String| -> bool {
+        serde_json::from_str::<serde_json::Value>(&json_str).is_ok()
+    })?;
+    json_obj.set("validate", json_validate_func)?;
+
+    global.set("JSON", json_obj)?;
+
+    // Add HTTP utilities
+    let http_obj = Object::new(ctx.clone())?;
+
+    let http_get_func = Function::new(ctx.clone(), |url: String| -> String {
+        // Note: This is a blocking call in an async context
+        // In practice, you might want to handle this differently
+        tokio::task::block_in_place(|| {
+            reqwest::blocking::get(&url)
+                .and_then(|resp| resp.text())
+                .unwrap_or_else(|_| "".to_string())
+        })
+    })?;
+    http_obj.set("get", http_get_func)?;
+
+    let http_post_func = Function::new(ctx.clone(), |url: String, body: String| -> String {
+        tokio::task::block_in_place(|| {
+            reqwest::blocking::Client::new()
+                .post(&url)
+                .body(body)
+                .send()
+                .and_then(|resp| resp.text())
+                .unwrap_or_else(|_| "".to_string())
+        })
+    })?;
+    http_obj.set("post", http_post_func)?;
+
+    let url_encode_func = Function::new(ctx.clone(), |input: String| -> String {
+        urlencoding::encode(&input).to_string()
+    })?;
+    http_obj.set("urlEncode", url_encode_func)?;
+
+    let url_decode_func = Function::new(ctx.clone(), |input: String| -> String {
+        urlencoding::decode(&input).unwrap_or(std::borrow::Cow::Borrowed("")).to_string()
+    })?;
+    http_obj.set("urlDecode", url_decode_func)?;
+
+    global.set("http", http_obj)?;
 
     Ok(())
 }
