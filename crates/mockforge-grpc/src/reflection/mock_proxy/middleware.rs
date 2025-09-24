@@ -9,6 +9,7 @@ use tonic::{Code, Request, Status, metadata::{MetadataKey, MetadataValue, Ascii}
 use tracing::{error, warn, debug};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use prost_reflect::{Kind, DynamicMessage, ReflectMessage};
+use std::time::Instant;
 
 impl MockReflectionProxy {
     /// Apply request preprocessing middleware
@@ -19,28 +20,38 @@ impl MockReflectionProxy {
     where
         T: prost_reflect::ReflectMessage,
     {
-        // Extract metadata - TODO: Fix KeyAndValueRef API
-        // let mut metadata_log = Vec::new();
-        // for kv in request.metadata().iter() {
-        //     metadata_log.push(format!("{}: {}", kv.key(), kv.value().to_str().unwrap_or("<binary>")));
-        // }
-        // tracing::debug!("Extracted request metadata: [{}]", metadata_log.join(", "));
+        // Extract metadata
+        let mut metadata_log = Vec::new();
+        for kv in request.metadata().iter() {
+            match kv {
+                tonic::metadata::KeyAndValueRef::Ascii(key, value) => {
+                    metadata_log.push(format!("{}: {}", key, value.to_str().unwrap_or("<binary>")));
+                }
+                tonic::metadata::KeyAndValueRef::Binary(key, _) => {
+                    metadata_log.push(format!("{}: <binary>", key));
+                }
+            }
+        }
+        tracing::debug!("Extracted request metadata: [{}]", metadata_log.join(", "));
 
-        // Validate request format - skip required field validation for now
-        // In proto3, all fields are effectively optional
-        let _descriptor = request.get_ref().descriptor();
-        // TODO: Add field validation back when API is clarified
+        // Validate request format
+        let descriptor = request.get_ref().descriptor();
+        let mut buf = Vec::new();
+        request.get_ref().encode(&mut buf).map_err(|e| Status::internal("Failed to encode request".to_string()))?;
+        let dynamic_message = DynamicMessage::decode(descriptor.clone(), &buf[..]).map_err(|e| Status::internal("Failed to decode request".to_string()))?;
+        if let Err(e) = self.validate_request_message(&dynamic_message) {
+            return Err(Status::internal(format!("Request validation failed: {}", e)));
+        }
         tracing::debug!("Request format validation passed");
 
         // Apply request transformations
         // Add mock-specific request headers
-        // TODO: Fix metadata insert API
-        // request
-        //     .metadata_mut()
-        //     .insert("x-mockforge-processed", MetadataValue::<Ascii>::from("true"));
-        // request
-        //     .metadata_mut()
-        //     .insert("x-mockforge-timestamp", MetadataValue::<Ascii>::from(chrono::Utc::now().to_rfc3339()));
+        request
+            .metadata_mut()
+            .insert("x-mockforge-processed", "true".parse().unwrap());
+        request
+            .metadata_mut()
+            .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
 
         tracing::debug!("Applied request transformations: added processed and timestamp headers");
 
@@ -58,17 +69,24 @@ impl MockReflectionProxy {
     {
         let start_time = std::time::Instant::now();
 
-        // Log request metadata - TODO: Fix KeyAndValueRef API
-        // let mut metadata_log = Vec::new();
-        // for kv in request.metadata().iter() {
-        //     metadata_log.push(format!("{}: {}", kv.key(), kv.value().to_str().unwrap_or("<binary>")));
-        // }
-        // tracing::debug!(
-        //     "Request metadata for {}/{}: [{}]",
-        //     service_name,
-        //     method_name,
-        //     metadata_log.join(", ")
-        // );
+        // Log request metadata
+        let mut metadata_log = Vec::new();
+        for kv in request.metadata().iter() {
+            match kv {
+                tonic::metadata::KeyAndValueRef::Ascii(key, value) => {
+                    metadata_log.push(format!("{}: {}", key, value.to_str().unwrap_or("<binary>")));
+                }
+                tonic::metadata::KeyAndValueRef::Binary(key, _) => {
+                    metadata_log.push(format!("{}: <binary>", key));
+                }
+            }
+        }
+        tracing::debug!(
+            "Request metadata for {}/{}: [{}]",
+            service_name,
+            method_name,
+            metadata_log.join(", ")
+        );
 
         // Log request size
         let request_size = request.get_ref().encoded_len();
@@ -95,14 +113,14 @@ impl MockReflectionProxy {
         service_name: &str,
         method_name: &str,
     ) -> Result<(), Status> {
+        let start = Instant::now();
         // Add mock-specific response headers
-        // TODO: Fix metadata insert API
-        // response
-        //     .metadata_mut()
-        //     .insert("x-mockforge-processed", MetadataValue::<Ascii>::from("true"));
-        // response
-        //     .metadata_mut()
-        //     .insert("x-mockforge-timestamp", MetadataValue::<Ascii>::from(chrono::Utc::now().to_rfc3339()));
+        response
+            .metadata_mut()
+            .insert("x-mockforge-processed", "true".parse().unwrap());
+        response
+            .metadata_mut()
+            .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
 
         // // Add processing timestamp for performance monitoring
         // let processing_time = std::time::SystemTime::now()
@@ -116,27 +134,20 @@ impl MockReflectionProxy {
         // Apply response transformations based on configuration
         if self.config.response_transform.enabled {
             // Add custom headers from configuration
-            // TODO: Fix metadata insert API
-            // for (key, value) in &self.config.response_transform.custom_headers {
-            //     let key = MetadataKey::<Ascii>::from(key);
-            //     let value = MetadataValue::<Ascii>::from(value);
-            //     response
-            //         .metadata_mut()
-            //         .insert(key, value);
-            // }
+            for (key, value) in &self.config.response_transform.custom_headers {
+                let key: MetadataKey<Ascii> = key.parse().unwrap();
+                let value: MetadataValue<Ascii> = value.parse().unwrap();
+                response.metadata_mut().insert(key, value);
+            }
         }
 
         // Log response processing
-        let processing_time = 0; // TODO: Implement actual processing time measurement
-        tracing::debug!(
-            "Postprocessed response for {}/{} with headers: processed={}, timestamp={}, processing_time={}, custom_headers={}",
-            service_name,
-            method_name,
-            "true",
-            chrono::Utc::now().to_rfc3339(),
-            processing_time,
-            self.config.response_transform.custom_headers.len()
-        );
+        let processing_time = start.elapsed().as_millis();
+        // Add processing timestamp for performance monitoring
+        response
+            .metadata_mut()
+            .insert("x-mockforge-processing-time", processing_time.to_string().parse().unwrap());
+        tracing::debug!("Postprocessed response for {}/{}", service_name, method_name);
 
         Ok(())
     }
@@ -301,6 +312,23 @@ impl MockReflectionProxy {
         Ok(())
     }
 
+    /// Validate a request DynamicMessage
+    fn validate_request_message(
+        &self,
+        message: &DynamicMessage,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Schema validation
+        self.validate_message_schema(message, "", "")?;
+        // Business rule validation
+        self.validate_business_rules(message, "", "")?;
+        // Cross-field validation
+        self.validate_cross_field_rules(message, "", "")?;
+        // Custom validation
+        self.validate_custom_rules(message, "", "")?;
+        tracing::debug!("Request validation passed");
+        Ok(())
+    }
+
     /// Validate message schema constraints
     fn validate_message_schema(
         &self,
@@ -387,15 +415,15 @@ impl MockReflectionProxy {
                     }
                 }
 
-                // Phone number validation (basic)
-                if field_name.contains("phone") && field.kind() == Kind::String {
-                    if let Ok(phone_str) = field_value.as_str() {
-                        if phone_str.is_empty() {
-                            return Err(format!("Empty phone number for field '{}' in {}/{}",
-                                field.name(), service_name, method_name).into());
-                        }
-                    }
+        // Phone number validation (basic)
+        if field_name.contains("phone") && field.kind() == Kind::String {
+            if let Ok(phone_str) = field_value.as_str() {
+                if !self.is_valid_phone_number(phone_str) {
+                    return Err(format!("Invalid phone number format '{}' for field '{}' in {}/{}",
+                        phone_str, field.name(), service_name, method_name).into());
                 }
+            }
+        }
             }
         }
 
@@ -547,6 +575,12 @@ impl MockReflectionProxy {
 
         // Domain should contain a dot
         domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+    }
+
+    /// Validate phone number format (basic)
+    fn is_valid_phone_number(&self, phone: &str) -> bool {
+        // Basic phone validation: not empty and reasonable length
+        !phone.is_empty() && phone.len() >= 7 && phone.len() <= 15
     }
 
     /// Validate ISO 8601 date format (basic)
