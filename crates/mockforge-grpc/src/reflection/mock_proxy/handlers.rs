@@ -341,11 +341,11 @@ impl MockReflectionProxy {
 
     /// Generate a mock message using the smart generator
     fn generate_mock_message(&self, descriptor: MessageDescriptor) -> Result<DynamicMessage, Status> {
-        let smart_generator = self.smart_generator().lock().map_err(|_| {
+        let mut smart_generator = self.smart_generator().lock().map_err(|_| {
             Status::internal("Failed to acquire lock on smart generator")
         })?;
 
-        Ok(smart_generator.generate_message(&descriptor))
+        Ok((&mut *smart_generator).generate_message(&descriptor))
     }
 
     /// Generate a mock message with a specific generator
@@ -353,7 +353,7 @@ impl MockReflectionProxy {
         smart_generator: &Arc<Mutex<crate::reflection::smart_mock_generator::SmartMockGenerator>>,
         descriptor: MessageDescriptor,
     ) -> Result<DynamicMessage, Status> {
-        let smart_generator = smart_generator.lock().map_err(|_| {
+        let mut smart_generator = smart_generator.lock().map_err(|_| {
             Status::internal("Failed to acquire lock on smart generator")
         })?;
 

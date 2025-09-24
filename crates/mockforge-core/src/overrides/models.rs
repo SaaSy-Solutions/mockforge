@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Override rule configuration
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OverrideRule {
     /// Target selectors: "operation:opId", "tag:Tag", "regex:pattern", or "path:pattern"
     pub targets: Vec<String>,
@@ -28,7 +28,7 @@ pub struct OverrideRule {
 }
 
 /// Override mode for applying patches
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum OverrideMode {
     /// Replace values (default JSON patch behavior)
     #[serde(rename = "replace")]
@@ -51,11 +51,12 @@ pub enum PatchOp {
 }
 
 /// Container for override rules with caching
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Overrides {
     /// Loaded override rules
     pub rules: Vec<OverrideRule>,
     /// Compiled regex patterns for performance
+    #[serde(skip)]
     pub regex_cache: HashMap<String, regex::Regex>,
 }
 

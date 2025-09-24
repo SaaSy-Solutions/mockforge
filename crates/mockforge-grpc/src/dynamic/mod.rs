@@ -100,11 +100,6 @@ impl ServiceRegistry {
     pub fn service_names(&self) -> Vec<String> {
         self.services.keys().cloned().collect()
     }
-
-    /// Get the descriptor pool
-    pub fn descriptor_pool(&self) -> &prost_reflect::DescriptorPool {
-        &self.descriptor_pool
-    }
 }
 
 /// Discover and register services from proto files

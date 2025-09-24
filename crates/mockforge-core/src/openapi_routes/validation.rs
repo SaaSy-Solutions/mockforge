@@ -9,11 +9,17 @@ use std::collections::HashMap;
 use jsonschema::validate;
 
 /// Validation mode for requests and responses
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum ValidationMode {
     Disabled,
     Warn,
     Enforce,
+}
+
+impl Default for ValidationMode {
+    fn default() -> Self {
+        ValidationMode::Warn
+    }
 }
 
 /// Validation options for OpenAPI route validation

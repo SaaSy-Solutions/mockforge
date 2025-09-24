@@ -145,14 +145,16 @@ impl StreamHandler {
         let service_name = service_name.to_string();
         let method_name = method_name.to_string();
 
+        let result = Self::handle_grpc_bidirectional_streaming(
+            proxy,
+            &service_name,
+            &method_name,
+            initial_request,
+            tx.clone(),
+        ).await;
+
         tokio::spawn(async move {
-            match Self::handle_grpc_bidirectional_streaming(
-                proxy,
-                &service_name,
-                &method_name,
-                initial_request,
-                tx.clone(),
-            ).await {
+            match result {
                 Ok(_) => {
                     let _ = tx.send(Ok(axum::response::sse::Event::default()
                         .event("complete")
@@ -301,24 +303,26 @@ impl StreamHandler {
         let output_descriptor = method_descriptor.output();
 
         // Generate a single mock response for now
-        let mock_response = match smart_generator.lock() {
-            Ok(mut gen) => gen.generate_message(&output_descriptor),
-            Err(e) => {
-                let error_msg = StreamingMessage {
-                    event_type: "error".to_string(),
-                    data: serde_json::json!({
-                        "message": format!("Failed to acquire smart generator lock: {}", e)
-                    }),
-                    metadata: vec![
-                        ("error_type".to_string(), "lock".to_string()),
-                    ].into_iter().collect(),
-                };
-                if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event("error")
-                        .data(json_str))).await;
+        let mock_response = {
+            match smart_generator.lock() {
+                Ok(mut gen) => gen.generate_message(&output_descriptor),
+                Err(e) => {
+                    let error_msg = StreamingMessage {
+                        event_type: "error".to_string(),
+                        data: serde_json::json!({
+                            "message": format!("Failed to acquire smart generator lock: {}", e)
+                        }),
+                        metadata: vec![
+                            ("error_type".to_string(), "lock".to_string()),
+                        ].into_iter().collect(),
+                    };
+                    if let Ok(json_str) = serde_json::to_string(&error_msg) {
+                        let _ = tx.send(Ok(axum::response::sse::Event::default()
+                            .event("error")
+                            .data(json_str))).await;
+                    }
+                    return Ok(());
                 }
-                return Ok(());
             }
         };
 

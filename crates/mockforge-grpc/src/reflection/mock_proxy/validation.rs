@@ -4,12 +4,12 @@
 //! including service/method validation and request routing.
 
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
-use prost_reflect::{DynamicMessage, MessageDescriptor};
+use prost_reflect::{DynamicMessage, MessageDescriptor, Value};
 use prost_reflect::ReflectMessage;
-use serde_json::Value;
 use tonic::{Request, Status};
-use tracing::{debug, warn};
+use tracing::{debug};
 use mockforge_core::openapi_routes::ValidationMode;
+use prost::bytes::Bytes as ProstBytes;
 
 use prost_reflect::prost::Message;
 
@@ -27,7 +27,8 @@ impl MockReflectionProxy {
         // Get method descriptor for validation
         let method_descriptor = self
             .cache
-            .get_method(service_name, method_name)?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Get expected input descriptor
         let expected_descriptor = method_descriptor.input();
@@ -45,12 +46,13 @@ impl MockReflectionProxy {
         }
 
         // Convert the typed message to DynamicMessage for field validation
-        let method_descriptor = self.cache.get_method(service_name, method_name)?;
+        let method_descriptor = self.cache.get_method(service_name, method_name).await?;
         let expected_descriptor = method_descriptor.input();
 
+        let encoded = request.get_ref().encode_to_vec();
         let dynamic_message = DynamicMessage::decode(
-            expected_descriptor,
-            request.get_ref().encode_to_vec(),
+            expected_descriptor.clone(),
+            ProstBytes::from(encoded),
         )
         .map_err(|e| Status::invalid_argument(format!("Failed to decode request as DynamicMessage: {}", e)))?;
 
@@ -73,7 +75,8 @@ impl MockReflectionProxy {
         // Get method descriptor for validation
         let method_descriptor = self
             .cache
-            .get_method(service_name, method_name)?;
+            .get_method(service_name, method_name)
+            .await?;
 
         // Validate response against protobuf schema
         let expected_descriptor = method_descriptor.output();
@@ -88,7 +91,7 @@ impl MockReflectionProxy {
         }
 
         // Validate field types and presence
-        Self::validate_dynamic_message_fields(response, expected_descriptor, "response")?;
+        Self::validate_dynamic_message_fields(response, &expected_descriptor, "response")?;
 
         debug!("Response validation passed for {}/{}", service_name, method_name);
         Ok(())
@@ -164,7 +167,7 @@ impl MockReflectionProxy {
         }
 
         // Validate field compatibility and check for breaking changes
-        Self::check_message_compatibility(cached_descriptor.input(), &input_descriptor, "input")?;
+        Self::check_message_compatibility(&cached_descriptor.input(), &input_descriptor, "input")?;
         Self::check_message_compatibility(&cached_descriptor.output(), &output_descriptor, "output")?;
 
         debug!("Signature validation passed for {}/{}", service_name, method_name);
@@ -177,7 +180,6 @@ impl MockReflectionProxy {
         provided: &MessageDescriptor,
         message_type: &str,
     ) -> Result<(), Status> {
-        use prost_reflect::Kind;
 
         for expected_field in expected.fields() {
             let field_name = expected_field.name();
@@ -194,8 +196,8 @@ impl MockReflectionProxy {
                 }
 
                 // For message types, check nested compatibility if full names differ
-                if let Kind::Message(expected_msg) = expected_field.kind() {
-                    if let Kind::Message(provided_msg) = provided_field.kind() {
+                if let prost_reflect::Kind::Message(expected_msg) = expected_field.kind() {
+                    if let prost_reflect::Kind::Message(provided_msg) = provided_field.kind() {
                         if expected_msg.full_name() != provided_msg.full_name() {
                             // Recursively check nested messages
                             Self::check_message_compatibility(&expected_msg, &provided_msg, &format!("{}.{}", message_type, field_name))?;
@@ -219,8 +221,6 @@ impl MockReflectionProxy {
         descriptor: &MessageDescriptor,
         context: &str,
     ) -> Result<(), Status> {
-        use prost_reflect::{Kind, Value};
-
         for field in descriptor.fields() {
             let field_name = field.name();
 
@@ -235,8 +235,10 @@ impl MockReflectionProxy {
                 }
 
                 // For nested messages, recursively validate
-                if let (Kind::Message(expected_msg), Value::Message(nested_msg)) = (field.kind(), *value_ref) {
-                    Self::validate_dynamic_message_fields(&nested_msg, &expected_msg, &format!("{}.{}", context, field_name))?;
+                if let ProstKind::Message(expected_msg) = field.kind() {
+                    if let Value::Message(ref nested_msg) = *value_ref {
+                        Self::validate_dynamic_message_fields(nested_msg, &expected_msg, &format!("{}.{}", context, field_name))?;
+                    }
                 }
             } else {
                 // In proto3, fields are optional, so missing is ok
@@ -248,18 +250,19 @@ impl MockReflectionProxy {
     }
 
     /// Check if a Value matches a Kind
-    fn value_matches_kind(value: &Value, kind: Kind) -> bool {
-        match (*value, kind) {
-            (Value::Bool(_), Kind::Bool) => true,
-            (Value::I32(_) | Value::I64(_), Kind::Int32 | Kind::Int64 | Kind::Sint32 | Kind::Sint64 | Kind::Sfixed32 | Kind::Sfixed64) => true,
-            (Value::U32(_) | Value::U64(_), Kind::Uint32 | Kind::Uint64 | Kind::Fixed32 | Kind::Fixed64) => true,
-            (Value::F32(_), Kind::Float) => true,
-            (Value::F64(_), Kind::Double) => true,
-            (Value::String(_), Kind::String) => true,
-            (Value::Bytes(_), Kind::Bytes) => true,
-            (Value::Message(_), Kind::Message(_)) => true,
-            (Value::Enum(_, _), Kind::Enum(_)) => true,
-            (Value::List(_), Kind::Message(_)) => true, // Lists are for repeated messages
+    fn value_matches_kind(value: &Value, kind: prost_reflect::Kind) -> bool {
+        match *value {
+            prost_reflect::Value::Bool(_) => kind == prost_reflect::Kind::Bool,
+            prost_reflect::Value::I32(_) => matches!(kind, prost_reflect::Kind::Int32 | prost_reflect::Kind::Sint32 | prost_reflect::Kind::Sfixed32),
+            prost_reflect::Value::I64(_) => matches!(kind, prost_reflect::Kind::Int64 | prost_reflect::Kind::Sint64 | prost_reflect::Kind::Sfixed64),
+            prost_reflect::Value::U32(_) => matches!(kind, prost_reflect::Kind::Uint32 | prost_reflect::Kind::Fixed32),
+            prost_reflect::Value::U64(_) => matches!(kind, prost_reflect::Kind::Uint64 | prost_reflect::Kind::Fixed64),
+            prost_reflect::Value::F32(_) => kind == prost_reflect::Kind::Float,
+            prost_reflect::Value::F64(_) => kind == prost_reflect::Kind::Double,
+            prost_reflect::Value::String(_) => kind == prost_reflect::Kind::String,
+            prost_reflect::Value::Bytes(_) => kind == prost_reflect::Kind::Bytes,
+            prost_reflect::Value::Message(_) => matches!(kind, prost_reflect::Kind::Message(_)),
+            prost_reflect::Value::List(_) => matches!(kind, prost_reflect::Kind::Message(_)), // Lists are for repeated messages
             _ => false,
         }
     }

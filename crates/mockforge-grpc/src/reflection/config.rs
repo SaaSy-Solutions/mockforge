@@ -3,9 +3,10 @@
 use crate::reflection::error_handling::ErrorConfig;
 use std::collections::{HashMap, HashSet};
 use mockforge_core::{overrides::Overrides, openapi_routes::ValidationMode};
+use serde::{Deserialize, Serialize};
 
 /// Configuration for the reflection proxy
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProxyConfig {
     /// List of allowed services (if empty, all services are allowed)
     pub allowlist: HashSet<String>,
@@ -26,52 +27,11 @@ pub struct ProxyConfig {
     /// Request timeout in seconds
     pub request_timeout_seconds: u64,
     /// Admin skip prefixes
-    #[serde(default)]
     pub admin_skip_prefixes: Vec<String>,
     /// Validation mode overrides
-    #[serde(default)]
     pub overrides: HashMap<String, ValidationMode>,
     /// Default request mode
-    #[serde(default)]
     pub request_mode: ValidationMode,
-}
-
-/// Default gRPC port
-fn default_grpc_port() -> u16 {
-    50051
-}
-
-/// Default request timeout in seconds
-fn default_request_timeout_seconds() -> u64 {
-    30
-}
-
-/// Configuration for response transformations
-#[derive(Debug, Clone)]
-pub struct ResponseTransformConfig {
-    /// Enable response transformations
-    #[serde(default)]
-    pub enabled: bool,
-    /// Custom headers to add to all responses
-    #[serde(default)]
-    pub custom_headers: std::collections::HashMap<String, String>,
-    /// Response body overrides using the override system
-    #[serde(skip)]
-    pub overrides: Option<Overrides>,
-    /// Enable response validation
-    #[serde(default)]
-    pub validate_responses: bool,
-}
-
-impl Default for ResponseTransformConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            custom_headers: std::collections::HashMap::new(),
-            overrides: None,
-            validate_responses: false,
-        }
-    }
 }
 
 impl Default for ProxyConfig {
@@ -89,6 +49,40 @@ impl Default for ProxyConfig {
             admin_skip_prefixes: Vec::new(),
             overrides: HashMap::new(),
             request_mode: ValidationMode::default(),
+        }
+    }
+}
+
+/// Default gRPC port
+fn default_grpc_port() -> u16 {
+    50051
+}
+
+/// Default request timeout in seconds
+fn default_request_timeout_seconds() -> u64 {
+    30
+}
+
+/// Configuration for response transformations
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ResponseTransformConfig {
+    /// Enable response transformations
+    pub enabled: bool,
+    /// Custom headers to add to all responses
+    pub custom_headers: std::collections::HashMap<String, String>,
+    /// Response body overrides using the override system
+    pub overrides: Option<Overrides>,
+    /// Enable response validation
+    pub validate_responses: bool,
+}
+
+impl Default for ResponseTransformConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            custom_headers: std::collections::HashMap::new(),
+            overrides: None,
+            validate_responses: false,
         }
     }
 }

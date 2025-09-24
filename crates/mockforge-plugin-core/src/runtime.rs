@@ -13,7 +13,8 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use wasmtime::{Engine, Linker, Module, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
+use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 
 /// WebAssembly runtime for plugin execution
 pub struct PluginRuntime {
@@ -199,6 +200,8 @@ impl Default for RuntimeConfig {
     }
 }
 
+
+
 /// Plugin instance wrapper
 pub struct PluginInstance {
     /// Plugin ID
@@ -208,7 +211,7 @@ pub struct PluginInstance {
     /// WebAssembly instance with WASI support
     instance: wasmtime::Instance,
     /// WebAssembly store with WASI context
-    store: Store<WasiCtx>,
+    store: Store<WasiP1Ctx>,
     /// Plugin state
     state: PluginState,
     /// Plugin metrics
@@ -236,21 +239,21 @@ impl PluginInstance {
             wasi_ctx_builder
                 .inherit_stdio()
                 .inherit_env()
-                .build()
+                .build_p1()
         } else {
             // Minimal WASI context for plugins without filesystem access
             wasi_ctx_builder
                 .inherit_stdio()
-                .build()
+                .build_p1()
         };
 
         // Create WebAssembly store with WASI context
         let mut store = Store::new(&module.engine(), wasi_ctx);
 
         // Link WASI functions to the store
-        let linker = Linker::new(&module.engine());
-        // TODO: Fix WASI linker setup - API has changed
-        // wasmtime_wasi::add_to_linker(&mut linker, |ctx: &mut WasiCtx| ctx)?;
+        let mut linker = Linker::<WasiP1Ctx>::new(&module.engine());
+        preview1::add_to_linker_sync(&mut linker, |t| t)
+            .map_err(|e| PluginError::wasm(format!("Failed to add WASI to linker: {}", e)))?;
 
         // Instantiate the module with WASI support
         let instance = linker.instantiate(&mut store, &module)
