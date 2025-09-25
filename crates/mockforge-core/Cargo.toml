@@ -38,7 +38,7 @@ sha2 = { workspace = true }
 openapiv3 = { workspace = true }
 indexmap = "2.0"
 axum = { workspace = true }
-json-patch = "4.0.0"
+json-patch = "4.1.0"
 jsonptr = "0.7.1"
 jsonpath = "0.1"
 roxmltree = "0.20"
