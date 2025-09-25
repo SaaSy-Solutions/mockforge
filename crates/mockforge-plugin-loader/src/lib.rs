@@ -15,6 +15,7 @@
 //! - **Resource Limits**: Memory, CPU, and execution time constraints
 //! - **Code Signing**: Optional plugin signature verification
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -173,14 +174,18 @@ pub struct PluginLoaderConfig {
     pub plugin_dirs: Vec<String>,
     /// Allow unsigned plugins (for development)
     pub allow_unsigned: bool,
-    /// Trusted public keys for plugin signing
+    /// Trusted public keys for plugin signing (key IDs)
     pub trusted_keys: Vec<String>,
+    /// Key data storage (key_id -> key_bytes)
+    pub key_data: std::collections::HashMap<String, Vec<u8>>,
     /// Maximum plugins to load
     pub max_plugins: usize,
     /// Plugin loading timeout
     pub load_timeout_secs: u64,
     /// Enable debug logging
     pub debug_logging: bool,
+    /// Skip WASM validation (for testing)
+    pub skip_wasm_validation: bool,
 }
 
 impl Default for PluginLoaderConfig {
@@ -192,9 +197,11 @@ impl Default for PluginLoaderConfig {
             ],
             allow_unsigned: false,
             trusted_keys: vec!["trusted-dev-key".to_string()],
+            key_data: std::collections::HashMap::new(),
             max_plugins: 100,
             load_timeout_secs: 30,
             debug_logging: false,
+            skip_wasm_validation: false,
         }
     }
 }

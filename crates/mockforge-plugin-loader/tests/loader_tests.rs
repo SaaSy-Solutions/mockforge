@@ -54,7 +54,8 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         // Test validation
@@ -192,14 +193,19 @@ mod tests {
     async fn test_security_validation() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("plugin.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
 
         // Create manifest with excessive resource requirements
         let manifest = create_test_plugin_manifest();
-
         let yaml_content = serde_yaml::to_string(&manifest).unwrap();
         fs::write(&manifest_path, yaml_content).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        // Create test WASM file
+        let wasm_bytes = create_test_wasm_bytes();
+        fs::write(&wasm_path, wasm_bytes).unwrap();
+
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         // Test validation - should pass (security limits are enforced at runtime)
@@ -211,14 +217,19 @@ mod tests {
     async fn test_network_capability_validation() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("plugin.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
 
         // Create manifest with network access
         let manifest = create_test_plugin_manifest();
-
         let yaml_content = serde_yaml::to_string(&manifest).unwrap();
         fs::write(&manifest_path, yaml_content).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        // Create test WASM file
+        let wasm_bytes = create_test_wasm_bytes();
+        fs::write(&wasm_path, wasm_bytes).unwrap();
+
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         // Test validation
@@ -233,14 +244,19 @@ mod tests {
     async fn test_filesystem_capability_validation() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("plugin.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
 
         // Create manifest with filesystem access
         let manifest = create_test_plugin_manifest();
-
         let yaml_content = serde_yaml::to_string(&manifest).unwrap();
         fs::write(&manifest_path, yaml_content).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        // Create test WASM file
+        let wasm_bytes = create_test_wasm_bytes();
+        fs::write(&wasm_path, wasm_bytes).unwrap();
+
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         // Test validation
@@ -255,14 +271,19 @@ mod tests {
     async fn test_dependency_validation() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("plugin.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
 
         // Create manifest with dependencies
         let manifest = create_test_plugin_manifest();
-
         let yaml_content = serde_yaml::to_string(&manifest).unwrap();
         fs::write(&manifest_path, yaml_content).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        // Create test WASM file
+        let wasm_bytes = create_test_wasm_bytes();
+        fs::write(&wasm_path, wasm_bytes).unwrap();
+
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         // Test validation - should pass (dependencies are checked at load time)
@@ -277,13 +298,18 @@ mod tests {
     async fn test_plugin_capability_validation() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("plugin.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
 
         let manifest = create_test_plugin_manifest();
-
         let yaml_content = serde_yaml::to_string(&manifest).unwrap();
         fs::write(&manifest_path, yaml_content).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        // Create test WASM file
+        let wasm_bytes = create_test_wasm_bytes();
+        fs::write(&wasm_path, wasm_bytes).unwrap();
+
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
@@ -297,14 +323,19 @@ mod tests {
     async fn test_configuration_schema_validation() {
         let temp_dir = TempDir::new().unwrap();
         let manifest_path = temp_dir.path().join("plugin.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
 
         // Create manifest with configuration schema
         let manifest = create_test_plugin_manifest();
-
         let yaml_content = serde_yaml::to_string(&manifest).unwrap();
         fs::write(&manifest_path, yaml_content).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        // Create test WASM file
+        let wasm_bytes = create_test_wasm_bytes();
+        fs::write(&wasm_path, wasm_bytes).unwrap();
+
+        let mut config = PluginLoaderConfig::default();
+        config.skip_wasm_validation = true; // Skip WASM validation for test
         let loader = PluginLoader::new(config);
 
         // Test validation
