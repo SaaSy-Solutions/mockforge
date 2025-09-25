@@ -17,6 +17,9 @@ use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
@@ -134,6 +137,7 @@ pub async fn build_router_with_auth(
         config: auth_config.unwrap_or_default(),
         spec,
         oauth2_client,
+        introspection_cache: Arc::new(RwLock::new(HashMap::new())),
     };
 
     // Set up the basic router with auth state

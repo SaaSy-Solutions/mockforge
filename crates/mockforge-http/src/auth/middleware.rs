@@ -6,7 +6,7 @@
 use axum::http::{Request, StatusCode};
 use axum::{extract::State, middleware::Next, response::Response};
 use axum::body::Body;
-use tracing::{debug, warn};
+use tracing::{debug, warn, error};
 
 use super::state::AuthState;
 use super::types::AuthResult;
@@ -79,6 +79,58 @@ pub async fn auth_middleware(
             res.headers_mut().insert(
                 "www-authenticate",
                 "Bearer".parse().unwrap()
+            );
+            res
+        }
+        AuthResult::NetworkError(reason) => {
+            error!("Authentication network error: {}", reason);
+            let mut res = Response::new(axum::body::Body::from(
+                serde_json::json!({
+                    "error": "Authentication service unavailable",
+                    "message": "Unable to verify token due to network issues"
+                }).to_string()
+            ));
+            *res.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
+            res
+        }
+        AuthResult::ServerError(reason) => {
+            error!("Authentication server error: {}", reason);
+            let mut res = Response::new(axum::body::Body::from(
+                serde_json::json!({
+                    "error": "Authentication service error",
+                    "message": "Unable to verify token due to server issues"
+                }).to_string()
+            ));
+            *res.status_mut() = StatusCode::BAD_GATEWAY;
+            res
+        }
+        AuthResult::TokenExpired => {
+            warn!("Token expired");
+            let mut res = Response::new(axum::body::Body::from(
+                serde_json::json!({
+                    "error": "Token expired",
+                    "message": "The provided token has expired"
+                }).to_string()
+            ));
+            *res.status_mut() = StatusCode::UNAUTHORIZED;
+            res.headers_mut().insert(
+                "www-authenticate",
+                "Bearer error=\"invalid_token\", error_description=\"The token has expired\"".parse().unwrap()
+            );
+            res
+        }
+        AuthResult::TokenInvalid(reason) => {
+            warn!("Token invalid: {}", reason);
+            let mut res = Response::new(axum::body::Body::from(
+                serde_json::json!({
+                    "error": "Invalid token",
+                    "message": reason
+                }).to_string()
+            ));
+            *res.status_mut() = StatusCode::UNAUTHORIZED;
+            res.headers_mut().insert(
+                "www-authenticate",
+                "Bearer error=\"invalid_token\"".parse().unwrap()
             );
             res
         }

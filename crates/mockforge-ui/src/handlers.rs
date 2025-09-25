@@ -195,7 +195,7 @@ pub struct SmokeTestContext {
 }
 
 /// Configuration state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ConfigurationState {
     /// Latency profile
     pub latency_profile: LatencyProfile,

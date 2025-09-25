@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::schema::ConfigSchema;
+use semver;
 
 /// Plugin manifest structure
 ///
@@ -46,7 +47,7 @@ impl PluginManifest {
     pub fn validate(&self) -> Result<()> {
         // Validate manifest version
         if self.manifest_version != "1.0" {
-            return Err(PluginError::manifest(&format!(
+            return Err(PluginError::config_error(&format!(
                 "Unsupported manifest version: {}",
                 self.manifest_version
             )));
@@ -164,16 +165,16 @@ impl PluginInfo {
     /// Validate plugin info
     pub fn validate(&self) -> Result<()> {
         if self.name.trim().is_empty() {
-            return Err(PluginError::manifest("Plugin name cannot be empty"));
+            return Err(PluginError::config_error("Plugin name cannot be empty"));
         }
 
         if self.types.is_empty() {
-            return Err(PluginError::manifest("Plugin must specify at least one type"));
+            return Err(PluginError::config_error("Plugin must specify at least one type"));
         }
 
         for plugin_type in &self.types {
             if plugin_type.trim().is_empty() {
-                return Err(PluginError::manifest("Plugin type cannot be empty"));
+                return Err(PluginError::config_error("Plugin type cannot be empty"));
             }
         }
 
@@ -218,7 +219,7 @@ impl PluginAuthor {
     /// Validate author info
     pub fn validate(&self) -> Result<()> {
         if self.name.trim().is_empty() {
-            return Err(PluginError::manifest("Author name cannot be empty"));
+            return Err(PluginError::config_error("Author name cannot be empty"));
         }
         Ok(())
     }
@@ -257,7 +258,7 @@ impl PluginDependency {
     /// Validate dependency
     pub fn validate(&self) -> Result<()> {
         if self.version.trim().is_empty() {
-            return Err(PluginError::manifest(&format!(
+            return Err(PluginError::config_error(&format!(
                 "Dependency {} version cannot be empty",
                 self.id
             )));
@@ -267,7 +268,31 @@ impl PluginDependency {
 
     /// Check if version requirement is satisfied
     pub fn satisfies_version(&self, version: &PluginVersion) -> bool {
-        // Simple version check - in production, use proper semver
-        self.version == "*" || self.version == version.to_string()
+        // Handle wildcard
+        if self.version == "*" {
+            return true;
+        }
+
+        // For plugin dependencies, treat bare versions as exact matches
+        // Prepend "=" if the version doesn't start with a comparator
+        let req_str = if self.version.starts_with(|c: char| c.is_ascii_digit()) {
+            format!("={}", self.version)
+        } else {
+            self.version.clone()
+        };
+
+        // Parse version requirement
+        let req = match semver::VersionReq::parse(&req_str) {
+            Ok(req) => req,
+            Err(_) => return false, // Invalid requirement
+        };
+
+        // Convert PluginVersion to semver::Version
+        let semver_version = match version.to_semver() {
+            Ok(v) => v,
+            Err(_) => return false, // Invalid version
+        };
+
+        req.matches(&semver_version)
     }
 }

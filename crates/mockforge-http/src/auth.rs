@@ -14,6 +14,10 @@ pub use mockforge_core::config::{AuthConfig, JwtConfig, OAuth2Config, BasicAuthC
 pub mod types;
 pub mod state;
 pub mod middleware;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 pub mod authenticator;
 pub mod oauth2;
 
@@ -47,6 +51,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let auth_header = "Basic YWRtaW46cGFzc3dvcmQxMjM="; // admin:password123 in base64
@@ -74,6 +79,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let auth_header = "Basic d3Jvbmd1c2VyOndyb25ncGFzcw=="; // wronguser:wrongpass in base64
@@ -98,6 +104,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let auth_header = "Basic invalidbase64";
@@ -124,6 +131,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = authenticate_api_key(&state, "valid-key-123");
@@ -154,6 +162,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = authenticate_api_key(&state, "invalid-key");
@@ -183,6 +192,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Create a test JWT
@@ -232,6 +242,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Create an expired JWT
@@ -272,6 +283,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Create JWT with wrong secret
@@ -304,6 +316,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = authenticate_request(&state, &None, &None, &None).await;
@@ -325,6 +338,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = authenticate_request(&state, &None, &None, &None).await;
@@ -350,6 +364,7 @@ mod tests {
             config,
             spec: None,
             oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let api_key_header = Some("valid-key".to_string());

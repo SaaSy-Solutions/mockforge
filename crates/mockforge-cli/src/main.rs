@@ -6,6 +6,7 @@ use mockforge_grpc;
 use mockforge_data;
 use mockforge_ui;
 use mockforge_data::rag::{RagConfig, LlmProvider, EmbeddingProvider};
+use mockforge_core::encryption::init_key_store;
 
 #[derive(Parser)]
 #[command(name = "mockforge")]
@@ -224,6 +225,9 @@ async fn handle_serve(
     println!("📡 HTTP server on port {}", http_port);
     println!("🔌 WebSocket server on port {}", ws_port);
     println!("⚡ gRPC server on port {}", grpc_port);
+
+    // Initialize key store at startup
+    init_key_store();
 
     // Build HTTP router with OpenAPI spec and traffic shaping if enabled
     let http_app = if traffic_shaping {

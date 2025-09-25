@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use wasmtime::{Engine, Linker, Module, Store};
-use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 
 /// WebAssembly runtime for plugin execution
@@ -175,8 +175,8 @@ pub struct RuntimeConfig {
     pub max_execution_time_ms: u64,
     /// Allow network access
     pub allow_network_access: bool,
-    /// Allow file system access
-    pub allow_filesystem_access: bool,
+    /// Allowed filesystem paths for plugins (empty for no access)
+    pub allowed_fs_paths: Vec<String>,
     /// Maximum concurrent plugin executions
     pub max_concurrent_executions: usize,
     /// Plugin cache directory
@@ -192,7 +192,7 @@ impl Default for RuntimeConfig {
             max_cpu_per_plugin: 0.5,                  // 50% of one core
             max_execution_time_ms: 5000,              // 5 seconds
             allow_network_access: false,
-            allow_filesystem_access: false,
+            allowed_fs_paths: vec![],
             max_concurrent_executions: 10,
             cache_dir: None,
             debug_logging: false,
@@ -234,18 +234,14 @@ impl PluginInstance {
         let mut wasi_ctx_builder = WasiCtxBuilder::new();
 
         // Configure WASI based on runtime config
-        let wasi_ctx = if config.allow_filesystem_access {
-            // Allow filesystem access - in production, this should be more restrictive
-            wasi_ctx_builder
-                .inherit_stdio()
-                .inherit_env()
-                .build_p1()
-        } else {
-            // Minimal WASI context for plugins without filesystem access
-            wasi_ctx_builder
-                .inherit_stdio()
-                .build_p1()
-        };
+        let mut wasi_ctx_builder = wasi_ctx_builder.inherit_stdio();
+
+        // Preopen allowed filesystem paths
+        for path in &config.allowed_fs_paths {
+            wasi_ctx_builder.preopened_dir(Path::new(path), path.as_str(), DirPerms::all(), FilePerms::all())?;
+        }
+
+        let wasi_ctx = wasi_ctx_builder.build_p1();
 
         // Create WebAssembly store with WASI context
         let mut store = Store::new(&module.engine(), wasi_ctx);

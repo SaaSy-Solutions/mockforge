@@ -80,7 +80,7 @@ impl PluginManifest {
     /// Load manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| PluginError::load(&format!("Failed to read manifest file: {}", e)))?;
+            .map_err(|e| PluginError::config_error(&format!("Failed to read manifest file: {}", e)))?;
 
         Self::from_str(&content)
     }
@@ -88,6 +88,6 @@ impl PluginManifest {
     /// Parse manifest from string
     pub fn from_str(content: &str) -> Result<Self> {
         serde_yaml::from_str(content)
-            .map_err(|e| PluginError::manifest(&format!("Failed to parse manifest: {}", e)))
+            .map_err(|e| PluginError::config_error(&format!("Failed to parse manifest: {}", e)))
     }
 }

@@ -1,4 +1,3 @@
-// Basic API service for MockForge chains (placeholder implementation)
 import {
   ChainSummary,
   ChainListResponse,
@@ -23,7 +22,20 @@ import {
   ImportResponse,
   ExecuteRequestRequest,
   ExecuteRequestResponse,
-  RequestHistoryResponse
+  RequestHistoryResponse,
+  EnvironmentListResponse,
+  CreateEnvironmentRequest,
+  CreateEnvironmentResponse,
+  UpdateEnvironmentRequest,
+  SetVariableRequest,
+  AutocompleteRequest,
+  AutocompleteResponse,
+  SyncStatus,
+  ConfigureSyncRequest,
+  SyncChange,
+  ConfirmSyncChangesRequest,
+  ImportRequest,
+  ImportHistoryResponse
 } from '@/types';
 
 const API_BASE = '/__mockforge/chains';

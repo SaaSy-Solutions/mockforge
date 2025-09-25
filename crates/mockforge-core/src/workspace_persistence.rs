@@ -1268,12 +1268,12 @@ impl WorkspacePersistence {
         output_path: &Path,
     ) -> Result<EncryptedExportResult> {
         // Check if encryption is enabled for this workspace
-        if !utils::is_encryption_enabled_for_workspace(&workspace.id) {
+        if !workspace.config.auto_encryption.enabled {
             return Err(Error::generic("Encryption is not enabled for this workspace. Enable encryption in workspace settings first."));
         }
 
         // Get auto-encryption config
-        let encryption_config = utils::get_auto_encryption_config(&workspace.id);
+        let encryption_config = workspace.config.auto_encryption.clone();
         let processor = AutoEncryptionProcessor::new(&workspace.id, encryption_config);
 
         // Create filtered workspace copy for export

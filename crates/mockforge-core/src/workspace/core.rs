@@ -5,6 +5,7 @@
 
 use crate::{Result, Error, routing::HttpMethod};
 use crate::config::AuthConfig;
+use crate::encryption::AutoEncryptionConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
@@ -248,6 +249,9 @@ pub struct WorkspaceConfig {
     pub ssl_verify: bool,
     /// Proxy configuration
     pub proxy: Option<String>,
+    /// Automatic encryption configuration
+    #[serde(default)]
+    pub auto_encryption: AutoEncryptionConfig,
 }
 
 /// Default timeout value (30 seconds)
@@ -274,6 +278,7 @@ impl Default for WorkspaceConfig {
             timeout_seconds: default_timeout(),
             ssl_verify: default_true(),
             proxy: None,
+            auto_encryption: AutoEncryptionConfig::default(),
         }
     }
 }

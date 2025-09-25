@@ -17,6 +17,7 @@ use sysinfo::System;
 
 use crate::models::*;
 use mockforge_core::{Error, Result, CentralizedRequestLogger};
+use tracing::{error, info};
 
 /// Request metrics for tracking
 #[derive(Debug, Clone, Default)]
@@ -167,46 +168,114 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Si
     }))
 }
 
-/// Update latency configuration (placeholder)
+/// Update latency configuration
 pub async fn update_latency(
-    State(_state): State<AdminState>,
-    Json(_config): Json<Value>,
+    State(state): State<super::AdminState>,
+    Json(config): Json<Value>,
 ) -> Json<ApiResponse<String>> {
+    // Extract latency configuration from the JSON
+    let base_ms = config.get("base_ms").and_then(|v| v.as_u64()).unwrap_or(50);
+    let jitter_ms = config.get("jitter_ms").and_then(|v| v.as_u64()).unwrap_or(20);
+    let tag_overrides = config
+        .get("tag_overrides")
+        .and_then(|v| v.as_object())
+        .map(|obj| obj.iter().filter_map(|(k, v)| v.as_u64().map(|val| (k.clone(), val))).collect())
+        .unwrap_or_default();
+
+    // Update the configuration
+    state.update_latency_config(base_ms, jitter_ms, tag_overrides).await;
+
+    tracing::info!("Updated latency profile: base_ms={}, jitter_ms={}", base_ms, jitter_ms);
     Json(ApiResponse::success("Latency configuration updated".to_string()))
 }
 
-/// Update fault injection configuration (placeholder)
+/// Update fault injection configuration
 pub async fn update_faults(
-    State(_state): State<AdminState>,
-    Json(_config): Json<Value>,
+    State(state): State<super::AdminState>,
+    Json(config): Json<Value>,
 ) -> Json<ApiResponse<String>> {
+    // Extract fault configuration from the JSON
+    let enabled = config.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let failure_rate = config.get("failure_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let status_codes = config
+        .get("status_codes")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u16)).collect())
+        .unwrap_or_default();
+
+    // Update the configuration
+    state.update_fault_config(enabled, failure_rate, status_codes).await;
+
+    tracing::info!("Updated fault config: enabled={}, failure_rate={}", enabled, failure_rate);
     Json(ApiResponse::success("Fault configuration updated".to_string()))
 }
 
-/// Update proxy configuration (placeholder)
+/// Update proxy configuration
 pub async fn update_proxy(
-    State(_state): State<AdminState>,
-    Json(_config): Json<Value>,
+    State(state): State<super::AdminState>,
+    Json(config): Json<Value>,
 ) -> Json<ApiResponse<String>> {
+    // Extract proxy configuration from the JSON
+    let enabled = config.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let upstream_url = config.get("upstream_url").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let timeout_seconds = config.get("timeout_seconds").and_then(|v| v.as_u64()).unwrap_or(30);
+
+    // Update the configuration
+    state.update_proxy_config(enabled, upstream_url.clone(), timeout_seconds).await;
+
+    tracing::info!("Updated proxy config: enabled={}, upstream_url={:?}, timeout_seconds={}", enabled, upstream_url, timeout_seconds);
     Json(ApiResponse::success("Proxy configuration updated".to_string()))
 }
 
-/// Clear logs (placeholder)
-pub async fn clear_logs(State(_state): State<AdminState>) -> Json<ApiResponse<String>> {
+/// Clear logs
+pub async fn clear_logs(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
+    state.logger.clear_logs().await;
+    tracing::info!("Request logs cleared via admin UI");
     Json(ApiResponse::success("Logs cleared".to_string()))
 }
 
-/// Restart servers (placeholder)
-pub async fn restart_servers(State(_state): State<AdminState>) -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Servers restarted".to_string()))
+/// Restart servers
+pub async fn restart_servers(State(state): State<super::AdminState>) -> Json<ApiResponse<String>> {
+    // Check if restart is already in progress
+    let current_status = state.get_restart_status().await;
+    if current_status.in_progress {
+        return Json(ApiResponse::error("Server restart already in progress".to_string()));
+    }
+
+    // Initiate restart status
+    if let Err(e) = state
+        .initiate_restart("Manual restart requested via admin UI".to_string())
+        .await
+    {
+        return Json(ApiResponse::error(format!("Failed to initiate restart: {}", e)));
+    }
+
+    // Spawn restart task to avoid blocking the response
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = super::perform_server_restart(&state_clone).await {
+            tracing::error!("Server restart failed: {}", e);
+            state_clone.complete_restart(false).await;
+        } else {
+            tracing::info!("Server restart completed successfully");
+            state_clone.complete_restart(true).await;
+        }
+    });
+
+    tracing::info!("Server restart initiated via admin UI");
+    Json(ApiResponse::success(
+        "Server restart initiated. Please wait for completion.".to_string(),
+    ))
 }
 
-/// Get restart status (placeholder)
-pub async fn get_restart_status() -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Ready".to_string()))
+/// Get restart status
+pub async fn get_restart_status(State(state): State<super::AdminState>) -> Json<ApiResponse<super::RestartStatus>> {
+    let status = state.get_restart_status().await;
+    Json(ApiResponse::success(status))
 }
 
-/// Get configuration (placeholder)
-pub async fn get_config(State(_state): State<AdminState>) -> Json<ApiResponse<Value>> {
-    Json(ApiResponse::success(json!({})))
+/// Get configuration
+pub async fn get_config(State(state): State<super::AdminState>) -> Json<ApiResponse<Value>> {
+    let config = state.get_config().await;
+    Json(ApiResponse::success(serde_json::to_value(config).unwrap_or_else(|_| json!({}))))
 }

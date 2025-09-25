@@ -1,7 +1,7 @@
 //! Tests for plugin core functionality
 
 use mockforge_plugin_core::*;
-use mockforge_plugin_core::runtime::ModuleValidator;
+use mockforge_plugin_core::manifest::models::PluginDependency;
 
 #[cfg(test)]
 mod tests {
@@ -241,6 +241,36 @@ mod tests {
         assert_eq!(manifest.info.id.as_str(), "test-plugin");
         assert_eq!(manifest.capabilities.len(), 1);
         assert!(manifest.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_version_requirement_satisfaction() {
+        let version_1_0_0 = PluginVersion::new(1, 0, 0);
+        let version_1_1_0 = PluginVersion::new(1, 1, 0);
+        let version_2_0_0 = PluginVersion::new(2, 0, 0);
+
+        // Test wildcard
+        let dep_wildcard = PluginDependency::new(PluginId::new("test"), "*".to_string());
+        assert!(dep_wildcard.satisfies_version(&version_1_0_0));
+        assert!(dep_wildcard.satisfies_version(&version_2_0_0));
+
+        // Test exact version
+        let dep_exact = PluginDependency::new(PluginId::new("test"), "1.0.0".to_string());
+        assert!(dep_exact.satisfies_version(&version_1_0_0));
+        assert!(!dep_exact.satisfies_version(&version_1_1_0));
+        assert!(!dep_exact.satisfies_version(&version_2_0_0));
+
+        // Test caret requirement (^1.0.0 should allow 1.x.x but not 2.x.x)
+        let dep_caret = PluginDependency::new(PluginId::new("test"), "^1.0.0".to_string());
+        assert!(dep_caret.satisfies_version(&version_1_0_0));
+        assert!(dep_caret.satisfies_version(&version_1_1_0));
+        assert!(!dep_caret.satisfies_version(&version_2_0_0));
+
+        // Test tilde requirement (~1.0.0 should allow 1.0.x but not 1.1.x)
+        let dep_tilde = PluginDependency::new(PluginId::new("test"), "~1.0.0".to_string());
+        assert!(dep_tilde.satisfies_version(&version_1_0_0));
+        assert!(!dep_tilde.satisfies_version(&version_1_1_0));
+        assert!(!dep_tilde.satisfies_version(&version_2_0_0));
     }
 
     #[test]

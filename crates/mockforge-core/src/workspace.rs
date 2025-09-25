@@ -25,6 +25,7 @@ use crate::{Result, Error};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::config::AuthConfig;
+use crate::encryption::AutoEncryptionConfig;
 use crate::routing::{HttpMethod, Route, RouteRegistry};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
@@ -272,6 +273,9 @@ pub struct WorkspaceConfig {
     pub active_environment_id: Option<EntityId>,
     /// Directory sync configuration
     pub sync: SyncConfig,
+    /// Automatic encryption configuration
+    #[serde(default)]
+    pub auto_encryption: AutoEncryptionConfig,
 }
 
 /// Workspace registry for managing multiple workspaces
@@ -994,6 +998,7 @@ impl Default for WorkspaceConfig {
             environments: Vec::new(),
             active_environment_id: None,
             sync: SyncConfig::default(),
+            auto_encryption: AutoEncryptionConfig::default(),
         }
     }
 }

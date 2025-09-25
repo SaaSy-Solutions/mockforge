@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+use semver;
+
 /// Plugin author information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginAuthor {
@@ -225,6 +227,31 @@ impl fmt::Display for PluginVersion {
     }
 }
 
+impl PluginVersion {
+    /// Convert to semver::Version
+    pub fn to_semver(&self) -> Result<semver::Version> {
+        let mut version_str = format!("{}.{}.{}", self.major, self.minor, self.patch);
+        if let Some(pre) = &self.pre_release {
+            version_str.push_str(&format!("-{}", pre));
+        }
+        if let Some(build) = &self.build {
+            version_str.push_str(&format!("+{}", build));
+        }
+        semver::Version::parse(&version_str).map_err(|e| PluginError::InternalError { message: format!("Invalid version: {}", e) })
+    }
+
+    /// Create from semver::Version
+    pub fn from_semver(version: &semver::Version) -> Self {
+        Self {
+            major: version.major as u32,
+            minor: version.minor as u32,
+            patch: version.patch as u32,
+            pre_release: if version.pre.is_empty() { None } else { Some(version.pre.to_string()) },
+            build: if version.build.is_empty() { None } else { Some(version.build.to_string()) },
+        }
+    }
+}
+
 /// Plugin capabilities (permissions and features)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PluginCapabilities {
@@ -258,6 +285,16 @@ impl PluginCapabilities {
         }
 
         result
+    }
+
+    /// Check if the plugin has a specific capability
+    pub fn has_capability(&self, capability: &str) -> bool {
+        match capability {
+            "network:http" => self.network.allow_http,
+            "filesystem:read" => !self.filesystem.read_paths.is_empty(),
+            "filesystem:write" => !self.filesystem.write_paths.is_empty(),
+            _ => self.custom.contains_key(capability),
+        }
     }
 }
 
@@ -664,6 +701,9 @@ pub enum PluginError {
 
     #[error("WASM module error: {message}")]
     WasmError { message: String },
+
+    #[error("WASM runtime error: {0}")]
+    WasmRuntimeError(#[from] wasmtime::Error),
 }
 
 impl PluginError {

@@ -41,7 +41,7 @@ pub mod errors;
 
 // Re-export commonly used types
 pub use algorithms::*;
-pub use key_management::*;
+pub use key_management::{KeyStore as KeyManagementStore, KeyStorage, FileKeyStorage};
 pub use auto_encryption::*;
 pub use derivation::*;
 pub use errors::*;
@@ -62,6 +62,8 @@ use sha2::Sha256;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
+use tracing;
+use crate::workspace_persistence::WorkspacePersistence;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Security::Credentials::{
@@ -81,6 +83,8 @@ pub enum EncryptionError {
     InvalidCiphertext(String),
     #[error("Key derivation failure: {0}")]
     KeyDerivation(String),
+    #[error("Generic encryption error: {message}")]
+    Generic { message: String },
 }
 
 pub type Result<T> = std::result::Result<T, EncryptionError>;
@@ -633,6 +637,7 @@ impl Default for MasterKeyManager {
 /// Workspace key manager for handling per-workspace encryption keys
 pub struct WorkspaceKeyManager {
     master_key_manager: MasterKeyManager,
+    key_storage: std::cell::RefCell<FileKeyStorage>,
 }
 
 impl WorkspaceKeyManager {
@@ -640,6 +645,15 @@ impl WorkspaceKeyManager {
     pub fn new() -> Self {
         Self {
             master_key_manager: MasterKeyManager::new(),
+            key_storage: std::cell::RefCell::new(FileKeyStorage::new()),
+        }
+    }
+
+    /// Create a workspace key manager with custom key storage path
+    pub fn with_storage_path<P: AsRef<std::path::Path>>(path: P) -> Self {
+        Self {
+            master_key_manager: MasterKeyManager::new(),
+            key_storage: std::cell::RefCell::new(FileKeyStorage::with_path(path)),
         }
     }
 
@@ -706,20 +720,37 @@ impl WorkspaceKeyManager {
         self.store_workspace_key(workspace_id, &encrypted_key)
     }
 
-    // Storage methods (simplified implementations)
+    // Storage methods using secure file-based storage
     fn store_workspace_key(&self, workspace_id: &str, encrypted_key: &str) -> Result<()> {
-        // In production, this would store in a secure database
-        // For now, use a simple file-based approach
-        let key_file = format!("workspace_{}_key.enc", workspace_id);
-        std::fs::write(&key_file, encrypted_key)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to store workspace key: {}", e)))
+        self.key_storage.borrow_mut().store_key(&workspace_id.to_string(), encrypted_key.as_bytes())
+            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to store workspace key: {:?}", e)))
     }
 
     fn retrieve_workspace_key(&self, workspace_id: &str) -> Result<String> {
-        // In production, this would retrieve from secure database
-        let key_file = format!("workspace_{}_key.enc", workspace_id);
-        std::fs::read_to_string(&key_file)
-            .map_err(|_| EncryptionError::InvalidKey(format!("Workspace key not found for: {}", workspace_id)))
+        // First try the new secure storage
+        match self.key_storage.borrow().retrieve_key(&workspace_id.to_string()) {
+            Ok(encrypted_bytes) => {
+                String::from_utf8(encrypted_bytes)
+                    .map_err(|e| EncryptionError::InvalidKey(format!("Invalid UTF-8 in stored key: {}", e)))
+            }
+            Err(_) => {
+                // Fall back to old file-based storage for backward compatibility
+                let old_key_file = format!("workspace_{}_key.enc", workspace_id);
+                match std::fs::read_to_string(&old_key_file) {
+                    Ok(encrypted_key) => {
+                        // Migrate to new storage
+                        if let Err(e) = self.key_storage.borrow_mut().store_key(&workspace_id.to_string(), encrypted_key.as_bytes()) {
+                            tracing::warn!("Failed to migrate workspace key to new storage: {:?}", e);
+                        } else {
+                            // Try to remove old file
+                            let _ = std::fs::remove_file(&old_key_file);
+                        }
+                        Ok(encrypted_key)
+                    }
+                    Err(_) => Err(EncryptionError::InvalidKey(format!("Workspace key not found for: {}", workspace_id))),
+                }
+            }
+        }
     }
 
     fn format_backup_string(&self, encrypted_key: &str) -> String {
@@ -950,18 +981,21 @@ pub mod utils {
     use super::*;
 
     /// Check if encryption is enabled for a workspace
-    pub fn is_encryption_enabled_for_workspace(workspace_id: &str) -> bool {
-        // In production, this would check workspace settings
-        // For now, check if workspace key exists
+    pub async fn is_encryption_enabled_for_workspace(persistence: &WorkspacePersistence, workspace_id: &str) -> Result<bool> {
+        // Try to load workspace and check settings
+        if let Ok(workspace) = persistence.load_workspace(workspace_id).await {
+            return Ok(workspace.config.auto_encryption.enabled);
+        }
+        // Fallback: check if workspace key exists (for backward compatibility)
         let manager = WorkspaceKeyManager::new();
-        manager.has_workspace_key(workspace_id)
+        Ok(manager.has_workspace_key(workspace_id))
     }
 
     /// Get the auto-encryption config for a workspace
-    pub fn get_auto_encryption_config(_workspace_id: &str) -> AutoEncryptionConfig {
-        // In production, this would load from workspace settings
-        // For now, return default config
-        AutoEncryptionConfig::default()
+    pub async fn get_auto_encryption_config(persistence: &WorkspacePersistence, workspace_id: &str) -> Result<AutoEncryptionConfig> {
+        let workspace = persistence.load_workspace(workspace_id).await
+            .map_err(|e| EncryptionError::Generic { message: format!("Failed to load workspace: {}", e) })?;
+        Ok(workspace.config.auto_encryption)
     }
 
     /// Encrypt data for a specific workspace
@@ -1284,8 +1318,8 @@ mod tests {
         let workspace_id = "test_utils_workspace";
         workspace_manager.generate_workspace_key(workspace_id).unwrap();
 
-        // Test utility functions
-        assert!(utils::is_encryption_enabled_for_workspace(workspace_id));
+        // Test utility functions - check if key exists (encryption enabled)
+        assert!(workspace_manager.has_workspace_key(workspace_id));
 
         let test_data = "test data for utils";
         let encrypted = utils::encrypt_for_workspace(workspace_id, test_data).unwrap();

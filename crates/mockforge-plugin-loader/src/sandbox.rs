@@ -282,26 +282,87 @@ impl SandboxInstance {
         }
     }
 
-    /// Call WebAssembly function (simplified implementation)
+    /// Call WebAssembly function
     async fn call_wasm_function(
         &mut self,
-        _function_name: &str,
-        _context: &PluginContext,
-        _input: &[u8],
+        function_name: &str,
+        context: &PluginContext,
+        input: &[u8],
     ) -> Result<serde_json::Value, String> {
-        // This is a placeholder implementation
-        // Real implementation would:
-        // 1. Prepare WASM memory for input data
-        // 2. Call the WASM function with proper parameters
-        // 3. Read results from WASM memory
-        // 4. Handle errors and cleanup
+        // Serialize context and input for WASM
+        let context_json = serde_json::to_string(context)
+            .map_err(|e| format!("Failed to serialize context: {}", e))?;
+        let combined_input = format!("{}\n{}", context_json, String::from_utf8_lossy(input));
 
-        // For now, return mock data
-        Ok(serde_json::json!({
-            "status": "success",
-            "message": "Plugin function executed",
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        }))
+        // Get the exported function from the linker
+        let func_extern = self.linker.get(&mut self.store, "", function_name)
+            .ok_or_else(|| format!("Function '{}' not found in WASM module", function_name))?;
+        let func = func_extern.into_func()
+            .ok_or_else(|| format!("Export '{}' is not a function", function_name))?;
+
+        // Allocate memory in WASM for the input string
+        let input_bytes = combined_input.as_bytes();
+        let input_len = input_bytes.len() as i32;
+
+        // Get alloc function
+        let alloc_extern = self.linker.get(&mut self.store, "", "alloc")
+            .ok_or_else(|| "WASM module must export an 'alloc' function for memory allocation".to_string())?;
+        let alloc_func = alloc_extern.into_func()
+            .ok_or_else(|| "Export 'alloc' is not a function".to_string())?;
+
+        let mut alloc_result = [wasmtime::Val::I32(0)];
+        alloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
+            .map_err(|e| format!("Failed to allocate memory for input: {}", e))?;
+
+        let input_ptr = match alloc_result[0] {
+            wasmtime::Val::I32(ptr) => ptr,
+            _ => return Err("alloc function did not return a valid pointer".to_string()),
+        };
+
+        // Write the input string to WASM memory
+        let memory_extern = self.linker.get(&mut self.store, "", "memory")
+            .ok_or_else(|| "WASM module must export a 'memory'".to_string())?;
+        let memory = memory_extern.into_memory()
+            .ok_or_else(|| "Export 'memory' is not a memory".to_string())?;
+
+        memory.write(&mut self.store, input_ptr as usize, input_bytes)
+            .map_err(|e| format!("Failed to write input to WASM memory: {}", e))?;
+
+        // Call the plugin function with the input pointer and length
+        let mut func_result = [wasmtime::Val::I32(0), wasmtime::Val::I32(0)];
+        func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut func_result)
+            .map_err(|e| format!("Failed to call WASM function '{}': {}", function_name, e))?;
+
+        // Extract the return values (assuming the function returns (ptr, len))
+        let output_ptr = match func_result[0] {
+            wasmtime::Val::I32(ptr) => ptr,
+            _ => return Err(format!("Function '{}' did not return a valid output pointer", function_name)),
+        };
+
+        let output_len = match func_result[1] {
+            wasmtime::Val::I32(len) => len,
+            _ => return Err(format!("Function '{}' did not return a valid output length", function_name)),
+        };
+
+        // Read the output from WASM memory
+        let mut output_bytes = vec![0u8; output_len as usize];
+        memory.read(&mut self.store, output_ptr as usize, &mut output_bytes)
+            .map_err(|e| format!("Failed to read output from WASM memory: {}", e))?;
+
+        // Deallocate the memory if there's a dealloc function
+        if let Some(dealloc_extern) = self.linker.get(&mut self.store, "", "dealloc") {
+            if let Some(dealloc_func) = dealloc_extern.into_func() {
+                let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut []);
+                let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(output_ptr), wasmtime::Val::I32(output_len)], &mut []);
+            }
+        }
+
+        // Parse the output as JSON
+        let output_str = String::from_utf8(output_bytes)
+            .map_err(|e| format!("Failed to convert output to string: {}", e))?;
+
+        serde_json::from_str(&output_str)
+            .map_err(|e| format!("Failed to parse WASM output as JSON: {}", e))
     }
 
     /// Get sandbox health

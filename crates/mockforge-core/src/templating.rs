@@ -527,7 +527,7 @@ fn replace_response_function(input: &str, chain_context: Option<&ChainTemplating
 
 /// Replace encryption tokens in a template string
 fn replace_encryption_tokens(input: &str) -> String {
-    // Initialize the key store if needed - in production this would be done once at startup
+    // Key store is initialized at startup
     let key_store = init_key_store();
 
     // Default key ID for templating

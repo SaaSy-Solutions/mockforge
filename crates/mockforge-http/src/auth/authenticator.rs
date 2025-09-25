@@ -4,6 +4,7 @@
 //! authentication schemes: JWT, Basic Auth, OAuth2, and API keys.
 
 use base64::Engine;
+use chrono;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde_json::Value;
 use tracing::debug;
@@ -191,10 +192,14 @@ pub fn authenticate_basic(state: &AuthState, auth_header: &str) -> Option<AuthRe
 
     // Extract credentials from header
     let encoded = auth_header.strip_prefix("Basic ")?;
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .ok()?;
-    let credentials = String::from_utf8(decoded).ok()?;
+    let decoded = match base64::engine::general_purpose::STANDARD.decode(encoded) {
+        Ok(d) => d,
+        Err(_) => return Some(AuthResult::Failure("Invalid base64 in Basic auth".to_string())),
+    };
+    let credentials = match String::from_utf8(decoded) {
+        Ok(c) => c,
+        Err(_) => return Some(AuthResult::Failure("Invalid UTF-8 in Basic auth credentials".to_string())),
+    };
     let parts: Vec<&str> = credentials.splitn(2, ':').collect();
     if parts.len() != 2 {
         return Some(AuthResult::Failure("Invalid Basic auth format".to_string()));
@@ -218,19 +223,24 @@ pub fn authenticate_basic(state: &AuthState, auth_header: &str) -> Option<AuthRe
 /// Authenticate using OAuth2 token introspection
 async fn authenticate_oauth2(state: &AuthState, auth_header: &str) -> Option<AuthResult> {
     let oauth2_config = state.config.oauth2.as_ref()?;
-    let client = state.oauth2_client.as_ref()?;
 
     // Extract token
     let token = auth_header.strip_prefix("Bearer ")?;
 
-    // Perform token introspection
-    // Note: This is a simplified implementation. In production, you'd want to:
-    // 1. Cache introspection results
-    // 2. Handle token refresh
-    // 3. Implement proper error handling
+    // Check cache first
+    {
+        let cache = state.introspection_cache.read().await;
+        if let Some(cached) = cache.get(token) {
+            let now = chrono::Utc::now().timestamp();
+            if cached.expires_at > now {
+                return Some(cached.result.clone());
+            }
+        }
+    }
 
+    // Perform token introspection
     let client = reqwest::Client::new();
-    let response = client
+    let response = match client
         .post(&oauth2_config.introspection_url)
         .basic_auth(&oauth2_config.client_id, Some(&oauth2_config.client_secret))
         .form(&[
@@ -239,18 +249,57 @@ async fn authenticate_oauth2(state: &AuthState, auth_header: &str) -> Option<Aut
         ])
         .send()
         .await
-        .ok()?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            debug!("Network error during OAuth2 introspection: {}", e);
+            return Some(AuthResult::NetworkError(format!("Failed to connect to introspection endpoint: {}", e)));
+        }
+    };
 
     if !response.status().is_success() {
-        return Some(AuthResult::Failure("OAuth2 token introspection failed".to_string()));
+        let status = response.status();
+        debug!("OAuth2 introspection server error: {}", status);
+        return Some(AuthResult::ServerError(format!("Introspection endpoint returned {}: {}", status, status.canonical_reason().unwrap_or("Unknown error"))));
     }
 
-    let introspection_result: Value = response.json().await.ok()?;
+    let introspection_result: Value = match response.json().await {
+        Ok(json) => json,
+        Err(e) => {
+            debug!("Failed to parse introspection response: {}", e);
+            return Some(AuthResult::ServerError(format!("Invalid JSON response from introspection endpoint: {}", e)));
+        }
+    };
 
     // Check if token is active
-    if let Some(active) = introspection_result.get("active").and_then(|v| v.as_bool()) {
-        if !active {
-            return Some(AuthResult::Failure("OAuth2 token is not active".to_string()));
+    let active = introspection_result.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !active {
+        let cached_result = AuthResult::TokenInvalid("Token is not active".to_string());
+        // Cache inactive tokens for a shorter time to avoid repeated checks
+        let expires_at = chrono::Utc::now().timestamp() + 300; // 5 minutes
+        let cached = super::state::CachedIntrospection {
+            result: cached_result.clone(),
+            expires_at,
+        };
+        let mut cache = state.introspection_cache.write().await;
+        cache.insert(token.to_string(), cached);
+        return Some(cached_result);
+    }
+
+    // Check if token is expired
+    if let Some(exp) = introspection_result.get("exp").and_then(|v| v.as_i64()) {
+        let now = chrono::Utc::now().timestamp();
+        if exp <= now {
+            let cached_result = AuthResult::TokenExpired;
+            // Cache expired tokens for a short time
+            let expires_at = chrono::Utc::now().timestamp() + 60; // 1 minute
+            let cached = super::state::CachedIntrospection {
+                result: cached_result.clone(),
+                expires_at,
+            };
+            let mut cache = state.introspection_cache.write().await;
+            cache.insert(token.to_string(), cached);
+            return Some(cached_result);
         }
     }
 
@@ -266,7 +315,17 @@ async fn authenticate_oauth2(state: &AuthState, auth_header: &str) -> Option<Aut
         claims.exp = Some(exp);
     }
 
-    Some(AuthResult::Success(claims))
+    // Cache successful result - use token expiration or default to 1 hour
+    let expires_at = claims.exp.unwrap_or(chrono::Utc::now().timestamp() + 3600);
+    let cached_result = AuthResult::Success(claims);
+    let cached = super::state::CachedIntrospection {
+        result: cached_result.clone(),
+        expires_at,
+    };
+    let mut cache = state.introspection_cache.write().await;
+    cache.insert(token.to_string(), cached);
+
+    Some(cached_result)
 }
 
 /// Authenticate using API key

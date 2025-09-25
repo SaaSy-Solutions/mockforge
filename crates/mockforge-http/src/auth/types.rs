@@ -14,6 +14,14 @@ pub enum AuthResult {
     Success(AuthClaims),
     /// Authentication failed with reason
     Failure(String),
+    /// Network error during authentication
+    NetworkError(String),
+    /// Authentication server error
+    ServerError(String),
+    /// Token is expired
+    TokenExpired,
+    /// Token is invalid
+    TokenInvalid(String),
     /// No authentication provided (when auth is optional)
     None,
 }

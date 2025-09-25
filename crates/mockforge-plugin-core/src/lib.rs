@@ -5,6 +5,7 @@
 
 // Public modules
 pub mod types;
+pub mod manifest;
 pub mod template;
 pub mod response;
 pub mod runtime;

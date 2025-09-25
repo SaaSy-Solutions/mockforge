@@ -79,6 +79,97 @@ impl Default for MemoryKeyStorage {
     }
 }
 
+/// File-based key storage implementation
+#[derive(Debug, Clone)]
+pub struct FileKeyStorage {
+    base_path: std::path::PathBuf,
+}
+
+impl FileKeyStorage {
+    /// Create a new file-based key storage with default path
+    pub fn new() -> Self {
+        Self {
+            base_path: std::path::PathBuf::from(".mockforge/keys"),
+        }
+    }
+
+    /// Create a new file-based key storage with custom base path
+    pub fn with_path<P: AsRef<std::path::Path>>(path: P) -> Self {
+        Self {
+            base_path: path.as_ref().to_path_buf(),
+        }
+    }
+
+    /// Get the file path for a key
+    fn key_file_path(&self, key_id: &KeyId) -> std::path::PathBuf {
+        self.base_path.join(format!("{}.key", key_id))
+    }
+
+    /// Ensure the base directory exists
+    fn ensure_base_dir(&self) -> EncryptionResult<()> {
+        if !self.base_path.exists() {
+            std::fs::create_dir_all(&self.base_path)
+                .map_err(|e| EncryptionError::generic(format!("Failed to create key storage directory: {}", e)))?;
+        }
+        Ok(())
+    }
+}
+
+impl KeyStorage for FileKeyStorage {
+    fn store_key(&mut self, key_id: &KeyId, encrypted_key: &[u8]) -> EncryptionResult<()> {
+        self.ensure_base_dir()?;
+        let file_path = self.key_file_path(key_id);
+        std::fs::write(&file_path, encrypted_key)
+            .map_err(|e| EncryptionError::generic(format!("Failed to store key {}: {}", key_id, e)))
+    }
+
+    fn retrieve_key(&self, key_id: &KeyId) -> EncryptionResult<Vec<u8>> {
+        let file_path = self.key_file_path(key_id);
+        std::fs::read(&file_path)
+            .map_err(|_| EncryptionError::key_not_found(key_id.clone()))
+    }
+
+    fn delete_key(&mut self, key_id: &KeyId) -> EncryptionResult<()> {
+        let file_path = self.key_file_path(key_id);
+        match std::fs::remove_file(&file_path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // Key doesn't exist, consider it deleted
+            Err(e) => Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e))),
+        }
+    }
+
+    fn key_exists(&self, key_id: &KeyId) -> bool {
+        self.key_file_path(key_id).exists()
+    }
+
+    fn list_keys(&self) -> Vec<KeyId> {
+        if !self.base_path.exists() {
+            return Vec::new();
+        }
+
+        std::fs::read_dir(&self.base_path)
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| {
+                        entry.ok().and_then(|e| {
+                            e.path()
+                                .file_stem()
+                                .and_then(|stem| stem.to_str())
+                                .map(|s| s.to_string())
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+impl Default for FileKeyStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Key metadata for tracking key properties and lifecycle
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyMetadata {

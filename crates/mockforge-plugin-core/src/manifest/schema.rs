@@ -43,7 +43,7 @@ impl ConfigSchema {
     /// Validate the schema
     pub fn validate(&self) -> Result<()> {
         if self.version != "1.0" {
-            return Err(PluginError::manifest(&format!(
+            return Err(PluginError::config_error(&format!(
                 "Unsupported schema version: {}",
                 self.version
             )));
@@ -57,7 +57,7 @@ impl ConfigSchema {
         // Validate required properties exist
         for required_name in &self.required {
             if !self.properties.contains_key(required_name) {
-                return Err(PluginError::manifest(&format!(
+                return Err(PluginError::config_error(&format!(
                     "Required property '{}' not defined in schema",
                     required_name
                 )));
@@ -73,7 +73,7 @@ impl ConfigSchema {
             // Check required properties
             for required_name in &self.required {
                 if !config_obj.contains_key(required_name) {
-                    return Err(PluginError::config(&format!(
+                    return Err(PluginError::config_error(&format!(
                         "Missing required configuration property: {}",
                         required_name
                     )));
@@ -85,7 +85,7 @@ impl ConfigSchema {
                 if let Some(property) = self.properties.get(key) {
                     property.validate_value(value)?;
                 } else {
-                    return Err(PluginError::config(&format!(
+                    return Err(PluginError::config_error(&format!(
                         "Unknown configuration property: {}",
                         key
                     )));
@@ -94,7 +94,7 @@ impl ConfigSchema {
 
             Ok(())
         } else {
-            Err(PluginError::config("Configuration must be an object"))
+            Err(PluginError::config_error("Configuration must be an object"))
         }
     }
 
@@ -166,7 +166,7 @@ impl ConfigProperty {
         // Validate default value matches type
         if let Some(default) = &self.default {
             self.validate_value(default).map_err(|e| {
-                PluginError::manifest(&format!("Invalid default value for property '{}': {}", name, e))
+                PluginError::config_error(&format!("Invalid default value for property '{}': {}", name, e))
             })?;
         }
 
@@ -179,27 +179,27 @@ impl ConfigProperty {
         match &self.property_type {
             PropertyType::String => {
                 if !value.is_string() {
-                    return Err(PluginError::config("Expected string value"));
+                    return Err(PluginError::config_error("Expected string value"));
                 }
             }
             PropertyType::Number => {
                 if !value.is_number() {
-                    return Err(PluginError::config("Expected number value"));
+                    return Err(PluginError::config_error("Expected number value"));
                 }
             }
             PropertyType::Boolean => {
                 if !value.is_boolean() {
-                    return Err(PluginError::config("Expected boolean value"));
+                    return Err(PluginError::config_error("Expected boolean value"));
                 }
             }
             PropertyType::Array => {
                 if !value.is_array() {
-                    return Err(PluginError::config("Expected array value"));
+                    return Err(PluginError::config_error("Expected array value"));
                 }
             }
             PropertyType::Object => {
                 if !value.is_object() {
-                    return Err(PluginError::config("Expected object value"));
+                    return Err(PluginError::config_error("Expected object value"));
                 }
             }
         }
@@ -264,12 +264,12 @@ impl PropertyValidation {
         if let Some(num) = value.as_f64() {
             if let Some(min) = self.min {
                 if num < min {
-                    return Err(PluginError::config(&format!("Value {} is less than minimum {}", num, min)));
+                    return Err(PluginError::config_error(&format!("Value {} is less than minimum {}", num, min)));
                 }
             }
             if let Some(max) = self.max {
                 if num > max {
-                    return Err(PluginError::config(&format!("Value {} is greater than maximum {}", num, max)));
+                    return Err(PluginError::config_error(&format!("Value {} is greater than maximum {}", num, max)));
                 }
             }
         }
@@ -278,19 +278,19 @@ impl PropertyValidation {
         if let Some(s) = value.as_str() {
             if let Some(min_len) = self.min_length {
                 if s.len() < min_len {
-                    return Err(PluginError::config(&format!("String length {} is less than minimum {}", s.len(), min_len)));
+                    return Err(PluginError::config_error(&format!("String length {} is less than minimum {}", s.len(), min_len)));
                 }
             }
             if let Some(max_len) = self.max_length {
                 if s.len() > max_len {
-                    return Err(PluginError::config(&format!("String length {} is greater than maximum {}", s.len(), max_len)));
+                    return Err(PluginError::config_error(&format!("String length {} is greater than maximum {}", s.len(), max_len)));
                 }
             }
             if let Some(pattern) = &self.pattern {
                 let regex = regex::Regex::new(pattern)
-                    .map_err(|e| PluginError::config(&format!("Invalid regex pattern: {}", e)))?;
+                    .map_err(|e| PluginError::config_error(&format!("Invalid regex pattern: {}", e)))?;
                 if !regex.is_match(s) {
-                    return Err(PluginError::config(&format!("String '{}' does not match pattern '{}'", s, pattern)));
+                    return Err(PluginError::config_error(&format!("String '{}' does not match pattern '{}'", s, pattern)));
                 }
             }
         }
@@ -299,12 +299,12 @@ impl PropertyValidation {
         if let Some(arr) = value.as_array() {
             if let Some(min_len) = self.min_length {
                 if arr.len() < min_len {
-                    return Err(PluginError::config(&format!("Array length {} is less than minimum {}", arr.len(), min_len)));
+                    return Err(PluginError::config_error(&format!("Array length {} is less than minimum {}", arr.len(), min_len)));
                 }
             }
             if let Some(max_len) = self.max_length {
                 if arr.len() > max_len {
-                    return Err(PluginError::config(&format!("Array length {} is greater than maximum {}", arr.len(), max_len)));
+                    return Err(PluginError::config_error(&format!("Array length {} is greater than maximum {}", arr.len(), max_len)));
                 }
             }
         }
@@ -319,7 +319,7 @@ impl PropertyValidation {
                 }
             }
             if !found {
-                return Err(PluginError::config(&format!("Value {} is not in allowed values", value)));
+                return Err(PluginError::config_error(&format!("Value {} is not in allowed values", value)));
             }
         }
 
