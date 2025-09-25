@@ -30,6 +30,7 @@ mockforge-plugin-loader = { path = "../mockforge-plugin-loader" }
 [build-dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+vergen = { version = "8.0", features = ["build", "git", "gitcl"] }
 
 [dev-dependencies]
 axum = { workspace = true, features = ["macros"] }

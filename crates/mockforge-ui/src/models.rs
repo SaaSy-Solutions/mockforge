@@ -774,3 +774,201 @@ pub struct AutocompleteResponse {
     /// End position of the token being completed
     pub end_position: usize,
 }
+
+/// Time series data point
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSeriesPoint {
+    /// Timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Value
+    pub value: f64,
+}
+
+/// Time series data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSeriesData {
+    /// Data points
+    pub points: Vec<TimeSeriesPoint>,
+    /// Metric name
+    pub metric: String,
+}
+
+/// Restart status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestartStatus {
+    /// Whether restart is in progress
+    pub restarting: bool,
+    /// Restart progress (0.0 to 1.0)
+    pub progress: f64,
+    /// Status message
+    pub message: String,
+}
+
+/// Smoke test result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmokeTestResult {
+    /// Test name
+    pub test_name: String,
+    /// Whether test passed
+    pub passed: bool,
+    /// Response time in milliseconds
+    pub response_time_ms: Option<u64>,
+    /// Error message (if failed)
+    pub error_message: Option<String>,
+}
+
+/// Smoke test context
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmokeTestContext {
+    /// Test suite name
+    pub suite_name: String,
+    /// Total tests
+    pub total_tests: usize,
+    /// Passed tests
+    pub passed_tests: usize,
+    /// Failed tests
+    pub failed_tests: usize,
+    /// Start time
+    pub start_time: chrono::DateTime<chrono::Utc>,
+    /// End time
+    pub end_time: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Configuration state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigurationState {
+    /// Whether configuration is valid
+    pub valid: bool,
+    /// Configuration errors
+    pub errors: Vec<String>,
+    /// Configuration warnings
+    pub warnings: Vec<String>,
+}
+
+/// Import history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportHistoryEntry {
+    /// Entry ID
+    pub id: String,
+    /// Import format
+    pub format: String,
+    /// Import timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Number of routes imported
+    pub routes_count: usize,
+    /// Number of variables imported
+    pub variables_count: usize,
+    /// Number of warnings
+    pub warnings_count: usize,
+    /// Whether import was successful
+    pub success: bool,
+    /// Filename (if applicable)
+    pub filename: Option<String>,
+    /// Environment name
+    pub environment: Option<String>,
+    /// Base URL
+    pub base_url: Option<String>,
+    /// Error message (if failed)
+    pub error_message: Option<String>,
+}
+
+/// Fixture information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureInfo {
+    /// Fixture ID
+    pub id: String,
+    /// Fixture name
+    pub name: String,
+    /// Fixture path
+    pub path: String,
+    /// File size in bytes
+    pub size_bytes: u64,
+    /// Last modified timestamp
+    pub last_modified: chrono::DateTime<chrono::Utc>,
+    /// Content type
+    pub content_type: Option<String>,
+}
+
+/// Fixture delete request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureDeleteRequest {
+    /// Fixture ID to delete
+    pub fixture_id: String,
+}
+
+/// Fixture bulk delete request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureBulkDeleteRequest {
+    /// Fixture IDs to delete
+    pub fixture_ids: Vec<String>,
+}
+
+/// Fixture bulk delete result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureBulkDeleteResult {
+    /// Successfully deleted fixture IDs
+    pub deleted: Vec<String>,
+    /// Failed deletions with error messages
+    pub failed: HashMap<String, String>,
+}
+
+/// Import route
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportRoute {
+    /// HTTP method
+    pub method: String,
+    /// Route path
+    pub path: String,
+    /// Request headers
+    pub headers: HashMap<String, String>,
+    /// Request body
+    pub body: Option<String>,
+    /// Expected response
+    pub response: ImportResponse,
+}
+
+/// Import response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportResponse {
+    /// HTTP status code
+    pub status: u16,
+    /// Response headers
+    pub headers: HashMap<String, String>,
+    /// Response body
+    pub body: serde_json::Value,
+}
+
+/// Import result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportResult {
+    /// Imported routes
+    pub routes: Vec<ImportRoute>,
+    /// Import warnings
+    pub warnings: Vec<String>,
+    /// Import errors
+    pub errors: Vec<String>,
+}
+
+/// Insomnia import result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsomniaImportResult {
+    /// Imported routes
+    pub routes: Vec<ImportRoute>,
+    /// Environment variables
+    pub variables: HashMap<String, String>,
+    /// Import warnings
+    pub warnings: Vec<String>,
+}
+
+
+
+/// Server information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerInfo {
+    /// Server version
+    pub version: String,
+    /// Build timestamp
+    pub build_time: String,
+    /// Git SHA
+    pub git_sha: String,
+}

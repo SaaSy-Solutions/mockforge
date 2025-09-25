@@ -243,6 +243,7 @@ async fn handle_serve(
         mockforge_http::build_router(
             spec.as_ref().map(|p| p.to_string_lossy().to_string()),
             None,
+            None,
         ).await
     };
 

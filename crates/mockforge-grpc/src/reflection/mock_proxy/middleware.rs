@@ -340,32 +340,31 @@ impl MockReflectionProxy {
 
         // Check field types and constraints
         for field in descriptor.fields() {
-            if let Some(value) = message.get_field(&field) {
-                let field_value = value.as_ref();
-                match field.kind() {
-                    Kind::Message(_) => {
-                        // For nested messages, recursively validate if it's a DynamicMessage
-                        if let Ok(nested_msg) = field_value.as_message() {
-                            self.validate_message_schema(&nested_msg, service_name, method_name)?;
-                        }
+            let value = message.get_field(&field);
+            let value_ref = value.as_ref();
+
+            // Check if the value kind matches the field kind
+            if !Self::value_matches_kind(value_ref, field.kind()) {
+                return Err(format!("{} field '{}' has incorrect type: expected {:?}, got {:?}",
+                    "Message validation", field.name(), field.kind(), value_ref).into());
+            }
+
+            // For nested messages, recursively validate
+            if let Kind::Message(expected_msg) = field.kind() {
+                if let prost_reflect::Value::Message(ref nested_msg) = *value_ref {
+                    // Basic nested message validation - could be expanded
+                    if nested_msg.descriptor() != expected_msg {
+                        return Err(format!("{} field '{}' has incorrect message type",
+                            "Message validation", field.name()).into());
                     }
-                    Kind::Enum(_) => {
-                        // Validate enum values are within range
-                        if let Ok(enum_value) = field_value.as_enum_number() {
-                            let enum_descriptor = field.kind().as_enum().unwrap();
-                            if enum_descriptor.get_value(enum_value).is_none() {
-                                return Err(format!("Invalid enum value {} for field '{}' in {}/{}",
-                                    enum_value, field.name(), service_name, method_name).into());
-                            }
-                        }
-                    }
-                    _ => {} // Other types are validated by protobuf encoding/decoding
                 }
             }
         }
 
         Ok(())
     }
+
+
 
     /// Validate business rules (email format, date ranges, etc.)
     fn validate_business_rules(
@@ -377,13 +376,13 @@ impl MockReflectionProxy {
         let descriptor = message.descriptor();
 
         for field in descriptor.fields() {
-            if let Some(value) = message.get_field(&field) {
-                let field_value = value.as_ref();
-                let field_name = field.name().to_lowercase();
+            let value = message.get_field(&field);
+            let field_value = value.as_ref();
+            let field_name = field.name().to_lowercase();
 
                 // Email validation
                 if field_name.contains("email") && field.kind() == Kind::String {
-                    if let Ok(email_str) = field_value.as_str() {
+                    if let Some(email_str) = field_value.as_str() {
                         if !self.is_valid_email(email_str) {
                             return Err(format!("Invalid email format '{}' for field '{}' in {}/{}",
                                 email_str, field.name(), service_name, method_name).into());
@@ -395,7 +394,7 @@ impl MockReflectionProxy {
                 if (field_name.contains("date") || field_name.contains("timestamp")) {
                     match field.kind() {
                         Kind::String => {
-                            if let Ok(date_str) = field_value.as_str() {
+                            if let Some(date_str) = field_value.as_str() {
                                 if !self.is_valid_iso8601_date(date_str) {
                                     return Err(format!("Invalid date format '{}' for field '{}' in {}/{}",
                                         date_str, field.name(), service_name, method_name).into());
@@ -404,7 +403,7 @@ impl MockReflectionProxy {
                         }
                         Kind::Int64 | Kind::Uint64 => {
                             // For timestamp fields, check reasonable range (1970-2100)
-                            if let Ok(timestamp) = field_value.as_i64() {
+                            if let Some(timestamp) = field_value.as_i64() {
                                 if timestamp < 0 || timestamp > 4102444800 { // 2100-01-01
                                     return Err(format!("Timestamp {} out of reasonable range for field '{}' in {}/{}",
                                         timestamp, field.name(), service_name, method_name).into());
@@ -415,15 +414,14 @@ impl MockReflectionProxy {
                     }
                 }
 
-        // Phone number validation (basic)
-        if field_name.contains("phone") && field.kind() == Kind::String {
-            if let Ok(phone_str) = field_value.as_str() {
-                if !self.is_valid_phone_number(phone_str) {
-                    return Err(format!("Invalid phone number format '{}' for field '{}' in {}/{}",
-                        phone_str, field.name(), service_name, method_name).into());
+            // Phone number validation (basic)
+            if field_name.contains("phone") && field.kind() == Kind::String {
+                if let Some(phone_str) = field_value.as_str() {
+                    if !self.is_valid_phone_number(phone_str) {
+                        return Err(format!("Invalid phone number format '{}' for field '{}' in {}/{}",
+                            phone_str, field.name(), service_name, method_name).into());
+                    }
                 }
-            }
-        }
             }
         }
 
@@ -444,22 +442,21 @@ impl MockReflectionProxy {
         let mut timestamp_fields = Vec::new();
 
         for field in descriptor.fields() {
-            if let Some(value) = message.get_field(&field) {
-                let field_value = value.as_ref();
-                let field_name = field.name().to_lowercase();
+            let value = message.get_field(&field);
+            let field_value = value.as_ref();
+            let field_name = field.name().to_lowercase();
 
-                if field_name.contains("start") && (field_name.contains("date") || field_name.contains("time")) {
-                    if let Ok(value) = field_value.as_i64() {
-                        date_fields.push(("start", value));
-                    }
-                } else if field_name.contains("end") && (field_name.contains("date") || field_name.contains("time")) {
-                    if let Ok(value) = field_value.as_i64() {
-                        date_fields.push(("end", value));
-                    }
-                } else if field_name.contains("timestamp") {
-                    if let Ok(value) = field_value.as_i64() {
-                        timestamp_fields.push((field.name(), value));
-                    }
+            if field_name.contains("start") && (field_name.contains("date") || field_name.contains("time")) {
+                if let Some(value) = field_value.as_i64() {
+                    date_fields.push(("start", value));
+                }
+            } else if field_name.contains("end") && (field_name.contains("date") || field_name.contains("time")) {
+                if let Some(value) = field_value.as_i64() {
+                    date_fields.push(("end", value));
+                }
+            } else if field_name.contains("timestamp") {
+                if let Some(value) = field_value.as_i64() {
+                    timestamp_fields.push((field.name().to_string(), value));
                 }
             }
         }
@@ -508,48 +505,47 @@ impl MockReflectionProxy {
         let descriptor = message.descriptor();
 
         for field in descriptor.fields() {
-            if let Some(value) = message.get_field(&field) {
-                let field_value = value.as_ref();
-                let field_name = field.name().to_lowercase();
+            let value = message.get_field(&field);
+            let field_value = value.as_ref();
+            let field_name = field.name().to_lowercase();
 
-                // Custom rule: ID fields should be positive
-                if field_name.ends_with("_id") || field_name == "id" {
-                    match field.kind() {
-                        Kind::Int32 | Kind::Int64 => {
-                            if let Ok(id_val) = field_value.as_i64() {
-                                if id_val <= 0 {
-                                    return Err(format!("ID field '{}' must be positive, got {} in {}/{}",
-                                        field.name(), id_val, service_name, method_name).into());
-                                }
+            // Custom rule: ID fields should be positive
+            if field_name.ends_with("_id") || field_name == "id" {
+                match field.kind() {
+                    Kind::Int32 | Kind::Int64 => {
+                        if let Some(id_val) = field_value.as_i64() {
+                            if id_val <= 0 {
+                                return Err(format!("ID field '{}' must be positive, got {} in {}/{}",
+                                    field.name(), id_val, service_name, method_name).into());
                             }
                         }
-                        Kind::Uint32 | Kind::Uint64 => {
-                            if let Ok(id_val) = field_value.as_u64() {
-                                if id_val == 0 {
-                                    return Err(format!("ID field '{}' must be non-zero, got {} in {}/{}",
-                                        field.name(), id_val, service_name, method_name).into());
-                                }
-                            }
-                        }
-                        Kind::String => {
-                            if let Ok(id_str) = field_value.as_str() {
-                                if id_str.trim().is_empty() {
-                                    return Err(format!("ID field '{}' cannot be empty in {}/{}",
-                                        field.name(), service_name, method_name).into());
-                                }
-                            }
-                        }
-                        _ => {}
                     }
-                }
-
-                // Custom rule: Amount/price fields should be non-negative
-                if field_name.contains("amount") || field_name.contains("price") || field_name.contains("cost") {
-                    if let Ok(numeric_val) = field_value.as_f64() {
-                        if numeric_val < 0.0 {
-                            return Err(format!("Amount/price field '{}' cannot be negative, got {} in {}/{}",
-                                field.name(), numeric_val, service_name, method_name).into());
+                    Kind::Uint32 | Kind::Uint64 => {
+                        if let Some(id_val) = field_value.as_u64() {
+                            if id_val == 0 {
+                                return Err(format!("ID field '{}' must be non-zero, got {} in {}/{}",
+                                    field.name(), id_val, service_name, method_name).into());
+                            }
                         }
+                    }
+                    Kind::String => {
+                        if let Some(id_str) = field_value.as_str() {
+                            if id_str.trim().is_empty() {
+                                return Err(format!("ID field '{}' cannot be empty in {}/{}",
+                                    field.name(), service_name, method_name).into());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Custom rule: Amount/price fields should be non-negative
+            if field_name.contains("amount") || field_name.contains("price") || field_name.contains("cost") {
+                if let Some(numeric_val) = field_value.as_f64() {
+                    if numeric_val < 0.0 {
+                        return Err(format!("Amount/price field '{}' cannot be negative, got {} in {}/{}",
+                            field.name(), numeric_val, service_name, method_name).into());
                     }
                 }
             }

@@ -9,26 +9,45 @@
 //! - import: Data import operations
 //! - fixtures: Fixture management operations
 
-// Re-export all handler modules for backward compatibility
-pub mod assets;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::process::Command;
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use chrono::{DateTime, Utc};
+use axum::{
+    extract::{Query, State},
+    http::{self, StatusCode},
+    response::{Html, IntoResponse, Json},
+};
+use sysinfo::System;
+use mockforge_core::{Error, Result};
+
+// Import all types from models
+use crate::models::{
+    ApiResponse, DashboardData, SystemInfo, ServerStatus, RouteInfo, RequestLog,
+    LatencyProfile, FaultConfig, ProxyConfig, ValidationSettings, LogFilter,
+    ConfigUpdate, HealthCheck, MetricsData, ServerInfo, DashboardSystemInfo, SimpleMetricsData,
+    ValidationUpdate,
+};
+
+// Import import types from core
+use mockforge_core::workspace_import::{ImportRoute, ImportResponse};
+
+// Handler sub-modules
 pub mod admin;
-pub mod workspace;
-pub mod plugin;
-pub mod sync;
-pub mod import;
-pub mod fixtures;
+pub mod assets;
 
 // Re-export commonly used types
 pub use assets::*;
 pub use admin::*;
-pub use workspace::*;
-pub use plugin::*;
-pub use sync::*;
-pub use import::*;
-pub use fixtures::*;
 
 // Import workspace persistence
 use mockforge_core::workspace_persistence::WorkspacePersistence;
+use mockforge_core::workspace_import::WorkspaceImportConfig;
 
 // Static assets - embedded at compile time
 const ADMIN_HTML: &str = r#"<!DOCTYPE html>
@@ -701,7 +720,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     let config = state.get_config().await;
 
     // Get recent logs from centralized logger
-    let recent_logs = if let Some(global_logger) = mockforge_core::get_global_logger() {
+    let recent_logs: Vec<RequestLog> = if let Some(global_logger) = mockforge_core::get_global_logger() {
         // Get logs from centralized logger
         let centralized_logs = global_logger.get_recent_logs(Some(20)).await;
 
@@ -791,13 +810,35 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     }
 
     let dashboard = DashboardData {
-        system: system_info,
-        servers,
-        routes,
-        recent_logs,
-        latency_profile: config.latency_profile,
-        fault_config: config.fault_config,
-        proxy_config: config.proxy_config,
+        server_info: ServerInfo {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            build_time: option_env!("VERGEN_BUILD_TIMESTAMP").unwrap_or("unknown").to_string(),
+            git_sha: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown").to_string(),
+        },
+        system_info: DashboardSystemInfo {
+            os: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
+            uptime: uptime,
+            memory_usage: system_metrics.memory_usage_mb * 1024 * 1024, // Convert MB to bytes
+        },
+        metrics: SimpleMetricsData {
+            total_requests: metrics.requests_by_endpoint.values().sum(),
+            active_requests: metrics.active_connections,
+            average_response_time: if metrics.response_times.is_empty() {
+                0.0
+            } else {
+                metrics.response_times.iter().sum::<u64>() as f64 / metrics.response_times.len() as f64
+            },
+            error_rate: {
+                let total_requests = metrics.requests_by_endpoint.values().sum::<u64>();
+                let total_errors = metrics.errors_by_endpoint.values().sum::<u64>();
+                if total_requests == 0 {
+                    0.0
+                } else {
+                    total_errors as f64 / total_requests as f64
+                }
+            },
+        },
     };
 
     Json(ApiResponse::success(dashboard))
@@ -2606,7 +2647,20 @@ pub async fn import_postman(
         max_depth: 5,
     };
 
-    match import_postman_to_workspace(import_result.routes, workspace_name.to_string(), config) {
+    // Convert MockForgeRoute to ImportRoute
+    let routes: Vec<ImportRoute> = import_result.routes.into_iter().map(|route| ImportRoute {
+        method: route.method,
+        path: route.path,
+        headers: route.headers,
+        body: route.body,
+        response: ImportResponse {
+            status: route.response.status,
+            headers: route.response.headers,
+            body: route.response.body,
+        },
+    }).collect();
+
+    match import_postman_to_workspace(routes, workspace_name.to_string(), config) {
         Ok(workspace_result) => {
             // Save the workspace to persistent storage
             if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
@@ -2660,7 +2714,7 @@ pub async fn import_insomnia(
     State(state): State<AdminState>,
     Json(request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
-    use mockforge_core::workspace_import::{import_insomnia_to_workspace, WorkspaceImportConfig};
+    use mockforge_core::workspace_import::create_workspace_from_insomnia;
     use uuid::Uuid;
 
     let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -2705,6 +2759,9 @@ pub async fn import_insomnia(
         max_depth: 5,
     };
 
+    // Extract variables count before moving import_result
+    let variables_count = import_result.variables.len();
+
     match mockforge_core::workspace_import::create_workspace_from_insomnia(import_result, Some(workspace_name.to_string())) {
         Ok(workspace_result) => {
             // Save the workspace to persistent storage
@@ -2719,7 +2776,7 @@ pub async fn import_insomnia(
                 format: "insomnia".to_string(),
                 timestamp: chrono::Utc::now(),
                 routes_count: workspace_result.request_count,
-                variables_count: import_result.variables.len(),
+                variables_count,
                 warnings_count: workspace_result.warnings.len(),
                 success: true,
                 filename: filename.map(|s| s.to_string()),
@@ -2878,42 +2935,89 @@ pub async fn preview_import(
         "unknown"
     };
 
-    let result = match format {
-        "postman" => import_postman_collection(content, base_url),
-        "insomnia" => import_insomnia_export(content, environment),
-        "curl" => import_curl_commands(content, base_url),
-        _ => return Json(ApiResponse::error("Unable to detect import format".to_string())),
-    };
+    match format {
+        "postman" => match import_postman_collection(content, base_url) {
+            Ok(import_result) => {
+                let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
+                    serde_json::json!({
+                        "method": route.method,
+                        "path": route.path,
+                        "headers": route.headers,
+                        "body": route.body,
+                        "status_code": route.response.status,
+                        "response": serde_json::json!({
+                            "status": route.response.status,
+                            "headers": route.response.headers,
+                            "body": route.response.body
+                        })
+                    })
+                }).collect();
 
-    match result {
-        Ok(import_result) => {
-            let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
-                serde_json::json!({
-                    "method": route.method,
-                    "path": route.path,
-                    "name": route.name,
-                    "description": route.description,
-                    "headers": route.headers,
-                    "body": route.body,
-                    "status_code": route.response.as_ref().map(|r| r.status),
-                    "response": route.response.map(|r| serde_json::json!({
-                        "status": r.status,
-                        "headers": r.headers,
-                        "body": r.body
-                    }))
-                })
-            }).collect();
+                let response = serde_json::json!({
+                    "routes": routes,
+                    "variables": import_result.variables,
+                    "warnings": import_result.warnings
+                });
 
-            let response = serde_json::json!({
-                "success": true,
-                "routes": routes,
-                "variables": import_result.variables,
-                "warnings": import_result.warnings
-            });
+                Json(ApiResponse::success(response))
+            }
+            Err(e) => Json(ApiResponse::error(format!("Postman import failed: {}", e))),
+        },
+        "insomnia" => match import_insomnia_export(content, environment) {
+            Ok(import_result) => {
+                let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
+                    serde_json::json!({
+                        "method": route.method,
+                        "path": route.path,
+                        "headers": route.headers,
+                        "body": route.body,
+                        "status_code": route.response.status,
+                        "response": serde_json::json!({
+                            "status": route.response.status,
+                            "headers": route.response.headers,
+                            "body": route.response.body
+                        })
+                    })
+                }).collect();
 
-            Json(ApiResponse::success(response))
-        }
-        Err(e) => Json(ApiResponse::error(format!("Import failed: {}", e))),
+                let response = serde_json::json!({
+                    "routes": routes,
+                    "variables": import_result.variables,
+                    "warnings": import_result.warnings
+                });
+
+                Json(ApiResponse::success(response))
+            }
+            Err(e) => Json(ApiResponse::error(format!("Insomnia import failed: {}", e))),
+        },
+        "curl" => match import_curl_commands(content, base_url) {
+            Ok(import_result) => {
+                let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
+                    serde_json::json!({
+                        "method": route.method,
+                        "path": route.path,
+                        "headers": route.headers,
+                        "body": route.body,
+                        "status_code": route.response.status,
+                        "response": serde_json::json!({
+                            "status": route.response.status,
+                            "headers": route.response.headers,
+                            "body": route.response.body
+                        })
+                    })
+                }).collect();
+
+                let response = serde_json::json!({
+                    "routes": routes,
+                    "variables": serde_json::json!({}),
+                    "warnings": import_result.warnings
+                });
+
+                Json(ApiResponse::success(response))
+            }
+            Err(e) => Json(ApiResponse::error(format!("Curl import failed: {}", e))),
+        },
+        _ => Json(ApiResponse::error("Unsupported import format".to_string())),
     }
 }
 

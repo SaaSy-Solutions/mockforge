@@ -191,7 +191,7 @@ impl Default for PluginLoaderConfig {
                 "./plugins".to_string(),
             ],
             allow_unsigned: false,
-            trusted_keys: Vec::new(),
+            trusted_keys: vec!["trusted-dev-key".to_string()],
             max_plugins: 100,
             load_timeout_secs: 30,
             debug_logging: false,

@@ -26,7 +26,7 @@ pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'stati
 /// Serve icon files
 pub async fn serve_icon() -> impl IntoResponse {
     // Return a simple SVG icon or placeholder
-    let icon_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#4f46e5"/><text x="16" y="20" text-anchor="middle" fill="white" font-family="Arial" font-size="14">MF</text></svg>"#;
+    let icon_svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\"><rect width=\"32\" height=\"32\" fill=\"#4f46e5\"/><text x=\"16\" y=\"20\" text-anchor=\"middle\" fill=\"white\" font-family=\"Arial\" font-size=\"14\">MF</text></svg>";
     ([(http::header::CONTENT_TYPE, "image/svg+xml")], icon_svg)
 }
 

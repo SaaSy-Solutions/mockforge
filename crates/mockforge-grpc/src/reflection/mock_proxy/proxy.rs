@@ -14,7 +14,7 @@ use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};
 
 /// Guard that automatically decrements the active connection counter when dropped
-struct ConnectionGuard {
+pub struct ConnectionGuard {
     counter: Arc<AtomicUsize>,
 }
 

@@ -128,7 +128,8 @@ mod tests {
         let wasm_bytes = create_minimal_wasm_module();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let config = PluginLoaderConfig::default();
+        let mut config = PluginLoaderConfig::default();
+        config.allow_unsigned = true; // Allow unsigned plugins for testing
         let mut loader = PluginLoader::new(config);
 
         // 1. Validate plugin

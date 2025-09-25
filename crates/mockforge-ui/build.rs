@@ -12,6 +12,14 @@ struct ManifestEntry {
 }
 
 fn main() {
+    // Generate version information using vergen
+    if let Err(e) = vergen::EmitBuilder::builder()
+        .build_timestamp()
+        .git_sha(true)
+        .emit()
+    {
+        println!("cargo:warning=Failed to generate version info: {}", e);
+    }
     println!("cargo:rerun-if-changed=ui/build.rs");
     println!("cargo:rerun-if-changed=ui/src/");
 

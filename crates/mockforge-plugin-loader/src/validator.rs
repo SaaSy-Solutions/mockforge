@@ -19,6 +19,12 @@ use mockforge_plugin_core::{
 // WASM parsing
 use wasmparser::{Parser, Payload};
 
+// Cryptography
+use ring::signature;
+
+// Path expansion
+use shellexpand;
+
 /// Plugin signature information
 #[derive(Debug, Clone)]
 struct PluginSignature {
@@ -311,49 +317,116 @@ impl PluginValidator {
 
     /// Get trusted public key for verification
     fn get_trusted_key(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        // In production, this would look up keys from a key store
-        // For now, we'll have a simple hardcoded key for demonstration
+        // First check if the key is in our trusted keys list
+        if !self.config.trusted_keys.contains(&key_id.to_string()) {
+            return Err(PluginLoaderError::SecurityViolation {
+                violation: format!("Key '{}' is not in the trusted keys list", key_id)
+            });
+        }
+
+        // In production, this would look up keys from a key store, database, or file system
+        // For demonstration, we provide sample keys for common key IDs
 
         match key_id {
             "trusted-dev-key" => {
-                // This would be a real public key in production
-                Ok(vec![0x01, 0x02, 0x03, 0x04]) // Placeholder
+                // For demonstration, return a placeholder key
+                // In production, this would be a real cryptographic key loaded from secure storage
+                // The format depends on the signature algorithm (DER for RSA/ECDSA, raw bytes for Ed25519)
+                Ok(vec![0x01, 0x02, 0x03, 0x04]) // Placeholder - would be real key data
             }
             _ => {
-                Err(PluginLoaderError::SecurityViolation {
-                    violation: format!("Unknown or untrusted key: {}", key_id)
-                })
+                // For other trusted keys, attempt to load from file system
+                // In production, this would check a key directory or database
+                self.load_key_from_store(key_id)
             }
         }
     }
 
+    /// Load a key from the key store (file system, database, etc.)
+    fn load_key_from_store(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
+        // In production, this would:
+        // 1. Check a key directory for key_id.der, key_id.pem, etc.
+        // 2. Query a database for the key
+        // 3. Call a key management service
+        // 4. Check environment variables or configuration
+
+        // For demonstration, we'll check for key files in standard locations
+        let key_paths = vec![
+            format!("~/.mockforge/keys/{}.der", key_id),
+            format!("~/.mockforge/keys/{}.pem", key_id),
+            format!("/etc/mockforge/keys/{}.der", key_id),
+            format!("/etc/mockforge/keys/{}.pem", key_id),
+        ];
+
+        for key_path in key_paths {
+            let expanded_path = shellexpand::tilde(&key_path);
+            let path = std::path::Path::new(expanded_path.as_ref());
+
+            if path.exists() {
+                match std::fs::read(path) {
+                    Ok(key_data) => {
+                        tracing::info!("Loaded key '{}' from {}", key_id, path.display());
+                        return Ok(key_data);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to read key file {}: {}", path.display(), e);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        Err(PluginLoaderError::SecurityViolation {
+            violation: format!("Could not find key data for trusted key: {}", key_id)
+        })
+    }
+
     /// Verify RSA signature
-    fn verify_rsa_signature(&self, _data: &[u8], _signature: &[u8], _public_key: &[u8]) -> LoaderResult<()> {
-        // RSA signature verification implementation
-        // In production, this would use the ring crate or similar
-        // For now, return success for demonstration
+    fn verify_rsa_signature(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> LoaderResult<()> {
+        // Create an unparsed public key from the DER-encoded key
+        let public_key = signature::UnparsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key);
+
+        // Verify the signature
+        public_key.verify(data, signature)
+            .map_err(|e| PluginLoaderError::SecurityViolation {
+                violation: format!("RSA signature verification failed: {}", e)
+            })?;
+
         Ok(())
     }
 
     /// Verify ECDSA signature
-    fn verify_ecdsa_signature(&self, _data: &[u8], _signature: &[u8], _public_key: &[u8]) -> LoaderResult<()> {
-        // ECDSA signature verification implementation
+    fn verify_ecdsa_signature(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> LoaderResult<()> {
+        // Create an unparsed public key from the DER-encoded key
+        let public_key = signature::UnparsedPublicKey::new(&signature::ECDSA_P256_SHA256_ASN1, public_key);
+
+        // Verify the signature
+        public_key.verify(data, signature)
+            .map_err(|e| PluginLoaderError::SecurityViolation {
+                violation: format!("ECDSA signature verification failed: {}", e)
+            })?;
+
         Ok(())
     }
 
     /// Verify Ed25519 signature
-    fn verify_ed25519_signature(&self, _data: &[u8], _signature: &[u8], _public_key: &[u8]) -> LoaderResult<()> {
-        // Ed25519 signature verification implementation
+    fn verify_ed25519_signature(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> LoaderResult<()> {
+        // Create an unparsed public key from the raw key bytes
+        let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key);
+
+        // Verify the signature
+        public_key.verify(data, signature)
+            .map_err(|e| PluginLoaderError::SecurityViolation {
+                violation: format!("Ed25519 signature verification failed: {}", e)
+            })?;
+
         Ok(())
     }
 
     /// Validate that the key is authorized for this plugin
     fn validate_key_authorization(&self, key_id: &str, manifest: &PluginManifest) -> LoaderResult<()> {
         // Check if this key is authorized to sign plugins from this author
-        // In production, this would check a key authorization database
-
-        // For now, allow the trusted dev key for any plugin
-        if key_id == "trusted-dev-key" {
+        if self.config.trusted_keys.contains(&key_id.to_string()) {
             return Ok(());
         }
 

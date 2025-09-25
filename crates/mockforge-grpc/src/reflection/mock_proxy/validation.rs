@@ -4,7 +4,7 @@
 //! including service/method validation and request routing.
 
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
-use prost_reflect::{DynamicMessage, MessageDescriptor, Value};
+use prost_reflect::{DynamicMessage, MessageDescriptor, Value, Kind};
 use prost_reflect::ReflectMessage;
 use tonic::{Request, Status};
 use tracing::{debug};
@@ -224,25 +224,21 @@ impl MockReflectionProxy {
         for field in descriptor.fields() {
             let field_name = field.name();
 
-            if let Some(value) = message.get_field(&field) {
-                let value_ref = value.as_ref();
-                // Check if the value kind matches the field kind
-                if !Self::value_matches_kind(value_ref, field.kind()) {
-                    return Err(Status::invalid_argument(format!(
-                        "{} field '{}' has incorrect type: expected {:?}, got {:?}",
-                        context, field_name, field.kind(), value_ref
-                    )));
-                }
+            let value = message.get_field(&field);
+            let value_ref = value.as_ref();
+            // Check if the value kind matches the field kind
+            if !Self::value_matches_kind(value_ref, field.kind()) {
+                return Err(Status::invalid_argument(format!(
+                    "{} field '{}' has incorrect type: expected {:?}, got {:?}",
+                    context, field_name, field.kind(), value_ref
+                )));
+            }
 
-                // For nested messages, recursively validate
-                if let ProstKind::Message(expected_msg) = field.kind() {
-                    if let Value::Message(ref nested_msg) = *value_ref {
-                        Self::validate_dynamic_message_fields(nested_msg, &expected_msg, &format!("{}.{}", context, field_name))?;
-                    }
+            // For nested messages, recursively validate
+            if let Kind::Message(expected_msg) = field.kind() {
+                if let Value::Message(ref nested_msg) = *value_ref {
+                    Self::validate_dynamic_message_fields(nested_msg, &expected_msg, &format!("{}.{}", context, field_name))?;
                 }
-            } else {
-                // In proto3, fields are optional, so missing is ok
-                // But if we want to check for required, we could, but proto3 has no required
             }
         }
 
@@ -250,7 +246,7 @@ impl MockReflectionProxy {
     }
 
     /// Check if a Value matches a Kind
-    fn value_matches_kind(value: &Value, kind: prost_reflect::Kind) -> bool {
+    pub fn value_matches_kind(value: &Value, kind: prost_reflect::Kind) -> bool {
         match *value {
             prost_reflect::Value::Bool(_) => kind == prost_reflect::Kind::Bool,
             prost_reflect::Value::I32(_) => matches!(kind, prost_reflect::Kind::Int32 | prost_reflect::Kind::Sint32 | prost_reflect::Kind::Sfixed32),

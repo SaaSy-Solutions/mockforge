@@ -74,33 +74,7 @@ impl AdminState {
     }
 }
 
-/// Get dashboard data
-pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<DashboardData>> {
-    let metrics = state.metrics.lock().unwrap();
-    Json(ApiResponse::success(DashboardData {
-        server_info: ServerInfo {
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            build_time: env!("VERGEN_BUILD_TIMESTAMP").unwrap_or("unknown"),
-            git_sha: env!("VERGEN_GIT_SHA").unwrap_or("unknown"),
-        },
-        system_info: DashboardSystemInfo {
-            os: std::env::consts::OS.to_string(),
-            arch: std::env::consts::ARCH.to_string(),
-            uptime: System::uptime() as u64,
-            memory_usage: System::new_all().total_memory() - System::new_all().available_memory(),
-        },
-        metrics: SimpleMetricsData {
-            total_requests: metrics.total_requests,
-            active_requests: metrics.active_requests,
-            average_response_time: metrics.average_response_time,
-            error_rate: if metrics.total_requests == 0 {
-                0.0
-            } else {
-                metrics.total_errors as f64 / metrics.total_requests as f64
-            },
-        },
-    }))
-}
+
 
 /// Get server information
 pub async fn get_server_info(State(state): State<AdminState>) -> Json<Value> {
