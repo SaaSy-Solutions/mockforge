@@ -25,7 +25,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Setup sccache (GHA backend)
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.9
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -86,7 +86,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Setup sccache (GHA backend)
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.9
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
