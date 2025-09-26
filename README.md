@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/mockforge.svg)](https://crates.io/crates/mockforge)
 [![Documentation](https://docs.rs/mockforge/badge.svg)](https://docs.rs/mockforge)
-[![Book](https://img.shields.io/badge/book-read%20online-blue.svg)](https://saasy-solutions.github.io/mockforge/)
+[![Book](https://img.shields.io/badge/book-read%20online-blue.svg)](https://docs.mockforge.dev/)
 [![CI](https://github.com/SaaSy-Solutions/mockforge/workflows/CI/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
@@ -29,7 +29,7 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 
 For comprehensive documentation, tutorials, and guides:
 
-**[📚 Read the MockForge Book](https://saasy-solutions.github.io/mockforge/)**
+**[📚 Read the MockForge Book](https://docs.mockforge.dev/)**
 
 The documentation covers:
 - Getting started guide and installation
@@ -667,7 +667,7 @@ make release-major
 
 ## 📚 Documentation
 
-- [User Guide](https://SaaSy-Solutions.github.io/mockforge/) - Complete documentation
+- [User Guide](https://docs.mockforge.dev/) - Complete documentation
 - [API Reference](https://docs.rs/mockforge) - Rust API documentation
 - [Contributing](CONTRIBUTING.md) - How to contribute
 - [Changelog](CHANGELOG.md) - Release notes
