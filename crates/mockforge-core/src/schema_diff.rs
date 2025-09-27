@@ -192,11 +192,19 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
                         additional_properties: None,
                     };
 
-                    let error_msg = format!("Missing required field '{}' of type {}", k, schema_info.data_type);
+                    let error_msg =
+                        format!("Missing required field '{}' of type {}", k, schema_info.data_type);
 
-                    out.push(ValidationError::new(path.to_string(), schema_info.data_type.clone(), "missing".to_string(), "missing_required")
+                    out.push(
+                        ValidationError::new(
+                            path.to_string(),
+                            schema_info.data_type.clone(),
+                            "missing".to_string(),
+                            "missing_required",
+                        )
                         .with_message(error_msg)
-                        .with_schema_info(schema_info));
+                        .with_schema_info(schema_info),
+                    );
                 }
             }
 
@@ -206,8 +214,15 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
                     let np = format!("{}/{}", path, k);
                     let error_msg = format!("Unexpected additional field '{}' found", k);
 
-                    out.push(ValidationError::new(np, "not_allowed".to_string(), type_of(&ao[k]).clone(), "additional_property")
-                        .with_message(error_msg));
+                    out.push(
+                        ValidationError::new(
+                            np,
+                            "not_allowed".to_string(),
+                            type_of(&ao[k]).clone(),
+                            "additional_property",
+                        )
+                        .with_message(error_msg),
+                    );
                 }
             }
         }
@@ -235,11 +250,22 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
                             additional_properties: None,
                         };
 
-                        let error_msg = format!("Array size mismatch: expected {} items, found {}", arr_size, aa.len());
+                        let error_msg = format!(
+                            "Array size mismatch: expected {} items, found {}",
+                            arr_size,
+                            aa.len()
+                        );
 
-                        out.push(ValidationError::new(path.to_string(), format!("array[{}]", arr_size), format!("array[{}]", aa.len()), "length_mismatch")
+                        out.push(
+                            ValidationError::new(
+                                path.to_string(),
+                                format!("array[{}]", arr_size),
+                                format!("array[{}]", aa.len()),
+                                "length_mismatch",
+                            )
                             .with_message(error_msg)
-                            .with_schema_info(schema_info));
+                            .with_schema_info(schema_info),
+                        );
                     }
                 }
             } else {
@@ -247,8 +273,15 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
                 if !aa.is_empty() {
                     let error_msg = format!("Expected empty array, but found {} items", aa.len());
 
-                    out.push(ValidationError::new(path.to_string(), "empty_array".to_string(), format!("array[{}]", aa.len()), "unexpected_items")
-                        .with_message(error_msg));
+                    out.push(
+                        ValidationError::new(
+                            path.to_string(),
+                            "empty_array".to_string(),
+                            format!("array[{}]", aa.len()),
+                            "unexpected_items",
+                        )
+                        .with_message(error_msg),
+                    );
                 }
             }
         }
@@ -261,7 +294,7 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
                 let schema_info = SchemaInfo {
                     data_type: et.clone(),
                     required: None,
-                    format: None,  // Could be expanded to extract format info
+                    format: None, // Could be expanded to extract format info
                     minimum: None,
                     maximum: None,
                     min_length: None,
@@ -273,9 +306,11 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
 
                 let error_msg = format!("Type mismatch: expected {}, found {}", et, at);
 
-                out.push(ValidationError::new(path.to_string(), et, at, "type_mismatch")
-                    .with_message(error_msg)
-                    .with_schema_info(schema_info));
+                out.push(
+                    ValidationError::new(path.to_string(), et, at, "type_mismatch")
+                        .with_message(error_msg)
+                        .with_schema_info(schema_info),
+                );
             } else {
                 // Same type but might have other constraints - check string/number specifics
                 match (e, a) {

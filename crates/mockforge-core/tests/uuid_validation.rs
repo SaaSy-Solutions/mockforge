@@ -5,10 +5,13 @@ use serde_json::json;
 #[test]
 fn test_uuid_regex_patterns() {
     // Standard UUID v4 regex pattern
-    let uuid_v4_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").unwrap();
+    let uuid_v4_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap();
 
     // More permissive UUID regex (accepts any valid UUID format)
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Test valid UUIDs
     let valid_uuids = vec![
@@ -41,13 +44,13 @@ fn test_uuid_regex_patterns() {
 
     // Test invalid UUIDs
     let invalid_uuids = vec![
-        "550e8400-e29b-41d4-a716-44665544000",     // too short
-        "550e8400-e29b-41d4-a716-4466554400000",   // too long
-        "550e8400-e29b-41d4-a716-44665544000g",    // invalid character
-        "550e8400e29b41d4a716446655440000",        // no hyphens
-        "550e8400-e29b-41d4-a716",                 // incomplete
-        "gggggggg-gggg-gggg-gggg-gggggggggggg",   // all invalid chars
-        "",                                       // empty
+        "550e8400-e29b-41d4-a716-44665544000",        // too short
+        "550e8400-e29b-41d4-a716-4466554400000",      // too long
+        "550e8400-e29b-41d4-a716-44665544000g",       // invalid character
+        "550e8400e29b41d4a716446655440000",           // no hyphens
+        "550e8400-e29b-41d4-a716",                    // incomplete
+        "gggggggg-gggg-gggg-gggg-gggggggggggg",       // all invalid chars
+        "",                                           // empty
         "550e8400-e29b-41d4-a716-446655440000-extra", // extra content
     ];
 
@@ -60,7 +63,8 @@ fn test_uuid_regex_patterns() {
 /// Test UUID validation in JSON responses
 #[test]
 fn test_uuid_validation_in_json() {
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Test various JSON structures with UUIDs
     let test_cases = vec![
@@ -123,7 +127,8 @@ fn validate_uuids_in_json(value: &serde_json::Value, uuid_regex: &Regex) {
 /// Test UUID uniqueness validation
 #[test]
 fn test_uuid_uniqueness() {
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Generate a set of UUIDs and ensure they're all unique
     let mut generated_uuids = std::collections::HashSet::new();
@@ -151,7 +156,8 @@ fn test_uuid_uniqueness() {
 #[test]
 fn test_uuid_case_insensitive_validation() {
     // Test that our regex handles different cases properly
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     let test_uuid = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -160,13 +166,19 @@ fn test_uuid_case_insensitive_validation() {
 
     // Test uppercase (should fail with our current regex)
     let uppercase_uuid = test_uuid.to_uppercase();
-    assert!(!uuid_regex.is_match(&uppercase_uuid),
-            "Uppercase UUID should be invalid with current regex: {}", uppercase_uuid);
+    assert!(
+        !uuid_regex.is_match(&uppercase_uuid),
+        "Uppercase UUID should be invalid with current regex: {}",
+        uppercase_uuid
+    );
 
     // Test mixed case (should fail)
     let mixed_uuid = "550E8400-E29B-41D4-A716-446655440000";
-    assert!(!uuid_regex.is_match(mixed_uuid),
-            "Mixed case UUID should be invalid with current regex: {}", mixed_uuid);
+    assert!(
+        !uuid_regex.is_match(mixed_uuid),
+        "Mixed case UUID should be invalid with current regex: {}",
+        mixed_uuid
+    );
 
     println!("✓ UUID validation correctly handles case sensitivity");
 }
@@ -174,7 +186,8 @@ fn test_uuid_case_insensitive_validation() {
 /// Test UUID validation performance
 #[test]
 fn test_uuid_validation_performance() {
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     let test_uuids = vec![
         "550e8400-e29b-41d4-a716-446655440000",
@@ -197,14 +210,18 @@ fn test_uuid_validation_performance() {
     println!("✓ UUID validation performance: {} validations in {:?}", 5000, duration);
 
     // Should complete in reasonable time (less than 1 second for 5000 validations)
-    assert!(duration.as_millis() < 1000,
-            "UUID validation should be fast, took {:?}", duration);
+    assert!(
+        duration.as_millis() < 1000,
+        "UUID validation should be fast, took {:?}",
+        duration
+    );
 }
 
 /// Test UUID validation in complex nested structures
 #[test]
 fn test_uuid_validation_complex_structures() {
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Complex nested structure that might come from an API response
     let complex_response = json!({
@@ -251,7 +268,10 @@ fn count_and_validate_uuids(value: &serde_json::Value, uuid_regex: &Regex) -> us
 
     match value {
         serde_json::Value::String(s) => {
-            if s.len() == 36 && s.chars().filter(|&c| c == '-').count() == 4 && uuid_regex.is_match(s) {
+            if s.len() == 36
+                && s.chars().filter(|&c| c == '-').count() == 4
+                && uuid_regex.is_match(s)
+            {
                 count += 1;
             }
         }
@@ -274,7 +294,8 @@ fn count_and_validate_uuids(value: &serde_json::Value, uuid_regex: &Regex) -> us
 /// Test edge cases for UUID validation
 #[test]
 fn test_uuid_validation_edge_cases() {
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Test strings that might be confused with UUIDs
     let edge_cases = vec![
@@ -310,7 +331,11 @@ fn test_uuid_validation_edge_cases() {
     ];
 
     for invalid_case in invalid_cases {
-        assert!(!uuid_regex.is_match(invalid_case), "Edge case '{}' should be invalid", invalid_case);
+        assert!(
+            !uuid_regex.is_match(invalid_case),
+            "Edge case '{}' should be invalid",
+            invalid_case
+        );
         println!("✓ Correctly rejected invalid edge case: '{}'", invalid_case);
     }
 }
@@ -319,27 +344,36 @@ fn test_uuid_validation_edge_cases() {
 #[test]
 fn test_uuid_versions_and_variants() {
     // Test UUID v1 (time-based)
-    let v1_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").unwrap();
+    let v1_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap();
     let v1_uuid = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
     assert!(v1_regex.is_match(v1_uuid), "UUID {} should be valid v1", v1_uuid);
 
     // Test UUID v3 (name-based, MD5)
-    let v3_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").unwrap();
+    let v3_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap();
     let v3_uuid = "6ba7b812-9dad-31d1-80b4-00c04fd430c8";
     assert!(v3_regex.is_match(v3_uuid), "UUID {} should be valid v3", v3_uuid);
 
     // Test UUID v4 (random)
-    let v4_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").unwrap();
+    let v4_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap();
     let v4_uuid = "550e8400-e29b-41d4-a716-446655440000";
     assert!(v4_regex.is_match(v4_uuid), "UUID {} should be valid v4", v4_uuid);
 
     // Test UUID v5 (name-based, SHA-1)
-    let v5_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").unwrap();
+    let v5_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+            .unwrap();
     let v5_uuid = "6ba7b814-9dad-51d1-80b4-00c04fd430c8";
     assert!(v5_regex.is_match(v5_uuid), "UUID {} should be valid v5", v5_uuid);
 
     // Test general UUID regex accepts all versions
-    let general_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let general_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
     let test_uuids = vec![v1_uuid, v3_uuid, v4_uuid, v5_uuid];
 
     for uuid in test_uuids {

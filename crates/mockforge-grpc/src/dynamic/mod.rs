@@ -4,9 +4,9 @@
 //! gRPC services from proto files, making the gRPC mock system flexible
 //! for different applications and developers.
 
+pub mod http_bridge;
 pub mod proto_parser;
 pub mod service_generator;
-pub mod http_bridge;
 
 use crate::reflection::{MockReflectionProxy, ProxyConfig};
 use proto_parser::ProtoParser;
@@ -294,7 +294,10 @@ async fn start_grpc_only_server(
             .build_v1()
             .map_err(|e| {
                 error!("Failed to build reflection service: {}", e);
-                Box::<dyn std::error::Error + Send + Sync>::from(format!("Failed to build reflection service: {}", e))
+                Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                    "Failed to build reflection service: {}",
+                    e
+                ))
             })?;
 
         router = router.add_service(reflection_service);
@@ -312,7 +315,10 @@ async fn start_combined_server(
     _config: &DynamicGrpcConfig,
     _registry_arc: Arc<ServiceRegistry>,
     _mock_proxy: MockReflectionProxy,
-) -> Result<tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>,
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     // HTTP bridge temporarily disabled for compilation
     Err("HTTP bridge not yet implemented".into())
 }

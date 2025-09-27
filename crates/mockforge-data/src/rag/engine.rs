@@ -3,8 +3,11 @@
 //! This module contains the main RAG engine implementation,
 //! including document processing, query handling, and response generation.
 
-use crate::rag::{config::{RagConfig, EmbeddingProvider}, storage::DocumentStorage};
 use crate::rag::utils::Cache;
+use crate::rag::{
+    config::{EmbeddingProvider, RagConfig},
+    storage::DocumentStorage,
+};
 use crate::schema::SchemaDefinition;
 use mockforge_core::Result;
 use serde::{Deserialize, Serialize};
@@ -161,9 +164,7 @@ impl std::fmt::Debug for RagEngine {
 impl RagEngine {
     /// Create a new RAG engine
     pub fn new(config: RagConfig, storage: Arc<dyn DocumentStorage>) -> Result<Self> {
-        let client = reqwest::ClientBuilder::new()
-            .timeout(config.timeout_duration())
-            .build()?;
+        let client = reqwest::ClientBuilder::new().timeout(config.timeout_duration()).build()?;
 
         let cache_ttl = config.cache_ttl_duration().as_secs();
 
@@ -202,7 +203,12 @@ impl RagEngine {
     }
 
     /// Add document to the knowledge base
-    pub async fn add_document(&self, document_id: String, content: String, metadata: HashMap<String, String>) -> Result<()> {
+    pub async fn add_document(
+        &self,
+        document_id: String,
+        content: String,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
         debug!("Adding document: {}", document_id);
 
         // Split document into chunks
@@ -363,9 +369,7 @@ impl RagEngine {
         let model = &self.config.embedding_model;
 
         match provider {
-            EmbeddingProvider::OpenAI => {
-                self.generate_openai_embedding(text, model).await
-            }
+            EmbeddingProvider::OpenAI => self.generate_openai_embedding(text, model).await,
             EmbeddingProvider::OpenAICompatible => {
                 self.generate_openai_compatible_embedding(text, model).await
             }
@@ -433,12 +437,14 @@ impl RagEngine {
         let keyword_weight = self.config.keyword_weight;
 
         for (rank, chunk) in candidates.iter().enumerate() {
-            let semantic_score = semantic_results.iter()
+            let semantic_score = semantic_results
+                .iter()
                 .find(|r| r.chunk.id == chunk.id)
                 .map(|r| r.score)
                 .unwrap_or(0.0);
 
-            let keyword_score = keyword_results.iter()
+            let keyword_score = keyword_results
+                .iter()
                 .find(|r| r.chunk.id == chunk.id)
                 .map(|r| r.score)
                 .unwrap_or(0.0);
@@ -467,15 +473,17 @@ impl RagEngine {
     }
 
     /// Build context from search results
-    fn build_context(&self, search_results: &[SearchResult], additional_context: Option<&str>) -> String {
+    fn build_context(
+        &self,
+        search_results: &[SearchResult],
+        additional_context: Option<&str>,
+    ) -> String {
         let mut context_parts = Vec::new();
 
         // Add search results
         for result in search_results {
-            context_parts.push(format!(
-                "Content: {}\nRelevance: {:.2}",
-                result.chunk.content, result.score
-            ));
+            context_parts
+                .push(format!("Content: {}\nRelevance: {:.2}", result.chunk.content, result.score));
         }
 
         // Add additional context if provided
@@ -508,7 +516,12 @@ impl RagEngine {
     }
 
     /// Create generation prompt for dataset creation
-    fn create_generation_prompt(&self, schema: &SchemaDefinition, count: usize, context: Option<&str>) -> String {
+    fn create_generation_prompt(
+        &self,
+        schema: &SchemaDefinition,
+        count: usize,
+        context: Option<&str>,
+    ) -> String {
         let mut prompt = format!(
             "Generate {} rows of sample data following this schema:\n\n{:?}\n\n",
             count, schema
@@ -523,7 +536,11 @@ impl RagEngine {
     }
 
     /// Parse dataset response from LLM
-    fn parse_dataset_response(&self, response: &str, _schema: &SchemaDefinition) -> Result<Vec<HashMap<String, Value>>> {
+    fn parse_dataset_response(
+        &self,
+        response: &str,
+        _schema: &SchemaDefinition,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         // Try to parse as JSON array
         match serde_json::from_str::<Vec<HashMap<String, Value>>>(response) {
             Ok(data) => Ok(data),
@@ -532,8 +549,9 @@ impl RagEngine {
                 if let Some(json_start) = response.find('[') {
                     if let Some(json_end) = response.rfind(']') {
                         let json_part = &response[json_start..=json_end];
-                        serde_json::from_str(json_part)
-                            .map_err(|e| mockforge_core::Error::generic(format!("Failed to parse JSON: {}", e)))
+                        serde_json::from_str(json_part).map_err(|e| {
+                            mockforge_core::Error::generic(format!("Failed to parse JSON: {}", e))
+                        })
                     } else {
                         Err(mockforge_core::Error::generic("No closing bracket found in response"))
                     }
@@ -546,10 +564,14 @@ impl RagEngine {
 
     /// Generate OpenAI embedding
     async fn generate_openai_embedding(&self, text: &str, model: &str) -> Result<Vec<f32>> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| mockforge_core::Error::generic("OpenAI API key not configured"))?;
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.openai.com/v1/embeddings")
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -561,7 +583,10 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -569,17 +594,23 @@ impl RagEngine {
             .as_array()
             .ok_or_else(|| mockforge_core::Error::generic("Invalid embedding response format"))?;
 
-        Ok(embedding.iter()
-            .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-            .collect())
+        Ok(embedding.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     }
 
     /// Generate OpenAI compatible embedding
-    async fn generate_openai_compatible_embedding(&self, text: &str, model: &str) -> Result<Vec<f32>> {
-        let api_key = self.config.api_key.as_ref()
+    async fn generate_openai_compatible_embedding(
+        &self,
+        text: &str,
+        model: &str,
+    ) -> Result<Vec<f32>> {
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| mockforge_core::Error::generic("API key not configured"))?;
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/embeddings", self.config.api_endpoint))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -591,7 +622,10 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -599,14 +633,20 @@ impl RagEngine {
             .as_array()
             .ok_or_else(|| mockforge_core::Error::generic("Invalid embedding response format"))?;
 
-        Ok(embedding.iter()
-            .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-            .collect())
+        Ok(embedding.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     }
 
     /// Generate OpenAI response
-    async fn generate_openai_response(&self, query: &str, context: &str, model: &str) -> Result<String> {
-        let api_key = self.config.api_key.as_ref()
+    async fn generate_openai_response(
+        &self,
+        query: &str,
+        context: &str,
+        model: &str,
+    ) -> Result<String> {
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| mockforge_core::Error::generic("OpenAI API key not configured"))?;
 
         let messages = vec![
@@ -617,10 +657,11 @@ impl RagEngine {
             serde_json::json!({
                 "role": "user",
                 "content": format!("Context: {}\n\nQuestion: {}", context, query)
-            })
+            }),
         ];
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.openai.com/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -635,7 +676,10 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -647,14 +691,27 @@ impl RagEngine {
     }
 
     /// Generate Anthropic response
-    async fn generate_anthropic_response(&self, _query: &str, _context: &str, _model: &str) -> Result<String> {
+    async fn generate_anthropic_response(
+        &self,
+        _query: &str,
+        _context: &str,
+        _model: &str,
+    ) -> Result<String> {
         // Placeholder implementation
         Ok("Anthropic response placeholder".to_string())
     }
 
     /// Generate OpenAI compatible response
-    async fn generate_openai_compatible_response(&self, query: &str, context: &str, model: &str) -> Result<String> {
-        let api_key = self.config.api_key.as_ref()
+    async fn generate_openai_compatible_response(
+        &self,
+        query: &str,
+        context: &str,
+        model: &str,
+    ) -> Result<String> {
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| mockforge_core::Error::generic("API key not configured"))?;
 
         let messages = vec![
@@ -665,10 +722,11 @@ impl RagEngine {
             serde_json::json!({
                 "role": "user",
                 "content": format!("Context: {}\n\nQuestion: {}", context, query)
-            })
+            }),
         ];
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/chat/completions", self.config.api_endpoint))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -683,7 +741,10 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -695,7 +756,12 @@ impl RagEngine {
     }
 
     /// Generate Ollama response
-    async fn generate_ollama_response(&self, _query: &str, _context: &str, _model: &str) -> Result<String> {
+    async fn generate_ollama_response(
+        &self,
+        _query: &str,
+        _context: &str,
+        _model: &str,
+    ) -> Result<String> {
         // Placeholder implementation
         Ok("Ollama response placeholder".to_string())
     }
@@ -778,5 +844,3 @@ impl Default for StorageStats {
         }
     }
 }
-
-

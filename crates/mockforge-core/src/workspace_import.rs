@@ -3,17 +3,19 @@
 //! This module provides functionality to automatically organize imported API definitions
 //! into workspace and folder structures based on the source format and content.
 
-use crate::workspace::{Workspace, MockRequest, WorkspaceRegistry, MockResponse};
-use crate::routing::HttpMethod;
-use crate::import::postman_import::{ImportResult as PostmanImportResult, MockForgeRoute as PostmanRoute};
-use crate::import::insomnia_import::MockForgeRoute as InsomniaRoute;
 use crate::import::curl_import::MockForgeRoute as CurlRoute;
 use crate::import::har_import::MockForgeRoute as HarRoute;
+use crate::import::insomnia_import::MockForgeRoute as InsomniaRoute;
 use crate::import::openapi_import::MockForgeRoute as OpenApiRoute;
-use crate::{Result, Error};
-use std::collections::HashMap;
+use crate::import::postman_import::{
+    ImportResult as PostmanImportResult, MockForgeRoute as PostmanRoute,
+};
+use crate::routing::HttpMethod;
+use crate::workspace::{MockRequest, MockResponse, Workspace, WorkspaceRegistry};
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Common import route structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,7 +197,8 @@ pub fn import_postman_to_existing_workspace(
     routes: Vec<ImportRoute>,
     config: WorkspaceImportConfig,
 ) -> Result<WorkspaceImportResult> {
-    let workspace = registry.get_workspace_mut(workspace_id)
+    let workspace = registry
+        .get_workspace_mut(workspace_id)
         .ok_or_else(|| Error::generic(format!("Workspace '{}' not found", workspace_id)))?;
 
     let warnings = Vec::new();
@@ -239,8 +242,7 @@ fn group_routes_by_folders<'a, T>(
     routes: &'a [T],
     config: &'a WorkspaceImportConfig,
     get_path: fn(&T) -> &str,
-) -> HashMap<String, Vec<&'a T>>
-{
+) -> HashMap<String, Vec<&'a T>> {
     let mut groups = HashMap::new();
 
     for route in routes {
@@ -291,9 +293,9 @@ fn create_folder_hierarchy(
 
         // Check if folder already exists
         let existing_folder = if let Some(parent_id) = &current_parent {
-            workspace.find_folder(parent_id).and_then(|parent|
-                parent.folders.iter().find(|f| f.name == folder_name)
-            )
+            workspace
+                .find_folder(parent_id)
+                .and_then(|parent| parent.folders.iter().find(|f| f.name == folder_name))
         } else {
             workspace.folders.iter().find(|f| f.name == folder_name)
         };
@@ -303,8 +305,9 @@ fn create_folder_hierarchy(
         } else {
             // Create new folder
             if let Some(parent_id) = &current_parent {
-                let parent = workspace.find_folder_mut(parent_id)
-                    .ok_or_else(|| Error::generic(format!("Parent folder '{}' not found", parent_id)))?;
+                let parent = workspace.find_folder_mut(parent_id).ok_or_else(|| {
+                    Error::generic(format!("Parent folder '{}' not found", parent_id))
+                })?;
                 parent.add_folder(folder_name)?
             } else {
                 workspace.add_folder(folder_name)?
@@ -331,7 +334,8 @@ fn add_routes_to_folder(
         }
     } else {
         // Add to specific folder
-        let folder = workspace.find_folder_mut(&folder_id)
+        let folder = workspace
+            .find_folder_mut(&folder_id)
             .ok_or_else(|| Error::generic(format!("Folder '{}' not found", folder_id)))?;
 
         for route in &routes {
@@ -357,7 +361,8 @@ fn convert_postman_route_to_request(route: &ImportRoute) -> MockRequest {
         _ => HttpMethod::GET, // Default to GET
     };
 
-    let mut request = MockRequest::new(method, route.path.clone(), format!("Imported: {}", route.path));
+    let mut request =
+        MockRequest::new(method, route.path.clone(), format!("Imported: {}", route.path));
 
     // Set response
     let mut response = MockResponse::default();
@@ -396,9 +401,8 @@ pub fn create_workspace_from_postman(
     let name = workspace_name.unwrap_or_else(|| "Postman Import".to_string());
     let config = WorkspaceImportConfig::default();
 
-    let routes: Vec<ImportRoute> = import_result.routes.into_iter()
-        .map(postman_route_to_import_route)
-        .collect();
+    let routes: Vec<ImportRoute> =
+        import_result.routes.into_iter().map(postman_route_to_import_route).collect();
     import_postman_to_workspace(routes, name, config)
 }
 
@@ -410,9 +414,8 @@ pub fn create_workspace_from_insomnia(
     let name = workspace_name.unwrap_or_else(|| "Insomnia Import".to_string());
     let config = WorkspaceImportConfig::default();
 
-    let routes: Vec<ImportRoute> = import_result.routes.into_iter()
-        .map(insomnia_route_to_import_route)
-        .collect();
+    let routes: Vec<ImportRoute> =
+        import_result.routes.into_iter().map(insomnia_route_to_import_route).collect();
     import_postman_to_workspace(routes, name, config)
 }
 
@@ -427,9 +430,8 @@ pub fn create_workspace_from_curl(
         ..Default::default()
     };
 
-    let routes: Vec<ImportRoute> = import_result.routes.into_iter()
-        .map(curl_route_to_import_route)
-        .collect();
+    let routes: Vec<ImportRoute> =
+        import_result.routes.into_iter().map(curl_route_to_import_route).collect();
     import_postman_to_workspace(routes, name, config)
 }
 
@@ -441,9 +443,8 @@ pub fn create_workspace_from_openapi(
     let name = workspace_name.unwrap_or_else(|| "OpenAPI Import".to_string());
     let config = WorkspaceImportConfig::default();
 
-    let routes: Vec<ImportRoute> = import_result.routes.into_iter()
-        .map(openapi_route_to_import_route)
-        .collect();
+    let routes: Vec<ImportRoute> =
+        import_result.routes.into_iter().map(openapi_route_to_import_route).collect();
     import_postman_to_workspace(routes, name, config)
 }
 
@@ -455,16 +456,14 @@ pub fn create_workspace_from_har(
     let name = workspace_name.unwrap_or_else(|| "HAR Import".to_string());
     let config = WorkspaceImportConfig::default();
 
-    let routes: Vec<ImportRoute> = import_result.routes.into_iter()
-        .map(har_route_to_import_route)
-        .collect();
+    let routes: Vec<ImportRoute> =
+        import_result.routes.into_iter().map(har_route_to_import_route).collect();
     import_postman_to_workspace(routes, name, config)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::import::MockForgeResponse;
 
     #[test]
     fn test_folder_path_determination() {
@@ -513,7 +512,8 @@ mod tests {
         ];
 
         let config = WorkspaceImportConfig::default();
-        let result = import_postman_to_workspace(routes, "Test Workspace".to_string(), config).unwrap();
+        let result =
+            import_postman_to_workspace(routes, "Test Workspace".to_string(), config).unwrap();
 
         assert_eq!(result.workspace.name, "Test Workspace");
         assert_eq!(result.request_count, 2);

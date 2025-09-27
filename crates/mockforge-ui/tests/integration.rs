@@ -2,31 +2,23 @@
  * Integration tests for backend API endpoints
  * Tests the Rust backend API responses and error handling
  */
-
 use axum::{body::Body, http::Request};
-use tower::ServiceExt;
 use mockforge_ui::create_admin_router;
 use serde_json::json;
+use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_dashboard_endpoint_integration() {
     let app = create_admin_router(None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/dashboard")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/dashboard").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
 
     // Parse the JSON response
@@ -74,9 +66,7 @@ async fn test_logs_endpoint_with_filters() {
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -89,20 +79,13 @@ async fn test_metrics_endpoint() {
     let app = create_admin_router(None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/metrics")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/metrics").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -121,20 +104,13 @@ async fn test_configuration_endpoints() {
 
     // Test GET config
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/config")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/config").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -178,9 +154,7 @@ async fn test_latency_configuration_update() {
     // Should succeed (200) or be a client error (400), but not a server error (500)
     assert!(!response.status().is_server_error());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -215,9 +189,7 @@ async fn test_fault_injection_update() {
 
     assert!(!response.status().is_server_error());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -251,9 +223,7 @@ async fn test_proxy_configuration_update() {
 
     assert!(!response.status().is_server_error());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -287,9 +257,7 @@ async fn test_validation_settings_update() {
 
     assert!(!response.status().is_server_error());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -301,20 +269,13 @@ async fn test_fixtures_endpoint() {
     let app = create_admin_router(None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/fixtures")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/fixtures").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -327,20 +288,13 @@ async fn test_environment_variables_endpoint() {
     let app = create_admin_router(None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/env")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/env").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -367,9 +321,7 @@ async fn test_server_restart_endpoint() {
     // Should not be a server error
     assert!(!response.status().is_server_error());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -394,9 +346,7 @@ async fn test_logs_clear_endpoint() {
     // Should not be a server error
     assert!(!response.status().is_server_error());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -408,20 +358,13 @@ async fn test_health_endpoint() {
     let app = create_admin_router(None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/health")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/health").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert!(response.status().is_success());
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
@@ -455,12 +398,7 @@ async fn test_error_responses() {
     // Test non-existent endpoint
     let app2 = create_admin_router(None, None, None, true);
     let response = app2
-        .oneshot(
-            Request::builder()
-                .uri("/__mockforge/nonexistent")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/__mockforge/nonexistent").body(Body::empty()).unwrap())
         .await
         .unwrap();
 

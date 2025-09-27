@@ -4,8 +4,8 @@
 //! through the HTTP API.
 
 use axum::extract::{Path, State};
-use axum::{Json, http::StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::{http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -103,9 +103,7 @@ pub struct ChainExecutionRecord {
 }
 
 // GET /chains - List all chains
-pub async fn list_chains(
-    State(state): State<ChainState>,
-) -> impl IntoResponse {
+pub async fn list_chains(State(state): State<ChainState>) -> impl IntoResponse {
     let chain_ids = state.registry.list_chains().await;
     let mut chains = Vec::new();
 
@@ -123,17 +121,11 @@ pub async fn list_chains(
     }
 
     let total = chains.len();
-    Json(ChainListResponse {
-        chains,
-        total,
-    })
+    Json(ChainListResponse { chains, total })
 }
 
 // GET /chains/:id - Get a specific chain
-pub async fn get_chain(
-    Path(chain_id): Path<String>,
-    State(state): State<ChainState>,
-) -> Response {
+pub async fn get_chain(Path(chain_id): Path<String>, State(state): State<ChainState>) -> Response {
     match state.registry.get_chain(&chain_id).await {
         Some(chain) => Json(chain).into_response(),
         None => (StatusCode::NOT_FOUND, format!("Chain '{}' not found", chain_id)).into_response(),
@@ -149,8 +141,11 @@ pub async fn create_chain(
         Ok(id) => Json(ChainCreateResponse {
             id: id.clone(),
             message: format!("Chain '{}' created successfully", id),
-        }).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, format!("Failed to create chain: {}", e)).into_response(),
+        })
+        .into_response(),
+        Err(e) => {
+            (StatusCode::BAD_REQUEST, format!("Failed to create chain: {}", e)).into_response()
+        }
     }
 }
 
@@ -169,14 +164,18 @@ pub async fn update_chain(
     match state.registry.register_from_yaml(&request.definition).await {
         Ok(new_id) => {
             if new_id != chain_id {
-                return (StatusCode::BAD_REQUEST, "Chain ID mismatch in update".to_string()).into_response();
+                return (StatusCode::BAD_REQUEST, "Chain ID mismatch in update".to_string())
+                    .into_response();
             }
             Json(serde_json::json!({
                 "id": new_id,
                 "message": "Chain updated successfully"
-            })).into_response()
+            }))
+            .into_response()
         }
-        Err(e) => (StatusCode::BAD_REQUEST, format!("Failed to update chain: {}", e)).into_response(),
+        Err(e) => {
+            (StatusCode::BAD_REQUEST, format!("Failed to update chain: {}", e)).into_response()
+        }
     }
 }
 
@@ -189,8 +188,10 @@ pub async fn delete_chain(
         Ok(_) => Json(serde_json::json!({
             "id": chain_id,
             "message": "Chain deleted successfully"
-        })).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to delete chain: {}", e)).into_response(),
+        }))
+        .into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to delete chain: {}", e))
+            .into_response(),
     }
 }
 
@@ -204,15 +205,23 @@ pub async fn execute_chain(
         Ok(result) => Json(ChainExecutionResponse {
             chain_id: result.chain_id,
             status: match result.status {
-                mockforge_core::chain_execution::ChainExecutionStatus::Successful => "successful".to_string(),
-                mockforge_core::chain_execution::ChainExecutionStatus::PartialSuccess => "partial_success".to_string(),
-                mockforge_core::chain_execution::ChainExecutionStatus::Failed => "failed".to_string(),
+                mockforge_core::chain_execution::ChainExecutionStatus::Successful => {
+                    "successful".to_string()
+                }
+                mockforge_core::chain_execution::ChainExecutionStatus::PartialSuccess => {
+                    "partial_success".to_string()
+                }
+                mockforge_core::chain_execution::ChainExecutionStatus::Failed => {
+                    "failed".to_string()
+                }
             },
             total_duration_ms: result.total_duration_ms,
             request_results: Some(serde_json::to_value(result.request_results).unwrap_or_default()),
             error_message: result.error_message,
-        }).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to execute chain: {}", e)).into_response(),
+        })
+        .into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to execute chain: {}", e))
+            .into_response(),
     }
 }
 
@@ -228,12 +237,14 @@ pub async fn validate_chain(
                     valid: true,
                     errors: vec![],
                     warnings: vec![], // Could add warnings for potential issues
-                }).into_response(),
+                })
+                .into_response(),
                 Err(e) => Json(ChainValidationResponse {
                     valid: false,
                     errors: vec![e.to_string()],
                     warnings: vec![],
-                }).into_response(),
+                })
+                .into_response(),
             }
         }
         None => (StatusCode::NOT_FOUND, format!("Chain '{}' not found", chain_id)).into_response(),
@@ -257,9 +268,15 @@ pub async fn get_chain_history(
         .map(|record| ChainExecutionRecord {
             executed_at: record.executed_at,
             status: match record.result.status {
-                mockforge_core::chain_execution::ChainExecutionStatus::Successful => "successful".to_string(),
-                mockforge_core::chain_execution::ChainExecutionStatus::PartialSuccess => "partial_success".to_string(),
-                mockforge_core::chain_execution::ChainExecutionStatus::Failed => "failed".to_string(),
+                mockforge_core::chain_execution::ChainExecutionStatus::Successful => {
+                    "successful".to_string()
+                }
+                mockforge_core::chain_execution::ChainExecutionStatus::PartialSuccess => {
+                    "partial_success".to_string()
+                }
+                mockforge_core::chain_execution::ChainExecutionStatus::Failed => {
+                    "failed".to_string()
+                }
             },
             total_duration_ms: record.result.total_duration_ms,
             request_count: record.result.request_results.len(),
@@ -273,7 +290,8 @@ pub async fn get_chain_history(
         chain_id,
         executions,
         total,
-    }).into_response()
+    })
+    .into_response()
 }
 
 #[cfg(test)]

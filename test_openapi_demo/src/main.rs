@@ -1,5 +1,5 @@
 use mockforge_core::import::openapi_command_generator::{
-    generate_commands_from_openapi, CommandGenerationOptions, CommandFormat
+    generate_commands_from_openapi, CommandFormat, CommandGenerationOptions,
 };
 use std::collections::HashMap;
 

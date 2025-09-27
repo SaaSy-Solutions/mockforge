@@ -1,6 +1,6 @@
 //! HTTP client for proxy operations
 
-use crate::{Result, Error};
+use crate::{Error, Result};
 use std::collections::HashMap;
 
 /// HTTP client for making proxy requests

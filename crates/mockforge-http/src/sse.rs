@@ -72,7 +72,8 @@ impl SSEStreamManager {
     pub fn default_config() -> SSEConfig {
         SSEConfig {
             event_type: Some("message".to_string()),
-            data_template: r#"{"message": "{{faker.sentence}}", "timestamp": "{{now}}"}"#.to_string(),
+            data_template: r#"{"message": "{{faker.sentence}}", "timestamp": "{{now}}"}"#
+                .to_string(),
             interval_ms: 1000,
             max_events: 0, // unlimited
             initial_delay_ms: 0,
@@ -128,7 +129,8 @@ impl SSEStreamManager {
                 }
 
                 // Set event data
-                let data_json = serde_json::to_string(&event_data).unwrap_or_else(|_| "{}".to_string());
+                let data_json =
+                    serde_json::to_string(&event_data).unwrap_or_else(|_| "{}".to_string());
                 event = event.data(data_json);
 
                 // Add event ID
@@ -189,9 +191,7 @@ pub fn sse_router() -> Router {
 /// Create SSE router with custom configuration
 pub fn sse_router_with_config(config: SSEConfig) -> Router {
     let manager = SSEStreamManager::new(config);
-    Router::new()
-        .route("/sse", get(sse_handler))
-        .with_state(manager)
+    Router::new().route("/sse", get(sse_handler)).with_state(manager)
 }
 
 /// SSE handler

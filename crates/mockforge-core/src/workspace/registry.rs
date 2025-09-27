@@ -3,13 +3,13 @@
 //! This module provides the WorkspaceRegistry for managing multiple workspaces,
 //! including loading, saving, and organizing workspaces.
 
-use crate::workspace::core::{EntityId, Workspace, Folder, MockRequest, Environment};
-use crate::workspace::request::RequestProcessor;
 use crate::routing::RouteRegistry;
+use crate::workspace::core::{EntityId, Environment, Folder, MockRequest, Workspace};
+use crate::workspace::request::RequestProcessor;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use chrono::{DateTime, Utc};
 
 /// Workspace registry for managing multiple workspaces
 #[derive(Debug, Clone)]
@@ -154,16 +154,12 @@ impl WorkspaceRegistry {
 
     /// Get the active workspace
     pub fn get_active_workspace(&self) -> Option<&Workspace> {
-        self.active_workspace_id
-            .as_ref()
-            .and_then(|id| self.workspaces.get(id))
+        self.active_workspace_id.as_ref().and_then(|id| self.workspaces.get(id))
     }
 
     /// Get the active workspace mutably
     pub fn get_active_workspace_mut(&mut self) -> Option<&mut Workspace> {
-        self.active_workspace_id
-            .as_ref()
-            .and_then(|id| self.workspaces.get_mut(id))
+        self.active_workspace_id.as_ref().and_then(|id| self.workspaces.get_mut(id))
     }
 
     /// Add an environment to the registry
@@ -198,15 +194,13 @@ impl WorkspaceRegistry {
 
     /// Get workspace statistics
     pub fn get_stats(&self) -> WorkspaceStats {
-        let total_folders = self.workspaces.values()
-            .map(|w| w.folders.len())
-            .sum::<usize>();
+        let total_folders = self.workspaces.values().map(|w| w.folders.len()).sum::<usize>();
 
-        let total_requests = self.workspaces.values()
-            .map(|w| w.requests.len())
-            .sum::<usize>();
+        let total_requests = self.workspaces.values().map(|w| w.requests.len()).sum::<usize>();
 
-        let total_responses = self.workspaces.values()
+        let total_responses = self
+            .workspaces
+            .values()
             .map(|w| w.requests.iter().map(|r| r.responses.len()).sum::<usize>())
             .sum::<usize>();
 
@@ -230,7 +224,9 @@ impl WorkspaceRegistry {
                 for request in &workspace.requests {
                     if request.enabled {
                         if let Some(_response) = request.active_response() {
-                            if let Ok(route) = self.request_processor.create_route_from_request(request) {
+                            if let Ok(route) =
+                                self.request_processor.create_route_from_request(request)
+                            {
                                 let _ = route_registry.add_route(route);
                             }
                         }
@@ -254,7 +250,8 @@ impl WorkspaceRegistry {
             for request in &folder.requests {
                 if request.enabled {
                     if let Some(_response) = request.active_response() {
-                        if let Ok(route) = self.request_processor.create_route_from_request(request) {
+                        if let Ok(route) = self.request_processor.create_route_from_request(request)
+                        {
                             let _ = route_registry.add_route(route);
                         }
                     }
@@ -294,7 +291,11 @@ impl WorkspaceRegistry {
     }
 
     /// Find a request in a folder hierarchy
-    fn find_request_in_folder<'a>(&self, folders: &'a [Folder], request_id: &EntityId) -> Option<&'a MockRequest> {
+    fn find_request_in_folder<'a>(
+        &self,
+        folders: &'a [Folder],
+        request_id: &EntityId,
+    ) -> Option<&'a MockRequest> {
         for folder in folders {
             // Check folder requests
             if let Some(request) = folder.requests.iter().find(|r| &r.id == request_id) {
@@ -322,7 +323,11 @@ impl WorkspaceRegistry {
     }
 
     /// Find a folder in a workspace hierarchy
-    fn find_folder_in_workspace<'a>(&self, folders: &'a [Folder], folder_id: &EntityId) -> Option<&'a Folder> {
+    fn find_folder_in_workspace<'a>(
+        &self,
+        folders: &'a [Folder],
+        folder_id: &EntityId,
+    ) -> Option<&'a Folder> {
         for folder in folders {
             if &folder.id == folder_id {
                 return Some(folder);
@@ -364,7 +369,13 @@ impl WorkspaceRegistry {
             for request in &workspace.requests {
                 if request.name.to_lowercase().contains(&query_lower)
                     || request.url.to_lowercase().contains(&query_lower)
-                    || request.description.as_ref().map(|d| d.to_lowercase()).unwrap_or_default().contains(&query_lower) {
+                    || request
+                        .description
+                        .as_ref()
+                        .map(|d| d.to_lowercase())
+                        .unwrap_or_default()
+                        .contains(&query_lower)
+                {
                     results.push(request);
                 }
             }
@@ -388,7 +399,13 @@ impl WorkspaceRegistry {
             for request in &folder.requests {
                 if request.name.to_lowercase().contains(query)
                     || request.url.to_lowercase().contains(query)
-                    || request.description.as_ref().map(|d| d.to_lowercase()).unwrap_or_default().contains(query) {
+                    || request
+                        .description
+                        .as_ref()
+                        .map(|d| d.to_lowercase())
+                        .unwrap_or_default()
+                        .contains(query)
+                {
                     results.push(request);
                 }
             }

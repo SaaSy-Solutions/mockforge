@@ -213,6 +213,12 @@ pub struct DashboardData {
     pub system_info: DashboardSystemInfo,
     /// Metrics data
     pub metrics: SimpleMetricsData,
+    /// Server status information
+    pub servers: Vec<ServerStatus>,
+    /// Recent logs
+    pub recent_logs: Vec<RequestLog>,
+    /// System information (for JS compatibility)
+    pub system: SystemInfo,
 }
 
 /// API response wrapper
@@ -678,7 +684,9 @@ impl From<mockforge_core::workspace::SyncDirection> for SyncDirection {
     fn from(core: mockforge_core::workspace::SyncDirection) -> Self {
         match core {
             mockforge_core::workspace::SyncDirection::Manual => Self::Manual,
-            mockforge_core::workspace::SyncDirection::WorkspaceToDirectory => Self::WorkspaceToDirectory,
+            mockforge_core::workspace::SyncDirection::WorkspaceToDirectory => {
+                Self::WorkspaceToDirectory
+            }
             mockforge_core::workspace::SyncDirection::Bidirectional => Self::Bidirectional,
         }
     }
@@ -959,8 +967,6 @@ pub struct InsomniaImportResult {
     /// Import warnings
     pub warnings: Vec<String>,
 }
-
-
 
 /// Server information
 #[derive(Debug, Clone, Serialize, Deserialize)]

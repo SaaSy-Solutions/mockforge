@@ -81,87 +81,121 @@ pub enum EncryptionError {
 impl EncryptionError {
     /// Create a new invalid key error
     pub fn invalid_key(message: impl Into<String>) -> Self {
-        Self::InvalidKey { message: message.into() }
+        Self::InvalidKey {
+            message: message.into(),
+        }
     }
 
     /// Create a new invalid nonce error
     pub fn invalid_nonce(message: impl Into<String>) -> Self {
-        Self::InvalidNonce { message: message.into() }
+        Self::InvalidNonce {
+            message: message.into(),
+        }
     }
 
     /// Create a new authentication failed error
     pub fn authentication_failed(message: impl Into<String>) -> Self {
-        Self::AuthenticationFailed { message: message.into() }
+        Self::AuthenticationFailed {
+            message: message.into(),
+        }
     }
 
     /// Create a new invalid ciphertext error
     pub fn invalid_ciphertext(message: impl Into<String>) -> Self {
-        Self::InvalidCiphertext { message: message.into() }
+        Self::InvalidCiphertext {
+            message: message.into(),
+        }
     }
 
     /// Create a new key derivation failed error
     pub fn key_derivation_failed(message: impl Into<String>) -> Self {
-        Self::KeyDerivationFailed { message: message.into() }
+        Self::KeyDerivationFailed {
+            message: message.into(),
+        }
     }
 
     /// Create a new key not found error
     pub fn key_not_found(key_id: impl Into<String>) -> Self {
-        Self::KeyNotFound { key_id: key_id.into() }
+        Self::KeyNotFound {
+            key_id: key_id.into(),
+        }
     }
 
     /// Create a new access denied error
     pub fn access_denied(message: impl Into<String>) -> Self {
-        Self::AccessDenied { message: message.into() }
+        Self::AccessDenied {
+            message: message.into(),
+        }
     }
 
     /// Create a new key store error
     pub fn key_store_error(message: impl Into<String>) -> Self {
-        Self::KeyStoreError { message: message.into() }
+        Self::KeyStoreError {
+            message: message.into(),
+        }
     }
 
     /// Create a new random generation failed error
     pub fn random_generation_failed(message: impl Into<String>) -> Self {
-        Self::RandomGenerationFailed { message: message.into() }
+        Self::RandomGenerationFailed {
+            message: message.into(),
+        }
     }
 
     /// Create a new invalid algorithm error
     pub fn invalid_algorithm(message: impl Into<String>) -> Self {
-        Self::InvalidAlgorithm { message: message.into() }
+        Self::InvalidAlgorithm {
+            message: message.into(),
+        }
     }
 
     /// Create a new cipher operation failed error
     pub fn cipher_operation_failed(message: impl Into<String>) -> Self {
-        Self::CipherOperationFailed { message: message.into() }
+        Self::CipherOperationFailed {
+            message: message.into(),
+        }
     }
 
     /// Create a new base64 error
     pub fn base64_error(message: impl Into<String>) -> Self {
-        Self::Base64Error { message: message.into() }
+        Self::Base64Error {
+            message: message.into(),
+        }
     }
 
     /// Create a new serialization error
     pub fn serialization_error(message: impl Into<String>) -> Self {
-        Self::SerializationError { message: message.into() }
+        Self::SerializationError {
+            message: message.into(),
+        }
     }
 
     /// Create a new template error
     pub fn template_error(message: impl Into<String>) -> Self {
-        Self::TemplateError { message: message.into() }
+        Self::TemplateError {
+            message: message.into(),
+        }
     }
 
     /// Create a new auto-encryption config error
     pub fn auto_encryption_config_error(message: impl Into<String>) -> Self {
-        Self::AutoEncryptionConfigError { message: message.into() }
+        Self::AutoEncryptionConfigError {
+            message: message.into(),
+        }
     }
 
     /// Create a new workspace encryption error
     pub fn workspace_encryption_error(message: impl Into<String>) -> Self {
-        Self::WorkspaceEncryptionError { message: message.into() }
+        Self::WorkspaceEncryptionError {
+            message: message.into(),
+        }
     }
 
     /// Create a new generic error
     pub fn generic(message: impl Into<String>) -> Self {
-        Self::Generic { message: message.into() }
+        Self::Generic {
+            message: message.into(),
+        }
     }
 
     /// Check if this is a recoverable error
@@ -191,8 +225,9 @@ impl EncryptionError {
     /// Get error severity level
     pub fn severity(&self) -> ErrorSeverity {
         match self {
-            Self::AuthenticationFailed { .. }
-            | Self::AccessDenied { .. } => ErrorSeverity::Critical,
+            Self::AuthenticationFailed { .. } | Self::AccessDenied { .. } => {
+                ErrorSeverity::Critical
+            }
 
             Self::InvalidKey { .. }
             | Self::InvalidNonce { .. }
@@ -276,10 +311,7 @@ impl fmt::Display for ContextualError {
         write!(
             f,
             "Encryption error in {} at {}: {} (context: {:?})",
-            self.context.operation,
-            self.context.timestamp,
-            self.error,
-            self.context.context
+            self.context.operation, self.context.timestamp, self.error, self.context.context
         )
     }
 }
@@ -319,13 +351,15 @@ impl EncryptionError {
 
             Self::KeyStoreError { .. } | Self::KeyDerivationFailed { .. } => {
                 ErrorRecoveryStrategy::ManualIntervention
-            },
+            }
 
             Self::AuthenticationFailed { .. } | Self::AccessDenied { .. } => {
                 ErrorRecoveryStrategy::FailFast
-            },
+            }
 
-            Self::InvalidKey { .. } | Self::InvalidNonce { .. } => ErrorRecoveryStrategy::FallbackMethod,
+            Self::InvalidKey { .. } | Self::InvalidNonce { .. } => {
+                ErrorRecoveryStrategy::FallbackMethod
+            }
 
             _ => ErrorRecoveryStrategy::RetryWithBackoff {
                 max_attempts: 2,
@@ -336,7 +370,10 @@ impl EncryptionError {
 
     /// Convert to contextual error
     pub fn with_context(self, context: ErrorContext) -> ContextualError {
-        ContextualError { error: self, context }
+        ContextualError {
+            error: self,
+            context,
+        }
     }
 }
 

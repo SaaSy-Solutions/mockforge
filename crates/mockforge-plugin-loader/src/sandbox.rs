@@ -5,14 +5,14 @@
 
 use super::*;
 use mockforge_plugin_core::{
-    PluginCapabilities, PluginId, PluginState, PluginHealth, PluginMetrics,
-    PluginContext, PluginResult
+    PluginCapabilities, PluginContext, PluginHealth, PluginId, PluginMetrics, PluginResult,
+    PluginState,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use wasmtime::{Engine, Linker, Module, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
+use wasmtime_wasi::p2::{WasiCtx, WasiCtxBuilder};
 
 /// Plugin sandbox for secure execution
 pub struct PluginSandbox {
@@ -38,7 +38,10 @@ impl PluginSandbox {
     }
 
     /// Create a plugin instance in the sandbox
-    pub async fn create_plugin_instance(&self, context: &PluginLoadContext) -> LoaderResult<PluginInstance> {
+    pub async fn create_plugin_instance(
+        &self,
+        context: &PluginLoadContext,
+    ) -> LoaderResult<PluginInstance> {
         let plugin_id = &context.plugin_id;
 
         // Check if sandbox already exists
@@ -62,10 +65,8 @@ impl PluginSandbox {
         sandboxes.insert(plugin_id.clone(), sandbox);
 
         // Create core plugin instance
-        let mut core_instance = mockforge_plugin_core::PluginInstance::new(
-            plugin_id.clone(),
-            context.manifest.clone(),
-        );
+        let mut core_instance =
+            mockforge_plugin_core::PluginInstance::new(plugin_id.clone(), context.manifest.clone());
         core_instance.set_state(PluginState::Ready);
 
         Ok(core_instance)
@@ -80,7 +81,8 @@ impl PluginSandbox {
         input: &[u8],
     ) -> LoaderResult<PluginResult<serde_json::Value>> {
         let mut sandboxes = self.active_sandboxes.write().await;
-        let sandbox = sandboxes.get_mut(plugin_id)
+        let sandbox = sandboxes
+            .get_mut(plugin_id)
             .ok_or_else(|| PluginLoaderError::not_found(plugin_id.clone()))?;
 
         sandbox.execute_function(function_name, context, input).await
@@ -89,7 +91,8 @@ impl PluginSandbox {
     /// Get plugin health from sandbox
     pub async fn get_plugin_health(&self, plugin_id: &PluginId) -> LoaderResult<PluginHealth> {
         let sandboxes = self.active_sandboxes.read().await;
-        let sandbox = sandboxes.get(plugin_id)
+        let sandbox = sandboxes
+            .get(plugin_id)
             .ok_or_else(|| PluginLoaderError::not_found(plugin_id.clone()))?;
 
         Ok(sandbox.get_health().await)
@@ -111,9 +114,13 @@ impl PluginSandbox {
     }
 
     /// Get sandbox resource usage
-    pub async fn get_sandbox_resources(&self, plugin_id: &PluginId) -> LoaderResult<SandboxResources> {
+    pub async fn get_sandbox_resources(
+        &self,
+        plugin_id: &PluginId,
+    ) -> LoaderResult<SandboxResources> {
         let sandboxes = self.active_sandboxes.read().await;
-        let sandbox = sandboxes.get(plugin_id)
+        let sandbox = sandboxes
+            .get(plugin_id)
             .ok_or_else(|| PluginLoaderError::not_found(plugin_id.clone()))?;
 
         Ok(sandbox.get_resources().await)
@@ -122,7 +129,8 @@ impl PluginSandbox {
     /// Check sandbox health
     pub async fn check_sandbox_health(&self, plugin_id: &PluginId) -> LoaderResult<SandboxHealth> {
         let sandboxes = self.active_sandboxes.read().await;
-        let sandbox = sandboxes.get(plugin_id)
+        let sandbox = sandboxes
+            .get(plugin_id)
             .ok_or_else(|| PluginLoaderError::not_found(plugin_id.clone()))?;
 
         Ok(sandbox.check_health().await)
@@ -157,10 +165,7 @@ impl SandboxInstance {
             .map_err(|e| PluginLoaderError::wasm(format!("Failed to load WASM module: {}", e)))?;
 
         // Create WASI context
-        let wasi_ctx = WasiCtxBuilder::new()
-            .inherit_stderr()
-            .inherit_stdout()
-            .build();
+        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
 
         // Create WebAssembly store
         let mut store = Store::new(engine, wasi_ctx);
@@ -173,7 +178,8 @@ impl SandboxInstance {
         // This is a non-critical feature for the main MockForge functionality
 
         // Instantiate the module
-        linker.instantiate(&mut store, &module)
+        linker
+            .instantiate(&mut store, &module)
             .map_err(|e| PluginLoaderError::wasm(format!("Failed to instantiate module: {}", e)))?;
 
         // Set up execution limits
@@ -196,14 +202,10 @@ impl SandboxInstance {
         let plugin_id = &context.plugin_id;
 
         // Create dummy values for when WebAssembly is disabled
-        let module = Module::new(&Engine::default(), []).map_err(|e| {
-            PluginLoaderError::wasm(format!("Failed to create stub module: {}", e))
-        })?;
+        let module = Module::new(&Engine::default(), [])
+            .map_err(|e| PluginLoaderError::wasm(format!("Failed to create stub module: {}", e)))?;
 
-        let wasi_ctx = WasiCtxBuilder::new()
-            .inherit_stderr()
-            .inherit_stdout()
-            .build();
+        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
 
         let store = Store::new(&Engine::default(), wasi_ctx);
         let linker = Linker::new(&Engine::default());
@@ -235,28 +237,31 @@ impl SandboxInstance {
 
         // Check execution limits
         if self.resources.execution_count > self.limits.max_executions {
-            return Err(PluginLoaderError::resource_limit(
-                format!("Maximum executions exceeded: {} allowed, {} used",
-                    self.limits.max_executions, self.resources.execution_count)
-            ));
+            return Err(PluginLoaderError::resource_limit(format!(
+                "Maximum executions exceeded: {} allowed, {} used",
+                self.limits.max_executions, self.resources.execution_count
+            )));
         }
 
         // Check time limits
         let time_since_last = chrono::Utc::now().signed_duration_since(self.resources.created_at);
-        let time_since_last_std = std::time::Duration::from_secs(time_since_last.num_seconds() as u64);
+        let time_since_last_std =
+            std::time::Duration::from_secs(time_since_last.num_seconds() as u64);
         if time_since_last_std > self.limits.max_lifetime {
-            return Err(PluginLoaderError::resource_limit(
-                format!("Maximum lifetime exceeded: {}s allowed, {}s used",
-                    self.limits.max_lifetime.as_secs(), time_since_last_std.as_secs())
-            ));
+            return Err(PluginLoaderError::resource_limit(format!(
+                "Maximum lifetime exceeded: {}s allowed, {}s used",
+                self.limits.max_lifetime.as_secs(),
+                time_since_last_std.as_secs()
+            )));
         }
 
         // Prepare function call
         let start_time = std::time::Instant::now();
 
         // Get function from linker
-        let _func = self.linker.get(&mut self.store, "", function_name)
-            .ok_or_else(|| PluginLoaderError::execution(format!("Function '{}' not found", function_name)))?;
+        let _func = self.linker.get(&mut self.store, "", function_name).ok_or_else(|| {
+            PluginLoaderError::execution(format!("Function '{}' not found", function_name))
+        })?;
 
         // Execute function (simplified - real implementation would handle WASM calling conventions)
         let result = self.call_wasm_function(function_name, context, input).await;
@@ -295,9 +300,12 @@ impl SandboxInstance {
         let combined_input = format!("{}\n{}", context_json, String::from_utf8_lossy(input));
 
         // Get the exported function from the linker
-        let func_extern = self.linker.get(&mut self.store, "", function_name)
+        let func_extern = self
+            .linker
+            .get(&mut self.store, "", function_name)
             .ok_or_else(|| format!("Function '{}' not found in WASM module", function_name))?;
-        let func = func_extern.into_func()
+        let func = func_extern
+            .into_func()
             .ok_or_else(|| format!("Export '{}' is not a function", function_name))?;
 
         // Allocate memory in WASM for the input string
@@ -305,13 +313,16 @@ impl SandboxInstance {
         let input_len = input_bytes.len() as i32;
 
         // Get alloc function
-        let alloc_extern = self.linker.get(&mut self.store, "", "alloc")
-            .ok_or_else(|| "WASM module must export an 'alloc' function for memory allocation".to_string())?;
-        let alloc_func = alloc_extern.into_func()
+        let alloc_extern = self.linker.get(&mut self.store, "", "alloc").ok_or_else(|| {
+            "WASM module must export an 'alloc' function for memory allocation".to_string()
+        })?;
+        let alloc_func = alloc_extern
+            .into_func()
             .ok_or_else(|| "Export 'alloc' is not a function".to_string())?;
 
         let mut alloc_result = [wasmtime::Val::I32(0)];
-        alloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
+        alloc_func
+            .call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
             .map_err(|e| format!("Failed to allocate memory for input: {}", e))?;
 
         let input_ptr = match alloc_result[0] {
@@ -320,40 +331,70 @@ impl SandboxInstance {
         };
 
         // Write the input string to WASM memory
-        let memory_extern = self.linker.get(&mut self.store, "", "memory")
+        let memory_extern = self
+            .linker
+            .get(&mut self.store, "", "memory")
             .ok_or_else(|| "WASM module must export a 'memory'".to_string())?;
-        let memory = memory_extern.into_memory()
+        let memory = memory_extern
+            .into_memory()
             .ok_or_else(|| "Export 'memory' is not a memory".to_string())?;
 
-        memory.write(&mut self.store, input_ptr as usize, input_bytes)
+        memory
+            .write(&mut self.store, input_ptr as usize, input_bytes)
             .map_err(|e| format!("Failed to write input to WASM memory: {}", e))?;
 
         // Call the plugin function with the input pointer and length
         let mut func_result = [wasmtime::Val::I32(0), wasmtime::Val::I32(0)];
-        func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut func_result)
-            .map_err(|e| format!("Failed to call WASM function '{}': {}", function_name, e))?;
+        func.call(
+            &mut self.store,
+            &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)],
+            &mut func_result,
+        )
+        .map_err(|e| format!("Failed to call WASM function '{}': {}", function_name, e))?;
 
         // Extract the return values (assuming the function returns (ptr, len))
         let output_ptr = match func_result[0] {
             wasmtime::Val::I32(ptr) => ptr,
-            _ => return Err(format!("Function '{}' did not return a valid output pointer", function_name)),
+            _ => {
+                return Err(format!(
+                    "Function '{}' did not return a valid output pointer",
+                    function_name
+                ))
+            }
         };
 
         let output_len = match func_result[1] {
             wasmtime::Val::I32(len) => len,
-            _ => return Err(format!("Function '{}' did not return a valid output length", function_name)),
+            _ => {
+                return Err(format!(
+                    "Function '{}' did not return a valid output length",
+                    function_name
+                ))
+            }
         };
 
         // Read the output from WASM memory
         let mut output_bytes = vec![0u8; output_len as usize];
-        memory.read(&mut self.store, output_ptr as usize, &mut output_bytes)
+        memory
+            .read(&mut self.store, output_ptr as usize, &mut output_bytes)
             .map_err(|e| format!("Failed to read output from WASM memory: {}", e))?;
 
         // Deallocate the memory if there's a dealloc function
         if let Some(dealloc_extern) = self.linker.get(&mut self.store, "", "dealloc") {
             if let Some(dealloc_func) = dealloc_extern.into_func() {
-                let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut []);
-                let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(output_ptr), wasmtime::Val::I32(output_len)], &mut []);
+                let _ = dealloc_func.call(
+                    &mut self.store,
+                    &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)],
+                    &mut [],
+                );
+                let _ = dealloc_func.call(
+                    &mut self.store,
+                    &[
+                        wasmtime::Val::I32(output_ptr),
+                        wasmtime::Val::I32(output_len),
+                    ],
+                    &mut [],
+                );
             }
         }
 
@@ -497,7 +538,11 @@ impl SandboxHealth {
     /// Add health check result
     pub fn add_check(&mut self, check: HealthCheck) {
         let failed = !check.passed;
-        let error_message = if failed { Some(check.message.clone()) } else { None };
+        let error_message = if failed {
+            Some(check.message.clone())
+        } else {
+            None
+        };
 
         self.checks.push(check);
         self.last_check = chrono::Utc::now();
@@ -603,8 +648,8 @@ impl Default for ExecutionLimits {
         Self {
             max_executions: 1000,
             max_total_time: std::time::Duration::from_secs(300), // 5 minutes
-            max_lifetime: std::time::Duration::from_secs(3600), // 1 hour
-            max_memory_bytes: 10 * 1024 * 1024, // 10MB
+            max_lifetime: std::time::Duration::from_secs(3600),  // 1 hour
+            max_memory_bytes: 10 * 1024 * 1024,                  // 10MB
             max_cpu_time_per_execution: std::time::Duration::from_secs(5),
         }
     }
@@ -619,7 +664,7 @@ impl ExecutionLimits {
             max_lifetime: std::time::Duration::from_secs(86400), // 24 hours
             max_memory_bytes: capabilities.resources.max_memory_bytes,
             max_cpu_time_per_execution: std::time::Duration::from_millis(
-                (capabilities.resources.max_cpu_percent * 1000.0) as u64
+                (capabilities.resources.max_cpu_percent * 1000.0) as u64,
             ),
         }
     }

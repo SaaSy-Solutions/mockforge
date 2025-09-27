@@ -51,7 +51,10 @@ impl OpenApiSpec {
                 .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
         };
 
-        Ok(Self { spec, file_path: None })
+        Ok(Self {
+            spec,
+            file_path: None,
+        })
     }
 
     /// Load OpenAPI spec from JSON value
@@ -59,7 +62,10 @@ impl OpenApiSpec {
         let spec: OpenAPI = serde_json::from_value(json)
             .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
 
-        Ok(Self { spec, file_path: None })
+        Ok(Self {
+            spec,
+            file_path: None,
+        })
     }
 
     /// Validate the OpenAPI specification
@@ -112,17 +118,25 @@ impl OpenApiSpec {
     }
 
     /// Get all schemas defined in the spec
-    pub fn schemas(&self) -> Option<&indexmap::IndexMap<String, openapiv3::ReferenceOr<openapiv3::Schema>>> {
+    pub fn schemas(
+        &self,
+    ) -> Option<&indexmap::IndexMap<String, openapiv3::ReferenceOr<openapiv3::Schema>>> {
         self.spec.components.as_ref().map(|c| &c.schemas)
     }
 
     /// Get all security schemes defined in the spec
-    pub fn security_schemes(&self) -> Option<&indexmap::IndexMap<String, openapiv3::ReferenceOr<openapiv3::SecurityScheme>>> {
+    pub fn security_schemes(
+        &self,
+    ) -> Option<&indexmap::IndexMap<String, openapiv3::ReferenceOr<openapiv3::SecurityScheme>>>
+    {
         self.spec.components.as_ref().map(|c| &c.security_schemes)
     }
 
     /// Get all operations for a given path
-    pub fn operations_for_path(&self, path: &str) -> std::collections::HashMap<String, openapiv3::Operation> {
+    pub fn operations_for_path(
+        &self,
+        path: &str,
+    ) -> std::collections::HashMap<String, openapiv3::Operation> {
         let mut operations = std::collections::HashMap::new();
 
         if let Some(path_item_ref) = self.spec.paths.paths.get(path) {
@@ -159,7 +173,10 @@ impl OpenApiSpec {
     }
 
     /// Get all paths with their operations
-    pub fn all_paths_and_operations(&self) -> std::collections::HashMap<String, std::collections::HashMap<String, openapiv3::Operation>> {
+    pub fn all_paths_and_operations(
+        &self,
+    ) -> std::collections::HashMap<String, std::collections::HashMap<String, openapiv3::Operation>>
+    {
         self.spec
             .paths
             .paths
@@ -174,7 +191,9 @@ impl OpenApiSpec {
             if let Some(components) = &self.spec.components {
                 if let Some(schema) = components.schemas.get(schema_name) {
                     match schema {
-                        openapiv3::ReferenceOr::Item(schema) => Some(crate::openapi::schema::OpenApiSchema::new(schema.clone())),
+                        openapiv3::ReferenceOr::Item(schema) => {
+                            Some(crate::openapi::schema::OpenApiSchema::new(schema.clone()))
+                        }
                         openapiv3::ReferenceOr::Reference { .. } => {
                             // Recursive reference, for now return None
                             None
@@ -192,7 +211,12 @@ impl OpenApiSpec {
     }
 
     /// Validate security requirements
-    pub fn validate_security_requirements(&self, security_requirements: &[openapiv3::SecurityRequirement], auth_header: Option<&str>, api_key: Option<&str>) -> Result<()> {
+    pub fn validate_security_requirements(
+        &self,
+        security_requirements: &[openapiv3::SecurityRequirement],
+        auth_header: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<()> {
         if security_requirements.is_empty() {
             return Ok(());
         }
@@ -208,7 +232,12 @@ impl OpenApiSpec {
     }
 
     /// Check if a single security requirement is satisfied
-    fn is_security_requirement_satisfied(&self, requirement: &openapiv3::SecurityRequirement, auth_header: Option<&str>, api_key: Option<&str>) -> Result<bool> {
+    fn is_security_requirement_satisfied(
+        &self,
+        requirement: &openapiv3::SecurityRequirement,
+        auth_header: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<bool> {
         // All schemes in the requirement must be satisfied (AND)
         for (scheme_name, _scopes) in requirement {
             if !self.is_security_scheme_satisfied(scheme_name, auth_header, api_key)? {
@@ -219,7 +248,12 @@ impl OpenApiSpec {
     }
 
     /// Check if a security scheme is satisfied
-    fn is_security_scheme_satisfied(&self, scheme_name: &str, auth_header: Option<&str>, api_key: Option<&str>) -> Result<bool> {
+    fn is_security_scheme_satisfied(
+        &self,
+        scheme_name: &str,
+        auth_header: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<bool> {
         let security_schemes = match self.security_schemes() {
             Some(schemes) => schemes,
             None => return Ok(false),
@@ -227,40 +261,36 @@ impl OpenApiSpec {
 
         let scheme = match security_schemes.get(scheme_name) {
             Some(scheme) => scheme,
-            None => return Err(Error::generic(format!("Security scheme '{}' not found", scheme_name))),
+            None => {
+                return Err(Error::generic(format!("Security scheme '{}' not found", scheme_name)))
+            }
         };
 
         let scheme = match scheme {
             openapiv3::ReferenceOr::Item(s) => s,
-            openapiv3::ReferenceOr::Reference { .. } => return Err(Error::generic("Referenced security schemes not supported")),
+            openapiv3::ReferenceOr::Reference { .. } => {
+                return Err(Error::generic("Referenced security schemes not supported"))
+            }
         };
 
         match scheme {
             openapiv3::SecurityScheme::HTTP { scheme, .. } => {
                 match scheme.as_str() {
-                    "bearer" => {
-                        match auth_header {
-                            Some(header) if header.starts_with("Bearer ") => Ok(true),
-                            _ => Ok(false),
-                        }
-                    }
-                    "basic" => {
-                        match auth_header {
-                            Some(header) if header.starts_with("Basic ") => Ok(true),
-                            _ => Ok(false),
-                        }
-                    }
+                    "bearer" => match auth_header {
+                        Some(header) if header.starts_with("Bearer ") => Ok(true),
+                        _ => Ok(false),
+                    },
+                    "basic" => match auth_header {
+                        Some(header) if header.starts_with("Basic ") => Ok(true),
+                        _ => Ok(false),
+                    },
                     _ => Ok(false), // Unsupported scheme
                 }
             }
             openapiv3::SecurityScheme::APIKey { location, .. } => {
                 match location {
-                    openapiv3::APIKeyLocation::Header => {
-                        Ok(auth_header.is_some())
-                    }
-                    openapiv3::APIKeyLocation::Query => {
-                        Ok(api_key.is_some())
-                    }
+                    openapiv3::APIKeyLocation::Header => Ok(auth_header.is_some()),
+                    openapiv3::APIKeyLocation::Query => Ok(api_key.is_some()),
                     _ => Ok(false), // Cookie not supported
                 }
             }

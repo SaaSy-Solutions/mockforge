@@ -81,12 +81,14 @@ fn merge_at_path(doc: &mut Value, path: &str, value: &Value) -> anyhow::Result<(
             // Navigate deeper
             match current {
                 Value::Object(map) => {
-                    current = map.entry(decoded_segment).or_insert(Value::Object(serde_json::Map::new()));
+                    current =
+                        map.entry(decoded_segment).or_insert(Value::Object(serde_json::Map::new()));
                 }
                 _ => {
                     // Create nested structure
                     let mut new_obj = serde_json::Map::new();
-                    new_obj.insert(decoded_segment.to_string(), Value::Object(serde_json::Map::new()));
+                    new_obj
+                        .insert(decoded_segment.to_string(), Value::Object(serde_json::Map::new()));
                     *current = Value::Object(new_obj);
                     current = &mut current[decoded_segment];
                 }

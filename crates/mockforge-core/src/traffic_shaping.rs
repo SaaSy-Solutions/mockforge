@@ -29,7 +29,7 @@ impl Default for BandwidthConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            max_bytes_per_sec: 0, // Unlimited
+            max_bytes_per_sec: 0,              // Unlimited
             burst_capacity_bytes: 1024 * 1024, // 1MB burst capacity
             tag_overrides: HashMap::new(),
         }
@@ -92,10 +92,10 @@ impl Default for BurstLossConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            burst_probability: 0.1, // 10% chance of burst
-            burst_duration_ms: 5000, // 5 second bursts
+            burst_probability: 0.1,      // 10% chance of burst
+            burst_duration_ms: 5000,     // 5 second bursts
             loss_rate_during_burst: 0.5, // 50% loss during burst
-            recovery_time_ms: 30000, // 30 second recovery
+            recovery_time_ms: 30000,     // 30 second recovery
             tag_overrides: HashMap::new(),
         }
     }
@@ -103,7 +103,12 @@ impl Default for BurstLossConfig {
 
 impl BurstLossConfig {
     /// Create a new burst loss configuration
-    pub fn new(burst_probability: f64, burst_duration_ms: u64, loss_rate: f64, recovery_time_ms: u64) -> Self {
+    pub fn new(
+        burst_probability: f64,
+        burst_duration_ms: u64,
+        loss_rate: f64,
+        recovery_time_ms: u64,
+    ) -> Self {
         Self {
             enabled: true,
             burst_probability: burst_probability.clamp(0.0, 1.0),
@@ -280,15 +285,13 @@ impl BurstLossState {
 }
 
 /// Traffic shaping configuration combining all features
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub struct TrafficShapingConfig {
     /// Bandwidth throttling configuration
     pub bandwidth: BandwidthConfig,
     /// Burst loss configuration
     pub burst_loss: BurstLossConfig,
 }
-
 
 /// Main traffic shaper combining bandwidth throttling and burst loss
 #[derive(Debug, Clone)]
@@ -473,6 +476,9 @@ mod tests {
 
         assert_eq!(config.get_effective_limit(&[]), 1000);
         assert_eq!(config.get_effective_limit(&["high-priority".to_string()]), 5000);
-        assert_eq!(config.get_effective_limit(&["low-priority".to_string(), "high-priority".to_string()]), 5000);
+        assert_eq!(
+            config.get_effective_limit(&["low-priority".to_string(), "high-priority".to_string()]),
+            5000
+        );
     }
 }

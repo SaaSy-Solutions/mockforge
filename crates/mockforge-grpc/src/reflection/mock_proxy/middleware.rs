@@ -3,20 +3,20 @@
 //! This module provides middleware for processing gRPC requests,
 //! including request transformation, logging, and metrics collection.
 
+use crate::reflection::metrics::{record_error, record_success};
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
-use crate::reflection::metrics::{record_success, record_error};
-use tonic::{Code, Request, Status, metadata::{MetadataKey, MetadataValue, Ascii}};
-use tracing::{error, warn, debug};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use prost_reflect::{Kind, DynamicMessage, ReflectMessage};
+use prost_reflect::{DynamicMessage, Kind, ReflectMessage};
 use std::time::Instant;
+use tonic::{
+    metadata::{Ascii, MetadataKey, MetadataValue},
+    Code, Request, Status,
+};
+use tracing::{debug, error, warn};
 
 impl MockReflectionProxy {
     /// Apply request preprocessing middleware
-    pub async fn preprocess_request<T>(
-        &self,
-        request: &mut Request<T>,
-    ) -> Result<(), Status>
+    pub async fn preprocess_request<T>(&self, request: &mut Request<T>) -> Result<(), Status>
     where
         T: prost_reflect::ReflectMessage,
     {
@@ -37,8 +37,12 @@ impl MockReflectionProxy {
         // Validate request format
         let descriptor = request.get_ref().descriptor();
         let mut buf = Vec::new();
-        request.get_ref().encode(&mut buf).map_err(|e| Status::internal("Failed to encode request".to_string()))?;
-        let dynamic_message = DynamicMessage::decode(descriptor.clone(), &buf[..]).map_err(|e| Status::internal("Failed to decode request".to_string()))?;
+        request
+            .get_ref()
+            .encode(&mut buf)
+            .map_err(|e| Status::internal("Failed to encode request".to_string()))?;
+        let dynamic_message = DynamicMessage::decode(descriptor.clone(), &buf[..])
+            .map_err(|e| Status::internal("Failed to decode request".to_string()))?;
         if let Err(e) = self.validate_request_message(&dynamic_message) {
             return Err(Status::internal(format!("Request validation failed: {}", e)));
         }
@@ -46,9 +50,7 @@ impl MockReflectionProxy {
 
         // Apply request transformations
         // Add mock-specific request headers
-        request
-            .metadata_mut()
-            .insert("x-mockforge-processed", "true".parse().unwrap());
+        request.metadata_mut().insert("x-mockforge-processed", "true".parse().unwrap());
         request
             .metadata_mut()
             .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
@@ -59,12 +61,8 @@ impl MockReflectionProxy {
     }
 
     /// Apply request logging middleware
-    pub async fn log_request<T>(
-        &self,
-        request: &Request<T>,
-        service_name: &str,
-        method_name: &str,
-    ) where
+    pub async fn log_request<T>(&self, request: &Request<T>, service_name: &str, method_name: &str)
+    where
         T: prost_reflect::ReflectMessage,
     {
         let start_time = std::time::Instant::now();
@@ -115,9 +113,7 @@ impl MockReflectionProxy {
     ) -> Result<(), Status> {
         let start = Instant::now();
         // Add mock-specific response headers
-        response
-            .metadata_mut()
-            .insert("x-mockforge-processed", "true".parse().unwrap());
+        response.metadata_mut().insert("x-mockforge-processed", "true".parse().unwrap());
         response
             .metadata_mut()
             .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
@@ -165,7 +161,15 @@ impl MockReflectionProxy {
         // Apply body transformations if enabled
         if self.config.response_transform.enabled {
             if let Some(ref overrides) = self.config.response_transform.overrides {
-                match self.transform_dynamic_message(&response.get_ref().clone(), service_name, method_name, overrides).await {
+                match self
+                    .transform_dynamic_message(
+                        &response.get_ref().clone(),
+                        service_name,
+                        method_name,
+                        overrides,
+                    )
+                    .await
+                {
                     Ok(transformed_message) => {
                         // Replace the response body
                         *response.get_mut() = transformed_message;
@@ -188,7 +192,10 @@ impl MockReflectionProxy {
 
             // Response validation
             if self.config.response_transform.validate_responses {
-                if let Err(validation_error) = self.validate_dynamic_message(response.get_ref(), service_name, method_name).await {
+                if let Err(validation_error) = self
+                    .validate_dynamic_message(response.get_ref(), service_name, method_name)
+                    .await
+                {
                     tracing::warn!(
                         "Response validation failed for {}/{}: {}",
                         service_name,
@@ -201,8 +208,6 @@ impl MockReflectionProxy {
 
         Ok(())
     }
-
-
 
     /// Transform a DynamicMessage using JSON overrides
     async fn transform_dynamic_message(
@@ -239,12 +244,14 @@ impl MockReflectionProxy {
         Ok(transformed_message)
     }
 
-
-
     /// Apply response postprocessing for streaming DynamicMessage responses
     pub async fn postprocess_streaming_dynamic_response(
         &self,
-        response: &mut tonic::Response<tokio_stream::wrappers::ReceiverStream<Result<prost_reflect::DynamicMessage, tonic::Status>>>,
+        response: &mut tonic::Response<
+            tokio_stream::wrappers::ReceiverStream<
+                Result<prost_reflect::DynamicMessage, tonic::Status>,
+            >,
+        >,
         service_name: &str,
         method_name: &str,
     ) -> Result<(), Status> {
@@ -303,11 +310,7 @@ impl MockReflectionProxy {
         // Custom validation rules from configuration
         self.validate_custom_rules(message, service_name, method_name)?;
 
-        tracing::debug!(
-            "Response validation passed for {}/{}",
-            service_name,
-            method_name
-        );
+        tracing::debug!("Response validation passed for {}/{}", service_name, method_name);
 
         Ok(())
     }
@@ -345,8 +348,14 @@ impl MockReflectionProxy {
 
             // Check if the value kind matches the field kind
             if !Self::value_matches_kind(value_ref, field.kind()) {
-                return Err(format!("{} field '{}' has incorrect type: expected {:?}, got {:?}",
-                    "Message validation", field.name(), field.kind(), value_ref).into());
+                return Err(format!(
+                    "{} field '{}' has incorrect type: expected {:?}, got {:?}",
+                    "Message validation",
+                    field.name(),
+                    field.kind(),
+                    value_ref
+                )
+                .into());
             }
 
             // For nested messages, recursively validate
@@ -354,8 +363,12 @@ impl MockReflectionProxy {
                 if let prost_reflect::Value::Message(ref nested_msg) = *value_ref {
                     // Basic nested message validation - could be expanded
                     if nested_msg.descriptor() != expected_msg {
-                        return Err(format!("{} field '{}' has incorrect message type",
-                            "Message validation", field.name()).into());
+                        return Err(format!(
+                            "{} field '{}' has incorrect message type",
+                            "Message validation",
+                            field.name()
+                        )
+                        .into());
                     }
                 }
             }
@@ -363,8 +376,6 @@ impl MockReflectionProxy {
 
         Ok(())
     }
-
-
 
     /// Validate business rules (email format, date ranges, etc.)
     fn validate_business_rules(
@@ -380,46 +391,71 @@ impl MockReflectionProxy {
             let field_value = value.as_ref();
             let field_name = field.name().to_lowercase();
 
-                // Email validation
-                if field_name.contains("email") && field.kind() == Kind::String {
-                    if let Some(email_str) = field_value.as_str() {
-                        if !self.is_valid_email(email_str) {
-                            return Err(format!("Invalid email format '{}' for field '{}' in {}/{}",
-                                email_str, field.name(), service_name, method_name).into());
-                        }
+            // Email validation
+            if field_name.contains("email") && field.kind() == Kind::String {
+                if let Some(email_str) = field_value.as_str() {
+                    if !self.is_valid_email(email_str) {
+                        return Err(format!(
+                            "Invalid email format '{}' for field '{}' in {}/{}",
+                            email_str,
+                            field.name(),
+                            service_name,
+                            method_name
+                        )
+                        .into());
                     }
                 }
+            }
 
-                // Date/timestamp validation
-                if (field_name.contains("date") || field_name.contains("timestamp")) {
-                    match field.kind() {
-                        Kind::String => {
-                            if let Some(date_str) = field_value.as_str() {
-                                if !self.is_valid_iso8601_date(date_str) {
-                                    return Err(format!("Invalid date format '{}' for field '{}' in {}/{}",
-                                        date_str, field.name(), service_name, method_name).into());
-                                }
+            // Date/timestamp validation
+            if (field_name.contains("date") || field_name.contains("timestamp")) {
+                match field.kind() {
+                    Kind::String => {
+                        if let Some(date_str) = field_value.as_str() {
+                            if !self.is_valid_iso8601_date(date_str) {
+                                return Err(format!(
+                                    "Invalid date format '{}' for field '{}' in {}/{}",
+                                    date_str,
+                                    field.name(),
+                                    service_name,
+                                    method_name
+                                )
+                                .into());
                             }
                         }
-                        Kind::Int64 | Kind::Uint64 => {
-                            // For timestamp fields, check reasonable range (1970-2100)
-                            if let Some(timestamp) = field_value.as_i64() {
-                                if timestamp < 0 || timestamp > 4102444800 { // 2100-01-01
-                                    return Err(format!("Timestamp {} out of reasonable range for field '{}' in {}/{}",
-                                        timestamp, field.name(), service_name, method_name).into());
-                                }
-                            }
-                        }
-                        _ => {}
                     }
+                    Kind::Int64 | Kind::Uint64 => {
+                        // For timestamp fields, check reasonable range (1970-2100)
+                        if let Some(timestamp) = field_value.as_i64() {
+                            if timestamp < 0 || timestamp > 4102444800 {
+                                // 2100-01-01
+                                return Err(format!(
+                                    "Timestamp {} out of reasonable range for field '{}' in {}/{}",
+                                    timestamp,
+                                    field.name(),
+                                    service_name,
+                                    method_name
+                                )
+                                .into());
+                            }
+                        }
+                    }
+                    _ => {}
                 }
+            }
 
             // Phone number validation (basic)
             if field_name.contains("phone") && field.kind() == Kind::String {
                 if let Some(phone_str) = field_value.as_str() {
                     if !self.is_valid_phone_number(phone_str) {
-                        return Err(format!("Invalid phone number format '{}' for field '{}' in {}/{}",
-                            phone_str, field.name(), service_name, method_name).into());
+                        return Err(format!(
+                            "Invalid phone number format '{}' for field '{}' in {}/{}",
+                            phone_str,
+                            field.name(),
+                            service_name,
+                            method_name
+                        )
+                        .into());
                     }
                 }
             }
@@ -446,11 +482,15 @@ impl MockReflectionProxy {
             let field_value = value.as_ref();
             let field_name = field.name().to_lowercase();
 
-            if field_name.contains("start") && (field_name.contains("date") || field_name.contains("time")) {
+            if field_name.contains("start")
+                && (field_name.contains("date") || field_name.contains("time"))
+            {
                 if let Some(value) = field_value.as_i64() {
                     date_fields.push(("start", value));
                 }
-            } else if field_name.contains("end") && (field_name.contains("date") || field_name.contains("time")) {
+            } else if field_name.contains("end")
+                && (field_name.contains("date") || field_name.contains("time"))
+            {
                 if let Some(value) = field_value.as_i64() {
                     date_fields.push(("end", value));
                 }
@@ -469,8 +509,11 @@ impl MockReflectionProxy {
             for &(_, start_val) in &start_dates {
                 for &(_, end_val) in &end_dates {
                     if start_val >= end_val {
-                        return Err(format!("Start date/time {} must be before end date/time {} in {}/{}",
-                            start_val, end_val, service_name, method_name).into());
+                        return Err(format!(
+                            "Start date/time {} must be before end date/time {} in {}/{}",
+                            start_val, end_val, service_name, method_name
+                        )
+                        .into());
                     }
                 }
             }
@@ -478,13 +521,20 @@ impl MockReflectionProxy {
 
         // Validate timestamp ranges (e.g., created_at <= updated_at)
         if timestamp_fields.len() >= 2 {
-            let created_at = timestamp_fields.iter().find(|(name, _)| name.to_lowercase().contains("created"));
-            let updated_at = timestamp_fields.iter().find(|(name, _)| name.to_lowercase().contains("updated"));
+            let created_at = timestamp_fields
+                .iter()
+                .find(|(name, _)| name.to_lowercase().contains("created"));
+            let updated_at = timestamp_fields
+                .iter()
+                .find(|(name, _)| name.to_lowercase().contains("updated"));
 
             if let (Some((_, created)), Some((_, updated))) = (created_at, updated_at) {
                 if created > updated {
-                    return Err(format!("Created timestamp {} cannot be after updated timestamp {} in {}/{}",
-                        created, updated, service_name, method_name).into());
+                    return Err(format!(
+                        "Created timestamp {} cannot be after updated timestamp {} in {}/{}",
+                        created, updated, service_name, method_name
+                    )
+                    .into());
                 }
             }
         }
@@ -515,24 +565,41 @@ impl MockReflectionProxy {
                     Kind::Int32 | Kind::Int64 => {
                         if let Some(id_val) = field_value.as_i64() {
                             if id_val <= 0 {
-                                return Err(format!("ID field '{}' must be positive, got {} in {}/{}",
-                                    field.name(), id_val, service_name, method_name).into());
+                                return Err(format!(
+                                    "ID field '{}' must be positive, got {} in {}/{}",
+                                    field.name(),
+                                    id_val,
+                                    service_name,
+                                    method_name
+                                )
+                                .into());
                             }
                         }
                     }
                     Kind::Uint32 | Kind::Uint64 => {
                         if let Some(id_val) = field_value.as_u64() {
                             if id_val == 0 {
-                                return Err(format!("ID field '{}' must be non-zero, got {} in {}/{}",
-                                    field.name(), id_val, service_name, method_name).into());
+                                return Err(format!(
+                                    "ID field '{}' must be non-zero, got {} in {}/{}",
+                                    field.name(),
+                                    id_val,
+                                    service_name,
+                                    method_name
+                                )
+                                .into());
                             }
                         }
                     }
                     Kind::String => {
                         if let Some(id_str) = field_value.as_str() {
                             if id_str.trim().is_empty() {
-                                return Err(format!("ID field '{}' cannot be empty in {}/{}",
-                                    field.name(), service_name, method_name).into());
+                                return Err(format!(
+                                    "ID field '{}' cannot be empty in {}/{}",
+                                    field.name(),
+                                    service_name,
+                                    method_name
+                                )
+                                .into());
                             }
                         }
                     }
@@ -541,11 +608,20 @@ impl MockReflectionProxy {
             }
 
             // Custom rule: Amount/price fields should be non-negative
-            if field_name.contains("amount") || field_name.contains("price") || field_name.contains("cost") {
+            if field_name.contains("amount")
+                || field_name.contains("price")
+                || field_name.contains("cost")
+            {
                 if let Some(numeric_val) = field_value.as_f64() {
                     if numeric_val < 0.0 {
-                        return Err(format!("Amount/price field '{}' cannot be negative, got {} in {}/{}",
-                            field.name(), numeric_val, service_name, method_name).into());
+                        return Err(format!(
+                            "Amount/price field '{}' cannot be negative, got {} in {}/{}",
+                            field.name(),
+                            numeric_val,
+                            service_name,
+                            method_name
+                        )
+                        .into());
                     }
                 }
             }
@@ -596,57 +672,76 @@ impl MockReflectionProxy {
         method_name: &str,
     ) -> Status {
         // Log error details with context
-        error!("Error in {}/{}: {} (code: {:?})", service_name, method_name, error, error.code());
+        error!(
+            "Error in {}/{}: {} (code: {:?})",
+            service_name,
+            method_name,
+            error,
+            error.code()
+        );
 
         match error.code() {
-            Code::InvalidArgument => {
-                Status::invalid_argument(format!("Invalid arguments provided to {}/{}", service_name, method_name))
-            }
+            Code::InvalidArgument => Status::invalid_argument(format!(
+                "Invalid arguments provided to {}/{}",
+                service_name, method_name
+            )),
             Code::NotFound => {
                 Status::not_found(format!("Resource not found in {}/{}", service_name, method_name))
             }
-            Code::AlreadyExists => {
-                Status::already_exists(format!("Resource already exists in {}/{}", service_name, method_name))
-            }
-            Code::PermissionDenied => {
-                Status::permission_denied(format!("Permission denied for {}/{}", service_name, method_name))
-            }
-            Code::FailedPrecondition => {
-                Status::failed_precondition(format!("Precondition failed for {}/{}", service_name, method_name))
-            }
+            Code::AlreadyExists => Status::already_exists(format!(
+                "Resource already exists in {}/{}",
+                service_name, method_name
+            )),
+            Code::PermissionDenied => Status::permission_denied(format!(
+                "Permission denied for {}/{}",
+                service_name, method_name
+            )),
+            Code::FailedPrecondition => Status::failed_precondition(format!(
+                "Precondition failed for {}/{}",
+                service_name, method_name
+            )),
             Code::Aborted => {
                 Status::aborted(format!("Operation aborted for {}/{}", service_name, method_name))
             }
-            Code::OutOfRange => {
-                Status::out_of_range(format!("Value out of range in {}/{}", service_name, method_name))
-            }
-            Code::Unimplemented => {
-                Status::unimplemented(format!("Method {}/{} not implemented", service_name, method_name))
-            }
+            Code::OutOfRange => Status::out_of_range(format!(
+                "Value out of range in {}/{}",
+                service_name, method_name
+            )),
+            Code::Unimplemented => Status::unimplemented(format!(
+                "Method {}/{} not implemented",
+                service_name, method_name
+            )),
             Code::Internal => {
                 Status::internal(format!("Internal error in {}/{}", service_name, method_name))
             }
-            Code::Unavailable => {
-                Status::unavailable(format!("Service {}/{} temporarily unavailable", service_name, method_name))
-            }
+            Code::Unavailable => Status::unavailable(format!(
+                "Service {}/{} temporarily unavailable",
+                service_name, method_name
+            )),
             Code::DataLoss => {
                 Status::data_loss(format!("Data loss occurred in {}/{}", service_name, method_name))
             }
-            Code::Unauthenticated => {
-                Status::unauthenticated(format!("Authentication required for {}/{}", service_name, method_name))
-            }
-             Code::DeadlineExceeded => {
-                 Status::deadline_exceeded(format!("Request to {}/{} timed out", service_name, method_name))
-             }
-             Code::ResourceExhausted => {
-                 Status::resource_exhausted(format!("Rate limit exceeded for {}/{}", service_name, method_name))
-             }
+            Code::Unauthenticated => Status::unauthenticated(format!(
+                "Authentication required for {}/{}",
+                service_name, method_name
+            )),
+            Code::DeadlineExceeded => Status::deadline_exceeded(format!(
+                "Request to {}/{} timed out",
+                service_name, method_name
+            )),
+            Code::ResourceExhausted => Status::resource_exhausted(format!(
+                "Rate limit exceeded for {}/{}",
+                service_name, method_name
+            )),
             _ => {
                 let message = error.message();
                 if message.contains(service_name) && message.contains(method_name) {
                     error
                 } else {
-                    Status::new(error.code(), format!("{}/{}: {}", service_name, method_name, message))
+                    Status::new(
+                        error.code(),
+                        format!("{}/{}: {}", service_name, method_name, message),
+                    )
                 }
             }
         }

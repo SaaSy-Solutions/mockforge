@@ -6,7 +6,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
 import { FolderOpen, Settings, Save } from 'lucide-react';
-import { SyncConfig, SyncDirection, SyncDirectoryStructure } from '../../types';
+import type { SyncConfig, SyncDirection, SyncDirectoryStructure } from '../../types';
 
 interface WorkspaceSettingsDialogProps {
   open: boolean;

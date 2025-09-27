@@ -198,9 +198,12 @@ pub struct HarImportResult {
 }
 
 /// Import a HAR archive
-pub fn import_har_archive(content: &str, base_url: Option<&str>) -> Result<HarImportResult, String> {
-    let archive: HarArchive = serde_json::from_str(content)
-        .map_err(|e| format!("Failed to parse HAR archive: {}", e))?;
+pub fn import_har_archive(
+    content: &str,
+    base_url: Option<&str>,
+) -> Result<HarImportResult, String> {
+    let archive: HarArchive =
+        serde_json::from_str(content).map_err(|e| format!("Failed to parse HAR archive: {}", e))?;
 
     let mut routes = Vec::new();
     let mut warnings = Vec::new();
@@ -213,10 +216,7 @@ pub fn import_har_archive(content: &str, base_url: Option<&str>) -> Result<HarIm
         }
     }
 
-    Ok(HarImportResult {
-        routes,
-        warnings,
-    })
+    Ok(HarImportResult { routes, warnings })
 }
 
 /// Convert a HAR entry to a MockForge route
@@ -406,21 +406,26 @@ mod tests {
     fn test_extract_path_from_url() {
         // Test with base URL
         assert_eq!(
-            extract_path_from_url("https://api.example.com/users/123", Some("https://api.example.com")).unwrap(),
+            extract_path_from_url(
+                "https://api.example.com/users/123",
+                Some("https://api.example.com")
+            )
+            .unwrap(),
             "/users/123"
         );
 
         // Test with query parameters
         assert_eq!(
-            extract_path_from_url("https://api.example.com/search?q=test&page=1", Some("https://api.example.com")).unwrap(),
+            extract_path_from_url(
+                "https://api.example.com/search?q=test&page=1",
+                Some("https://api.example.com")
+            )
+            .unwrap(),
             "/search?q=test&page=1"
         );
 
         // Test without base URL
-        assert_eq!(
-            extract_path_from_url("https://api.example.com/users", None).unwrap(),
-            "/users"
-        );
+        assert_eq!(extract_path_from_url("https://api.example.com/users", None).unwrap(), "/users");
     }
 
     #[test]
@@ -441,7 +446,10 @@ mod tests {
             body_size: 16,
         };
 
-        assert_eq!(extract_request_body(&request_with_text), Some(r#"{"name": "John"}"#.to_string()));
+        assert_eq!(
+            extract_request_body(&request_with_text),
+            Some(r#"{"name": "John"}"#.to_string())
+        );
     }
 
     #[test]
@@ -705,23 +713,46 @@ mod tests {
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "POST");
         assert_eq!(result.routes[0].path, "/form");
-        assert_eq!(result.routes[0].body, Some("username=john_doe&password=secret123&remember=true".to_string()));
+        assert_eq!(
+            result.routes[0].body,
+            Some("username=john_doe&password=secret123&remember=true".to_string())
+        );
     }
 
     #[test]
     fn test_extract_path_from_url_edge_cases() {
         // Test with various URL formats
         let test_cases = vec![
-            ("https://api.example.com/users/123", Some("https://api.example.com"), "/users/123"),
-            ("https://api.example.com/users/123/details", Some("https://api.example.com"), "/users/123/details"),
-            ("https://api.example.com/search?q=test", Some("https://api.example.com"), "/search?q=test"),
-            ("https://api.example.com/search?q=test&page=1", Some("https://api.example.com"), "/search?q=test&page=1"),
+            (
+                "https://api.example.com/users/123",
+                Some("https://api.example.com"),
+                "/users/123",
+            ),
+            (
+                "https://api.example.com/users/123/details",
+                Some("https://api.example.com"),
+                "/users/123/details",
+            ),
+            (
+                "https://api.example.com/search?q=test",
+                Some("https://api.example.com"),
+                "/search?q=test",
+            ),
+            (
+                "https://api.example.com/search?q=test&page=1",
+                Some("https://api.example.com"),
+                "/search?q=test&page=1",
+            ),
             ("https://api.example.com/", Some("https://api.example.com"), "/"),
             ("https://api.example.com", Some("https://api.example.com"), "/"),
             ("https://api.example.com/users", None, "/users"),
             ("https://api.example.com/users/", None, "/users/"),
             ("http://localhost:8080/api/test", Some("http://localhost:8080"), "/api/test"),
-            ("https://subdomain.example.com/api/v1/test", Some("https://subdomain.example.com"), "/api/v1/test"),
+            (
+                "https://subdomain.example.com/api/v1/test",
+                Some("https://subdomain.example.com"),
+                "/api/v1/test",
+            ),
         ];
 
         for (url, base_url, expected) in test_cases {
@@ -748,7 +779,10 @@ mod tests {
             headers_size: 100,
             body_size: 30,
         };
-        assert_eq!(extract_request_body(&request_with_json), Some(r#"{"name": "John", "age": 30}"#.to_string()));
+        assert_eq!(
+            extract_request_body(&request_with_json),
+            Some(r#"{"name": "John", "age": 30}"#.to_string())
+        );
 
         // Test with form parameters
         let request_with_form = HarRequest {
@@ -761,16 +795,34 @@ mod tests {
             post_data: Some(HarPostData {
                 mime_type: "application/x-www-form-urlencoded".to_string(),
                 params: vec![
-                    HarParam { name: "username".to_string(), value: Some("john_doe".to_string()), file_name: None, content_type: None },
-                    HarParam { name: "password".to_string(), value: Some("secret123".to_string()), file_name: None, content_type: None },
-                    HarParam { name: "remember".to_string(), value: Some("true".to_string()), file_name: None, content_type: None },
+                    HarParam {
+                        name: "username".to_string(),
+                        value: Some("john_doe".to_string()),
+                        file_name: None,
+                        content_type: None,
+                    },
+                    HarParam {
+                        name: "password".to_string(),
+                        value: Some("secret123".to_string()),
+                        file_name: None,
+                        content_type: None,
+                    },
+                    HarParam {
+                        name: "remember".to_string(),
+                        value: Some("true".to_string()),
+                        file_name: None,
+                        content_type: None,
+                    },
                 ],
                 text: None,
             }),
             headers_size: 100,
             body_size: 50,
         };
-        assert_eq!(extract_request_body(&request_with_form), Some("username=john_doe&password=secret123&remember=true".to_string()));
+        assert_eq!(
+            extract_request_body(&request_with_form),
+            Some("username=john_doe&password=secret123&remember=true".to_string())
+        );
 
         // Test with empty params
         let request_with_empty_params = HarRequest {
@@ -865,7 +917,10 @@ mod tests {
             headers_size: 100,
             body_size: 0,
         };
-        assert_eq!(extract_response_body(&response_with_empty_text), json!({"message": "Mock response from HAR import"}));
+        assert_eq!(
+            extract_response_body(&response_with_empty_text),
+            json!({"message": "Mock response from HAR import"})
+        );
 
         // Test with no text
         let response_with_no_text = HarResponse {
@@ -885,7 +940,10 @@ mod tests {
             headers_size: 100,
             body_size: 0,
         };
-        assert_eq!(extract_response_body(&response_with_no_text), json!({"message": "Mock response from HAR import"}));
+        assert_eq!(
+            extract_response_body(&response_with_no_text),
+            json!({"message": "Mock response from HAR import"})
+        );
 
         // Test with complex JSON
         let response_with_complex_json = HarResponse {
@@ -905,7 +963,8 @@ mod tests {
             headers_size: 100,
             body_size: 100,
         };
-        let expected = json!({"users": [{"id": 1, "name": "John"}, {"id": 2, "name": "Jane"}], "total": 2});
+        let expected =
+            json!({"users": [{"id": 1, "name": "John"}, {"id": 2, "name": "Jane"}], "total": 2});
         assert_eq!(extract_response_body(&response_with_complex_json), expected);
     }
 

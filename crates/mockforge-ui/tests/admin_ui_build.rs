@@ -1,9 +1,9 @@
-use std::process::Command;
-use std::path::Path;
-use std::fs;
 use axum::{body::Body, http::Request};
-use tower::ServiceExt;
 use mockforge_ui::create_admin_router;
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+use tower::ServiceExt;
 
 /// Test that the admin UI builds successfully and serves assets correctly
 #[tokio::test]
@@ -84,12 +84,7 @@ async fn test_admin_ui_serves_built_assets() {
 
     // Test that main HTML page serves
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -99,9 +94,7 @@ async fn test_admin_ui_serves_built_assets() {
     assert_eq!(content_type, "text/html", "Main page should serve HTML content");
 
     // Verify HTML content contains expected elements
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html_content = String::from_utf8(body_bytes.to_vec()).unwrap();
 
     // Basic HTML structure checks
@@ -111,58 +104,53 @@ async fn test_admin_ui_serves_built_assets() {
     assert!(html_content.contains("<body>"), "HTML should have body tag");
 
     // Check for typical React/Vite build artifacts
-    assert!(html_content.contains("<div id=\"root\">") || html_content.contains("root"),
-            "HTML should have React root element");
+    assert!(
+        html_content.contains("<div id=\"root\">") || html_content.contains("root"),
+        "HTML should have React root element"
+    );
 
     // Test CSS asset serving
     let app2 = create_admin_router(None, None, None, None, true);
     let css_response = app2
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     // CSS should either serve successfully or return a fallback
-    assert!(css_response.status().is_success() || css_response.status().is_client_error(),
-            "CSS request should not return server error");
+    assert!(
+        css_response.status().is_success() || css_response.status().is_client_error(),
+        "CSS request should not return server error"
+    );
 
     if css_response.status().is_success() {
         let css_content_type = css_response.headers().get("content-type").unwrap();
         assert_eq!(css_content_type, "text/css", "CSS should have correct content type");
 
-        let css_body = axum::body::to_bytes(css_response.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let css_body = axum::body::to_bytes(css_response.into_body(), usize::MAX).await.unwrap();
         assert!(css_body.len() > 0, "CSS content should not be empty");
     }
 
     // Test JavaScript asset serving
     let app3 = create_admin_router(None, None, None, None, true);
     let js_response = app3
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.js")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     // JS should either serve successfully or return a fallback
-    assert!(js_response.status().is_success() || js_response.status().is_client_error(),
-            "JavaScript request should not return server error");
+    assert!(
+        js_response.status().is_success() || js_response.status().is_client_error(),
+        "JavaScript request should not return server error"
+    );
 
     if js_response.status().is_success() {
         let js_content_type = js_response.headers().get("content-type").unwrap();
-        assert_eq!(js_content_type, "application/javascript", "JS should have correct content type");
+        assert_eq!(
+            js_content_type, "application/javascript",
+            "JS should have correct content type"
+        );
 
-        let js_body = axum::body::to_bytes(js_response.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let js_body = axum::body::to_bytes(js_response.into_body(), usize::MAX).await.unwrap();
         assert!(js_body.len() > 0, "JavaScript content should not be empty");
     }
 }
@@ -208,8 +196,10 @@ async fn test_ui_build_file_structure() {
 
             // HTML should contain references to built assets
             // This is a basic check - in a real build, there would be hashed asset names
-            assert!(html_content.contains("assets/") || html_content.contains("/assets/"),
-                    "HTML should reference assets directory");
+            assert!(
+                html_content.contains("assets/") || html_content.contains("/assets/"),
+                "HTML should reference assets directory"
+            );
         }
     }
 }
@@ -224,18 +214,16 @@ async fn test_ui_handles_missing_assets() {
 
     // Test main page
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     // Should not return server error even if assets are missing
-    assert!(!response.status().is_server_error(),
-            "Main page should not return server error, got: {}", response.status());
+    assert!(
+        !response.status().is_server_error(),
+        "Main page should not return server error, got: {}",
+        response.status()
+    );
 
     if response.status().is_success() {
         let content_type = response.headers().get("content-type").unwrap();
@@ -245,34 +233,30 @@ async fn test_ui_handles_missing_assets() {
     // Test CSS endpoint
     let app2 = create_admin_router(None, None, None, None, true);
     let css_response = app2
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     // Should handle gracefully (either serve content or return appropriate error)
-    assert!(!css_response.status().is_server_error(),
-            "CSS endpoint should not return server error, got: {}", css_response.status());
+    assert!(
+        !css_response.status().is_server_error(),
+        "CSS endpoint should not return server error, got: {}",
+        css_response.status()
+    );
 
     // Test JS endpoint
     let app3 = create_admin_router(None, None, None, None, true);
     let js_response = app3
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.js")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     // Should handle gracefully
-    assert!(!js_response.status().is_server_error(),
-            "JS endpoint should not return server error, got: {}", js_response.status());
+    assert!(
+        !js_response.status().is_server_error(),
+        "JS endpoint should not return server error, got: {}",
+        js_response.status()
+    );
 }
 
 /// Test that the UI build process can be triggered programmatically
@@ -307,8 +291,12 @@ async fn test_ui_build_process() {
 
     // Verify build script content contains expected commands
     let script_content = fs::read_to_string(&build_script).unwrap();
-    assert!(script_content.contains("npm") || script_content.contains("yarn") || script_content.contains("pnpm"),
-            "Build script should contain package manager commands");
+    assert!(
+        script_content.contains("npm")
+            || script_content.contains("yarn")
+            || script_content.contains("pnpm"),
+        "Build script should contain package manager commands"
+    );
     assert!(script_content.contains("build"), "Build script should contain build command");
 }
 
@@ -318,12 +306,7 @@ async fn test_ui_security_headers() {
     let app = create_admin_router(None, None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -341,11 +324,11 @@ async fn test_ui_security_headers() {
         "x-frame-options",
         "x-xss-protection",
         "content-security-policy",
-        "strict-transport-security"
+        "strict-transport-security",
     ];
 
-    let has_some_security_headers = security_headers.iter()
-        .any(|&header| headers.get(header).is_some());
+    let has_some_security_headers =
+        security_headers.iter().any(|&header| headers.get(header).is_some());
 
     // At minimum, we should have content-type-options for security
     if let Some(x_content_type) = headers.get("x-content-type-options") {

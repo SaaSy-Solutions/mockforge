@@ -3,7 +3,7 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
-use crate::{Result, openapi::spec::OpenApiSpec};
+use crate::{openapi::spec::OpenApiSpec, Result};
 use openapiv3::{Operation, PathItem, ReferenceOr};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -68,7 +68,12 @@ impl OpenApiRoute {
     }
 
     /// Create an OpenApiRoute from an operation
-    pub fn from_operation(method: &str, path: String, operation: &Operation, spec: Arc<OpenApiSpec>) -> Self {
+    pub fn from_operation(
+        method: &str,
+        path: String,
+        operation: &Operation,
+        spec: Arc<OpenApiSpec>,
+    ) -> Self {
         Self::new(method.to_string(), path, operation.clone(), spec)
     }
 
@@ -88,7 +93,12 @@ impl OpenApiRoute {
         use crate::openapi::response::ResponseGenerator;
 
         // Try to generate a response based on the OpenAPI schema
-        match ResponseGenerator::generate_response(&self.spec, &self.operation, 200, Some("application/json")) {
+        match ResponseGenerator::generate_response(
+            &self.spec,
+            &self.operation,
+            200,
+            Some("application/json"),
+        ) {
             Ok(response_body) => (200, response_body),
             Err(_) => {
                 // Fallback to simple mock response if schema-based generation fails
@@ -140,28 +150,68 @@ impl RouteGenerator {
         if let Some(item) = path_item.as_item() {
             // Generate route for each HTTP method
             if let Some(op) = &item.get {
-                routes.push(OpenApiRoute::new("GET".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "GET".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.post {
-                routes.push(OpenApiRoute::new("POST".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "POST".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.put {
-                routes.push(OpenApiRoute::new("PUT".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "PUT".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.delete {
-                routes.push(OpenApiRoute::new("DELETE".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "DELETE".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.patch {
-                routes.push(OpenApiRoute::new("PATCH".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "PATCH".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.head {
-                routes.push(OpenApiRoute::new("HEAD".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "HEAD".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.options {
-                routes.push(OpenApiRoute::new("OPTIONS".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "OPTIONS".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.trace {
-                routes.push(OpenApiRoute::new("TRACE".to_string(), path.to_string(), op.clone(), spec.clone()));
+                routes.push(OpenApiRoute::new(
+                    "TRACE".to_string(),
+                    path.to_string(),
+                    op.clone(),
+                    spec.clone(),
+                ));
             }
         }
 

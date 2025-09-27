@@ -1,10 +1,6 @@
 //! Integration tests for HTTP bridge functionality
 
-use mockforge_grpc::dynamic::{
-    DynamicGrpcConfig,
-    discover_services,
-    start_dynamic_server,
-};
+use mockforge_grpc::dynamic::{discover_services, start_dynamic_server, DynamicGrpcConfig};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -37,7 +33,10 @@ async fn test_http_bridge_creation() {
 
     // Test that gRPC-only server can be started (but don't actually start it due to port conflicts)
     let registry = discover_services(&grpc_config).await.unwrap();
-    assert!(registry.service_names().len() >= 1, "Should discover at least the greeter service");
+    assert!(
+        registry.service_names().len() >= 1,
+        "Should discover at least the greeter service"
+    );
 
     println!("Test passed: HTTP bridge configuration and service discovery works");
 }

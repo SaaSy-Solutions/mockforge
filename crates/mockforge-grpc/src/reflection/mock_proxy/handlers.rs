@@ -50,7 +50,8 @@ impl MockReflectionProxy {
         }
 
         // Forward to real service
-        self.forward_server_streaming_request(request, &service_name, &method_name).await
+        self.forward_server_streaming_request(request, &service_name, &method_name)
+            .await
     }
 
     /// Handle a client streaming gRPC request
@@ -66,11 +67,14 @@ impl MockReflectionProxy {
 
         // Check if this should be mocked
         if self.should_mock_service_method(&service_name, &method_name) {
-            return self.generate_mock_client_stream_response(&service_name, &method_name, request).await;
+            return self
+                .generate_mock_client_stream_response(&service_name, &method_name, request)
+                .await;
         }
 
         // Forward to real service
-        self.forward_client_streaming_request(request, &service_name, &method_name).await
+        self.forward_client_streaming_request(request, &service_name, &method_name)
+            .await
     }
 
     /// Handle a bidirectional streaming gRPC request
@@ -86,17 +90,25 @@ impl MockReflectionProxy {
 
         // Check if this should be mocked
         if self.should_mock_service_method(&service_name, &method_name) {
-            return self.generate_mock_bidirectional_stream_response(&service_name, &method_name).await;
+            return self
+                .generate_mock_bidirectional_stream_response(&service_name, &method_name)
+                .await;
         }
 
         // Forward to real service
-        self.forward_bidirectional_streaming_request(request, &service_name, &method_name).await
+        self.forward_bidirectional_streaming_request(request, &service_name, &method_name)
+            .await
     }
 
     /// Extract service and method names from a request
-    pub fn extract_service_method_from_request<T>(&self, request: &Request<T>) -> Result<(String, String), Status> {
+    pub fn extract_service_method_from_request<T>(
+        &self,
+        request: &Request<T>,
+    ) -> Result<(String, String), Status> {
         // Try to get path from metadata (gRPC path header)
-        let path = request.metadata().get("path")
+        let path = request
+            .metadata()
+            .get("path")
             .or_else(|| request.metadata().get(":path"))
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| Status::invalid_argument("Missing path in request"))?;
@@ -106,7 +118,9 @@ impl MockReflectionProxy {
         }
         let parts: Vec<&str> = path[1..].split('/').collect();
         if parts.len() != 2 {
-            return Err(Status::invalid_argument("Invalid gRPC path format, expected /Service/Method"));
+            return Err(Status::invalid_argument(
+                "Invalid gRPC path format, expected /Service/Method",
+            ));
         }
         Ok((parts[0].to_string(), parts[1].to_string()))
     }
@@ -121,10 +135,7 @@ impl MockReflectionProxy {
         info!("Generating mock response for {}/{}", service_name, method_name);
 
         // Get the method descriptor
-        let method_descriptor = self
-            .cache()
-            .get_method(service_name, method_name)
-            .await?;
+        let method_descriptor = self.cache().get_method(service_name, method_name).await?;
 
         // Generate a mock response message
         let response_message = self.generate_mock_message(method_descriptor.output())?;
@@ -132,7 +143,8 @@ impl MockReflectionProxy {
         let mut response = Response::new(response_message);
 
         // Apply response postprocessing with body transformations
-        self.postprocess_dynamic_response(&mut response, service_name, method_name).await?;
+        self.postprocess_dynamic_response(&mut response, service_name, method_name)
+            .await?;
 
         Ok(response)
     }
@@ -146,10 +158,7 @@ impl MockReflectionProxy {
         info!("Generating mock stream response for {}/{}", service_name, method_name);
 
         // Get the method descriptor
-        let method_descriptor = self
-            .cache()
-            .get_method(service_name, method_name)
-            .await?;
+        let method_descriptor = self.cache().get_method(service_name, method_name).await?;
 
         // Create a channel for streaming responses
         let (tx, rx) = mpsc::channel(4);
@@ -178,7 +187,8 @@ impl MockReflectionProxy {
         let mut response = Response::new(ReceiverStream::new(rx));
 
         // Apply response postprocessing for streaming responses
-        self.postprocess_streaming_dynamic_response(&mut response, service_name, method_name).await?;
+        self.postprocess_streaming_dynamic_response(&mut response, service_name, method_name)
+            .await?;
 
         Ok(response)
     }
@@ -193,10 +203,7 @@ impl MockReflectionProxy {
         info!("Generating mock client streaming response for {}/{}", service_name, method_name);
 
         // Get the method descriptor
-        let method_descriptor = self
-            .cache()
-            .get_method(service_name, method_name)
-            .await?;
+        let method_descriptor = self.cache().get_method(service_name, method_name).await?;
 
         // Generate a mock response message
         let response_message = self.generate_mock_message(method_descriptor.output())?;
@@ -204,7 +211,8 @@ impl MockReflectionProxy {
         let mut response = Response::new(response_message);
 
         // Apply response postprocessing with body transformations
-        self.postprocess_dynamic_response(&mut response, service_name, method_name).await?;
+        self.postprocess_dynamic_response(&mut response, service_name, method_name)
+            .await?;
 
         Ok(response)
     }
@@ -215,13 +223,13 @@ impl MockReflectionProxy {
         service_name: &str,
         method_name: &str,
     ) -> Result<Response<ReceiverStream<Result<DynamicMessage, Status>>>, Status> {
-        info!("Generating mock bidirectional stream response for {}/{}", service_name, method_name);
+        info!(
+            "Generating mock bidirectional stream response for {}/{}",
+            service_name, method_name
+        );
 
         // Get the method descriptor
-        let method_descriptor = self
-            .cache()
-            .get_method(service_name, method_name)
-            .await?;
+        let method_descriptor = self.cache().get_method(service_name, method_name).await?;
 
         // Create a channel for streaming responses
         let (tx, rx) = mpsc::channel(4);
@@ -250,7 +258,8 @@ impl MockReflectionProxy {
         let mut response = Response::new(ReceiverStream::new(rx));
 
         // Apply response postprocessing for streaming responses
-        self.postprocess_streaming_dynamic_response(&mut response, service_name, method_name).await?;
+        self.postprocess_streaming_dynamic_response(&mut response, service_name, method_name)
+            .await?;
 
         Ok(response)
     }
@@ -264,13 +273,16 @@ impl MockReflectionProxy {
     ) -> Result<Response<DynamicMessage>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
-            let _channel = self.connection_pool.get_channel(upstream).await
-                .map_err(|e| Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e)))?;
+            let _channel = self.connection_pool.get_channel(upstream).await.map_err(|e| {
+                Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
+            })?;
 
             // Generic gRPC forwarding requires generated client stubs for the specific service
             // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
             // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented("Generic gRPC forwarding not supported - requires service-specific client stubs"))
+            Err(Status::unimplemented(
+                "Generic gRPC forwarding not supported - requires service-specific client stubs",
+            ))
         } else {
             Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
         }
@@ -285,13 +297,16 @@ impl MockReflectionProxy {
     ) -> Result<Response<ReceiverStream<Result<DynamicMessage, Status>>>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
-            let _channel = self.connection_pool.get_channel(upstream).await
-                .map_err(|e| Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e)))?;
+            let _channel = self.connection_pool.get_channel(upstream).await.map_err(|e| {
+                Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
+            })?;
 
             // Generic gRPC forwarding requires generated client stubs for the specific service
             // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
             // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented("Generic gRPC forwarding not supported - requires service-specific client stubs"))
+            Err(Status::unimplemented(
+                "Generic gRPC forwarding not supported - requires service-specific client stubs",
+            ))
         } else {
             Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
         }
@@ -306,13 +321,16 @@ impl MockReflectionProxy {
     ) -> Result<Response<DynamicMessage>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
-            let _channel = self.connection_pool.get_channel(upstream).await
-                .map_err(|e| Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e)))?;
+            let _channel = self.connection_pool.get_channel(upstream).await.map_err(|e| {
+                Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
+            })?;
 
             // Generic gRPC forwarding requires generated client stubs for the specific service
             // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
             // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented("Generic gRPC forwarding not supported - requires service-specific client stubs"))
+            Err(Status::unimplemented(
+                "Generic gRPC forwarding not supported - requires service-specific client stubs",
+            ))
         } else {
             Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
         }
@@ -327,23 +345,30 @@ impl MockReflectionProxy {
     ) -> Result<Response<ReceiverStream<Result<DynamicMessage, Status>>>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
-            let _channel = self.connection_pool.get_channel(upstream).await
-                .map_err(|e| Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e)))?;
+            let _channel = self.connection_pool.get_channel(upstream).await.map_err(|e| {
+                Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
+            })?;
 
             // Generic gRPC forwarding requires generated client stubs for the specific service
             // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
             // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented("Generic gRPC forwarding not supported - requires service-specific client stubs"))
+            Err(Status::unimplemented(
+                "Generic gRPC forwarding not supported - requires service-specific client stubs",
+            ))
         } else {
             Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
         }
     }
 
     /// Generate a mock message using the smart generator
-    fn generate_mock_message(&self, descriptor: MessageDescriptor) -> Result<DynamicMessage, Status> {
-        let mut smart_generator = self.smart_generator().lock().map_err(|_| {
-            Status::internal("Failed to acquire lock on smart generator")
-        })?;
+    fn generate_mock_message(
+        &self,
+        descriptor: MessageDescriptor,
+    ) -> Result<DynamicMessage, Status> {
+        let mut smart_generator = self
+            .smart_generator()
+            .lock()
+            .map_err(|_| Status::internal("Failed to acquire lock on smart generator"))?;
 
         Ok((&mut *smart_generator).generate_message(&descriptor))
     }
@@ -353,9 +378,9 @@ impl MockReflectionProxy {
         smart_generator: &Arc<Mutex<crate::reflection::smart_mock_generator::SmartMockGenerator>>,
         descriptor: MessageDescriptor,
     ) -> Result<DynamicMessage, Status> {
-        let mut smart_generator = smart_generator.lock().map_err(|_| {
-            Status::internal("Failed to acquire lock on smart generator")
-        })?;
+        let mut smart_generator = smart_generator
+            .lock()
+            .map_err(|_| Status::internal("Failed to acquire lock on smart generator"))?;
 
         Ok(smart_generator.generate_message(&descriptor))
     }

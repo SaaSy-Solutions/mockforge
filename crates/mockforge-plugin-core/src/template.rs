@@ -234,7 +234,12 @@ impl FunctionParameter {
     }
 
     /// Create an optional parameter with default value
-    pub fn with_default<S: Into<String>>(name: S, param_type: S, description: S, default: Value) -> Self {
+    pub fn with_default<S: Into<String>>(
+        name: S,
+        param_type: S,
+        description: S,
+        default: Value,
+    ) -> Self {
         Self {
             name: name.into(),
             param_type: param_type.into(),

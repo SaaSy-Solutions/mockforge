@@ -83,27 +83,31 @@ pub fn generate_commands_from_openapi(
     spec_content: &str,
     options: CommandGenerationOptions,
 ) -> Result<CommandGenerationResult, String> {
-    let json_value: serde_json::Value = serde_json::from_str(spec_content)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    let json_value: serde_json::Value =
+        serde_json::from_str(spec_content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
     let spec = OpenApiSpec::from_json(json_value)
         .map_err(|e| format!("Failed to load OpenAPI spec: {}", e))?;
 
-    spec.validate()
-        .map_err(|e| format!("Invalid OpenAPI specification: {}", e))?;
+    spec.validate().map_err(|e| format!("Invalid OpenAPI specification: {}", e))?;
 
     let spec_info = OpenApiSpecInfo {
         title: spec.title().to_string(),
         version: spec.version().to_string(),
         description: spec.description().map(|s| s.to_string()),
         openapi_version: spec.spec.openapi.clone(),
-        servers: spec.spec.servers.iter()
+        servers: spec
+            .spec
+            .servers
+            .iter()
             .filter_map(|server| server.url.parse::<url::Url>().ok())
             .map(|url| url.to_string())
             .collect(),
     };
 
-    let base_url = options.base_url.clone()
+    let base_url = options
+        .base_url
+        .clone()
         .or_else(|| spec_info.servers.first().cloned())
         .unwrap_or_else(|| "http://localhost:3000".to_string());
 
@@ -114,9 +118,12 @@ pub fn generate_commands_from_openapi(
 
     for (path, operations) in path_operations {
         for (method, operation) in operations {
-            match generate_commands_for_operation(&spec, &method, &path, &operation, &base_url, &options) {
+            match generate_commands_for_operation(
+                &spec, &method, &path, &operation, &base_url, &options,
+            ) {
                 Ok(mut op_commands) => commands.append(&mut op_commands),
-                Err(e) => warnings.push(format!("Failed to generate commands for {} {}: {}", method, path, e)),
+                Err(e) => warnings
+                    .push(format!("Failed to generate commands for {} {}: {}", method, path, e)),
             }
         }
     }
@@ -137,15 +144,19 @@ fn generate_commands_for_operation(
     base_url: &str,
     options: &CommandGenerationOptions,
 ) -> Result<Vec<GeneratedCommand>, String> {
-    let operation_id = operation.operation_id.clone()
-        .unwrap_or_else(|| format!("{}_{}", method.to_lowercase(), path.replace("/", "_").trim_matches('_')));
+    let operation_id = operation.operation_id.clone().unwrap_or_else(|| {
+        format!("{}_{}", method.to_lowercase(), path.replace("/", "_").trim_matches('_'))
+    });
 
-    let description = operation.summary.as_ref()
+    let description = operation
+        .summary
+        .as_ref()
         .or(operation.description.as_ref())
         .map(|s| s.to_string());
 
     // Generate parameter combinations
-    let parameter_combinations = generate_parameter_combinations(spec, operation, options.max_examples_per_operation)?;
+    let parameter_combinations =
+        generate_parameter_combinations(spec, operation, options.max_examples_per_operation)?;
 
     if parameter_combinations.is_empty() && !options.all_operations {
         return Ok(Vec::new());
@@ -217,10 +228,10 @@ fn generate_parameter_combinations(
 
         if let Some(param) = param {
             let (name, example_value) = match param {
-                openapiv3::Parameter::Path { parameter_data, .. } |
-                openapiv3::Parameter::Query { parameter_data, .. } |
-                openapiv3::Parameter::Header { parameter_data, .. } |
-                openapiv3::Parameter::Cookie { parameter_data, .. } => {
+                openapiv3::Parameter::Path { parameter_data, .. }
+                | openapiv3::Parameter::Query { parameter_data, .. }
+                | openapiv3::Parameter::Header { parameter_data, .. }
+                | openapiv3::Parameter::Cookie { parameter_data, .. } => {
                     let name = parameter_data.name.clone();
                     let example = generate_parameter_example(&parameter_data);
                     (name, example)
@@ -248,9 +259,7 @@ fn generate_parameter_example(parameter_data: &openapiv3::ParameterData) -> Stri
     match &parameter_data.format {
         openapiv3::ParameterSchemaOrContent::Schema(schema_ref) => {
             match schema_ref {
-                openapiv3::ReferenceOr::Item(schema) => {
-                    generate_example_from_schema(schema)
-                }
+                openapiv3::ReferenceOr::Item(schema) => generate_example_from_schema(schema),
                 openapiv3::ReferenceOr::Reference { .. } => {
                     // For references, use a generic example
                     "example".to_string()
@@ -277,9 +286,12 @@ fn generate_example_from_schema(schema: &openapiv3::Schema) -> String {
     }
 }
 
-
 /// Build URL with parameters substituted
-fn build_url_with_params(base_url: &str, path_template: &str, params: &HashMap<String, String>) -> Result<String, String> {
+fn build_url_with_params(
+    base_url: &str,
+    path_template: &str,
+    params: &HashMap<String, String>,
+) -> Result<String, String> {
     let mut url = base_url.trim_end_matches('/').to_string();
     let mut path = path_template.to_string();
 
@@ -292,7 +304,8 @@ fn build_url_with_params(base_url: &str, path_template: &str, params: &HashMap<S
     url.push_str(&path);
 
     // Add query parameters
-    let query_params: Vec<String> = params.iter()
+    let query_params: Vec<String> = params
+        .iter()
         .filter(|(key, _)| !path_template.contains(&format!("{{{}}}", key)))
         .map(|(key, value)| format!("{}={}", key, urlencoding::encode(value)))
         .collect();
@@ -321,7 +334,9 @@ fn build_headers(
 
     // Add Content-Type for request body
     if let Some(request_body) = &operation.request_body {
-        if let Some(_content) = request_body.as_item().and_then(|rb| rb.content.get("application/json")) {
+        if let Some(_content) =
+            request_body.as_item().and_then(|rb| rb.content.get("application/json"))
+        {
             headers.insert("Content-Type".to_string(), "application/json".to_string());
         }
     }
@@ -370,14 +385,23 @@ fn add_security_headers(
                         openapiv3::SecurityScheme::HTTP { scheme, .. } => {
                             match scheme.as_str() {
                                 "bearer" => {
-                                    headers.insert("Authorization".to_string(), "Bearer YOUR_TOKEN_HERE".to_string());
+                                    headers.insert(
+                                        "Authorization".to_string(),
+                                        "Bearer YOUR_TOKEN_HERE".to_string(),
+                                    );
                                 }
                                 "basic" => {
-                                    headers.insert("Authorization".to_string(), "Basic YOUR_CREDENTIALS_HERE".to_string());
+                                    headers.insert(
+                                        "Authorization".to_string(),
+                                        "Basic YOUR_CREDENTIALS_HERE".to_string(),
+                                    );
                                 }
                                 _ => {
                                     // For other HTTP schemes, add a generic placeholder
-                                    headers.insert("Authorization".to_string(), format!("{} YOUR_CREDENTIALS_HERE", scheme.to_uppercase()));
+                                    headers.insert(
+                                        "Authorization".to_string(),
+                                        format!("{} YOUR_CREDENTIALS_HERE", scheme.to_uppercase()),
+                                    );
                                 }
                             }
                         }
@@ -395,10 +419,16 @@ fn add_security_headers(
                             }
                         }
                         openapiv3::SecurityScheme::OpenIDConnect { .. } => {
-                            headers.insert("Authorization".to_string(), "Bearer YOUR_OIDC_TOKEN_HERE".to_string());
+                            headers.insert(
+                                "Authorization".to_string(),
+                                "Bearer YOUR_OIDC_TOKEN_HERE".to_string(),
+                            );
                         }
                         openapiv3::SecurityScheme::OAuth2 { .. } => {
-                            headers.insert("Authorization".to_string(), "Bearer YOUR_OAUTH_TOKEN_HERE".to_string());
+                            headers.insert(
+                                "Authorization".to_string(),
+                                "Bearer YOUR_OAUTH_TOKEN_HERE".to_string(),
+                            );
                         }
                     }
                 }
@@ -420,7 +450,9 @@ fn build_request_body(
     }
 
     if let Some(request_body) = &operation.request_body {
-        if let Some(content) = request_body.as_item().and_then(|rb| rb.content.get("application/json")) {
+        if let Some(content) =
+            request_body.as_item().and_then(|rb| rb.content.get("application/json"))
+        {
             if let Some(example) = &content.example {
                 return serde_json::to_string_pretty(example)
                     .map(Some)

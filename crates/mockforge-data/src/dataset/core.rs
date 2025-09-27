@@ -261,7 +261,12 @@ pub struct Dataset {
 
 impl Dataset {
     /// Create a new empty dataset
-    pub fn new(name: String, schema_name: String, config: DataConfig, format: OutputFormat) -> Self {
+    pub fn new(
+        name: String,
+        schema_name: String,
+        config: DataConfig,
+        format: OutputFormat,
+    ) -> Self {
         Self {
             metadata: DatasetMetadata::new(name, schema_name, config, format),
             rows: Vec::new(),
@@ -318,7 +323,8 @@ impl Dataset {
 
     /// Get rows by metadata key-value
     pub fn get_rows_by_metadata(&self, key: &str, value: &str) -> Vec<&DatasetRow> {
-        self.rows.iter()
+        self.rows
+            .iter()
             .filter(|row| row.get_metadata(key).map(|v| v == value).unwrap_or(false))
             .collect()
     }
@@ -415,7 +421,9 @@ impl Dataset {
 
                             if temp_stats.field_type.is_none() {
                                 temp_stats.field_type = Some(value_type.to_string());
-                            } else if temp_stats.field_type.as_ref() != Some(&value_type.to_string()) {
+                            } else if temp_stats.field_type.as_ref()
+                                != Some(&value_type.to_string())
+                            {
                                 temp_stats.field_type = Some("mixed".to_string());
                             }
 
@@ -442,34 +450,47 @@ impl Dataset {
         for (field_name, temp_stats) in temp_field_stats {
             let field_type = temp_stats.field_type.unwrap_or_else(|| "unknown".to_string());
 
-            let (min_value, max_value, average_value) = if field_type == "number" && !temp_stats.numeric_values.is_empty() {
+            let (min_value, max_value, average_value) = if field_type == "number"
+                && !temp_stats.numeric_values.is_empty()
+            {
                 let min = temp_stats.numeric_values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-                let max = temp_stats.numeric_values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+                let max =
+                    temp_stats.numeric_values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
                 let sum: f64 = temp_stats.numeric_values.iter().sum();
                 let avg = sum / temp_stats.numeric_values.len() as f64;
-                (Some(serde_json::Value::Number(serde_json::Number::from_f64(min).unwrap_or(serde_json::Number::from(0)))),
-                 Some(serde_json::Value::Number(serde_json::Number::from_f64(max).unwrap_or(serde_json::Number::from(0)))),
-                 Some(avg))
+                (
+                    Some(serde_json::Value::Number(
+                        serde_json::Number::from_f64(min).unwrap_or(serde_json::Number::from(0)),
+                    )),
+                    Some(serde_json::Value::Number(
+                        serde_json::Number::from_f64(max).unwrap_or(serde_json::Number::from(0)),
+                    )),
+                    Some(avg),
+                )
             } else {
                 (None, None, None)
             };
 
             // Get most common values (top 5)
-            let mut most_common: Vec<(serde_json::Value, usize)> = temp_stats.frequency.into_iter().collect();
+            let mut most_common: Vec<(serde_json::Value, usize)> =
+                temp_stats.frequency.into_iter().collect();
             most_common.sort_by(|a, b| b.1.cmp(&a.1));
             most_common.truncate(5);
 
-            field_stats.insert(field_name.clone(), FieldStats {
-                field_name,
-                field_type,
-                non_null_count: temp_stats.non_null_count,
-                null_count: temp_stats.null_count,
-                unique_count: temp_stats.unique_values.len(),
-                min_value,
-                max_value,
-                average_value,
-                most_common_values: most_common,
-            });
+            field_stats.insert(
+                field_name.clone(),
+                FieldStats {
+                    field_name,
+                    field_type,
+                    non_null_count: temp_stats.non_null_count,
+                    null_count: temp_stats.null_count,
+                    unique_count: temp_stats.unique_values.len(),
+                    min_value,
+                    max_value,
+                    average_value,
+                    most_common_values: most_common,
+                },
+            );
         }
 
         let row_count = self.rows.len();

@@ -3,11 +3,11 @@
 //! This module handles the authentication state containing configuration
 //! and runtime data needed for authentication operations.
 
+use super::types::AuthResult;
+use mockforge_core::{config::AuthConfig, OpenApiSpec};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use mockforge_core::{config::AuthConfig, OpenApiSpec};
-use super::types::AuthResult;
 
 /// Cached OAuth2 introspection result
 #[derive(Debug, Clone)]

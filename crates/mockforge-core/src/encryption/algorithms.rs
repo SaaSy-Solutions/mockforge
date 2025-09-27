@@ -5,10 +5,10 @@
 
 use crate::encryption::errors::{EncryptionError, EncryptionResult};
 use aes_gcm::{
-    aead::{Aead, KeyInit, generic_array::GenericArray},
+    aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{ChaCha20Poly1305, Key as ChaChaKey};
 use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -45,14 +45,16 @@ impl EncryptionKey {
     /// Create a new encryption key from raw bytes
     pub fn new(key: Vec<u8>, algorithm: EncryptionAlgorithm) -> EncryptionResult<Self> {
         let expected_len = match algorithm {
-            EncryptionAlgorithm::Aes256Gcm => 32, // 256 bits
+            EncryptionAlgorithm::Aes256Gcm => 32,        // 256 bits
             EncryptionAlgorithm::ChaCha20Poly1305 => 32, // 256 bits
         };
 
         if key.len() != expected_len {
             return Err(EncryptionError::invalid_key(format!(
                 "Key length {} does not match expected length {} for algorithm {}",
-                key.len(), expected_len, algorithm
+                key.len(),
+                expected_len,
+                algorithm
             )));
         }
 
@@ -175,9 +177,7 @@ impl EncryptionEngine {
         aad: Option<&[u8]>,
     ) -> EncryptionResult<EncryptedData> {
         match key.algorithm() {
-            EncryptionAlgorithm::Aes256Gcm => {
-                Self::encrypt_aes256_gcm(key, plaintext, aad)
-            }
+            EncryptionAlgorithm::Aes256Gcm => Self::encrypt_aes256_gcm(key, plaintext, aad),
             EncryptionAlgorithm::ChaCha20Poly1305 => {
                 Self::encrypt_chacha20_poly1305(key, plaintext, aad)
             }
@@ -193,14 +193,13 @@ impl EncryptionEngine {
         if key.algorithm() != &encrypted_data.algorithm {
             return Err(EncryptionError::invalid_algorithm(format!(
                 "Key algorithm {} does not match encrypted data algorithm {}",
-                key.algorithm(), encrypted_data.algorithm
+                key.algorithm(),
+                encrypted_data.algorithm
             )));
         }
 
         match key.algorithm() {
-            EncryptionAlgorithm::Aes256Gcm => {
-                Self::decrypt_aes256_gcm(key, encrypted_data)
-            }
+            EncryptionAlgorithm::Aes256Gcm => Self::decrypt_aes256_gcm(key, encrypted_data),
             EncryptionAlgorithm::ChaCha20Poly1305 => {
                 Self::decrypt_chacha20_poly1305(key, encrypted_data)
             }
@@ -224,13 +223,24 @@ impl EncryptionEngine {
 
         // Encrypt the plaintext
         let ciphertext = match aad {
-            Some(aad_data) => {
-                cipher.encrypt(nonce, aes_gcm::aead::Payload { msg: plaintext, aad: aad_data })
-            }
-            None => {
-                cipher.encrypt(nonce, aes_gcm::aead::Payload { msg: plaintext, aad: &[] })
-            }
-        }.map_err(|e| EncryptionError::cipher_operation_failed(format!("AES-GCM encryption failed: {}", e)))?;
+            Some(aad_data) => cipher.encrypt(
+                nonce,
+                aes_gcm::aead::Payload {
+                    msg: plaintext,
+                    aad: aad_data,
+                },
+            ),
+            None => cipher.encrypt(
+                nonce,
+                aes_gcm::aead::Payload {
+                    msg: plaintext,
+                    aad: &[],
+                },
+            ),
+        }
+        .map_err(|e| {
+            EncryptionError::cipher_operation_failed(format!("AES-GCM encryption failed: {}", e))
+        })?;
 
         Ok(EncryptedData::new(
             ciphertext,
@@ -253,18 +263,30 @@ impl EncryptionEngine {
         let cipher = Aes256Gcm::new(cipher_key);
 
         let plaintext = match encrypted_data.aad_bytes() {
-            Some(Ok(aad)) => {
-                cipher.decrypt(nonce, aes_gcm::aead::Payload { msg: &ciphertext, aad: &aad })
-            }
+            Some(Ok(aad)) => cipher.decrypt(
+                nonce,
+                aes_gcm::aead::Payload {
+                    msg: &ciphertext,
+                    aad: &aad,
+                },
+            ),
             Some(Err(e)) => return Err(e),
-            None => {
-                cipher.decrypt(nonce, aes_gcm::aead::Payload { msg: &ciphertext, aad: &[] })
-            }
-        }.map_err(|e| {
+            None => cipher.decrypt(
+                nonce,
+                aes_gcm::aead::Payload {
+                    msg: &ciphertext,
+                    aad: &[],
+                },
+            ),
+        }
+        .map_err(|e| {
             if e.to_string().contains("authentication") {
                 EncryptionError::authentication_failed("AES-GCM authentication failed")
             } else {
-                EncryptionError::cipher_operation_failed(format!("AES-GCM decryption failed: {}", e))
+                EncryptionError::cipher_operation_failed(format!(
+                    "AES-GCM decryption failed: {}",
+                    e
+                ))
             }
         })?;
 
@@ -288,13 +310,27 @@ impl EncryptionEngine {
 
         // Encrypt the plaintext
         let ciphertext = match aad {
-            Some(aad_data) => {
-                cipher.encrypt(nonce, chacha20poly1305::aead::Payload { msg: plaintext, aad: aad_data })
-            }
-            None => {
-                cipher.encrypt(nonce, chacha20poly1305::aead::Payload { msg: plaintext, aad: &[] })
-            }
-        }.map_err(|e| EncryptionError::cipher_operation_failed(format!("ChaCha20-Poly1305 encryption failed: {}", e)))?;
+            Some(aad_data) => cipher.encrypt(
+                nonce,
+                chacha20poly1305::aead::Payload {
+                    msg: plaintext,
+                    aad: aad_data,
+                },
+            ),
+            None => cipher.encrypt(
+                nonce,
+                chacha20poly1305::aead::Payload {
+                    msg: plaintext,
+                    aad: &[],
+                },
+            ),
+        }
+        .map_err(|e| {
+            EncryptionError::cipher_operation_failed(format!(
+                "ChaCha20-Poly1305 encryption failed: {}",
+                e
+            ))
+        })?;
 
         Ok(EncryptedData::new(
             ciphertext,
@@ -317,18 +353,30 @@ impl EncryptionEngine {
         let cipher = ChaCha20Poly1305::new(cipher_key);
 
         let plaintext = match encrypted_data.aad_bytes() {
-            Some(Ok(aad)) => {
-                cipher.decrypt(nonce, chacha20poly1305::aead::Payload { msg: &ciphertext, aad: &aad })
-            }
+            Some(Ok(aad)) => cipher.decrypt(
+                nonce,
+                chacha20poly1305::aead::Payload {
+                    msg: &ciphertext,
+                    aad: &aad,
+                },
+            ),
             Some(Err(e)) => return Err(e),
-            None => {
-                cipher.decrypt(nonce, chacha20poly1305::aead::Payload { msg: &ciphertext, aad: &[] })
-            }
-        }.map_err(|e| {
+            None => cipher.decrypt(
+                nonce,
+                chacha20poly1305::aead::Payload {
+                    msg: &ciphertext,
+                    aad: &[],
+                },
+            ),
+        }
+        .map_err(|e| {
             if e.to_string().contains("authentication") {
                 EncryptionError::authentication_failed("ChaCha20-Poly1305 authentication failed")
             } else {
-                EncryptionError::cipher_operation_failed(format!("ChaCha20-Poly1305 decryption failed: {}", e))
+                EncryptionError::cipher_operation_failed(format!(
+                    "ChaCha20-Poly1305 decryption failed: {}",
+                    e
+                ))
             }
         })?;
 
@@ -341,10 +389,14 @@ impl EncryptionEngine {
     }
 
     /// Decrypt a string using the default algorithm (AES-256-GCM)
-    pub fn decrypt_string(key: &EncryptionKey, encrypted_data: &EncryptedData) -> EncryptionResult<String> {
+    pub fn decrypt_string(
+        key: &EncryptionKey,
+        encrypted_data: &EncryptedData,
+    ) -> EncryptionResult<String> {
         let plaintext = Self::decrypt(key, encrypted_data)?;
-        String::from_utf8(plaintext)
-            .map_err(|e| EncryptionError::invalid_ciphertext(format!("Invalid UTF-8 in decrypted data: {}", e)))
+        String::from_utf8(plaintext).map_err(|e| {
+            EncryptionError::invalid_ciphertext(format!("Invalid UTF-8 in decrypted data: {}", e))
+        })
     }
 
     /// Validate key strength
@@ -382,7 +434,7 @@ pub mod utils {
     /// Generate a cryptographically secure random nonce
     pub fn generate_nonce(algorithm: &EncryptionAlgorithm) -> EncryptionResult<Vec<u8>> {
         let nonce_len = match algorithm {
-            EncryptionAlgorithm::Aes256Gcm => 12, // 96 bits
+            EncryptionAlgorithm::Aes256Gcm => 12,        // 96 bits
             EncryptionAlgorithm::ChaCha20Poly1305 => 12, // 96 bits
         };
 
@@ -403,7 +455,9 @@ pub mod utils {
         if nonce.len() != expected_len {
             return Err(EncryptionError::invalid_nonce(format!(
                 "Nonce length {} does not match expected length {} for algorithm {}",
-                nonce.len(), expected_len, algorithm
+                nonce.len(),
+                expected_len,
+                algorithm
             )));
         }
 

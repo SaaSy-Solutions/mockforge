@@ -45,8 +45,8 @@ export interface FixtureInfo {
 export interface DiffChange {
   type: 'add' | 'remove' | 'modify';
   path: string;
-  oldValue?: any;
-  newValue?: any;
+  oldValue?: unknown;
+  newValue?: unknown;
   line_number?: number;
   content?: string;
   old_content?: string;
@@ -76,7 +76,7 @@ export interface RequestLog {
   client_ip?: string;
   headers?: Record<string, string>;
   query_params?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   error_message?: string;
 }
 
@@ -222,7 +222,7 @@ export interface RouteInfo {
   method: string;
   description?: string;
   statusCode: number;
-  responseBody?: any;
+  responseBody?: unknown;
   responseHeaders?: Record<string, string>;
   delay?: number;
   tags?: string[];
@@ -273,16 +273,35 @@ export interface SetVariableRequest {
   encrypted?: boolean;
 }
 
+export interface AutocompleteSuggestion {
+  text: string;
+  display_text?: string;
+  kind?: string;
+  documentation?: string;
+}
+
+export interface AutocompleteResponse {
+  suggestions: AutocompleteSuggestion[];
+  start_position: number;
+  end_position: number;
+}
+
 export interface AutocompleteRequest {
-  query: string;
-  limit?: number;
-  serviceId?: string;
+  input: string;
+  cursor_position: number;
+  context?: string;
+}
+
+export interface EnvironmentColor {
+  hex: string;
+  name: string;
 }
 
 export interface Environment {
   id: string;
   name: string;
   description?: string;
+  color?: EnvironmentColor;
   createdAt: string;
   updatedAt: string;
   variables: EnvironmentVariable[];
@@ -292,8 +311,10 @@ export interface EnvironmentSummary {
   id: string;
   name: string;
   description?: string;
-  variableCount: number;
-  isGlobal?: boolean;
+  variable_count: number;
+  is_global?: boolean;
+  active?: boolean;
+  color?: EnvironmentColor;
 }
 
 export interface EnvironmentVariable {
@@ -336,14 +357,14 @@ export interface BadgeProps {
 
 export interface TableProps {
   columns: TableColumn[];
-  data: any[];
+  data: unknown[];
   className?: string;
 }
 
 export interface TableColumn {
   key: string;
   label: string;
-  render?: (value: any, row: any) => React.ReactNode;
+  render?: (value: unknown, row: unknown) => React.ReactNode;
 }
 
 export interface ModalProps {
@@ -508,7 +529,7 @@ export interface ColumnType {
   key: string;
   label: string;
   sortable?: boolean;
-  render?: (value: any, row: LogEntry) => React.ReactNode;
+  render?: (value: unknown, row: LogEntry) => React.ReactNode;
 }
 
 // PluginsPage types (minimal placeholder, can be extended)
@@ -578,7 +599,7 @@ export interface ChainExecutionResponse {
   chainId: string;
   status: string;
   totalDurationMs: number;
-  requestResults?: any;
+  requestResults?: unknown;
   errorMessage?: string;
 }
 
@@ -602,7 +623,7 @@ export interface ChainRequest {
   method: string;
   url: string;
   headers: Record<string, string>;
-  body?: any;
+  body?: unknown;
   dependsOn: string[];
   timeoutSecs?: number;
   expectedStatus?: number[];
@@ -622,7 +643,7 @@ export interface ChainDefinition {
   description?: string;
   config: ChainConfig;
   links: ChainLink[];
-  variables: Record<string, any>;
+  variables: Record<string, unknown>;
   tags: string[];
 }
 

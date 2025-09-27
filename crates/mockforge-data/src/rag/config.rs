@@ -168,7 +168,12 @@ impl RagConfig {
     }
 
     /// Set embedding configuration
-    pub fn with_embedding(mut self, provider: EmbeddingProvider, model: String, dimensions: usize) -> Self {
+    pub fn with_embedding(
+        mut self,
+        provider: EmbeddingProvider,
+        model: String,
+        dimensions: usize,
+    ) -> Self {
         self.embedding_provider = provider;
         self.embedding_model = model;
         self.embedding_dimensions = dimensions;
@@ -259,17 +264,23 @@ impl RagConfig {
         }
 
         if self.chunk_overlap >= self.chunk_size {
-            return Err(mockforge_core::Error::generic("Chunk overlap must be less than chunk size"));
+            return Err(mockforge_core::Error::generic(
+                "Chunk overlap must be less than chunk size",
+            ));
         }
 
         if !(0.0..=1.0).contains(&self.similarity_threshold) {
-            return Err(mockforge_core::Error::generic("Similarity threshold must be between 0.0 and 1.0"));
+            return Err(mockforge_core::Error::generic(
+                "Similarity threshold must be between 0.0 and 1.0",
+            ));
         }
 
         if self.hybrid_search {
             let total_weight = self.semantic_weight + self.keyword_weight;
             if (total_weight - 1.0).abs() > f32::EPSILON {
-                return Err(mockforge_core::Error::generic("Hybrid search weights must sum to 1.0"));
+                return Err(mockforge_core::Error::generic(
+                    "Hybrid search weights must sum to 1.0",
+                ));
             }
         }
 

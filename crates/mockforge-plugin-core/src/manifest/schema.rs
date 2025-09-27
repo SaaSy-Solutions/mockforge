@@ -18,6 +18,12 @@ pub struct ConfigSchema {
     pub required: Vec<String>,
 }
 
+impl Default for ConfigSchema {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigSchema {
     /// Create new config schema
     pub fn new() -> Self {
@@ -166,7 +172,10 @@ impl ConfigProperty {
         // Validate default value matches type
         if let Some(default) = &self.default {
             self.validate_value(default).map_err(|e| {
-                PluginError::config_error(&format!("Invalid default value for property '{}': {}", name, e))
+                PluginError::config_error(&format!(
+                    "Invalid default value for property '{}': {}",
+                    name, e
+                ))
             })?;
         }
 
@@ -245,6 +254,12 @@ pub struct PropertyValidation {
     pub enum_values: Option<Vec<serde_json::Value>>,
 }
 
+impl Default for PropertyValidation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PropertyValidation {
     /// Create new validation
     pub fn new() -> Self {
@@ -264,12 +279,18 @@ impl PropertyValidation {
         if let Some(num) = value.as_f64() {
             if let Some(min) = self.min {
                 if num < min {
-                    return Err(PluginError::config_error(&format!("Value {} is less than minimum {}", num, min)));
+                    return Err(PluginError::config_error(&format!(
+                        "Value {} is less than minimum {}",
+                        num, min
+                    )));
                 }
             }
             if let Some(max) = self.max {
                 if num > max {
-                    return Err(PluginError::config_error(&format!("Value {} is greater than maximum {}", num, max)));
+                    return Err(PluginError::config_error(&format!(
+                        "Value {} is greater than maximum {}",
+                        num, max
+                    )));
                 }
             }
         }
@@ -278,19 +299,31 @@ impl PropertyValidation {
         if let Some(s) = value.as_str() {
             if let Some(min_len) = self.min_length {
                 if s.len() < min_len {
-                    return Err(PluginError::config_error(&format!("String length {} is less than minimum {}", s.len(), min_len)));
+                    return Err(PluginError::config_error(&format!(
+                        "String length {} is less than minimum {}",
+                        s.len(),
+                        min_len
+                    )));
                 }
             }
             if let Some(max_len) = self.max_length {
                 if s.len() > max_len {
-                    return Err(PluginError::config_error(&format!("String length {} is greater than maximum {}", s.len(), max_len)));
+                    return Err(PluginError::config_error(&format!(
+                        "String length {} is greater than maximum {}",
+                        s.len(),
+                        max_len
+                    )));
                 }
             }
             if let Some(pattern) = &self.pattern {
-                let regex = regex::Regex::new(pattern)
-                    .map_err(|e| PluginError::config_error(&format!("Invalid regex pattern: {}", e)))?;
+                let regex = regex::Regex::new(pattern).map_err(|e| {
+                    PluginError::config_error(&format!("Invalid regex pattern: {}", e))
+                })?;
                 if !regex.is_match(s) {
-                    return Err(PluginError::config_error(&format!("String '{}' does not match pattern '{}'", s, pattern)));
+                    return Err(PluginError::config_error(&format!(
+                        "String '{}' does not match pattern '{}'",
+                        s, pattern
+                    )));
                 }
             }
         }
@@ -299,12 +332,20 @@ impl PropertyValidation {
         if let Some(arr) = value.as_array() {
             if let Some(min_len) = self.min_length {
                 if arr.len() < min_len {
-                    return Err(PluginError::config_error(&format!("Array length {} is less than minimum {}", arr.len(), min_len)));
+                    return Err(PluginError::config_error(&format!(
+                        "Array length {} is less than minimum {}",
+                        arr.len(),
+                        min_len
+                    )));
                 }
             }
             if let Some(max_len) = self.max_length {
                 if arr.len() > max_len {
-                    return Err(PluginError::config_error(&format!("Array length {} is greater than maximum {}", arr.len(), max_len)));
+                    return Err(PluginError::config_error(&format!(
+                        "Array length {} is greater than maximum {}",
+                        arr.len(),
+                        max_len
+                    )));
                 }
             }
         }
@@ -319,7 +360,10 @@ impl PropertyValidation {
                 }
             }
             if !found {
-                return Err(PluginError::config_error(&format!("Value {} is not in allowed values", value)));
+                return Err(PluginError::config_error(&format!(
+                    "Value {} is not in allowed values",
+                    value
+                )));
             }
         }
 

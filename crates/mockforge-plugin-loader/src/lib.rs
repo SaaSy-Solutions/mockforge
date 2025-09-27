@@ -15,26 +15,24 @@
 //! - **Resource Limits**: Memory, CPU, and execution time constraints
 //! - **Code Signing**: Optional plugin signature verification
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
 // Import types from plugin core
 use mockforge_plugin_core::{
-    PluginId, PluginManifest, PluginInfo, PluginVersion, PluginAuthor,
-    PluginInstance
+    PluginAuthor, PluginId, PluginInfo, PluginInstance, PluginManifest, PluginVersion,
 };
 
 pub mod loader;
-pub mod validator;
-pub mod sandbox;
 pub mod registry;
+pub mod sandbox;
+pub mod validator;
 
 /// Re-export commonly used types
 pub use loader::*;
-pub use validator::*;
-pub use sandbox::*;
 pub use registry::*;
+pub use sandbox::*;
+pub use validator::*;
 
 /// Plugin loader result type
 pub type LoaderResult<T> = std::result::Result<T, PluginLoaderError>;
@@ -191,10 +189,7 @@ pub struct PluginLoaderConfig {
 impl Default for PluginLoaderConfig {
     fn default() -> Self {
         Self {
-            plugin_dirs: vec![
-                "~/.mockforge/plugins".to_string(),
-                "./plugins".to_string(),
-            ],
+            plugin_dirs: vec!["~/.mockforge/plugins".to_string(), "./plugins".to_string()],
             allow_unsigned: false,
             trusted_keys: vec!["trusted-dev-key".to_string()],
             key_data: std::collections::HashMap::new(),
@@ -322,7 +317,6 @@ pub struct PluginDiscovery {
     /// Validation errors (if any)
     pub errors: Vec<String>,
 }
-
 
 impl PluginDiscovery {
     /// Create successful discovery

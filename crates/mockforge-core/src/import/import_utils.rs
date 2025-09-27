@@ -273,7 +273,8 @@ fn is_openapi_json(content: &str) -> bool {
     if let Ok(json) = serde_json::from_str::<Value>(content) {
         if let Some(obj) = json.as_object() {
             // Check for OpenAPI 3.x fields
-            if obj.contains_key("openapi") && obj.contains_key("info") && obj.contains_key("paths") {
+            if obj.contains_key("openapi") && obj.contains_key("info") && obj.contains_key("paths")
+            {
                 if let Some(openapi_version) = obj.get("openapi") {
                     if let Some(version_str) = openapi_version.as_str() {
                         // OpenAPI 3.0, 3.0.x, 3.1, 3.1.x etc.
@@ -291,7 +292,8 @@ fn is_swagger_json(content: &str) -> bool {
     if let Ok(json) = serde_json::from_str::<Value>(content) {
         if let Some(obj) = json.as_object() {
             // Check for Swagger 2.0 fields
-            if obj.contains_key("swagger") && obj.contains_key("info") && obj.contains_key("paths") {
+            if obj.contains_key("swagger") && obj.contains_key("info") && obj.contains_key("paths")
+            {
                 if let Some(swagger_version) = obj.get("swagger") {
                     if let Some(version_str) = swagger_version.as_str() {
                         return version_str.starts_with("2.0");

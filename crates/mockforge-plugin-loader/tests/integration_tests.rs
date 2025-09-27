@@ -1,8 +1,8 @@
 //! Integration tests for the complete plugin system
 
-use mockforge_plugin_loader::*;
+use mockforge_plugin_core::template::{TemplateFunction, TemplatePlugin, TemplatePluginConfig};
 use mockforge_plugin_core::*;
-use mockforge_plugin_core::template::{TemplatePlugin, TemplatePluginConfig, TemplateFunction};
+use mockforge_plugin_loader::*;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
@@ -32,8 +32,14 @@ mod tests {
             _config: &TemplatePluginConfig,
         ) -> Result<PluginResult<HashMap<String, TemplateFunction>>> {
             let mut functions = HashMap::new();
-            functions.insert("test_function".to_string(), TemplateFunction::new("test_function", "string", "Returns a test result"));
-            functions.insert("add".to_string(), TemplateFunction::new("add", "number", "Adds two numbers"));
+            functions.insert(
+                "test_function".to_string(),
+                TemplateFunction::new("test_function", "string", "Returns a test result"),
+            );
+            functions.insert(
+                "add".to_string(),
+                TemplateFunction::new("add", "number", "Adds two numbers"),
+            );
             Ok(PluginResult::success(functions, 0))
         }
 
@@ -45,21 +51,26 @@ mod tests {
             _config: &TemplatePluginConfig,
         ) -> Result<PluginResult<serde_json::Value>> {
             match function_name {
-                "test_function" => {
-                    Ok(PluginResult::success(serde_json::json!("test_result"), 0))
-                }
+                "test_function" => Ok(PluginResult::success(serde_json::json!("test_result"), 0)),
                 "add" => {
                     if args.len() == 2 {
                         if let (Some(a), Some(b)) = (args[0].as_i64(), args[1].as_i64()) {
                             Ok(PluginResult::success(serde_json::json!(a + b), 0))
                         } else {
-                            Ok(PluginResult::failure("Arguments must be numbers".to_string(), 0) as PluginResult<serde_json::Value>)
+                            Ok(PluginResult::failure("Arguments must be numbers".to_string(), 0)
+                                as PluginResult<serde_json::Value>)
                         }
                     } else {
-                        Ok(PluginResult::failure("Add function requires 2 arguments".to_string(), 0) as PluginResult<serde_json::Value>)
+                        Ok(
+                            PluginResult::failure(
+                                "Add function requires 2 arguments".to_string(),
+                                0,
+                            ) as PluginResult<serde_json::Value>,
+                        )
                     }
                 }
-                _ => Ok(PluginResult::failure(format!("Unknown function: {}", function_name), 0) as PluginResult<serde_json::Value>),
+                _ => Ok(PluginResult::failure(format!("Unknown function: {}", function_name), 0)
+                    as PluginResult<serde_json::Value>),
             }
         }
 
@@ -89,10 +100,15 @@ mod tests {
         let id = PluginId::new("mock-template-plugin");
         let version = PluginVersion::new(1, 0, 0);
         let author = PluginAuthor::with_email("Test Suite", "test@example.com");
-        let info = PluginInfo::new(id, version, "Mock Template Plugin", "A mock plugin for testing", author);
+        let info = PluginInfo::new(
+            id,
+            version,
+            "Mock Template Plugin",
+            "A mock plugin for testing",
+            author,
+        );
 
-        PluginManifest::new(info)
-            .with_capability("template")
+        PluginManifest::new(info).with_capability("template")
     }
 
     fn create_minimal_wasm_module() -> Vec<u8> {
@@ -103,7 +119,8 @@ mod tests {
             0x01, 0x00, 0x00, 0x00, // WASM version 1
             0x01, 0x05, 0x01, 0x60, 0x00, 0x00, // Type section: 1 type, () -> ()
             0x03, 0x02, 0x01, 0x00, // Function section: 1 function, type 0
-            0x07, 0x0A, 0x01, 0x06, 0x72, 0x75, 0x6E, 0x00, 0x00, // Export section: export "run" function 0
+            0x07, 0x0A, 0x01, 0x06, 0x72, 0x75, 0x6E, 0x00,
+            0x00, // Export section: export "run" function 0
             0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B, // Code section: 1 function, empty body
         ]
     }
@@ -233,9 +250,9 @@ mod tests {
         assert!(health_result.is_err());
 
         let mut loader_mut = loader; // Would need mutable access in real impl
-        // Unload non-existent should not panic
-        // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
-        // assert!(unload_result.is_ok()); // In real impl
+                                     // Unload non-existent should not panic
+                                     // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
+                                     // assert!(unload_result.is_ok()); // In real impl
     }
 
     #[tokio::test]
@@ -253,8 +270,14 @@ mod tests {
         // Verify initial context using custom fields
         assert_eq!(context.custom.get("method"), Some(&serde_json::json!("POST")));
         assert_eq!(context.custom.get("uri"), Some(&serde_json::json!("/api/users")));
-        assert_eq!(context.custom.get("headers"), Some(&serde_json::json!({"content-type": "application/json"})));
-        assert_eq!(context.custom.get("body"), Some(&serde_json::json!({"name": "John", "email": "john@example.com"})));
+        assert_eq!(
+            context.custom.get("headers"),
+            Some(&serde_json::json!({"content-type": "application/json"}))
+        );
+        assert_eq!(
+            context.custom.get("body"),
+            Some(&serde_json::json!({"name": "John", "email": "john@example.com"}))
+        );
 
         // Test context customization
         context = context.with_custom("user_id", serde_json::json!("user123"));
@@ -278,7 +301,11 @@ mod tests {
         let validator = PluginValidator::new(config);
 
         // Test valid capabilities
-        let valid_capabilities = vec!["template".to_string(), "network:http".to_string(), "filesystem:read".to_string()];
+        let valid_capabilities = vec![
+            "template".to_string(),
+            "network:http".to_string(),
+            "filesystem:read".to_string(),
+        ];
         let result = validator.validate_capabilities(&valid_capabilities);
         assert!(result.is_ok(), "Valid capabilities should pass validation");
 
@@ -305,7 +332,8 @@ mod tests {
         assert!(success_result.execution_time_ms >= 0);
 
         // Test failure result
-        let failure_result = PluginResult::failure("test error".to_string(), 150) as PluginResult<String>;
+        let failure_result =
+            PluginResult::failure("test error".to_string(), 150) as PluginResult<String>;
         assert!(!failure_result.success);
         assert!(failure_result.data.is_none());
         assert_eq!(failure_result.error, Some("test error".to_string()));
@@ -313,8 +341,12 @@ mod tests {
 
         // Test result with metadata
         let mut result_with_metadata = PluginResult::success("data".to_string(), 200);
-        result_with_metadata.metadata.insert("plugin_version".to_string(), serde_json::json!("1.0.0"));
-        result_with_metadata.metadata.insert("execution_mode".to_string(), serde_json::json!("sandboxed"));
+        result_with_metadata
+            .metadata
+            .insert("plugin_version".to_string(), serde_json::json!("1.0.0"));
+        result_with_metadata
+            .metadata
+            .insert("execution_mode".to_string(), serde_json::json!("sandboxed"));
 
         assert!(result_with_metadata.success);
         assert_eq!(result_with_metadata.metadata.len(), 2);
@@ -339,7 +371,7 @@ mod tests {
         let unhealthy = PluginHealth::unhealthy(
             PluginState::Error,
             "Plugin crashed".to_string(),
-            unhealthy_metrics
+            unhealthy_metrics,
         );
         assert!(!unhealthy.healthy);
         assert_eq!(unhealthy.message, "Plugin crashed");
@@ -376,10 +408,10 @@ mod tests {
         metrics.total_executions += 1;
         metrics.successful_executions += 1;
         let execution_time_2 = 50u64;
-        metrics.avg_execution_time_ms = (
-            metrics.avg_execution_time_ms * (metrics.total_executions - 1) as f64
-            + execution_time_2 as f64
-        ) / metrics.total_executions as f64;
+        metrics.avg_execution_time_ms = (metrics.avg_execution_time_ms
+            * (metrics.total_executions - 1) as f64
+            + execution_time_2 as f64)
+            / metrics.total_executions as f64;
         if execution_time_2 > metrics.max_execution_time_ms {
             metrics.max_execution_time_ms = execution_time_2;
         }
@@ -388,10 +420,10 @@ mod tests {
         metrics.total_executions += 1;
         metrics.failed_executions += 1;
         let execution_time_3 = 200u64;
-        metrics.avg_execution_time_ms = (
-            metrics.avg_execution_time_ms * (metrics.total_executions - 1) as f64
-            + execution_time_3 as f64
-        ) / metrics.total_executions as f64;
+        metrics.avg_execution_time_ms = (metrics.avg_execution_time_ms
+            * (metrics.total_executions - 1) as f64
+            + execution_time_3 as f64)
+            / metrics.total_executions as f64;
         if execution_time_3 > metrics.max_execution_time_ms {
             metrics.max_execution_time_ms = execution_time_3;
         }
@@ -410,14 +442,8 @@ mod tests {
         // Test plugin dependency handling
 
         let mut dependencies = std::collections::HashMap::new();
-        dependencies.insert(
-            PluginId::new("base-plugin"),
-            PluginVersion::new(1, 0, 0)
-        );
-        dependencies.insert(
-            PluginId::new("optional-plugin"),
-            PluginVersion::new(2, 1, 0)
-        );
+        dependencies.insert(PluginId::new("base-plugin"), PluginVersion::new(1, 0, 0));
+        dependencies.insert(PluginId::new("optional-plugin"), PluginVersion::new(2, 1, 0));
 
         assert_eq!(dependencies.len(), 2);
 

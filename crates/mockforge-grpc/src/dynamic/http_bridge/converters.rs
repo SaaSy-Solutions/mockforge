@@ -3,12 +3,14 @@
 //! This module provides utilities to convert between JSON and protobuf messages,
 //! enabling HTTP REST API access to gRPC services.
 
-use prost_reflect::{DynamicMessage, MessageDescriptor, DescriptorPool, FieldDescriptor, Kind, Value, ReflectMessage};
+use base64::{engine::general_purpose, Engine as _};
+use prost_reflect::{
+    DescriptorPool, DynamicMessage, FieldDescriptor, Kind, MessageDescriptor, ReflectMessage, Value,
+};
 use serde_json::{self, Value as JsonValue};
 use std::collections::HashMap;
 use std::string::String as StdString;
 use tracing::{debug, warn};
-use base64::{Engine as _, engine::general_purpose};
 
 /// Errors that can occur during JSON/protobuf conversion
 #[derive(Debug, thiserror::Error)]
@@ -20,7 +22,11 @@ pub enum ConversionError {
     #[error("Unknown field '{field}' in message")]
     UnknownField { field: String },
     #[error("Type mismatch for field '{field}': expected {expected}, got {actual}")]
-    TypeMismatch { field: String, expected: String, actual: String },
+    TypeMismatch {
+        field: String,
+        expected: String,
+        actual: String,
+    },
     #[error("Failed to convert nested message: {0}")]
     NestedError(String),
     #[error("Protobuf reflection error: {0}")]
@@ -28,7 +34,9 @@ pub enum ConversionError {
 }
 
 impl ConversionError {
-    fn with_field(field: impl Into<String>) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
+    fn with_field(
+        field: impl Into<String>,
+    ) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
         let field = field.into();
         move |err| ConversionError::ProtobufError(format!("Field '{}': {}", field, err))
     }
@@ -108,10 +116,11 @@ impl ProtobufJsonConverter {
         field_name: &str,
         json_value: &JsonValue,
     ) -> Result<(), ConversionError> {
-        let field = message.descriptor().get_field_by_name(field_name)
-            .ok_or_else(|| ConversionError::UnknownField {
+        let field = message.descriptor().get_field_by_name(field_name).ok_or_else(|| {
+            ConversionError::UnknownField {
                 field: field_name.to_string(),
-            })?;
+            }
+        })?;
 
         let protobuf_value = self.convert_json_value_to_protobuf(&field, json_value)?;
         message.set_field(&field, protobuf_value);
@@ -131,7 +140,8 @@ impl ProtobufJsonConverter {
             Message(ref message_descriptor) => {
                 match json_value {
                     JsonValue::Object(_) => {
-                        let nested_message = self.json_to_protobuf(message_descriptor, json_value)?;
+                        let nested_message =
+                            self.json_to_protobuf(message_descriptor, json_value)?;
                         Ok(Value::Message(nested_message))
                     }
                     JsonValue::Null if field.supports_presence() => {
@@ -200,232 +210,198 @@ impl ProtobufJsonConverter {
                     }),
                 }
             }
-            String => {
-                match json_value {
-                    JsonValue::String(s) => Ok(Value::String(s.clone())),
-                    JsonValue::Null if field.supports_presence() => Ok(Value::String(StdString::new())),
-                    _ => Err(ConversionError::TypeMismatch {
-                        field: field.name().to_string(),
-                        expected: "string".to_string(),
-                        actual: self.json_type_name(json_value),
-                    }),
+            String => match json_value {
+                JsonValue::String(s) => Ok(Value::String(s.clone())),
+                JsonValue::Null if field.supports_presence() => Ok(Value::String(StdString::new())),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Int32 | Sint32 | Sfixed32 => match json_value {
+                JsonValue::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        Ok(Value::I32(i as i32))
+                    } else {
+                        Err(ConversionError::InvalidValue {
+                            field: field.name().to_string(),
+                            message: "Number out of range for int32".to_string(),
+                        })
+                    }
                 }
-            }
-            Int32 | Sint32 | Sfixed32 => {
-                match json_value {
-                    JsonValue::Number(n) => {
-                        if let Some(i) = n.as_i64() {
-                            Ok(Value::I32(i as i32))
-                        } else {
-                            Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: "Number out of range for int32".to_string(),
-                            })
-                        }
-                    }
-                    JsonValue::String(s) => {
-                        match s.parse::<i32>() {
-                            Ok(i) => Ok(Value::I32(i)),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid int32 value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::I32(0)),
-                    _ => Err(ConversionError::TypeMismatch {
+                JsonValue::String(s) => match s.parse::<i32>() {
+                    Ok(i) => Ok(Value::I32(i)),
+                    Err(_) => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "number or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid int32 value: {}", s),
                     }),
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::I32(0)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "number or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Int64 | Sint64 | Sfixed64 => match json_value {
+                JsonValue::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        Ok(Value::I64(i))
+                    } else {
+                        Err(ConversionError::InvalidValue {
+                            field: field.name().to_string(),
+                            message: "Number out of range for int64".to_string(),
+                        })
+                    }
                 }
-            }
-            Int64 | Sint64 | Sfixed64 => {
-                match json_value {
-                    JsonValue::Number(n) => {
-                        if let Some(i) = n.as_i64() {
-                            Ok(Value::I64(i))
-                        } else {
-                            Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: "Number out of range for int64".to_string(),
-                            })
-                        }
-                    }
-                    JsonValue::String(s) => {
-                        match s.parse::<i64>() {
-                            Ok(i) => Ok(Value::I64(i)),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid int64 value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::I64(0)),
-                    _ => Err(ConversionError::TypeMismatch {
+                JsonValue::String(s) => match s.parse::<i64>() {
+                    Ok(i) => Ok(Value::I64(i)),
+                    Err(_) => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "number or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid int64 value: {}", s),
                     }),
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::I64(0)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "number or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Uint32 | Fixed32 => match json_value {
+                JsonValue::Number(n) => {
+                    if let Some(i) = n.as_u64() {
+                        Ok(Value::U32(i as u32))
+                    } else {
+                        Err(ConversionError::InvalidValue {
+                            field: field.name().to_string(),
+                            message: "Number out of range for uint32".to_string(),
+                        })
+                    }
                 }
-            }
-            Uint32 | Fixed32 => {
-                match json_value {
-                    JsonValue::Number(n) => {
-                        if let Some(i) = n.as_u64() {
-                            Ok(Value::U32(i as u32))
-                        } else {
-                            Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: "Number out of range for uint32".to_string(),
-                            })
-                        }
-                    }
-                    JsonValue::String(s) => {
-                        match s.parse::<u32>() {
-                            Ok(i) => Ok(Value::U32(i)),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid uint32 value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::U32(0)),
-                    _ => Err(ConversionError::TypeMismatch {
+                JsonValue::String(s) => match s.parse::<u32>() {
+                    Ok(i) => Ok(Value::U32(i)),
+                    Err(_) => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "number or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid uint32 value: {}", s),
                     }),
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::U32(0)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "number or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Uint64 | Fixed64 => match json_value {
+                JsonValue::Number(n) => {
+                    if let Some(i) = n.as_u64() {
+                        Ok(Value::U64(i))
+                    } else {
+                        Err(ConversionError::InvalidValue {
+                            field: field.name().to_string(),
+                            message: "Number out of range for uint64".to_string(),
+                        })
+                    }
                 }
-            }
-            Uint64 | Fixed64 => {
-                match json_value {
-                    JsonValue::Number(n) => {
-                        if let Some(i) = n.as_u64() {
-                            Ok(Value::U64(i))
-                        } else {
-                            Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: "Number out of range for uint64".to_string(),
-                            })
-                        }
-                    }
-                    JsonValue::String(s) => {
-                        match s.parse::<u64>() {
-                            Ok(i) => Ok(Value::U64(i)),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid uint64 value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::U64(0)),
-                    _ => Err(ConversionError::TypeMismatch {
+                JsonValue::String(s) => match s.parse::<u64>() {
+                    Ok(i) => Ok(Value::U64(i)),
+                    Err(_) => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "number or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid uint64 value: {}", s),
                     }),
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::U64(0)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "number or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Float => match json_value {
+                JsonValue::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        Ok(Value::F32(f as f32))
+                    } else {
+                        Ok(Value::F32(0.0))
+                    }
                 }
-            }
-            Float => {
-                match json_value {
-                    JsonValue::Number(n) => {
-                        if let Some(f) = n.as_f64() {
-                            Ok(Value::F32(f as f32))
-                        } else {
-                            Ok(Value::F32(0.0))
-                        }
-                    }
-                    JsonValue::String(s) => {
-                        match s.parse::<f32>() {
-                            Ok(f) => Ok(Value::F32(f)),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid float value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::F32(0.0)),
-                    _ => Err(ConversionError::TypeMismatch {
+                JsonValue::String(s) => match s.parse::<f32>() {
+                    Ok(f) => Ok(Value::F32(f)),
+                    Err(_) => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "number or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid float value: {}", s),
                     }),
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::F32(0.0)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "number or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Double => match json_value {
+                JsonValue::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        Ok(Value::F64(f))
+                    } else {
+                        Ok(Value::F64(0.0))
+                    }
                 }
-            }
-            Double => {
-                match json_value {
-                    JsonValue::Number(n) => {
-                        if let Some(f) = n.as_f64() {
-                            Ok(Value::F64(f))
-                        } else {
-                            Ok(Value::F64(0.0))
-                        }
-                    }
-                    JsonValue::String(s) => {
-                        match s.parse::<f64>() {
-                            Ok(f) => Ok(Value::F64(f)),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid double value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::F64(0.0)),
-                    _ => Err(ConversionError::TypeMismatch {
+                JsonValue::String(s) => match s.parse::<f64>() {
+                    Ok(f) => Ok(Value::F64(f)),
+                    Err(_) => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "number or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid double value: {}", s),
                     }),
-                }
-            }
-            Bool => {
-                match json_value {
-                    JsonValue::Bool(b) => Ok(Value::Bool(*b)),
-                    JsonValue::String(s) => {
-                        match s.to_lowercase().as_str() {
-                            "true" | "1" | "yes" | "on" => Ok(Value::Bool(true)),
-                            "false" | "0" | "no" | "off" | "" => Ok(Value::Bool(false)),
-                            _ => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid boolean value: {}", s),
-                            }),
-                        }
-                    }
-                    JsonValue::Number(n) => {
-                        if let Some(i) = n.as_i64() {
-                            Ok(Value::Bool(i != 0))
-                        } else {
-                            Ok(Value::Bool(false))
-                        }
-                    }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::Bool(false)),
-                    _ => Err(ConversionError::TypeMismatch {
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::F64(0.0)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "number or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Bool => match json_value {
+                JsonValue::Bool(b) => Ok(Value::Bool(*b)),
+                JsonValue::String(s) => match s.to_lowercase().as_str() {
+                    "true" | "1" | "yes" | "on" => Ok(Value::Bool(true)),
+                    "false" | "0" | "no" | "off" | "" => Ok(Value::Bool(false)),
+                    _ => Err(ConversionError::InvalidValue {
                         field: field.name().to_string(),
-                        expected: "boolean, number, or string".to_string(),
-                        actual: self.json_type_name(json_value),
+                        message: format!("Invalid boolean value: {}", s),
                     }),
-                }
-            }
-            Bytes => {
-                match json_value {
-                    JsonValue::String(s) => {
-                        match general_purpose::STANDARD.decode(s) {
-                            Ok(bytes) => Ok(Value::Bytes(bytes.into())),
-                            Err(_) => Err(ConversionError::InvalidValue {
-                                field: field.name().to_string(),
-                                message: format!("Invalid base64 string: {}", s),
-                            }),
-                        }
+                },
+                JsonValue::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        Ok(Value::Bool(i != 0))
+                    } else {
+                        Ok(Value::Bool(false))
                     }
-                    JsonValue::Null if field.supports_presence() => Ok(Value::Bytes(vec![].into())),
-                    _ => Err(ConversionError::TypeMismatch {
-                        field: field.name().to_string(),
-                        expected: "base64 string".to_string(),
-                        actual: self.json_type_name(json_value),
-                    }),
                 }
-            }
+                JsonValue::Null if field.supports_presence() => Ok(Value::Bool(false)),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "boolean, number, or string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
+            Bytes => match json_value {
+                JsonValue::String(s) => match general_purpose::STANDARD.decode(s) {
+                    Ok(bytes) => Ok(Value::Bytes(bytes.into())),
+                    Err(_) => Err(ConversionError::InvalidValue {
+                        field: field.name().to_string(),
+                        message: format!("Invalid base64 string: {}", s),
+                    }),
+                },
+                JsonValue::Null if field.supports_presence() => Ok(Value::Bytes(vec![].into())),
+                _ => Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "base64 string".to_string(),
+                    actual: self.json_type_name(json_value),
+                }),
+            },
         }
     }
 
@@ -529,7 +505,10 @@ impl ProtobufJsonConverter {
     }
 
     /// Get default value for a field based on its type
-    fn get_default_value_for_field(&self, field: &FieldDescriptor) -> Result<Value, ConversionError> {
+    fn get_default_value_for_field(
+        &self,
+        field: &FieldDescriptor,
+    ) -> Result<Value, ConversionError> {
         use prost_reflect::Kind::*;
 
         Ok(match field.kind() {
@@ -671,8 +650,15 @@ mod tests {
         assert_eq!(converter.json_type_name(&JsonValue::Null), "null");
         assert_eq!(converter.json_type_name(&JsonValue::Bool(true)), "boolean");
         assert_eq!(converter.json_type_name(&JsonValue::Bool(false)), "boolean");
-        assert_eq!(converter.json_type_name(&JsonValue::Number(serde_json::Number::from(42))), "number");
-        assert_eq!(converter.json_type_name(&JsonValue::Number(serde_json::Number::from_f64(3.14).unwrap())), "number");
+        assert_eq!(
+            converter.json_type_name(&JsonValue::Number(serde_json::Number::from(42))),
+            "number"
+        );
+        assert_eq!(
+            converter
+                .json_type_name(&JsonValue::Number(serde_json::Number::from_f64(3.14).unwrap())),
+            "number"
+        );
         assert_eq!(converter.json_type_name(&JsonValue::String("test".to_string())), "string");
         assert_eq!(converter.json_type_name(&JsonValue::Array(vec![])), "array");
         assert_eq!(converter.json_type_name(&JsonValue::Array(vec![JsonValue::Null])), "array");
@@ -829,15 +815,21 @@ mod tests {
 
         // Test deeply nested object
         let mut nested_obj = serde_json::Map::new();
-        nested_obj.insert("level1".to_string(), JsonValue::Object({
-            let mut level2 = serde_json::Map::new();
-            level2.insert("level2".to_string(), JsonValue::Object({
-                let mut level3 = serde_json::Map::new();
-                level3.insert("level3".to_string(), JsonValue::String("deep".to_string()));
-                level3
-            }));
-            level2
-        }));
+        nested_obj.insert(
+            "level1".to_string(),
+            JsonValue::Object({
+                let mut level2 = serde_json::Map::new();
+                level2.insert(
+                    "level2".to_string(),
+                    JsonValue::Object({
+                        let mut level3 = serde_json::Map::new();
+                        level3.insert("level3".to_string(), JsonValue::String("deep".to_string()));
+                        level3
+                    }),
+                );
+                level2
+            }),
+        );
         let nested_object = JsonValue::Object(nested_obj);
         assert_eq!(converter.json_type_name(&nested_object), "object");
     }
@@ -849,12 +841,12 @@ mod tests {
 
         // Test various base64 strings
         let base64_cases = vec![
-            "",  // empty
-            "dGVzdA==",  // "test"
-            "SGVsbG8gV29ybGQ=",  // "Hello World"
-            "YWJjMTIzIT8kKiYoKSctPUB+",  // "abc123!?$*&()'-=@~"
-            "dGVzdGluZyB3aXRoIHNwYWNlcyBhbmQgc3BlY2lhbCBjaGFycw==",  // "testing with spaces and special chars"
-            "aHR0cHM6Ly9leGFtcGxlLmNvbS9wYXRoP3F1ZXJ5PXZhbHVl",  // URL-like base64
+            "",                                                     // empty
+            "dGVzdA==",                                             // "test"
+            "SGVsbG8gV29ybGQ=",                                     // "Hello World"
+            "YWJjMTIzIT8kKiYoKSctPUB+",                             // "abc123!?$*&()'-=@~"
+            "dGVzdGluZyB3aXRoIHNwYWNlcyBhbmQgc3BlY2lhbCBjaGFycw==", // "testing with spaces and special chars"
+            "aHR0cHM6Ly9leGFtcGxlLmNvbS9wYXRoP3F1ZXJ5PXZhbHVl",     // URL-like base64
         ];
 
         for base64_str in base64_cases {

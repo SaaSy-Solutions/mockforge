@@ -11,7 +11,6 @@ import {
   DialogClose,
 } from '../ui/Dialog';
 import { useAuthStore } from '../../stores/useAuthStore';
-import type { User } from '../../types';
 
 interface ProfileSettingsProps {
   open: boolean;
@@ -72,7 +71,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
       });
 
       onOpenChange(false);
-    } catch (error) {
+    } catch {
       setErrors({ general: 'Failed to update profile. Please try again.' });
     } finally {
       setIsSubmitting(false);

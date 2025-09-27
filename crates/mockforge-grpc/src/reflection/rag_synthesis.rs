@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 #[cfg(feature = "data-faker")]
-use mockforge_data::rag::{RagEngine, RagConfig};
+use mockforge_data::rag::{RagConfig, RagEngine};
 
 /// Configuration for RAG-driven data synthesis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,7 +193,10 @@ impl RagDataSynthesizer {
     }
 
     /// Generate domain context for an entity using RAG
-    pub async fn generate_entity_context(&mut self, entity_name: &str) -> Result<EntityContext, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn generate_entity_context(
+        &mut self,
+        entity_name: &str,
+    ) -> Result<EntityContext, Box<dyn std::error::Error + Send + Sync>> {
         // Check cache first
         if let Some(cached_context) = self.entity_contexts.get(entity_name) {
             return Ok(cached_context.clone());
@@ -215,14 +218,17 @@ impl RagDataSynthesizer {
         }
 
         // Extract business rules from context
-        context.business_rules = self.extract_business_rules(&context.domain_context, entity_name)?;
+        context.business_rules =
+            self.extract_business_rules(&context.domain_context, entity_name)?;
 
         // Find example values from context sources
-        context.example_values = self.extract_example_values(&context.domain_context, entity_name)?;
+        context.example_values =
+            self.extract_example_values(&context.domain_context, entity_name)?;
 
         // Generate related entity contexts if schema graph is available
         if let Some(schema_graph) = &self.schema_graph {
-            context.related_contexts = self.generate_related_contexts(entity_name, schema_graph).await?;
+            context.related_contexts =
+                self.generate_related_contexts(entity_name, schema_graph).await?;
         }
 
         // Cache the context
@@ -263,7 +269,8 @@ impl RagDataSynthesizer {
 
         // Use RAG to generate contextually appropriate value
         if self.config.enabled && !context.domain_context.is_empty() {
-            let rag_value = self.generate_contextual_value(&context, field_name, field_type).await?;
+            let rag_value =
+                self.generate_contextual_value(&context, field_name, field_type).await?;
             if !rag_value.is_empty() {
                 return Ok(Some(rag_value));
             }
@@ -274,7 +281,9 @@ impl RagDataSynthesizer {
 
     /// Initialize RAG engine from configuration
     #[cfg(feature = "data-faker")]
-    fn initialize_rag_engine(config: &RagSynthesisRagConfig) -> Result<RagEngine, Box<dyn std::error::Error + Send + Sync>> {
+    fn initialize_rag_engine(
+        config: &RagSynthesisRagConfig,
+    ) -> Result<RagEngine, Box<dyn std::error::Error + Send + Sync>> {
         let rag_config = RagConfig {
             provider: mockforge_data::rag::LlmProvider::OpenAI,
             api_endpoint: config.api_endpoint.clone(),
@@ -297,14 +306,19 @@ impl RagDataSynthesizer {
     }
 
     /// Query RAG system for entity-specific context
-    async fn query_rag_for_entity(&self, entity_name: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn query_rag_for_entity(
+        &self,
+        entity_name: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(feature = "data-faker")]
         if let Some(rag_engine) = &self.rag_engine {
             let query = format!("What is {} in this domain? What are typical values and constraints for {} entities?", entity_name, entity_name);
-            
-            let chunks = rag_engine.keyword_search(&query, self.config.rag_config.as_ref().unwrap().max_documents);
+
+            let chunks = rag_engine
+                .keyword_search(&query, self.config.rag_config.as_ref().unwrap().max_documents);
             if !chunks.is_empty() {
-                let context = chunks.into_iter()
+                let context = chunks
+                    .into_iter()
                     .map(|chunk| &chunk.content)
                     .cloned()
                     .collect::<Vec<_>>()
@@ -320,7 +334,11 @@ impl RagDataSynthesizer {
     }
 
     /// Extract business rules from context text
-    fn extract_business_rules(&self, context: &str, entity_name: &str) -> Result<Vec<BusinessRule>, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_business_rules(
+        &self,
+        context: &str,
+        entity_name: &str,
+    ) -> Result<Vec<BusinessRule>, Box<dyn std::error::Error + Send + Sync>> {
         let mut rules = Vec::new();
 
         // Simple rule extraction - can be enhanced with NLP
@@ -340,7 +358,11 @@ impl RagDataSynthesizer {
         if context.to_lowercase().contains("phone") && context.to_lowercase().contains("number") {
             rules.push(BusinessRule {
                 description: "Phone fields must follow phone number format".to_string(),
-                applies_to_fields: vec!["phone".to_string(), "mobile".to_string(), "phone_number".to_string()],
+                applies_to_fields: vec![
+                    "phone".to_string(),
+                    "mobile".to_string(),
+                    "phone_number".to_string(),
+                ],
                 rule_type: BusinessRuleType::Format,
                 parameters: {
                     let mut params = HashMap::new();
@@ -355,7 +377,11 @@ impl RagDataSynthesizer {
     }
 
     /// Extract example values from context
-    fn extract_example_values(&self, context: &str, _entity_name: &str) -> Result<HashMap<String, Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_example_values(
+        &self,
+        context: &str,
+        _entity_name: &str,
+    ) -> Result<HashMap<String, Vec<String>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut examples = HashMap::new();
 
         // Simple example extraction - can be enhanced with regex/NLP
@@ -364,12 +390,14 @@ impl RagDataSynthesizer {
             if line.contains("example:") || line.contains("e.g.") {
                 // Extract examples from line - simplified implementation
                 if line.to_lowercase().contains("email") {
-                    examples.entry("email".to_string())
+                    examples
+                        .entry("email".to_string())
                         .or_insert_with(Vec::new)
                         .push("user@example.com".to_string());
                 }
                 if line.to_lowercase().contains("name") {
-                    examples.entry("name".to_string())
+                    examples
+                        .entry("name".to_string())
                         .or_insert_with(Vec::new)
                         .push("John Doe".to_string());
                 }
@@ -380,7 +408,11 @@ impl RagDataSynthesizer {
     }
 
     /// Generate contexts for related entities
-    async fn generate_related_contexts(&self, entity_name: &str, schema_graph: &SchemaGraph) -> Result<HashMap<String, String>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn generate_related_contexts(
+        &self,
+        entity_name: &str,
+        schema_graph: &SchemaGraph,
+    ) -> Result<HashMap<String, String>, Box<dyn std::error::Error + Send + Sync>> {
         let mut related_contexts = HashMap::new();
 
         if let Some(entity) = schema_graph.entities.get(entity_name) {
@@ -396,7 +428,12 @@ impl RagDataSynthesizer {
     }
 
     /// Apply a business rule to generate field value
-    fn apply_business_rule(&self, rule: &BusinessRule, field_name: &str, _field_type: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    fn apply_business_rule(
+        &self,
+        rule: &BusinessRule,
+        field_name: &str,
+        _field_type: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         match rule.rule_type {
             BusinessRuleType::Format => {
                 if let Some(format) = rule.parameters.get("format") {
@@ -409,7 +446,9 @@ impl RagDataSynthesizer {
             }
             BusinessRuleType::Range => {
                 // Apply range constraints
-                if let (Some(min), Some(max)) = (rule.parameters.get("min"), rule.parameters.get("max")) {
+                if let (Some(min), Some(max)) =
+                    (rule.parameters.get("min"), rule.parameters.get("max"))
+                {
                     if let (Ok(min_val), Ok(max_val)) = (min.parse::<i32>(), max.parse::<i32>()) {
                         // Use deterministic value based on field name hash
                         let field_hash = self.hash_field_name(field_name);
@@ -427,11 +466,17 @@ impl RagDataSynthesizer {
     }
 
     /// Generate contextual value using RAG
-    async fn generate_contextual_value(&self, context: &EntityContext, field_name: &str, field_type: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn generate_contextual_value(
+        &self,
+        context: &EntityContext,
+        field_name: &str,
+        field_type: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Use a prompt template to generate contextually appropriate value
         if let Some(template) = self.find_applicable_template(&context.entity_name) {
-            let prompt = self.build_prompt_from_template(template, context, field_name, field_type)?;
-            
+            let prompt =
+                self.build_prompt_from_template(template, context, field_name, field_type)?;
+
             #[cfg(feature = "data-faker")]
             if let Some(rag_engine) = &self.rag_engine {
                 let chunks = rag_engine.keyword_search(&prompt, 1);
@@ -450,7 +495,9 @@ impl RagDataSynthesizer {
     /// Find applicable prompt template for entity
     fn find_applicable_template(&self, entity_name: &str) -> Option<&PromptTemplate> {
         for template in self.config.prompt_templates.values() {
-            if template.entity_types.contains(&entity_name.to_string()) || template.entity_types.contains(&"*".to_string()) {
+            if template.entity_types.contains(&entity_name.to_string())
+                || template.entity_types.contains(&"*".to_string())
+            {
                 return Some(template);
             }
         }
@@ -485,17 +532,21 @@ impl RagDataSynthesizer {
     pub fn is_enabled(&self) -> bool {
         self.config.enabled && {
             #[cfg(feature = "data-faker")]
-            { self.rag_engine.is_some() }
+            {
+                self.rag_engine.is_some()
+            }
             #[cfg(not(feature = "data-faker"))]
-            { false }
+            {
+                false
+            }
         }
     }
-    
+
     /// Generate a deterministic hash for a field name for stable data generation
     pub fn hash_field_name(&self, field_name: &str) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         field_name.hash(&mut hasher);
         hasher.finish()
@@ -505,7 +556,7 @@ impl RagDataSynthesizer {
 impl Default for RagSynthesisConfig {
     fn default() -> Self {
         let mut prompt_templates = HashMap::new();
-        
+
         // Default template for all entities
         prompt_templates.insert("default".to_string(), PromptTemplate {
             name: "default".to_string(),
@@ -549,10 +600,10 @@ mod tests {
     fn test_business_rule_extraction() {
         let config = RagSynthesisConfig::default();
         let synthesizer = RagDataSynthesizer::new(config);
-        
+
         let context = "Users must provide a valid email format. Phone numbers should be in international format.";
         let rules = synthesizer.extract_business_rules(context, "User").unwrap();
-        
+
         assert!(rules.len() >= 1);
         assert!(rules.iter().any(|r| matches!(r.rule_type, BusinessRuleType::Format)));
     }

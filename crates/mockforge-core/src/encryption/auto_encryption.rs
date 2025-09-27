@@ -5,9 +5,9 @@
 
 use crate::encryption::algorithms::{EncryptionEngine, EncryptionKey};
 use crate::encryption::errors::{EncryptionError, EncryptionResult};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use regex::Regex;
 
 /// Configuration for automatic encryption
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,10 +76,8 @@ impl RequestContext {
         path: String,
         headers: std::collections::HashMap<String, String>,
     ) -> Self {
-        let content_type = headers
-            .get("content-type")
-            .or_else(|| headers.get("Content-Type"))
-            .cloned();
+        let content_type =
+            headers.get("content-type").or_else(|| headers.get("Content-Type")).cloned();
 
         Self {
             method,
@@ -107,7 +105,10 @@ pub enum RuleCondition {
     /// Field name matches pattern
     FieldMatches { pattern: String },
     /// Header exists with value
-    HeaderExists { name: String, value_pattern: Option<String> },
+    HeaderExists {
+        name: String,
+        value_pattern: Option<String>,
+    },
     /// Request path matches pattern
     PathMatches { pattern: String },
     /// HTTP method matches
@@ -126,7 +127,9 @@ pub enum RuleAction {
     /// Skip encryption for this request
     SkipEncryption,
     /// Use specific algorithm
-    UseAlgorithm { algorithm: crate::encryption::algorithms::EncryptionAlgorithm },
+    UseAlgorithm {
+        algorithm: crate::encryption::algorithms::EncryptionAlgorithm,
+    },
 }
 
 /// Result of automatic encryption processing
@@ -213,7 +216,11 @@ impl AutoEncryptionProcessor {
     }
 
     /// Process a request for automatic encryption
-    pub fn process_request(&self, request_data: &mut serde_json::Value, request_context: Option<&RequestContext>) -> EncryptionResult<AutoEncryptionResult> {
+    pub fn process_request(
+        &self,
+        request_data: &mut serde_json::Value,
+        request_context: Option<&RequestContext>,
+    ) -> EncryptionResult<AutoEncryptionResult> {
         if !self.is_enabled() {
             return Ok(AutoEncryptionResult {
                 encrypted: false,
@@ -253,7 +260,11 @@ impl AutoEncryptionProcessor {
     }
 
     /// Process a response for automatic encryption
-    pub fn process_response(&self, response_data: &mut serde_json::Value, request_context: Option<&RequestContext>) -> EncryptionResult<AutoEncryptionResult> {
+    pub fn process_response(
+        &self,
+        response_data: &mut serde_json::Value,
+        request_context: Option<&RequestContext>,
+    ) -> EncryptionResult<AutoEncryptionResult> {
         if !self.is_enabled() || !self.config.encrypt_response_bodies {
             return Ok(AutoEncryptionResult {
                 encrypted: false,
@@ -328,10 +339,13 @@ impl AutoEncryptionProcessor {
                     if let Some(field_value) = map.get(&field_name) {
                         if let Some(string_value) = field_value.as_str() {
                             if let Some(encryption_key) = &self.encryption_key {
-                                match EncryptionEngine::encrypt_string(encryption_key, string_value) {
+                                match EncryptionEngine::encrypt_string(encryption_key, string_value)
+                                {
                                     Ok(encrypted) => {
                                         let encrypted_json = serde_json::to_value(&encrypted)
-                                            .map_err(|e| EncryptionError::serialization_error(e.to_string()))?;
+                                            .map_err(|e| {
+                                                EncryptionError::serialization_error(e.to_string())
+                                            })?;
                                         map.insert(field_name.clone(), encrypted_json);
 
                                         encrypted_fields.insert(
@@ -369,7 +383,12 @@ impl AutoEncryptionProcessor {
                     } else {
                         current_path.to_string()
                     };
-                    count += self.encrypt_fields_in_value(v, &nested_path, encrypted_fields, request_context)?;
+                    count += self.encrypt_fields_in_value(
+                        v,
+                        &nested_path,
+                        encrypted_fields,
+                        request_context,
+                    )?;
                 }
             }
             serde_json::Value::Array(arr) => {
@@ -379,7 +398,12 @@ impl AutoEncryptionProcessor {
                     } else {
                         format!("{}.[{}]", current_path, index)
                     };
-                    count += self.encrypt_fields_in_value(item, &nested_path, encrypted_fields, request_context)?;
+                    count += self.encrypt_fields_in_value(
+                        item,
+                        &nested_path,
+                        encrypted_fields,
+                        request_context,
+                    )?;
                 }
             }
             _ => {}
@@ -389,7 +413,12 @@ impl AutoEncryptionProcessor {
     }
 
     /// Check if a field should be encrypted
-    fn should_encrypt_field(&self, field_name: &str, field_path: &str, request_context: Option<&RequestContext>) -> bool {
+    fn should_encrypt_field(
+        &self,
+        field_name: &str,
+        field_path: &str,
+        request_context: Option<&RequestContext>,
+    ) -> bool {
         // Check custom rules first
         for rule in &self.config.custom_rules {
             if self.rule_matches(rule, field_name, field_path, request_context) {
@@ -420,15 +449,26 @@ impl AutoEncryptionProcessor {
     }
 
     /// Check if a rule matches the current context
-    fn rule_matches(&self, rule: &EncryptionRule, field_name: &str, field_path: &str, request_context: Option<&RequestContext>) -> bool {
+    fn rule_matches(
+        &self,
+        rule: &EncryptionRule,
+        field_name: &str,
+        field_path: &str,
+        request_context: Option<&RequestContext>,
+    ) -> bool {
         for condition in &rule.conditions {
             match condition {
                 RuleCondition::FieldMatches { pattern } => {
-                    if !Self::matches_pattern(field_name, pattern) && !Self::matches_pattern(field_path, pattern) {
+                    if !Self::matches_pattern(field_name, pattern)
+                        && !Self::matches_pattern(field_path, pattern)
+                    {
                         return false;
                     }
                 }
-                RuleCondition::HeaderExists { name, value_pattern } => {
+                RuleCondition::HeaderExists {
+                    name,
+                    value_pattern,
+                } => {
                     if let Some(ctx) = request_context {
                         let header_exists = ctx.headers.contains_key(name);
                         if !header_exists {
@@ -562,40 +602,39 @@ impl AutoEncryptionProcessor {
     pub fn validate_config(&self) -> EncryptionResult<()> {
         if self.config.enabled && self.encryption_key.is_none() {
             return Err(EncryptionError::auto_encryption_config_error(
-                "Auto-encryption enabled but no encryption key provided"
+                "Auto-encryption enabled but no encryption key provided",
             ));
         }
 
         for pattern in &self.config.field_patterns {
             if pattern.pattern.is_empty() {
-                return Err(EncryptionError::auto_encryption_config_error(
-                    "Empty field pattern"
-                ));
+                return Err(EncryptionError::auto_encryption_config_error("Empty field pattern"));
             }
 
             if let Err(e) = Regex::new(&pattern.pattern) {
-                return Err(EncryptionError::auto_encryption_config_error(
-                    format!("Invalid regex pattern '{}': {}", pattern.pattern, e)
-                ));
+                return Err(EncryptionError::auto_encryption_config_error(format!(
+                    "Invalid regex pattern '{}': {}",
+                    pattern.pattern, e
+                )));
             }
         }
 
         for rule in &self.config.custom_rules {
             if rule.name.is_empty() {
                 return Err(EncryptionError::auto_encryption_config_error(
-                    "Encryption rule name cannot be empty"
+                    "Encryption rule name cannot be empty",
                 ));
             }
 
             if rule.conditions.is_empty() {
                 return Err(EncryptionError::auto_encryption_config_error(
-                    "Encryption rule must have at least one condition"
+                    "Encryption rule must have at least one condition",
                 ));
             }
 
             if rule.actions.is_empty() {
                 return Err(EncryptionError::auto_encryption_config_error(
-                    "Encryption rule must have at least one action"
+                    "Encryption rule must have at least one action",
                 ));
             }
         }

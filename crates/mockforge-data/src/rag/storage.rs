@@ -200,10 +200,18 @@ pub trait DocumentStorage: Send + Sync {
     async fn store_chunks(&self, chunks: Vec<DocumentChunk>) -> Result<()>;
 
     /// Search for similar chunks
-    async fn search_similar(&self, query_embedding: &[f32], top_k: usize) -> Result<Vec<DocumentChunk>>;
+    async fn search_similar(
+        &self,
+        query_embedding: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<DocumentChunk>>;
 
     /// Search with custom parameters
-    async fn search_with_params(&self, query_embedding: &[f32], params: SearchParams) -> Result<Vec<DocumentChunk>>;
+    async fn search_with_params(
+        &self,
+        query_embedding: &[f32],
+        params: SearchParams,
+    ) -> Result<Vec<DocumentChunk>>;
 
     /// Get chunk by ID
     async fn get_chunk(&self, chunk_id: &str) -> Result<Option<DocumentChunk>>;
@@ -377,11 +385,16 @@ impl DocumentStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn search_similar(&self, query_embedding: &[f32], top_k: usize) -> Result<Vec<DocumentChunk>> {
+    async fn search_similar(
+        &self,
+        query_embedding: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<DocumentChunk>> {
         let vectors = self.vectors.read().await;
         let chunks = self.chunks.read().await;
 
-        let mut similarities: Vec<(String, f32)> = vectors.iter()
+        let mut similarities: Vec<(String, f32)> = vectors
+            .iter()
             .map(|(chunk_id, embedding)| {
                 let similarity = self.cosine_similarity(query_embedding, embedding);
                 (chunk_id.clone(), similarity)
@@ -402,7 +415,11 @@ impl DocumentStorage for InMemoryStorage {
         Ok(results)
     }
 
-    async fn search_with_params(&self, query_embedding: &[f32], params: SearchParams) -> Result<Vec<DocumentChunk>> {
+    async fn search_with_params(
+        &self,
+        query_embedding: &[f32],
+        params: SearchParams,
+    ) -> Result<Vec<DocumentChunk>> {
         let mut results = self.search_similar(query_embedding, params.top_k * 2).await?; // Get more candidates
 
         // Apply filters
@@ -462,7 +479,8 @@ impl DocumentStorage for InMemoryStorage {
 
     async fn get_chunks_by_document(&self, document_id: &str) -> Result<Vec<DocumentChunk>> {
         let chunks = self.chunks.read().await;
-        let results = chunks.values()
+        let results = chunks
+            .values()
             .filter(|chunk| chunk.document_id == document_id)
             .cloned()
             .collect();
@@ -499,9 +517,8 @@ impl DocumentStorage for InMemoryStorage {
 
     async fn list_documents(&self) -> Result<Vec<String>> {
         let chunks = self.chunks.read().await;
-        let documents: std::collections::HashSet<String> = chunks.values()
-            .map(|chunk| chunk.document_id.clone())
-            .collect();
+        let documents: std::collections::HashSet<String> =
+            chunks.values().map(|chunk| chunk.document_id.clone()).collect();
         Ok(documents.into_iter().collect())
     }
 

@@ -69,7 +69,11 @@ impl TextChunker {
     }
 
     /// Create overlapping chunks for better context preservation
-    pub fn create_overlapping_chunks(text: &str, chunk_size: usize, overlap_ratio: f32) -> Vec<String> {
+    pub fn create_overlapping_chunks(
+        text: &str,
+        chunk_size: usize,
+        overlap_ratio: f32,
+    ) -> Vec<String> {
         let overlap = ((chunk_size as f32) * overlap_ratio).round() as usize;
         Self::split_text(text, chunk_size, overlap)
     }
@@ -82,9 +86,7 @@ impl TextChunker {
         metadata: HashMap<String, String>,
     ) -> Vec<(String, HashMap<String, String>)> {
         let chunks = Self::split_text(text, chunk_size, overlap);
-        chunks.into_iter()
-            .map(|chunk| (chunk, metadata.clone()))
-            .collect()
+        chunks.into_iter().map(|chunk| (chunk, metadata.clone())).collect()
     }
 }
 
@@ -115,10 +117,7 @@ impl SimilarityCalculator {
             return f32::INFINITY;
         }
 
-        let sum_squares: f32 = a.iter()
-            .zip(b.iter())
-            .map(|(x, y)| (x - y).powi(2))
-            .sum();
+        let sum_squares: f32 = a.iter().zip(b.iter()).map(|(x, y)| (x - y).powi(2)).sum();
 
         sum_squares.sqrt()
     }
@@ -129,10 +128,7 @@ impl SimilarityCalculator {
             return f32::INFINITY;
         }
 
-        a.iter()
-            .zip(b.iter())
-            .map(|(x, y)| (x - y).abs())
-            .sum()
+        a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum()
     }
 
     /// Calculate dot product of two vectors
@@ -171,8 +167,13 @@ impl SimilarityCalculator {
     }
 
     /// Find most similar vectors to a query vector
-    pub fn find_most_similar(query: &[f32], candidates: &[Vec<f32>], top_k: usize) -> Vec<(usize, f32)> {
-        let mut similarities: Vec<(usize, f32)> = candidates.iter()
+    pub fn find_most_similar(
+        query: &[f32],
+        candidates: &[Vec<f32>],
+        top_k: usize,
+    ) -> Vec<(usize, f32)> {
+        let mut similarities: Vec<(usize, f32)> = candidates
+            .iter()
             .enumerate()
             .map(|(i, vec)| (i, Self::cosine_similarity(query, vec)))
             .collect();
@@ -190,10 +191,7 @@ pub struct TextPreprocessor;
 impl TextPreprocessor {
     /// Clean text by removing extra whitespace and normalizing
     pub fn clean_text(text: &str) -> String {
-        text
-            .split_whitespace()
-            .collect::<Vec<&str>>()
-            .join(" ")
+        text.split_whitespace().collect::<Vec<&str>>().join(" ")
     }
 
     /// Remove HTML tags from text
@@ -216,8 +214,7 @@ impl TextPreprocessor {
 
     /// Normalize whitespace
     pub fn normalize_whitespace(text: &str) -> String {
-        text
-            .chars()
+        text.chars()
             .fold((String::new(), false), |(mut acc, mut was_space), ch| {
                 if ch.is_whitespace() {
                     if !was_space {
@@ -255,11 +252,7 @@ impl TextPreprocessor {
         let mut sorted_words: Vec<(String, usize)> = word_counts.into_iter().collect();
         sorted_words.sort_by(|a, b| b.1.cmp(&a.1));
 
-        sorted_words
-            .into_iter()
-            .take(max_keywords)
-            .map(|(word, _)| word)
-            .collect()
+        sorted_words.into_iter().take(max_keywords).map(|(word, _)| word).collect()
     }
 
     /// Truncate text to maximum length while preserving word boundaries
@@ -275,8 +268,7 @@ impl TextPreprocessor {
 
     /// Expand contractions in text
     pub fn expand_contractions(text: &str) -> String {
-        text
-            .replace("don't", "do not")
+        text.replace("don't", "do not")
             .replace("can't", "cannot")
             .replace("won't", "will not")
             .replace("i'm", "i am")
@@ -297,17 +289,104 @@ impl TextPreprocessor {
 fn is_stop_word(word: &str) -> bool {
     matches!(
         word,
-        "the" | "a" | "an" | "and" | "or" | "but" | "in" | "on" | "at" | "to" | "for" |
-        "of" | "with" | "by" | "from" | "up" | "about" | "into" | "through" | "during" |
-        "before" | "after" | "above" | "below" | "between" | "among" | "is" | "are" |
-        "was" | "were" | "be" | "been" | "being" | "have" | "has" | "had" | "do" |
-        "does" | "did" | "will" | "would" | "could" | "should" | "may" | "might" |
-        "must" | "can" | "this" | "that" | "these" | "those" | "i" | "you" | "he" |
-        "she" | "it" | "we" | "they" | "me" | "him" | "her" | "us" | "them" | "my" |
-        "your" | "his" | "its" | "our" | "their" | "mine" | "yours" | "hers" | "ours" |
-        "theirs" | "am" | "not" | "no" | "yes" | "here" | "there" | "now" | "then" |
-        "so" | "very" | "too" | "also" | "only" | "just" | "even" | "still" | "yet" |
-        "again" | "once" | "never" | "always" | "often" | "sometimes" | "usually"
+        "the"
+            | "a"
+            | "an"
+            | "and"
+            | "or"
+            | "but"
+            | "in"
+            | "on"
+            | "at"
+            | "to"
+            | "for"
+            | "of"
+            | "with"
+            | "by"
+            | "from"
+            | "up"
+            | "about"
+            | "into"
+            | "through"
+            | "during"
+            | "before"
+            | "after"
+            | "above"
+            | "below"
+            | "between"
+            | "among"
+            | "is"
+            | "are"
+            | "was"
+            | "were"
+            | "be"
+            | "been"
+            | "being"
+            | "have"
+            | "has"
+            | "had"
+            | "do"
+            | "does"
+            | "did"
+            | "will"
+            | "would"
+            | "could"
+            | "should"
+            | "may"
+            | "might"
+            | "must"
+            | "can"
+            | "this"
+            | "that"
+            | "these"
+            | "those"
+            | "i"
+            | "you"
+            | "he"
+            | "she"
+            | "it"
+            | "we"
+            | "they"
+            | "me"
+            | "him"
+            | "her"
+            | "us"
+            | "them"
+            | "my"
+            | "your"
+            | "his"
+            | "its"
+            | "our"
+            | "their"
+            | "mine"
+            | "yours"
+            | "hers"
+            | "ours"
+            | "theirs"
+            | "am"
+            | "not"
+            | "no"
+            | "yes"
+            | "here"
+            | "there"
+            | "now"
+            | "then"
+            | "so"
+            | "very"
+            | "too"
+            | "also"
+            | "only"
+            | "just"
+            | "even"
+            | "still"
+            | "yet"
+            | "again"
+            | "once"
+            | "never"
+            | "always"
+            | "often"
+            | "sometimes"
+            | "usually"
     )
 }
 
@@ -414,9 +493,7 @@ where
         let now = std::time::Instant::now();
 
         // Remove expired entries
-        self.data.retain(|_, (_, timestamp)| {
-            now.duration_since(*timestamp) < self.ttl
-        });
+        self.data.retain(|_, (_, timestamp)| now.duration_since(*timestamp) < self.ttl);
 
         // Check if we need to evict old entries
         if self.data.len() >= self.max_size {
@@ -535,10 +612,7 @@ impl<'a> Drop for TimerGuard<'a> {
     fn drop(&mut self) {
         let duration = self.start.elapsed();
         let operation_duration = format!("{}_duration", self.operation);
-        self.monitor.metrics.insert(
-            operation_duration,
-            MetricValue::Duration(duration),
-        );
+        self.monitor.metrics.insert(operation_duration, MetricValue::Duration(duration));
     }
 }
 
@@ -582,7 +656,9 @@ impl FileUtils {
     }
 
     /// Read JSON file
-    pub async fn read_json_file<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(path: P) -> Result<T> {
+    pub async fn read_json_file<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(
+        path: P,
+    ) -> Result<T> {
         let content = Self::read_text_file(path).await?;
         let data: T = serde_json::from_str(&content)?;
         Ok(data)
@@ -617,10 +693,10 @@ impl ErrorUtils {
     /// Check if error is retryable
     pub fn is_retryable_error(error: &mockforge_core::Error) -> bool {
         // Simple heuristic - in practice, you might want to categorize errors
-        error.to_string().contains("timeout") ||
-        error.to_string().contains("rate limit") ||
-        error.to_string().contains("503") ||
-        error.to_string().contains("502") ||
-        error.to_string().contains("504")
+        error.to_string().contains("timeout")
+            || error.to_string().contains("rate limit")
+            || error.to_string().contains("503")
+            || error.to_string().contains("502")
+            || error.to_string().contains("504")
     }
 }

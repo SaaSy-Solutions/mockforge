@@ -2,13 +2,18 @@
 //!
 //! This module provides the main MockReflectionProxy struct and core proxy functionality.
 
-use crate::dynamic::{ServiceRegistry, service_generator::DynamicGrpcService};
+use crate::dynamic::{service_generator::DynamicGrpcService, ServiceRegistry};
 use crate::reflection::{
-    cache::DescriptorCache, config::ProxyConfig, connection_pool::ConnectionPool,
-    smart_mock_generator::{SmartMockGenerator, SmartMockConfig},
+    cache::DescriptorCache,
+    config::ProxyConfig,
+    connection_pool::ConnectionPool,
+    smart_mock_generator::{SmartMockConfig, SmartMockGenerator},
 };
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, ReflectMessage};
-use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex, OnceLock,
+};
 use std::time::Duration;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};

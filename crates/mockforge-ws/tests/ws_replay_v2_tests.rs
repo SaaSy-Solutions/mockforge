@@ -1,6 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use mockforge_core::ws_proxy::WsProxyConfig;
-use mockforge_ws::{WsReplayEntry, WsAssertion, WsMatchCondition};
+use mockforge_ws::{WsAssertion, WsMatchCondition, WsReplayEntry};
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -16,7 +16,9 @@ async fn test_ws_replay_engine_parsing() {
     let entries: Vec<WsReplayEntry> = script_content
         .lines()
         .filter_map(|line| {
-            if line.trim().is_empty() { None } else {
+            if line.trim().is_empty() {
+                None
+            } else {
                 serde_json::from_str(line).ok()
             }
         })
@@ -70,13 +72,11 @@ async fn test_assertion_processing() {
 
     // Test negative case
     let invalid_json = r#"{"status":"error"}"#;
-    let negative_assertions = vec![
-        WsAssertion {
-            pattern: "$.type".to_string(),
-            expected: true,
-            description: Some("Must have type field".to_string()),
-        },
-    ];
+    let negative_assertions = vec![WsAssertion {
+        pattern: "$.type".to_string(),
+        expected: true,
+        description: Some("Must have type field".to_string()),
+    }];
 
     // This would fail: engine.process_assertions(invalid_json, &negative_assertions).expect_err(...)
 }
@@ -108,7 +108,9 @@ async fn test_complex_branching_script() {
     let entries: Vec<WsReplayEntry> = complex_script
         .lines()
         .filter_map(|line| {
-            if line.trim().is_empty() { None } else {
+            if line.trim().is_empty() {
+                None
+            } else {
                 serde_json::from_str(line).ok()
             }
         })
@@ -118,19 +120,24 @@ async fn test_complex_branching_script() {
     assert_eq!(entries.len(), 6);
 
     // Check that we have proper step IDs
-    let step_ids: Vec<String> = entries.iter()
-        .filter_map(|e| e.step_id.clone())
-        .collect();
+    let step_ids: Vec<String> = entries.iter().filter_map(|e| e.step_id.clone()).collect();
 
     let expected_steps = vec![
-        "session_init", "await_credentials", "admin_flow",
-        "guest_flow", "standard_flow", "cleanup"
+        "session_init",
+        "await_credentials",
+        "admin_flow",
+        "guest_flow",
+        "standard_flow",
+        "cleanup",
     ];
 
     assert_eq!(step_ids, expected_steps);
 
     // Verify assertions on credentials step
-    let credentials_step = entries.iter().find(|e| e.step_id == Some("await_credentials".to_string())).unwrap();
+    let credentials_step = entries
+        .iter()
+        .find(|e| e.step_id == Some("await_credentials".to_string()))
+        .unwrap();
     assert!(credentials_step.assertions.is_some());
     assert_eq!(credentials_step.assertions.as_ref().unwrap().len(), 2);
 
@@ -151,7 +158,9 @@ async fn test_legacy_fallback_compilation() {
     let entries: Vec<WsReplayEntry> = legacy_script
         .lines()
         .filter_map(|line| {
-            if line.trim().is_empty() { None } else {
+            if line.trim().is_empty() {
+                None
+            } else {
                 serde_json::from_str(line).ok()
             }
         })

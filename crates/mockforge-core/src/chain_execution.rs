@@ -4,15 +4,17 @@
 //! dependency resolution, parallel execution when possible, and proper error handling.
 
 use crate::request_chaining::{
-    ChainConfig, ChainDefinition, ChainExecutionContext, ChainLink,
-    ChainTemplatingContext, ChainResponse,
-    RequestChainRegistry,
+    ChainConfig, ChainDefinition, ChainExecutionContext, ChainLink, ChainResponse,
+    ChainTemplatingContext, RequestChainRegistry,
 };
 use crate::templating::{expand_str_with_context, TemplatingContext};
 use crate::{Error, Result};
 use chrono::Utc;
 use futures::future::join_all;
-use reqwest::{header::{HeaderMap, HeaderName, HeaderValue}, Client, Method};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Client, Method,
+};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -57,7 +59,11 @@ impl ChainExecutionEngine {
     }
 
     /// Execute a chain by ID
-    pub async fn execute_chain(&self, chain_id: &str, variables: Option<serde_json::Value>) -> Result<ChainExecutionResult> {
+    pub async fn execute_chain(
+        &self,
+        chain_id: &str,
+        variables: Option<serde_json::Value>,
+    ) -> Result<ChainExecutionResult> {
         let chain = self
             .registry
             .get_chain(chain_id)
@@ -98,7 +104,10 @@ impl ChainExecutionEngine {
 
         // Initialize context with chain variables
         for (key, value) in &chain_def.variables {
-            execution_context.templating.chain_context.set_variable(key.clone(), value.clone());
+            execution_context
+                .templating
+                .chain_context
+                .set_variable(key.clone(), value.clone());
         }
 
         // Merge custom variables from request
@@ -114,14 +123,13 @@ impl ChainExecutionEngine {
             self.execute_with_parallelism(&mut execution_context).await
         } else {
             self.execute_sequential(&mut execution_context).await
-        }.map(|_| {
-            ChainExecutionResult {
-                chain_id: chain_def.id.clone(),
-                status: ChainExecutionStatus::Successful,
-                total_duration_ms: start_time.elapsed().as_millis() as u64,
-                request_results: execution_context.templating.chain_context.responses.clone(),
-                error_message: None,
-            }
+        }
+        .map(|_| ChainExecutionResult {
+            chain_id: chain_def.id.clone(),
+            status: ChainExecutionStatus::Successful,
+            total_duration_ms: start_time.elapsed().as_millis() as u64,
+            request_results: execution_context.templating.chain_context.responses.clone(),
+            error_message: None,
         })
     }
 
@@ -180,10 +188,8 @@ impl ChainExecutionEngine {
                         };
 
                         let context = Arc::new(Mutex::new(parallel_context));
-                        let engine = ChainExecutionEngine::new(
-                            self.registry.clone(),
-                            self.config.clone(),
-                        );
+                        let engine =
+                            ChainExecutionEngine::new(self.registry.clone(), self.config.clone());
 
                         tokio::spawn(async move {
                             let mut ctx = context.lock().await;
@@ -194,7 +200,8 @@ impl ChainExecutionEngine {
 
                 let results = join_all(tasks).await;
                 for result in results {
-                    result.map_err(|e| Error::generic(format!("Task join error: {}", e)))?
+                    result
+                        .map_err(|e| Error::generic(format!("Task join error: {}", e)))?
                         .map_err(|e| Error::generic(format!("Request execution error: {}", e)))?;
                 }
             }
@@ -208,10 +215,10 @@ impl ChainExecutionEngine {
         &self,
         execution_context: &mut ChainExecutionContext,
     ) -> Result<()> {
-                let links = execution_context.definition.links.clone();
-                for link in &links {
-                    self.execute_request(link, execution_context).await?;
-                }
+        let links = execution_context.definition.links.clone();
+        for link in &links {
+            self.execute_request(link, execution_context).await?;
+        }
         Ok(())
     }
 
@@ -226,8 +233,9 @@ impl ChainExecutionEngine {
         // Prepare the request with templating
         execution_context.templating.set_current_request(link.request.clone());
 
-        let method = Method::from_bytes(link.request.method.as_bytes())
-            .map_err(|e| Error::generic(format!("Invalid HTTP method '{}': {}", link.request.method, e)))?;
+        let method = Method::from_bytes(link.request.method.as_bytes()).map_err(|e| {
+            Error::generic(format!("Invalid HTTP method '{}': {}", link.request.method, e))
+        })?;
 
         let url = self.expand_template(&link.request.url, &execution_context.templating);
 
@@ -237,32 +245,36 @@ impl ChainExecutionEngine {
             let expanded_value = self.expand_template(value, &execution_context.templating);
             let header_name = HeaderName::from_str(key)
                 .map_err(|e| Error::generic(format!("Invalid header name '{}': {}", key, e)))?;
-            let header_value = HeaderValue::from_str(&expanded_value)
-                .map_err(|e| Error::generic(format!("Invalid header value for '{}': {}", key, e)))?;
+            let header_value = HeaderValue::from_str(&expanded_value).map_err(|e| {
+                Error::generic(format!("Invalid header value for '{}': {}", key, e))
+            })?;
             headers.insert(header_name, header_value);
         }
 
         // Prepare request builder
-        let mut request_builder = self.http_client
-            .request(method, &url)
-            .headers(headers.clone());
+        let mut request_builder = self.http_client.request(method, &url).headers(headers.clone());
 
         // Add body if present
         if let Some(body) = &link.request.body {
             match body {
                 crate::request_chaining::RequestBody::Json(json_value) => {
-                    let expanded_body = self.expand_template_in_json(json_value, &execution_context.templating);
+                    let expanded_body =
+                        self.expand_template_in_json(json_value, &execution_context.templating);
                     request_builder = request_builder.json(&expanded_body);
                 }
                 crate::request_chaining::RequestBody::BinaryFile { path, content_type } => {
                     // Create templating context for path expansion
-                    let templating_context = TemplatingContext::with_chain(execution_context.templating.clone());
+                    let templating_context =
+                        TemplatingContext::with_chain(execution_context.templating.clone());
 
                     // Expand templates in the file path
                     let expanded_path = expand_str_with_context(path, &templating_context);
 
                     // Create a new body with expanded path
-                    let binary_body = crate::request_chaining::RequestBody::binary_file(expanded_path, content_type.clone());
+                    let binary_body = crate::request_chaining::RequestBody::binary_file(
+                        expanded_path,
+                        content_type.clone(),
+                    );
 
                     // Read the binary file
                     match binary_body.to_bytes().await {
@@ -272,7 +284,14 @@ impl ChainExecutionEngine {
                             // Set content type if specified
                             if let Some(ct) = content_type {
                                 let mut headers = headers.clone();
-                                headers.insert("content-type", ct.parse().unwrap_or_else(|_| reqwest::header::HeaderValue::from_static("application/octet-stream")));
+                                headers.insert(
+                                    "content-type",
+                                    ct.parse().unwrap_or_else(|_| {
+                                        reqwest::header::HeaderValue::from_static(
+                                            "application/octet-stream",
+                                        )
+                                    }),
+                                );
                                 request_builder = request_builder.headers(headers);
                             }
                         }
@@ -290,10 +309,9 @@ impl ChainExecutionEngine {
         }
 
         // Execute the request
-        let response_result = timeout(
-            Duration::from_secs(self.config.global_timeout_secs),
-            request_builder.send()
-        ).await;
+        let response_result =
+            timeout(Duration::from_secs(self.config.global_timeout_secs), request_builder.send())
+                .await;
 
         let response = match response_result {
             Ok(Ok(resp)) => resp,
@@ -342,7 +360,10 @@ impl ChainExecutionEngine {
 
         // Store the response
         if let Some(store_name) = &link.store_as {
-            execution_context.templating.chain_context.store_response(store_name.clone(), chain_response.clone());
+            execution_context
+                .templating
+                .chain_context
+                .store_response(store_name.clone(), chain_response.clone());
         }
 
         // Extract variables from response
@@ -353,7 +374,10 @@ impl ChainExecutionEngine {
         }
 
         // Also store by request ID as fallback
-        execution_context.templating.chain_context.store_response(link.request.id.clone(), chain_response);
+        execution_context
+            .templating
+            .chain_context
+            .store_response(link.request.id.clone(), chain_response);
 
         Ok(())
     }
@@ -363,7 +387,8 @@ impl ChainExecutionEngine {
         let mut graph = HashMap::new();
 
         for link in links {
-            graph.entry(link.request.id.clone())
+            graph
+                .entry(link.request.id.clone())
                 .or_insert_with(Vec::new)
                 .extend(link.request.depends_on.iter().cloned());
         }
@@ -442,17 +467,15 @@ impl ChainExecutionEngine {
     fn expand_template_in_json(&self, value: &Value, context: &ChainTemplatingContext) -> Value {
         match value {
             Value::String(s) => Value::String(self.expand_template(s, context)),
-            Value::Array(arr) => Value::Array(
-                arr.iter()
-                    .map(|v| self.expand_template_in_json(v, context))
-                    .collect()
-            ),
+            Value::Array(arr) => {
+                Value::Array(arr.iter().map(|v| self.expand_template_in_json(v, context)).collect())
+            }
             Value::Object(map) => {
                 let mut new_map = serde_json::Map::new();
                 for (k, v) in map {
                     new_map.insert(
                         self.expand_template(k, context),
-                        self.expand_template_in_json(v, context)
+                        self.expand_template_in_json(v, context),
                     );
                 }
                 Value::Object(new_map)
@@ -522,7 +545,7 @@ mod tests {
     #[tokio::test]
     async fn test_engine_creation() {
         let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
-        let engine = ChainExecutionEngine::new(registry, ChainConfig::default());
+        let _engine = ChainExecutionEngine::new(registry, ChainConfig::default());
 
         // Engine should be created successfully
         assert!(true); // If we reach here, creation worked

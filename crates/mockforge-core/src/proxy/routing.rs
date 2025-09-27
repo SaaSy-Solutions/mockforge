@@ -1,6 +1,9 @@
 //! Proxy routing logic
 
-use crate::{Result, routing::{HttpMethod, Route}};
+use crate::{
+    routing::{HttpMethod, Route},
+    Result,
+};
 use std::collections::HashMap;
 
 /// Proxy router for determining if a request should be proxied
@@ -33,7 +36,12 @@ impl ProxyRouter {
     }
 
     /// Get the target URL for a proxied request
-    pub fn get_target_url(&self, method: &HttpMethod, path: &str, base_url: &str) -> Option<String> {
+    pub fn get_target_url(
+        &self,
+        method: &HttpMethod,
+        path: &str,
+        base_url: &str,
+    ) -> Option<String> {
         if let Some(routes) = self.proxy_routes.get(method) {
             for route in routes {
                 if self.matches_path(&route.path, path) {
@@ -153,9 +161,6 @@ mod tests {
             router.get_target_url(&HttpMethod::GET, "/api/posts", base_url),
             Some("http://backend:8080/posts".to_string())
         );
-        assert_eq!(
-            router.get_target_url(&HttpMethod::GET, "/admin/users", base_url),
-            None
-        );
+        assert_eq!(router.get_target_url(&HttpMethod::GET, "/admin/users", base_url), None);
     }
 }

@@ -1,7 +1,7 @@
 //! Tests for plugin core functionality
 
-use mockforge_plugin_core::*;
 use mockforge_plugin_core::manifest::models::PluginDependency;
+use mockforge_plugin_core::*;
 
 #[cfg(test)]
 mod tests {
@@ -49,7 +49,10 @@ mod tests {
             .with_timeout(10000);
 
         assert_eq!(context.timeout_ms, 10000);
-        assert_eq!(context.environment.get("DATABASE_URL"), Some(&"postgres://localhost:5432/test".to_string()));
+        assert_eq!(
+            context.environment.get("DATABASE_URL"),
+            Some(&"postgres://localhost:5432/test".to_string())
+        );
         assert_eq!(context.environment.get("API_KEY"), Some(&"secret123".to_string()));
         assert_eq!(context.environment.get("NONEXISTENT"), None);
     }
@@ -96,7 +99,8 @@ mod tests {
 
         // Test unhealthy plugin
         let metrics = PluginMetrics::default();
-        let unhealthy = PluginHealth::unhealthy(PluginState::Error, "Plugin crashed".to_string(), metrics);
+        let unhealthy =
+            PluginHealth::unhealthy(PluginState::Error, "Plugin crashed".to_string(), metrics);
         assert!(!unhealthy.healthy);
         assert_eq!(unhealthy.message, "Plugin crashed");
         assert_eq!(unhealthy.state, PluginState::Error);
@@ -234,8 +238,7 @@ mod tests {
             "A test plugin",
             author,
         );
-        let manifest = PluginManifest::new(info)
-            .with_capability("template");
+        let manifest = PluginManifest::new(info).with_capability("template");
 
         // Basic validation - just check structure
         assert_eq!(manifest.info.id.as_str(), "test-plugin");
@@ -275,7 +278,10 @@ mod tests {
 
     #[test]
     fn test_plugin_capabilities() {
-        let capabilities = PluginCapabilities::from_strings(&["network:http".to_string(), "filesystem:read".to_string()]);
+        let capabilities = PluginCapabilities::from_strings(&[
+            "network:http".to_string(),
+            "filesystem:read".to_string(),
+        ]);
 
         assert!(capabilities.network.allow_http);
         assert!(capabilities.filesystem.read_paths.contains(&"*".to_string()));

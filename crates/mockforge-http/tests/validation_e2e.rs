@@ -60,15 +60,19 @@ async fn toggling_validation_mode_runtime() {
         response_template_expand: false,
         validation_status: None,
     });
-    let updated_app: Router = build_router(Some(path.to_string_lossy().to_string()), updated_opts, None).await;
+    let updated_app: Router =
+        build_router(Some(path.to_string_lossy().to_string()), updated_opts, None).await;
 
     // Bind on new random port for updated router
     let updated_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let updated_addr: SocketAddr = updated_listener.local_addr().unwrap();
     let updated_server = tokio::spawn(async move {
-        axum::serve(updated_listener, updated_app.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-            .unwrap()
+        axum::serve(
+            updated_listener,
+            updated_app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap()
     });
 
     // Now invalid request should pass due to per-route warn override

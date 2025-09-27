@@ -3,7 +3,7 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/Tooltip';
 import { Sync, AlertCircle, CheckCircle, Clock, Play, Square } from 'lucide-react';
-import { SyncStatus } from '../../types';
+import type { SyncStatus } from '../../types';
 
 interface SyncStatusIndicatorProps {
   status: SyncStatus;

@@ -10,11 +10,11 @@
 //! - Support for nested queries and fragments
 //! - Configurable data complexity levels
 
+use graphql_parser::query::{parse_query, Definition, Field, OperationDefinition, Selection};
 use mockforge_plugin_core::*;
+use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use graphql_parser::query::{parse_query, Definition, OperationDefinition, Selection, Field};
-use rand::{Rng, rng};
 
 /// Plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,9 +45,7 @@ pub struct GraphQLResponsePlugin {
 impl GraphQLResponsePlugin {
     /// Create a new GraphQL response plugin
     pub fn new(config: GraphQLConfig) -> Self {
-        Self {
-            config,
-        }
+        Self { config }
     }
 
     /// Parse GraphQL query and extract requested fields
@@ -61,13 +59,22 @@ impl GraphQLResponsePlugin {
                     if let Definition::Operation(operation) = definition {
                         match operation {
                             OperationDefinition::Query(query_def) => {
-                                self.extract_fields_from_selection_set(&query_def.selection_set, &mut fields);
+                                self.extract_fields_from_selection_set(
+                                    &query_def.selection_set,
+                                    &mut fields,
+                                );
                             }
                             OperationDefinition::Mutation(mutation_def) => {
-                                self.extract_fields_from_selection_set(&mutation_def.selection_set, &mut fields);
+                                self.extract_fields_from_selection_set(
+                                    &mutation_def.selection_set,
+                                    &mut fields,
+                                );
                             }
                             OperationDefinition::Subscription(subscription_def) => {
-                                self.extract_fields_from_selection_set(&subscription_def.selection_set, &mut fields);
+                                self.extract_fields_from_selection_set(
+                                    &subscription_def.selection_set,
+                                    &mut fields,
+                                );
                             }
                             OperationDefinition::SelectionSet(selection_set) => {
                                 self.extract_fields_from_selection_set(&selection_set, &mut fields);
@@ -79,13 +86,28 @@ impl GraphQLResponsePlugin {
             Err(_) => {
                 // Fallback: extract common GraphQL fields if parsing fails
                 if query.contains("user") || query.contains("User") {
-                    fields.extend(vec!["id".to_string(), "name".to_string(), "email".to_string(), "createdAt".to_string()]);
+                    fields.extend(vec![
+                        "id".to_string(),
+                        "name".to_string(),
+                        "email".to_string(),
+                        "createdAt".to_string(),
+                    ]);
                 }
                 if query.contains("product") || query.contains("Product") {
-                    fields.extend(vec!["id".to_string(), "name".to_string(), "price".to_string(), "category".to_string()]);
+                    fields.extend(vec![
+                        "id".to_string(),
+                        "name".to_string(),
+                        "price".to_string(),
+                        "category".to_string(),
+                    ]);
                 }
                 if query.contains("order") || query.contains("Order") {
-                    fields.extend(vec!["id".to_string(), "total".to_string(), "status".to_string(), "items".to_string()]);
+                    fields.extend(vec![
+                        "id".to_string(),
+                        "total".to_string(),
+                        "status".to_string(),
+                        "items".to_string(),
+                    ]);
                 }
             }
         }
@@ -94,7 +116,11 @@ impl GraphQLResponsePlugin {
     }
 
     /// Recursively extract field names from a selection set
-    fn extract_fields_from_selection_set<'a>(&self, selection_set: &graphql_parser::query::SelectionSet<'a, &'a str>, fields: &mut Vec<String>) {
+    fn extract_fields_from_selection_set<'a>(
+        &self,
+        selection_set: &graphql_parser::query::SelectionSet<'a, &'a str>,
+        fields: &mut Vec<String>,
+    ) {
         for selection in &selection_set.items {
             match selection {
                 Selection::Field(field) => {
@@ -131,9 +157,18 @@ impl GraphQLResponsePlugin {
 
             "name" | "title" => {
                 let names = [
-                    "Alice Johnson", "Bob Smith", "Charlie Brown", "Diana Prince",
-                    "Eve Wilson", "Frank Miller", "Grace Lee", "Henry Ford",
-                    "Wireless Headphones", "Smart Watch", "Laptop Computer", "Coffee Maker"
+                    "Alice Johnson",
+                    "Bob Smith",
+                    "Charlie Brown",
+                    "Diana Prince",
+                    "Eve Wilson",
+                    "Frank Miller",
+                    "Grace Lee",
+                    "Henry Ford",
+                    "Wireless Headphones",
+                    "Smart Watch",
+                    "Laptop Computer",
+                    "Coffee Maker",
                 ];
                 serde_json::json!(names[rng.gen_range(0..names.len())])
             }
@@ -168,18 +203,28 @@ impl GraphQLResponsePlugin {
                     "A high-quality product designed for everyday use.",
                     "Premium features with excellent performance.",
                     "Reliable and durable construction.",
-                    "User-friendly interface with advanced capabilities."
+                    "User-friendly interface with advanced capabilities.",
                 ];
                 serde_json::json!(descriptions[rng.gen_range(0..descriptions.len())])
             }
 
             "category" | "type" | "kind" => {
-                let categories = ["Electronics", "Books", "Clothing", "Home", "Sports", "Music"];
+                let categories = [
+                    "Electronics",
+                    "Books",
+                    "Clothing",
+                    "Home",
+                    "Sports",
+                    "Music",
+                ];
                 serde_json::json!(categories[rng.gen_range(0..categories.len())])
             }
 
             "url" | "image" | "avatar" => {
-                serde_json::json!(format!("https://example.com/image_{}.jpg", rng.gen_range(1..100)))
+                serde_json::json!(format!(
+                    "https://example.com/image_{}.jpg",
+                    rng.gen_range(1..100)
+                ))
             }
 
             "active" | "enabled" | "isactive" => {
@@ -190,7 +235,9 @@ impl GraphQLResponsePlugin {
                 // Default mock data based on complexity setting
                 match self.config.mock_data_complexity.as_str() {
                     "simple" => serde_json::json!("mock_value"),
-                    "medium" => serde_json::json!(format!("mock_{}_{}", field_name, rng.gen_range(1..100))),
+                    "medium" => {
+                        serde_json::json!(format!("mock_{}_{}", field_name, rng.gen_range(1..100)))
+                    }
                     "complex" => {
                         // Generate more complex mock data
                         let mock_types = ["string", "number", "boolean", "array", "object"];
@@ -203,10 +250,10 @@ impl GraphQLResponsePlugin {
                                 "nested_field": format!("nested_{}", field_name),
                                 "value": rng.gen_range(1..100)
                             }),
-                            _ => serde_json::json!("default_mock")
+                            _ => serde_json::json!("default_mock"),
                         }
                     }
-                    _ => serde_json::json!("mock_value")
+                    _ => serde_json::json!("mock_value"),
                 }
             }
         }
@@ -250,8 +297,9 @@ impl GraphQLResponsePlugin {
     fn is_graphql_request(&self, request: &ResponseRequest) -> bool {
         // Check content type
         if let Some(content_type) = request.headers.get("content-type") {
-            if content_type.to_str().unwrap_or("").contains("application/graphql") ||
-                content_type.to_str().unwrap_or("").contains("application/json") {
+            if content_type.to_str().unwrap_or("").contains("application/graphql")
+                || content_type.to_str().unwrap_or("").contains("application/json")
+            {
                 return true;
             }
         }
@@ -259,9 +307,9 @@ impl GraphQLResponsePlugin {
         // Check if body contains GraphQL query
         if let Some(body) = &request.body {
             if let Ok(query_str) = std::str::from_utf8(body) {
-                return query_str.contains("query") ||
-                        query_str.contains("{") ||
-                        query_str.contains("mutation");
+                return query_str.contains("query")
+                    || query_str.contains("{")
+                    || query_str.contains("mutation");
             }
         }
 
@@ -313,10 +361,7 @@ impl ResponsePlugin for GraphQLResponsePlugin {
         _config: &ResponsePluginConfig,
     ) -> Result<PluginResult<ResponseData>> {
         if !self.is_graphql_request(request) {
-            return Ok(PluginResult::failure(
-                "Not a GraphQL request".to_string(),
-                0,
-            ));
+            return Ok(PluginResult::failure("Not a GraphQL request".to_string(), 0));
         }
 
         // Extract GraphQL query from request body
@@ -370,7 +415,10 @@ impl ResponsePlugin for GraphQLResponsePlugin {
     }
 
     fn supported_content_types(&self) -> Vec<String> {
-        vec!["application/graphql".to_string(), "application/json".to_string()]
+        vec![
+            "application/graphql".to_string(),
+            "application/json".to_string(),
+        ]
     }
 
     async fn cleanup(&self) -> Result<()> {
@@ -380,10 +428,11 @@ impl ResponsePlugin for GraphQLResponsePlugin {
 
 /// Plugin factory function
 #[no_mangle]
-pub extern "C" fn create_response_plugin(config_json: *const u8, config_len: usize) -> *mut GraphQLResponsePlugin {
-    let config_bytes = unsafe {
-        std::slice::from_raw_parts(config_json, config_len)
-    };
+pub extern "C" fn create_response_plugin(
+    config_json: *const u8,
+    config_len: usize,
+) -> *mut GraphQLResponsePlugin {
+    let config_bytes = unsafe { std::slice::from_raw_parts(config_json, config_len) };
 
     let config_str = match std::str::from_utf8(config_bytes) {
         Ok(s) => s,
@@ -462,7 +511,7 @@ mod tests {
     #[test]
     fn test_graphql_response_generation() {
         let config = GraphQLConfig::default();
-        let mut plugin = GraphQLResponsePlugin::new(config);
+        let plugin = GraphQLResponsePlugin::new(config);
 
         let query = r#"query { user { id name email } }"#;
         let response = plugin.generate_graphql_response(query);
@@ -488,10 +537,10 @@ mod tests {
         assert!(plugin.is_graphql_request(&context));
     }
 
-    #[test]
-    fn test_response_generation() {
+    #[tokio::test]
+    async fn test_response_generation() {
         let config = GraphQLConfig::default();
-        let mut plugin = GraphQLResponsePlugin::new(config);
+        let plugin = GraphQLResponsePlugin::new(config);
 
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
@@ -500,15 +549,21 @@ mod tests {
             "query": "query { user { id name email } }"
         });
 
-        let context = PluginContext::new(
-            "POST".to_string(),
-            "/graphql".to_string(),
-            headers,
-            Some(body)
-        );
+        let context =
+            PluginContext::new("POST".to_string(), "/graphql".to_string(), headers, Some(body));
 
-        let result = plugin.generate_response(&context, &ResponsePluginConfig::default());
-        assert!(result.success);
-        assert!(result.data.is_some());
+        let request = mockforge_plugin_core::ResponseRequest {
+            method: "POST".to_string(),
+            path: "/graphql".to_string(),
+            headers: headers.clone(),
+            body: Some(body.clone()),
+        };
+        let result = plugin
+            .generate_response(&context, &request, &ResponsePluginConfig::default())
+            .await;
+        assert!(result.is_ok());
+        let plugin_result = result.unwrap();
+        assert!(plugin_result.success);
+        assert!(plugin_result.data.is_some());
     }
 }

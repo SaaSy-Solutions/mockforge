@@ -2,8 +2,8 @@
 //!
 //! This module generates actual gRPC service implementations from parsed proto definitions.
 
-use crate::dynamic::proto_parser::{ProtoService, ProtoParser, ProtoMethod};
-use crate::reflection::smart_mock_generator::{SmartMockGenerator, SmartMockConfig};
+use crate::dynamic::proto_parser::{ProtoMethod, ProtoParser, ProtoService};
+use crate::reflection::smart_mock_generator::{SmartMockConfig, SmartMockGenerator};
 use mockforge_core::latency::LatencyInjector;
 use prost_reflect::DescriptorPool;
 use prost_types::Any;
@@ -34,7 +34,9 @@ impl EnhancedServiceFactory {
         let mut services = Vec::new();
 
         // Store services info before consuming parser
-        let services_info: Vec<(String, ProtoService)> = parser.services().iter()
+        let services_info: Vec<(String, ProtoService)> = parser
+            .services()
+            .iter()
             .map(|(name, service)| (name.clone(), service.clone()))
             .collect();
 
@@ -69,7 +71,12 @@ impl EnhancedServiceFactory {
     ) -> DynamicGrpcService {
         if proto_parser.is_some() {
             info!("Creating enhanced service: {}", proto_service.name);
-            DynamicGrpcService::new_enhanced(proto_service, latency_injector, proto_parser, smart_config)
+            DynamicGrpcService::new_enhanced(
+                proto_service,
+                latency_injector,
+                proto_parser,
+                smart_config,
+            )
         } else {
             info!("Creating basic service: {}", proto_service.name);
             DynamicGrpcService::new(proto_service, latency_injector)
@@ -120,7 +127,9 @@ impl DynamicGrpcService {
             latency_injector,
             mock_responses,
             proto_parser: None,
-            smart_generator: Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default()))),
+            smart_generator: Arc::new(Mutex::new(SmartMockGenerator::new(
+                SmartMockConfig::default(),
+            ))),
         }
     }
 
@@ -234,17 +243,26 @@ impl DynamicGrpcService {
             let mut json_parts = Vec::new();
             for (field_name, field_type) in fields {
                 let mock_value = match field_type.as_str() {
-                    "greeting" => format!("\"Hello from enhanced MockForge service {}!\"", service_name),
+                    "greeting" => {
+                        format!("\"Hello from enhanced MockForge service {}!\"", service_name)
+                    }
                     "user_name" => "\"MockForge User\"".to_string(),
-                    "timestamp" => format!("\"{}\"", std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()),
+                    "timestamp" => format!(
+                        "\"{}\"",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs()
+                    ),
                     "identifier" | "new_id" => format!("{}", generator.next_sequence()),
                     "total_count" => "42".to_string(),
                     "status" => "\"success\"".to_string(),
-                    "success_message" => format!("\"Successfully processed {} request\"", method_name),
-                    "confirmation_message" => format!("\"Operation {} completed successfully\"", method_name),
+                    "success_message" => {
+                        format!("\"Successfully processed {} request\"", method_name)
+                    }
+                    "confirmation_message" => {
+                        format!("\"Operation {} completed successfully\"", method_name)
+                    }
                     "version_number" => "\"1.0.0\"".to_string(),
                     "updated_status" | "deleted_status" => "true".to_string(),
                     _ => format!("\"Enhanced mock data for {}\"", field_type),

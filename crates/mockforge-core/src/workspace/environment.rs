@@ -4,9 +4,9 @@
 //! and environment-specific configurations.
 
 use crate::workspace::core::{EntityId, Environment, EnvironmentColor};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 /// Environment manager for handling multiple environments
 #[derive(Debug, Clone)]
@@ -113,9 +113,7 @@ impl EnvironmentManager {
 
     /// Get the active environment
     pub fn get_active_environment(&self) -> Option<&Environment> {
-        self.active_environment_id
-            .as_ref()
-            .and_then(|id| self.environments.get(id))
+        self.active_environment_id.as_ref().and_then(|id| self.environments.get(id))
     }
 
     /// Set the active environment
@@ -176,11 +174,18 @@ impl EnvironmentManager {
             }
         }
 
-        VariableSubstitution { value: result, success, errors }
+        VariableSubstitution {
+            value: result,
+            success,
+            errors,
+        }
     }
 
     /// Parse variable name from template
-    fn parse_variable_name(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> Option<String> {
+    fn parse_variable_name(
+        &self,
+        chars: &mut std::iter::Peekable<std::str::Chars>,
+    ) -> Option<String> {
         let mut var_name = String::new();
 
         while let Some(ch) = chars.peek() {
@@ -251,18 +256,16 @@ impl EnvironmentManager {
         environment_id: &EntityId,
         format: EnvironmentExportFormat,
     ) -> Result<String, String> {
-        let environment = self.environments.get(environment_id)
+        let environment = self
+            .environments
+            .get(environment_id)
             .ok_or_else(|| format!("Environment with ID {} not found", environment_id))?;
 
         match format {
-            EnvironmentExportFormat::Json => {
-                serde_json::to_string_pretty(environment)
-                    .map_err(|e| format!("Failed to serialize environment: {}", e))
-            }
-            EnvironmentExportFormat::Yaml => {
-                serde_yaml::to_string(environment)
-                    .map_err(|e| format!("Failed to serialize environment: {}", e))
-            }
+            EnvironmentExportFormat::Json => serde_json::to_string_pretty(environment)
+                .map_err(|e| format!("Failed to serialize environment: {}", e)),
+            EnvironmentExportFormat::Yaml => serde_yaml::to_string(environment)
+                .map_err(|e| format!("Failed to serialize environment: {}", e)),
             EnvironmentExportFormat::DotEnv => {
                 let mut result = String::new();
                 for (key, value) in &environment.variables {
@@ -297,13 +300,10 @@ impl EnvironmentManager {
 
     /// Get environment statistics
     pub fn get_stats(&self) -> EnvironmentStats {
-        let total_variables = self.environments.values()
-            .map(|env| env.variables.len())
-            .sum::<usize>();
+        let total_variables =
+            self.environments.values().map(|env| env.variables.len()).sum::<usize>();
 
-        let active_count = self.environments.values()
-            .filter(|env| env.active)
-            .count();
+        let active_count = self.environments.values().filter(|env| env.active).count();
 
         EnvironmentStats {
             total_environments: self.environments.len(),
@@ -315,7 +315,8 @@ impl EnvironmentManager {
     /// Find environments by name
     pub fn find_environments_by_name(&self, name_query: &str) -> Vec<&Environment> {
         let query_lower = name_query.to_lowercase();
-        self.environments.values()
+        self.environments
+            .values()
             .filter(|env| env.name.to_lowercase().contains(&query_lower))
             .collect()
     }
@@ -334,8 +335,14 @@ impl EnvironmentManager {
     }
 
     /// Clone environment
-    pub fn clone_environment(&mut self, source_id: &EntityId, new_name: String) -> Result<EntityId, String> {
-        let source_env = self.environments.get(source_id)
+    pub fn clone_environment(
+        &mut self,
+        source_id: &EntityId,
+        new_name: String,
+    ) -> Result<EntityId, String> {
+        let source_env = self
+            .environments
+            .get(source_id)
             .ok_or_else(|| format!("Environment with ID {} not found", source_id))?;
 
         let mut new_env = source_env.clone();
@@ -357,7 +364,9 @@ impl EnvironmentManager {
         let mut merged_variables = HashMap::new();
 
         for env_id in environment_ids {
-            let env = self.environments.get(env_id)
+            let env = self
+                .environments
+                .get(env_id)
                 .ok_or_else(|| format!("Environment with ID {} not found", env_id))?;
 
             for (key, value) in &env.variables {
@@ -400,7 +409,10 @@ impl EnvironmentValidator {
         }
 
         if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
-            return Err("Variable name can only contain letters, numbers, underscores, and hyphens".to_string());
+            return Err(
+                "Variable name can only contain letters, numbers, underscores, and hyphens"
+                    .to_string(),
+            );
         }
 
         if name.starts_with('-') || name.ends_with('-') {

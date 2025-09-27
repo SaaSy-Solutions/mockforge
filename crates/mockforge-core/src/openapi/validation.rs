@@ -4,11 +4,14 @@
 //! against OpenAPI specifications.
 
 use crate::Result;
-use openapiv3::{Operation, Parameter, ReferenceOr, Response, Responses, Header, MediaType, ParameterSchemaOrContent, ParameterData};
-use serde_json::Value;
-use std::collections::HashMap;
 use indexmap::IndexMap;
 use jsonschema::{self, Draft};
+use openapiv3::{
+    Header, MediaType, Operation, Parameter, ParameterData, ParameterSchemaOrContent, ReferenceOr,
+    Response, Responses,
+};
+use serde_json::Value;
+use std::collections::HashMap;
 
 /// Request validation result
 #[derive(Debug, Clone)]
@@ -84,13 +87,31 @@ impl RequestValidator {
             if let Some(param) = param_ref.as_item() {
                 match param {
                     Parameter::Path { parameter_data, .. } => {
-                        validate_parameter_data(parameter_data, path_params, "path", spec, &mut errors);
+                        validate_parameter_data(
+                            parameter_data,
+                            path_params,
+                            "path",
+                            spec,
+                            &mut errors,
+                        );
                     }
                     Parameter::Query { parameter_data, .. } => {
-                        validate_parameter_data(parameter_data, query_params, "query", spec, &mut errors);
+                        validate_parameter_data(
+                            parameter_data,
+                            query_params,
+                            "query",
+                            spec,
+                            &mut errors,
+                        );
                     }
                     Parameter::Header { parameter_data, .. } => {
-                        validate_parameter_data(parameter_data, headers, "header", spec, &mut errors);
+                        validate_parameter_data(
+                            parameter_data,
+                            headers,
+                            "header",
+                            spec,
+                            &mut errors,
+                        );
                     }
                     Parameter::Cookie { .. } => {
                         // Cookie parameter validation not implemented
@@ -104,13 +125,17 @@ impl RequestValidator {
             match request_body_ref {
                 openapiv3::ReferenceOr::Reference { reference } => {
                     if let Some(request_body) = spec.get_request_body(reference) {
-                        if let Some(body_errors) = validate_request_body(body, &request_body.content, spec) {
+                        if let Some(body_errors) =
+                            validate_request_body(body, &request_body.content, spec)
+                        {
                             errors.extend(body_errors);
                         }
                     }
                 }
                 openapiv3::ReferenceOr::Item(request_body) => {
-                    if let Some(body_errors) = validate_request_body(body, &request_body.content, spec) {
+                    if let Some(body_errors) =
+                        validate_request_body(body, &request_body.content, spec)
+                    {
                         errors.extend(body_errors);
                     }
                 }
@@ -123,8 +148,6 @@ impl RequestValidator {
             Ok(RequestValidationResult::invalid(errors))
         }
     }
-
-
 }
 
 /// Response validator
@@ -147,12 +170,16 @@ impl ResponseValidator {
         if let Some(response_ref) = response {
             if let Some(response_item) = response_ref.as_item() {
                 // Validate headers
-                if let Some(header_errors) = validate_response_headers(headers, &response_item.headers, spec) {
+                if let Some(header_errors) =
+                    validate_response_headers(headers, &response_item.headers, spec)
+                {
                     errors.extend(header_errors);
                 }
 
                 // Validate body
-                if let Some(body_errors) = validate_response_body(body, &response_item.content, spec) {
+                if let Some(body_errors) =
+                    validate_response_body(body, &response_item.content, spec)
+                {
                     errors.extend(body_errors);
                 }
             }
@@ -170,7 +197,10 @@ impl ResponseValidator {
 }
 
 /// Find the response definition for a given status code
-fn find_response_for_status(responses: &Responses, status_code: u16) -> Option<&ReferenceOr<Response>> {
+fn find_response_for_status(
+    responses: &Responses,
+    status_code: u16,
+) -> Option<&ReferenceOr<Response>> {
     // First try exact match
     if let Some(response) = responses.responses.get(&openapiv3::StatusCode::Code(status_code)) {
         return Some(response);
@@ -215,7 +245,11 @@ fn validate_response_headers(
                                                 schema_errors.push(error.to_string());
                                             }
                                             if !schema_errors.is_empty() {
-                                                errors.push(format!("Header '{}' validation failed: {}", header_name, schema_errors.join(", ")));
+                                                errors.push(format!(
+                                                    "Header '{}' validation failed: {}",
+                                                    header_name,
+                                                    schema_errors.join(", ")
+                                                ));
                                             }
                                         }
                                         Err(e) => {
@@ -224,7 +258,10 @@ fn validate_response_headers(
                                     }
                                 }
                                 Err(e) => {
-                                    errors.push(format!("Failed to convert schema for header '{}' to JSON: {}", header_name, e));
+                                    errors.push(format!(
+                                        "Failed to convert schema for header '{}' to JSON: {}",
+                                        header_name, e
+                                    ));
                                 }
                             }
                         }
@@ -242,7 +279,11 @@ fn validate_response_headers(
                                                     schema_errors.push(error.to_string());
                                                 }
                                                 if !schema_errors.is_empty() {
-                                                    errors.push(format!("Header '{}' validation failed: {}", header_name, schema_errors.join(", ")));
+                                                    errors.push(format!(
+                                                        "Header '{}' validation failed: {}",
+                                                        header_name,
+                                                        schema_errors.join(", ")
+                                                    ));
                                                 }
                                             }
                                             Err(e) => {
@@ -251,11 +292,17 @@ fn validate_response_headers(
                                         }
                                     }
                                     Err(e) => {
-                                        errors.push(format!("Failed to convert schema for header '{}' to JSON: {}", header_name, e));
+                                        errors.push(format!(
+                                            "Failed to convert schema for header '{}' to JSON: {}",
+                                            header_name, e
+                                        ));
                                     }
                                 }
                             } else {
-                                errors.push(format!("Failed to resolve schema reference for header '{}': {}", header_name, reference));
+                                errors.push(format!(
+                                    "Failed to resolve schema reference for header '{}': {}",
+                                    header_name, reference
+                                ));
                             }
                         }
                     }
@@ -305,14 +352,16 @@ fn validate_response_body(
                                                 Some(errors)
                                             }
                                         }
-                                        Err(e) => {
-                                            Some(vec![format!("Failed to create schema validator: {}", e)])
-                                        }
+                                        Err(e) => Some(vec![format!(
+                                            "Failed to create schema validator: {}",
+                                            e
+                                        )]),
                                     }
                                 }
-                                Err(e) => {
-                                    Some(vec![format!("Failed to convert OpenAPI schema to JSON: {}", e)])
-                                }
+                                Err(e) => Some(vec![format!(
+                                    "Failed to convert OpenAPI schema to JSON: {}",
+                                    e
+                                )]),
                             }
                         }
                         ReferenceOr::Reference { reference } => {
@@ -338,24 +387,27 @@ fn validate_response_body(
                                                     Some(errors)
                                                 }
                                             }
-                                            Err(e) => {
-                                                Some(vec![format!("Failed to create schema validator: {}", e)])
-                                            }
+                                            Err(e) => Some(vec![format!(
+                                                "Failed to create schema validator: {}",
+                                                e
+                                            )]),
                                         }
                                     }
-                                    Err(e) => {
-                                        Some(vec![format!("Failed to convert OpenAPI schema to JSON: {}", e)])
-                                    }
+                                    Err(e) => Some(vec![format!(
+                                        "Failed to convert OpenAPI schema to JSON: {}",
+                                        e
+                                    )]),
                                 }
                             } else {
-                                Some(vec![format!("Failed to resolve schema reference: {}", reference)])
+                                Some(vec![format!(
+                                    "Failed to resolve schema reference: {}",
+                                    reference
+                                )])
                             }
                         }
                     }
                 }
-                None => {
-                    Some(vec!["Response body is required but not provided".to_string()])
-                }
+                None => Some(vec!["Response body is required but not provided".to_string()]),
             }
         } else {
             // No schema defined, body is optional
@@ -401,14 +453,16 @@ fn validate_request_body(
                                                 Some(errors)
                                             }
                                         }
-                                        Err(e) => {
-                                            Some(vec![format!("Failed to create schema validator: {}", e)])
-                                        }
+                                        Err(e) => Some(vec![format!(
+                                            "Failed to create schema validator: {}",
+                                            e
+                                        )]),
                                     }
                                 }
-                                Err(e) => {
-                                    Some(vec![format!("Failed to convert OpenAPI schema to JSON: {}", e)])
-                                }
+                                Err(e) => Some(vec![format!(
+                                    "Failed to convert OpenAPI schema to JSON: {}",
+                                    e
+                                )]),
                             }
                         }
                         ReferenceOr::Reference { reference } => {
@@ -434,24 +488,27 @@ fn validate_request_body(
                                                     Some(errors)
                                                 }
                                             }
-                                            Err(e) => {
-                                                Some(vec![format!("Failed to create schema validator: {}", e)])
-                                            }
+                                            Err(e) => Some(vec![format!(
+                                                "Failed to create schema validator: {}",
+                                                e
+                                            )]),
                                         }
                                     }
-                                    Err(e) => {
-                                        Some(vec![format!("Failed to convert OpenAPI schema to JSON: {}", e)])
-                                    }
+                                    Err(e) => Some(vec![format!(
+                                        "Failed to convert OpenAPI schema to JSON: {}",
+                                        e
+                                    )]),
                                 }
                             } else {
-                                Some(vec![format!("Failed to resolve schema reference: {}", reference)])
+                                Some(vec![format!(
+                                    "Failed to resolve schema reference: {}",
+                                    reference
+                                )])
                             }
                         }
                     }
                 }
-                None => {
-                    Some(vec!["Request body is required but not provided".to_string()])
-                }
+                None => Some(vec!["Request body is required but not provided".to_string()]),
             }
         } else {
             // No schema defined, body is optional
@@ -481,32 +538,38 @@ fn validate_parameter_data(
         if let Some(actual_value) = params_map.get(&parameter_data.name) {
             let param_value = Value::String(actual_value.clone());
             match schema_ref {
-                ReferenceOr::Item(schema) => {
-                    match serde_json::to_value(schema) {
-                        Ok(schema_json) => {
-                            match jsonschema::options()
-                                .with_draft(Draft::Draft7)
-                                .build(&schema_json)
-                            {
-                                Ok(validator) => {
-                                    let mut schema_errors = Vec::new();
-                                    for error in validator.iter_errors(&param_value) {
-                                        schema_errors.push(error.to_string());
-                                    }
-                                    if !schema_errors.is_empty() {
-                                        errors.push(format!("Parameter '{}' {} validation failed: {}", parameter_data.name, location, schema_errors.join(", ")));
-                                    }
+                ReferenceOr::Item(schema) => match serde_json::to_value(schema) {
+                    Ok(schema_json) => {
+                        match jsonschema::options().with_draft(Draft::Draft7).build(&schema_json) {
+                            Ok(validator) => {
+                                let mut schema_errors = Vec::new();
+                                for error in validator.iter_errors(&param_value) {
+                                    schema_errors.push(error.to_string());
                                 }
-                                Err(e) => {
-                                    errors.push(format!("Failed to create schema validator for parameter '{}': {}", parameter_data.name, e));
+                                if !schema_errors.is_empty() {
+                                    errors.push(format!(
+                                        "Parameter '{}' {} validation failed: {}",
+                                        parameter_data.name,
+                                        location,
+                                        schema_errors.join(", ")
+                                    ));
                                 }
                             }
-                        }
-                        Err(e) => {
-                            errors.push(format!("Failed to convert schema for parameter '{}' to JSON: {}", parameter_data.name, e));
+                            Err(e) => {
+                                errors.push(format!(
+                                    "Failed to create schema validator for parameter '{}': {}",
+                                    parameter_data.name, e
+                                ));
+                            }
                         }
                     }
-                }
+                    Err(e) => {
+                        errors.push(format!(
+                            "Failed to convert schema for parameter '{}' to JSON: {}",
+                            parameter_data.name, e
+                        ));
+                    }
+                },
                 ReferenceOr::Reference { reference } => {
                     if let Some(resolved_schema) = spec.get_schema(reference) {
                         match serde_json::to_value(&resolved_schema.schema) {
@@ -521,7 +584,12 @@ fn validate_parameter_data(
                                             schema_errors.push(error.to_string());
                                         }
                                         if !schema_errors.is_empty() {
-                                            errors.push(format!("Parameter '{}' {} validation failed: {}", parameter_data.name, location, schema_errors.join(", ")));
+                                            errors.push(format!(
+                                                "Parameter '{}' {} validation failed: {}",
+                                                parameter_data.name,
+                                                location,
+                                                schema_errors.join(", ")
+                                            ));
                                         }
                                     }
                                     Err(e) => {
@@ -530,11 +598,17 @@ fn validate_parameter_data(
                                 }
                             }
                             Err(e) => {
-                                errors.push(format!("Failed to convert schema for parameter '{}' to JSON: {}", parameter_data.name, e));
+                                errors.push(format!(
+                                    "Failed to convert schema for parameter '{}' to JSON: {}",
+                                    parameter_data.name, e
+                                ));
                             }
                         }
                     } else {
-                        errors.push(format!("Failed to resolve schema reference for parameter '{}': {}", parameter_data.name, reference));
+                        errors.push(format!(
+                            "Failed to resolve schema reference for parameter '{}': {}",
+                            parameter_data.name, reference
+                        ));
                     }
                 }
             }

@@ -9,45 +9,44 @@
 //! - import: Data import operations
 //! - fixtures: Fixture management operations
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::process::Command;
-use std::process::Stdio;
-use std::time::Duration;
-use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use chrono::{DateTime, Utc};
 use axum::{
     extract::{Query, State},
     http::{self, StatusCode},
     response::{Html, IntoResponse, Json},
 };
-use sysinfo::System;
+use chrono::{DateTime, Utc};
 use mockforge_core::{Error, Result};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::HashMap;
+use std::process::Command;
+use std::process::Stdio;
+use std::sync::Arc;
+use std::time::Duration;
+use sysinfo::System;
+use tokio::sync::RwLock;
 
 // Import all types from models
 use crate::models::{
-    ApiResponse, DashboardData, SystemInfo, ServerStatus, RouteInfo, RequestLog,
-    LatencyProfile, FaultConfig, ProxyConfig, ValidationSettings, LogFilter,
-    ConfigUpdate, HealthCheck, MetricsData, ServerInfo, DashboardSystemInfo, SimpleMetricsData,
-    ValidationUpdate,
+    ApiResponse, ConfigUpdate, DashboardData, DashboardSystemInfo, FaultConfig, HealthCheck,
+    LatencyProfile, LogFilter, MetricsData, ProxyConfig, RequestLog, RouteInfo, ServerInfo,
+    ServerStatus, SimpleMetricsData, SystemInfo, ValidationSettings, ValidationUpdate,
 };
 
 // Import import types from core
-use mockforge_core::workspace_import::{ImportRoute, ImportResponse};
+use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
 
 // Handler sub-modules
 pub mod admin;
 pub mod assets;
 
 // Re-export commonly used types
-pub use assets::*;
 pub use admin::*;
+pub use assets::*;
 
 // Import workspace persistence
-use mockforge_core::workspace_persistence::WorkspacePersistence;
 use mockforge_core::workspace_import::WorkspaceImportConfig;
+use mockforge_core::workspace_persistence::WorkspacePersistence;
 
 // Static assets - embedded at compile time
 const ADMIN_HTML: &str = r#"<!DOCTYPE html>
@@ -64,7 +63,8 @@ const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 </body>
 </html>"#;
 
-const ADMIN_CSS: &str = r#"body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }"#;
+const ADMIN_CSS: &str =
+    r#"body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }"#;
 
 const ADMIN_JS: &str = r#"console.log('MockForge Admin UI');"#;
 
@@ -245,6 +245,8 @@ pub struct AdminState {
     pub grpc_server_addr: Option<std::net::SocketAddr>,
     /// GraphQL server address
     pub graphql_server_addr: Option<std::net::SocketAddr>,
+    /// Whether API endpoints are enabled
+    pub api_enabled: bool,
     /// Start time
     pub start_time: chrono::DateTime<chrono::Utc>,
     /// Request metrics (protected by RwLock)
@@ -299,11 +301,15 @@ impl AdminState {
                 if refresh_count % 10 == 0 {
                     tracing::debug!(
                         "System metrics updated: CPU={:.1}%, Mem={}MB, Threads={}",
-                        cpu_usage, memory_mb_u64, active_threads
+                        cpu_usage,
+                        memory_mb_u64,
+                        active_threads
                     );
                 }
 
-                state_clone.update_system_metrics(memory_mb_u64, cpu_usage as f64, active_threads).await;
+                state_clone
+                    .update_system_metrics(memory_mb_u64, cpu_usage as f64, active_threads)
+                    .await;
 
                 refresh_count += 1;
 
@@ -319,6 +325,7 @@ impl AdminState {
         ws_server_addr: Option<std::net::SocketAddr>,
         grpc_server_addr: Option<std::net::SocketAddr>,
         graphql_server_addr: Option<std::net::SocketAddr>,
+        api_enabled: bool,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -327,6 +334,7 @@ impl AdminState {
             ws_server_addr,
             grpc_server_addr,
             graphql_server_addr,
+            api_enabled,
             start_time,
             metrics: Arc::new(RwLock::new(RequestMetrics::default())),
             system_metrics: Arc::new(RwLock::new(SystemMetrics {
@@ -720,32 +728,33 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     let config = state.get_config().await;
 
     // Get recent logs from centralized logger
-    let recent_logs: Vec<RequestLog> = if let Some(global_logger) = mockforge_core::get_global_logger() {
-        // Get logs from centralized logger
-        let centralized_logs = global_logger.get_recent_logs(Some(20)).await;
+    let recent_logs: Vec<RequestLog> =
+        if let Some(global_logger) = mockforge_core::get_global_logger() {
+            // Get logs from centralized logger
+            let centralized_logs = global_logger.get_recent_logs(Some(20)).await;
 
-        // Convert to RequestLog format for admin UI
-        centralized_logs
-            .into_iter()
-            .map(|log| RequestLog {
-                id: log.id,
-                timestamp: log.timestamp,
-                method: log.method,
-                path: log.path,
-                status_code: log.status_code,
-                response_time_ms: log.response_time_ms,
-                client_ip: log.client_ip,
-                user_agent: log.user_agent,
-                headers: log.headers,
-                response_size_bytes: log.response_size_bytes,
-                error_message: log.error_message,
-            })
-            .collect()
-    } else {
-        // Fallback to local logs if centralized logger not available
-        let logs = state.logs.read().await;
-        logs.iter().rev().take(10).cloned().collect()
-    };
+            // Convert to RequestLog format for admin UI
+            centralized_logs
+                .into_iter()
+                .map(|log| RequestLog {
+                    id: log.id,
+                    timestamp: log.timestamp,
+                    method: log.method,
+                    path: log.path,
+                    status_code: log.status_code,
+                    response_time_ms: log.response_time_ms,
+                    client_ip: log.client_ip,
+                    user_agent: log.user_agent,
+                    headers: log.headers,
+                    response_size_bytes: log.response_size_bytes,
+                    error_message: log.error_message,
+                })
+                .collect()
+        } else {
+            // Fallback to local logs if centralized logger not available
+            let logs = state.logs.read().await;
+            logs.iter().rev().take(10).cloned().collect()
+        };
 
     let system_info = SystemInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -818,7 +827,7 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         system_info: DashboardSystemInfo {
             os: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
-            uptime: uptime,
+            uptime,
             memory_usage: system_metrics.memory_usage_mb * 1024 * 1024, // Convert MB to bytes
         },
         metrics: SimpleMetricsData {
@@ -827,7 +836,8 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
             average_response_time: if metrics.response_times.is_empty() {
                 0.0
             } else {
-                metrics.response_times.iter().sum::<u64>() as f64 / metrics.response_times.len() as f64
+                metrics.response_times.iter().sum::<u64>() as f64
+                    / metrics.response_times.len() as f64
             },
             error_rate: {
                 let total_requests = metrics.requests_by_endpoint.values().sum::<u64>();
@@ -839,6 +849,9 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
                 }
             },
         },
+        servers,
+        recent_logs,
+        system: system_info,
     };
 
     Json(ApiResponse::success(dashboard))
@@ -2495,9 +2508,7 @@ async fn execute_single_smoke_test(
 }
 
 /// Install a plugin from a path or URL
-pub async fn install_plugin(
-    Json(request): Json<serde_json::Value>,
-) -> impl IntoResponse {
+pub async fn install_plugin(Json(request): Json<serde_json::Value>) -> impl IntoResponse {
     // Extract source from request
     let source = request.get("source").and_then(|s| s.as_str()).unwrap_or("");
 
@@ -2513,10 +2524,12 @@ pub async fn install_plugin(
         // Download the plugin from URL
         match download_plugin_from_url(source).await {
             Ok(temp_path) => temp_path,
-            Err(e) => return Json(json!({
-                "success": false,
-                "error": format!("Failed to download plugin: {}", e)
-            })),
+            Err(e) => {
+                return Json(json!({
+                    "success": false,
+                    "error": format!("Failed to download plugin: {}", e)
+                }))
+            }
         }
     } else {
         // Use local file path
@@ -2541,29 +2554,36 @@ pub async fn install_plugin(
 /// Download a plugin from a URL and return the temporary file path
 async fn download_plugin_from_url(url: &str) -> Result<std::path::PathBuf> {
     // Create a temporary file
-    let temp_file = std::env::temp_dir().join(format!("plugin_{}.tmp", chrono::Utc::now().timestamp()));
+    let temp_file =
+        std::env::temp_dir().join(format!("plugin_{}.tmp", chrono::Utc::now().timestamp()));
     let temp_path = temp_file.clone();
 
     // Download the file
-    let response = reqwest::get(url).await
+    let response = reqwest::get(url)
+        .await
         .map_err(|e| Error::generic(format!("Failed to download from URL: {}", e)))?;
 
     if !response.status().is_success() {
-        return Err(Error::generic(format!("HTTP error {}: {}", response.status().as_u16(),
-                          response.status().canonical_reason().unwrap_or("Unknown"))));
+        return Err(Error::generic(format!(
+            "HTTP error {}: {}",
+            response.status().as_u16(),
+            response.status().canonical_reason().unwrap_or("Unknown")
+        )));
     }
 
     // Read the response bytes
-    let bytes = response.bytes().await
+    let bytes = response
+        .bytes()
+        .await
         .map_err(|e| Error::generic(format!("Failed to read response: {}", e)))?;
 
     // Write to temporary file
-    tokio::fs::write(&temp_file, &bytes).await
+    tokio::fs::write(&temp_file, &bytes)
+        .await
         .map_err(|e| Error::generic(format!("Failed to write temporary file: {}", e)))?;
 
     Ok(temp_path)
 }
-
 
 pub async fn serve_icon() -> impl IntoResponse {
     // Return a simple placeholder icon response
@@ -2648,24 +2668,33 @@ pub async fn import_postman(
     };
 
     // Convert MockForgeRoute to ImportRoute
-    let routes: Vec<ImportRoute> = import_result.routes.into_iter().map(|route| ImportRoute {
-        method: route.method,
-        path: route.path,
-        headers: route.headers,
-        body: route.body,
-        response: ImportResponse {
-            status: route.response.status,
-            headers: route.response.headers,
-            body: route.response.body,
-        },
-    }).collect();
+    let routes: Vec<ImportRoute> = import_result
+        .routes
+        .into_iter()
+        .map(|route| ImportRoute {
+            method: route.method,
+            path: route.path,
+            headers: route.headers,
+            body: route.body,
+            response: ImportResponse {
+                status: route.response.status,
+                headers: route.response.headers,
+                body: route.response.body,
+            },
+        })
+        .collect();
 
     match import_postman_to_workspace(routes, workspace_name.to_string(), config) {
         Ok(workspace_result) => {
             // Save the workspace to persistent storage
-            if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
+            if let Err(e) =
+                state.workspace_persistence.save_workspace(&workspace_result.workspace).await
+            {
                 tracing::error!("Failed to save workspace: {}", e);
-                return Json(ApiResponse::error(format!("Import succeeded but failed to save workspace: {}", e)));
+                return Json(ApiResponse::error(format!(
+                    "Import succeeded but failed to save workspace: {}",
+                    e
+                )));
             }
 
             // Record successful import
@@ -2685,7 +2714,10 @@ pub async fn import_postman(
             let mut history = state.import_history.write().await;
             history.push(entry);
 
-            Json(ApiResponse::success(format!("Successfully imported {} routes into workspace '{}'", workspace_result.request_count, workspace_name)))
+            Json(ApiResponse::success(format!(
+                "Successfully imported {} routes into workspace '{}'",
+                workspace_result.request_count, workspace_name
+            )))
         }
         Err(e) => {
             // Record failed import
@@ -2762,12 +2794,20 @@ pub async fn import_insomnia(
     // Extract variables count before moving import_result
     let variables_count = import_result.variables.len();
 
-    match mockforge_core::workspace_import::create_workspace_from_insomnia(import_result, Some(workspace_name.to_string())) {
+    match mockforge_core::workspace_import::create_workspace_from_insomnia(
+        import_result,
+        Some(workspace_name.to_string()),
+    ) {
         Ok(workspace_result) => {
             // Save the workspace to persistent storage
-            if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
+            if let Err(e) =
+                state.workspace_persistence.save_workspace(&workspace_result.workspace).await
+            {
                 tracing::error!("Failed to save workspace: {}", e);
-                return Json(ApiResponse::error(format!("Import succeeded but failed to save workspace: {}", e)));
+                return Json(ApiResponse::error(format!(
+                    "Import succeeded but failed to save workspace: {}",
+                    e
+                )));
             }
 
             // Record successful import
@@ -2787,7 +2827,10 @@ pub async fn import_insomnia(
             let mut history = state.import_history.write().await;
             history.push(entry);
 
-            Json(ApiResponse::success(format!("Successfully imported {} routes into workspace '{}'", workspace_result.request_count, workspace_name)))
+            Json(ApiResponse::success(format!(
+                "Successfully imported {} routes into workspace '{}'",
+                workspace_result.request_count, workspace_name
+            )))
         }
         Err(e) => {
             // Record failed import
@@ -2855,16 +2898,23 @@ pub async fn import_curl(
     };
 
     // Create workspace from imported routes
-    let workspace_name = filename
-        .and_then(|f| f.split('.').next())
-        .unwrap_or("Imported Curl Commands");
+    let workspace_name =
+        filename.and_then(|f| f.split('.').next()).unwrap_or("Imported Curl Commands");
 
-    match mockforge_core::workspace_import::create_workspace_from_curl(import_result, Some(workspace_name.to_string())) {
+    match mockforge_core::workspace_import::create_workspace_from_curl(
+        import_result,
+        Some(workspace_name.to_string()),
+    ) {
         Ok(workspace_result) => {
             // Save the workspace to persistent storage
-            if let Err(e) = state.workspace_persistence.save_workspace(&workspace_result.workspace).await {
+            if let Err(e) =
+                state.workspace_persistence.save_workspace(&workspace_result.workspace).await
+            {
                 tracing::error!("Failed to save workspace: {}", e);
-                return Json(ApiResponse::error(format!("Import succeeded but failed to save workspace: {}", e)));
+                return Json(ApiResponse::error(format!(
+                    "Import succeeded but failed to save workspace: {}",
+                    e
+                )));
             }
 
             // Record successful import
@@ -2884,7 +2934,10 @@ pub async fn import_curl(
             let mut history = state.import_history.write().await;
             history.push(entry);
 
-            Json(ApiResponse::success(format!("Successfully imported {} routes into workspace '{}'", workspace_result.request_count, workspace_name)))
+            Json(ApiResponse::success(format!(
+                "Successfully imported {} routes into workspace '{}'",
+                workspace_result.request_count, workspace_name
+            )))
         }
         Err(e) => {
             // Record failed import
@@ -2913,7 +2966,9 @@ pub async fn preview_import(
     State(state): State<AdminState>,
     Json(request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
-    use mockforge_core::import::{import_postman_collection, import_insomnia_export, import_curl_commands};
+    use mockforge_core::import::{
+        import_curl_commands, import_insomnia_export, import_postman_collection,
+    };
 
     let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
     let filename = request.get("filename").and_then(|v| v.as_str());
@@ -2922,11 +2977,18 @@ pub async fn preview_import(
 
     // Detect format from filename or content
     let format = if let Some(fname) = filename {
-        if fname.to_lowercase().contains("postman") || fname.to_lowercase().ends_with(".postman_collection") {
+        if fname.to_lowercase().contains("postman")
+            || fname.to_lowercase().ends_with(".postman_collection")
+        {
             "postman"
-        } else if fname.to_lowercase().contains("insomnia") || fname.to_lowercase().ends_with(".insomnia") {
+        } else if fname.to_lowercase().contains("insomnia")
+            || fname.to_lowercase().ends_with(".insomnia")
+        {
             "insomnia"
-        } else if fname.to_lowercase().contains("curl") || fname.to_lowercase().ends_with(".sh") || fname.to_lowercase().ends_with(".curl") {
+        } else if fname.to_lowercase().contains("curl")
+            || fname.to_lowercase().ends_with(".sh")
+            || fname.to_lowercase().ends_with(".curl")
+        {
             "curl"
         } else {
             "unknown"
@@ -2938,20 +3000,24 @@ pub async fn preview_import(
     match format {
         "postman" => match import_postman_collection(content, base_url) {
             Ok(import_result) => {
-                let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
-                    serde_json::json!({
-                        "method": route.method,
-                        "path": route.path,
-                        "headers": route.headers,
-                        "body": route.body,
-                        "status_code": route.response.status,
-                        "response": serde_json::json!({
-                            "status": route.response.status,
-                            "headers": route.response.headers,
-                            "body": route.response.body
+                let routes: Vec<serde_json::Value> = import_result
+                    .routes
+                    .into_iter()
+                    .map(|route| {
+                        serde_json::json!({
+                            "method": route.method,
+                            "path": route.path,
+                            "headers": route.headers,
+                            "body": route.body,
+                            "status_code": route.response.status,
+                            "response": serde_json::json!({
+                                "status": route.response.status,
+                                "headers": route.response.headers,
+                                "body": route.response.body
+                            })
                         })
                     })
-                }).collect();
+                    .collect();
 
                 let response = serde_json::json!({
                     "routes": routes,
@@ -2965,20 +3031,24 @@ pub async fn preview_import(
         },
         "insomnia" => match import_insomnia_export(content, environment) {
             Ok(import_result) => {
-                let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
-                    serde_json::json!({
-                        "method": route.method,
-                        "path": route.path,
-                        "headers": route.headers,
-                        "body": route.body,
-                        "status_code": route.response.status,
-                        "response": serde_json::json!({
-                            "status": route.response.status,
-                            "headers": route.response.headers,
-                            "body": route.response.body
+                let routes: Vec<serde_json::Value> = import_result
+                    .routes
+                    .into_iter()
+                    .map(|route| {
+                        serde_json::json!({
+                            "method": route.method,
+                            "path": route.path,
+                            "headers": route.headers,
+                            "body": route.body,
+                            "status_code": route.response.status,
+                            "response": serde_json::json!({
+                                "status": route.response.status,
+                                "headers": route.response.headers,
+                                "body": route.response.body
+                            })
                         })
                     })
-                }).collect();
+                    .collect();
 
                 let response = serde_json::json!({
                     "routes": routes,
@@ -2992,20 +3062,24 @@ pub async fn preview_import(
         },
         "curl" => match import_curl_commands(content, base_url) {
             Ok(import_result) => {
-                let routes: Vec<serde_json::Value> = import_result.routes.into_iter().map(|route| {
-                    serde_json::json!({
-                        "method": route.method,
-                        "path": route.path,
-                        "headers": route.headers,
-                        "body": route.body,
-                        "status_code": route.response.status,
-                        "response": serde_json::json!({
-                            "status": route.response.status,
-                            "headers": route.response.headers,
-                            "body": route.response.body
+                let routes: Vec<serde_json::Value> = import_result
+                    .routes
+                    .into_iter()
+                    .map(|route| {
+                        serde_json::json!({
+                            "method": route.method,
+                            "path": route.path,
+                            "headers": route.headers,
+                            "body": route.body,
+                            "status_code": route.response.status,
+                            "response": serde_json::json!({
+                                "status": route.response.status,
+                                "headers": route.response.headers,
+                                "body": route.response.body
+                            })
                         })
                     })
-                }).collect();
+                    .collect();
 
                 let response = serde_json::json!({
                     "routes": routes,
@@ -3027,21 +3101,26 @@ pub async fn get_import_history(
     let history = state.import_history.read().await;
     let total = history.len();
 
-    let imports: Vec<serde_json::Value> = history.iter().rev().take(50).map(|entry| {
-        serde_json::json!({
-            "id": entry.id,
-            "format": entry.format,
-            "timestamp": entry.timestamp.to_rfc3339(),
-            "routes_count": entry.routes_count,
-            "variables_count": entry.variables_count,
-            "warnings_count": entry.warnings_count,
-            "success": entry.success,
-            "filename": entry.filename,
-            "environment": entry.environment,
-            "base_url": entry.base_url,
-            "error_message": entry.error_message
+    let imports: Vec<serde_json::Value> = history
+        .iter()
+        .rev()
+        .take(50)
+        .map(|entry| {
+            serde_json::json!({
+                "id": entry.id,
+                "format": entry.format,
+                "timestamp": entry.timestamp.to_rfc3339(),
+                "routes_count": entry.routes_count,
+                "variables_count": entry.variables_count,
+                "warnings_count": entry.warnings_count,
+                "success": entry.success,
+                "filename": entry.filename,
+                "environment": entry.environment,
+                "base_url": entry.base_url,
+                "error_message": entry.error_message
+            })
         })
-    }).collect();
+        .collect();
 
     let response = serde_json::json!({
         "imports": imports,
@@ -3249,7 +3328,11 @@ pub async fn set_environment_variable(
 
 pub async fn remove_environment_variable(
     State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id, variable_name)): axum::extract::Path<(String, String, String)>,
+    axum::extract::Path((workspace_id, environment_id, variable_name)): axum::extract::Path<(
+        String,
+        String,
+        String,
+    )>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment variable removed".to_string()))
 }
@@ -3344,9 +3427,7 @@ pub async fn get_plugin_status(
 }
 
 // Missing functions that routes.rs expects
-pub async fn clear_import_history(
-    State(state): State<AdminState>,
-) -> Json<ApiResponse<String>> {
+pub async fn clear_import_history(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
     let mut history = state.import_history.write().await;
     history.clear();
     Json(ApiResponse::success("Import history cleared".to_string()))
@@ -3364,8 +3445,6 @@ pub async fn get_plugin(
     })))
 }
 
-pub async fn reload_plugins(
-    State(state): State<AdminState>,
-) -> Json<ApiResponse<String>> {
+pub async fn reload_plugins(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Plugins reloaded".to_string()))
 }

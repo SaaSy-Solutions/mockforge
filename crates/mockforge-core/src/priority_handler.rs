@@ -117,9 +117,7 @@ impl PriorityHttpHandler {
             } else {
                 fingerprint.tags()
             };
-            if let Some((status_code, error_message)) =
-                failure_injector.process_request(&tags)
-            {
+            if let Some((status_code, error_message)) = failure_injector.process_request(&tags) {
                 let error_response = serde_json::json!({
                     "error": error_message,
                     "injected_failure": true,

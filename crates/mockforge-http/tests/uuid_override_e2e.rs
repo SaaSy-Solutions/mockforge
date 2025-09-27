@@ -1,9 +1,9 @@
 use axum::Router;
-use mockforge_http::build_router;
 use mockforge_core::openapi_routes::ValidationOptions;
-use std::net::SocketAddr;
-use serde_json::json;
+use mockforge_http::build_router;
 use regex::Regex;
+use serde_json::json;
+use std::net::SocketAddr;
 
 /// Test that UUID templating works in override files
 #[tokio::test]
@@ -63,8 +63,12 @@ async fn test_uuid_override_templating() {
     // Set environment variable for overrides
     std::env::set_var("MOCKFORGE_HTTP_OVERRIDES_GLOB", override_file.to_string_lossy().to_string());
 
-    let app: Router = build_router(Some(spec_path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app: Router = build_router(
+        Some(spec_path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -83,7 +87,8 @@ async fn test_uuid_override_templating() {
     let body: serde_json::Value = res.json().await.unwrap();
 
     // Validate that UUIDs were generated and are valid
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Check requestId
     assert!(body["requestId"].is_string(), "requestId should be a string");
@@ -93,7 +98,10 @@ async fn test_uuid_override_templating() {
     // Check correlationId
     assert!(body["correlationId"].is_string(), "correlationId should be a string");
     let correlation_id = body["correlationId"].as_str().unwrap();
-    assert!(uuid_regex.is_match(correlation_id), "correlationId should be a valid UUID format");
+    assert!(
+        uuid_regex.is_match(correlation_id),
+        "correlationId should be a valid UUID format"
+    );
 
     // Check traceId
     assert!(body["traceId"].is_string(), "traceId should be a string");
@@ -183,10 +191,17 @@ async fn test_uuid_override_modes() {
     tokio::fs::write(&merge_override, merge_content).await.unwrap();
 
     // Test replace mode
-    std::env::set_var("MOCKFORGE_HTTP_OVERRIDES_GLOB", replace_override.to_string_lossy().to_string());
+    std::env::set_var(
+        "MOCKFORGE_HTTP_OVERRIDES_GLOB",
+        replace_override.to_string_lossy().to_string(),
+    );
 
-    let app: Router = build_router(Some(spec_path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app: Router = build_router(
+        Some(spec_path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -205,17 +220,25 @@ async fn test_uuid_override_modes() {
 
     let body_replace: serde_json::Value = res_replace.json().await.unwrap();
 
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
     assert!(uuid_regex.is_match(body_replace["id"].as_str().unwrap()));
     assert_eq!(body_replace["type"], "replaced");
 
     drop(server);
 
     // Test merge mode
-    std::env::set_var("MOCKFORGE_HTTP_OVERRIDES_GLOB", merge_override.to_string_lossy().to_string());
+    std::env::set_var(
+        "MOCKFORGE_HTTP_OVERRIDES_GLOB",
+        merge_override.to_string_lossy().to_string(),
+    );
 
-    let app2: Router = build_router(Some(spec_path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app2: Router = build_router(
+        Some(spec_path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr2 = listener2.local_addr().unwrap();
@@ -294,8 +317,12 @@ async fn test_uuid_post_templating() {
 
     std::env::set_var("MOCKFORGE_HTTP_OVERRIDES_GLOB", override_file.to_string_lossy().to_string());
 
-    let app: Router = build_router(Some(spec_path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app: Router = build_router(
+        Some(spec_path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -313,7 +340,8 @@ async fn test_uuid_post_templating() {
 
     let body: serde_json::Value = res.json().await.unwrap();
 
-    let uuid_regex = Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    let uuid_regex =
+        Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Check that static field remains unchanged
     assert_eq!(body["staticField"], "not-a-uuid");

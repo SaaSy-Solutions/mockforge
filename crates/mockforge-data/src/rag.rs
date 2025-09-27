@@ -251,7 +251,8 @@ impl RagEngine {
                     warn!("Failed to generate RAG data for row {}: {}", i, e);
 
                     // If too many rows fail, return an error
-                    if failed_rows > config.rows / 4 { // Allow up to 25% failure rate
+                    if failed_rows > config.rows / 4 {
+                        // Allow up to 25% failure rate
                         return Err(mockforge_core::Error::generic(
                             format!("Too many RAG generation failures ({} out of {} rows failed). Check API configuration and network connectivity.", failed_rows, config.rows)
                         ));
@@ -265,14 +266,21 @@ impl RagEngine {
         }
 
         if failed_rows > 0 {
-            warn!("RAG generation completed with {} failed rows out of {}", failed_rows, config.rows);
+            warn!(
+                "RAG generation completed with {} failed rows out of {}",
+                failed_rows, config.rows
+            );
         }
 
         Ok(results)
     }
 
     /// Generate a single row using RAG
-    async fn generate_single_row_with_rag(&self, schema: &SchemaDefinition, row_index: usize) -> Result<Value> {
+    async fn generate_single_row_with_rag(
+        &self,
+        schema: &SchemaDefinition,
+        row_index: usize,
+    ) -> Result<Value> {
         let prompt = self.build_generation_prompt(schema, row_index).await?;
         let generated_data = self.call_llm(&prompt).await?;
         self.parse_llm_response(&generated_data)
@@ -581,14 +589,20 @@ impl RagEngine {
                     last_error = Some(e);
                     if attempt < self.config.max_retries {
                         let delay = Duration::from_millis(500 * (attempt + 1) as u64);
-                        warn!("LLM API call failed (attempt {}), retrying in {:?}: {:?}", attempt + 1, delay, last_error);
+                        warn!(
+                            "LLM API call failed (attempt {}), retrying in {:?}: {:?}",
+                            attempt + 1,
+                            delay,
+                            last_error
+                        );
                         sleep(delay).await;
                     }
                 }
             }
         }
 
-        Err(last_error.unwrap_or_else(|| mockforge_core::Error::generic("All LLM API retry attempts failed")))
+        Err(last_error
+            .unwrap_or_else(|| mockforge_core::Error::generic("All LLM API retry attempts failed")))
     }
 
     /// Single attempt to call LLM API with provider-specific implementation

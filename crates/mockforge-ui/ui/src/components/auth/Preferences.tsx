@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
@@ -29,8 +29,7 @@ import {
   RotateCcw,
   Monitor,
   Sun,
-  Moon,
-  Smartphone
+  Moon
 } from 'lucide-react';
 
 interface PreferencesProps {
@@ -134,8 +133,8 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                       <button
                         key={value}
                         onClick={() => {
-                          updateTheme({ theme: value as any });
-                          setThemeStore(value as any);
+                          updateTheme({ theme: value as 'light' | 'dark' | 'system' });
+                          setThemeStore(value as 'light' | 'dark' | 'system');
                         }}
                         className={`flex items-center gap-2 p-3 rounded-lg border transition-all ${
                           preferences.theme.theme === value
@@ -158,7 +157,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     {accentColors.map(({ value, label }) => (
                       <button
                         key={value}
-                        onClick={() => updateTheme({ accentColor: value as any })}
+                        onClick={() => updateTheme({ accentColor: value as string })}
                         className={`w-8 h-8 rounded-full border-2 transition-all ${
                           preferences.theme.accentColor === value
                             ? 'border-gray-900 dark:border-gray-100 scale-110'
@@ -374,7 +373,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     ].map(({ value, label }) => (
                       <button
                         key={value}
-                        onClick={() => updateSearch({ defaultScope: value as any })}
+                        onClick={() => updateSearch({ defaultScope: value as 'current' | 'logs' | 'all' | 'services' })}
                         className={`p-2 text-sm rounded border transition-all ${
                           preferences.search.defaultScope === value
                             ? 'border-brand bg-brand/10 text-brand'

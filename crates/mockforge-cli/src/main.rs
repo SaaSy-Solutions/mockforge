@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
-use mockforge_http;
-use mockforge_ws;
-use mockforge_grpc;
-use mockforge_data;
-use mockforge_ui;
-use mockforge_data::rag::{RagConfig, LlmProvider, EmbeddingProvider};
 use mockforge_core::encryption::init_key_store;
+use mockforge_data;
+use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
+use mockforge_grpc;
+use mockforge_http;
+use mockforge_ui;
+use mockforge_ws;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "mockforge")]
@@ -200,7 +200,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Admin { port, config } => {
             handle_admin(port, config).await?;
         }
-        Commands::Sync { workspace_dir, config } => {
+        Commands::Sync {
+            workspace_dir,
+            config,
+        } => {
             handle_sync(workspace_dir, config).await?;
         }
     }
@@ -213,8 +216,8 @@ async fn handle_serve(
     http_port: u16,
     ws_port: u16,
     grpc_port: u16,
-    _admin: bool,
-    _admin_port: u16,
+    admin: bool,
+    admin_port: u16,
     spec: Option<PathBuf>,
     _ws_replay_file: Option<PathBuf>,
     traffic_shaping: bool,
@@ -225,13 +228,18 @@ async fn handle_serve(
     println!("📡 HTTP server on port {}", http_port);
     println!("🔌 WebSocket server on port {}", ws_port);
     println!("⚡ gRPC server on port {}", grpc_port);
+    if admin {
+        println!("🎛️ Admin UI on port {}", admin_port);
+    }
 
     // Initialize key store at startup
     init_key_store();
 
     // Build HTTP router with OpenAPI spec and traffic shaping if enabled
     let http_app = if traffic_shaping {
-        use mockforge_core::{TrafficShaper, TrafficShapingConfig, BandwidthConfig, BurstLossConfig};
+        use mockforge_core::{
+            BandwidthConfig, BurstLossConfig, TrafficShaper, TrafficShapingConfig,
+        };
         let config = TrafficShapingConfig {
             bandwidth: BandwidthConfig::new(bandwidth_limit, burst_size),
             burst_loss: BurstLossConfig::default(), // Disable burst loss for now
@@ -242,18 +250,26 @@ async fn handle_serve(
             None,
             traffic_shaper,
             true,
-        ).await
+        )
+        .await
     } else {
         mockforge_http::build_router(
             spec.as_ref().map(|p| p.to_string_lossy().to_string()),
             None,
             None,
-        ).await
+        )
+        .await
     };
 
-    println!("✅ HTTP server configured with health check at http://localhost:{}/health", http_port);
+    println!(
+        "✅ HTTP server configured with health check at http://localhost:{}/health",
+        http_port
+    );
     println!("✅ WebSocket server configured at ws://localhost:{}/ws", ws_port);
     println!("✅ gRPC server configured at localhost:{}", grpc_port);
+    if admin {
+        println!("✅ Admin UI configured at http://localhost:{}", admin_port);
+    }
 
     println!("💡 Press Ctrl+C to stop");
 
@@ -281,6 +297,28 @@ async fn handle_serve(
         }
     });
 
+    // Start Admin UI server (if enabled)
+    let admin_handle = if admin {
+        Some(tokio::spawn(async move {
+            println!("🎛️ Admin UI listening on http://localhost:{}", admin_port);
+            let addr = format!("127.0.0.1:{}", admin_port).parse().unwrap();
+            if let Err(e) = mockforge_ui::start_admin_server(
+                addr,
+                Some(format!("127.0.0.1:{}", http_port).parse().unwrap()),
+                Some(format!("127.0.0.1:{}", ws_port).parse().unwrap()),
+                Some(format!("127.0.0.1:{}", grpc_port).parse().unwrap()),
+                None,
+                true,
+            )
+            .await
+            {
+                eprintln!("❌ Admin UI server error: {}", e);
+            }
+        }))
+    } else {
+        None
+    };
+
     // Wait for all servers or shutdown signal
     tokio::select! {
         _ = http_handle => {
@@ -292,6 +330,15 @@ async fn handle_serve(
         _ = grpc_handle => {
             println!("⚡ gRPC server stopped");
         }
+        _ = async {
+            if let Some(handle) = admin_handle {
+                handle.await.unwrap();
+            } else {
+                std::future::pending::<()>().await;
+            }
+        } => {
+            println!("🎛️ Admin UI stopped");
+        }
         _ = tokio::signal::ctrl_c() => {
             println!("🛑 Received shutdown signal");
         }
@@ -302,7 +349,9 @@ async fn handle_serve(
     Ok(())
 }
 
-async fn handle_data(data_command: DataCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_data(
+    data_command: DataCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match data_command {
         DataCommands::Template {
             template,
@@ -332,7 +381,17 @@ async fn handle_data(data_command: DataCommands) -> Result<(), Box<dyn std::erro
             }
 
             // Generate data using the specified template
-            let result = generate_from_template(&template, rows, rag, rag_provider, rag_model, rag_endpoint, rag_timeout, rag_max_retries).await?;
+            let result = generate_from_template(
+                &template,
+                rows,
+                rag,
+                rag_provider,
+                rag_model,
+                rag_endpoint,
+                rag_timeout,
+                rag_max_retries,
+            )
+            .await?;
 
             // Format and output the result
             output_result(result, format, output).await?;
@@ -360,19 +419,22 @@ async fn handle_data(data_command: DataCommands) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-async fn handle_admin(port: u16, _config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_admin(
+    port: u16,
+    _config: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🎛️ Starting MockForge Admin UI...");
 
     // Start the admin UI server
     let addr = format!("127.0.0.1:{}", port).parse()?;
     mockforge_ui::start_admin_server(
-        addr,
-        None, // http_server_addr
+        addr, None, // http_server_addr
         None, // ws_server_addr
         None, // grpc_server_addr
         None, // graphql_server_addr
         true, // api_enabled
-    ).await?;
+    )
+    .await?;
 
     println!("✅ Admin UI started successfully!");
     println!("🌐 Access at: http://localhost:{}/", port);
@@ -384,7 +446,10 @@ async fn handle_admin(port: u16, _config: Option<PathBuf>) -> Result<(), Box<dyn
     Ok(())
 }
 
-async fn handle_sync(workspace_dir: PathBuf, _config: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_sync(
+    workspace_dir: PathBuf,
+    _config: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🔄 Starting MockForge Sync Daemon...");
     println!("📁 Monitoring workspace directory: {}", workspace_dir.display());
 
@@ -445,7 +510,9 @@ fn load_rag_config(
                 LlmProvider::OpenAI => "https://api.openai.com/v1/chat/completions".to_string(),
                 LlmProvider::Anthropic => "https://api.anthropic.com/v1/messages".to_string(),
                 LlmProvider::Ollama => "http://localhost:11434/api/generate".to_string(),
-                LlmProvider::OpenAICompatible => "http://localhost:8000/v1/chat/completions".to_string(),
+                LlmProvider::OpenAICompatible => {
+                    "http://localhost:8000/v1/chat/completions".to_string()
+                }
             }),
         api_key: std::env::var("MOCKFORGE_RAG_API_KEY").ok(),
         model: model_override
@@ -485,10 +552,14 @@ fn load_rag_config(
             .parse()
             .unwrap_or(5),
         request_timeout_seconds: timeout_override
-            .or_else(|| std::env::var("MOCKFORGE_RAG_TIMEOUT_SECONDS").ok().and_then(|s| s.parse().ok()))
+            .or_else(|| {
+                std::env::var("MOCKFORGE_RAG_TIMEOUT_SECONDS").ok().and_then(|s| s.parse().ok())
+            })
             .unwrap_or(30),
         max_retries: max_retries_override
-            .or_else(|| std::env::var("MOCKFORGE_RAG_MAX_RETRIES").ok().and_then(|s| s.parse().ok()))
+            .or_else(|| {
+                std::env::var("MOCKFORGE_RAG_MAX_RETRIES").ok().and_then(|s| s.parse().ok())
+            })
             .unwrap_or(3),
     }
 }
@@ -517,7 +588,11 @@ async fn generate_from_template(
         "product" | "products" => templates::product_schema(),
         "order" | "orders" => templates::order_schema(),
         _ => {
-            return Err(format!("Unknown template: {}. Available templates: user, product, order", template).into());
+            return Err(format!(
+                "Unknown template: {}. Available templates: user, product, order",
+                template
+            )
+            .into());
         }
     };
 
@@ -526,12 +601,21 @@ async fn generate_from_template(
 
     // Configure RAG if enabled
     if rag_enabled {
-        let rag_config = load_rag_config(rag_provider.clone(), rag_model.clone(), rag_endpoint.clone(), rag_timeout, rag_max_retries);
-        generator.configure_rag(rag_config)
+        let rag_config = load_rag_config(
+            rag_provider.clone(),
+            rag_model.clone(),
+            rag_endpoint.clone(),
+            rag_timeout,
+            rag_max_retries,
+        );
+        generator
+            .configure_rag(rag_config)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
     }
 
-    generator.generate().await
+    generator
+        .generate()
+        .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 }
 
@@ -574,7 +658,8 @@ async fn output_result(
                     // Add data rows
                     for row in &result.data {
                         if let Some(obj) = row.as_object() {
-                            let values: Vec<String> = headers.iter()
+                            let values: Vec<String> = headers
+                                .iter()
                                 .map(|header| {
                                     obj.get(header)
                                         .and_then(|v| v.as_str())

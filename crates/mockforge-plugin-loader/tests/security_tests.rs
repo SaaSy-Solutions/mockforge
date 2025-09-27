@@ -1,7 +1,7 @@
 //! Security-focused tests for the plugin system
 
-use mockforge_plugin_loader::*;
 use mockforge_plugin_core::*;
+use mockforge_plugin_loader::*;
 use std::fs;
 use tempfile::TempDir;
 
@@ -22,10 +22,20 @@ mod tests {
         let id = PluginId::new("excessive-plugin");
         let version = PluginVersion::new(1, 0, 0);
         let author = PluginAuthor::new("Malicious Author");
-        let info = PluginInfo::new(id, version, "Excessive Permissions Plugin", "Plugin requesting excessive permissions", author);
+        let info = PluginInfo::new(
+            id,
+            version,
+            "Excessive Permissions Plugin",
+            "Plugin requesting excessive permissions",
+            author,
+        );
 
         let mut manifest = PluginManifest::new(info);
-        manifest.capabilities = vec!["network:http".to_string(), "filesystem:read".to_string(), "filesystem:write".to_string()];
+        manifest.capabilities = vec![
+            "network:http".to_string(),
+            "filesystem:read".to_string(),
+            "filesystem:write".to_string(),
+        ];
         manifest
     }
 
@@ -74,13 +84,16 @@ mod tests {
 
         let mut config = PluginLoaderConfig::default();
         config.skip_wasm_validation = true; // Skip WASM validation for test
-        // For this test, we need to allow the capabilities in the security policies
-        // But since we can't modify security policies easily, let's modify the manifest to not request excessive permissions
+                                            // For this test, we need to allow the capabilities in the security policies
+                                            // But since we can't modify security policies easily, let's modify the manifest to not request excessive permissions
         let loader = PluginLoader::new(config);
 
         // Test validation - should pass manifest validation but be restricted at runtime
         let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
-        assert!(result.is_ok(), "Manifest validation should pass even with excessive permissions");
+        assert!(
+            result.is_ok(),
+            "Manifest validation should pass even with excessive permissions"
+        );
 
         let validated_manifest = result.unwrap();
 
@@ -111,7 +124,10 @@ mod tests {
         // Test that capabilities are properly parsed
         let parsed = PluginCapabilities::from_strings(&network_capabilities);
         assert!(parsed.network.allow_http, "Network HTTP permission should be enabled");
-        assert!(parsed.custom.contains_key("template"), "Template capability should be in custom");
+        assert!(
+            parsed.custom.contains_key("template"),
+            "Template capability should be in custom"
+        );
 
         // Test invalid capabilities (if any restrictions exist)
         // For now, all valid capabilities should pass
@@ -126,15 +142,28 @@ mod tests {
         let validator = PluginValidator::new(config);
 
         // Test valid filesystem capabilities
-        let filesystem_capabilities = vec!["filesystem:read".to_string(), "filesystem:write".to_string(), "template".to_string()];
+        let filesystem_capabilities = vec![
+            "filesystem:read".to_string(),
+            "filesystem:write".to_string(),
+            "template".to_string(),
+        ];
         let result = validator.validate_capabilities(&filesystem_capabilities);
         assert!(result.is_ok(), "Filesystem capabilities should pass validation");
 
         // Test that capabilities are properly parsed
         let parsed = PluginCapabilities::from_strings(&filesystem_capabilities);
-        assert!(parsed.filesystem.read_paths.contains(&"*".to_string()), "Filesystem read permission should be enabled");
-        assert!(parsed.filesystem.write_paths.contains(&"*".to_string()), "Filesystem write permission should be enabled");
-        assert!(parsed.custom.contains_key("template"), "Template capability should be in custom");
+        assert!(
+            parsed.filesystem.read_paths.contains(&"*".to_string()),
+            "Filesystem read permission should be enabled"
+        );
+        assert!(
+            parsed.filesystem.write_paths.contains(&"*".to_string()),
+            "Filesystem write permission should be enabled"
+        );
+        assert!(
+            parsed.custom.contains_key("template"),
+            "Template capability should be in custom"
+        );
     }
 
     #[tokio::test]
@@ -146,15 +175,28 @@ mod tests {
         let validator = PluginValidator::new(config);
 
         // Test valid resource limit capabilities
-        let resource_capabilities = vec!["resource:memory=100MB".to_string(), "resource:cpu=5s".to_string(), "template".to_string()];
+        let resource_capabilities = vec![
+            "resource:memory=100MB".to_string(),
+            "resource:cpu=5s".to_string(),
+            "template".to_string(),
+        ];
         let result = validator.validate_capabilities(&resource_capabilities);
         assert!(result.is_ok(), "Resource limit capabilities should pass validation");
 
         // Test that capabilities are properly parsed (currently stored as custom)
         let parsed = PluginCapabilities::from_strings(&resource_capabilities);
-        assert!(parsed.custom.contains_key("resource:memory=100MB"), "Memory resource limit should be in custom");
-        assert!(parsed.custom.contains_key("resource:cpu=5s"), "CPU resource limit should be in custom");
-        assert!(parsed.custom.contains_key("template"), "Template capability should be in custom");
+        assert!(
+            parsed.custom.contains_key("resource:memory=100MB"),
+            "Memory resource limit should be in custom"
+        );
+        assert!(
+            parsed.custom.contains_key("resource:cpu=5s"),
+            "CPU resource limit should be in custom"
+        );
+        assert!(
+            parsed.custom.contains_key("template"),
+            "Template capability should be in custom"
+        );
     }
 
     #[tokio::test]
@@ -323,7 +365,6 @@ mod tests {
         let author = PluginAuthor::with_email("Test Author", "test@example.com");
         let info = PluginInfo::new(id, version, "Test Plugin", "A test plugin", author);
 
-        PluginManifest::new(info)
-            .with_capability("template")
+        PluginManifest::new(info).with_capability("template")
     }
 }

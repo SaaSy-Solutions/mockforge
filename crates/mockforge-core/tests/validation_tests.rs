@@ -1,5 +1,5 @@
-use mockforge_core::validation::*;
 use mockforge_core::validation::Validator;
+use mockforge_core::validation::*;
 use mockforge_core::workspace::request::RequestProcessor;
 use serde_json::json;
 use std::fs;
@@ -206,16 +206,19 @@ mod validation_tests {
         assert!(!errors.is_empty(), "Invalid request should produce errors");
 
         // Check that we get detailed error information
-        let username_error = errors.iter().find(|e|
-            e.path.contains("username") && e.error_type == "length_mismatch");
+        let username_error = errors
+            .iter()
+            .find(|e| e.path.contains("username") && e.error_type == "length_mismatch");
         assert!(username_error.is_some(), "Should have username length error");
 
-        let email_error = errors.iter().find(|e|
-            e.path.contains("email") && e.error_type == "missing_required");
+        let email_error = errors
+            .iter()
+            .find(|e| e.path.contains("email") && e.error_type == "missing_required");
         assert!(email_error.is_some(), "Should have missing email error");
 
-        let age_error = errors.iter().find(|e|
-            e.path.contains("age") && e.error_type == "range_out_of_bounds");
+        let age_error = errors
+            .iter()
+            .find(|e| e.path.contains("age") && e.error_type == "range_out_of_bounds");
         assert!(age_error.is_some(), "Should have age range error");
 
         // Test enhanced 422 JSON formatting
@@ -516,23 +519,25 @@ mod validation_tests {
         assert!(errors.len() >= 4, "Should have multiple validation errors");
 
         // Should have pattern violation for name
-        let name_error = errors.iter().find(|e|
-            e.path.contains("user.name") && e.error_type.contains("pattern"));
+        let name_error = errors
+            .iter()
+            .find(|e| e.path.contains("user.name") && e.error_type.contains("pattern"));
         assert!(name_error.is_some(), "Should detect name pattern violation");
 
         // Should have uri format error
-        let website_error = errors.iter().find(|e|
-            e.path.contains("profile.website") && e.error_type.contains("format"));
+        let website_error = errors
+            .iter()
+            .find(|e| e.path.contains("profile.website") && e.error_type.contains("format"));
         assert!(website_error.is_some(), "Should detect website format error");
 
         // Should have additional property errors
-        let additional_error = errors.iter().find(|e|
-            e.error_type == "additional_property");
+        let additional_error = errors.iter().find(|e| e.error_type == "additional_property");
         assert!(additional_error.is_some(), "Should detect additional properties");
 
         // Should have array length violation for empty tag
-        let array_error = errors.iter().find(|e|
-            e.path.contains("tags") && e.error_type.contains("length"));
+        let array_error = errors
+            .iter()
+            .find(|e| e.path.contains("tags") && e.error_type.contains("length"));
         assert!(array_error.is_some(), "Should detect array length violations");
 
         // Verify schema information is provided
@@ -609,7 +614,8 @@ mod validation_tests {
     #[test]
     fn test_from_protobuf_valid_descriptor() {
         // Read the test descriptor file generated from greeter.proto
-        let descriptor_bytes = fs::read("/tmp/test_descriptor.bin").expect("Failed to read test descriptor file");
+        let descriptor_bytes =
+            fs::read("/tmp/test_descriptor.bin").expect("Failed to read test descriptor file");
 
         // Create validator from protobuf descriptor
         let validator = Validator::from_protobuf(&descriptor_bytes).unwrap();

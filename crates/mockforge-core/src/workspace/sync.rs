@@ -4,13 +4,13 @@
 //! including conflict resolution, merge strategies, and sync status tracking.
 
 use crate::workspace::core::{EntityId, Workspace};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use tokio::fs;
-use std::path::Path;
-use serde_yaml;
+use serde::{Deserialize, Serialize};
 use serde_json;
+use serde_yaml;
+use std::collections::HashMap;
+use std::path::Path;
+use tokio::fs;
 
 /// Synchronization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,15 +270,20 @@ impl WorkspaceSyncManager {
         self.status.last_error = None;
 
         let result = match &self.config.provider {
-            SyncProvider::Git { repo_url, branch, auth_token } => {
-                self.sync_with_git(workspace, repo_url, branch, auth_token.as_deref()).await
-            }
-            SyncProvider::Cloud { service_url, api_key, project_id } => {
-                self.sync_with_cloud(workspace, service_url, api_key, project_id).await
-            }
-            SyncProvider::Local { directory_path, watch_changes } => {
-                self.sync_with_local(workspace, directory_path, *watch_changes).await
-            }
+            SyncProvider::Git {
+                repo_url,
+                branch,
+                auth_token,
+            } => self.sync_with_git(workspace, repo_url, branch, auth_token.as_deref()).await,
+            SyncProvider::Cloud {
+                service_url,
+                api_key,
+                project_id,
+            } => self.sync_with_cloud(workspace, service_url, api_key, project_id).await,
+            SyncProvider::Local {
+                directory_path,
+                watch_changes,
+            } => self.sync_with_local(workspace, directory_path, *watch_changes).await,
         };
 
         // Calculate duration
@@ -319,20 +324,23 @@ impl WorkspaceSyncManager {
         auth_token: Option<&str>,
     ) -> Result<SyncResult, String> {
         // Create a temporary directory for the Git repository
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+        let temp_dir =
+            tempfile::tempdir().map_err(|e| format!("Failed to create temp directory: {}", e))?;
 
         let repo_path = temp_dir.path().join("repo");
 
         match self.config.sync_direction {
             SyncDirection::LocalToRemote => {
-                self.sync_local_to_git(workspace, repo_url, branch, auth_token, &repo_path).await
+                self.sync_local_to_git(workspace, repo_url, branch, auth_token, &repo_path)
+                    .await
             }
             SyncDirection::RemoteToLocal => {
-                self.sync_git_to_local(workspace, repo_url, branch, auth_token, &repo_path).await
+                self.sync_git_to_local(workspace, repo_url, branch, auth_token, &repo_path)
+                    .await
             }
             SyncDirection::Bidirectional => {
-                self.sync_bidirectional_git(workspace, repo_url, branch, auth_token, &repo_path).await
+                self.sync_bidirectional_git(workspace, repo_url, branch, auth_token, &repo_path)
+                    .await
             }
         }
     }
@@ -354,7 +362,8 @@ impl WorkspaceSyncManager {
         let workspace_yaml = serde_yaml::to_string(workspace)
             .map_err(|e| format!("Failed to serialize workspace: {}", e))?;
 
-        tokio::fs::write(&workspace_file, &workspace_yaml).await
+        tokio::fs::write(&workspace_file, &workspace_yaml)
+            .await
             .map_err(|e| format!("Failed to write workspace file: {}", e))?;
 
         // Add, commit, and push changes
@@ -392,7 +401,8 @@ impl WorkspaceSyncManager {
             });
         }
 
-        let workspace_yaml = tokio::fs::read_to_string(&workspace_file).await
+        let workspace_yaml = tokio::fs::read_to_string(&workspace_file)
+            .await
             .map_err(|e| format!("Failed to read workspace file: {}", e))?;
 
         let remote_workspace: Workspace = serde_yaml::from_str(&workspace_yaml)
@@ -431,7 +441,9 @@ impl WorkspaceSyncManager {
         repo_path: &std::path::Path,
     ) -> Result<SyncResult, String> {
         // First sync from Git to local
-        let pull_result = self.sync_git_to_local(workspace, repo_url, branch, auth_token, repo_path).await?;
+        let pull_result = self
+            .sync_git_to_local(workspace, repo_url, branch, auth_token, repo_path)
+            .await?;
 
         if !pull_result.conflicts.is_empty() {
             // Conflicts detected, return them
@@ -473,7 +485,13 @@ impl WorkspaceSyncManager {
             };
 
             let output = Command::new("git")
-                .args(["clone", "--branch", branch, &clone_url, &repo_path.to_string_lossy()])
+                .args([
+                    "clone",
+                    "--branch",
+                    branch,
+                    &clone_url,
+                    &repo_path.to_string_lossy(),
+                ])
                 .output()
                 .map_err(|e| format!("Failed to clone repository: {}", e))?;
 
@@ -496,7 +514,9 @@ impl WorkspaceSyncManager {
         use std::process::Command;
 
         let repo_path_str = repo_path.to_string_lossy();
-        let file_path_str = workspace_file.strip_prefix(repo_path).unwrap_or(workspace_file)
+        let file_path_str = workspace_file
+            .strip_prefix(repo_path)
+            .unwrap_or(workspace_file)
             .to_string_lossy();
 
         // Add file
@@ -570,16 +590,19 @@ impl WorkspaceSyncManager {
 
         // Build API URLs
         let base_url = service_url.trim_end_matches('/');
-        let workspace_url = format!("{}/api/v1/projects/{}/workspaces/{}", base_url, project_id, workspace.id);
+        let workspace_url =
+            format!("{}/api/v1/projects/{}/workspaces/{}", base_url, project_id, workspace.id);
 
         match self.config.sync_direction {
             SyncDirection::LocalToRemote => {
                 // Only upload local workspace to cloud
-                self.upload_workspace_to_cloud(&client, &workspace_url, api_key, workspace).await
+                self.upload_workspace_to_cloud(&client, &workspace_url, api_key, workspace)
+                    .await
             }
             SyncDirection::RemoteToLocal => {
                 // Only download remote workspace and update local
-                self.download_workspace_from_cloud(&client, &workspace_url, api_key, workspace).await
+                self.download_workspace_from_cloud(&client, &workspace_url, api_key, workspace)
+                    .await
             }
             SyncDirection::Bidirectional => {
                 // Fetch remote, compare, handle conflicts, then upload if needed
@@ -656,7 +679,8 @@ impl WorkspaceSyncManager {
             return Err(format!("Cloud download failed with status {}: {}", status, error_text));
         }
 
-        let remote_json: serde_json::Value = response.json()
+        let remote_json: serde_json::Value = response
+            .json()
             .await
             .map_err(|e| format!("Failed to parse remote workspace: {}", e))?;
 
@@ -697,7 +721,9 @@ impl WorkspaceSyncManager {
         workspace: &mut Workspace,
     ) -> Result<SyncResult, String> {
         // First try to download remote workspace
-        let download_result = self.download_workspace_from_cloud(client, workspace_url, api_key, workspace).await?;
+        let download_result = self
+            .download_workspace_from_cloud(client, workspace_url, api_key, workspace)
+            .await?;
 
         if !download_result.conflicts.is_empty() {
             // Conflicts detected, return them
@@ -743,7 +769,8 @@ impl WorkspaceSyncManager {
 
         // Ensure directory exists
         if !dir_path.exists() {
-            fs::create_dir_all(dir_path).await
+            fs::create_dir_all(dir_path)
+                .await
                 .map_err(|e| format!("Failed to create directory {}: {}", directory_path, e))?;
         }
 
@@ -754,7 +781,8 @@ impl WorkspaceSyncManager {
                 let content = serde_yaml::to_string(workspace)
                     .map_err(|e| format!("Failed to serialize workspace: {}", e))?;
 
-                fs::write(&file_path, content).await
+                fs::write(&file_path, content)
+                    .await
                     .map_err(|e| format!("Failed to write workspace file: {}", e))?;
 
                 Ok(SyncResult {
@@ -772,7 +800,8 @@ impl WorkspaceSyncManager {
                     return Err(format!("Workspace file not found: {:?}", file_path));
                 }
 
-                let content = fs::read_to_string(&file_path).await
+                let content = fs::read_to_string(&file_path)
+                    .await
                     .map_err(|e| format!("Failed to read workspace file: {}", e))?;
 
                 let remote_workspace: Workspace = serde_yaml::from_str(&content)
@@ -786,7 +815,8 @@ impl WorkspaceSyncManager {
                     if workspace.updated_at > remote_workspace.updated_at {
                         // Local is newer, this is a conflict
                         let local_json = serde_json::to_value(&*workspace).unwrap_or_default();
-                        let remote_json = serde_json::to_value(&remote_workspace).unwrap_or_default();
+                        let remote_json =
+                            serde_json::to_value(&remote_workspace).unwrap_or_default();
                         conflicts.push(SyncConflict {
                             entity_id: workspace.id.clone(),
                             entity_type: "workspace".to_string(),
@@ -797,7 +827,8 @@ impl WorkspaceSyncManager {
                     } else if workspace.updated_at == remote_workspace.updated_at {
                         // Same timestamp, check if content differs
                         let local_json = serde_json::to_value(&*workspace).unwrap_or_default();
-                        let remote_json = serde_json::to_value(&remote_workspace).unwrap_or_default();
+                        let remote_json =
+                            serde_json::to_value(&remote_workspace).unwrap_or_default();
                         if local_json != remote_json {
                             // Content differs but timestamps are same, conflict
                             conflicts.push(SyncConflict {
@@ -838,7 +869,8 @@ impl WorkspaceSyncManager {
                 let mut conflicts = vec![];
 
                 if file_path.exists() {
-                    let content = fs::read_to_string(&file_path).await
+                    let content = fs::read_to_string(&file_path)
+                        .await
                         .map_err(|e| format!("Failed to read workspace file: {}", e))?;
 
                     let remote_workspace: Workspace = serde_yaml::from_str(&content)
@@ -847,7 +879,8 @@ impl WorkspaceSyncManager {
                     // Simple conflict detection based on updated_at
                     if remote_workspace.updated_at > workspace.updated_at {
                         // Remote is newer, this would be a conflict
-                        let remote_version = serde_json::to_value(&remote_workspace).unwrap_or_default();
+                        let remote_version =
+                            serde_json::to_value(&remote_workspace).unwrap_or_default();
                         conflicts.push(SyncConflict {
                             entity_id: workspace.id.clone(),
                             entity_type: "workspace".to_string(),
@@ -862,7 +895,8 @@ impl WorkspaceSyncManager {
                 let content = serde_yaml::to_string(workspace)
                     .map_err(|e| format!("Failed to serialize workspace: {}", e))?;
 
-                fs::write(&file_path, content).await
+                fs::write(&file_path, content)
+                    .await
                     .map_err(|e| format!("Failed to write workspace file: {}", e))?;
 
                 Ok(SyncResult {
@@ -876,7 +910,10 @@ impl WorkspaceSyncManager {
     }
 
     /// Resolve conflicts
-    pub fn resolve_conflicts(&mut self, resolutions: HashMap<EntityId, ConflictResolution>) -> Result<usize, String> {
+    pub fn resolve_conflicts(
+        &mut self,
+        resolutions: HashMap<EntityId, ConflictResolution>,
+    ) -> Result<usize, String> {
         let mut resolved_count = 0;
 
         for conflict in &self.conflicts.clone() {
@@ -903,8 +940,8 @@ impl WorkspaceSyncManager {
 
         // Remove resolved conflicts
         self.conflicts.retain(|conflict| {
-            !resolutions.contains_key(&conflict.entity_id) ||
-            matches!(resolutions.get(&conflict.entity_id), Some(ConflictResolution::Manual))
+            !resolutions.contains_key(&conflict.entity_id)
+                || matches!(resolutions.get(&conflict.entity_id), Some(ConflictResolution::Manual))
         });
 
         self.status.conflicts = self.conflicts.len();
@@ -951,7 +988,8 @@ impl WorkspaceSyncManager {
 
     /// Get conflicts that need manual resolution
     pub fn get_manual_conflicts(&self) -> Vec<&SyncConflict> {
-        self.conflicts.iter()
+        self.conflicts
+            .iter()
             .filter(|_conflict| {
                 // This would need to be determined based on the conflict resolution strategy
                 true

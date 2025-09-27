@@ -1,9 +1,9 @@
 //! Proxy request handler
 
-use crate::{Result, Error};
-use std::collections::HashMap;
-use axum::http::{Method, Uri, HeaderMap};
 use super::client::ProxyClient;
+use crate::{Error, Result};
+use axum::http::{HeaderMap, Method, Uri};
+use std::collections::HashMap;
 
 /// HTTP proxy request handler
 pub struct ProxyHandler {
@@ -60,7 +60,9 @@ impl ProxyHandler {
         }
 
         let status_code = response.status().as_u16();
-        let body_bytes = response.bytes().await
+        let body_bytes = response
+            .bytes()
+            .await
             .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?;
 
         Ok(ProxyResponse {
@@ -117,7 +119,8 @@ impl ProxyHandler {
 
         // Create proxy client and send request
         let client = ProxyClient::new();
-        let response = client.send_request(reqwest_method, &upstream_url, &header_map, body).await?;
+        let response =
+            client.send_request(reqwest_method, &upstream_url, &header_map, body).await?;
 
         // Convert response back to ProxyResponse
         let mut response_headers = HeaderMap::new();
@@ -128,7 +131,9 @@ impl ProxyHandler {
         }
 
         let status_code = response.status().as_u16();
-        let body_bytes = response.bytes().await
+        let body_bytes = response
+            .bytes()
+            .await
             .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?;
 
         Ok(ProxyResponse {

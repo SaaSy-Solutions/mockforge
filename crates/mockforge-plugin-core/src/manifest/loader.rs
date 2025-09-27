@@ -19,7 +19,7 @@ impl ManifestLoader {
 
     /// Load manifest from string content
     pub fn load_from_string(content: &str) -> Result<PluginManifest> {
-        PluginManifest::from_str(content)
+        PluginManifest::parse_from_str(content)
     }
 
     /// Load and validate manifest from file
@@ -44,7 +44,7 @@ impl ManifestLoader {
             let entry = entry?;
             let path = entry.path();
 
-            if path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml") {
+            if path.extension().is_some_and(|ext| ext == "yaml" || ext == "yml") {
                 match Self::load_from_file(&path) {
                     Ok(manifest) => manifests.push(manifest),
                     Err(e) => {
@@ -79,14 +79,15 @@ impl ManifestLoader {
 impl PluginManifest {
     /// Load manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| PluginError::config_error(&format!("Failed to read manifest file: {}", e)))?;
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            PluginError::config_error(&format!("Failed to read manifest file: {}", e))
+        })?;
 
-        Self::from_str(&content)
+        Self::parse_from_str(&content)
     }
 
     /// Parse manifest from string
-    pub fn from_str(content: &str) -> Result<Self> {
+    pub fn parse_from_str(content: &str) -> Result<Self> {
         serde_yaml::from_str(content)
             .map_err(|e| PluginError::config_error(&format!("Failed to parse manifest: {}", e)))
     }

@@ -3,12 +3,15 @@
 //! This module provides functionality for processing mock requests,
 //! including request matching, response generation, and request execution.
 
-use crate::workspace::core::{EntityId, Workspace, Folder, MockRequest, MockResponse};
-use crate::{Result, Error, routing::{Route, RouteRegistry, HttpMethod}};
 use crate::templating::TemplateEngine;
+use crate::workspace::core::{EntityId, Folder, MockRequest, MockResponse, Workspace};
+use crate::{
+    routing::{HttpMethod, Route, RouteRegistry},
+    Error, Result,
+};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Request execution result
 #[derive(Debug, Clone)]
@@ -102,7 +105,9 @@ impl RequestProcessor {
     }
 
     /// Create a new request processor with environment manager
-    pub fn with_environment_manager(environment_manager: crate::workspace::environment::EnvironmentManager) -> Self {
+    pub fn with_environment_manager(
+        environment_manager: crate::workspace::environment::EnvironmentManager,
+    ) -> Self {
         Self {
             _template_engine: TemplateEngine::new(),
             environment_manager: Some(environment_manager),
@@ -123,7 +128,9 @@ impl RequestProcessor {
         }
 
         // Search folder requests
-        if let Some(request_id) = self.find_matching_request_in_folders(&workspace.folders, criteria) {
+        if let Some(request_id) =
+            self.find_matching_request_in_folders(&workspace.folders, criteria)
+        {
             return Some(request_id);
         }
 
@@ -191,7 +198,13 @@ impl RequestProcessor {
     }
 
     /// Recursive function to match path segments with wildcards
-    fn match_segments(&self, pattern_parts: &[&str], path_parts: &[&str], pattern_idx: usize, path_idx: usize) -> bool {
+    fn match_segments(
+        &self,
+        pattern_parts: &[&str],
+        path_parts: &[&str],
+        pattern_idx: usize,
+        path_idx: usize,
+    ) -> bool {
         // If we've consumed both patterns and paths, it's a match
         if pattern_idx == pattern_parts.len() && path_idx == path_parts.len() {
             return true;
@@ -209,7 +222,8 @@ impl RequestProcessor {
                 // Single wildcard: try matching with current path segment
                 if path_idx < path_parts.len() {
                     // Try consuming one segment
-                    if self.match_segments(pattern_parts, path_parts, pattern_idx + 1, path_idx + 1) {
+                    if self.match_segments(pattern_parts, path_parts, pattern_idx + 1, path_idx + 1)
+                    {
                         return true;
                     }
                 }
@@ -223,15 +237,21 @@ impl RequestProcessor {
                 }
                 // Try matching one or more segments
                 if path_idx < path_parts.len()
-                    && self.match_segments(pattern_parts, path_parts, pattern_idx, path_idx + 1) {
-                        return true;
-                    }
+                    && self.match_segments(pattern_parts, path_parts, pattern_idx, path_idx + 1)
+                {
+                    return true;
+                }
                 false
             }
             _ => {
                 // Exact match required
                 if path_idx < path_parts.len() && current_pattern == path_parts[path_idx] {
-                    return self.match_segments(pattern_parts, path_parts, pattern_idx + 1, path_idx + 1);
+                    return self.match_segments(
+                        pattern_parts,
+                        path_parts,
+                        pattern_idx + 1,
+                        path_idx + 1,
+                    );
                 }
                 false
             }
@@ -253,7 +273,9 @@ impl RequestProcessor {
             }
 
             // Search subfolders
-            if let Some(request_id) = self.find_matching_request_in_folders(&folder.folders, criteria) {
+            if let Some(request_id) =
+                self.find_matching_request_in_folders(&folder.folders, criteria)
+            {
                 return Some(request_id);
             }
         }
@@ -269,7 +291,8 @@ impl RequestProcessor {
         context: &RequestExecutionContext,
     ) -> Result<RequestExecutionResult> {
         // Find the request
-        let request = self.find_request_in_workspace(workspace, request_id)
+        let request = self
+            .find_request_in_workspace(workspace, request_id)
             .ok_or_else(|| format!("Request with ID {} not found", request_id))?;
 
         let start_time = std::time::Instant::now();
@@ -277,11 +300,14 @@ impl RequestProcessor {
         // Validate request
         let validation = self.validate_request(request, context);
         if !validation.is_valid {
-            return Err(Error::Validation { message: format!("Request validation failed: {:?}", validation.errors) });
+            return Err(Error::Validation {
+                message: format!("Request validation failed: {:?}", validation.errors),
+            });
         }
 
         // Get active response
-        let response = request.active_response()
+        let response = request
+            .active_response()
             .ok_or_else(|| Error::generic("No active response found for request"))?;
 
         // Apply variable substitution
@@ -337,7 +363,8 @@ impl RequestProcessor {
             }
 
             // Search subfolders
-            if let Some(request) = self.find_request_in_folders_mut(&mut folder.folders, request_id) {
+            if let Some(request) = self.find_request_in_folders_mut(&mut folder.folders, request_id)
+            {
                 return Some(request);
             }
         }
@@ -352,7 +379,10 @@ impl RequestProcessor {
         request_id: &EntityId,
     ) -> Option<&'a MockRequest> {
         // Search root requests
-        workspace.requests.iter().find(|r| &r.id == request_id)
+        workspace
+            .requests
+            .iter()
+            .find(|r| &r.id == request_id)
             .or_else(|| self.find_request_in_folders(&workspace.folders, request_id))
     }
 
@@ -398,9 +428,13 @@ impl RequestProcessor {
 
         // Validate method
         match request.method {
-            HttpMethod::GET | HttpMethod::POST | HttpMethod::PUT |
-            HttpMethod::DELETE | HttpMethod::PATCH | HttpMethod::HEAD |
-            HttpMethod::OPTIONS => {
+            HttpMethod::GET
+            | HttpMethod::POST
+            | HttpMethod::PUT
+            | HttpMethod::DELETE
+            | HttpMethod::PATCH
+            | HttpMethod::HEAD
+            | HttpMethod::OPTIONS => {
                 // Valid methods
             }
         }
@@ -453,7 +487,10 @@ impl RequestProcessor {
     }
 
     /// Get environment variables for context
-    fn get_environment_variables(&self, context: &RequestExecutionContext) -> Option<HashMap<String, String>> {
+    fn get_environment_variables(
+        &self,
+        context: &RequestExecutionContext,
+    ) -> Option<HashMap<String, String>> {
         if let Some(env_manager) = &self.environment_manager {
             if let Some(active_env) = env_manager.get_active_environment() {
                 return Some(active_env.variables.clone());
@@ -494,7 +531,8 @@ impl RequestProcessor {
                     }
 
                     // Simple success determination (could be improved)
-                    if entry.duration_ms < 5000 { // Less than 5 seconds
+                    if entry.duration_ms < 5000 {
+                        // Less than 5 seconds
                         successful_requests += 1;
                     } else {
                         failed_requests += 1;
@@ -504,8 +542,15 @@ impl RequestProcessor {
         }
 
         // Also collect from folder requests
-        self.collect_folder_request_metrics(&workspace.folders, &mut total_requests, &mut successful_requests,
-                                          &mut failed_requests, &mut total_response_time, &mut request_counts, &mut last_execution);
+        self.collect_folder_request_metrics(
+            &workspace.folders,
+            &mut total_requests,
+            &mut successful_requests,
+            &mut failed_requests,
+            &mut total_response_time,
+            &mut request_counts,
+            &mut last_execution,
+        );
 
         let average_response_time = if total_requests > 0 {
             total_response_time as f64 / total_requests as f64
@@ -571,8 +616,15 @@ impl RequestProcessor {
             }
 
             // Recurse into subfolders
-            self.collect_folder_request_metrics(&folder.folders, total_requests, successful_requests,
-                                              failed_requests, total_response_time, request_counts, last_execution);
+            self.collect_folder_request_metrics(
+                &folder.folders,
+                total_requests,
+                successful_requests,
+                failed_requests,
+                total_response_time,
+                request_counts,
+                last_execution,
+            );
         }
     }
 
@@ -582,7 +634,8 @@ impl RequestProcessor {
             return Err(Error::validation("Request is disabled"));
         }
 
-        let response = request.active_response()
+        let response = request
+            .active_response()
             .ok_or_else(|| Error::validation("No active response found"))?;
 
         // Create route with request information
@@ -591,12 +644,20 @@ impl RequestProcessor {
         // Store additional data in metadata
         route.metadata.insert("id".to_string(), serde_json::json!(request.id));
         route.metadata.insert("response".to_string(), serde_json::json!(response.body));
-        route.metadata.insert("status_code".to_string(), serde_json::json!(response.status_code));
+        route
+            .metadata
+            .insert("status_code".to_string(), serde_json::json!(response.status_code));
         route.metadata.insert("headers".to_string(), serde_json::json!(request.headers));
-        route.metadata.insert("query_params".to_string(), serde_json::json!(request.query_params));
+        route
+            .metadata
+            .insert("query_params".to_string(), serde_json::json!(request.query_params));
         route.metadata.insert("enabled".to_string(), serde_json::json!(request.enabled));
-        route.metadata.insert("created_at".to_string(), serde_json::json!(request.created_at));
-        route.metadata.insert("updated_at".to_string(), serde_json::json!(request.updated_at));
+        route
+            .metadata
+            .insert("created_at".to_string(), serde_json::json!(request.created_at));
+        route
+            .metadata
+            .insert("updated_at".to_string(), serde_json::json!(request.updated_at));
 
         Ok(route)
     }

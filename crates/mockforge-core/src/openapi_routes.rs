@@ -7,32 +7,32 @@
 //! - builder: Axum router building from OpenAPI specs
 
 // Re-export sub-modules for backward compatibility
+pub mod builder;
+pub mod generation;
 pub mod registry;
 pub mod validation;
-pub mod generation;
-pub mod builder;
 
 // Re-export commonly used types
-pub use validation::*;
-pub use generation::*;
 pub use builder::*;
+pub use generation::*;
+pub use validation::*;
 
 // Legacy types and functions for backward compatibility
+use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 use crate::templating::expand_tokens as core_expand_tokens;
-use crate::{Error, Result, latency::LatencyInjector, overrides::Overrides};
-use crate::openapi::{OpenApiSpec, OpenApiRoute, OpenApiOperation, OpenApiSchema};
+use crate::{latency::LatencyInjector, overrides::Overrides, Error, Result};
 use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
+use axum::response::IntoResponse;
 use axum::routing::*;
 use axum::{Json, Router};
-use axum::response::IntoResponse;
 use chrono::Utc;
 use once_cell::sync::Lazy;
+use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tracing;
-use openapiv3::ParameterSchemaOrContent;
 
 /// OpenAPI route registry that manages generated routes
 #[derive(Debug, Clone)]
@@ -193,38 +193,41 @@ impl OpenApiRouteRegistry {
             >,
                                 RawQuery(raw_query): RawQuery,
                                 headers: HeaderMap,
-                                 body: axum::body::Bytes| async move {
+                                body: axum::body::Bytes| async move {
                 // Admin routes are mounted separately; no validation skip needed here.
-                 // Build params maps
-                 let mut path_map = serde_json::Map::new();
-                 for (k, v) in path_params {
-                     path_map.insert(k, Value::String(v));
-                 }
+                // Build params maps
+                let mut path_map = serde_json::Map::new();
+                for (k, v) in path_params {
+                    path_map.insert(k, Value::String(v));
+                }
 
-                 // Query
-                 let mut query_map = Map::new();
-                 if let Some(q) = raw_query {
-                     for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
-                         query_map.insert(k.to_string(), Value::String(v.to_string()));
-                     }
-                 }
+                // Query
+                let mut query_map = Map::new();
+                if let Some(q) = raw_query {
+                    for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
+                        query_map.insert(k.to_string(), Value::String(v.to_string()));
+                    }
+                }
 
-                 // Headers: only capture those declared on this operation
-                 let mut header_map = Map::new();
-                  for p_ref in &operation.parameters {
-                      if let Some(p) = p_ref.as_item() {
-                          if let openapiv3::Parameter::Header { parameter_data, .. } = p {
-                              let name_lc = parameter_data.name.to_ascii_lowercase();
-                              if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
-                                  if let Some(val) = headers.get(hn) {
-                                      if let Ok(s) = val.to_str() {
-                                          header_map.insert(parameter_data.name.clone(), Value::String(s.to_string()));
-                                      }
-                                  }
-                              }
-                          }
-                      }
-                  }
+                // Headers: only capture those declared on this operation
+                let mut header_map = Map::new();
+                for p_ref in &operation.parameters {
+                    if let Some(p) = p_ref.as_item() {
+                        if let openapiv3::Parameter::Header { parameter_data, .. } = p {
+                            let name_lc = parameter_data.name.to_ascii_lowercase();
+                            if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                                if let Some(val) = headers.get(hn) {
+                                    if let Ok(s) = val.to_str() {
+                                        header_map.insert(
+                                            parameter_data.name.clone(),
+                                            Value::String(s.to_string()),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // Cookies: parse Cookie header
                 let mut cookie_map = Map::new();
@@ -315,22 +318,31 @@ impl OpenApiRouteRegistry {
                 // Optional response validation
                 if validator.options.validate_responses {
                     // Find the first 2xx response in the operation
-                    if let Some((status_code, _response)) = operation.responses.responses.iter()
-                        .filter_map(|(status, resp)| {
-                            match status {
-                                openapiv3::StatusCode::Code(code) if *code >= 200 && *code < 300 => {
-                                    resp.as_item().map(|r| ((*code), r))
-                                }
-                                openapiv3::StatusCode::Range(range) if *range >= 200 && *range < 300 => {
-                                    resp.as_item().map(|r| (200, r))
-                                }
-                                _ => None,
+                    if let Some((status_code, _response)) = operation
+                        .responses
+                        .responses
+                        .iter()
+                        .filter_map(|(status, resp)| match status {
+                            openapiv3::StatusCode::Code(code) if *code >= 200 && *code < 300 => {
+                                resp.as_item().map(|r| ((*code), r))
                             }
+                            openapiv3::StatusCode::Range(range)
+                                if *range >= 200 && *range < 300 =>
+                            {
+                                resp.as_item().map(|r| (200, r))
+                            }
+                            _ => None,
                         })
-                        .next() {
+                        .next()
+                    {
                         // Basic response validation - check if response is valid JSON
-                        if serde_json::from_value::<serde_json::Value>(final_response.clone()).is_err() {
-                            tracing::warn!("Response validation failed: invalid JSON for status {}", status_code);
+                        if serde_json::from_value::<serde_json::Value>(final_response.clone())
+                            .is_err()
+                        {
+                            tracing::warn!(
+                                "Response validation failed: invalid JSON for status {}",
+                                status_code
+                            );
                         }
                     }
                 }
@@ -370,7 +382,12 @@ impl OpenApiRouteRegistry {
         latency_injector: LatencyInjector,
         failure_injector: Option<crate::FailureInjector>,
     ) -> Router {
-        self.build_router_with_injectors_and_overrides(latency_injector, failure_injector, None, false)
+        self.build_router_with_injectors_and_overrides(
+            latency_injector,
+            failure_injector,
+            None,
+            false,
+        )
     }
 
     /// Build an Axum router from the OpenAPI spec with latency, failure injection, and overrides support
@@ -455,7 +472,10 @@ impl OpenApiRouteRegistry {
                             if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
                                 if let Some(val) = headers.get(hn) {
                                     if let Ok(s) = val.to_str() {
-                                        header_map.insert(parameter_data.name.clone(), Value::String(s.to_string()));
+                                        header_map.insert(
+                                            parameter_data.name.clone(),
+                                            Value::String(s.to_string()),
+                                        );
                                     }
                                 }
                             }
@@ -668,15 +688,21 @@ impl OpenApiRouteRegistry {
             if let Some(schema) = &route.operation.request_body {
                 if let Some(value) = body {
                     if aggregate {
-                        if let Some(content) = schema.as_item().and_then(|rb| rb.content.get("application/json")) {
+                        if let Some(content) =
+                            schema.as_item().and_then(|rb| rb.content.get("application/json"))
+                        {
                             if let Some(_schema_ref) = &content.schema {
                                 // Basic JSON validation - schema validation deferred
-                                if serde_json::from_value::<serde_json::Value>(value.clone()).is_err() {
+                                if serde_json::from_value::<serde_json::Value>(value.clone())
+                                    .is_err()
+                                {
                                     errors.push("body: invalid JSON".to_string());
                                 }
                             }
                         }
-                    } else if let Some(content) = schema.as_item().and_then(|rb| rb.content.get("application/json")) {
+                    } else if let Some(content) =
+                        schema.as_item().and_then(|rb| rb.content.get("application/json"))
+                    {
                         if let Some(_schema_ref) = &content.schema {
                             // Basic JSON validation - schema validation deferred
                             if serde_json::from_value::<serde_json::Value>(value.clone()).is_err() {
@@ -698,18 +724,47 @@ impl OpenApiRouteRegistry {
                 if let Some(p) = p_ref.as_item() {
                     match p {
                         openapiv3::Parameter::Path { parameter_data, .. } => {
-                            validate_parameter(parameter_data, path_params, "path", aggregate, &mut errors, &mut details);
+                            validate_parameter(
+                                parameter_data,
+                                path_params,
+                                "path",
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
                         }
                         openapiv3::Parameter::Query { parameter_data, .. } => {
                             // For query deepObject, reconstruct value from key-likes: name[prop]
                             let deep_value = None; // Simplified for now
-                            validate_parameter_with_deep_object(parameter_data, query_params, "query", deep_value, aggregate, &mut errors, &mut details);
+                            validate_parameter_with_deep_object(
+                                parameter_data,
+                                query_params,
+                                "query",
+                                deep_value,
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
                         }
                         openapiv3::Parameter::Header { parameter_data, .. } => {
-                            validate_parameter(parameter_data, header_params, "header", aggregate, &mut errors, &mut details);
+                            validate_parameter(
+                                parameter_data,
+                                header_params,
+                                "header",
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
                         }
                         openapiv3::Parameter::Cookie { parameter_data, .. } => {
-                            validate_parameter(parameter_data, cookie_params, "cookie", aggregate, &mut errors, &mut details);
+                            validate_parameter(
+                                parameter_data,
+                                cookie_params,
+                                "cookie",
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
                         }
                     }
                 }
@@ -754,12 +809,21 @@ impl OpenApiRouteRegistry {
     /// Get operation details for a route
     pub fn get_operation(&self, path: &str, method: &str) -> Option<OpenApiOperation> {
         self.get_route(path, method).map(|route| {
-            OpenApiOperation::from_operation(&route.method, route.path.clone(), &route.operation, &self.spec)
+            OpenApiOperation::from_operation(
+                &route.method,
+                route.path.clone(),
+                &route.operation,
+                &self.spec,
+            )
         })
     }
 
     /// Extract path parameters from a request path by matching against known routes
-    pub fn extract_path_parameters(&self, path: &str, method: &str) -> std::collections::HashMap<String, String> {
+    pub fn extract_path_parameters(
+        &self,
+        path: &str,
+        method: &str,
+    ) -> std::collections::HashMap<String, String> {
         for route in &self.routes {
             if route.method != method {
                 continue;
@@ -773,12 +837,17 @@ impl OpenApiRouteRegistry {
     }
 
     /// Match a request path against a route pattern and extract parameters
-    fn match_path_to_route(&self, request_path: &str, route_pattern: &str) -> Option<std::collections::HashMap<String, String>> {
+    fn match_path_to_route(
+        &self,
+        request_path: &str,
+        route_pattern: &str,
+    ) -> Option<std::collections::HashMap<String, String>> {
         let mut params = std::collections::HashMap::new();
 
         // Split both paths into segments
         let request_segments: Vec<&str> = request_path.trim_start_matches('/').split('/').collect();
-        let pattern_segments: Vec<&str> = route_pattern.trim_start_matches('/').split('/').collect();
+        let pattern_segments: Vec<&str> =
+            route_pattern.trim_start_matches('/').split('/').collect();
 
         if request_segments.len() != pattern_segments.len() {
             return None;
@@ -787,7 +856,7 @@ impl OpenApiRouteRegistry {
         for (req_seg, pat_seg) in request_segments.iter().zip(pattern_segments.iter()) {
             if pat_seg.starts_with('{') && pat_seg.ends_with('}') {
                 // This is a parameter
-                let param_name = &pat_seg[1..pat_seg.len()-1];
+                let param_name = &pat_seg[1..pat_seg.len() - 1];
                 params.insert(param_name.to_string(), req_seg.to_string());
             } else if req_seg != pat_seg {
                 // Static segment doesn't match
@@ -921,7 +990,9 @@ fn generate_enhanced_422_response(
         // Validate request body with detailed error collection
         if let Some(schema) = &route.operation.request_body {
             if let Some(value) = body {
-                if let Some(content) = schema.as_item().and_then(|rb| rb.content.get("application/json")) {
+                if let Some(content) =
+                    schema.as_item().and_then(|rb| rb.content.get("application/json"))
+                {
                     if let Some(_schema_ref) = &content.schema {
                         // Basic JSON validation - schema validation deferred
                         if serde_json::from_value::<serde_json::Value>(value.clone()).is_err() {
@@ -947,7 +1018,13 @@ fn generate_enhanced_422_response(
             if let Some(param) = param_ref.as_item() {
                 match param {
                     openapiv3::Parameter::Path { parameter_data, .. } => {
-                        validate_parameter_detailed(parameter_data, path_params, "path", "path parameter", &mut field_errors);
+                        validate_parameter_detailed(
+                            parameter_data,
+                            path_params,
+                            "path",
+                            "path parameter",
+                            &mut field_errors,
+                        );
                     }
                     openapiv3::Parameter::Query { parameter_data, .. } => {
                         let deep_value = if Some("form") == Some("deepObject") {
@@ -955,13 +1032,32 @@ fn generate_enhanced_422_response(
                         } else {
                             None
                         };
-                        validate_parameter_detailed_with_deep(parameter_data, query_params, "query", "query parameter", deep_value, &mut field_errors);
+                        validate_parameter_detailed_with_deep(
+                            parameter_data,
+                            query_params,
+                            "query",
+                            "query parameter",
+                            deep_value,
+                            &mut field_errors,
+                        );
                     }
                     openapiv3::Parameter::Header { parameter_data, .. } => {
-                        validate_parameter_detailed(parameter_data, header_params, "header", "header parameter", &mut field_errors);
+                        validate_parameter_detailed(
+                            parameter_data,
+                            header_params,
+                            "header",
+                            "header parameter",
+                            &mut field_errors,
+                        );
                     }
                     openapiv3::Parameter::Cookie { parameter_data, .. } => {
-                        validate_parameter_detailed(parameter_data, cookie_params, "cookie", "cookie parameter", &mut field_errors);
+                        validate_parameter_detailed(
+                            parameter_data,
+                            cookie_params,
+                            "cookie",
+                            "cookie parameter",
+                            &mut field_errors,
+                        );
                     }
                 }
             }
@@ -994,9 +1090,14 @@ fn validate_parameter(
                 if let Some(schema) = s.as_item() {
                     let coerced = coerce_value_for_schema(v, schema);
                     // Validate the coerced value against the schema
-                    if let Err(validation_error) = OpenApiSchema::new(schema.clone()).validate(&coerced) {
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema.clone()).validate(&coerced)
+                    {
                         let error_msg = validation_error.to_string();
-                        errors.push(format!("{} parameter '{}' validation failed: {}", prefix, parameter_data.name, error_msg));
+                        errors.push(format!(
+                            "{} parameter '{}' validation failed: {}",
+                            prefix, parameter_data.name, error_msg
+                        ));
                         if aggregate {
                             details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
                         }
@@ -1031,10 +1132,15 @@ fn validate_parameter_with_deep_object(
             if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
                 if let Some(schema) = s.as_item() {
                     let coerced = coerce_by_style(v, schema, Some("form")); // Default to form style for now
-                    // Validate the coerced value against the schema
-                    if let Err(validation_error) = OpenApiSchema::new(schema.clone()).validate(&coerced) {
+                                                                            // Validate the coerced value against the schema
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema.clone()).validate(&coerced)
+                    {
                         let error_msg = validation_error.to_string();
-                        errors.push(format!("{} parameter '{}' validation failed: {}", prefix, parameter_data.name, error_msg));
+                        errors.push(format!(
+                            "{} parameter '{}' validation failed: {}",
+                            prefix, parameter_data.name, error_msg
+                        ));
                         if aggregate {
                             details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
                         }
@@ -1073,7 +1179,9 @@ fn validate_parameter_detailed(
                 if let Some(schema_ref) = schema.as_item() {
                     let coerced_value = coerce_value_for_schema(value, schema_ref);
                     // Validate the coerced value against the schema
-                    if let Err(validation_error) = OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value) {
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
+                    {
                         field_errors.push(json!({
                             "path": param_path,
                             "expected": "valid according to schema",
@@ -1125,8 +1233,10 @@ fn validate_parameter_detailed_with_deep(
                 // Apply coercion before validation
                 if let Some(schema_ref) = schema.as_item() {
                     let coerced_value = coerce_by_style(value, schema_ref, Some("form")); // Default to form style for now
-                    // Validate the coerced value against the schema
-                    if let Err(validation_error) = OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value) {
+                                                                                          // Validate the coerced value against the schema
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
+                    {
                         field_errors.push(json!({
                             "path": param_path,
                             "expected": "valid according to schema",

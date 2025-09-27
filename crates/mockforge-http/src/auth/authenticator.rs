@@ -10,7 +10,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::state::AuthState;
-use super::types::{AuthResult, AuthClaims};
+use super::types::{AuthClaims, AuthResult};
 
 /// Authenticate a request using various methods
 pub async fn authenticate_request(
@@ -103,13 +103,17 @@ pub async fn authenticate_jwt(state: &AuthState, auth_header: &str) -> Option<Au
     // Create decoding key based on algorithm
     let decoding_key = match header.alg {
         Algorithm::HS256 | Algorithm::HS384 | Algorithm::HS512 => {
-            let secret = jwt_config.secret.as_ref()
+            let secret = jwt_config
+                .secret
+                .as_ref()
                 .ok_or_else(|| AuthResult::Failure("JWT secret not configured".to_string()))
                 .ok()?;
             DecodingKey::from_secret(secret.as_bytes())
         }
         Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512 => {
-            let key = jwt_config.rsa_public_key.as_ref()
+            let key = jwt_config
+                .rsa_public_key
+                .as_ref()
                 .ok_or_else(|| AuthResult::Failure("RSA public key not configured".to_string()))
                 .ok()?;
             DecodingKey::from_rsa_pem(key.as_bytes())
@@ -120,7 +124,9 @@ pub async fn authenticate_jwt(state: &AuthState, auth_header: &str) -> Option<Au
                 .ok()?
         }
         Algorithm::ES256 | Algorithm::ES384 => {
-            let key = jwt_config.ecdsa_public_key.as_ref()
+            let key = jwt_config
+                .ecdsa_public_key
+                .as_ref()
                 .ok_or_else(|| AuthResult::Failure("ECDSA public key not configured".to_string()))
                 .ok()?;
             DecodingKey::from_ec_pem(key.as_bytes())
@@ -157,7 +163,11 @@ pub async fn authenticate_jwt(state: &AuthState, auth_header: &str) -> Option<Au
             if let Some(iat) = claims.get("iat").and_then(|v| v.as_i64()) {
                 auth_claims.iat = Some(iat);
             }
-            if let Some(username) = claims.get("username").or_else(|| claims.get("preferred_username")).and_then(|v| v.as_str()) {
+            if let Some(username) = claims
+                .get("username")
+                .or_else(|| claims.get("preferred_username"))
+                .and_then(|v| v.as_str())
+            {
                 auth_claims.username = Some(username.to_string());
             }
 
@@ -172,7 +182,18 @@ pub async fn authenticate_jwt(state: &AuthState, auth_header: &str) -> Option<Au
 
             // Store custom claims
             for (key, value) in claims.as_object()? {
-                if !["sub", "iss", "aud", "exp", "iat", "username", "preferred_username", "roles"].contains(&key.as_str()) {
+                if ![
+                    "sub",
+                    "iss",
+                    "aud",
+                    "exp",
+                    "iat",
+                    "username",
+                    "preferred_username",
+                    "roles",
+                ]
+                .contains(&key.as_str())
+                {
                     auth_claims.custom.insert(key.clone(), value.clone());
                 }
             }
@@ -198,7 +219,9 @@ pub fn authenticate_basic(state: &AuthState, auth_header: &str) -> Option<AuthRe
     };
     let credentials = match String::from_utf8(decoded) {
         Ok(c) => c,
-        Err(_) => return Some(AuthResult::Failure("Invalid UTF-8 in Basic auth credentials".to_string())),
+        Err(_) => {
+            return Some(AuthResult::Failure("Invalid UTF-8 in Basic auth credentials".to_string()))
+        }
     };
     let parts: Vec<&str> = credentials.splitn(2, ':').collect();
     if parts.len() != 2 {
@@ -245,7 +268,10 @@ async fn authenticate_oauth2(state: &AuthState, auth_header: &str) -> Option<Aut
         .basic_auth(&oauth2_config.client_id, Some(&oauth2_config.client_secret))
         .form(&[
             ("token", token),
-            ("token_type_hint", oauth2_config.token_type_hint.as_deref().unwrap_or("access_token")),
+            (
+                "token_type_hint",
+                oauth2_config.token_type_hint.as_deref().unwrap_or("access_token"),
+            ),
         ])
         .send()
         .await
@@ -253,21 +279,31 @@ async fn authenticate_oauth2(state: &AuthState, auth_header: &str) -> Option<Aut
         Ok(resp) => resp,
         Err(e) => {
             debug!("Network error during OAuth2 introspection: {}", e);
-            return Some(AuthResult::NetworkError(format!("Failed to connect to introspection endpoint: {}", e)));
+            return Some(AuthResult::NetworkError(format!(
+                "Failed to connect to introspection endpoint: {}",
+                e
+            )));
         }
     };
 
     if !response.status().is_success() {
         let status = response.status();
         debug!("OAuth2 introspection server error: {}", status);
-        return Some(AuthResult::ServerError(format!("Introspection endpoint returned {}: {}", status, status.canonical_reason().unwrap_or("Unknown error"))));
+        return Some(AuthResult::ServerError(format!(
+            "Introspection endpoint returned {}: {}",
+            status,
+            status.canonical_reason().unwrap_or("Unknown error")
+        )));
     }
 
     let introspection_result: Value = match response.json().await {
         Ok(json) => json,
         Err(e) => {
             debug!("Failed to parse introspection response: {}", e);
-            return Some(AuthResult::ServerError(format!("Invalid JSON response from introspection endpoint: {}", e)));
+            return Some(AuthResult::ServerError(format!(
+                "Invalid JSON response from introspection endpoint: {}",
+                e
+            )));
         }
     };
 

@@ -200,7 +200,8 @@ impl LlmProviderTrait for OpenAiProvider {
             request_body["stop"] = serde_json::json!(stop);
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -209,7 +210,10 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -228,7 +232,8 @@ impl LlmProviderTrait for OpenAiProvider {
         top_p: Option<f32>,
         stop_sequences: Option<Vec<String>>,
     ) -> Result<String> {
-        let openai_messages: Vec<Value> = messages.iter()
+        let openai_messages: Vec<Value> = messages
+            .iter()
             .map(|msg| {
                 serde_json::json!({
                     "role": format!("{:?}", msg.role).to_lowercase(),
@@ -252,7 +257,8 @@ impl LlmProviderTrait for OpenAiProvider {
             request_body["stop"] = serde_json::json!(stop);
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -261,7 +267,10 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -273,14 +282,18 @@ impl LlmProviderTrait for OpenAiProvider {
     }
 
     async fn get_available_models(&self) -> Result<Vec<String>> {
-        let response = self.client
+        let response = self
+            .client
             .get(format!("{}/models", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -288,7 +301,8 @@ impl LlmProviderTrait for OpenAiProvider {
             .as_array()
             .ok_or_else(|| mockforge_core::Error::generic("Invalid models response format"))?;
 
-        let model_names = models.iter()
+        let model_names = models
+            .iter()
             .filter_map(|model| model["id"].as_str().map(|s| s.to_string()))
             .collect();
 
@@ -341,7 +355,8 @@ impl OpenAiEmbeddingProvider {
 #[async_trait::async_trait]
 impl EmbeddingProviderTrait for OpenAiEmbeddingProvider {
     async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/embeddings", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -353,7 +368,10 @@ impl EmbeddingProviderTrait for OpenAiEmbeddingProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("OpenAI API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "OpenAI API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -361,9 +379,7 @@ impl EmbeddingProviderTrait for OpenAiEmbeddingProvider {
             .as_array()
             .ok_or_else(|| mockforge_core::Error::generic("Invalid embedding response format"))?;
 
-        Ok(embedding.iter()
-            .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-            .collect())
+        Ok(embedding.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     }
 
     async fn generate_embeddings(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
@@ -449,7 +465,8 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             request_body["stop"] = serde_json::json!(stop);
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -458,7 +475,10 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -477,7 +497,8 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
         top_p: Option<f32>,
         stop_sequences: Option<Vec<String>>,
     ) -> Result<String> {
-        let openai_messages: Vec<Value> = messages.iter()
+        let openai_messages: Vec<Value> = messages
+            .iter()
             .map(|msg| {
                 serde_json::json!({
                     "role": format!("{:?}", msg.role).to_lowercase(),
@@ -501,7 +522,8 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             request_body["stop"] = serde_json::json!(stop);
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -510,7 +532,10 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -523,7 +548,8 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
 
     async fn get_available_models(&self) -> Result<Vec<String>> {
         // Try to get models, but fall back gracefully if not available
-        match self.client
+        match self
+            .client
             .get(format!("{}/models", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
@@ -531,10 +557,11 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
         {
             Ok(response) if response.status().is_success() => {
                 let json: Value = response.json().await?;
-                let models = json["data"]
-                    .as_array()
-                    .ok_or_else(|| mockforge_core::Error::generic("Invalid models response format"))?;
-                Ok(models.iter()
+                let models = json["data"].as_array().ok_or_else(|| {
+                    mockforge_core::Error::generic("Invalid models response format")
+                })?;
+                Ok(models
+                    .iter()
                     .filter_map(|model| model["id"].as_str().map(|s| s.to_string()))
                     .collect())
             }
@@ -578,7 +605,8 @@ impl OpenAiCompatibleEmbeddingProvider {
 #[async_trait::async_trait]
 impl EmbeddingProviderTrait for OpenAiCompatibleEmbeddingProvider {
     async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/embeddings", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -590,7 +618,10 @@ impl EmbeddingProviderTrait for OpenAiCompatibleEmbeddingProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!("API error: {}", response.status())));
+            return Err(mockforge_core::Error::generic(format!(
+                "API error: {}",
+                response.status()
+            )));
         }
 
         let json: Value = response.json().await?;
@@ -598,9 +629,7 @@ impl EmbeddingProviderTrait for OpenAiCompatibleEmbeddingProvider {
             .as_array()
             .ok_or_else(|| mockforge_core::Error::generic("Invalid embedding response format"))?;
 
-        Ok(embedding.iter()
-            .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-            .collect())
+        Ok(embedding.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     }
 
     async fn generate_embeddings(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
@@ -649,11 +678,16 @@ impl ProviderFactory {
             }
             LlmProvider::OpenAICompatible => {
                 let base_url = base_url.ok_or_else(|| {
-                    mockforge_core::Error::generic("Base URL required for OpenAI compatible provider")
+                    mockforge_core::Error::generic(
+                        "Base URL required for OpenAI compatible provider",
+                    )
                 })?;
                 Ok(Box::new(OpenAiCompatibleProvider::new(api_key, base_url, model)))
             }
-            _ => Err(mockforge_core::Error::generic(format!("Provider type {:?} not yet implemented", provider_type))),
+            _ => Err(mockforge_core::Error::generic(format!(
+                "Provider type {:?} not yet implemented",
+                provider_type
+            ))),
         }
     }
 
@@ -670,7 +704,9 @@ impl ProviderFactory {
             }
             EmbeddingProvider::OpenAICompatible => {
                 let base_url = base_url.ok_or_else(|| {
-                    mockforge_core::Error::generic("Base URL required for OpenAI compatible embedding provider")
+                    mockforge_core::Error::generic(
+                        "Base URL required for OpenAI compatible embedding provider",
+                    )
                 })?;
                 Ok(Box::new(OpenAiCompatibleEmbeddingProvider::new(api_key, base_url, model)))
             }

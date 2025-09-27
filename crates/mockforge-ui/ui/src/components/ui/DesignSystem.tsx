@@ -812,3 +812,374 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
     </button>
   );
 }
+
+// ============================================================================
+// CONTEXT MENU COMPONENTS
+// ============================================================================
+
+interface ContextMenuProps {
+  children: React.ReactNode;
+  items: ContextMenuItem[];
+  position: { x: number; y: number };
+  onClose: () => void;
+}
+
+interface ContextMenuItem {
+  label: string;
+  onClick: () => void;
+  icon?: React.ReactNode;
+}
+
+export function ContextMenu({ children, items, position, onClose }: ContextMenuProps) {
+  return (
+    <>
+      {children}
+      <div
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+      />
+      <div
+        className="absolute z-50 min-w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 py-1"
+        style={{ left: position.x, top: position.y }}
+      >
+        {items.map((item, index) => (
+          <button
+            key={index}
+            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-colors duration-150"
+            onClick={() => {
+              item.onClick();
+              onClose();
+            }}
+          >
+            {item.icon && <span className="mr-2">{item.icon}</span>}
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+export function ContextMenuContent({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
+}
+
+export function ContextMenuItem({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
+}
+
+export function ContextMenuTrigger({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
+}
+
+// ============================================================================
+// TOAST COMPONENTS
+// ============================================================================
+
+interface ToastProps {
+  message: string;
+  type?: 'success' | 'error' | 'warning' | 'info';
+  onClose?: () => void;
+}
+
+export function Toast({ message, type = 'info', onClose }: ToastProps) {
+  const colors = {
+    success: 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400',
+    error: 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400',
+    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400',
+    info: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400',
+  };
+
+  return (
+    <div className={cn(
+      'flex items-center justify-between p-4 border rounded-lg shadow-sm',
+      colors[type]
+    )}>
+      <span className="text-sm">{message}</span>
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="ml-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
+}
+
+// ============================================================================
+// PROGRESS COMPONENT
+// ============================================================================
+
+interface ProgressProps {
+  value: number;
+  max?: number;
+  className?: string;
+}
+
+export function Progress({ value, max = 100, className }: ProgressProps) {
+  const percentage = Math.min((value / max) * 100, 100);
+
+  return (
+    <div className={cn('w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2', className)}>
+      <div
+        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+}
+
+// ============================================================================
+// RADIO GROUP COMPONENTS
+// ============================================================================
+
+interface RadioGroupProps {
+  value: string;
+  onValueChange: (value: string) => void;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function RadioGroup({ value, onValueChange, children, className }: RadioGroupProps) {
+  return (
+    <div className={cn('space-y-2', className)} data-value={value}>
+      {React.Children.map(children, (child) =>
+        React.isValidElement(child)
+          ? React.cloneElement(child, { onValueChange })
+          : child
+      )}
+    </div>
+  );
+}
+
+interface RadioGroupItemProps {
+  value: string;
+  children: React.ReactNode;
+  onValueChange?: (value: string) => void;
+  className?: string;
+}
+
+export function RadioGroupItem({ value, children, onValueChange, className }: RadioGroupItemProps) {
+  return (
+    <label className={cn('flex items-center space-x-2 cursor-pointer', className)}>
+      <input
+        type="radio"
+        value={value}
+        onChange={(e) => onValueChange?.(e.target.value)}
+        className="text-blue-600 focus:ring-blue-500"
+      />
+      <span className="text-sm text-gray-700 dark:text-gray-300">{children}</span>
+    </label>
+  );
+}
+
+// ============================================================================
+// SWITCH COMPONENT
+// ============================================================================
+
+interface SwitchProps {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  className?: string;
+}
+
+export function Switch({ checked, onCheckedChange, className }: SwitchProps) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+        checked ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700',
+        className
+      )}
+      onClick={() => onCheckedChange(!checked)}
+    >
+      <span
+        className={cn(
+          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+          checked ? 'translate-x-6' : 'translate-x-1'
+        )}
+      />
+    </button>
+  );
+}
+
+// ============================================================================
+// DIALOG COMPONENTS
+// ============================================================================
+
+interface DialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+}
+
+export function Dialog({ open, onOpenChange, children }: DialogProps) {
+  if (!open) return null;
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        onClick={() => onOpenChange(false)}
+      />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function DialogContent({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn('p-6', className)}>{children}</div>;
+}
+
+export function DialogHeader({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn('px-6 py-4 border-b border-gray-200 dark:border-gray-700', className)}>{children}</div>;
+}
+
+export function DialogTitle({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <h3 className={cn('text-lg font-semibold text-gray-900 dark:text-gray-100', className)}>{children}</h3>;
+}
+
+export function DialogDescription({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={cn('text-sm text-gray-600 dark:text-gray-400 mt-2', className)}>{children}</p>;
+}
+
+// ============================================================================
+// TOOLTIP COMPONENT
+// ============================================================================
+
+interface TooltipProps {
+  content: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function Tooltip({ content, children, className }: TooltipProps) {
+  const [isVisible, setIsVisible] = React.useState(false);
+
+  return (
+    <div
+      className={cn('relative', className)}
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+    >
+      {children}
+      {isVisible && (
+        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
+          {content}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// DROPDOWN MENU COMPONENTS
+// ============================================================================
+
+import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+
+interface DropdownMenuProps {
+  children: React.ReactNode;
+}
+
+export function DropdownMenu({ children }: DropdownMenuProps) {
+  return <DropdownMenuPrimitive.Root>{children}</DropdownMenuPrimitive.Root>;
+}
+
+interface DropdownMenuTriggerProps {
+  children: React.ReactNode;
+  asChild?: boolean;
+  className?: string;
+}
+
+export function DropdownMenuTrigger({ children, asChild, className }: DropdownMenuTriggerProps) {
+  return (
+    <DropdownMenuPrimitive.Trigger asChild={asChild} className={className}>
+      {children}
+    </DropdownMenuPrimitive.Trigger>
+  );
+}
+
+interface DropdownMenuContentProps {
+  children: React.ReactNode;
+  align?: 'start' | 'center' | 'end';
+  className?: string;
+}
+
+export function DropdownMenuContent({ children, align = 'end', className }: DropdownMenuContentProps) {
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        align={align}
+        className={cn(
+          'z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1 text-gray-900 dark:text-gray-100 shadow-md',
+          className
+        )}
+      >
+        {children}
+      </DropdownMenuPrimitive.Content>
+    </DropdownMenuPrimitive.Portal>
+  );
+}
+
+interface DropdownMenuItemProps {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function DropdownMenuItem({ children, onClick, disabled, className }: DropdownMenuItemProps) {
+  return (
+    <DropdownMenuPrimitive.Item
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-gray-100 dark:focus:bg-gray-800 focus:text-gray-900 dark:focus:text-gray-100',
+        disabled && 'pointer-events-none opacity-50',
+        className
+      )}
+    >
+      {children}
+    </DropdownMenuPrimitive.Item>
+  );
+}
+
+interface DropdownMenuLabelProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function DropdownMenuLabel({ children, className }: DropdownMenuLabelProps) {
+  return (
+    <DropdownMenuPrimitive.Label
+      className={cn('px-2 py-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100', className)}
+    >
+      {children}
+    </DropdownMenuPrimitive.Label>
+  );
+}
+
+interface DropdownMenuSeparatorProps {
+  className?: string;
+}
+
+export function DropdownMenuSeparator({ className }: DropdownMenuSeparatorProps) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      className={cn('-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-800', className)}
+    />
+  );
+}

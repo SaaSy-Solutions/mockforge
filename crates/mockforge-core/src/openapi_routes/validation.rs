@@ -3,10 +3,10 @@
 //! This module provides validation functionality for OpenAPI-based routes,
 //! including request validation, response validation, and error handling.
 
+use jsonschema::validate;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use jsonschema::validate;
 
 /// Validation mode for requests and responses
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]

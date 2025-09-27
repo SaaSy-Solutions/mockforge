@@ -46,15 +46,17 @@ pub struct OpenApiSpecInfo {
 }
 
 /// Import an OpenAPI specification
-pub fn import_openapi_spec(content: &str, _base_url: Option<&str>) -> Result<OpenApiImportResult, String> {
-    let json_value: Value = serde_json::from_str(content)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+pub fn import_openapi_spec(
+    content: &str,
+    _base_url: Option<&str>,
+) -> Result<OpenApiImportResult, String> {
+    let json_value: Value =
+        serde_json::from_str(content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
     let spec = OpenApiSpec::from_json(json_value)
         .map_err(|e| format!("Failed to load OpenAPI spec: {}", e))?;
 
-    spec.validate()
-        .map_err(|e| format!("Invalid OpenAPI specification: {}", e))?;
+    spec.validate().map_err(|e| format!("Invalid OpenAPI specification: {}", e))?;
 
     // Extract spec info
     let spec_info = OpenApiSpecInfo {
@@ -62,7 +64,10 @@ pub fn import_openapi_spec(content: &str, _base_url: Option<&str>) -> Result<Ope
         version: spec.version().to_string(),
         description: spec.description().map(|s| s.to_string()),
         openapi_version: spec.spec.openapi.clone(),
-        servers: spec.spec.servers.iter()
+        servers: spec
+            .spec
+            .servers
+            .iter()
             .filter_map(|server| server.url.parse::<url::Url>().ok())
             .map(|url| url.to_string())
             .collect(),
@@ -91,20 +96,6 @@ pub fn import_openapi_spec(content: &str, _base_url: Option<&str>) -> Result<Ope
 }
 
 /// Convert an OpenAPI operation to a MockForge route
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

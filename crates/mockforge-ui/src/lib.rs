@@ -21,7 +21,13 @@ pub async fn start_admin_server(
     graphql_server_addr: Option<SocketAddr>,
     api_enabled: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = create_admin_router(http_server_addr, ws_server_addr, grpc_server_addr, graphql_server_addr, api_enabled);
+    let app = create_admin_router(
+        http_server_addr,
+        ws_server_addr,
+        grpc_server_addr,
+        graphql_server_addr,
+        api_enabled,
+    );
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);
 

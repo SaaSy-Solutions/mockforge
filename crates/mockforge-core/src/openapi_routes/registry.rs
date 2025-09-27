@@ -3,9 +3,9 @@
 //! This module provides the main OpenApiRouteRegistry struct and related
 //! functionality for managing OpenAPI-based routes.
 
-use crate::openapi::spec::OpenApiSpec;
+use super::validation::{ValidationMode, ValidationOptions};
 use crate::openapi::route::OpenApiRoute;
-use super::validation::{ValidationOptions, ValidationMode};
+use crate::openapi::spec::OpenApiSpec;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -72,8 +72,6 @@ impl OpenApiRouteRegistry {
         }
     }
 
-
-
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
@@ -82,28 +80,68 @@ impl OpenApiRouteRegistry {
             if let Some(item) = path_item.as_item() {
                 // Generate route for each HTTP method
                 if let Some(op) = &item.get {
-                    routes.push(OpenApiRoute::from_operation("GET", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "GET",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.post {
-                    routes.push(OpenApiRoute::from_operation("POST", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "POST",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.put {
-                    routes.push(OpenApiRoute::from_operation("PUT", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "PUT",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.delete {
-                    routes.push(OpenApiRoute::from_operation("DELETE", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "DELETE",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.patch {
-                    routes.push(OpenApiRoute::from_operation("PATCH", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "PATCH",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.head {
-                    routes.push(OpenApiRoute::from_operation("HEAD", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "HEAD",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.options {
-                    routes.push(OpenApiRoute::from_operation("OPTIONS", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "OPTIONS",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
                 if let Some(op) = &item.trace {
-                    routes.push(OpenApiRoute::from_operation("TRACE", path.clone(), op, spec.clone()));
+                    routes.push(OpenApiRoute::from_operation(
+                        "TRACE",
+                        path.clone(),
+                        op,
+                        spec.clone(),
+                    ));
                 }
             }
         }
@@ -146,12 +184,17 @@ impl OpenApiRouteRegistry {
     }
 
     /// Match a request path against a route pattern and extract parameters
-    fn match_path_to_route(&self, request_path: &str, route_pattern: &str) -> Option<HashMap<String, String>> {
+    fn match_path_to_route(
+        &self,
+        request_path: &str,
+        route_pattern: &str,
+    ) -> Option<HashMap<String, String>> {
         let mut params = HashMap::new();
 
         // Split both paths into segments
         let request_segments: Vec<&str> = request_path.trim_start_matches('/').split('/').collect();
-        let pattern_segments: Vec<&str> = route_pattern.trim_start_matches('/').split('/').collect();
+        let pattern_segments: Vec<&str> =
+            route_pattern.trim_start_matches('/').split('/').collect();
 
         if request_segments.len() != pattern_segments.len() {
             return None;
@@ -160,7 +203,7 @@ impl OpenApiRouteRegistry {
         for (req_seg, pat_seg) in request_segments.iter().zip(pattern_segments.iter()) {
             if pat_seg.starts_with('{') && pat_seg.ends_with('}') {
                 // This is a parameter
-                let param_name = &pat_seg[1..pat_seg.len()-1];
+                let param_name = &pat_seg[1..pat_seg.len() - 1];
                 params.insert(param_name.to_string(), req_seg.to_string());
             } else if req_seg != pat_seg {
                 // Static segment doesn't match

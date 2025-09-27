@@ -1,6 +1,6 @@
 use axum::{body::Body, http::Request};
-use tower::ServiceExt;
 use mockforge_ui::create_admin_router;
+use tower::ServiceExt;
 
 /// Test that static assets are served with correct MIME types
 #[tokio::test]
@@ -9,12 +9,7 @@ async fn test_static_assets_mime_types() {
 
     // Test HTML serving
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -27,12 +22,7 @@ async fn test_static_assets_mime_types() {
     // Test CSS serving
     let app2 = create_admin_router(None, None, None, None, true);
     let response_css = app2
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -45,12 +35,7 @@ async fn test_static_assets_mime_types() {
     // Test JavaScript serving
     let app3 = create_admin_router(None, None, None, None, true);
     let response_js = app3
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.js")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -68,12 +53,7 @@ async fn test_image_assets_mime_types() {
 
     // Test PNG icon serving
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/mockforge-icon.png")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/mockforge-icon.png").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -84,9 +64,7 @@ async fn test_image_assets_mime_types() {
     assert_eq!(content_type, "image/png");
 
     // Verify we got actual image data
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     assert!(body_bytes.len() > 0, "PNG file should contain data");
 
     // Test different icon sizes
@@ -95,18 +73,13 @@ async fn test_image_assets_mime_types() {
         "/mockforge-icon-48.png",
         "/mockforge-logo.png",
         "/mockforge-logo-40.png",
-        "/mockforge-logo-80.png"
+        "/mockforge-logo-80.png",
     ];
 
     for icon_path in icon_sizes {
         let app_test = create_admin_router(None, None, None, None, true);
         let response = app_test
-            .oneshot(
-                Request::builder()
-                    .uri(icon_path)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri(icon_path).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -115,9 +88,7 @@ async fn test_image_assets_mime_types() {
         let content_type = response.headers().get("content-type").unwrap();
         assert_eq!(content_type, "image/png", "Wrong content type for {}", icon_path);
 
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert!(body_bytes.len() > 0, "No data for {}", icon_path);
     }
 }
@@ -129,12 +100,7 @@ async fn test_static_assets_caching_headers() {
 
     // Test CSS caching headers
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -145,20 +111,20 @@ async fn test_static_assets_caching_headers() {
     if let Some(cache_header) = cache_control {
         let cache_value = cache_header.to_str().unwrap();
         // Should have some form of caching directive
-        assert!(cache_value.contains("max-age") || cache_value.contains("no-cache") ||
-                cache_value.contains("public") || cache_value.contains("private"),
-                "Cache-Control header should contain valid directive: {}", cache_value);
+        assert!(
+            cache_value.contains("max-age")
+                || cache_value.contains("no-cache")
+                || cache_value.contains("public")
+                || cache_value.contains("private"),
+            "Cache-Control header should contain valid directive: {}",
+            cache_value
+        );
     }
 
     // Test JavaScript caching headers
     let app2 = create_admin_router(None, None, None, None, true);
     let response_js = app2
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.js")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -167,20 +133,20 @@ async fn test_static_assets_caching_headers() {
     let js_cache_control = response_js.headers().get("cache-control");
     if let Some(js_cache_header) = js_cache_control {
         let js_cache_value = js_cache_header.to_str().unwrap();
-        assert!(js_cache_value.contains("max-age") || js_cache_value.contains("no-cache") ||
-                js_cache_value.contains("public") || js_cache_value.contains("private"),
-                "JS Cache-Control header should contain valid directive: {}", js_cache_value);
+        assert!(
+            js_cache_value.contains("max-age")
+                || js_cache_value.contains("no-cache")
+                || js_cache_value.contains("public")
+                || js_cache_value.contains("private"),
+            "JS Cache-Control header should contain valid directive: {}",
+            js_cache_value
+        );
     }
 
     // Test image caching headers
     let app3 = create_admin_router(None, None, None, None, true);
     let response_img = app3
-        .oneshot(
-            Request::builder()
-                .uri("/mockforge-icon.png")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/mockforge-icon.png").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -189,9 +155,14 @@ async fn test_static_assets_caching_headers() {
     let img_cache_control = response_img.headers().get("cache-control");
     if let Some(img_cache_header) = img_cache_control {
         let img_cache_value = img_cache_header.to_str().unwrap();
-        assert!(img_cache_value.contains("max-age") || img_cache_value.contains("no-cache") ||
-                img_cache_value.contains("public") || img_cache_value.contains("private"),
-                "Image Cache-Control header should contain valid directive: {}", img_cache_value);
+        assert!(
+            img_cache_value.contains("max-age")
+                || img_cache_value.contains("no-cache")
+                || img_cache_value.contains("public")
+                || img_cache_value.contains("private"),
+            "Image Cache-Control header should contain valid directive: {}",
+            img_cache_value
+        );
     }
 }
 
@@ -202,12 +173,7 @@ async fn test_static_assets_etags() {
 
     // Test HTML ETag
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -218,20 +184,18 @@ async fn test_static_assets_etags() {
     if let Some(etag_header) = etag {
         let etag_value = etag_header.to_str().unwrap();
         // ETag should be a valid quoted string
-        assert!(etag_value.starts_with('"') && etag_value.ends_with('"'),
-                "ETag should be a quoted string: {}", etag_value);
+        assert!(
+            etag_value.starts_with('"') && etag_value.ends_with('"'),
+            "ETag should be a quoted string: {}",
+            etag_value
+        );
         assert!(etag_value.len() > 2, "ETag should not be empty: {}", etag_value);
     }
 
     // Test CSS ETag
     let app2 = create_admin_router(None, None, None, None, true);
     let response_css = app2
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -240,8 +204,11 @@ async fn test_static_assets_etags() {
     let css_etag = response_css.headers().get("etag");
     if let Some(css_etag_header) = css_etag {
         let css_etag_value = css_etag_header.to_str().unwrap();
-        assert!(css_etag_value.starts_with('"') && css_etag_value.ends_with('"'),
-                "CSS ETag should be a quoted string: {}", css_etag_value);
+        assert!(
+            css_etag_value.starts_with('"') && css_etag_value.ends_with('"'),
+            "CSS ETag should be a quoted string: {}",
+            css_etag_value
+        );
     }
 }
 
@@ -252,12 +219,7 @@ async fn test_conditional_requests() {
 
     // First, get the ETag
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.css")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -307,17 +269,16 @@ async fn test_all_static_routes_accessible() {
     for route in static_routes {
         let app = create_admin_router(None, None, None, None, true);
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri(route)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
-        assert!(response.status().is_success(),
-                "Route {} should be accessible, got status {}", route, response.status());
+        assert!(
+            response.status().is_success(),
+            "Route {} should be accessible, got status {}",
+            route,
+            response.status()
+        );
     }
 }
 
@@ -327,12 +288,7 @@ async fn test_static_assets_content_length() {
     let app = create_admin_router(None, None, None, None, true);
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/assets/index.js")
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -346,12 +302,14 @@ async fn test_static_assets_content_length() {
     assert!(length_value > 0, "Content-Length should be greater than 0");
 
     // For JavaScript, it should be reasonably large (not empty)
-    assert!(length_value > 100, "JavaScript file should be reasonably large, got {} bytes", length_value);
+    assert!(
+        length_value > 100,
+        "JavaScript file should be reasonably large, got {} bytes",
+        length_value
+    );
 
     // Verify actual body matches content length
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     assert_eq!(body_bytes.len(), length_value, "Body length should match Content-Length header");
 }
 
@@ -372,21 +330,19 @@ async fn test_spa_fallback_routing() {
     for route in client_routes {
         let app_test = create_admin_router(None, None, None, None, true);
         let response = app_test
-            .oneshot(
-                Request::builder()
-                    .uri(route)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
-        assert!(response.status().is_success(),
-                "SPA route {} should serve index.html, got status {}", route, response.status());
+        assert!(
+            response.status().is_success(),
+            "SPA route {} should serve index.html, got status {}",
+            route,
+            response.status()
+        );
 
         // Should serve HTML content
         let content_type = response.headers().get("content-type").unwrap();
-        assert_eq!(content_type, "text/html",
-                   "SPA route {} should serve HTML content", route);
+        assert_eq!(content_type, "text/html", "SPA route {} should serve HTML content", route);
     }
 }

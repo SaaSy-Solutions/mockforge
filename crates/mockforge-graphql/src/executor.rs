@@ -69,14 +69,17 @@ pub async fn create_graphql_router(
 
     // Add latency injection if configured
     if let Some(profile) = latency_profile {
-        let latency_injector = mockforge_core::latency::LatencyInjector::new(profile, Default::default());
-        app = app.layer(axum::middleware::from_fn(move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
-            let injector = latency_injector.clone();
-            async move {
-                let _ = injector.inject_latency(&[]).await;
-                next.run(req).await
-            }
-        }));
+        let latency_injector =
+            mockforge_core::latency::LatencyInjector::new(profile, Default::default());
+        app = app.layer(axum::middleware::from_fn(
+            move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                let injector = latency_injector.clone();
+                async move {
+                    let _ = injector.inject_latency(&[]).await;
+                    next.run(req).await
+                }
+            },
+        ));
     }
 
     Ok(app)
@@ -92,11 +95,9 @@ async fn graphql_handler(
 
 /// GraphQL Playground handler
 async fn graphql_playground() -> impl IntoResponse {
-    Html(
-        async_graphql::http::playground_source(
-            GraphQLPlaygroundConfig::new("/graphql")
-                .title("MockForge GraphQL Playground")
-                .subscription_endpoint("/graphql"),
-        ),
-    )
+    Html(async_graphql::http::playground_source(
+        GraphQLPlaygroundConfig::new("/graphql")
+            .title("MockForge GraphQL Playground")
+            .subscription_endpoint("/graphql"),
+    ))
 }

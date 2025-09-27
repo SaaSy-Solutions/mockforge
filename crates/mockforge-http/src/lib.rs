@@ -6,15 +6,15 @@ pub mod replay_listing;
 pub mod request_logging;
 pub mod sse;
 
-use axum::Router;
 use axum::middleware::from_fn_with_state;
+use axum::Router;
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
 use mockforge_core::latency::LatencyInjector;
+use mockforge_core::openapi::OpenApiSpec;
+use mockforge_core::openapi_routes::OpenApiRouteRegistry;
+use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_core::LatencyProfile;
 use mockforge_core::TrafficShaper;
-use mockforge_core::openapi::OpenApiSpec;
-use mockforge_core::openapi_routes::ValidationOptions;
-use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use std::collections::HashMap;
@@ -23,7 +23,11 @@ use tokio::sync::RwLock;
 use tracing::*;
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
-pub async fn build_router(spec_path: Option<String>, options: Option<ValidationOptions>, failure_config: Option<FailureConfig>) -> Router {
+pub async fn build_router(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    failure_config: Option<FailureConfig>,
+) -> Router {
     // Set up the basic router
     let mut app = Router::new();
 
@@ -40,7 +44,10 @@ pub async fn build_router(spec_path: Option<String>, options: Option<ValidationO
 
                 app = if let Some(failure_config) = &failure_config {
                     let failure_injector = FailureInjector::new(Some(failure_config.clone()), true);
-                    registry.build_router_with_injectors(LatencyInjector::default(), Some(failure_injector))
+                    registry.build_router_with_injectors(
+                        LatencyInjector::default(),
+                        Some(failure_injector),
+                    )
                 } else {
                     registry.build_router()
                 };
@@ -65,7 +72,6 @@ pub async fn build_router(spec_path: Option<String>, options: Option<ValidationO
     app
 }
 
-
 /// Build the base HTTP router with authentication and latency support
 pub async fn build_router_with_auth_and_latency(
     _spec_path: Option<String>,
@@ -87,14 +93,13 @@ pub async fn build_router_with_latency(
     build_router(None, None, None).await
 }
 
-
 /// Build the base HTTP router with authentication support
 pub async fn build_router_with_auth(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
     auth_config: Option<mockforge_core::config::AuthConfig>,
 ) -> Router {
-    use crate::auth::{AuthState, auth_middleware, create_oauth2_client};
+    use crate::auth::{auth_middleware, create_oauth2_client, AuthState};
     use std::sync::Arc;
 
     // If richer faker is available, register provider once (idempotent)
@@ -180,7 +185,6 @@ pub async fn build_router_with_auth(
     app
 }
 
-
 /// Serve a provided router on the given port.
 pub async fn serve_router(
     port: u16,
@@ -216,7 +220,8 @@ pub async fn start_with_auth_and_latency(
     auth_config: Option<mockforge_core::config::AuthConfig>,
     latency_profile: Option<LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    start_with_auth_and_injectors(port, spec_path, options, auth_config, latency_profile, None).await
+    start_with_auth_and_injectors(port, spec_path, options, auth_config, latency_profile, None)
+        .await
 }
 
 /// Start HTTP server with authentication and injectors support
@@ -253,14 +258,22 @@ pub async fn build_router_with_chains(
     options: Option<ValidationOptions>,
     circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
 ) -> Router {
-    use axum::{routing::{get, post, put, delete}, Router};
     use crate::chain_handlers::create_chain_state;
+    use axum::{
+        routing::{delete, get, post, put},
+        Router,
+    };
     use std::sync::Arc;
 
     // Create chain registry and execution engine
     let chain_config = circling_config.unwrap_or_default();
-    let registry = Arc::new(mockforge_core::request_chaining::RequestChainRegistry::new(chain_config.clone()));
-    let engine = Arc::new(mockforge_core::chain_execution::ChainExecutionEngine::new(registry.clone(), chain_config));
+    let registry = Arc::new(mockforge_core::request_chaining::RequestChainRegistry::new(
+        chain_config.clone(),
+    ));
+    let engine = Arc::new(mockforge_core::chain_execution::ChainExecutionEngine::new(
+        registry.clone(),
+        chain_config,
+    ));
     let chain_state = create_chain_state(registry, engine);
 
     // Start with basic router
@@ -278,7 +291,7 @@ pub async fn build_router_with_chains(
             .route("/:id/execute", post(chain_handlers::execute_chain))
             .route("/:id/validate", post(chain_handlers::validate_chain))
             .route("/:id/history", get(chain_handlers::get_chain_history))
-            .with_state(chain_state)
+            .with_state(chain_state),
     );
 
     app
@@ -315,8 +328,8 @@ pub async fn build_router_with_traffic_shaping(
     traffic_shaper: Option<TrafficShaper>,
     traffic_shaping_enabled: bool,
 ) -> Router {
-    use crate::op_middleware::Shared;
     use crate::latency_profiles::LatencyProfiles;
+    use crate::op_middleware::Shared;
     use mockforge_core::Overrides;
 
     let shared = Shared {
@@ -377,6 +390,12 @@ pub async fn start_with_traffic_shaping(
     traffic_shaper: Option<TrafficShaper>,
     traffic_shaping_enabled: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = build_router_with_traffic_shaping(spec_path, options, traffic_shaper, traffic_shaping_enabled).await;
+    let app = build_router_with_traffic_shaping(
+        spec_path,
+        options,
+        traffic_shaper,
+        traffic_shaping_enabled,
+    )
+    .await;
     serve_router(port, app).await
 }

@@ -1,8 +1,8 @@
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::Path;
-use serde::Deserialize;
-use std::collections::HashMap;
 use std::process::Command;
 
 #[derive(Deserialize, Debug)]
@@ -13,11 +13,7 @@ struct ManifestEntry {
 
 fn main() {
     // Generate version information using vergen
-    if let Err(e) = vergen::EmitBuilder::builder()
-        .build_timestamp()
-        .git_sha(true)
-        .emit()
-    {
+    if let Err(e) = vergen::EmitBuilder::builder().build_timestamp().git_sha(true).emit() {
         println!("cargo:warning=Failed to generate version info: {}", e);
     }
     println!("cargo:rerun-if-changed=ui/build.rs");
@@ -47,25 +43,34 @@ fn main() {
 
     if manifest_path.exists() {
         let manifest_content = fs::read_to_string(&manifest_path).unwrap();
-        let manifest: HashMap<String, ManifestEntry> = serde_json::from_str(&manifest_content).unwrap();
-        let entry = manifest.get("index.html").expect("Could not find index.html entry in manifest.json");
+        let manifest: HashMap<String, ManifestEntry> =
+            serde_json::from_str(&manifest_content).unwrap();
+        let entry = manifest
+            .get("index.html")
+            .expect("Could not find index.html entry in manifest.json");
 
         let js_path = ui_dist_path.join(&entry.file);
-        let css_path = entry.css.as_ref().and_then(|files| files.first()).map(|file| ui_dist_path.join(file));
+        let css_path = entry
+            .css
+            .as_ref()
+            .and_then(|files| files.first())
+            .map(|file| ui_dist_path.join(file));
 
         let css_content = if let Some(path) = css_path {
-            format!("pub fn get_admin_css() -> &'static str {{    include_str!(r\"{}\")\n}}", path.display())
+            format!(
+                "pub fn get_admin_css() -> &'static str {{    include_str!(r\"{}\")\n}}",
+                path.display()
+            )
         } else {
             "pub fn get_admin_css() -> &'static str { \"\" }\n".to_string()
         };
 
-        let js_content = format!("pub fn get_admin_js() -> &'static str {{    include_str!(r\"{}\")\n}}", js_path.display());
+        let js_content = format!(
+            "pub fn get_admin_js() -> &'static str {{    include_str!(r\"{}\")\n}}",
+            js_path.display()
+        );
 
-        fs::write(
-            &dest_path,
-            format!("{}\n\n{}", css_content, js_content)
-        ).unwrap();
-
+        fs::write(&dest_path, format!("{}\n\n{}", css_content, js_content)).unwrap();
     } else {
         // UI not built, create dummy functions
         let content = "

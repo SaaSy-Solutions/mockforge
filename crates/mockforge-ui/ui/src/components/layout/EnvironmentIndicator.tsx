@@ -2,7 +2,7 @@ import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useEnvironments, useSetActiveEnvironment } from '../../hooks/useApi';
 import { Button } from '../ui/button';
-import { EnvironmentSummary } from '../../types';
+import type { EnvironmentSummary } from '../../types';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +22,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
   const { data: environments, isLoading } = useEnvironments(workspaceId);
   const setActiveEnvironment = useSetActiveEnvironment(workspaceId);
 
-  const activeEnvironment = environments?.environments.find(env => env.active);
+  const activeEnvironment = environments?.environments.find((env: EnvironmentSummary) => env.active);
 
   const handleEnvironmentSwitch = async (environment: EnvironmentSummary) => {
     try {
@@ -52,7 +52,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
     );
   }
 
-  const availableEnvironments = environments?.environments.filter(env => !env.active) || [];
+  const availableEnvironments = environments?.environments.filter((env: EnvironmentSummary) => !env.active) || [];
 
   if (compact) {
     return (
@@ -112,7 +112,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
           <>
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Switch Environment</DropdownMenuLabel>
-            {availableEnvironments.map((environment) => (
+            {availableEnvironments.map((environment: EnvironmentSummary) => (
               <DropdownMenuItem
                 key={environment.id}
                 onClick={() => handleEnvironmentSwitch(environment)}

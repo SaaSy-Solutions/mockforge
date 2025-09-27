@@ -4,8 +4,8 @@
 //! to MockForge routes.
 
 use regex::Regex;
-use std::collections::HashMap;
 use serde_json::json;
+use std::collections::HashMap;
 
 /// Parsed curl command components
 #[derive(Debug)]
@@ -41,7 +41,10 @@ pub struct CurlImportResult {
 }
 
 /// Import curl command(s)
-pub fn import_curl_commands(content: &str, base_url: Option<&str>) -> Result<CurlImportResult, String> {
+pub fn import_curl_commands(
+    content: &str,
+    base_url: Option<&str>,
+) -> Result<CurlImportResult, String> {
     let mut routes = Vec::new();
     let mut warnings = Vec::new();
 
@@ -55,12 +58,10 @@ pub fn import_curl_commands(content: &str, base_url: Option<&str>) -> Result<Cur
         }
 
         match parse_curl_command(trimmed) {
-            Ok(parsed) => {
-                match convert_curl_to_route(parsed, base_url) {
-                    Ok(route) => routes.push(route),
-                    Err(e) => warnings.push(format!("Failed to convert curl command {}: {}", i + 1, e)),
-                }
-            }
+            Ok(parsed) => match convert_curl_to_route(parsed, base_url) {
+                Ok(route) => routes.push(route),
+                Err(e) => warnings.push(format!("Failed to convert curl command {}: {}", i + 1, e)),
+            },
             Err(e) => {
                 warnings.push(format!("Failed to parse curl command {}: {}", i + 1, e));
             }
@@ -140,8 +141,7 @@ fn parse_curl_command(command: &str) -> Result<ParsedCurlCommand, String> {
     }
 
     // Extract method from -X flag
-    let method_regex = Regex::new(r#"-X\s+(\w+)"#)
-        .map_err(|e| format!("Regex error: {}", e))?;
+    let method_regex = Regex::new(r#"-X\s+(\w+)"#).map_err(|e| format!("Regex error: {}", e))?;
 
     if let Some(captures) = method_regex.captures(command) {
         if let Some(method_match) = captures.get(1) {
@@ -150,8 +150,8 @@ fn parse_curl_command(command: &str) -> Result<ParsedCurlCommand, String> {
     }
 
     // Extract headers from -H flags
-    let header_regex = Regex::new(r#"-H\s+["']([^"']+)["']"#)
-        .map_err(|e| format!("Regex error: {}", e))?;
+    let header_regex =
+        Regex::new(r#"-H\s+["']([^"']+)["']"#).map_err(|e| format!("Regex error: {}", e))?;
 
     for captures in header_regex.captures_iter(command) {
         if let Some(header_match) = captures.get(1) {
@@ -208,7 +208,11 @@ fn extract_path_from_url(url: &str, base_url: Option<&str>) -> Result<String, St
     if let Some(base) = base_url {
         if url.starts_with(base) {
             let path = url.trim_start_matches(base).trim_start_matches('/');
-            return Ok(if path.is_empty() { "/".to_string() } else { format!("/{}", path) });
+            return Ok(if path.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{}", path)
+            });
         }
     }
 

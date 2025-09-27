@@ -490,7 +490,8 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
     }
 
     if let Ok(traffic_shaping_enabled) = std::env::var("MOCKFORGE_TRAFFIC_SHAPING_ENABLED") {
-        let enabled = traffic_shaping_enabled == "1" || traffic_shaping_enabled.eq_ignore_ascii_case("true");
+        let enabled =
+            traffic_shaping_enabled == "1" || traffic_shaping_enabled.eq_ignore_ascii_case("true");
         config.core.traffic_shaping_enabled = enabled;
     }
 

@@ -4,19 +4,17 @@
 //! part of the main dynamic routing.
 
 use super::{BridgeResponse, HttpBridgeConfig};
-use axum::{
-    response::{IntoResponse, Sse},
-};
-use serde_json::Value;
-use std::time::Duration;
-use tokio_stream::{StreamExt, wrappers::ReceiverStream};
-use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use tonic::{Request, Response, Status, Streaming};
-use prost_reflect::DynamicMessage;
-use tokio::sync::mpsc;
-use tracing::{debug, warn};
 use crate::reflection::smart_mock_generator::SmartMockGenerator;
+use axum::response::{IntoResponse, Sse};
+use prost_reflect::DynamicMessage;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tonic::{Request, Response, Status, Streaming};
+use tracing::{debug, warn};
 
 /// Stream handler for server-sent events
 pub struct StreamHandler;
@@ -35,7 +33,8 @@ impl StreamHandler {
         service_name: String,
         method_name: String,
     ) -> impl IntoResponse {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<axum::response::sse::Event, axum::BoxError>>(32);
+        let (tx, rx) =
+            tokio::sync::mpsc::channel::<Result<axum::response::sse::Event, axum::BoxError>>(32);
 
         // Spawn a task to simulate bidirectional streaming
         tokio::spawn(async move {
@@ -51,9 +50,9 @@ impl StreamHandler {
             };
 
             if let Ok(json_str) = serde_json::to_string(&init_msg) {
-                let _ = tx.send(Ok(axum::response::sse::Event::default()
-                    .event("message")
-                    .data(json_str))).await;
+                let _ = tx
+                    .send(Ok(axum::response::sse::Event::default().event("message").data(json_str)))
+                    .await;
             }
 
             // Simulate ongoing streaming data for demonstration
@@ -68,14 +67,22 @@ impl StreamHandler {
                         "message": format!("Streaming message #{}", counter),
                         "timestamp": chrono::Utc::now().to_rfc3339()
                     }),
-                    metadata: vec![("sequence".to_string(), counter.to_string())].into_iter().collect(),
+                    metadata: vec![("sequence".to_string(), counter.to_string())]
+                        .into_iter()
+                        .collect(),
                 };
 
                 if let Ok(json_str) = serde_json::to_string(&stream_msg) {
-                    let event_type = if counter % 3 == 0 { "heartbeat" } else { "data" };
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event(event_type)
-                        .data(json_str))).await;
+                    let event_type = if counter % 3 == 0 {
+                        "heartbeat"
+                    } else {
+                        "data"
+                    };
+                    let _ = tx
+                        .send(Ok(axum::response::sse::Event::default()
+                            .event(event_type)
+                            .data(json_str)))
+                        .await;
                 }
 
                 counter += 1;
@@ -88,13 +95,17 @@ impl StreamHandler {
                             "error": "Simulated network error",
                             "code": "NETWORK_ERROR"
                         }),
-                        metadata: vec![("error_code".to_string(), "123".to_string())].into_iter().collect(),
+                        metadata: vec![("error_code".to_string(), "123".to_string())]
+                            .into_iter()
+                            .collect(),
                     };
 
                     if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                        let _ = tx.send(Ok(axum::response::sse::Event::default()
-                            .event("error")
-                            .data(json_str))).await;
+                        let _ = tx
+                            .send(Ok(axum::response::sse::Event::default()
+                                .event("error")
+                                .data(json_str)))
+                            .await;
                     }
                 }
             }
@@ -106,13 +117,17 @@ impl StreamHandler {
                     "message": "Streaming session completed",
                     "total_messages": counter
                 }),
-                metadata: vec![("session_id".to_string(), "demo-123".to_string())].into_iter().collect(),
+                metadata: vec![("session_id".to_string(), "demo-123".to_string())]
+                    .into_iter()
+                    .collect(),
             };
 
             if let Ok(json_str) = serde_json::to_string(&complete_msg) {
-                let _ = tx.send(Ok(axum::response::sse::Event::default()
-                    .event("complete")
-                    .data(json_str))).await;
+                let _ = tx
+                    .send(Ok(axum::response::sse::Event::default()
+                        .event("complete")
+                        .data(json_str)))
+                    .await;
             }
         });
 
@@ -128,7 +143,7 @@ impl StreamHandler {
         Sse::new(stream).keep_alive(
             axum::response::sse::KeepAlive::new()
                 .interval(Duration::from_secs(30))
-                .text("keep-alive")
+                .text("keep-alive"),
         )
     }
 
@@ -151,19 +166,24 @@ impl StreamHandler {
             &method_name,
             initial_request,
             tx.clone(),
-        ).await;
+        )
+        .await;
 
         tokio::spawn(async move {
             match result {
                 Ok(_) => {
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event("complete")
-                        .data("Stream completed successfully"))).await;
+                    let _ = tx
+                        .send(Ok(axum::response::sse::Event::default()
+                            .event("complete")
+                            .data("Stream completed successfully")))
+                        .await;
                 }
                 Err(e) => {
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event("error")
-                        .data(format!("Stream error: {}", e)))).await;
+                    let _ = tx
+                        .send(Ok(axum::response::sse::Event::default()
+                            .event("error")
+                            .data(format!("Stream error: {}", e))))
+                        .await;
                 }
             }
         });
@@ -180,7 +200,7 @@ impl StreamHandler {
         Sse::new(stream).keep_alive(
             axum::response::sse::KeepAlive::new()
                 .interval(Duration::from_secs(30))
-                .text("keep-alive")
+                .text("keep-alive"),
         )
     }
 
@@ -202,15 +222,26 @@ impl StreamHandler {
         let service = service_opt.unwrap();
         let method_opt = service.service().methods.iter().find(|m| m.name == method_name);
         if method_opt.is_none() {
-            return Err(format!("Method '{}' not found in service '{}'", method_name, service_name).into());
+            return Err(format!(
+                "Method '{}' not found in service '{}'",
+                method_name, service_name
+            )
+            .into());
         }
 
         let method_info = method_opt.unwrap();
-        let input_descriptor = registry.descriptor_pool().get_message_by_name(&method_info.input_type).ok_or_else(|| format!("Input type '{}' not found", method_info.input_type))?;
-        let output_descriptor = registry.descriptor_pool().get_message_by_name(&method_info.output_type).ok_or_else(|| format!("Output type '{}' not found", method_info.output_type))?;
+        let input_descriptor = registry
+            .descriptor_pool()
+            .get_message_by_name(&method_info.input_type)
+            .ok_or_else(|| format!("Input type '{}' not found", method_info.input_type))?;
+        let output_descriptor = registry
+            .descriptor_pool()
+            .get_message_by_name(&method_info.output_type)
+            .ok_or_else(|| format!("Output type '{}' not found", method_info.output_type))?;
 
         // Create converter
-        let converter = super::converters::ProtobufJsonConverter::new(registry.descriptor_pool().clone());
+        let converter =
+            super::converters::ProtobufJsonConverter::new(registry.descriptor_pool().clone());
 
         // Prepare client messages - initial_request can be a single message or array of messages
         let client_messages: Vec<Value> = if initial_request.is_array() {
@@ -236,12 +267,16 @@ impl StreamHandler {
                         metadata: vec![
                             ("error_type".to_string(), "conversion".to_string()),
                             ("sequence".to_string(), i.to_string()),
-                        ].into_iter().collect(),
+                        ]
+                        .into_iter()
+                        .collect(),
                     };
                     if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                        let _ = tx.send(Ok(axum::response::sse::Event::default()
-                            .event("error")
-                            .data(json_str))).await;
+                        let _ = tx
+                            .send(Ok(axum::response::sse::Event::default()
+                                .event("error")
+                                .data(json_str)))
+                            .await;
                     }
                     continue;
                 }
@@ -263,17 +298,22 @@ impl StreamHandler {
             metadata: vec![
                 ("stream_type".to_string(), "bidirectional".to_string()),
                 ("protocol".to_string(), "grpc-web-over-sse".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         if let Ok(json_str) = serde_json::to_string(&start_msg) {
-            let _ = tx.send(Ok(axum::response::sse::Event::default()
-                .event("stream_start")
-                .data(json_str))).await;
+            let _ = tx
+                .send(Ok(axum::response::sse::Event::default()
+                    .event("stream_start")
+                    .data(json_str)))
+                .await;
         }
 
         // Create a channel for the client stream
-        let (client_tx, client_rx) = mpsc::channel::<Result<prost_reflect::DynamicMessage, tonic::Status>>(10);
+        let (client_tx, client_rx) =
+            mpsc::channel::<Result<prost_reflect::DynamicMessage, tonic::Status>>(10);
 
         // Create the request with the client stream
         let request = Request::new(ReceiverStream::new(client_rx));
@@ -292,10 +332,7 @@ impl StreamHandler {
         });
 
         // Get the method descriptor
-        let method_descriptor = proxy
-            .cache()
-            .get_method(service_name, method_name)
-            .await?;
+        let method_descriptor = proxy.cache().get_method(service_name, method_name).await?;
 
         // For bidirectional streaming, we need to handle both directions
         // This is a simplified implementation that sends a single mock response
@@ -312,14 +349,16 @@ impl StreamHandler {
                         data: serde_json::json!({
                             "message": format!("Failed to acquire smart generator lock: {}", e)
                         }),
-                        metadata: vec![
-                            ("error_type".to_string(), "lock".to_string()),
-                        ].into_iter().collect(),
+                        metadata: vec![("error_type".to_string(), "lock".to_string())]
+                            .into_iter()
+                            .collect(),
                     };
                     if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                        let _ = tx.send(Ok(axum::response::sse::Event::default()
-                            .event("error")
-                            .data(json_str))).await;
+                        let _ = tx
+                            .send(Ok(axum::response::sse::Event::default()
+                                .event("error")
+                                .data(json_str)))
+                            .await;
                     }
                     return Ok(());
                 }
@@ -335,13 +374,17 @@ impl StreamHandler {
                     metadata: vec![
                         ("sequence".to_string(), "1".to_string()),
                         ("message_type".to_string(), "response".to_string()),
-                    ].into_iter().collect(),
+                    ]
+                    .into_iter()
+                    .collect(),
                 };
 
                 if let Ok(json_str) = serde_json::to_string(&response_msg) {
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event("grpc_response")
-                        .data(json_str))).await;
+                    let _ = tx
+                        .send(Ok(axum::response::sse::Event::default()
+                            .event("grpc_response")
+                            .data(json_str)))
+                        .await;
                 }
             }
             Err(e) => {
@@ -350,14 +393,16 @@ impl StreamHandler {
                     data: serde_json::json!({
                         "message": format!("Failed to convert response to JSON: {}", e)
                     }),
-                    metadata: vec![
-                        ("error_type".to_string(), "conversion".to_string()),
-                    ].into_iter().collect(),
+                    metadata: vec![("error_type".to_string(), "conversion".to_string())]
+                        .into_iter()
+                        .collect(),
                 };
                 if let Ok(json_str) = serde_json::to_string(&error_msg) {
-                    let _ = tx.send(Ok(axum::response::sse::Event::default()
-                        .event("error")
-                        .data(json_str))).await;
+                    let _ = tx
+                        .send(Ok(axum::response::sse::Event::default()
+                            .event("error")
+                            .data(json_str)))
+                        .await;
                 }
             }
         }
@@ -371,15 +416,15 @@ impl StreamHandler {
                     "responses_sent": 1
                 }
             }),
-            metadata: vec![
-                ("session_status".to_string(), "completed".to_string()),
-            ].into_iter().collect(),
+            metadata: vec![("session_status".to_string(), "completed".to_string())]
+                .into_iter()
+                .collect(),
         };
 
         if let Ok(json_str) = serde_json::to_string(&end_msg) {
-            let _ = tx.send(Ok(axum::response::sse::Event::default()
-                .event("stream_end")
-                .data(json_str))).await;
+            let _ = tx
+                .send(Ok(axum::response::sse::Event::default().event("stream_end").data(json_str)))
+                .await;
         }
 
         Ok(())
@@ -453,12 +498,13 @@ impl RequestProcessor {
         for (key, value) in headers.iter() {
             let key_str = key.as_str();
             // Skip HTTP-specific headers
-            if !key_str.starts_with("host") &&
-               !key_str.starts_with("content-type") &&
-               !key_str.starts_with("content-length") &&
-               !key_str.starts_with("user-agent") &&
-               !key_str.starts_with("accept") &&
-               !key_str.starts_with("authorization") {
+            if !key_str.starts_with("host")
+                && !key_str.starts_with("content-type")
+                && !key_str.starts_with("content-length")
+                && !key_str.starts_with("user-agent")
+                && !key_str.starts_with("accept")
+                && !key_str.starts_with("authorization")
+            {
                 if let Ok(value_str) = value.to_str() {
                     metadata.insert(key_str.to_string(), value_str.to_string());
                 }
@@ -477,16 +523,40 @@ mod tests {
 
     #[test]
     fn test_error_to_status_code() {
-        assert_eq!(ErrorHandler::error_to_status_code("service not found"), axum::http::StatusCode::NOT_FOUND);
-        assert_eq!(ErrorHandler::error_to_status_code("unauthorized"), axum::http::StatusCode::FORBIDDEN);
-        assert_eq!(ErrorHandler::error_to_status_code("invalid request"), axum::http::StatusCode::BAD_REQUEST);
-        assert_eq!(ErrorHandler::error_to_status_code("internal error"), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            ErrorHandler::error_to_status_code("service not found"),
+            axum::http::StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ErrorHandler::error_to_status_code("unauthorized"),
+            axum::http::StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            ErrorHandler::error_to_status_code("invalid request"),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ErrorHandler::error_to_status_code("internal error"),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
 
         // Test additional error cases
-        assert_eq!(ErrorHandler::error_to_status_code("Unknown service"), axum::http::StatusCode::NOT_FOUND);
-        assert_eq!(ErrorHandler::error_to_status_code("forbidden access"), axum::http::StatusCode::FORBIDDEN);
-        assert_eq!(ErrorHandler::error_to_status_code("malformed JSON"), axum::http::StatusCode::BAD_REQUEST);
-        assert_eq!(ErrorHandler::error_to_status_code("random error"), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            ErrorHandler::error_to_status_code("Unknown service"),
+            axum::http::StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ErrorHandler::error_to_status_code("forbidden access"),
+            axum::http::StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            ErrorHandler::error_to_status_code("malformed JSON"),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ErrorHandler::error_to_status_code("random error"),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
@@ -497,7 +567,9 @@ mod tests {
         assert!(RequestProcessor::validate_request("test", "method", 2000, 1000).is_err());
 
         // Test edge cases
-        assert!(RequestProcessor::validate_request("valid_service", "valid_method", 0, 1000).is_ok());
+        assert!(
+            RequestProcessor::validate_request("valid_service", "valid_method", 0, 1000).is_ok()
+        );
         assert!(RequestProcessor::validate_request("test", "method", 1000, 1000).is_ok());
         assert!(RequestProcessor::validate_request("test", "method", 1001, 1000).is_err());
 
@@ -559,7 +631,9 @@ mod tests {
             metadata: vec![
                 ("sequence".to_string(), "1".to_string()),
                 ("type".to_string(), "test".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         // Test serialization
@@ -590,14 +664,21 @@ mod tests {
             route_pattern: "/{service}/{method}".to_string(),
         };
 
-        let stream_response = StreamHandler::create_sse_stream(config, "test_service".to_string(), "test_method".to_string()).await;
+        let stream_response = StreamHandler::create_sse_stream(
+            config,
+            "test_service".to_string(),
+            "test_method".to_string(),
+        )
+        .await;
 
         // Verify it's an SSE response
         let sse_response = stream_response.into_response();
         assert_eq!(sse_response.status(), axum::http::StatusCode::OK);
 
         // Check content type
-        let content_type = sse_response.headers().get("content-type")
+        let content_type = sse_response
+            .headers()
+            .get("content-type")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("");
         assert!(content_type.contains("text/event-stream"));
@@ -612,7 +693,9 @@ mod tests {
             metadata: vec![
                 ("service".to_string(), "test".to_string()),
                 ("method".to_string(), "test".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         let json_str = serde_json::to_string(&response).unwrap();
@@ -623,7 +706,8 @@ mod tests {
         assert!(json_str.contains("service"));
         assert!(json_str.contains("method"));
 
-        let deserialized: BridgeResponse<serde_json::Value> = serde_json::from_str(&json_str).unwrap();
+        let deserialized: BridgeResponse<serde_json::Value> =
+            serde_json::from_str(&json_str).unwrap();
         assert_eq!(deserialized.success, response.success);
         assert_eq!(deserialized.data, response.data);
         assert_eq!(deserialized.error, response.error);
@@ -643,8 +727,11 @@ mod tests {
 
         // Test with very large body sizes
         let large_size = usize::MAX / 2;
-        assert!(RequestProcessor::validate_request("test", "method", large_size, usize::MAX).is_ok());
-        assert!(RequestProcessor::validate_request("test", "method", large_size + 1, large_size).is_err());
+        assert!(
+            RequestProcessor::validate_request("test", "method", large_size, usize::MAX).is_ok()
+        );
+        assert!(RequestProcessor::validate_request("test", "method", large_size + 1, large_size)
+            .is_err());
     }
 
     #[test]

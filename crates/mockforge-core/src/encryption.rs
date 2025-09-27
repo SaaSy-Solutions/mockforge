@@ -34,36 +34,36 @@
 
 // Re-export sub-modules for backward compatibility
 pub mod algorithms;
-pub mod key_management;
 pub mod auto_encryption;
 pub mod derivation;
 pub mod errors;
+pub mod key_management;
 
 // Re-export commonly used types
 pub use algorithms::*;
-pub use key_management::{KeyStore as KeyManagementStore, KeyStorage, FileKeyStorage};
 pub use auto_encryption::*;
 pub use derivation::*;
 pub use errors::*;
+pub use key_management::{FileKeyStorage, KeyStorage, KeyStore as KeyManagementStore};
 
+use crate::workspace_persistence::WorkspacePersistence;
 use aes_gcm::{
-    aead::{Aead, KeyInit, generic_array::GenericArray},
+    aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2, Params,
 };
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{ChaCha20Poly1305, Key as ChaChaKey};
 use pbkdf2::pbkdf2_hmac;
 use rand::{rng, Rng};
-use sha2::Sha256;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::fmt;
 use thiserror::Error;
 use tracing;
-use crate::workspace_persistence::WorkspacePersistence;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Security::Credentials::{
@@ -131,7 +131,7 @@ impl EncryptionKey {
     /// Create a new encryption key from raw bytes
     pub fn new(algorithm: EncryptionAlgorithm, key_data: Vec<u8>) -> Result<Self> {
         let expected_len = match algorithm {
-            EncryptionAlgorithm::Aes256Gcm => 32, // 256 bits
+            EncryptionAlgorithm::Aes256Gcm => 32,        // 256 bits
             EncryptionAlgorithm::ChaCha20Poly1305 => 32, // 256 bits
         };
 
@@ -156,9 +156,7 @@ impl EncryptionKey {
         salt: Option<&[u8]>,
         algorithm: EncryptionAlgorithm,
     ) -> Result<Self> {
-        let salt = salt
-            .map(|s| s.to_vec())
-            .unwrap_or_else(|| rng().random::<[u8; 32]>().to_vec());
+        let salt = salt.map(|s| s.to_vec()).unwrap_or_else(|| rng().random::<[u8; 32]>().to_vec());
 
         let mut key = vec![0u8; 32];
         pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, 100_000, &mut key);
@@ -202,7 +200,9 @@ impl EncryptionKey {
     pub fn encrypt(&self, plaintext: &str, associated_data: Option<&[u8]>) -> Result<String> {
         match self.algorithm {
             EncryptionAlgorithm::Aes256Gcm => self.encrypt_aes_gcm(plaintext, associated_data),
-            EncryptionAlgorithm::ChaCha20Poly1305 => self.encrypt_chacha20(plaintext, associated_data),
+            EncryptionAlgorithm::ChaCha20Poly1305 => {
+                self.encrypt_chacha20(plaintext, associated_data)
+            }
         }
     }
 
@@ -210,7 +210,9 @@ impl EncryptionKey {
     pub fn decrypt(&self, ciphertext: &str, associated_data: Option<&[u8]>) -> Result<String> {
         match self.algorithm {
             EncryptionAlgorithm::Aes256Gcm => self.decrypt_aes_gcm(ciphertext, associated_data),
-            EncryptionAlgorithm::ChaCha20Poly1305 => self.decrypt_chacha20(ciphertext, associated_data),
+            EncryptionAlgorithm::ChaCha20Poly1305 => {
+                self.decrypt_chacha20(ciphertext, associated_data)
+            }
         }
     }
 
@@ -241,9 +243,7 @@ impl EncryptionKey {
             .map_err(|e| EncryptionError::InvalidCiphertext(e.to_string()))?;
 
         if data.len() < 12 {
-            return Err(EncryptionError::InvalidCiphertext(
-                "Ciphertext too short".to_string(),
-            ));
+            return Err(EncryptionError::InvalidCiphertext("Ciphertext too short".to_string()));
         }
 
         let nonce = GenericArray::from_slice(&data[0..12]);
@@ -267,7 +267,11 @@ impl EncryptionKey {
             .map_err(|e| EncryptionError::Decryption(format!("Invalid UTF-8: {}", e)))
     }
 
-    pub fn encrypt_chacha20(&self, plaintext: &str, _associated_data: Option<&[u8]>) -> Result<String> {
+    pub fn encrypt_chacha20(
+        &self,
+        plaintext: &str,
+        _associated_data: Option<&[u8]>,
+    ) -> Result<String> {
         let key = ChaChaKey::from_slice(&self.key_data);
         let cipher = ChaCha20Poly1305::new(key);
         let nonce: [u8; 24] = rng().random(); // 192-bit nonce as specified
@@ -283,15 +287,17 @@ impl EncryptionKey {
         Ok(general_purpose::STANDARD.encode(&result))
     }
 
-    pub fn decrypt_chacha20(&self, ciphertext: &str, _associated_data: Option<&[u8]>) -> Result<String> {
+    pub fn decrypt_chacha20(
+        &self,
+        ciphertext: &str,
+        _associated_data: Option<&[u8]>,
+    ) -> Result<String> {
         let data = general_purpose::STANDARD
             .decode(ciphertext)
             .map_err(|e| EncryptionError::InvalidCiphertext(e.to_string()))?;
 
         if data.len() < 24 {
-            return Err(EncryptionError::InvalidCiphertext(
-                "Ciphertext too short".to_string(),
-            ));
+            return Err(EncryptionError::InvalidCiphertext("Ciphertext too short".to_string()));
         }
 
         let nonce = chacha20poly1305::Nonce::from_slice(&data[0..24]);
@@ -350,8 +356,12 @@ impl KeyStore {
         method: KeyDerivationMethod,
     ) -> Result<()> {
         let key = match method {
-            KeyDerivationMethod::Pbkdf2 => EncryptionKey::from_password_pbkdf2(password, None, algorithm)?,
-            KeyDerivationMethod::Argon2 => EncryptionKey::from_password_argon2(password, None, algorithm)?,
+            KeyDerivationMethod::Pbkdf2 => {
+                EncryptionKey::from_password_pbkdf2(password, None, algorithm)?
+            }
+            KeyDerivationMethod::Argon2 => {
+                EncryptionKey::from_password_argon2(password, None, algorithm)?
+            }
         };
         self.store_key(id, key);
         Ok(())
@@ -442,27 +452,31 @@ impl MasterKeyManager {
     fn store_in_macos_keychain(&self, key: &str) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
-        let home = std::env::var("HOME")
-            .map_err(|_| EncryptionError::InvalidKey("HOME environment variable not set".to_string()))?;
+        let home = std::env::var("HOME").map_err(|_| {
+            EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+        })?;
         let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
 
         // Create directory if it doesn't exist
         if let Some(parent) = key_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| EncryptionError::InvalidKey(format!("Failed to create directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                EncryptionError::InvalidKey(format!("Failed to create directory: {}", e))
+            })?;
         }
 
         // Write the key
-        std::fs::write(&key_path, key)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to write master key: {}", e)))?;
+        std::fs::write(&key_path, key).map_err(|e| {
+            EncryptionError::InvalidKey(format!("Failed to write master key: {}", e))
+        })?;
 
         // Set permissions to 600 (owner read/write only)
         let mut perms = std::fs::metadata(&key_path)
             .map_err(|e| EncryptionError::InvalidKey(format!("Failed to get metadata: {}", e)))?
             .permissions();
         perms.set_mode(0o600);
-        std::fs::set_permissions(&key_path, perms)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to set permissions: {}", e)))?;
+        std::fs::set_permissions(&key_path, perms).map_err(|e| {
+            EncryptionError::InvalidKey(format!("Failed to set permissions: {}", e))
+        })?;
 
         Ok(())
     }
@@ -471,27 +485,31 @@ impl MasterKeyManager {
     fn store_in_linux_keyring(&self, key: &str) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
-        let home = std::env::var("HOME")
-            .map_err(|_| EncryptionError::InvalidKey("HOME environment variable not set".to_string()))?;
+        let home = std::env::var("HOME").map_err(|_| {
+            EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+        })?;
         let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
 
         // Create directory if it doesn't exist
         if let Some(parent) = key_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| EncryptionError::InvalidKey(format!("Failed to create directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                EncryptionError::InvalidKey(format!("Failed to create directory: {}", e))
+            })?;
         }
 
         // Write the key
-        std::fs::write(&key_path, key)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to write master key: {}", e)))?;
+        std::fs::write(&key_path, key).map_err(|e| {
+            EncryptionError::InvalidKey(format!("Failed to write master key: {}", e))
+        })?;
 
         // Set permissions to 600 (owner read/write only)
         let mut perms = std::fs::metadata(&key_path)
             .map_err(|e| EncryptionError::InvalidKey(format!("Failed to get metadata: {}", e)))?
             .permissions();
         perms.set_mode(0o600);
-        std::fs::set_permissions(&key_path, perms)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to set permissions: {}", e)))?;
+        std::fs::set_permissions(&key_path, perms).map_err(|e| {
+            EncryptionError::InvalidKey(format!("Failed to set permissions: {}", e))
+        })?;
 
         Ok(())
     }
@@ -507,15 +525,11 @@ impl MasterKeyManager {
         };
 
         let target_name = "MockForge/MasterKey";
-        let target_name_wide: Vec<u16> = OsString::from(target_name)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let target_name_wide: Vec<u16> =
+            OsString::from(target_name).encode_wide().chain(std::iter::once(0)).collect();
 
-        let credential_blob: Vec<u16> = OsString::from(key)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let credential_blob: Vec<u16> =
+            OsString::from(key).encode_wide().chain(std::iter::once(0)).collect();
 
         let mut credential = CREDENTIALW {
             Flags: 0,
@@ -545,20 +559,24 @@ impl MasterKeyManager {
         // Try platform-specific keychain first
         #[cfg(target_os = "macos")]
         {
-            let home = std::env::var("HOME")
-                .map_err(|_| EncryptionError::InvalidKey("HOME environment variable not set".to_string()))?;
+            let home = std::env::var("HOME").map_err(|_| {
+                EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+            })?;
             let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
-            std::fs::read_to_string(&key_path)
-                .map_err(|_| EncryptionError::InvalidKey("Master key not found in keychain".to_string()))
+            std::fs::read_to_string(&key_path).map_err(|_| {
+                EncryptionError::InvalidKey("Master key not found in keychain".to_string())
+            })
         }
 
         #[cfg(target_os = "linux")]
         {
-            let home = std::env::var("HOME")
-                .map_err(|_| EncryptionError::InvalidKey("HOME environment variable not set".to_string()))?;
+            let home = std::env::var("HOME").map_err(|_| {
+                EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+            })?;
             let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
-            std::fs::read_to_string(&key_path)
-                .map_err(|_| EncryptionError::InvalidKey("Master key not found in keychain".to_string()))
+            std::fs::read_to_string(&key_path).map_err(|_| {
+                EncryptionError::InvalidKey("Master key not found in keychain".to_string())
+            })
         }
 
         #[cfg(target_os = "windows")]
@@ -570,8 +588,9 @@ impl MasterKeyManager {
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             // Fallback for other platforms
-            std::env::var("MOCKFORGE_MASTER_KEY")
-                .map_err(|_| EncryptionError::InvalidKey("Master key not found in keychain".to_string()))
+            std::env::var("MOCKFORGE_MASTER_KEY").map_err(|_| {
+                EncryptionError::InvalidKey("Master key not found in keychain".to_string())
+            })
         }
     }
 
@@ -580,13 +599,13 @@ impl MasterKeyManager {
         use std::ffi::OsString;
         use std::os::windows::ffi::OsStringExt;
         use windows::core::PCWSTR;
-        use windows::Win32::Security::Credentials::{CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC};
+        use windows::Win32::Security::Credentials::{
+            CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC,
+        };
 
         let target_name = "MockForge/MasterKey";
-        let target_name_wide: Vec<u16> = OsString::from(target_name)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let target_name_wide: Vec<u16> =
+            OsString::from(target_name).encode_wide().chain(std::iter::once(0)).collect();
 
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
 
@@ -668,7 +687,7 @@ impl WorkspaceKeyManager {
         // Encrypt the workspace key with the master key
         let workspace_key_b64 = master_key.encrypt_chacha20(
             &general_purpose::STANDARD.encode(workspace_key_bytes),
-            Some(workspace_id.as_bytes())
+            Some(workspace_id.as_bytes()),
         )?;
 
         // Store the encrypted workspace key (in database or secure storage)
@@ -682,10 +701,8 @@ impl WorkspaceKeyManager {
         let encrypted_key_b64 = self.retrieve_workspace_key(workspace_id)?;
         let master_key = self.master_key_manager.get_master_key()?;
 
-        let decrypted_key_b64 = master_key.decrypt_chacha20(
-            &encrypted_key_b64,
-            Some(workspace_id.as_bytes())
-        )?;
+        let decrypted_key_b64 =
+            master_key.decrypt_chacha20(&encrypted_key_b64, Some(workspace_id.as_bytes()))?;
 
         let workspace_key_bytes = general_purpose::STANDARD
             .decode(decrypted_key_b64)
@@ -715,39 +732,56 @@ impl WorkspaceKeyManager {
     }
 
     /// Restore workspace key from backup string
-    pub fn restore_workspace_key_from_backup(&self, workspace_id: &str, backup_string: &str) -> Result<()> {
+    pub fn restore_workspace_key_from_backup(
+        &self,
+        workspace_id: &str,
+        backup_string: &str,
+    ) -> Result<()> {
         let encrypted_key = self.parse_backup_string(backup_string)?;
         self.store_workspace_key(workspace_id, &encrypted_key)
     }
 
     // Storage methods using secure file-based storage
     fn store_workspace_key(&self, workspace_id: &str, encrypted_key: &str) -> Result<()> {
-        self.key_storage.borrow_mut().store_key(&workspace_id.to_string(), encrypted_key.as_bytes())
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to store workspace key: {:?}", e)))
+        self.key_storage
+            .borrow_mut()
+            .store_key(&workspace_id.to_string(), encrypted_key.as_bytes())
+            .map_err(|e| {
+                EncryptionError::InvalidKey(format!("Failed to store workspace key: {:?}", e))
+            })
     }
 
     fn retrieve_workspace_key(&self, workspace_id: &str) -> Result<String> {
         // First try the new secure storage
         match self.key_storage.borrow().retrieve_key(&workspace_id.to_string()) {
-            Ok(encrypted_bytes) => {
-                String::from_utf8(encrypted_bytes)
-                    .map_err(|e| EncryptionError::InvalidKey(format!("Invalid UTF-8 in stored key: {}", e)))
-            }
+            Ok(encrypted_bytes) => String::from_utf8(encrypted_bytes).map_err(|e| {
+                EncryptionError::InvalidKey(format!("Invalid UTF-8 in stored key: {}", e))
+            }),
             Err(_) => {
                 // Fall back to old file-based storage for backward compatibility
                 let old_key_file = format!("workspace_{}_key.enc", workspace_id);
                 match std::fs::read_to_string(&old_key_file) {
                     Ok(encrypted_key) => {
                         // Migrate to new storage
-                        if let Err(e) = self.key_storage.borrow_mut().store_key(&workspace_id.to_string(), encrypted_key.as_bytes()) {
-                            tracing::warn!("Failed to migrate workspace key to new storage: {:?}", e);
+                        if let Err(e) = self
+                            .key_storage
+                            .borrow_mut()
+                            .store_key(&workspace_id.to_string(), encrypted_key.as_bytes())
+                        {
+                            tracing::warn!(
+                                "Failed to migrate workspace key to new storage: {:?}",
+                                e
+                            );
                         } else {
                             // Try to remove old file
                             let _ = std::fs::remove_file(&old_key_file);
                         }
                         Ok(encrypted_key)
                     }
-                    Err(_) => Err(EncryptionError::InvalidKey(format!("Workspace key not found for: {}", workspace_id))),
+                    Err(_) => Err(EncryptionError::InvalidKey(format!(
+                        "Workspace key not found for: {}",
+                        workspace_id
+                    ))),
                 }
             }
         }
@@ -766,7 +800,8 @@ impl WorkspaceKeyManager {
         }
 
         // Pad or truncate to create consistent format
-        if result.len() > 59 { // 9 groups of 6 chars + 8 dashes = 54 + 8 = 62, but we want 59 for readability
+        if result.len() > 59 {
+            // 9 groups of 6 chars + 8 dashes = 54 + 8 = 62, but we want 59 for readability
             result.truncate(59);
         }
 
@@ -827,7 +862,7 @@ impl Default for AutoEncryptionConfig {
             ],
             sensitive_patterns: vec![
                 r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b".to_string(), // Credit card numbers
-                r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b".to_string(), // SSN pattern
+                r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b".to_string(),            // SSN pattern
             ],
         }
     }
@@ -851,7 +886,10 @@ impl AutoEncryptionProcessor {
     }
 
     /// Process headers and encrypt sensitive ones
-    pub fn process_headers(&self, headers: &mut std::collections::HashMap<String, String>) -> Result<()> {
+    pub fn process_headers(
+        &self,
+        headers: &mut std::collections::HashMap<String, String>,
+    ) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -880,7 +918,10 @@ impl AutoEncryptionProcessor {
     }
 
     /// Process environment variables and encrypt sensitive ones
-    pub fn process_env_vars(&self, env_vars: &mut std::collections::HashMap<String, String>) -> Result<()> {
+    pub fn process_env_vars(
+        &self,
+        env_vars: &mut std::collections::HashMap<String, String>,
+    ) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -898,14 +939,15 @@ impl AutoEncryptionProcessor {
 
     /// Check if a header should be encrypted
     fn is_sensitive_header(&self, header_name: &str) -> bool {
-        self.config.sensitive_headers.iter()
+        self.config
+            .sensitive_headers
+            .iter()
             .any(|h| h.eq_ignore_ascii_case(header_name))
     }
 
     /// Check if an environment variable should be encrypted
     fn is_sensitive_env_var(&self, var_name: &str) -> bool {
-        self.config.sensitive_env_vars.iter()
-            .any(|v| v.eq_ignore_ascii_case(var_name))
+        self.config.sensitive_env_vars.iter().any(|v| v.eq_ignore_ascii_case(var_name))
     }
 
     /// Check if a field path should be encrypted
@@ -914,8 +956,7 @@ impl AutoEncryptionProcessor {
         let field_name = field_path.last().unwrap_or(&default_field);
 
         // Check exact field names
-        if self.config.sensitive_fields.iter()
-            .any(|f| f.eq_ignore_ascii_case(field_name)) {
+        if self.config.sensitive_fields.iter().any(|f| f.eq_ignore_ascii_case(field_name)) {
             return true;
         }
 
@@ -943,7 +984,7 @@ impl AutoEncryptionProcessor {
         &self,
         json: &mut serde_json::Value,
         workspace_key: &EncryptionKey,
-        current_path: Vec<String>
+        current_path: Vec<String>,
     ) -> Result<()> {
         match json {
             serde_json::Value::Object(obj) => {
@@ -981,7 +1022,10 @@ pub mod utils {
     use super::*;
 
     /// Check if encryption is enabled for a workspace
-    pub async fn is_encryption_enabled_for_workspace(persistence: &WorkspacePersistence, workspace_id: &str) -> Result<bool> {
+    pub async fn is_encryption_enabled_for_workspace(
+        persistence: &WorkspacePersistence,
+        workspace_id: &str,
+    ) -> Result<bool> {
         // Try to load workspace and check settings
         if let Ok(workspace) = persistence.load_workspace(workspace_id).await {
             return Ok(workspace.config.auto_encryption.enabled);
@@ -992,9 +1036,15 @@ pub mod utils {
     }
 
     /// Get the auto-encryption config for a workspace
-    pub async fn get_auto_encryption_config(persistence: &WorkspacePersistence, workspace_id: &str) -> Result<AutoEncryptionConfig> {
-        let workspace = persistence.load_workspace(workspace_id).await
-            .map_err(|e| EncryptionError::Generic { message: format!("Failed to load workspace: {}", e) })?;
+    pub async fn get_auto_encryption_config(
+        persistence: &WorkspacePersistence,
+        workspace_id: &str,
+    ) -> Result<AutoEncryptionConfig> {
+        let workspace = persistence.load_workspace(workspace_id).await.map_err(|e| {
+            EncryptionError::Generic {
+                message: format!("Failed to load workspace: {}", e),
+            }
+        })?;
         Ok(workspace.config.auto_encryption)
     }
 
@@ -1014,7 +1064,11 @@ pub mod utils {
 }
 
 /// Encrypt text using a stored key
-pub fn encrypt_with_key(key_id: &str, plaintext: &str, associated_data: Option<&[u8]>) -> Result<String> {
+pub fn encrypt_with_key(
+    key_id: &str,
+    plaintext: &str,
+    associated_data: Option<&[u8]>,
+) -> Result<String> {
     let store = get_key_store()
         .ok_or_else(|| EncryptionError::InvalidKey("Key store not initialized".to_string()))?;
 
@@ -1026,7 +1080,11 @@ pub fn encrypt_with_key(key_id: &str, plaintext: &str, associated_data: Option<&
 }
 
 /// Decrypt text using a stored key
-pub fn decrypt_with_key(key_id: &str, ciphertext: &str, associated_data: Option<&[u8]>) -> Result<String> {
+pub fn decrypt_with_key(
+    key_id: &str,
+    ciphertext: &str,
+    associated_data: Option<&[u8]>,
+) -> Result<String> {
     let store = get_key_store()
         .ok_or_else(|| EncryptionError::InvalidKey("Key store not initialized".to_string()))?;
 
@@ -1043,8 +1101,12 @@ mod tests {
 
     #[test]
     fn test_aes_gcm_encrypt_decrypt() {
-        let key = EncryptionKey::from_password_pbkdf2("test_password", None, EncryptionAlgorithm::Aes256Gcm)
-            .unwrap();
+        let key = EncryptionKey::from_password_pbkdf2(
+            "test_password",
+            None,
+            EncryptionAlgorithm::Aes256Gcm,
+        )
+        .unwrap();
 
         let plaintext = "Hello, World!";
         let ciphertext = key.encrypt(plaintext, None).unwrap();
@@ -1055,8 +1117,12 @@ mod tests {
 
     #[test]
     fn test_chacha20_encrypt_decrypt() {
-        let key = EncryptionKey::from_password_pbkdf2("test_password", None, EncryptionAlgorithm::ChaCha20Poly1305)
-            .unwrap();
+        let key = EncryptionKey::from_password_pbkdf2(
+            "test_password",
+            None,
+            EncryptionAlgorithm::ChaCha20Poly1305,
+        )
+        .unwrap();
 
         let plaintext = "Hello, World!";
         let ciphertext = key.encrypt(plaintext, None).unwrap();
@@ -1069,12 +1135,14 @@ mod tests {
     fn test_key_store() {
         let mut store = KeyStore::new();
 
-        store.derive_and_store_key(
-            "test_key".to_string(),
-            "test_password",
-            EncryptionAlgorithm::Aes256Gcm,
-            KeyDerivationMethod::Pbkdf2,
-        ).unwrap();
+        store
+            .derive_and_store_key(
+                "test_key".to_string(),
+                "test_password",
+                EncryptionAlgorithm::Aes256Gcm,
+                KeyDerivationMethod::Pbkdf2,
+            )
+            .unwrap();
 
         assert!(store.get_key("test_key").is_some());
         assert!(store.list_keys().contains(&"test_key".to_string()));
@@ -1091,15 +1159,20 @@ mod tests {
 
     #[test]
     fn test_invalid_ciphertext() {
-        let key = EncryptionKey::from_password_pbkdf2("test", None, EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let key = EncryptionKey::from_password_pbkdf2("test", None, EncryptionAlgorithm::Aes256Gcm)
+            .unwrap();
         let result = key.decrypt("invalid_base64!", None);
         assert!(matches!(result, Err(EncryptionError::InvalidCiphertext(_))));
     }
 
     #[test]
     fn test_chacha20_encrypt_decrypt_24byte_nonce() {
-        let key = EncryptionKey::from_password_pbkdf2("test_password", None, EncryptionAlgorithm::ChaCha20Poly1305)
-            .unwrap();
+        let key = EncryptionKey::from_password_pbkdf2(
+            "test_password",
+            None,
+            EncryptionAlgorithm::ChaCha20Poly1305,
+        )
+        .unwrap();
 
         let plaintext = "Hello, World! This is a test of ChaCha20-Poly1305 with 24-byte nonce.";
         let ciphertext = key.encrypt_chacha20(plaintext, None).unwrap();
@@ -1293,7 +1366,8 @@ mod tests {
         // Test environment variable encryption
         let mut env_vars = std::collections::HashMap::new();
         env_vars.insert("API_KEY".to_string(), "sk-1234567890abcdef".to_string());
-        env_vars.insert("DATABASE_URL".to_string(), "postgres://user:pass@host:5432/db".to_string());
+        env_vars
+            .insert("DATABASE_URL".to_string(), "postgres://user:pass@host:5432/db".to_string());
         env_vars.insert("NORMAL_VAR".to_string(), "normal_value".to_string());
 
         processor.process_env_vars(&mut env_vars).unwrap();

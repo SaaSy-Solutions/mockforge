@@ -7,24 +7,30 @@ use crate::conditions::{evaluate_condition, ConditionContext};
 use crate::templating::expand_tokens as core_expand_tokens;
 use serde_json::Value;
 
-pub mod models;
 pub mod loader;
 pub mod matcher;
+pub mod models;
 pub mod patcher;
 
 // Re-export main types and functions for convenience
-pub use models::{OverrideRule, OverrideMode, PatchOp, Overrides};
 pub use matcher::*;
+pub use models::{OverrideMode, OverrideRule, Overrides, PatchOp};
 pub use patcher::*;
 
 impl Overrides {
-
     pub fn apply(&self, operation_id: &str, tags: &[String], path: &str, body: &mut Value) {
         self.apply_with_context(operation_id, tags, path, body, &ConditionContext::new())
     }
 
     /// Apply overrides with condition evaluation
-    pub fn apply_with_context(&self, operation_id: &str, tags: &[String], path: &str, body: &mut Value, context: &ConditionContext) {
+    pub fn apply_with_context(
+        &self,
+        operation_id: &str,
+        tags: &[String],
+        path: &str,
+        body: &mut Value,
+        context: &ConditionContext,
+    ) {
         for r in &self.rules {
             if !matcher::matches_target(r, operation_id, tags, path, &self.regex_cache) {
                 continue;

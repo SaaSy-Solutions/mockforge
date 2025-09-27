@@ -3,12 +3,12 @@
 //! This module provides the fundamental data structures for workspaces, folders,
 //! and mock requests, including their properties and basic operations.
 
-use crate::{Result, Error, routing::HttpMethod};
 use crate::config::AuthConfig;
 use crate::encryption::AutoEncryptionConfig;
+use crate::{routing::HttpMethod, Error, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// Unique identifier for workspace entities

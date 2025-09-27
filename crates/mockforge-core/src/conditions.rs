@@ -127,7 +127,10 @@ impl ConditionContext {
 }
 
 /// Evaluate a condition expression
-pub fn evaluate_condition(condition: &str, context: &ConditionContext) -> Result<bool, ConditionError> {
+pub fn evaluate_condition(
+    condition: &str,
+    context: &ConditionContext,
+) -> Result<bool, ConditionError> {
     let condition = condition.trim();
 
     if condition.is_empty() {
@@ -168,7 +171,10 @@ pub fn evaluate_condition(condition: &str, context: &ConditionContext) -> Result
 }
 
 /// Evaluate AND condition with multiple sub-conditions
-fn evaluate_and_condition(conditions: &str, context: &ConditionContext) -> Result<bool, ConditionError> {
+fn evaluate_and_condition(
+    conditions: &str,
+    context: &ConditionContext,
+) -> Result<bool, ConditionError> {
     let parts: Vec<&str> = conditions.split(',').map(|s| s.trim()).collect();
 
     for part in parts {
@@ -181,7 +187,10 @@ fn evaluate_and_condition(conditions: &str, context: &ConditionContext) -> Resul
 }
 
 /// Evaluate OR condition with multiple sub-conditions
-fn evaluate_or_condition(conditions: &str, context: &ConditionContext) -> Result<bool, ConditionError> {
+fn evaluate_or_condition(
+    conditions: &str,
+    context: &ConditionContext,
+) -> Result<bool, ConditionError> {
     let parts: Vec<&str> = conditions.split(',').map(|s| s.trim()).collect();
 
     for part in parts {
@@ -194,7 +203,10 @@ fn evaluate_or_condition(conditions: &str, context: &ConditionContext) -> Result
 }
 
 /// Evaluate NOT condition
-fn evaluate_not_condition(condition: &str, context: &ConditionContext) -> Result<bool, ConditionError> {
+fn evaluate_not_condition(
+    condition: &str,
+    context: &ConditionContext,
+) -> Result<bool, ConditionError> {
     Ok(!evaluate_condition(condition, context)?)
 }
 
@@ -324,7 +336,10 @@ fn evaluate_xpath_simple(node: &Node, xpath: &str) -> bool {
 }
 
 /// Evaluate simple conditions like header checks, query param checks, etc.
-fn evaluate_simple_condition(condition: &str, context: &ConditionContext) -> Result<bool, ConditionError> {
+fn evaluate_simple_condition(
+    condition: &str,
+    context: &ConditionContext,
+) -> Result<bool, ConditionError> {
     // Handle header conditions: header[name]=value
     if let Some(header_condition) = condition.strip_prefix("header[") {
         if let Some((header_name, expected_value)) = header_condition.split_once("]=") {
@@ -382,14 +397,13 @@ mod tests {
 
     #[test]
     fn test_jsonpath_condition() {
-        let context = ConditionContext::new()
-            .with_response_body(json!({
-                "user": {
-                    "name": "John",
-                    "role": "admin"
-                },
-                "items": [1, 2, 3]
-            }));
+        let context = ConditionContext::new().with_response_body(json!({
+            "user": {
+                "name": "John",
+                "role": "admin"
+            },
+            "items": [1, 2, 3]
+        }));
 
         // Test simple path existence
         assert!(evaluate_condition("$.user", &context).unwrap());
@@ -467,8 +481,7 @@ mod tests {
             </user>
         "#;
 
-        let context = ConditionContext::new()
-            .with_response_xml(xml_content.to_string());
+        let context = ConditionContext::new().with_response_xml(xml_content.to_string());
 
         // Test basic element existence
         assert!(evaluate_condition("/user", &context).unwrap());

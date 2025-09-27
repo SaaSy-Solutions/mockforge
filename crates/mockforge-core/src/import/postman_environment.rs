@@ -112,7 +112,8 @@ pub fn is_postman_environment_json(content: &str) -> bool {
                             if let Some(first_item) = arr.first() {
                                 if let Some(item_obj) = first_item.as_object() {
                                     let has_key = item_obj.contains_key("key");
-                                    let has_value = item_obj.contains_key("value") || item_obj.contains_key("enabled");
+                                    let has_value = item_obj.contains_key("value")
+                                        || item_obj.contains_key("enabled");
                                     return has_key && has_value;
                                 }
                             }
@@ -165,12 +166,12 @@ mod tests {
         let base_url_var = result.variables.get("base_url").unwrap();
         assert_eq!(base_url_var.value, "https://api.dev.example.com");
         assert_eq!(base_url_var.description.as_ref().unwrap(), "API base URL");
-        assert_eq!(base_url_var.enabled, true);
+        assert!(base_url_var.enabled);
 
         // Check api_key variable
         let api_key_var = result.variables.get("api_key").unwrap();
         assert_eq!(api_key_var.value, "dev-key-123");
-        assert_eq!(api_key_var.enabled, true);
+        assert!(api_key_var.enabled);
     }
 
     #[test]

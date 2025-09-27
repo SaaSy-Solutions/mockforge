@@ -3,8 +3,8 @@
 //! This module handles the generation of routes from OpenAPI specifications,
 //! including parameter extraction, path matching, and route creation.
 
-use crate::openapi::spec::OpenApiSpec;
 use crate::openapi::route::OpenApiRoute;
+use crate::openapi::spec::OpenApiSpec;
 use std::sync::Arc;
 
 /// Generate routes from an OpenAPI specification
@@ -33,7 +33,12 @@ pub fn generate_routes_from_spec(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
                 routes.push(OpenApiRoute::from_operation("HEAD", path.clone(), op, spec.clone()));
             }
             if let Some(op) = &item.options {
-                routes.push(OpenApiRoute::from_operation("OPTIONS", path.clone(), op, spec.clone()));
+                routes.push(OpenApiRoute::from_operation(
+                    "OPTIONS",
+                    path.clone(),
+                    op,
+                    spec.clone(),
+                ));
             }
             if let Some(op) = &item.trace {
                 routes.push(OpenApiRoute::from_operation("TRACE", path.clone(), op, spec.clone()));
@@ -102,7 +107,12 @@ pub fn route_matches_pattern(route_path: &str, request_path: &str) -> bool {
 }
 
 /// Recursive function to match path segments with wildcards and parameters
-fn match_segments(route_parts: &[&str], request_parts: &[&str], route_idx: usize, request_idx: usize) -> bool {
+fn match_segments(
+    route_parts: &[&str],
+    request_parts: &[&str],
+    route_idx: usize,
+    request_idx: usize,
+) -> bool {
     // If we've consumed both patterns and paths, it's a match
     if route_idx == route_parts.len() && request_idx == request_parts.len() {
         return true;
@@ -134,7 +144,8 @@ fn match_segments(route_parts: &[&str], request_parts: &[&str], route_idx: usize
             }
             // Try matching one or more segments
             if request_idx < request_parts.len()
-                && match_segments(route_parts, request_parts, route_idx, request_idx + 1) {
+                && match_segments(route_parts, request_parts, route_idx, request_idx + 1)
+            {
                 return true;
             }
             false
@@ -201,11 +212,7 @@ pub fn generate_mock_response_code(route: &OpenApiRoute) -> String {
     // Add response generation logic based on the route's operation
     let _operation = &route.operation;
     code.push_str("// Generate response based on OpenAPI operation\n");
-    code.push_str(&format!(
-        "// Operation: {} {}\n",
-        route.method,
-        route.path
-    ));
+    code.push_str(&format!("// Operation: {} {}\n", route.method, route.path));
 
     code
 }

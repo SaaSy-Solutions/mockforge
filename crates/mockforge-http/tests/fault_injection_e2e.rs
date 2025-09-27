@@ -1,10 +1,9 @@
 use axum::Router;
 use mockforge_core::failure_injection::FailureConfig;
-use mockforge_http::build_router;
 use mockforge_core::openapi_routes::ValidationOptions;
-use std::net::SocketAddr;
+use mockforge_http::build_router;
 use serde_json::json;
-
+use std::net::SocketAddr;
 
 /// Test that fault injection can trigger 500 errors
 #[tokio::test]
@@ -35,20 +34,25 @@ async fn test_fault_injection_triggers_500() {
     let failure_config = Some(FailureConfig {
         global_error_rate: 0.0,
         default_status_codes: vec![500, 502, 503],
-        tag_configs: std::collections::HashMap::from([
-            ("faulty".to_string(), mockforge_core::failure_injection::TagFailureConfig {
+        tag_configs: std::collections::HashMap::from([(
+            "faulty".to_string(),
+            mockforge_core::failure_injection::TagFailureConfig {
                 error_rate: 1.0, // 100% error rate
                 status_codes: Some(vec![500]),
                 error_message: Some("Injected fault for testing".to_string()),
-            })
-        ]),
+            },
+        )]),
         include_tags: Vec::new(),
         exclude_tags: Vec::new(),
     });
 
     // Build router with fault injection enabled
-    let app: Router = build_router(Some(path.to_string_lossy().to_string()), Some(ValidationOptions::default()), failure_config)
-        .await;
+    let app: Router = build_router(
+        Some(path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        failure_config,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -104,8 +108,12 @@ async fn test_fault_injection_can_be_disabled() {
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
-    let app: Router = build_router(Some(path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app: Router = build_router(
+        Some(path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -165,8 +173,12 @@ async fn test_fault_injection_different_status_codes() {
 
     // This test would need access to the actual failure injection configuration
     // For now, it's a placeholder showing the expected test structure
-    let app: Router = build_router(Some(path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app: Router = build_router(
+        Some(path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -238,8 +250,12 @@ async fn test_fault_injection_tag_filters() {
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
-    let app: Router = build_router(Some(path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-        .await;
+    let app: Router = build_router(
+        Some(path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

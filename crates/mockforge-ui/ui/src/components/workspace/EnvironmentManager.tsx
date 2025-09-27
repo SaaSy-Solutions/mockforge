@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/Dialog';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '../ui/ContextMenu';
 import { ModernCard } from '../ui/DesignSystem';
-import { EnvironmentSummary, CreateEnvironmentRequest, UpdateEnvironmentRequest, EnvironmentColor } from '../../types';
+import type { EnvironmentSummary, CreateEnvironmentRequest, UpdateEnvironmentRequest, EnvironmentColor } from '../../types';
 import { toast } from '../ui/Toast';
 
 interface EnvironmentManagerProps {

@@ -4,11 +4,11 @@
 //! across different endpoints, maintaining referential integrity and
 //! business logic constraints in generated mock data.
 
-use crate::reflection::schema_graph::{SchemaGraph, Relationship, ForeignKeyMapping};
+use crate::reflection::schema_graph::{ForeignKeyMapping, Relationship, SchemaGraph};
 use prost_reflect::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, warn, info};
+use tracing::{debug, info, warn};
 
 /// Configuration for cross-endpoint validation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,37 +188,46 @@ impl ValidationFramework {
             validation_cache: HashMap::new(),
         }
     }
-    
+
     /// Set the schema graph for relationship validation
     pub fn set_schema_graph(&mut self, schema_graph: SchemaGraph) {
-        info!("Setting schema graph with {} entities for validation", schema_graph.entities.len());
+        info!(
+            "Setting schema graph with {} entities for validation",
+            schema_graph.entities.len()
+        );
         self.schema_graph = Some(schema_graph);
     }
-    
+
     /// Register a generated entity for validation
-    pub fn register_entity(&mut self, entity: GeneratedEntity) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn register_entity(
+        &mut self,
+        entity: GeneratedEntity,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         debug!("Registering entity {} for endpoint {}", entity.entity_type, entity.endpoint);
-        
+
         let entity_type = entity.entity_type.clone();
         let primary_key = entity.primary_key.clone();
-        
+
         // Add to entities list
-        let entities_list = self.data_store.entities.entry(entity_type.clone()).or_insert_with(Vec::new);
+        let entities_list =
+            self.data_store.entities.entry(entity_type.clone()).or_insert_with(Vec::new);
         let entity_index = entities_list.len();
         entities_list.push(entity);
-        
+
         // Update foreign key index if primary key exists
         if let Some(pk) = primary_key {
-            let type_index = self.data_store.foreign_key_index
+            let type_index = self
+                .data_store
+                .foreign_key_index
                 .entry(entity_type)
                 .or_insert_with(HashMap::new);
             let pk_index = type_index.entry(pk).or_insert_with(Vec::new);
             pk_index.push(entity_index);
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate all registered entities for cross-endpoint consistency
     pub fn validate_all_entities(&mut self) -> ValidationResult {
         if !self.config.enabled {
@@ -229,43 +238,48 @@ impl ValidationFramework {
                 validated_entities: vec![],
             };
         }
-        
-        info!("Starting cross-endpoint validation of {} entity types", 
-              self.data_store.entities.len());
-              
+
+        info!(
+            "Starting cross-endpoint validation of {} entity types",
+            self.data_store.entities.len()
+        );
+
         let mut result = ValidationResult {
             is_valid: true,
             errors: vec![],
             warnings: vec![],
             validated_entities: vec![],
         };
-        
+
         // Validate foreign key relationships
         self.validate_foreign_key_relationships(&mut result);
-        
+
         // Validate custom rules
         self.validate_custom_rules(&mut result);
-        
+
         // Validate referential integrity
         self.validate_referential_integrity(&mut result);
-        
+
         // Check for potential issues
         self.check_data_consistency(&mut result);
-        
+
         result.is_valid = result.errors.is_empty() || !self.config.strict_mode;
-        
-        info!("Validation completed: {} errors, {} warnings", 
-              result.errors.len(), result.warnings.len());
-              
+
+        info!(
+            "Validation completed: {} errors, {} warnings",
+            result.errors.len(),
+            result.warnings.len()
+        );
+
         result
     }
-    
+
     /// Validate foreign key relationships
     fn validate_foreign_key_relationships(&self, result: &mut ValidationResult) {
         if let Some(schema_graph) = &self.schema_graph {
             for (entity_type, entities) in &self.data_store.entities {
                 result.validated_entities.push(entity_type.clone());
-                
+
                 // Get foreign key mappings for this entity
                 if let Some(fk_mappings) = schema_graph.foreign_keys.get(entity_type) {
                     for entity in entities {
@@ -275,7 +289,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate foreign keys for a specific entity
     fn validate_entity_foreign_keys(
         &self,
@@ -305,7 +319,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Check if a foreign key value exists
     fn foreign_key_exists(&self, target_entity: &str, key_value: &str) -> bool {
         if let Some(type_index) = self.data_store.foreign_key_index.get(target_entity) {
@@ -314,7 +328,7 @@ impl ValidationFramework {
             false
         }
     }
-    
+
     /// Validate custom validation rules
     fn validate_custom_rules(&self, result: &mut ValidationResult) {
         for rule in &self.config.custom_rules {
@@ -327,7 +341,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate an entity against a custom rule
     fn validate_entity_against_rule(
         &self,
@@ -350,7 +364,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate field format
     fn validate_field_format(
         &self,
@@ -369,7 +383,10 @@ impl ValidationFramework {
                                 field_name: field_name.clone(),
                                 message: rule.error_message.clone(),
                                 invalid_value: field_value.clone(),
-                                suggested_fix: Some(format!("Value should match pattern: {}", pattern)),
+                                suggested_fix: Some(format!(
+                                    "Value should match pattern: {}",
+                                    pattern
+                                )),
                             });
                         }
                     }
@@ -377,7 +394,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate field range constraints
     fn validate_field_range(
         &self,
@@ -390,10 +407,10 @@ impl ValidationFramework {
                 if let Ok(value) = field_value.parse::<f64>() {
                     let min = rule.parameters.get("min").and_then(|s| s.parse::<f64>().ok());
                     let max = rule.parameters.get("max").and_then(|s| s.parse::<f64>().ok());
-                    
-                    let out_of_range = (min.is_some() && value < min.unwrap()) ||
-                                      (max.is_some() && value > max.unwrap());
-                                      
+
+                    let out_of_range = (min.is_some() && value < min.unwrap())
+                        || (max.is_some() && value > max.unwrap());
+
                     if out_of_range {
                         result.errors.push(ValidationError {
                             error_type: ValidationErrorType::OutOfRange,
@@ -412,7 +429,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate field uniqueness constraints
     fn validate_field_uniqueness(
         &self,
@@ -424,7 +441,7 @@ impl ValidationFramework {
             if let Some(field_value) = entity.field_values.get(field_name) {
                 // Check if this value appears in other entities
                 let mut duplicate_count = 0;
-                
+
                 if let Some(entities) = self.data_store.entities.get(&entity.entity_type) {
                     for other_entity in entities {
                         if let Some(other_value) = other_entity.field_values.get(field_name) {
@@ -434,7 +451,7 @@ impl ValidationFramework {
                         }
                     }
                 }
-                
+
                 if duplicate_count > 1 {
                     result.errors.push(ValidationError {
                         error_type: ValidationErrorType::DuplicateValue,
@@ -448,7 +465,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate referential integrity across endpoints
     fn validate_referential_integrity(&self, result: &mut ValidationResult) {
         if let Some(schema_graph) = &self.schema_graph {
@@ -457,7 +474,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Validate a specific relationship's integrity
     fn validate_relationship_integrity(
         &self,
@@ -470,10 +487,10 @@ impl ValidationFramework {
         ) {
             for from_entity in from_entities {
                 if let Some(ref_value) = from_entity.field_values.get(&relationship.field_name) {
-                    let target_exists = to_entities.iter().any(|to_entity| {
-                        to_entity.primary_key.as_ref() == Some(ref_value)
-                    });
-                    
+                    let target_exists = to_entities
+                        .iter()
+                        .any(|to_entity| to_entity.primary_key.as_ref() == Some(ref_value));
+
                     if !target_exists && relationship.is_required {
                         result.warnings.push(ValidationWarning {
                             warning_type: ValidationWarningType::DataInconsistency,
@@ -481,7 +498,7 @@ impl ValidationFramework {
                             field_name: Some(relationship.field_name.clone()),
                             message: format!(
                                 "Required relationship from {} to {} not satisfied - referenced {} '{}' does not exist",
-                                relationship.from_entity, relationship.to_entity, 
+                                relationship.from_entity, relationship.to_entity,
                                 relationship.to_entity, ref_value
                             ),
                         });
@@ -490,16 +507,16 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Check for general data consistency issues
     fn check_data_consistency(&self, result: &mut ValidationResult) {
         // Check for entities that are never referenced
         self.check_orphaned_entities(result);
-        
+
         // Check for potential performance issues
         self.check_performance_concerns(result);
     }
-    
+
     /// Check for entities that might be orphaned
     fn check_orphaned_entities(&self, result: &mut ValidationResult) {
         if let Some(schema_graph) = &self.schema_graph {
@@ -522,7 +539,7 @@ impl ValidationFramework {
             }
         }
     }
-    
+
     /// Check for potential performance concerns
     fn check_performance_concerns(&self, result: &mut ValidationResult) {
         for (entity_type, entities) in &self.data_store.entities {
@@ -533,13 +550,14 @@ impl ValidationFramework {
                     field_name: None,
                     message: format!(
                         "Large number of {} entities ({}) may impact performance",
-                        entity_type, entities.len()
+                        entity_type,
+                        entities.len()
                     ),
                 });
             }
         }
     }
-    
+
     /// Clear all validation data
     pub fn clear(&mut self) {
         self.data_store.entities.clear();
@@ -547,16 +565,18 @@ impl ValidationFramework {
         self.validation_cache.clear();
         info!("Validation framework data cleared");
     }
-    
+
     /// Get validation statistics
     pub fn get_statistics(&self) -> ValidationStatistics {
         let total_entities: usize = self.data_store.entities.values().map(|v| v.len()).sum();
         let entity_type_count = self.data_store.entities.len();
-        let indexed_keys: usize = self.data_store.foreign_key_index
+        let indexed_keys: usize = self
+            .data_store
+            .foreign_key_index
             .values()
             .map(|type_index| type_index.len())
             .sum();
-            
+
         ValidationStatistics {
             total_entities,
             entity_type_count,
@@ -583,7 +603,7 @@ pub struct ValidationStatistics {
 mod tests {
     use super::*;
     use std::time::SystemTime;
-    
+
     #[test]
     fn test_validation_framework_creation() {
         let config = ValidationConfig::default();
@@ -591,12 +611,12 @@ mod tests {
         assert!(framework.config.enabled);
         assert!(!framework.config.strict_mode);
     }
-    
+
     #[test]
     fn test_entity_registration() {
         let config = ValidationConfig::default();
         let mut framework = ValidationFramework::new(config);
-        
+
         let entity = GeneratedEntity {
             entity_type: "User".to_string(),
             primary_key: Some("user_123".to_string()),
@@ -607,19 +627,19 @@ mod tests {
             endpoint: "/users".to_string(),
             generated_at: SystemTime::now(),
         };
-        
+
         framework.register_entity(entity).expect("Should register entity successfully");
-        
+
         let stats = framework.get_statistics();
         assert_eq!(stats.total_entities, 1);
         assert_eq!(stats.entity_type_count, 1);
     }
-    
+
     #[test]
     fn test_validation_with_no_schema() {
         let config = ValidationConfig::default();
         let mut framework = ValidationFramework::new(config);
-        
+
         // Add some entities
         let entity1 = GeneratedEntity {
             entity_type: "User".to_string(),
@@ -628,14 +648,14 @@ mod tests {
             endpoint: "/users".to_string(),
             generated_at: SystemTime::now(),
         };
-        
+
         framework.register_entity(entity1).unwrap();
-        
+
         let result = framework.validate_all_entities();
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
     }
-    
+
     #[test]
     fn test_custom_validation_rule() {
         let mut config = ValidationConfig::default();
@@ -644,14 +664,15 @@ mod tests {
             applies_to_entities: vec!["User".to_string()],
             validates_fields: vec!["email".to_string()],
             rule_type: ValidationRuleType::FieldFormat,
-            parameters: HashMap::from([
-                ("pattern".to_string(), r"^[^@]+@[^@]+\.[^@]+$".to_string())
-            ]),
+            parameters: HashMap::from([(
+                "pattern".to_string(),
+                r"^[^@]+@[^@]+\.[^@]+$".to_string(),
+            )]),
             error_message: "Invalid email format".to_string(),
         });
-        
+
         let mut framework = ValidationFramework::new(config);
-        
+
         let entity = GeneratedEntity {
             entity_type: "User".to_string(),
             primary_key: Some("1".to_string()),
@@ -662,9 +683,9 @@ mod tests {
             endpoint: "/users".to_string(),
             generated_at: SystemTime::now(),
         };
-        
+
         framework.register_entity(entity).unwrap();
-        
+
         let result = framework.validate_all_entities();
         assert!(!result.errors.is_empty());
         assert_eq!(result.errors[0].error_type, ValidationErrorType::InvalidFormat);

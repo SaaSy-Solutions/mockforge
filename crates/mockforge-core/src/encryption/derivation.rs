@@ -3,7 +3,7 @@
 //! This module provides secure key derivation functions for generating
 //! encryption keys from passwords and other secret material.
 
-use crate::encryption::algorithms::{EncryptionKey, EncryptionAlgorithm};
+use crate::encryption::algorithms::{EncryptionAlgorithm, EncryptionKey};
 use crate::encryption::errors::{EncryptionError, EncryptionResult};
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
@@ -12,7 +12,6 @@ use argon2::{
 use pbkdf2::pbkdf2_hmac;
 use rand::{rng, Rng};
 use sha2::Sha256;
-
 
 /// Key derivation method
 #[derive(Debug, Clone)]
@@ -24,9 +23,7 @@ pub enum KeyDerivationMethod {
         parallelism: u32,
     },
     /// PBKDF2-HMAC-SHA256
-    Pbkdf2 {
-        iterations: u32,
-    },
+    Pbkdf2 { iterations: u32 },
 }
 
 /// Key derivation manager
@@ -105,7 +102,11 @@ impl KeyDerivationManager {
         algorithm: EncryptionAlgorithm,
     ) -> EncryptionResult<EncryptionKey> {
         match method {
-            KeyDerivationMethod::Argon2 { memory_kib, iterations, parallelism } => {
+            KeyDerivationMethod::Argon2 {
+                memory_kib,
+                iterations,
+                parallelism,
+            } => {
                 self.derive_key_argon2(secret, salt, memory_kib, iterations, parallelism, algorithm)
             }
             KeyDerivationMethod::Pbkdf2 { iterations } => {
@@ -131,7 +132,8 @@ impl KeyDerivationManager {
             iterations,
             parallelism,
             Some(32), // output length
-        ).map_err(|e| EncryptionError::key_derivation_failed(e.to_string()))?;
+        )
+        .map_err(|e| EncryptionError::key_derivation_failed(e.to_string()))?;
 
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let password_hash = argon2
@@ -152,7 +154,7 @@ impl KeyDerivationManager {
             key_bytes[..key_len].to_vec()
         } else {
             return Err(EncryptionError::key_derivation_failed(
-                "Derived key too short for algorithm"
+                "Derived key too short for algorithm",
             ));
         };
 
@@ -180,7 +182,11 @@ impl KeyDerivationManager {
     }
 
     /// Verify a password against a derived key
-    pub fn verify_password(&self, password: &str, expected_key: &EncryptionKey) -> EncryptionResult<bool> {
+    pub fn verify_password(
+        &self,
+        password: &str,
+        expected_key: &EncryptionKey,
+    ) -> EncryptionResult<bool> {
         let derived_key = self.derive_master_key(password)?;
 
         Ok(derived_key.as_bytes() == expected_key.as_bytes())
@@ -197,27 +203,31 @@ impl KeyDerivationManager {
     /// Validate key derivation parameters
     pub fn validate_parameters(&self, method: &KeyDerivationMethod) -> EncryptionResult<()> {
         match method {
-            KeyDerivationMethod::Argon2 { memory_kib, iterations, parallelism } => {
+            KeyDerivationMethod::Argon2 {
+                memory_kib,
+                iterations,
+                parallelism,
+            } => {
                 if *memory_kib < 8 {
                     return Err(EncryptionError::invalid_algorithm(
-                        "Argon2 memory must be at least 8 KiB"
+                        "Argon2 memory must be at least 8 KiB",
                     ));
                 }
                 if *iterations < 1 {
                     return Err(EncryptionError::invalid_algorithm(
-                        "Argon2 iterations must be at least 1"
+                        "Argon2 iterations must be at least 1",
                     ));
                 }
                 if *parallelism < 1 {
                     return Err(EncryptionError::invalid_algorithm(
-                        "Argon2 parallelism must be at least 1"
+                        "Argon2 parallelism must be at least 1",
                     ));
                 }
             }
             KeyDerivationMethod::Pbkdf2 { iterations } => {
                 if *iterations < 1000 {
                     return Err(EncryptionError::invalid_algorithm(
-                        "PBKDF2 iterations should be at least 1000 for security"
+                        "PBKDF2 iterations should be at least 1000 for security",
                     ));
                 }
             }
@@ -231,5 +241,3 @@ impl Default for KeyDerivationManager {
         Self::new()
     }
 }
-
-

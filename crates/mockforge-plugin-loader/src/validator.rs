@@ -7,13 +7,13 @@
 //! - Security policy enforcement
 
 use super::*;
-use std::path::Path;
 use std::collections::HashSet;
+use std::path::Path;
 
 // Import types from plugin core
 use mockforge_plugin_core::{
-    PluginId, PluginManifest, PluginCapabilities, NetworkPermissions,
-    FilesystemPermissions, ResourceLimits
+    FilesystemPermissions, NetworkPermissions, PluginCapabilities, PluginId, PluginManifest,
+    ResourceLimits,
 };
 
 // WASM parsing
@@ -26,7 +26,7 @@ use ring::signature;
 use shellexpand;
 
 // Encoding
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use hex;
 
 // JSON serialization
@@ -74,19 +74,21 @@ impl PluginValidator {
         // Validate plugin dependencies
         let mut visited = std::collections::HashSet::new();
         visited.insert(manifest.info.id.clone());
-        if let Err(e) = self.validate_dependencies(&manifest.info.id, &manifest.dependencies, &mut visited).await {
+        if let Err(e) = self
+            .validate_dependencies(&manifest.info.id, &manifest.dependencies, &mut visited)
+            .await
+        {
             errors.push(e);
         }
 
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(PluginLoaderError::validation(
-                format!("Manifest validation failed with {} errors: {}",
-                    errors.len(),
-                    errors.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
-                )
-            ))
+            Err(PluginLoaderError::validation(format!(
+                "Manifest validation failed with {} errors: {}",
+                errors.len(),
+                errors.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+            )))
         }
     }
 
@@ -97,7 +99,10 @@ impl PluginValidator {
             network: NetworkPermissions::default(),
             filesystem: FilesystemPermissions::default(),
             resources: ResourceLimits::default(),
-            custom: capability_names.iter().map(|name| (name.clone(), serde_json::Value::Bool(true))).collect(),
+            custom: capability_names
+                .iter()
+                .map(|name| (name.clone(), serde_json::Value::Bool(true)))
+                .collect(),
         };
         self.security_policies.validate_capabilities(&capabilities)
     }
@@ -109,7 +114,8 @@ impl PluginValidator {
             return Err(PluginLoaderError::fs("WASM file does not exist".to_string()));
         }
 
-        let metadata = tokio::fs::metadata(wasm_path).await
+        let metadata = tokio::fs::metadata(wasm_path)
+            .await
             .map_err(|e| PluginLoaderError::fs(format!("Cannot read WASM file metadata: {}", e)))?;
 
         if !metadata.is_file() {
@@ -163,11 +169,15 @@ impl PluginValidator {
             .collect();
 
         if wasm_files.is_empty() {
-            return Err(PluginLoaderError::load("No WebAssembly file found in plugin directory".to_string()));
+            return Err(PluginLoaderError::load(
+                "No WebAssembly file found in plugin directory".to_string(),
+            ));
         }
 
         if wasm_files.len() > 1 {
-            return Err(PluginLoaderError::load("Multiple WebAssembly files found in plugin directory".to_string()));
+            return Err(PluginLoaderError::load(
+                "Multiple WebAssembly files found in plugin directory".to_string(),
+            ));
         }
 
         // Validate WASM file (unless skipped for testing)
@@ -179,28 +189,40 @@ impl PluginValidator {
     }
 
     /// Validate plugin dependencies
-    async fn validate_dependencies(&self, current_plugin_id: &PluginId, dependencies: &std::collections::HashMap<mockforge_plugin_core::PluginId, mockforge_plugin_core::PluginVersion>, visited: &mut std::collections::HashSet<PluginId>) -> LoaderResult<()> {
+    async fn validate_dependencies(
+        &self,
+        current_plugin_id: &PluginId,
+        dependencies: &std::collections::HashMap<
+            mockforge_plugin_core::PluginId,
+            mockforge_plugin_core::PluginVersion,
+        >,
+        visited: &mut std::collections::HashSet<PluginId>,
+    ) -> LoaderResult<()> {
         for (plugin_id, version) in dependencies {
             // Check for circular dependencies using DFS
             if self.would_create_circular_dependency(current_plugin_id, plugin_id, visited) {
-                return Err(PluginLoaderError::ValidationError { message: format!(
-                    "Circular dependency detected: '{}' -> '{}'",
-                    current_plugin_id.0, plugin_id.0
-                ) });
+                return Err(PluginLoaderError::ValidationError {
+                    message: format!(
+                        "Circular dependency detected: '{}' -> '{}'",
+                        current_plugin_id.0, plugin_id.0
+                    ),
+                });
             }
 
             // Validate dependency ID format
             if plugin_id.0.is_empty() {
-                return Err(PluginLoaderError::ValidationError { message:
-                    "Dependency plugin ID cannot be empty".to_string()
+                return Err(PluginLoaderError::ValidationError {
+                    message: "Dependency plugin ID cannot be empty".to_string(),
                 });
             }
 
             if plugin_id.0.len() > 100 {
-                return Err(PluginLoaderError::ValidationError { message: format!(
-                    "Dependency plugin ID '{}' is too long (max 100 characters)",
-                    plugin_id.0
-                ) });
+                return Err(PluginLoaderError::ValidationError {
+                    message: format!(
+                        "Dependency plugin ID '{}' is too long (max 100 characters)",
+                        plugin_id.0
+                    ),
+                });
             }
 
             // Validate version requirements
@@ -209,11 +231,14 @@ impl PluginValidator {
             }
 
             // Check for potentially problematic dependency patterns
-            if plugin_id.0.contains("..") || plugin_id.0.contains("/") || plugin_id.0.contains("\\") {
-                return Err(PluginLoaderError::SecurityViolation { violation: format!(
-                    "Dependency plugin ID '{}' contains potentially unsafe characters",
-                    plugin_id.0
-                ) });
+            if plugin_id.0.contains("..") || plugin_id.0.contains("/") || plugin_id.0.contains("\\")
+            {
+                return Err(PluginLoaderError::SecurityViolation {
+                    violation: format!(
+                        "Dependency plugin ID '{}' contains potentially unsafe characters",
+                        plugin_id.0
+                    ),
+                });
             }
 
             // Future enhancements would check:
@@ -228,9 +253,13 @@ impl PluginValidator {
 
     /// Validate a dependency version requirement
 
-
     /// Check if adding this dependency would create a circular dependency
-    fn would_create_circular_dependency(&self, current_plugin_id: &PluginId, dependency_id: &PluginId, visited: &mut std::collections::HashSet<PluginId>) -> bool {
+    fn would_create_circular_dependency(
+        &self,
+        current_plugin_id: &PluginId,
+        dependency_id: &PluginId,
+        visited: &mut std::collections::HashSet<PluginId>,
+    ) -> bool {
         // Check for direct self-dependency
         if dependency_id == current_plugin_id {
             return true;
@@ -257,7 +286,11 @@ impl PluginValidator {
     }
 
     /// Check if plugin is signed (if signing is required)
-    pub async fn validate_plugin_signature(&self, plugin_path: &Path, manifest: &PluginManifest) -> LoaderResult<()> {
+    pub async fn validate_plugin_signature(
+        &self,
+        plugin_path: &Path,
+        manifest: &PluginManifest,
+    ) -> LoaderResult<()> {
         // Check if signature validation is required
         if self.config.allow_unsigned {
             return Ok(());
@@ -267,20 +300,27 @@ impl PluginValidator {
         let sig_path = plugin_path.with_extension("sig");
         if !sig_path.exists() {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Plugin '{}' requires a signature but none was found", manifest.info.id.0)
+                violation: format!(
+                    "Plugin '{}' requires a signature but none was found",
+                    manifest.info.id.0
+                ),
             });
         }
 
         // Read signature file
-        let signature_data = std::fs::read(&sig_path)
-            .map_err(|e| PluginLoaderError::ValidationError { message: format!("Failed to read signature file: {}", e) })?;
+        let signature_data =
+            std::fs::read(&sig_path).map_err(|e| PluginLoaderError::ValidationError {
+                message: format!("Failed to read signature file: {}", e),
+            })?;
 
         // Parse signature (assuming it's a simple format for now)
         let signature = self.parse_signature(&signature_data)?;
 
         // Read plugin data for verification
-        let plugin_data = std::fs::read(plugin_path)
-            .map_err(|e| PluginLoaderError::ValidationError { message: format!("Failed to read plugin file: {}", e) })?;
+        let plugin_data =
+            std::fs::read(plugin_path).map_err(|e| PluginLoaderError::ValidationError {
+                message: format!("Failed to read plugin file: {}", e),
+            })?;
 
         // Verify signature against trusted keys
         self.verify_signature(&plugin_data, &signature, manifest).await?;
@@ -293,31 +333,46 @@ impl PluginValidator {
         // Parse signature in JSON format for better structure and extensibility
         // Format: {"algorithm": "rsa|ecdsa|ed25519", "signature": "hex_string", "key_id": "key_identifier"}
 
-        let sig_json: serde_json::Value = serde_json::from_slice(data)
-            .map_err(|e| PluginLoaderError::ValidationError { message: format!("Invalid signature JSON format: {}", e) })?;
+        let sig_json: serde_json::Value =
+            serde_json::from_slice(data).map_err(|e| PluginLoaderError::ValidationError {
+                message: format!("Invalid signature JSON format: {}", e),
+            })?;
 
-        let algorithm = sig_json.get("algorithm")
+        let algorithm = sig_json
+            .get("algorithm")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| PluginLoaderError::ValidationError { message: "Missing or invalid 'algorithm' field".to_string() })?
+            .ok_or_else(|| PluginLoaderError::ValidationError {
+                message: "Missing or invalid 'algorithm' field".to_string(),
+            })?
             .to_string();
 
-        let signature_hex = sig_json.get("signature")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| PluginLoaderError::ValidationError { message: "Missing or invalid 'signature' field".to_string() })?;
+        let signature_hex =
+            sig_json.get("signature").and_then(|v| v.as_str()).ok_or_else(|| {
+                PluginLoaderError::ValidationError {
+                    message: "Missing or invalid 'signature' field".to_string(),
+                }
+            })?;
 
-        let key_id = sig_json.get("key_id")
+        let key_id = sig_json
+            .get("key_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| PluginLoaderError::ValidationError { message: "Missing or invalid 'key_id' field".to_string() })?
+            .ok_or_else(|| PluginLoaderError::ValidationError {
+                message: "Missing or invalid 'key_id' field".to_string(),
+            })?
             .to_string();
 
         // Validate algorithm
         if !["rsa", "ecdsa", "ed25519"].contains(&algorithm.as_str()) {
-            return Err(PluginLoaderError::ValidationError { message: format!("Unsupported signature algorithm: {}", algorithm) });
+            return Err(PluginLoaderError::ValidationError {
+                message: format!("Unsupported signature algorithm: {}", algorithm),
+            });
         }
 
         // Decode signature
-        let signature = hex::decode(signature_hex)
-            .map_err(|e| PluginLoaderError::ValidationError { message: format!("Invalid signature hex: {}", e) })?;
+        let signature =
+            hex::decode(signature_hex).map_err(|e| PluginLoaderError::ValidationError {
+                message: format!("Invalid signature hex: {}", e),
+            })?;
 
         Ok(PluginSignature {
             algorithm,
@@ -327,7 +382,12 @@ impl PluginValidator {
     }
 
     /// Verify signature against trusted keys
-    async fn verify_signature(&self, data: &[u8], signature: &PluginSignature, manifest: &PluginManifest) -> LoaderResult<()> {
+    async fn verify_signature(
+        &self,
+        data: &[u8],
+        signature: &PluginSignature,
+        manifest: &PluginManifest,
+    ) -> LoaderResult<()> {
         // Get trusted public key for this key_id
         let public_key = self.get_trusted_key(&signature.key_id)?;
 
@@ -346,7 +406,9 @@ impl PluginValidator {
                 self.verify_ed25519_signature(data, &signature.signature, &public_key)?;
             }
             _ => {
-                return Err(PluginLoaderError::ValidationError { message: format!("Unsupported algorithm: {}", signature.algorithm) });
+                return Err(PluginLoaderError::ValidationError {
+                    message: format!("Unsupported algorithm: {}", signature.algorithm),
+                });
             }
         }
 
@@ -361,7 +423,7 @@ impl PluginValidator {
         // First check if the key is in our trusted keys list
         if !self.config.trusted_keys.contains(&key_id.to_string()) {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Key '{}' is not in the trusted keys list", key_id)
+                violation: format!("Key '{}' is not in the trusted keys list", key_id),
             });
         }
 
@@ -404,7 +466,7 @@ impl PluginValidator {
         // }
 
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Could not find key data for trusted key: {}", key_id)
+            violation: format!("Could not find key data for trusted key: {}", key_id),
         })
     }
 
@@ -439,7 +501,7 @@ impl PluginValidator {
         }
 
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Key not found in environment: {}", key_id)
+            violation: format!("Key not found in environment: {}", key_id),
         })
     }
 
@@ -468,7 +530,7 @@ impl PluginValidator {
         }
 
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Key not found in filesystem: {}", key_id)
+            violation: format!("Key not found in filesystem: {}", key_id),
         })
     }
 
@@ -478,7 +540,7 @@ impl PluginValidator {
         // TODO: Implement database key loading
         // This would connect to a configured database and query for the key
         Err(PluginLoaderError::SecurityViolation {
-            violation: "Database key loading not implemented".to_string()
+            violation: "Database key loading not implemented".to_string(),
         })
     }
 
@@ -488,62 +550,88 @@ impl PluginValidator {
         // TODO: Implement KMS key loading
         // This would call a configured key management service (AWS KMS, HashiCorp Vault, etc.)
         Err(PluginLoaderError::SecurityViolation {
-            violation: "Key management service loading not implemented".to_string()
+            violation: "Key management service loading not implemented".to_string(),
         })
     }
 
     /// Verify RSA signature
-    fn verify_rsa_signature(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> LoaderResult<()> {
+    fn verify_rsa_signature(
+        &self,
+        data: &[u8],
+        signature: &[u8],
+        public_key: &[u8],
+    ) -> LoaderResult<()> {
         // Create an unparsed public key from the DER-encoded key
-        let public_key = signature::UnparsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key);
+        let public_key =
+            signature::UnparsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key);
 
         // Verify the signature
-        public_key.verify(data, signature)
+        public_key
+            .verify(data, signature)
             .map_err(|e| PluginLoaderError::SecurityViolation {
-                violation: format!("RSA signature verification failed: {}", e)
+                violation: format!("RSA signature verification failed: {}", e),
             })?;
 
         Ok(())
     }
 
     /// Verify ECDSA signature
-    fn verify_ecdsa_signature(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> LoaderResult<()> {
+    fn verify_ecdsa_signature(
+        &self,
+        data: &[u8],
+        signature: &[u8],
+        public_key: &[u8],
+    ) -> LoaderResult<()> {
         // Create an unparsed public key from the DER-encoded key
-        let public_key = signature::UnparsedPublicKey::new(&signature::ECDSA_P256_SHA256_ASN1, public_key);
+        let public_key =
+            signature::UnparsedPublicKey::new(&signature::ECDSA_P256_SHA256_ASN1, public_key);
 
         // Verify the signature
-        public_key.verify(data, signature)
+        public_key
+            .verify(data, signature)
             .map_err(|e| PluginLoaderError::SecurityViolation {
-                violation: format!("ECDSA signature verification failed: {}", e)
+                violation: format!("ECDSA signature verification failed: {}", e),
             })?;
 
         Ok(())
     }
 
     /// Verify Ed25519 signature
-    fn verify_ed25519_signature(&self, data: &[u8], signature: &[u8], public_key: &[u8]) -> LoaderResult<()> {
+    fn verify_ed25519_signature(
+        &self,
+        data: &[u8],
+        signature: &[u8],
+        public_key: &[u8],
+    ) -> LoaderResult<()> {
         // Create an unparsed public key from the raw key bytes
         let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key);
 
         // Verify the signature
-        public_key.verify(data, signature)
+        public_key
+            .verify(data, signature)
             .map_err(|e| PluginLoaderError::SecurityViolation {
-                violation: format!("Ed25519 signature verification failed: {}", e)
+                violation: format!("Ed25519 signature verification failed: {}", e),
             })?;
 
         Ok(())
     }
 
     /// Validate that the key is authorized for this plugin
-    fn validate_key_authorization(&self, key_id: &str, manifest: &PluginManifest) -> LoaderResult<()> {
+    fn validate_key_authorization(
+        &self,
+        key_id: &str,
+        manifest: &PluginManifest,
+    ) -> LoaderResult<()> {
         // Check if this key is authorized to sign plugins from this author
         if self.config.trusted_keys.contains(&key_id.to_string()) {
             return Ok(());
         }
 
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Key '{}' is not authorized to sign plugins from '{}'",
-                key_id, manifest.info.author.name)
+            violation: format!(
+                "Key '{}' is not authorized to sign plugins from '{}'",
+                key_id, manifest.info.author.name
+            ),
         })
     }
 
@@ -580,7 +668,8 @@ impl PluginValidator {
             summary.errors.push("No WebAssembly file found".to_string());
         }
 
-        summary.is_valid = summary.manifest_valid && summary.wasm_valid && summary.errors.is_empty();
+        summary.is_valid =
+            summary.manifest_valid && summary.wasm_valid && summary.errors.is_empty();
         summary
     }
 
@@ -590,7 +679,8 @@ impl PluginValidator {
             .map_err(|e| PluginLoaderError::fs(format!("Cannot read directory: {}", e)))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| PluginLoaderError::fs(format!("Cannot read entry: {}", e)))?;
+            let entry =
+                entry.map_err(|e| PluginLoaderError::fs(format!("Cannot read entry: {}", e)))?;
             let path = entry.path();
 
             if let Some(extension) = path.extension() {
@@ -662,7 +752,7 @@ impl SecurityPolicies {
         // This allows manifests to declare capabilities that may be restricted based on deployment.
 
         // Check for dangerous capabilities that are always forbidden
-        let caps = PluginCapabilities::from_strings(&manifest.capabilities);
+        let _caps = PluginCapabilities::from_strings(&manifest.capabilities);
 
         // For now, we allow all capability declarations in manifests
         // Runtime enforcement will restrict actual usage
@@ -676,14 +766,16 @@ impl SecurityPolicies {
         if capabilities.resources.max_memory_bytes > self.max_memory_bytes() {
             return Err(PluginLoaderError::security(format!(
                 "Memory limit {} exceeds maximum allowed {}",
-                capabilities.resources.max_memory_bytes, self.max_memory_bytes()
+                capabilities.resources.max_memory_bytes,
+                self.max_memory_bytes()
             )));
         }
 
         if capabilities.resources.max_cpu_percent > self.max_cpu_percent() {
             return Err(PluginLoaderError::security(format!(
                 "CPU limit {:.2}% exceeds maximum allowed {:.2}%",
-                capabilities.resources.max_cpu_percent, self.max_cpu_percent()
+                capabilities.resources.max_cpu_percent,
+                self.max_cpu_percent()
             )));
         }
 
@@ -735,7 +827,7 @@ impl SecurityPolicies {
 
             if !allowed_modules.contains(&module_name) {
                 return Err(PluginLoaderError::SecurityViolation {
-                    violation: format!("Disallowed import module: {}", module_name)
+                    violation: format!("Disallowed import module: {}", module_name),
                 });
             }
 
@@ -761,9 +853,14 @@ impl SecurityPolicies {
         // Allow common safe WASI functions
         let allowed_functions = [
             // File operations (with capability checks)
-            "fd_read", "fd_write", "fd_close", "fd_fdstat_get",
+            "fd_read",
+            "fd_write",
+            "fd_close",
+            "fd_fdstat_get",
             // Path operations (with capability checks)
-            "path_open", "path_readlink", "path_filestat_get",
+            "path_open",
+            "path_readlink",
+            "path_filestat_get",
             // Time operations
             "clock_time_get",
             // Process operations
@@ -774,7 +871,7 @@ impl SecurityPolicies {
 
         if !allowed_functions.contains(&field_name) {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Disallowed WASI function: {}", field_name)
+                violation: format!("Disallowed WASI function: {}", field_name),
             });
         }
 
@@ -793,7 +890,7 @@ impl SecurityPolicies {
 
         if !allowed_functions.contains(&field_name) {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Disallowed host function: {}", field_name)
+                violation: format!("Disallowed host function: {}", field_name),
             });
         }
 
@@ -827,15 +924,15 @@ impl SecurityPolicies {
 
         // Every WASM module should have at least one memory export
         if !has_memory_export {
-            return Err(PluginLoaderError::ValidationError { message:
-                "WASM module must export memory".to_string()
+            return Err(PluginLoaderError::ValidationError {
+                message: "WASM module must export memory".to_string(),
             });
         }
 
         // Check function export limits
         if function_exports > 1000 {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Too many function exports: {} (max: 1000)", function_exports)
+                violation: format!("Too many function exports: {} (max: 1000)", function_exports),
             });
         }
 
@@ -850,9 +947,10 @@ impl SecurityPolicies {
             if let wasmtime::ExternType::Memory(memory_type) = import.ty() {
                 // Check memory limits
                 if let Some(max) = memory_type.maximum() {
-                    if max > 100 { // 100 pages = 6.4MB
+                    if max > 100 {
+                        // 100 pages = 6.4MB
                         return Err(PluginLoaderError::SecurityViolation {
-                            violation: format!("Memory limit too high: {} pages (max: 100)", max)
+                            violation: format!("Memory limit too high: {} pages (max: 100)", max),
                         });
                     }
                 }
@@ -860,7 +958,7 @@ impl SecurityPolicies {
                 // Check if memory can grow beyond safe limits
                 if memory_type.maximum().is_none() && memory_type.is_shared() {
                     return Err(PluginLoaderError::SecurityViolation {
-                        violation: "Shared memory without maximum limit not allowed".to_string()
+                        violation: "Shared memory without maximum limit not allowed".to_string(),
                     });
                 }
             }
@@ -872,7 +970,7 @@ impl SecurityPolicies {
                 if let Some(max) = memory_type.maximum() {
                     if max > 100 {
                         return Err(PluginLoaderError::SecurityViolation {
-                            violation: format!("Exported memory limit too high: {} pages", max)
+                            violation: format!("Exported memory limit too high: {} pages", max),
                         });
                     }
                 }
@@ -900,7 +998,7 @@ impl SecurityPolicies {
         for import in module.imports() {
             if suspicious_imports.contains(&import.module()) {
                 return Err(PluginLoaderError::SecurityViolation {
-                    violation: format!("Suspicious import module: {}", import.module())
+                    violation: format!("Suspicious import module: {}", import.module()),
                 });
             }
         }
@@ -929,7 +1027,7 @@ impl SecurityPolicies {
         // Set reasonable limits
         if function_count > 10000 {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Too many functions: {} (max: 10000)", function_count)
+                violation: format!("Too many functions: {} (max: 10000)", function_count),
             });
         }
 
@@ -996,7 +1094,10 @@ impl SecurityPolicies {
         // (could indicate obfuscated malicious code)
         if total_functions > 5000 {
             return Err(PluginLoaderError::SecurityViolation {
-                violation: format!("Too many functions: {} (reasonable limit: 5000)", total_functions),
+                violation: format!(
+                    "Too many functions: {} (reasonable limit: 5000)",
+                    total_functions
+                ),
             });
         }
 
@@ -1013,19 +1114,18 @@ impl SecurityPolicies {
         // Scan for suspicious strings, URLs, shell commands, etc.
 
         // Serialize the module to get WASM bytes
-        let wasm_bytes = module.serialize().map_err(|e| {
-            PluginLoaderError::ValidationError {
-                message: format!("Failed to serialize WASM module: {}", e),
-            }
+        let wasm_bytes = module.serialize().map_err(|e| PluginLoaderError::ValidationError {
+            message: format!("Failed to serialize WASM module: {}", e),
         })?;
 
         // Parse the WASM binary to extract data segments
         let parser = Parser::new(0);
-        let payloads = parser.parse_all(&wasm_bytes).collect::<Result<Vec<_>, _>>().map_err(|e| {
-            PluginLoaderError::ValidationError {
-                message: format!("Failed to parse WASM module: {}", e),
-            }
-        })?;
+        let payloads =
+            parser.parse_all(&wasm_bytes).collect::<Result<Vec<_>, _>>().map_err(|e| {
+                PluginLoaderError::ValidationError {
+                    message: format!("Failed to parse WASM module: {}", e),
+                }
+            })?;
 
         // Define suspicious patterns to check for
         let suspicious_patterns = [
@@ -1054,11 +1154,10 @@ impl SecurityPolicies {
         for payload in payloads {
             if let Payload::DataSection(data_section) = payload {
                 for data_segment_result in data_section {
-                    let data_segment = data_segment_result.map_err(|e| {
-                        PluginLoaderError::ValidationError {
+                    let data_segment =
+                        data_segment_result.map_err(|e| PluginLoaderError::ValidationError {
                             message: format!("Failed to read data segment: {}", e),
-                        }
-                    })?;
+                        })?;
                     let data = data_segment.data;
 
                     // Convert to string for easier checking (assuming UTF-8)
@@ -1066,16 +1165,25 @@ impl SecurityPolicies {
                         for pattern in &suspicious_patterns {
                             if data_str.contains(pattern) {
                                 return Err(PluginLoaderError::SecurityViolation {
-                                    violation: format!("Data segment contains suspicious content: '{}'", pattern),
+                                    violation: format!(
+                                        "Data segment contains suspicious content: '{}'",
+                                        pattern
+                                    ),
                                 });
                             }
                         }
                     } else {
                         // If not UTF-8, check for byte sequences
                         for pattern in &suspicious_patterns {
-                            if data.windows(pattern.len()).any(|window| window == pattern.as_bytes()) {
+                            if data
+                                .windows(pattern.len())
+                                .any(|window| window == pattern.as_bytes())
+                            {
                                 return Err(PluginLoaderError::SecurityViolation {
-                                    violation: format!("Data segment contains suspicious content: '{}'", pattern),
+                                    violation: format!(
+                                        "Data segment contains suspicious content: '{}'",
+                                        pattern
+                                    ),
                                 });
                             }
                         }

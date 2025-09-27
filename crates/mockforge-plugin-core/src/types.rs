@@ -40,7 +40,13 @@ pub struct PluginInfo {
 }
 
 impl PluginInfo {
-    pub fn new(id: PluginId, version: PluginVersion, name: &str, description: &str, author: PluginAuthor) -> Self {
+    pub fn new(
+        id: PluginId,
+        version: PluginVersion,
+        name: &str,
+        description: &str,
+        author: PluginAuthor,
+    ) -> Self {
         Self {
             id,
             version,
@@ -84,7 +90,9 @@ impl PluginManifest {
     }
 
     /// Load plugin manifest from file
-    pub fn from_file<P: AsRef<Path>>(path: P) -> std::result::Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn from_file<P: AsRef<Path>>(
+        path: P,
+    ) -> std::result::Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let content = std::fs::read_to_string(path)?;
         let manifest: Self = serde_yaml::from_str(&content)?;
         Ok(manifest)
@@ -237,7 +245,9 @@ impl PluginVersion {
         if let Some(build) = &self.build {
             version_str.push_str(&format!("+{}", build));
         }
-        semver::Version::parse(&version_str).map_err(|e| PluginError::InternalError { message: format!("Invalid version: {}", e) })
+        semver::Version::parse(&version_str).map_err(|e| PluginError::InternalError {
+            message: format!("Invalid version: {}", e),
+        })
     }
 
     /// Create from semver::Version
@@ -246,8 +256,16 @@ impl PluginVersion {
             major: version.major as u32,
             minor: version.minor as u32,
             patch: version.patch as u32,
-            pre_release: if version.pre.is_empty() { None } else { Some(version.pre.to_string()) },
-            build: if version.build.is_empty() { None } else { Some(version.build.to_string()) },
+            pre_release: if version.pre.is_empty() {
+                None
+            } else {
+                Some(version.pre.to_string())
+            },
+            build: if version.build.is_empty() {
+                None
+            } else {
+                Some(version.build.to_string())
+            },
         }
     }
 }
@@ -264,8 +282,6 @@ pub struct PluginCapabilities {
     /// Custom capabilities
     pub custom: HashMap<String, serde_json::Value>,
 }
-
-
 
 impl PluginCapabilities {
     /// Create PluginCapabilities from a list of capability strings

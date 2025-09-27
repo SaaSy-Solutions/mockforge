@@ -4,7 +4,7 @@
 //! identifying foreign keys, references, and data dependencies for coherent
 //! synthetic data generation.
 
-use prost_reflect::{DescriptorPool, MessageDescriptor, FieldDescriptor, Kind};
+use prost_reflect::{DescriptorPool, FieldDescriptor, Kind, MessageDescriptor};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::info;
@@ -23,7 +23,7 @@ pub struct SchemaGraph {
 /// An entity node in the schema graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityNode {
-    /// Entity name (e.g., "User", "Order") 
+    /// Entity name (e.g., "User", "Order")
     pub name: String,
     /// Full qualified name (e.g., "com.example.User")
     pub full_name: String,
@@ -153,20 +153,20 @@ impl ProtoSchemaGraphExtractor {
     /// Create a new proto schema graph extractor
     pub fn new() -> Self {
         let mut patterns = Vec::new();
-        
+
         // Standard ID patterns
         patterns.push(ForeignKeyPattern {
             pattern: regex::Regex::new(r"^(.+)_id$").unwrap(),
             entity_extraction: EntityExtractionMethod::RemoveSuffix("_id".to_string()),
             confidence: 0.9,
         });
-        
+
         patterns.push(ForeignKeyPattern {
-            pattern: regex::Regex::new(r"^(.+)Id$").unwrap(), 
+            pattern: regex::Regex::new(r"^(.+)Id$").unwrap(),
             entity_extraction: EntityExtractionMethod::RemoveSuffix("Id".to_string()),
             confidence: 0.85,
         });
-        
+
         // Reference patterns
         patterns.push(ForeignKeyPattern {
             pattern: regex::Regex::new(r"^(.+)_ref$").unwrap(),
@@ -180,7 +180,10 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Extract schema graph from protobuf descriptor pool
-    pub fn extract_from_proto(&self, pool: &DescriptorPool) -> Result<SchemaGraph, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn extract_from_proto(
+        &self,
+        pool: &DescriptorPool,
+    ) -> Result<SchemaGraph, Box<dyn std::error::Error + Send + Sync>> {
         let mut entities = HashMap::new();
         let mut relationships = Vec::new();
         let mut foreign_keys = HashMap::new();
@@ -214,14 +217,20 @@ impl ProtoSchemaGraphExtractor {
             foreign_keys,
         };
 
-        info!("Extracted schema graph with {} entities and {} relationships", 
-              graph.entities.len(), graph.relationships.len());
+        info!(
+            "Extracted schema graph with {} entities and {} relationships",
+            graph.entities.len(),
+            graph.relationships.len()
+        );
 
         Ok(graph)
     }
 
     /// Extract an entity from a proto message descriptor
-    fn extract_entity_from_message(&self, descriptor: &MessageDescriptor) -> Result<EntityNode, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_entity_from_message(
+        &self,
+        descriptor: &MessageDescriptor,
+    ) -> Result<EntityNode, Box<dyn std::error::Error + Send + Sync>> {
         let name = Self::extract_entity_name(descriptor.name());
         let full_name = descriptor.full_name().to_string();
 
@@ -242,13 +251,17 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Extract field information from a proto field descriptor
-    fn extract_field_info(&self, field: &FieldDescriptor) -> Result<FieldInfo, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_field_info(
+        &self,
+        field: &FieldDescriptor,
+    ) -> Result<FieldInfo, Box<dyn std::error::Error + Send + Sync>> {
         let name = field.name().to_string();
         let field_type = Self::kind_to_string(&field.kind());
         let is_required = true; // Proto fields are required by default unless marked optional
 
         // Check if this looks like a foreign key
-        let (is_foreign_key, foreign_key_target) = self.analyze_potential_foreign_key(&name, &field.kind());
+        let (is_foreign_key, foreign_key_target) =
+            self.analyze_potential_foreign_key(&name, &field.kind());
 
         let mut constraints = HashMap::new();
         if field.is_list() {
@@ -266,11 +279,16 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Analyze if a field might be a foreign key
-    fn analyze_potential_foreign_key(&self, field_name: &str, kind: &Kind) -> (bool, Option<String>) {
+    fn analyze_potential_foreign_key(
+        &self,
+        field_name: &str,
+        kind: &Kind,
+    ) -> (bool, Option<String>) {
         // Check naming patterns
         for pattern in &self.foreign_key_patterns {
             if pattern.pattern.is_match(field_name) {
-                if let Some(entity_name) = self.extract_entity_name_from_field(field_name, pattern) {
+                if let Some(entity_name) = self.extract_entity_name_from_field(field_name, pattern)
+                {
                     return (true, Some(entity_name));
                 }
             }
@@ -286,7 +304,11 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Extract entity name from field name using pattern
-    fn extract_entity_name_from_field(&self, field_name: &str, pattern: &ForeignKeyPattern) -> Option<String> {
+    fn extract_entity_name_from_field(
+        &self,
+        field_name: &str,
+        pattern: &ForeignKeyPattern,
+    ) -> Option<String> {
         match &pattern.entity_extraction {
             EntityExtractionMethod::RemoveSuffix(suffix) => {
                 if field_name.ends_with(suffix) {
@@ -302,7 +324,11 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Detect foreign keys in an entity
-    fn detect_foreign_keys(&self, entity: &EntityNode, all_entities: &HashMap<String, EntityNode>) -> Result<Vec<ForeignKeyMapping>, Box<dyn std::error::Error + Send + Sync>> {
+    fn detect_foreign_keys(
+        &self,
+        entity: &EntityNode,
+        all_entities: &HashMap<String, EntityNode>,
+    ) -> Result<Vec<ForeignKeyMapping>, Box<dyn std::error::Error + Send + Sync>> {
         let mut mappings = Vec::new();
 
         for field in &entity.fields {
@@ -325,7 +351,11 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Extract relationships from an entity
-    fn extract_relationships(&self, entity: &EntityNode, all_entities: &HashMap<String, EntityNode>) -> Result<Vec<Relationship>, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_relationships(
+        &self,
+        entity: &EntityNode,
+        all_entities: &HashMap<String, EntityNode>,
+    ) -> Result<Vec<Relationship>, Box<dyn std::error::Error + Send + Sync>> {
         let mut relationships = Vec::new();
 
         for field in &entity.fields {
@@ -342,7 +372,10 @@ impl ProtoSchemaGraphExtractor {
                     let cardinality = if field.constraints.get("repeated").is_some() {
                         Cardinality { min: 0, max: None }
                     } else {
-                        Cardinality { min: if field.is_required { 1 } else { 0 }, max: Some(1) }
+                        Cardinality {
+                            min: if field.is_required { 1 } else { 0 },
+                            max: Some(1),
+                        }
                     };
 
                     relationships.push(Relationship {
@@ -361,7 +394,11 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Update cross-references between entities
-    fn update_cross_references(&self, entities: &mut HashMap<String, EntityNode>, relationships: &[Relationship]) {
+    fn update_cross_references(
+        &self,
+        entities: &mut HashMap<String, EntityNode>,
+        relationships: &[Relationship],
+    ) {
         // Build reference maps
         let mut referenced_by_map: HashMap<String, Vec<String>> = HashMap::new();
         let mut references_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -385,7 +422,7 @@ impl ProtoSchemaGraphExtractor {
             if let Some(refs) = references_map.get(entity_name) {
                 entity.references = refs.clone();
             }
-            
+
             if let Some(referenced_by) = referenced_by_map.get(entity_name) {
                 entity.referenced_by = referenced_by.clone();
                 entity.is_root = false; // Referenced entities are not root
@@ -444,12 +481,12 @@ mod tests {
     #[test]
     fn test_foreign_key_pattern_matching() {
         let extractor = ProtoSchemaGraphExtractor::new();
-        
+
         // Test standard patterns
         let (is_fk, target) = extractor.analyze_potential_foreign_key("user_id", &Kind::Int32);
         assert!(is_fk);
         assert_eq!(target, Some("User".to_string()));
-        
+
         let (is_fk, target) = extractor.analyze_potential_foreign_key("orderId", &Kind::Int64);
         assert!(is_fk);
         assert_eq!(target, Some("Order".to_string()));
@@ -459,6 +496,9 @@ mod tests {
     fn test_entity_name_normalization() {
         assert_eq!(ProtoSchemaGraphExtractor::normalize_entity_name("user"), "User");
         assert_eq!(ProtoSchemaGraphExtractor::normalize_entity_name("order_item"), "OrderItem");
-        assert_eq!(ProtoSchemaGraphExtractor::normalize_entity_name("ProductCategory"), "ProductCategory");
+        assert_eq!(
+            ProtoSchemaGraphExtractor::normalize_entity_name("ProductCategory"),
+            "ProductCategory"
+        );
     }
 }

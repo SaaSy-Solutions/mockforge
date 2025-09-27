@@ -9,26 +9,26 @@
 
 // Re-export sub-modules for backward compatibility
 pub mod core;
-pub mod registry;
 pub mod environment;
-pub mod sync;
+pub mod registry;
 pub mod request;
+pub mod sync;
 
 // Re-export commonly used types
-pub use registry::*;
 pub use environment::*;
-pub use sync::*;
+pub use registry::*;
 pub use request::*;
+pub use sync::*;
 
 // Legacy imports for compatibility
-use crate::{Result, Error};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use crate::config::AuthConfig;
 use crate::encryption::AutoEncryptionConfig;
 use crate::routing::{HttpMethod, Route, RouteRegistry};
-use std::collections::HashMap;
+use crate::{Error, Result};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Unique identifier for workspace entities
 pub type EntityId = String;
@@ -60,8 +60,7 @@ pub struct Workspace {
 }
 
 /// Configuration for request inheritance at folder level
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FolderInheritanceConfig {
     /// Headers to be inherited by child requests (if not overridden)
     #[serde(default)]
@@ -313,7 +312,11 @@ impl Workspace {
     }
 
     /// Create a new environment
-    pub fn create_environment(&mut self, name: String, description: Option<String>) -> Result<EntityId> {
+    pub fn create_environment(
+        &mut self,
+        name: String,
+        description: Option<String>,
+    ) -> Result<EntityId> {
         // Check if environment name already exists
         if self.config.environments.iter().any(|env| env.name == name) {
             return Err(Error::generic(format!("Environment with name '{}' already exists", name)));
@@ -537,10 +540,13 @@ impl Workspace {
 
         // Remove sensitive environment variables before sync
         // This implementation filters out common sensitive keys
-        filtered.config.global_environment.variables = self.filter_sensitive_variables(&self.config.global_environment.variables);
+        filtered.config.global_environment.variables =
+            self.filter_sensitive_variables(&self.config.global_environment.variables);
 
         // Filter out non-sharable environments
-        filtered.config.environments = filtered.config.environments
+        filtered.config.environments = filtered
+            .config
+            .environments
             .into_iter()
             .filter(|env| env.sharable)
             .map(|mut env| {
@@ -553,17 +559,38 @@ impl Workspace {
     }
 
     /// Filter out sensitive environment variables
-    fn filter_sensitive_variables(&self, variables: &HashMap<String, String>) -> HashMap<String, String> {
+    fn filter_sensitive_variables(
+        &self,
+        variables: &HashMap<String, String>,
+    ) -> HashMap<String, String> {
         let sensitive_keys = [
             // Common sensitive keys that should not be synced
-            "password", "secret", "key", "token", "credential",
-            "api_key", "apikey", "api_secret", "db_password", "database_password",
-            "aws_secret_key", "aws_session_token", "private_key",
-            "authorization", "auth_token", "access_token", "refresh_token",
-            "cookie", "session", "csrf", "jwt", "bearer",
+            "password",
+            "secret",
+            "key",
+            "token",
+            "credential",
+            "api_key",
+            "apikey",
+            "api_secret",
+            "db_password",
+            "database_password",
+            "aws_secret_key",
+            "aws_session_token",
+            "private_key",
+            "authorization",
+            "auth_token",
+            "access_token",
+            "refresh_token",
+            "cookie",
+            "session",
+            "csrf",
+            "jwt",
+            "bearer",
         ];
 
-        variables.iter()
+        variables
+            .iter()
             .filter(|(key, _)| {
                 let key_lower = key.to_lowercase();
                 !sensitive_keys.iter().any(|sensitive| key_lower.contains(sensitive))
@@ -593,7 +620,6 @@ impl Workspace {
             format!("{}.yaml", filename)
         }
     }
-
 }
 
 /// Helper function to sanitize filenames for cross-platform compatibility
@@ -693,11 +719,13 @@ impl Folder {
 
         // Add this folder's requests
         for request in &self.requests {
-            routes.push(Route::new(request.method.clone(), request.path.clone())
-                .with_priority(request.priority)
-                .with_metadata("request_id".to_string(), serde_json::json!(request.id))
-                .with_metadata("folder_id".to_string(), serde_json::json!(self.id))
-                .with_metadata("workspace_id".to_string(), serde_json::json!(workspace_id)));
+            routes.push(
+                Route::new(request.method.clone(), request.path.clone())
+                    .with_priority(request.priority)
+                    .with_metadata("request_id".to_string(), serde_json::json!(request.id))
+                    .with_metadata("folder_id".to_string(), serde_json::json!(self.id))
+                    .with_metadata("workspace_id".to_string(), serde_json::json!(workspace_id)),
+            );
         }
 
         // Add routes from subfolders
@@ -750,10 +778,12 @@ impl Workspace {
 
         // Add workspace-level requests
         for request in &self.requests {
-            routes.push(Route::new(request.method.clone(), request.path.clone())
-                .with_priority(request.priority)
-                .with_metadata("request_id".to_string(), serde_json::json!(request.id))
-                .with_metadata("workspace_id".to_string(), serde_json::json!(self.id)));
+            routes.push(
+                Route::new(request.method.clone(), request.path.clone())
+                    .with_priority(request.priority)
+                    .with_metadata("request_id".to_string(), serde_json::json!(request.id))
+                    .with_metadata("workspace_id".to_string(), serde_json::json!(self.id)),
+            );
         }
 
         // Add routes from folders
@@ -805,8 +835,8 @@ impl Folder {
 
         while let Some(folder) = current {
             path.push(folder);
-            current = folder.parent_id.as_ref()
-                .and_then(|parent_id| workspace.find_folder(parent_id));
+            current =
+                folder.parent_id.as_ref().and_then(|parent_id| workspace.find_folder(parent_id));
         }
 
         path.reverse(); // Root first
@@ -816,7 +846,11 @@ impl Folder {
 
 impl MockRequest {
     /// Apply inheritance to this request, returning headers and auth from the hierarchy
-    pub fn apply_inheritance(&mut self, effective_headers: HashMap<String, String>, effective_auth: Option<&AuthConfig>) {
+    pub fn apply_inheritance(
+        &mut self,
+        effective_headers: HashMap<String, String>,
+        effective_auth: Option<&AuthConfig>,
+    ) {
         // Merge headers - request headers override inherited ones
         for (key, value) in effective_headers {
             self.headers.entry(key).or_insert(value);
@@ -830,7 +864,11 @@ impl MockRequest {
     }
 
     /// Create inherited request with merged headers and auth
-    pub fn create_inherited_request(mut self, workspace: &Workspace, folder_path: &[&Folder]) -> Self {
+    pub fn create_inherited_request(
+        mut self,
+        workspace: &Workspace,
+        folder_path: &[&Folder],
+    ) -> Self {
         let effective_headers = workspace.get_effective_headers(folder_path);
         let effective_auth = workspace.get_effective_auth(folder_path);
 
@@ -846,10 +884,10 @@ impl MockRequest {
             name,
             description: None,
             method,
-             path,
-             headers: HashMap::new(),
-             query_params: HashMap::new(),
-             body: None,
+            path,
+            headers: HashMap::new(),
+            query_params: HashMap::new(),
+            body: None,
             response: MockResponse::default(),
             response_history: Vec::new(),
             created_at: now,
@@ -919,7 +957,6 @@ impl Default for MockResponse {
     }
 }
 
-
 impl Environment {
     /// Create a new environment
     pub fn new(name: String) -> Self {
@@ -932,7 +969,7 @@ impl Environment {
             variables: HashMap::new(),
             created_at: now,
             updated_at: now,
-            order: 0, // Default order will be updated when added to workspace
+            order: 0,        // Default order will be updated when added to workspace
             sharable: false, // Default to not sharable
         }
     }
@@ -940,7 +977,8 @@ impl Environment {
     /// Create a new global environment
     pub fn new_global() -> Self {
         let mut env = Self::new("Global".to_string());
-        env.description = Some("Global environment variables available in all contexts".to_string());
+        env.description =
+            Some("Global environment variables available in all contexts".to_string());
         env
     }
 
@@ -1052,7 +1090,10 @@ impl WorkspaceRegistry {
     pub fn set_active_workspace(&mut self, id: Option<String>) -> Result<()> {
         if let Some(ref workspace_id) = id {
             if !self.workspaces.contains_key(workspace_id) {
-                return Err(Error::generic(format!("Workspace with ID '{}' not found", workspace_id)));
+                return Err(Error::generic(format!(
+                    "Workspace with ID '{}' not found",
+                    workspace_id
+                )));
             }
         }
         self.active_workspace = id;
@@ -1061,8 +1102,7 @@ impl WorkspaceRegistry {
 
     /// Get the active workspace
     pub fn get_active_workspace(&self) -> Option<&Workspace> {
-        self.active_workspace.as_ref()
-            .and_then(|id| self.workspaces.get(id))
+        self.active_workspace.as_ref().and_then(|id| self.workspaces.get(id))
     }
 
     /// Get the active workspace ID
@@ -1087,7 +1127,10 @@ impl WorkspaceRegistry {
         // Validate that all provided IDs exist
         for workspace_id in &workspace_ids {
             if !self.workspaces.contains_key(workspace_id) {
-                return Err(Error::generic(format!("Workspace with ID '{}' not found", workspace_id)));
+                return Err(Error::generic(format!(
+                    "Workspace with ID '{}' not found",
+                    workspace_id
+                )));
             }
         }
 
@@ -1140,7 +1183,7 @@ mod tests {
     fn test_workspace_creation() {
         let workspace = Workspace::new("Test Workspace".to_string());
         assert_eq!(workspace.name, "Test Workspace");
-        assert!(workspace.id.len() > 0);
+        assert!(!workspace.id.is_empty());
         assert!(workspace.folders.is_empty());
         assert!(workspace.requests.is_empty());
     }
@@ -1149,14 +1192,15 @@ mod tests {
     fn test_folder_creation() {
         let folder = Folder::new("Test Folder".to_string());
         assert_eq!(folder.name, "Test Folder");
-        assert!(folder.id.len() > 0);
+        assert!(!folder.id.is_empty());
         assert!(folder.folders.is_empty());
         assert!(folder.requests.is_empty());
     }
 
     #[test]
     fn test_request_creation() {
-        let request = MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
+        let request =
+            MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
         assert_eq!(request.name, "Test Request");
         assert_eq!(request.method, HttpMethod::GET);
         assert_eq!(request.path, "/test");
@@ -1172,13 +1216,18 @@ mod tests {
         assert_eq!(workspace.folders.len(), 1);
 
         // Add request to workspace
-        let request = MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
+        let request =
+            MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
         workspace.add_request(request).unwrap();
         assert_eq!(workspace.requests.len(), 1);
 
         // Add request to folder
         let folder = workspace.find_folder_mut(&folder_id).unwrap();
-        let folder_request = MockRequest::new(HttpMethod::POST, "/folder-test".to_string(), "Folder Request".to_string());
+        let folder_request = MockRequest::new(
+            HttpMethod::POST,
+            "/folder-test".to_string(),
+            "Folder Request".to_string(),
+        );
         folder.add_request(folder_request).unwrap();
         assert_eq!(folder.requests.len(), 1);
     }
@@ -1206,13 +1255,25 @@ mod tests {
     #[test]
     fn test_inheritance_header_priority() {
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        workspace.config.default_headers.insert("X-Common".to_string(), "workspace-value".to_string());
-        workspace.config.default_headers.insert("X-Workspace-Only".to_string(), "workspace-only-value".to_string());
+        workspace
+            .config
+            .default_headers
+            .insert("X-Common".to_string(), "workspace-value".to_string());
+        workspace
+            .config
+            .default_headers
+            .insert("X-Workspace-Only".to_string(), "workspace-only-value".to_string());
 
         // Add folder with inheritance
         let mut folder = Folder::new("Test Folder".to_string());
-        folder.inheritance.headers.insert("X-Common".to_string(), "folder-value".to_string());
-        folder.inheritance.headers.insert("X-Folder-Only".to_string(), "folder-only-value".to_string());
+        folder
+            .inheritance
+            .headers
+            .insert("X-Common".to_string(), "folder-value".to_string());
+        folder
+            .inheritance
+            .headers
+            .insert("X-Folder-Only".to_string(), "folder-only-value".to_string());
 
         // Test single folder
         let folder_path = vec![&folder];
@@ -1220,20 +1281,30 @@ mod tests {
 
         assert_eq!(effective_headers.get("X-Common").unwrap(), "folder-value"); // Folder overrides workspace
         assert_eq!(effective_headers.get("X-Workspace-Only").unwrap(), "workspace-only-value"); // Workspace value preserved
-        assert_eq!(effective_headers.get("X-Folder-Only").unwrap(), "folder-only-value"); // Folder value added
+        assert_eq!(effective_headers.get("X-Folder-Only").unwrap(), "folder-only-value");
+        // Folder value added
     }
 
     #[test]
     fn test_inheritance_request_headers_override() {
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        workspace.config.default_headers.insert("Authorization".to_string(), "Bearer workspace-token".to_string());
+        workspace
+            .config
+            .default_headers
+            .insert("Authorization".to_string(), "Bearer workspace-token".to_string());
 
         let folder_path = vec![];
         let effective_headers = workspace.get_effective_headers(&folder_path);
-        let mut request = MockRequest::new(crate::routing::HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
+        let mut request = MockRequest::new(
+            crate::routing::HttpMethod::GET,
+            "/test".to_string(),
+            "Test Request".to_string(),
+        );
 
         // Request headers should override inherited ones
-        request.headers.insert("Authorization".to_string(), "Bearer request-token".to_string());
+        request
+            .headers
+            .insert("Authorization".to_string(), "Bearer request-token".to_string());
 
         // Apply inheritance - request headers should take priority
         request.apply_inheritance(effective_headers, None);
@@ -1244,17 +1315,32 @@ mod tests {
     #[test]
     fn test_inheritance_nested_folders() {
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        workspace.config.default_headers.insert("X-Level".to_string(), "workspace".to_string());
+        workspace
+            .config
+            .default_headers
+            .insert("X-Level".to_string(), "workspace".to_string());
 
         // Parent folder
         let mut parent_folder = Folder::new("Parent Folder".to_string());
-        parent_folder.inheritance.headers.insert("X-Level".to_string(), "parent".to_string());
-        parent_folder.inheritance.headers.insert("X-Parent-Only".to_string(), "parent-value".to_string());
+        parent_folder
+            .inheritance
+            .headers
+            .insert("X-Level".to_string(), "parent".to_string());
+        parent_folder
+            .inheritance
+            .headers
+            .insert("X-Parent-Only".to_string(), "parent-value".to_string());
 
         // Child folder
         let mut child_folder = Folder::new("Child Folder".to_string());
-        child_folder.inheritance.headers.insert("X-Level".to_string(), "child".to_string());
-        child_folder.inheritance.headers.insert("X-Child-Only".to_string(), "child-value".to_string());
+        child_folder
+            .inheritance
+            .headers
+            .insert("X-Level".to_string(), "child".to_string());
+        child_folder
+            .inheritance
+            .headers
+            .insert("X-Child-Only".to_string(), "child-value".to_string());
 
         // Parent-to-child hierarchy
         let folder_path = vec![&parent_folder, &child_folder];
@@ -1273,13 +1359,15 @@ mod tests {
 
         // Create folder with auth
         let mut folder = Folder::new("Test Folder".to_string());
-        let mut auth = AuthConfig::default();
-        auth.require_auth = true;
-        auth.api_key = Some(ApiKeyConfig {
-            header_name: "X-API-Key".to_string(),
-            query_name: Some("api_key".to_string()),
-            keys: vec!["folder-key".to_string()],
-        });
+        let auth = AuthConfig {
+            require_auth: true,
+            api_key: Some(ApiKeyConfig {
+                header_name: "X-API-Key".to_string(),
+                query_name: Some("api_key".to_string()),
+                keys: vec!["folder-key".to_string()],
+            }),
+            ..Default::default()
+        };
         folder.inheritance.auth = Some(auth);
 
         let folder_path = vec![&folder];

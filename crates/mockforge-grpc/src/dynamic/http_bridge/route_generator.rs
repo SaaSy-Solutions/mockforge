@@ -4,8 +4,8 @@
 //! mapping gRPC methods to RESTful endpoints.
 
 use super::HttpBridgeConfig;
-use std::collections::HashMap;
 use regex::Regex;
+use std::collections::HashMap;
 use tracing::{debug, warn};
 
 /// Generates HTTP routes from protobuf service definitions
@@ -43,8 +43,7 @@ impl RouteGenerator {
     pub fn generate_url_pattern(&self, service_name: &str, method_name: &str) -> String {
         let path = self.generate_route_path(service_name, method_name);
         // Replace path parameters with regex patterns
-        path.replace("{service}", "[^/]+")
-            .replace("{method}", "[^/]+")
+        path.replace("{service}", "[^/]+").replace("{method}", "[^/]+")
     }
 
     /// Clean service name for HTTP routing
@@ -80,13 +79,17 @@ impl RouteGenerator {
         method_descriptor: &prost_reflect::MethodDescriptor,
     ) -> serde_json::Value {
         let path = self.generate_route_path(service_name, method_name);
-        let operation = self.generate_openapi_operation(service_name, method_name, method_descriptor);
+        let operation =
+            self.generate_openapi_operation(service_name, method_name, method_descriptor);
 
         serde_json::json!({ path: operation })
     }
 
     /// Generate full OpenAPI specification for all services
-    pub fn generate_openapi_spec(&self, services: &std::collections::HashMap<String, crate::dynamic::proto_parser::ProtoService>) -> serde_json::Value {
+    pub fn generate_openapi_spec(
+        &self,
+        services: &std::collections::HashMap<String, crate::dynamic::proto_parser::ProtoService>,
+    ) -> serde_json::Value {
         let mut paths = serde_json::Map::new();
         let mut schemas = serde_json::Map::new();
 
@@ -98,7 +101,7 @@ impl RouteGenerator {
                     service_name,
                     &method.name,
                     method,
-                    &mut schemas
+                    &mut schemas,
                 );
 
                 // Determine HTTP method
@@ -108,9 +111,12 @@ impl RouteGenerator {
                     "post"
                 };
 
-                paths.insert(path, serde_json::json!({
-                    http_method: operation
-                }));
+                paths.insert(
+                    path,
+                    serde_json::json!({
+                        http_method: operation
+                    }),
+                );
             }
         }
 
@@ -171,11 +177,13 @@ impl RouteGenerator {
 
         // Add request body for methods that send data
         if !proto_method.server_streaming {
-            operation["requestBody"] = self.generate_openapi_request_body_full(proto_method, schemas);
+            operation["requestBody"] =
+                self.generate_openapi_request_body_full(proto_method, schemas);
         }
 
         // Add responses
-        operation["responses"] = self.generate_openapi_responses_full(service_name, method_name, proto_method, schemas);
+        operation["responses"] =
+            self.generate_openapi_responses_full(service_name, method_name, proto_method, schemas);
 
         operation
     }
@@ -347,15 +355,13 @@ impl RouteGenerator {
         };
 
         // Convert to PascalCase and append "Message" if not already present
-        let schema_name = short_name.chars()
-            .enumerate()
-            .fold(String::new(), |mut acc, (i, c)| {
-                if c.is_uppercase() && i > 0 {
-                    acc.push('_');
-                }
-                acc.push(c.to_uppercase().next().unwrap_or(c));
-                acc
-            });
+        let schema_name = short_name.chars().enumerate().fold(String::new(), |mut acc, (i, c)| {
+            if c.is_uppercase() && i > 0 {
+                acc.push('_');
+            }
+            acc.push(c.to_uppercase().next().unwrap_or(c));
+            acc
+        });
 
         if !schema_name.ends_with("Message") {
             format!("{}Message", schema_name)
@@ -413,7 +419,10 @@ impl RouteGenerator {
     }
 
     /// Get appropriate HTTP method for gRPC method type
-    pub fn get_http_method(&self, method_descriptor: &prost_reflect::MethodDescriptor) -> &'static str {
+    pub fn get_http_method(
+        &self,
+        method_descriptor: &prost_reflect::MethodDescriptor,
+    ) -> &'static str {
         if method_descriptor.is_client_streaming() && method_descriptor.is_server_streaming() {
             "post" // Bidirectional streaming uses POST
         } else if method_descriptor.is_server_streaming() {
@@ -539,7 +548,10 @@ impl RouteGenerator {
     }
 
     /// Generate JSON schema from protobuf message descriptor
-    pub fn generate_json_schema(&self, descriptor: &prost_reflect::MessageDescriptor) -> serde_json::Value {
+    pub fn generate_json_schema(
+        &self,
+        descriptor: &prost_reflect::MessageDescriptor,
+    ) -> serde_json::Value {
         let mut properties = serde_json::Map::new();
         let mut required = Vec::new();
 
@@ -569,7 +581,7 @@ impl RouteGenerator {
 
         if !required.is_empty() {
             schema["required"] = serde_json::Value::Array(
-                required.into_iter().map(serde_json::Value::String).collect()
+                required.into_iter().map(serde_json::Value::String).collect(),
             );
         }
 
@@ -607,13 +619,17 @@ impl RouteGenerator {
                     "type": "string"
                 })
             }
-            prost_reflect::Kind::Int32 | prost_reflect::Kind::Sint32 | prost_reflect::Kind::Sfixed32 => {
+            prost_reflect::Kind::Int32
+            | prost_reflect::Kind::Sint32
+            | prost_reflect::Kind::Sfixed32 => {
                 serde_json::json!({
                     "type": "integer",
                     "format": "int32"
                 })
             }
-            prost_reflect::Kind::Int64 | prost_reflect::Kind::Sint64 | prost_reflect::Kind::Sfixed64 => {
+            prost_reflect::Kind::Int64
+            | prost_reflect::Kind::Sint64
+            | prost_reflect::Kind::Sfixed64 => {
                 serde_json::json!({
                     "type": "integer",
                     "format": "int64"
@@ -740,7 +756,10 @@ mod tests {
         };
         let generator = RouteGenerator::new(config);
 
-        assert_eq!(generator.extract_service_name("/api/greeter/sayhello"), Some("greeter".to_string()));
+        assert_eq!(
+            generator.extract_service_name("/api/greeter/sayhello"),
+            Some("greeter".to_string())
+        );
         assert_eq!(generator.extract_service_name("/api/user/get"), Some("user".to_string()));
         assert_eq!(generator.extract_service_name("/other/path"), None);
     }
@@ -753,7 +772,10 @@ mod tests {
         };
         let generator = RouteGenerator::new(config);
 
-        assert_eq!(generator.extract_method_name("/api/greeter/sayhello"), Some("sayhello".to_string()));
+        assert_eq!(
+            generator.extract_method_name("/api/greeter/sayhello"),
+            Some("sayhello".to_string())
+        );
         assert_eq!(generator.extract_method_name("/api/user/get"), Some("get".to_string()));
         assert_eq!(generator.extract_method_name("/api/single"), None);
     }
@@ -798,7 +820,12 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            assert_eq!(generator.clean_service_name(input), expected, "Failed for input: {}", input);
+            assert_eq!(
+                generator.clean_service_name(input),
+                expected,
+                "Failed for input: {}",
+                input
+            );
         }
     }
 
@@ -884,8 +911,16 @@ mod tests {
         for (service, method) in test_cases {
             let pattern = generator.generate_url_pattern(service, method);
             assert!(pattern.starts_with("/api/"), "Pattern should start with /api/: {}", pattern);
-            assert!(pattern.contains("[^/]+"), "Pattern should contain regex for service: {}", pattern);
-            assert!(pattern.contains("[^/]+"), "Pattern should contain regex for method: {}", pattern);
+            assert!(
+                pattern.contains("[^/]+"),
+                "Pattern should contain regex for service: {}",
+                pattern
+            );
+            assert!(
+                pattern.contains("[^/]+"),
+                "Pattern should contain regex for method: {}",
+                pattern
+            );
         }
     }
 
@@ -991,9 +1026,9 @@ mod tests {
             assert!(params_array.len() >= 1, "Should have at least stream parameter");
 
             // Check if stream parameter exists
-            let stream_param = params_array.iter().find(|p| {
-                p.get("name").and_then(|n| n.as_str()) == Some("stream")
-            });
+            let stream_param = params_array
+                .iter()
+                .find(|p| p.get("name").and_then(|n| n.as_str()) == Some("stream"));
 
             assert!(stream_param.is_some(), "Stream parameter should exist");
         }
@@ -1039,7 +1074,11 @@ mod tests {
         for type_name in test_types {
             let example = generator.generate_example_for_type(type_name);
             assert!(example.is_object(), "Example should be an object for type: {}", type_name);
-            assert!(!example.as_object().unwrap().is_empty(), "Example object should not be empty for type: {}", type_name);
+            assert!(
+                !example.as_object().unwrap().is_empty(),
+                "Example object should not be empty for type: {}",
+                type_name
+            );
         }
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAutocomplete } from '../../hooks/useApi';
-import { AutocompleteSuggestion, AutocompleteRequest } from '../../types';
+import type { AutocompleteSuggestion, AutocompleteRequest } from '../../types';
 
 interface AutocompleteInputProps {
   value: string;

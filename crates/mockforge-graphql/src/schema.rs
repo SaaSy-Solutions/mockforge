@@ -1,6 +1,6 @@
 //! GraphQL schema parsing and generation
 
-use async_graphql::{Object, Schema, EmptyMutation, EmptySubscription};
+use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
 
 /// Simple User type for GraphQL
 #[derive(async_graphql::SimpleObject)]

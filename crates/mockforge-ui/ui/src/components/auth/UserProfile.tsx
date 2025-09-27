@@ -116,17 +116,21 @@ export function UserProfile() {
               </div>
 
               <div className="border-t my-2"></div>
+              
 
               <div className="space-y-1">
                 <div className="px-3 py-2 text-xs text-muted-foreground">
                   System
                 </div>
-                <button
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
-                  onClick={() => setShowDropdown(false)}
-                >
-                  API Documentation
-                </button>
+                 <a
+                   href="/api-docs"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors block"
+                   onClick={() => setShowDropdown(false)}
+                 >
+                   API Documentation
+                 </a>
                 <button
                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
                   onClick={() => setShowDropdown(false)}

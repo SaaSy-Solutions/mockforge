@@ -156,7 +156,10 @@ pub struct ImportResult {
 }
 
 /// Import a Postman collection
-pub fn import_postman_collection(content: &str, base_url: Option<&str>) -> Result<ImportResult, String> {
+pub fn import_postman_collection(
+    content: &str,
+    base_url: Option<&str>,
+) -> Result<ImportResult, String> {
     let collection: PostmanCollection = serde_json::from_str(content)
         .map_err(|e| format!("Failed to parse Postman collection: {}", e))?;
 
@@ -196,7 +199,9 @@ fn process_items(
                 // This is a request
                 match convert_request_to_route(request, &item.name, variables, base_url) {
                     Ok(route) => routes.push(route),
-                    Err(e) => warnings.push(format!("Failed to convert request '{}': {}", item.name, e)),
+                    Err(e) => {
+                        warnings.push(format!("Failed to convert request '{}': {}", item.name, e))
+                    }
                 }
             }
         } else if !item.item.is_empty() {
@@ -272,25 +277,32 @@ fn build_url(
 
                 // Path
                 if let Some(path_parts) = &structured.path {
-                    let path: Vec<String> = path_parts.iter().map(|part| match part {
-                        StringOrVariable::String(s) => resolve_variables(s, variables),
-                        StringOrVariable::Variable(var) => {
-                            if let Some(value) = variables.get(&var.key) {
-                                value.clone()
-                            } else {
-                                var.key.clone()
+                    let path: Vec<String> = path_parts
+                        .iter()
+                        .map(|part| match part {
+                            StringOrVariable::String(s) => resolve_variables(s, variables),
+                            StringOrVariable::Variable(var) => {
+                                if let Some(value) = variables.get(&var.key) {
+                                    value.clone()
+                                } else {
+                                    var.key.clone()
+                                }
                             }
-                        }
-                    }).collect();
+                        })
+                        .collect();
                     url_parts.push(path.join("/"));
                 }
 
                 // Query
-                let query_parts: Vec<String> = structured.query.iter()
+                let query_parts: Vec<String> = structured
+                    .query
+                    .iter()
                     .filter(|q| !q.disabled && q.key.is_some())
                     .map(|q| {
                         let key = resolve_variables(q.key.as_ref().unwrap(), variables);
-                        let value = q.value.as_ref()
+                        let value = q
+                            .value
+                            .as_ref()
                             .map(|v| resolve_variables(v, variables))
                             .unwrap_or_default();
                         format!("{}={}", key, value)
@@ -333,7 +345,10 @@ fn resolve_variables(input: &str, variables: &HashMap<String, String>) -> String
 }
 
 /// Generate a mock response for the request
-fn generate_mock_response(request: &PostmanRequest, _variables: &HashMap<String, String>) -> MockForgeResponse {
+fn generate_mock_response(
+    request: &PostmanRequest,
+    _variables: &HashMap<String, String>,
+) -> MockForgeResponse {
     let mut headers = HashMap::new();
     headers.insert("Content-Type".to_string(), "application/json".to_string());
 
@@ -381,7 +396,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "GET");
@@ -432,7 +448,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 3);
 
@@ -444,7 +461,10 @@ mod tests {
         assert_eq!(result.routes[1].method, "POST");
         assert_eq!(result.routes[1].path, "/users");
         assert_eq!(result.routes[1].body, Some("{\"name\": \"John\", \"age\": 30}".to_string()));
-        assert_eq!(result.routes[1].headers.get("Content-Type"), Some(&"application/json".to_string()));
+        assert_eq!(
+            result.routes[1].headers.get("Content-Type"),
+            Some(&"application/json".to_string())
+        );
 
         // Check third route (PUT)
         assert_eq!(result.routes[2].method, "PUT");
@@ -497,7 +517,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 3);
 
@@ -540,7 +561,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "GET");
@@ -565,11 +587,12 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 7);
 
-        let expected_methods = vec!["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
+        let expected_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
         for (i, expected_method) in expected_methods.iter().enumerate() {
             assert_eq!(result.routes[i].method, *expected_method);
             assert_eq!(result.routes[i].path, format!("/{}", expected_method.to_lowercase()));
@@ -603,12 +626,16 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "POST");
         assert_eq!(result.routes[0].path, "/form");
-        assert_eq!(result.routes[0].body, Some("username=john_doe&password=secret123&remember=true".to_string()));
+        assert_eq!(
+            result.routes[0].body,
+            Some("username=john_doe&password=secret123&remember=true".to_string())
+        );
     }
 
     #[test]
@@ -646,19 +673,26 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 2);
 
         // Check JSON request
         assert_eq!(result.routes[0].method, "POST");
         assert_eq!(result.routes[0].path, "/json");
-        assert_eq!(result.routes[0].body, Some("{\"message\": \"Hello World\", \"data\": {\"key\": \"value\"}}".to_string()));
+        assert_eq!(
+            result.routes[0].body,
+            Some("{\"message\": \"Hello World\", \"data\": {\"key\": \"value\"}}".to_string())
+        );
 
         // Check XML request
         assert_eq!(result.routes[1].method, "POST");
         assert_eq!(result.routes[1].path, "/xml");
-        assert_eq!(result.routes[1].body, Some("<root><message>Hello</message><data><key>value</key></data></root>".to_string()));
+        assert_eq!(
+            result.routes[1].body,
+            Some("<root><message>Hello</message><data><key>value</key></data></root>".to_string())
+        );
     }
 
     #[test]
@@ -692,12 +726,16 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "GET");
         assert_eq!(result.routes[0].path, "/protected");
-        assert_eq!(result.routes[0].headers.get("Authorization"), Some(&"Bearer test-token-abc".to_string()));
+        assert_eq!(
+            result.routes[0].headers.get("Authorization"),
+            Some(&"Bearer test-token-abc".to_string())
+        );
         assert_eq!(result.routes[0].headers.get("X-API-Key"), Some(&"api-key-123".to_string()));
     }
 
@@ -728,7 +766,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "GET");
@@ -762,7 +801,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         // All requests should be imported regardless of disabled status in Postman
         // (disabled in Postman means not executed during collection run, not that it's invalid)
@@ -796,7 +836,8 @@ mod tests {
             ]
         }"#;
 
-        let result = import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
+        let result =
+            import_postman_collection(collection_json, Some("https://api.example.com")).unwrap();
 
         assert_eq!(result.routes.len(), 1);
         assert_eq!(result.routes[0].method, "GET");

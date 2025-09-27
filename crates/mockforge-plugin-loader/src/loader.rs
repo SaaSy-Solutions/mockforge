@@ -16,9 +16,7 @@ use tokio::sync::RwLock;
 use tokio::time::{timeout, Duration};
 
 // Import types from plugin core
-use mockforge_plugin_core::{
-    PluginId, PluginHealth, PluginManifest, PluginInstance
-};
+use mockforge_plugin_core::{PluginHealth, PluginId, PluginInstance, PluginManifest};
 
 /// Main plugin loader
 pub struct PluginLoader {
@@ -75,8 +73,11 @@ impl PluginLoader {
                     }
                 }
             } else {
-                tracing::debug!("Skipping invalid plugin {}: {}", discovery.plugin_id,
-                    discovery.first_error().unwrap_or("unknown error"));
+                tracing::debug!(
+                    "Skipping invalid plugin {}: {}",
+                    discovery.plugin_id,
+                    discovery.first_error().unwrap_or("unknown error")
+                );
                 stats.record_skipped();
             }
         }
@@ -88,12 +89,14 @@ impl PluginLoader {
     /// Load a specific plugin by ID
     pub async fn load_plugin(&self, plugin_id: &PluginId) -> LoaderResult<()> {
         // Find plugin in discovery paths
-        let discovery = self.discover_plugin_by_id(plugin_id).await?
+        let discovery = self
+            .discover_plugin_by_id(plugin_id)
+            .await?
             .ok_or_else(|| PluginLoaderError::not_found(plugin_id.clone()))?;
 
         if !discovery.is_valid {
             return Err(PluginLoaderError::validation(
-                discovery.first_error().unwrap_or("Plugin validation failed").to_string()
+                discovery.first_error().unwrap_or("Plugin validation failed").to_string(),
             ));
         }
 
@@ -138,7 +141,10 @@ impl PluginLoader {
     }
 
     /// Discover plugins in a directory
-    async fn discover_plugins_in_directory(&self, dir_path: &str) -> LoaderResult<Vec<PluginDiscovery>> {
+    async fn discover_plugins_in_directory(
+        &self,
+        dir_path: &str,
+    ) -> LoaderResult<Vec<PluginDiscovery>> {
         let expanded_path = shellexpand::tilde(dir_path);
         let dir_path = PathBuf::from(expanded_path.as_ref());
 
@@ -149,7 +155,8 @@ impl PluginLoader {
 
         if !dir_path.is_dir() {
             return Err(PluginLoaderError::fs(format!(
-                "Plugin path is not a directory: {}", dir_path.display()
+                "Plugin path is not a directory: {}",
+                dir_path.display()
             )));
         }
 
@@ -160,7 +167,9 @@ impl PluginLoader {
             Ok(entries) => entries,
             Err(e) => {
                 return Err(PluginLoaderError::fs(format!(
-                    "Failed to read plugin directory {}: {}", dir_path.display(), e
+                    "Failed to read plugin directory {}: {}",
+                    dir_path.display(),
+                    e
                 )));
             }
         };
@@ -199,7 +208,11 @@ impl PluginLoader {
             Err(e) => {
                 let plugin_id = PluginId::new("unknown".to_string());
                 let errors = vec![format!("Failed to load manifest: {}", e)];
-                return Ok(PluginDiscovery::failure(plugin_id, manifest_path.display().to_string(), errors));
+                return Ok(PluginDiscovery::failure(
+                    plugin_id,
+                    manifest_path.display().to_string(),
+                    errors,
+                ));
             }
         };
 
@@ -219,13 +232,20 @@ impl PluginLoader {
             }
             Err(errors) => {
                 let errors_str: Vec<String> = vec![errors.to_string()];
-                Ok(PluginDiscovery::failure(plugin_id, manifest_path.display().to_string(), errors_str))
+                Ok(PluginDiscovery::failure(
+                    plugin_id,
+                    manifest_path.display().to_string(),
+                    errors_str,
+                ))
             }
         }
     }
 
     /// Discover plugin by ID
-    async fn discover_plugin_by_id(&self, plugin_id: &PluginId) -> LoaderResult<Option<PluginDiscovery>> {
+    async fn discover_plugin_by_id(
+        &self,
+        plugin_id: &PluginId,
+    ) -> LoaderResult<Option<PluginDiscovery>> {
         for dir in &self.config.plugin_dirs {
             let discoveries = self.discover_plugins_in_directory(dir).await?;
             if let Some(discovery) = discoveries.into_iter().find(|d| &d.plugin_id == plugin_id) {
@@ -251,10 +271,9 @@ impl PluginLoader {
         self.validator.validate_capabilities(&discovery.manifest.capabilities)?;
 
         // Find WASM file
-        let plugin_path = self.find_plugin_wasm_file(&discovery.path).await?
-            .ok_or_else(|| PluginLoaderError::load(format!(
-                "No WebAssembly file found for plugin {}", plugin_id
-            )))?;
+        let plugin_path = self.find_plugin_wasm_file(&discovery.path).await?.ok_or_else(|| {
+            PluginLoaderError::load(format!("No WebAssembly file found for plugin {}", plugin_id))
+        })?;
 
         // Validate WASM file
         self.validator.validate_wasm_file(&plugin_path).await?;
@@ -271,9 +290,12 @@ impl PluginLoader {
         let load_timeout = Duration::from_secs(self.config.load_timeout_secs);
         let plugin_instance = timeout(load_timeout, self.load_plugin_instance(&load_context))
             .await
-            .map_err(|_| PluginLoaderError::load(format!(
-                "Plugin loading timed out after {} seconds", self.config.load_timeout_secs
-            )))??;
+            .map_err(|_| {
+                PluginLoaderError::load(format!(
+                    "Plugin loading timed out after {} seconds",
+                    self.config.load_timeout_secs
+                ))
+            })??;
 
         // Register plugin
         let mut registry = self.registry.write().await;
@@ -284,7 +306,10 @@ impl PluginLoader {
     }
 
     /// Load plugin instance
-    async fn load_plugin_instance(&self, context: &PluginLoadContext) -> LoaderResult<PluginInstance> {
+    async fn load_plugin_instance(
+        &self,
+        context: &PluginLoadContext,
+    ) -> LoaderResult<PluginInstance> {
         // Create plugin instance through sandbox
         self.sandbox.create_plugin_instance(context).await
     }
@@ -298,7 +323,9 @@ impl PluginLoader {
             Ok(entries) => entries,
             Err(e) => {
                 return Err(PluginLoaderError::fs(format!(
-                    "Failed to read plugin directory {}: {}", plugin_path.display(), e
+                    "Failed to read plugin directory {}: {}",
+                    plugin_path.display(),
+                    e
                 )));
             }
         };
@@ -419,7 +446,8 @@ mod tests {
         let plugin_id = PluginId::new("test-plugin");
         let errors = vec!["Validation failed".to_string()];
 
-        let discovery = PluginDiscovery::failure(plugin_id, "/tmp/test".to_string(), errors.clone());
+        let discovery =
+            PluginDiscovery::failure(plugin_id, "/tmp/test".to_string(), errors.clone());
         assert!(!discovery.is_success());
         assert_eq!(discovery.errors, errors);
         assert_eq!(discovery.first_error(), Some("Validation failed"));

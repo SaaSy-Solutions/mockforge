@@ -1,6 +1,11 @@
 //! Data generator implementation
 
-use crate::{faker::EnhancedFaker, rag::{RagEngine, RagConfig}, schema::SchemaDefinition, DataConfig, GenerationResult};
+use crate::{
+    faker::EnhancedFaker,
+    rag::{RagConfig, RagEngine},
+    schema::SchemaDefinition,
+    DataConfig, GenerationResult,
+};
 use mockforge_core::Result;
 use std::time::Instant;
 

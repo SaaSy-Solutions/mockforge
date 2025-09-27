@@ -4,22 +4,25 @@
 //! for extensible functionality like custom token resolvers.
 
 // Public modules
-pub mod types;
 pub mod manifest;
-pub mod template;
 pub mod response;
 pub mod runtime;
+pub mod template;
+pub mod types;
 
 // Re-export the async trait
 pub mod async_trait;
 pub use async_trait::TokenResolver;
 
 // Re-export types
-pub use types::*;
 pub use response::*;
+pub use types::*;
 
 // Re-export common types for backwards compatibility
-pub use types::{PluginId, PluginVersion, PluginAuthor, PluginInfo, PluginManifest, PluginState, PluginHealth, PluginMetadata};
+pub use types::{
+    PluginAuthor, PluginHealth, PluginId, PluginInfo, PluginManifest, PluginMetadata, PluginState,
+    PluginVersion,
+};
 
 // Additional utility traits (commented out as we're using the async trait)
 // pub trait SyncTokenResolver {
@@ -39,7 +42,7 @@ pub use types::{PluginId, PluginVersion, PluginAuthor, PluginInfo, PluginManifes
 // }
 
 // Re-export additional types for backwards compatibility
-pub use types::{ResolutionContext, RequestMetadata, PluginError, PluginInstance, Result};
+pub use types::{PluginError, PluginInstance, RequestMetadata, ResolutionContext, Result};
 
 #[cfg(test)]
 mod tests {
@@ -89,8 +92,8 @@ mod tests {
 
     #[test]
     fn test_request_metadata() {
-        let request = RequestMetadata::new("GET", "/api/users")
-            .with_header("Accept", "application/json");
+        let request =
+            RequestMetadata::new("GET", "/api/users").with_header("Accept", "application/json");
 
         assert_eq!(request.method, "GET");
         assert_eq!(request.path, "/api/users");

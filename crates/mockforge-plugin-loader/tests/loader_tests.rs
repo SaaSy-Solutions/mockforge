@@ -1,7 +1,7 @@
 //! Comprehensive tests for the plugin loader functionality
 
-use mockforge_plugin_loader::*;
 use mockforge_plugin_core::*;
+use mockforge_plugin_loader::*;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
@@ -16,8 +16,7 @@ mod tests {
         let author = PluginAuthor::with_email("Test Author", "test@example.com");
         let info = PluginInfo::new(id, version, "Test Plugin", "A test plugin", author);
 
-        PluginManifest::new(info)
-            .with_capability("template")
+        PluginManifest::new(info).with_capability("template")
     }
 
     fn create_test_wasm_bytes() -> Vec<u8> {
@@ -25,8 +24,9 @@ mod tests {
         // This is a simplified WASM binary that just contains a valid header
         vec![
             0x00, 0x61, 0x73, 0x6D, // WASM magic number
-            0x01, 0x00, 0x00, 0x00, // WASM version
-            // Empty sections - this is a minimal valid module
+            0x01, 0x00, 0x00,
+            0x00, // WASM version
+                  // Empty sections - this is a minimal valid module
         ]
     }
 
@@ -316,7 +316,10 @@ mod tests {
         assert!(result.is_ok(), "Plugin validation should pass");
 
         let validated_manifest = result.unwrap();
-        assert!(validated_manifest.capabilities.contains(&"template".to_string()), "Plugin should have template capability");
+        assert!(
+            validated_manifest.capabilities.contains(&"template".to_string()),
+            "Plugin should have template capability"
+        );
     }
 
     #[tokio::test]

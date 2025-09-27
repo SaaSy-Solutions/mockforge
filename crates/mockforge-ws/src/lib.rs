@@ -28,13 +28,14 @@ pub fn router_with_proxy(proxy_handler: WsProxyHandler) -> Router {
     #[cfg(feature = "data-faker")]
     register_core_faker_provider();
 
-    Router::new()
-        .route("/ws", get(ws_handler_with_proxy))
-        .with_state(proxy_handler)
+    Router::new().route("/ws", get(ws_handler_with_proxy)).with_state(proxy_handler)
 }
 
 /// Start WebSocket server with latency simulation
-pub async fn start_with_latency(port: u16, latency: Option<LatencyProfile>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_with_latency(
+    port: u16,
+    latency: Option<LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let latency_injector = latency.map(|profile| LatencyInjector::new(profile, Default::default()));
     let router = if let Some(injector) = latency_injector {
         router_with_latency(injector)

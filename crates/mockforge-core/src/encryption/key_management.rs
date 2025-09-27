@@ -3,13 +3,13 @@
 //! This module provides comprehensive key management functionality including
 //! key generation, storage, rotation, and secure key lifecycle management.
 
-use crate::encryption::algorithms::{EncryptionKey, EncryptionAlgorithm};
+use crate::encryption::algorithms::{EncryptionAlgorithm, EncryptionKey};
 use crate::encryption::derivation::KeyDerivationManager;
 use crate::encryption::errors::{EncryptionError, EncryptionResult};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, OnceLock};
-use chrono::{DateTime, Utc};
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// Key identifier for lookup and management
 pub type KeyId = String;
@@ -54,7 +54,8 @@ impl KeyStorage for MemoryKeyStorage {
     }
 
     fn retrieve_key(&self, key_id: &KeyId) -> EncryptionResult<Vec<u8>> {
-        self.keys.get(key_id)
+        self.keys
+            .get(key_id)
             .cloned()
             .ok_or_else(|| EncryptionError::key_not_found(key_id.clone()))
     }
@@ -108,8 +109,9 @@ impl FileKeyStorage {
     /// Ensure the base directory exists
     fn ensure_base_dir(&self) -> EncryptionResult<()> {
         if !self.base_path.exists() {
-            std::fs::create_dir_all(&self.base_path)
-                .map_err(|e| EncryptionError::generic(format!("Failed to create key storage directory: {}", e)))?;
+            std::fs::create_dir_all(&self.base_path).map_err(|e| {
+                EncryptionError::generic(format!("Failed to create key storage directory: {}", e))
+            })?;
         }
         Ok(())
     }
@@ -125,8 +127,7 @@ impl KeyStorage for FileKeyStorage {
 
     fn retrieve_key(&self, key_id: &KeyId) -> EncryptionResult<Vec<u8>> {
         let file_path = self.key_file_path(key_id);
-        std::fs::read(&file_path)
-            .map_err(|_| EncryptionError::key_not_found(key_id.clone()))
+        std::fs::read(&file_path).map_err(|_| EncryptionError::key_not_found(key_id.clone()))
     }
 
     fn delete_key(&mut self, key_id: &KeyId) -> EncryptionResult<()> {
@@ -134,7 +135,9 @@ impl KeyStorage for FileKeyStorage {
         match std::fs::remove_file(&file_path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // Key doesn't exist, consider it deleted
-            Err(e) => Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e))),
+            Err(e) => {
+                Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e)))
+            }
         }
     }
 
@@ -239,8 +242,7 @@ impl KeyStore {
 
     /// Initialize the master key for the key store
     pub fn initialize_master_key(&mut self, master_password: &str) -> EncryptionResult<()> {
-        let master_key = self.derivation_manager
-            .derive_master_key(master_password)?;
+        let master_key = self.derivation_manager.derive_master_key(master_password)?;
 
         self.master_key = Some(master_key);
         Ok(())
@@ -301,23 +303,26 @@ impl KeyStore {
         let encrypted_data: Vec<u8> = self.storage.retrieve_key(key_id)?;
 
         // Deserialize encrypted data
-        let encrypted: crate::encryption::algorithms::EncryptedData = serde_json::from_slice(&encrypted_data)
-            .map_err(|e| EncryptionError::serialization_error(e.to_string()))?;
+        let encrypted: crate::encryption::algorithms::EncryptedData =
+            serde_json::from_slice(&encrypted_data)
+                .map_err(|e| EncryptionError::serialization_error(e.to_string()))?;
 
         // Decrypt the key
-        let master_key = self.master_key.as_ref()
+        let master_key = self
+            .master_key
+            .as_ref()
             .ok_or_else(|| EncryptionError::key_store_error("Master key not initialized"))?;
 
-        let decrypted_bytes = crate::encryption::algorithms::EncryptionEngine::decrypt(
-            master_key,
-            &encrypted,
-        )?;
+        let decrypted_bytes =
+            crate::encryption::algorithms::EncryptionEngine::decrypt(master_key, &encrypted)?;
 
         let key_data = String::from_utf8(decrypted_bytes)
             .map_err(|e| EncryptionError::serialization_error(e.to_string()))?;
 
         // Get metadata to determine algorithm
-        let metadata = self.metadata.get(key_id)
+        let metadata = self
+            .metadata
+            .get(key_id)
             .ok_or_else(|| EncryptionError::key_not_found(key_id.clone()))?;
 
         EncryptionKey::from_base64(&key_data, metadata.algorithm.clone())
@@ -334,7 +339,9 @@ impl KeyStore {
 
     /// Rotate a key (generate new version)
     pub fn rotate_key(&mut self, key_id: &KeyId) -> EncryptionResult<()> {
-        let old_metadata = self.metadata.get(key_id)
+        let old_metadata = self
+            .metadata
+            .get(key_id)
             .ok_or_else(|| EncryptionError::key_not_found(key_id.clone()))?
             .clone();
 
@@ -389,13 +396,16 @@ impl KeyStore {
 
     /// Check if a key exists and is active
     pub fn key_exists(&self, key_id: &KeyId) -> bool {
-        self.storage.key_exists(key_id) && self.metadata.get(key_id)
-            .map(|meta| meta.is_active)
-            .unwrap_or(false)
+        self.storage.key_exists(key_id)
+            && self.metadata.get(key_id).map(|meta| meta.is_active).unwrap_or(false)
     }
 
     /// Set key expiration
-    pub fn set_key_expiration(&mut self, key_id: &KeyId, expires_at: DateTime<Utc>) -> EncryptionResult<()> {
+    pub fn set_key_expiration(
+        &mut self,
+        key_id: &KeyId,
+        expires_at: DateTime<Utc>,
+    ) -> EncryptionResult<()> {
         if let Some(metadata) = self.metadata.get_mut(key_id) {
             metadata.expires_at = Some(expires_at);
             Ok(())
@@ -409,7 +419,9 @@ impl KeyStore {
         let now = Utc::now();
 
         // Find expired keys
-        let expired_key_ids: Vec<KeyId> = self.metadata.iter()
+        let expired_key_ids: Vec<KeyId> = self
+            .metadata
+            .iter()
             .filter_map(|(key_id, metadata)| {
                 if let Some(expires_at) = metadata.expires_at {
                     if now > expires_at && metadata.is_active {
@@ -438,25 +450,27 @@ impl KeyStore {
     pub fn get_statistics(&self) -> KeyStoreStatistics {
         let total_keys = self.metadata.len();
         let active_keys = self.metadata.values().filter(|meta| meta.is_active).count();
-        let expired_keys = self.metadata.values()
-            .filter(|meta| {
-                meta.expires_at.is_some_and(|exp| chrono::Utc::now() > exp)
-            })
+        let expired_keys = self
+            .metadata
+            .values()
+            .filter(|meta| meta.expires_at.is_some_and(|exp| chrono::Utc::now() > exp))
             .count();
 
-        let total_usage: u64 = self.metadata.values()
-            .map(|meta| meta.usage_count)
-            .sum();
+        let total_usage: u64 = self.metadata.values().map(|meta| meta.usage_count).sum();
 
         KeyStoreStatistics {
             total_keys,
             active_keys,
             expired_keys,
             total_usage,
-            oldest_key: self.metadata.values()
+            oldest_key: self
+                .metadata
+                .values()
                 .min_by_key(|meta| meta.created_at)
                 .map(|meta| meta.created_at),
-            newest_key: self.metadata.values()
+            newest_key: self
+                .metadata
+                .values()
                 .max_by_key(|meta| meta.created_at)
                 .map(|meta| meta.created_at),
         }
@@ -526,10 +540,7 @@ pub mod utils {
     /// Generate a unique key ID
     pub fn generate_key_id() -> KeyId {
         use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
 
         format!("key_{}", timestamp)
     }
@@ -553,8 +564,15 @@ pub mod utils {
 
     /// Sanitize key ID for safe storage
     pub fn sanitize_key_id(key_id: &str) -> String {
-        key_id.chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        key_id
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>()
             .trim_matches('_')
             .to_string()

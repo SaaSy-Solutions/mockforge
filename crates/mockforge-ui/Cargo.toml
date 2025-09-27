@@ -20,6 +20,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 reqwest = { version = "0.11", features = ["json"] }
 sysinfo = { workspace = true }
+html-escape = "0.2"
 mockforge-core = { path = "../mockforge-core" }
 mockforge-http = { path = "../mockforge-http" }
 mockforge-ws = { path = "../mockforge-ws" }

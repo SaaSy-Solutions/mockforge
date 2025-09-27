@@ -4,11 +4,11 @@
 
 use mockforge_core::LatencyProfile;
 
-pub mod schema;
 pub mod executor;
+pub mod schema;
 
+pub use executor::{create_graphql_router, start_graphql_server, GraphQLExecutor};
 pub use schema::GraphQLSchema;
-pub use executor::{GraphQLExecutor, start_graphql_server, create_graphql_router};
 
 /// Start GraphQL server with default configuration
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

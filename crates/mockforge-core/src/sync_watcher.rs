@@ -1,10 +1,10 @@
- //! File system watcher for bidirectional directory sync
+//! File system watcher for bidirectional directory sync
 //!
 //! This module provides real-time file system monitoring for bidirectional
 //! sync between workspaces and external directories.
 
 use crate::workspace_persistence::WorkspacePersistence;
-use crate::{Result, Error};
+use crate::{Error, Result};
 use notify::{Config, Event, RecommendedWatcher, Watcher};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -38,10 +38,7 @@ pub enum SyncEvent {
         content: String,
     },
     /// File deleted from directory
-    FileDeleted {
-        workspace_id: String,
-        path: PathBuf,
-    },
+    FileDeleted { workspace_id: String, path: PathBuf },
     /// Directory changes detected (summary)
     DirectoryChanged {
         workspace_id: String,
@@ -76,11 +73,7 @@ impl SyncWatcher {
     }
 
     /// Start monitoring a workspace directory
-    pub async fn start_monitoring(
-        &mut self,
-        workspace_id: &str,
-        directory: &str,
-    ) -> Result<()> {
+    pub async fn start_monitoring(&mut self, workspace_id: &str, directory: &str) -> Result<()> {
         let directory_path = PathBuf::from(directory);
 
         // Ensure directory exists
@@ -110,7 +103,14 @@ impl SyncWatcher {
                     let dir_clone = directory_path_clone.clone();
 
                     tokio::spawn(async move {
-                        if let Err(e) = Self::handle_fs_event(&tx_clone, &workspace_id_clone, &dir_clone, &event).await {
+                        if let Err(e) = Self::handle_fs_event(
+                            &tx_clone,
+                            &workspace_id_clone,
+                            &dir_clone,
+                            &event,
+                        )
+                        .await
+                        {
                             error!("Failed to handle file system event: {}", e);
                         }
                     });
@@ -133,21 +133,34 @@ impl SyncWatcher {
         let is_running = self.running.clone();
 
         tokio::spawn(async move {
-            info!("Started monitoring workspace {} in directory {}", workspace_id_for_processing, directory_str);
+            info!(
+                "Started monitoring workspace {} in directory {}",
+                workspace_id_for_processing, directory_str
+            );
 
             while *is_running.lock().await {
                 match timeout(Duration::from_millis(100), rx.recv()).await {
                     Ok(Some(event)) => {
-                        if let Err(e) = Self::process_sync_event(&persistence_clone, &workspace_id_for_processing, &directory_path_for_processing, event).await {
+                        if let Err(e) = Self::process_sync_event(
+                            &persistence_clone,
+                            &workspace_id_for_processing,
+                            &directory_path_for_processing,
+                            event,
+                        )
+                        .await
+                        {
                             error!("Failed to process sync event: {}", e);
                         }
                     }
-                    Ok(None) => break, // Channel closed
+                    Ok(None) => break,  // Channel closed
                     Err(_) => continue, // Timeout, continue monitoring
                 }
             }
 
-            info!("Stopped monitoring workspace {} in directory {}", workspace_id_for_processing, directory_str);
+            info!(
+                "Stopped monitoring workspace {} in directory {}",
+                workspace_id_for_processing, directory_str
+            );
         });
 
         Ok(())
@@ -184,10 +197,12 @@ impl SyncWatcher {
             let relative_path = path.strip_prefix(base_dir).unwrap_or(path);
 
             // Skip metadata files and temporary files
-            if relative_path.starts_with(".") ||
-               relative_path.file_name()
-                 .map(|n| n.to_string_lossy().starts_with("."))
-                 .unwrap_or(false) {
+            if relative_path.starts_with(".")
+                || relative_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().starts_with("."))
+                    .unwrap_or(false)
+            {
                 continue;
             }
 
@@ -229,10 +244,12 @@ impl SyncWatcher {
         }
 
         if !changes.is_empty() {
-            let _ = tx.send(SyncEvent::DirectoryChanged {
-                workspace_id: workspace_id.to_string(),
-                changes,
-            }).await;
+            let _ = tx
+                .send(SyncEvent::DirectoryChanged {
+                    workspace_id: workspace_id.to_string(),
+                    changes,
+                })
+                .await;
         }
 
         Ok(())
@@ -245,14 +262,25 @@ impl SyncWatcher {
         _directory: &Path,
         event: SyncEvent,
     ) -> Result<()> {
-        if let SyncEvent::DirectoryChanged { workspace_id, changes } = event {
+        if let SyncEvent::DirectoryChanged {
+            workspace_id,
+            changes,
+        } = event
+        {
             info!("Processing {} file changes for workspace {}", changes.len(), workspace_id);
 
             for change in changes {
                 match change.kind {
                     ChangeKind::Created | ChangeKind::Modified => {
                         if let Some(content) = change.content {
-                            if let Err(e) = Self::import_yaml_content(persistence, &workspace_id, &change.path, &content).await {
+                            if let Err(e) = Self::import_yaml_content(
+                                persistence,
+                                &workspace_id,
+                                &change.path,
+                                &content,
+                            )
+                            .await
+                            {
                                 warn!("Failed to import file {}: {}", change.path.display(), e);
                             }
                         }
@@ -280,16 +308,22 @@ impl SyncWatcher {
         let workspace = persistence.load_workspace(workspace_id).await?;
 
         // Check sync direction before proceeding
-        if !matches!(workspace.get_sync_direction(), crate::workspace::SyncDirection::Bidirectional) {
+        if !matches!(workspace.get_sync_direction(), crate::workspace::SyncDirection::Bidirectional)
+        {
             debug!("Workspace {} is not configured for bidirectional sync", workspace_id);
             return Ok(());
         }
 
         // Try to parse as a workspace export
-        if let Ok(_export) = serde_yaml::from_str::<crate::workspace_persistence::WorkspaceExport>(content) {
+        if let Ok(_export) =
+            serde_yaml::from_str::<crate::workspace_persistence::WorkspaceExport>(content)
+        {
             // This is a full workspace export - we should be cautious about importing
             // For now, just log the intent
-            info!("Detected workspace export for {}, skipping full import to avoid conflicts", workspace_id);
+            info!(
+                "Detected workspace export for {}, skipping full import to avoid conflicts",
+                workspace_id
+            );
             return Ok(());
         }
 
@@ -303,7 +337,11 @@ impl SyncWatcher {
             workspace.add_request(request)?;
             persistence.save_workspace(&workspace).await?;
 
-            info!("Successfully imported request {} into workspace {}", path.display(), workspace_id);
+            info!(
+                "Successfully imported request {} into workspace {}",
+                path.display(),
+                workspace_id
+            );
         } else {
             debug!("Content in {} is not a recognized format, skipping", path.display());
         }

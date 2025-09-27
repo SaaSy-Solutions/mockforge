@@ -8,12 +8,14 @@
 //! - OAuth2 with token introspection
 
 // Re-export types from mockforge-core for convenience
-pub use mockforge_core::config::{AuthConfig, JwtConfig, OAuth2Config, BasicAuthConfig, ApiKeyConfig};
+pub use mockforge_core::config::{
+    ApiKeyConfig, AuthConfig, BasicAuthConfig, JwtConfig, OAuth2Config,
+};
 
 // Sub-modules
-pub mod types;
-pub mod state;
 pub mod middleware;
+pub mod state;
+pub mod types;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,20 +24,19 @@ pub mod authenticator;
 pub mod oauth2;
 
 // Re-export main types and functions for convenience
-pub use types::{AuthResult, AuthClaims};
-pub use state::AuthState;
+pub use authenticator::{authenticate_jwt, authenticate_request};
 pub use middleware::auth_middleware;
 pub use oauth2::create_oauth2_client;
-pub use authenticator::{authenticate_request, authenticate_jwt};
-
+pub use state::AuthState;
+pub use types::{AuthClaims, AuthResult};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use authenticator::{authenticate_api_key, authenticate_basic};
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use serde_json::json;
     use std::collections::HashMap;
-    use authenticator::{authenticate_basic, authenticate_api_key};
 
     #[test]
     fn test_authenticate_basic_success() {

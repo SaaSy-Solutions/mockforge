@@ -1,5 +1,3 @@
-use mockforge_core::openapi_routes::*;
-use serde_json::json;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -7,8 +5,10 @@ use axum::{
     response::Response,
     Router,
 };
-use tower::Service;
+use mockforge_core::openapi_routes::*;
+use serde_json::json;
 use std::net::SocketAddr;
+use tower::Service;
 
 #[tokio::test]
 async fn test_mock_route_generation() {
@@ -121,19 +121,11 @@ async fn test_request_logger_middleware() {
     use mockforge_core::openapi_routes::builder::request_logger;
 
     // Create a simple request
-    let request = Request::builder()
-        .method("GET")
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let request = Request::builder().method("GET").uri("/test").body(Body::empty()).unwrap();
 
     // Create a mock next middleware that returns a response
-    let next = Next::new(|_| async {
-        Ok(Response::builder()
-            .status(200)
-            .body(Body::empty())
-            .unwrap())
-    });
+    let next =
+        Next::new(|_| async { Ok(Response::builder().status(200).body(Body::empty()).unwrap()) });
 
     // Call the middleware
     let result = request_logger(request, next).await;
@@ -149,19 +141,11 @@ async fn test_error_handler_middleware() {
     use mockforge_core::openapi_routes::builder::error_handler;
 
     // Create a simple request
-    let request = Request::builder()
-        .method("GET")
-        .uri("/test")
-        .body(Body::empty())
-        .unwrap();
+    let request = Request::builder().method("GET").uri("/test").body(Body::empty()).unwrap();
 
     // Create a mock next middleware that returns a server error response
-    let next = Next::new(|_| async {
-        Ok(Response::builder()
-            .status(500)
-            .body(Body::empty())
-            .unwrap())
-    });
+    let next =
+        Next::new(|_| async { Ok(Response::builder().status(500).body(Body::empty()).unwrap()) });
 
     // Call the middleware
     let response = error_handler(request, next).await;
@@ -172,8 +156,8 @@ async fn test_error_handler_middleware() {
 
 #[tokio::test]
 async fn test_validate_request_middleware() {
-    use mockforge_core::openapi_routes::builder::validate_request;
     use axum::extract::State;
+    use mockforge_core::openapi_routes::builder::validate_request;
 
     // Create a simple OpenAPI spec for testing
     let spec_json = json!({
@@ -196,19 +180,11 @@ async fn test_validate_request_middleware() {
     let registry = create_registry_from_json(spec_json).unwrap();
 
     // Create a valid request
-    let request = Request::builder()
-        .method("GET")
-        .uri("/users")
-        .body(Body::empty())
-        .unwrap();
+    let request = Request::builder().method("GET").uri("/users").body(Body::empty()).unwrap();
 
     // Create a mock next middleware
-    let next = Next::new(|_| async {
-        Ok(Response::builder()
-            .status(200)
-            .body(Body::empty())
-            .unwrap())
-    });
+    let next =
+        Next::new(|_| async { Ok(Response::builder().status(200).body(Body::empty()).unwrap()) });
 
     // Call the middleware with the registry as state
     let result = validate_request(State(registry), request, next).await;
@@ -220,8 +196,8 @@ async fn test_validate_request_middleware() {
 #[tokio::test]
 async fn test_middleware_integration() {
     use axum::routing::get;
-    use std::time::Duration;
     use reqwest::Client;
+    use std::time::Duration;
 
     // Create a simple OpenAPI spec
     let spec_json = json!({
@@ -263,11 +239,7 @@ async fn test_middleware_integration() {
 
     // Make HTTP request
     let client = Client::new();
-    let response = client
-        .get(format!("http://{}/test", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(format!("http://{}/test", addr)).send().await.unwrap();
 
     // Check response
     assert_eq!(response.status(), 200);

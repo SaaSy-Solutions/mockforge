@@ -3,12 +3,12 @@
 //! This module provides functionality for generating mock responses
 //! based on OpenAPI specifications.
 
-use crate::{Result, OpenApiSpec};
-use openapiv3::{Operation, Response, Schema, ReferenceOr, Responses};
+use crate::{OpenApiSpec, Result};
+use chrono;
+use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
+use rand::{rng, Rng};
 use serde_json::Value;
 use std::collections::HashMap;
-use chrono;
-use rand::{rng, Rng};
 
 /// Response generator for creating mock responses
 pub struct ResponseGenerator;
@@ -67,7 +67,11 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a Response object
-    fn generate_from_response(spec: &OpenApiSpec, response: &Response, content_type: Option<&str>) -> Result<Value> {
+    fn generate_from_response(
+        spec: &OpenApiSpec,
+        response: &Response,
+        content_type: Option<&str>,
+    ) -> Result<Value> {
         // If content_type is specified, look for that media type
         if let Some(content_type) = content_type {
             if let Some(media_type) = response.content.get(content_type) {
@@ -94,13 +98,14 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a MediaType
-    fn generate_from_media_type(spec: &OpenApiSpec, media_type: &openapiv3::MediaType) -> Result<Value> {
+    fn generate_from_media_type(
+        spec: &OpenApiSpec,
+        media_type: &openapiv3::MediaType,
+    ) -> Result<Value> {
         match &media_type.schema {
             Some(schema_ref) => {
                 match schema_ref {
-                    ReferenceOr::Item(schema) => {
-                        Ok(Self::generate_example_from_schema(schema))
-                    }
+                    ReferenceOr::Item(schema) => Ok(Self::generate_example_from_schema(schema)),
                     ReferenceOr::Reference { reference } => {
                         // Resolve the schema reference
                         if let Some(schema) = spec.get_schema(reference) {
@@ -126,15 +131,11 @@ impl ResponseGenerator {
                 // Use faker for string fields based on field name hints
                 Value::String("example string".to_string())
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => {
-                Value::Number(42.into())
-            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => Value::Number(42.into()),
             openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => {
                 Value::Number(serde_json::Number::from_f64(3.14).unwrap())
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => {
-                Value::Bool(true)
-            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {
                 let mut map = serde_json::Map::new();
                 for (prop_name, _) in &obj.properties {
@@ -143,15 +144,13 @@ impl ResponseGenerator {
                 }
                 Value::Object(map)
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) => {
-                match &arr.items {
-                    Some(ReferenceOr::Item(item_schema)) => {
-                        let example_item = Self::generate_example_from_schema(item_schema);
-                        Value::Array(vec![example_item])
-                    }
-                    _ => Value::Array(vec![Value::String("item".to_string())]),
+            openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) => match &arr.items {
+                Some(ReferenceOr::Item(item_schema)) => {
+                    let example_item = Self::generate_example_from_schema(item_schema);
+                    Value::Array(vec![example_item])
                 }
-            }
+                _ => Value::Array(vec![Value::String("item".to_string())]),
+            },
             _ => Value::Object(serde_json::Map::new()),
         }
     }
@@ -188,9 +187,20 @@ impl ResponseGenerator {
             Value::Number((18 + rng().random_range(0..60)).into())
         } else if prop_lower.contains("count") || prop_lower.contains("quantity") {
             Value::Number((1 + rng().random_range(0..100)).into())
-        } else if prop_lower.contains("price") || prop_lower.contains("amount") || prop_lower.contains("cost") {
-            Value::Number(serde_json::Number::from_f64((rng().random::<f64>() * 1000.0 * 100.0).round() / 100.0).unwrap())
-        } else if prop_lower.contains("active") || prop_lower.contains("enabled") || prop_lower.contains("is_") {
+        } else if prop_lower.contains("price")
+            || prop_lower.contains("amount")
+            || prop_lower.contains("cost")
+        {
+            Value::Number(
+                serde_json::Number::from_f64(
+                    (rng().random::<f64>() * 1000.0 * 100.0).round() / 100.0,
+                )
+                .unwrap(),
+            )
+        } else if prop_lower.contains("active")
+            || prop_lower.contains("enabled")
+            || prop_lower.contains("is_")
+        {
             Value::Bool(rng().random_bool(0.5))
         } else if prop_lower.contains("date") || prop_lower.contains("time") {
             Value::String(chrono::Utc::now().to_rfc3339())

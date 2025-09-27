@@ -38,6 +38,9 @@ import {
   ImportHistoryResponse
 } from '@/types';
 
+// Re-export FixtureInfo from types for backwards compatibility
+export type { FixtureInfo } from '../types/index';
+
 const API_BASE = '/__mockforge/chains';
 const WORKSPACE_API_BASE = '/__mockforge/workspaces';
 
@@ -439,5 +442,298 @@ class ImportApiService {
   }
 }
 
+class FixturesApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getFixtures(): Promise<FixtureInfo[]> {
+    return this.fetchJson('/__mockforge/fixtures');
+  }
+
+  async deleteFixture(fixtureId: string): Promise<void> {
+    return this.fetchJson(`/__mockforge/fixtures/${fixtureId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteFixturesBulk(fixtureIds: string[]): Promise<void> {
+    return this.fetchJson('/__mockforge/fixtures/bulk', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fixture_ids: fixtureIds }),
+    });
+  }
+
+  async downloadFixture(fixtureId: string): Promise<Blob> {
+    const response = await fetch(`/__mockforge/fixtures/${fixtureId}/download`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  async renameFixture(fixtureId: string, newName: string): Promise<void> {
+    return this.fetchJson(`/__mockforge/fixtures/${fixtureId}/rename`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ new_name: newName }),
+    });
+  }
+
+  async moveFixture(fixtureId: string, newPath: string): Promise<void> {
+    return this.fetchJson(`/__mockforge/fixtures/${fixtureId}/move`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ new_path: newPath }),
+    });
+  }
+}
+
+// ==================== ADMIN API METHODS ====================
+
+class DashboardApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getDashboard(): Promise<any> {
+    return this.fetchJson('/__mockforge/dashboard');
+  }
+
+  async getHealth(): Promise<any> {
+    return this.fetchJson('/__mockforge/health');
+  }
+}
+
+class ServerApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getServerInfo(): Promise<any> {
+    return this.fetchJson('/__mockforge/server-info');
+  }
+
+  async restartServer(reason?: string): Promise<any> {
+    return this.fetchJson('/__mockforge/servers/restart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || 'Manual restart' }),
+    });
+  }
+
+  async getRestartStatus(): Promise<any> {
+    return this.fetchJson('/__mockforge/servers/restart/status');
+  }
+}
+
+class RoutesApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getRoutes(): Promise<any> {
+    return this.fetchJson('/__mockforge/routes');
+  }
+}
+
+class LogsApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getLogs(params?: any): Promise<any> {
+    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.fetchJson(`/__mockforge/logs${queryString}`);
+  }
+
+  async clearLogs(): Promise<any> {
+    return this.fetchJson('/__mockforge/logs', {
+      method: 'DELETE',
+    });
+  }
+}
+
+class MetricsApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getMetrics(): Promise<any> {
+    return this.fetchJson('/__mockforge/metrics');
+  }
+}
+
+class ConfigApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getConfig(): Promise<any> {
+    return this.fetchJson('/__mockforge/config');
+  }
+
+  async updateLatency(config: any): Promise<any> {
+    return this.fetchJson('/__mockforge/config/latency', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  }
+
+  async updateFaults(config: any): Promise<any> {
+    return this.fetchJson('/__mockforge/config/faults', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  }
+
+  async updateProxy(config: any): Promise<any> {
+    return this.fetchJson('/__mockforge/config/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  }
+}
+
+class ValidationApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async updateValidation(config: any): Promise<any> {
+    return this.fetchJson('/__mockforge/validation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  }
+}
+
+class EnvApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getEnv(): Promise<any> {
+    return this.fetchJson('/__mockforge/env');
+  }
+
+  async updateEnv(key: string, value: string): Promise<any> {
+    return this.fetchJson('/__mockforge/env', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    });
+  }
+}
+
+class FilesApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getFileContent(request: any): Promise<any> {
+    return this.fetchJson('/__mockforge/files/content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  }
+
+  async saveFileContent(request: any): Promise<any> {
+    return this.fetchJson('/__mockforge/files/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  }
+}
+
+class SmokeTestsApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getSmokeTests(): Promise<any> {
+    return this.fetchJson('/__mockforge/smoke');
+  }
+
+  async runSmokeTests(): Promise<any> {
+    return this.fetchJson('/__mockforge/smoke/run', {
+      method: 'GET',
+    });
+  }
+}
+
 export const apiService = new ApiService();
 export const importApi = new ImportApiService();
+export const fixturesApi = new FixturesApiService();
+
+// Admin API services
+export const dashboardApi = new DashboardApiService();
+export const serverApi = new ServerApiService();
+export const routesApi = new RoutesApiService();
+export const logsApi = new LogsApiService();
+export const metricsApi = new MetricsApiService();
+export const configApi = new ConfigApiService();
+export const validationApi = new ValidationApiService();
+export const envApi = new EnvApiService();
+export const filesApi = new FilesApiService();
+export const smokeTestsApi = new SmokeTestsApiService();
+
+// Type exports for backwards compatibility
+export type DashboardData = any;

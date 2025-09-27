@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::{debug, error, info, warn};
 use tempfile::TempDir;
+use tracing::{debug, error, info, warn};
 
 /// A parsed proto service definition
 #[derive(Debug, Clone)]
@@ -195,24 +195,24 @@ impl ProtoParser {
 
         // Build protoc command
         let mut cmd = Command::new("protoc");
-        
+
         // Add include paths
         for include_path in &self.include_paths {
             cmd.arg("-I").arg(include_path);
         }
-        
+
         // Add proto file's directory as include path
         if let Some(parent_dir) = Path::new(proto_file).parent() {
             cmd.arg("-I").arg(parent_dir);
         }
-        
+
         // Add well-known types include path (common protoc installation paths)
         let well_known_paths = [
             "/usr/local/include",
-            "/usr/include", 
+            "/usr/include",
             "/opt/homebrew/include",
         ];
-        
+
         for path in &well_known_paths {
             if Path::new(path).exists() {
                 cmd.arg("-I").arg(path);
@@ -230,7 +230,7 @@ impl ProtoParser {
 
         // Execute protoc
         let output = cmd.output()?;
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("protoc failed: {}", stderr).into());
@@ -286,7 +286,8 @@ impl ProtoParser {
         debug!("Extracting services from descriptor pool");
 
         // Clear existing services (except mock ones)
-        let mock_services: HashMap<String, ProtoService> = self.services
+        let mock_services: HashMap<String, ProtoService> = self
+            .services
             .drain()
             .filter(|(name, _)| name.contains("mockforge.greeter"))
             .collect();
@@ -311,10 +312,12 @@ impl ProtoParser {
                     client_streaming: method_descriptor.is_client_streaming(),
                     server_streaming: method_descriptor.is_server_streaming(),
                 };
-                
-                debug!("  Found method: {} ({} -> {})", 
-                    method.name, method.input_type, method.output_type);
-                
+
+                debug!(
+                    "  Found method: {} ({} -> {})",
+                    method.name, method.input_type, method.output_type
+                );
+
                 methods.push(method);
             }
 

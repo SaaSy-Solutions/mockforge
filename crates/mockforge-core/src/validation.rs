@@ -4,11 +4,11 @@ use crate::{
     openapi::{OpenApiOperation, OpenApiSecurityRequirement, OpenApiSpec},
     Error, Result,
 };
-use jsonschema::{self, Draft, Validator as JSONSchema};
-use prost_reflect::{DynamicMessage, DescriptorPool};
-use serde_json::{json, Value};
 use base32::Alphabet;
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
+use jsonschema::{self, Draft, Validator as JSONSchema};
+use prost_reflect::{DescriptorPool, DynamicMessage};
+use serde_json::{json, Value};
 
 /// Schema validator for different formats
 #[derive(Debug)]
@@ -99,7 +99,7 @@ impl Validator {
     pub fn is_implemented(&self) -> bool {
         match self {
             Self::JsonSchema(_) => true,
-            Self::OpenApi(_) => true,  // Now implemented with schema validation
+            Self::OpenApi(_) => true, // Now implemented with schema validation
             Self::Protobuf(_) => true, // Now implemented with descriptor-based validation
         }
     }
@@ -133,8 +133,14 @@ impl Validator {
     }
 
     /// Recursively validate OpenAPI 3.1 schema constraints
-    fn validate_openapi31_constraints(&self, data: &Value, schema: &Value, path: &str) -> Result<()> {
-        let schema_obj = schema.as_object()
+    fn validate_openapi31_constraints(
+        &self,
+        data: &Value,
+        schema: &Value,
+        path: &str,
+    ) -> Result<()> {
+        let schema_obj = schema
+            .as_object()
             .ok_or_else(|| Error::validation(format!("{}: Schema must be an object", path)))?;
 
         // Handle type-specific validation
@@ -166,7 +172,11 @@ impl Validator {
                 }
             }
             if !errors.is_empty() {
-                return Err(Error::validation(format!("{}: No subschema in anyOf matched: {}", path, errors.join(", "))));
+                return Err(Error::validation(format!(
+                    "{}: No subschema in anyOf matched: {}",
+                    path,
+                    errors.join(", ")
+                )));
             }
         }
 
@@ -178,7 +188,10 @@ impl Validator {
                 }
             }
             if matches != 1 {
-                return Err(Error::validation(format!("{}: Expected exactly one subschema in oneOf to match, got {}", path, matches)));
+                return Err(Error::validation(format!(
+                    "{}: Expected exactly one subschema in oneOf to match, got {}",
+                    path, matches
+                )));
             }
         }
 
@@ -191,28 +204,43 @@ impl Validator {
     }
 
     /// Validate number-specific OpenAPI 3.1 constraints
-    fn validate_number_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
-        let num = data.as_f64()
+    fn validate_number_constraints(
+        &self,
+        data: &Value,
+        schema: &serde_json::Map<String, Value>,
+        path: &str,
+    ) -> Result<()> {
+        let num = data
+            .as_f64()
             .ok_or_else(|| Error::validation(format!("{}: Expected number, got {}", path, data)))?;
 
         // multipleOf validation
         if let Some(multiple_of) = schema.get("multipleOf").and_then(|v| v.as_f64()) {
             if multiple_of > 0.0 && (num / multiple_of) % 1.0 != 0.0 {
-                return Err(Error::validation(format!("{}: {} is not a multiple of {}", path, num, multiple_of)));
+                return Err(Error::validation(format!(
+                    "{}: {} is not a multiple of {}",
+                    path, num, multiple_of
+                )));
             }
         }
 
         // exclusiveMinimum validation
         if let Some(excl_min) = schema.get("exclusiveMinimum").and_then(|v| v.as_f64()) {
             if num <= excl_min {
-                return Err(Error::validation(format!("{}: {} must be greater than {}", path, num, excl_min)));
+                return Err(Error::validation(format!(
+                    "{}: {} must be greater than {}",
+                    path, num, excl_min
+                )));
             }
         }
 
         // exclusiveMaximum validation
         if let Some(excl_max) = schema.get("exclusiveMaximum").and_then(|v| v.as_f64()) {
             if num >= excl_max {
-                return Err(Error::validation(format!("{}: {} must be less than {}", path, num, excl_max)));
+                return Err(Error::validation(format!(
+                    "{}: {} must be less than {}",
+                    path, num, excl_max
+                )));
             }
         }
 
@@ -220,21 +248,39 @@ impl Validator {
     }
 
     /// Validate array-specific OpenAPI 3.1 constraints
-    fn validate_array_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
-        let arr = data.as_array()
+    fn validate_array_constraints(
+        &self,
+        data: &Value,
+        schema: &serde_json::Map<String, Value>,
+        path: &str,
+    ) -> Result<()> {
+        let arr = data
+            .as_array()
             .ok_or_else(|| Error::validation(format!("{}: Expected array, got {}", path, data)))?;
 
         // minItems validation
-        if let Some(min_items) = schema.get("minItems").and_then(|v| v.as_u64()).map(|v| v as usize) {
+        if let Some(min_items) = schema.get("minItems").and_then(|v| v.as_u64()).map(|v| v as usize)
+        {
             if arr.len() < min_items {
-                return Err(Error::validation(format!("{}: Array has {} items, minimum is {}", path, arr.len(), min_items)));
+                return Err(Error::validation(format!(
+                    "{}: Array has {} items, minimum is {}",
+                    path,
+                    arr.len(),
+                    min_items
+                )));
             }
         }
 
         // maxItems validation
-        if let Some(max_items) = schema.get("maxItems").and_then(|v| v.as_u64()).map(|v| v as usize) {
+        if let Some(max_items) = schema.get("maxItems").and_then(|v| v.as_u64()).map(|v| v as usize)
+        {
             if arr.len() > max_items {
-                return Err(Error::validation(format!("{}: Array has {} items, maximum is {}", path, arr.len(), max_items)));
+                return Err(Error::validation(format!(
+                    "{}: Array has {} items, maximum is {}",
+                    path,
+                    arr.len(),
+                    max_items
+                )));
             }
         }
 
@@ -257,8 +303,14 @@ impl Validator {
     }
 
     /// Validate object-specific OpenAPI 3.1 constraints
-    fn validate_object_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
-        let obj = data.as_object()
+    fn validate_object_constraints(
+        &self,
+        data: &Value,
+        schema: &serde_json::Map<String, Value>,
+        path: &str,
+    ) -> Result<()> {
+        let obj = data
+            .as_object()
             .ok_or_else(|| Error::validation(format!("{}: Expected object, got {}", path, data)))?;
 
         // Required properties
@@ -266,7 +318,10 @@ impl Validator {
             for req_prop in required {
                 if let Some(prop_name) = req_prop.as_str() {
                     if !obj.contains_key(prop_name) {
-                        return Err(Error::validation(format!("{}: Missing required property '{}'", path, prop_name)));
+                        return Err(Error::validation(format!(
+                            "{}: Missing required property '{}'",
+                            path, prop_name
+                        )));
                     }
                 }
             }
@@ -286,8 +341,14 @@ impl Validator {
     }
 
     /// Validate string-specific OpenAPI 3.1 constraints
-    fn validate_string_constraints(&self, data: &Value, schema: &serde_json::Map<String, Value>, path: &str) -> Result<()> {
-        let _str_val = data.as_str()
+    fn validate_string_constraints(
+        &self,
+        data: &Value,
+        schema: &serde_json::Map<String, Value>,
+        path: &str,
+    ) -> Result<()> {
+        let _str_val = data
+            .as_str()
             .ok_or_else(|| Error::validation(format!("{}: Expected string, got {}", path, data)))?;
 
         // Content encoding validation (handled separately in validate_content_encoding)
@@ -300,8 +361,15 @@ impl Validator {
     }
 
     /// Validate content encoding
-    fn validate_content_encoding(&self, data: Option<&str>, encoding: &str, path: &str) -> Result<()> {
-        let str_data = data.ok_or_else(|| Error::validation(format!("{}: Content encoding requires string data", path)))?;
+    fn validate_content_encoding(
+        &self,
+        data: Option<&str>,
+        encoding: &str,
+        path: &str,
+    ) -> Result<()> {
+        let str_data = data.ok_or_else(|| {
+            Error::validation(format!("{}: Content encoding requires string data", path))
+        })?;
 
         match encoding {
             "base64" => {
@@ -323,13 +391,20 @@ impl Validator {
             }
             "hex" | "binary" => {
                 if hex::decode(str_data).is_err() {
-                    return Err(Error::validation(format!("{}: Invalid {} encoding", path, encoding)));
+                    return Err(Error::validation(format!(
+                        "{}: Invalid {} encoding",
+                        path, encoding
+                    )));
                 }
             }
             // Other encodings could be added here (gzip, etc.)
             _ => {
                 // Unknown encoding - log a warning but don't fail validation
-                tracing::warn!("{}: Unknown content encoding '{}', skipping validation", path, encoding);
+                tracing::warn!(
+                    "{}: Unknown content encoding '{}', skipping validation",
+                    path,
+                    encoding
+                );
             }
         }
 

@@ -3,32 +3,32 @@
 //! This module provides functionality to bridge HTTP requests to gRPC services,
 //! allowing RESTful APIs to be generated dynamically from protobuf definitions.
 
-pub mod route_generator;
-pub mod handlers;
 pub mod converters;
+pub mod handlers;
+pub mod route_generator;
 
-use crate::reflection::{MockReflectionProxy, ProxyConfig};
 use crate::dynamic::proto_parser::ProtoService;
-use converters::{ProtobufJsonConverter, ConversionError};
-use route_generator::RouteGenerator;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::future::Future;
+use crate::reflection::{MockReflectionProxy, ProxyConfig};
 use axum::{
-    Router,
-    routing::{post, get, put, delete, patch},
-    http::Method,
-    extract::{Path, Query, State},
-    response::{Json, IntoResponse, Sse},
     body::Bytes,
+    extract::{Path, Query, State},
+    http::Method,
+    response::{IntoResponse, Json, Sse},
+    routing::{delete, get, patch, post, put},
+    Router,
 };
+use converters::{ConversionError, ProtobufJsonConverter};
+use futures_util::stream::Stream;
+use route_generator::RouteGenerator;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tower_http::cors::{CorsLayer, Any};
-use tracing::{debug, info, warn};
-use futures_util::stream::Stream;
-use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tower_http::cors::{Any, CorsLayer};
+use tracing::{debug, info, warn};
 
 /// Configuration for the HTTP bridge
 #[derive(Debug, Clone)]
@@ -118,7 +118,8 @@ impl HttpBridge {
         config: HttpBridgeConfig,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let route_generator = RouteGenerator::new(config.clone());
-        let converter = ProtobufJsonConverter::new(proxy.service_registry.descriptor_pool().clone());
+        let converter =
+            ProtobufJsonConverter::new(proxy.service_registry.descriptor_pool().clone());
         let available_services = proxy.service_names();
 
         let stats = BridgeStats {
@@ -145,9 +146,15 @@ impl HttpBridge {
         if self.config.enable_cors {
             router = router.layer(
                 CorsLayer::new()
-                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH])
+                    .allow_methods([
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::PATCH,
+                    ])
                     .allow_headers(Any)
-                    .allow_origin(Any)
+                    .allow_origin(Any),
             );
         }
 
@@ -156,52 +163,52 @@ impl HttpBridge {
         router = router.with_state(bridge);
 
         // Add health check endpoint
-        router = router.route(
-            &format!("{}/health", self.config.base_path),
-            get(Self::health_check)
-        );
+        router =
+            router.route(&format!("{}/health", self.config.base_path), get(Self::health_check));
 
         // Add statistics endpoint
-        router = router.route(
-            &format!("{}/stats", self.config.base_path),
-            get(Self::get_stats)
-        );
+        router = router.route(&format!("{}/stats", self.config.base_path), get(Self::get_stats));
 
         // Add services listing endpoint
-        router = router.route(
-            &format!("{}/services", self.config.base_path),
-            get(Self::list_services)
-        );
+        router =
+            router.route(&format!("{}/services", self.config.base_path), get(Self::list_services));
 
         // Add OpenAPI documentation endpoint
-        router = router.route(
-            &format!("{}/docs", self.config.base_path),
-            get(Self::get_openapi_spec)
-        );
+        router =
+            router.route(&format!("{}/docs", self.config.base_path), get(Self::get_openapi_spec));
 
         // Create dynamic bridge endpoints for all registered services
         let registry = self.proxy.service_registry();
 
         // Add a generic route that handles all service/method combinations
         // The route pattern supports both GET (for streaming) and POST (for unary) requests
-        router = router.route(&self.config.route_pattern, post(Self::handle_generic_bridge_request));
+        router =
+            router.route(&self.config.route_pattern, post(Self::handle_generic_bridge_request));
         router = router.route(&self.config.route_pattern, get(Self::handle_generic_bridge_request));
 
         let available_services = registry.service_names();
-        let total_methods = registry.services.values().map(|s| s.service().methods.len()).sum::<usize>();
-        info!("Created HTTP bridge router with {} services and {} dynamic endpoints",
-              available_services.len(), total_methods);
+        let total_methods =
+            registry.services.values().map(|s| s.service().methods.len()).sum::<usize>();
+        info!(
+            "Created HTTP bridge router with {} services and {} dynamic endpoints",
+            available_services.len(),
+            total_methods
+        );
 
         router
     }
 
     /// Health check handler
-    async fn health_check(State(bridge): State<Arc<HttpBridge>>) -> axum::response::Json<serde_json::Value> {
+    async fn health_check(
+        State(bridge): State<Arc<HttpBridge>>,
+    ) -> axum::response::Json<serde_json::Value> {
         axum::response::Json(serde_json::json!({"status": "ok", "bridge": "healthy"}))
     }
 
     /// Get statistics handler
-    async fn get_stats(State(bridge): State<Arc<HttpBridge>>) -> axum::response::Json<serde_json::Value> {
+    async fn get_stats(
+        State(bridge): State<Arc<HttpBridge>>,
+    ) -> axum::response::Json<serde_json::Value> {
         let stats = bridge.stats.lock().unwrap();
         axum::response::Json(serde_json::json!({
             "requests_served": stats.requests_served,
@@ -212,12 +219,16 @@ impl HttpBridge {
     }
 
     /// List services handler
-    async fn list_services(State(bridge): State<Arc<HttpBridge>>) -> axum::response::Json<serde_json::Value> {
+    async fn list_services(
+        State(bridge): State<Arc<HttpBridge>>,
+    ) -> axum::response::Json<serde_json::Value> {
         Self::list_services_static(&bridge).await
     }
 
     /// Get OpenAPI spec handler
-    async fn get_openapi_spec(State(bridge): State<Arc<HttpBridge>>) -> axum::response::Json<serde_json::Value> {
+    async fn get_openapi_spec(
+        State(bridge): State<Arc<HttpBridge>>,
+    ) -> axum::response::Json<serde_json::Value> {
         Self::get_openapi_spec_static(&bridge).await
     }
 
@@ -259,8 +270,7 @@ impl HttpBridge {
         let registry = state.proxy.service_registry();
         let service_opt = registry.get(service_name);
         let method_info = if let Some(service) = service_opt {
-            service.service().methods.iter()
-                .find(|m| m.name == *method_name)
+            service.service().methods.iter().find(|m| m.name == *method_name)
         } else {
             let error_response = BridgeResponse::<Value> {
                 success: false,
@@ -277,7 +287,10 @@ impl HttpBridge {
                 let error_response = BridgeResponse::<Value> {
                     success: false,
                     data: None,
-                    error: Some(format!("Method '{}' not found in service '{}'", method_name, service_name)),
+                    error: Some(format!(
+                        "Method '{}' not found in service '{}'",
+                        method_name, service_name
+                    )),
                     metadata: HashMap::new(),
                 };
                 return (axum::http::StatusCode::NOT_FOUND, Json(error_response)).into_response();
@@ -300,7 +313,8 @@ impl HttpBridge {
             method_info.server_streaming,
             Query(query),
             body,
-        ).await;
+        )
+        .await;
 
         match result {
             Ok(response) => {
@@ -324,7 +338,8 @@ impl HttpBridge {
                     error: Some(err.to_string()),
                     metadata: HashMap::new(),
                 };
-                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)).into_response()
+                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+                    .into_response()
             }
         }
     }
@@ -336,68 +351,79 @@ impl HttpBridge {
         method_name: String,
         client_streaming: bool,
         server_streaming: bool,
-    ) -> Box<dyn Fn(
-        State<Arc<Self>>,
-        Path<HashMap<String, String>>,
-        Query<BridgeQuery>,
-        Bytes,
-    ) -> Pin<Box<dyn Future<Output = axum::response::Response> + Send>> + Send + Sync> {
-        Box::new(move |state: State<Arc<Self>>,
-              path: Path<HashMap<String, String>>,
-              query: Query<BridgeQuery>,
-              body: Bytes| {
-            let service_name = service_name.clone();
-            let method_name = method_name.clone();
-            let stats = state.stats.clone();
-            let proxy = state.proxy.clone();
-            let converter = state.converter.clone();
+    ) -> Box<
+        dyn Fn(
+                State<Arc<Self>>,
+                Path<HashMap<String, String>>,
+                Query<BridgeQuery>,
+                Bytes,
+            ) -> Pin<Box<dyn Future<Output = axum::response::Response> + Send>>
+            + Send
+            + Sync,
+    > {
+        Box::new(
+            move |state: State<Arc<Self>>,
+                  path: Path<HashMap<String, String>>,
+                  query: Query<BridgeQuery>,
+                  body: Bytes| {
+                let service_name = service_name.clone();
+                let method_name = method_name.clone();
+                let stats = state.stats.clone();
+                let proxy = state.proxy.clone();
+                let converter = state.converter.clone();
 
-            Box::pin(async move {
-                // Update stats
-                {
-                    let mut stats = stats.lock().unwrap();
-                    stats.requests_served += 1;
-                }
-
-                // Handle the request
-                let result = Self::handle_bridge_request(
-                    &proxy,
-                    &converter,
-                    &service_name,
-                    &method_name,
-                    client_streaming,
-                    server_streaming,
-                    query,
-                    body,
-                ).await;
-
-                match result {
-                    Ok(response) => {
-                        // Update successful stats
-                        {
-                            let mut stats = stats.lock().unwrap();
-                            stats.requests_successful += 1;
-                        }
-                        (axum::http::StatusCode::OK, Json(response)).into_response()
+                Box::pin(async move {
+                    // Update stats
+                    {
+                        let mut stats = stats.lock().unwrap();
+                        stats.requests_served += 1;
                     }
-                    Err(err) => {
-                        // Update failed stats
-                        {
-                            let mut stats = stats.lock().unwrap();
-                            stats.requests_failed += 1;
+
+                    // Handle the request
+                    let result = Self::handle_bridge_request(
+                        &proxy,
+                        &converter,
+                        &service_name,
+                        &method_name,
+                        client_streaming,
+                        server_streaming,
+                        query,
+                        body,
+                    )
+                    .await;
+
+                    match result {
+                        Ok(response) => {
+                            // Update successful stats
+                            {
+                                let mut stats = stats.lock().unwrap();
+                                stats.requests_successful += 1;
+                            }
+                            (axum::http::StatusCode::OK, Json(response)).into_response()
                         }
-                        warn!("Bridge request failed for {}.{}: {}", service_name, method_name, err);
-                        let error_response = BridgeResponse::<Value> {
-                            success: false,
-                            data: None,
-                            error: Some(err.to_string()),
-                            metadata: HashMap::new(),
-                        };
-                        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)).into_response()
+                        Err(err) => {
+                            // Update failed stats
+                            {
+                                let mut stats = stats.lock().unwrap();
+                                stats.requests_failed += 1;
+                            }
+                            warn!(
+                                "Bridge request failed for {}.{}: {}",
+                                service_name, method_name, err
+                            );
+                            let error_response = BridgeResponse::<Value> {
+                                success: false,
+                                data: None,
+                                error: Some(err.to_string()),
+                                metadata: HashMap::new(),
+                            };
+                            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+                                .into_response()
+                        }
                     }
-                }
-            })
-        })
+                })
+            },
+        )
     }
 
     /// Get bridge statistics (static method for handler)
@@ -412,7 +438,9 @@ impl HttpBridge {
     }
 
     /// List available services (static method for handler)
-    async fn list_services_static(bridge: &Arc<HttpBridge>) -> axum::response::Json<serde_json::Value> {
+    async fn list_services_static(
+        bridge: &Arc<HttpBridge>,
+    ) -> axum::response::Json<serde_json::Value> {
         let services = bridge.proxy.service_names();
         axum::response::Json(serde_json::json!({
             "services": services
@@ -420,12 +448,18 @@ impl HttpBridge {
     }
 
     /// Get OpenAPI spec (static method for handler)
-    async fn get_openapi_spec_static(bridge: &Arc<HttpBridge>) -> axum::response::Json<serde_json::Value> {
-        use std::collections::HashMap;
+    async fn get_openapi_spec_static(
+        bridge: &Arc<HttpBridge>,
+    ) -> axum::response::Json<serde_json::Value> {
         use crate::dynamic::proto_parser::ProtoService;
+        use std::collections::HashMap;
 
         // Extract services from the service registry
-        let services: HashMap<String, ProtoService> = bridge.proxy.service_registry().services.iter()
+        let services: HashMap<String, ProtoService> = bridge
+            .proxy
+            .service_registry()
+            .services
+            .iter()
             .map(|(name, dyn_service)| (name.clone(), dyn_service.service().clone()))
             .collect();
 
@@ -452,17 +486,28 @@ impl HttpBridge {
             Value::Null
         } else {
             serde_json::from_slice(&body).map_err(|e| {
-                Box::<dyn std::error::Error + Send + Sync>::from(format!("Failed to parse JSON request: {}", e))
+                Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                    "Failed to parse JSON request: {}",
+                    e
+                ))
             })?
         };
 
         // Call appropriate gRPC method based on streaming type
         if server_streaming {
             // Handle streaming response
-            Self::handle_streaming_request(proxy, converter, service_name, method_name, json_request).await
+            Self::handle_streaming_request(
+                proxy,
+                converter,
+                service_name,
+                method_name,
+                json_request,
+            )
+            .await
         } else {
             // Handle unary request
-            Self::handle_unary_request(proxy, converter, service_name, method_name, json_request).await
+            Self::handle_unary_request(proxy, converter, service_name, method_name, json_request)
+                .await
         }
     }
 
@@ -487,7 +532,11 @@ impl HttpBridge {
         let service = service_opt.unwrap();
         let method_opt = service.service().methods.iter().find(|m| m.name == method_name);
         if method_opt.is_none() {
-            return Err(format!("Method '{}' not found in service '{}'", method_name, service_name).into());
+            return Err(format!(
+                "Method '{}' not found in service '{}'",
+                method_name, service_name
+            )
+            .into());
         }
 
         // For now, create a generic response since we don't have full descriptor integration
@@ -524,8 +573,6 @@ impl HttpBridge {
         // Full streaming implementation would use Server-Sent Events
         Err("Streaming responses via HTTP bridge are not yet implemented".into())
     }
-
-
 }
 
 impl Clone for HttpBridge {

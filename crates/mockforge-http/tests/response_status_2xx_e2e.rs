@@ -15,15 +15,18 @@ async fn returns_202_when_present() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
-    let app: Router =
-        build_router(Some(path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-            .await;
+    let app: Router = build_router(
+        Some(path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move { 
+    let server = tokio::spawn(async move {
         axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .await
-            .unwrap() 
+            .unwrap()
     });
     let client = reqwest::Client::new();
     let url = format!("http://{}/accept", addr);
@@ -44,15 +47,18 @@ async fn returns_204_with_empty_body() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
-    let app: Router =
-        build_router(Some(path.to_string_lossy().to_string()), Some(ValidationOptions::default()), None)
-            .await;
+    let app: Router = build_router(
+        Some(path.to_string_lossy().to_string()),
+        Some(ValidationOptions::default()),
+        None,
+    )
+    .await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move { 
+    let server = tokio::spawn(async move {
         axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .await
-            .unwrap() 
+            .unwrap()
     });
     let client = reqwest::Client::new();
     let url = format!("http://{}/nocontent", addr);

@@ -130,14 +130,10 @@ impl RequestBody {
     /// Convert the request body to bytes for HTTP transmission
     pub async fn to_bytes(&self) -> crate::Result<Vec<u8>> {
         match self {
-            RequestBody::Json(value) => {
-                Ok(serde_json::to_vec(value)?)
-            }
-            RequestBody::BinaryFile { path, .. } => {
-                tokio::fs::read(path).await.map_err(|e| {
-                    crate::Error::generic(format!("Failed to read binary file '{}': {}", path, e))
-                })
-            }
+            RequestBody::Json(value) => Ok(serde_json::to_vec(value)?),
+            RequestBody::BinaryFile { path, .. } => tokio::fs::read(path).await.map_err(|e| {
+                crate::Error::generic(format!("Failed to read binary file '{}': {}", path, e))
+            }),
         }
     }
 
@@ -302,7 +298,11 @@ impl ChainTemplatingContext {
     }
 
     /// Navigate JSON value using path segments
-    fn navigate_json_path(&self, value: &serde_json::Value, path: &[&str]) -> Option<serde_json::Value> {
+    fn navigate_json_path(
+        &self,
+        value: &serde_json::Value,
+        path: &[&str],
+    ) -> Option<serde_json::Value> {
         if path.is_empty() {
             return Some(value.clone());
         }
@@ -318,7 +318,7 @@ impl ChainTemplatingContext {
             serde_json::Value::Array(arr) => {
                 // Handle array indexing like [0]
                 if path[0].starts_with('[') && path[0].ends_with(']') {
-                    let index_str = &path[0][1..path[0].len()-1];
+                    let index_str = &path[0][1..path[0].len() - 1];
                     if let Ok(index) = index_str.parse::<usize>() {
                         if let Some(item) = arr.get(index) {
                             self.navigate_json_path(item, &path[1..])
@@ -490,9 +490,8 @@ impl RequestChainRegistry {
         }
 
         // Check for duplicate request IDs
-        let request_ids: std::collections::HashSet<_> = chain.links.iter()
-            .map(|link| &link.request.id)
-            .collect();
+        let request_ids: std::collections::HashSet<_> =
+            chain.links.iter().map(|link| &link.request.id).collect();
 
         if request_ids.len() != chain.links.len() {
             return Err(Error::generic("Duplicate request IDs found in chain"));
@@ -624,7 +623,9 @@ mod tests {
         // Test multiple responses
         let response1 = ChainResponse {
             status: 200,
-            headers: vec![("Content-Type".to_string(), "application/json".to_string())].into_iter().collect(),
+            headers: vec![("Content-Type".to_string(), "application/json".to_string())]
+                .into_iter()
+                .collect(),
             body: Some(json!({"message": "success1"})),
             duration_ms: 100,
             executed_at: "2023-01-01T00:00:00Z".to_string(),
@@ -698,7 +699,9 @@ mod tests {
             id: "test-req".to_string(),
             method: "POST".to_string(),
             url: "https://api.example.com/test".to_string(),
-            headers: vec![("Content-Type".to_string(), "application/json".to_string())].into_iter().collect(),
+            headers: vec![("Content-Type".to_string(), "application/json".to_string())]
+                .into_iter()
+                .collect(),
             body: Some(RequestBody::Json(json!({"key": "value"}))),
             depends_on: vec!["req1".to_string(), "req2".to_string()],
             timeout_secs: Some(30),
@@ -731,7 +734,9 @@ mod tests {
             headers: vec![
                 ("Content-Type".to_string(), "application/json".to_string()),
                 ("X-Request-ID".to_string(), "req-123".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
             body: Some(json!({"result": "success", "data": [1, 2, 3]})),
             duration_ms: 150,
             executed_at: "2023-01-01T00:00:00Z".to_string(),
@@ -776,7 +781,8 @@ mod tests {
         assert!(matches!(json_body, RequestBody::Json(_)));
 
         // Test string body
-        let string_body = RequestBody::Json(serde_json::Value::String("raw text content".to_string()));
+        let string_body =
+            RequestBody::Json(serde_json::Value::String("raw text content".to_string()));
         assert!(matches!(string_body, RequestBody::Json(_)));
 
         // Test binary file body
@@ -923,27 +929,29 @@ mod tests {
             name: "Test Chain".to_string(),
             description: Some("A comprehensive test chain".to_string()),
             config: ChainConfig::default(),
-            links: vec![
-                ChainLink {
-                    request: ChainRequest {
-                        id: "req1".to_string(),
-                        method: "GET".to_string(),
-                        url: "https://api.example.com/users".to_string(),
-                        headers: HashMap::new(),
-                        body: None,
-                        depends_on: vec![],
-                        timeout_secs: None,
-                        expected_status: None,
-                        scripting: None,
-                    },
-                    extract: vec![("user_id".to_string(), "$.users[0].id".to_string())].into_iter().collect(),
-                    store_as: Some("users".to_string()),
+            links: vec![ChainLink {
+                request: ChainRequest {
+                    id: "req1".to_string(),
+                    method: "GET".to_string(),
+                    url: "https://api.example.com/users".to_string(),
+                    headers: HashMap::new(),
+                    body: None,
+                    depends_on: vec![],
+                    timeout_secs: None,
+                    expected_status: None,
+                    scripting: None,
                 },
-            ],
+                extract: vec![("user_id".to_string(), "$.users[0].id".to_string())]
+                    .into_iter()
+                    .collect(),
+                store_as: Some("users".to_string()),
+            }],
             variables: vec![
                 ("api_key".to_string(), json!("test-key")),
                 ("base_url".to_string(), json!("https://api.example.com")),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
             tags: vec!["test".to_string(), "integration".to_string()],
         };
 
@@ -974,7 +982,7 @@ mod tests {
             tags: vec![],
             variables: HashMap::new(),
         };
-        let mut exec_ctx = ChainExecutionContext::new(chain_def);
+        let exec_ctx = ChainExecutionContext::new(chain_def);
 
         // Test elapsed time
         assert!(exec_ctx.elapsed_ms() > 0);
@@ -1009,7 +1017,8 @@ mod tests {
                     request: ChainRequest {
                         id: "req2".to_string(),
                         method: "POST".to_string(),
-                        url: "https://api.example.com/users/{{chain.users.body[0].id}}/posts".to_string(),
+                        url: "https://api.example.com/users/{{chain.users.body[0].id}}/posts"
+                            .to_string(),
                         headers: HashMap::new(),
                         body: Some(RequestBody::Json(json!({"title": "Hello World"}))),
                         depends_on: vec!["req1".to_string()],
@@ -1050,23 +1059,21 @@ mod tests {
             name: "Self Dependency Chain".to_string(),
             description: None,
             config: ChainConfig::default(),
-            links: vec![
-                ChainLink {
-                    request: ChainRequest {
-                        id: "req1".to_string(),
-                        method: "GET".to_string(),
-                        url: "https://api.example.com/users".to_string(),
-                        headers: HashMap::new(),
-                        body: None,
-                        depends_on: vec!["req1".to_string()], // Self dependency
-                        timeout_secs: None,
-                        expected_status: None,
-                        scripting: None,
-                    },
-                    extract: HashMap::new(),
-                    store_as: None,
+            links: vec![ChainLink {
+                request: ChainRequest {
+                    id: "req1".to_string(),
+                    method: "GET".to_string(),
+                    url: "https://api.example.com/users".to_string(),
+                    headers: HashMap::new(),
+                    body: None,
+                    depends_on: vec!["req1".to_string()], // Self dependency
+                    timeout_secs: None,
+                    expected_status: None,
+                    scripting: None,
                 },
-            ],
+                extract: HashMap::new(),
+                store_as: None,
+            }],
             variables: HashMap::new(),
             tags: vec![],
         };

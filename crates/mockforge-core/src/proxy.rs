@@ -8,9 +8,9 @@
 //! - routing: Route matching and rule evaluation
 
 // Re-export sub-modules for backward compatibility
+pub mod client;
 pub mod config;
 pub mod handler;
-pub mod client;
 pub mod middleware;
 pub mod routing;
 
@@ -20,15 +20,14 @@ pub use routing::*;
 
 // Legacy imports for compatibility
 
+pub use client::{ProxyClient, ProxyResponse};
 /// Legacy types and structures - moved to sub-modules
 /// These are kept for backward compatibility
 // Re-export the main types from sub-modules
 pub use config::{ProxyConfig, ProxyRule};
 pub use handler::ProxyHandler;
-pub use client::{ProxyClient, ProxyResponse};
 
 // The config and handler modules provide the methods directly
-
 
 #[cfg(test)]
 mod tests {

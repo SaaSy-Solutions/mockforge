@@ -6,7 +6,7 @@ use tokio::test;
 
 use mockforge_core::chain_execution::{ChainExecutionEngine, ChainExecutionResult};
 use mockforge_core::request_chaining::{
-    ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestChainRegistry, RequestBody,
+    ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestBody, RequestChainRegistry,
 };
 use mockforge_core::{Error, Result};
 
@@ -53,8 +53,14 @@ fn create_auth_chain() -> ChainDefinition {
                     method: "GET".to_string(),
                     url: "https://httpbin.org/get".to_string(),
                     headers: HashMap::from([
-                        ("Authorization".to_string(), "Bearer {{chain.login_response.json.access_token}}".to_string()),
-                        ("X-User-ID".to_string(), "{{chain.login_response.json.user.id}}".to_string()),
+                        (
+                            "Authorization".to_string(),
+                            "Bearer {{chain.login_response.json.access_token}}".to_string(),
+                        ),
+                        (
+                            "X-User-ID".to_string(),
+                            "{{chain.login_response.json.user.id}}".to_string(),
+                        ),
                     ]),
                     body: None,
                     depends_on: vec!["login".to_string()],
@@ -62,9 +68,7 @@ fn create_auth_chain() -> ChainDefinition {
                     expected_status: Some(vec![200]),
                     scripting: None,
                 },
-                extract: HashMap::from([
-                    ("profile_name".to_string(), "json.name".to_string()),
-                ]),
+                extract: HashMap::from([("profile_name".to_string(), "json.name".to_string())]),
                 store_as: Some("profile_response".to_string()),
             },
         ],
@@ -118,8 +122,7 @@ async fn test_chain_validation() {
     let result = registry.validate_chain(&invalid_chain).await;
     assert!(result.is_err());
     let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("Circular dependency") ||
-            error_msg.contains("circular dependency"));
+    assert!(error_msg.contains("Circular dependency") || error_msg.contains("circular dependency"));
 
     // Test empty chain
     let empty_chain = ChainDefinition {
@@ -151,29 +154,30 @@ async fn test_chain_with_too_many_links() {
     oversized_chain.config.max_chain_length = 10;
 
     // Add more links than the limit
-    let extra_links: Vec<ChainLink> = (0..6).map(|i| ChainLink {
-        request: ChainRequest {
-            id: format!("extra_link_{}", i),
-            method: "GET".to_string(),
-            url: "https://httpbin.org/get".to_string(),
-            headers: HashMap::new(),
-            body: None,
-            depends_on: vec![],
-            timeout_secs: None,
-            expected_status: None,
-                    scripting: None,
-        },
-        extract: HashMap::new(),
-        store_as: Some(format!("response_{}", i)),
-    }).collect();
+    let extra_links: Vec<ChainLink> = (0..6)
+        .map(|i| ChainLink {
+            request: ChainRequest {
+                id: format!("extra_link_{}", i),
+                method: "GET".to_string(),
+                url: "https://httpbin.org/get".to_string(),
+                headers: HashMap::new(),
+                body: None,
+                depends_on: vec![],
+                timeout_secs: None,
+                expected_status: None,
+                scripting: None,
+            },
+            extract: HashMap::new(),
+            store_as: Some(format!("response_{}", i)),
+        })
+        .collect();
 
     oversized_chain.links.extend(extra_links);
 
     let result = registry.validate_chain(&oversized_chain).await;
     assert!(result.is_err());
     let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("exceeds maximum") ||
-            error_msg.contains("chain length"));
+    assert!(error_msg.contains("exceeds maximum") || error_msg.contains("chain length"));
 }
 
 #[test]
@@ -190,9 +194,8 @@ async fn test_chain_dependency_resolution() {
     assert_eq!(chain.links[1].request.depends_on, vec!["login"]);
 
     // Check for unique IDs
-    let ids: std::collections::HashSet<String> = chain.links.iter()
-        .map(|link| link.request.id.clone())
-        .collect();
+    let ids: std::collections::HashSet<String> =
+        chain.links.iter().map(|link| link.request.id.clone()).collect();
     assert_eq!(ids.len(), chain.links.len());
 }
 
@@ -345,40 +348,41 @@ async fn test_chain_with_complex_variables() {
         name: "Complex Variables Chain".to_string(),
         description: None,
         config: ChainConfig::default(),
-        links: vec![
-            ChainLink {
-                request: ChainRequest {
-                    id: "complex_request".to_string(),
-                    method: "POST".to_string(),
-                    url: "https://httpbin.org/post".to_string(),
-                    headers: HashMap::from([
-                        ("Content-Type".to_string(), "application/json".to_string()),
-                        ("X-Custom".to_string(), "custom-value".to_string()),
-                    ]),
-                    body: Some(RequestBody::Json(serde_json::json!({
-                        "nested": {
-                            "value": "{{faker.uuid}}",
-                            "list": [1, 2, "{{faker.name}}"],
-                            "timestamp": "{{now}}"
-                        },
-                        "int_value": "{{randInt 10 100}}",
-                        "float_value": "{{rand.float}}"
-                    }))),
-                    depends_on: vec![],
-                    timeout_secs: None,
-                    expected_status: None,
-                    scripting: None,
-                },
-                extract: HashMap::from([
-                    ("request_id".to_string(), "json.nested.value".to_string()),
-                    ("server_time".to_string(), "headers.Date".to_string()),
+        links: vec![ChainLink {
+            request: ChainRequest {
+                id: "complex_request".to_string(),
+                method: "POST".to_string(),
+                url: "https://httpbin.org/post".to_string(),
+                headers: HashMap::from([
+                    ("Content-Type".to_string(), "application/json".to_string()),
+                    ("X-Custom".to_string(), "custom-value".to_string()),
                 ]),
-                store_as: Some("complex_response".to_string()),
+                body: Some(RequestBody::Json(serde_json::json!({
+                    "nested": {
+                        "value": "{{faker.uuid}}",
+                        "list": [1, 2, "{{faker.name}}"],
+                        "timestamp": "{{now}}"
+                    },
+                    "int_value": "{{randInt 10 100}}",
+                    "float_value": "{{rand.float}}"
+                }))),
+                depends_on: vec![],
+                timeout_secs: None,
+                expected_status: None,
+                scripting: None,
             },
-        ],
+            extract: HashMap::from([
+                ("request_id".to_string(), "json.nested.value".to_string()),
+                ("server_time".to_string(), "headers.Date".to_string()),
+            ]),
+            store_as: Some("complex_response".to_string()),
+        }],
         variables: HashMap::from([
             ("api_version".to_string(), serde_json::Value::String("v1".to_string())),
-            ("base_url".to_string(), serde_json::Value::String("https://httpbin.org".to_string())),
+            (
+                "base_url".to_string(),
+                serde_json::Value::String("https://httpbin.org".to_string()),
+            ),
         ]),
         tags: vec![],
     };
@@ -413,27 +417,25 @@ async fn test_chain_with_multiple_extraction_patterns() {
         name: "Extraction Test Chain".to_string(),
         description: None,
         config: ChainConfig::default(),
-        links: vec![
-            ChainLink {
-                request: ChainRequest {
-                    id: "extraction_request".to_string(),
-                    method: "GET".to_string(),
-                    url: "https://httpbin.org/json".to_string(),
-                    headers: HashMap::new(),
-                    body: None,
-                    depends_on: vec![],
-                    timeout_secs: None,
-                    expected_status: None,
-                    scripting: None,
-                },
-                extract: HashMap::from([
-                    ("slideshow_title".to_string(), "slideshow.title".to_string()),
-                    ("first_slide_title".to_string(), "slideshow.slides.[0].title".to_string()),
-                    ("total_slides".to_string(), "slideshow.slides.*".to_string()),
-                ]),
-                store_as: Some("extraction_response".to_string()),
+        links: vec![ChainLink {
+            request: ChainRequest {
+                id: "extraction_request".to_string(),
+                method: "GET".to_string(),
+                url: "https://httpbin.org/json".to_string(),
+                headers: HashMap::new(),
+                body: None,
+                depends_on: vec![],
+                timeout_secs: None,
+                expected_status: None,
+                scripting: None,
             },
-        ],
+            extract: HashMap::from([
+                ("slideshow_title".to_string(), "slideshow.title".to_string()),
+                ("first_slide_title".to_string(), "slideshow.slides.[0].title".to_string()),
+                ("total_slides".to_string(), "slideshow.slides.*".to_string()),
+            ]),
+            store_as: Some("extraction_response".to_string()),
+        }],
         variables: HashMap::new(),
         tags: vec!["extraction".to_string()],
     };

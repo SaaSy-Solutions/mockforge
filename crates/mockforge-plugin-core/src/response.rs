@@ -148,9 +148,7 @@ impl ResponseRequest {
     ) -> Self {
         let query_params = uri
             .query()
-            .map(|q| url::form_urlencoded::parse(q.as_bytes())
-                .into_owned()
-                .collect())
+            .map(|q| url::form_urlencoded::parse(q.as_bytes()).into_owned().collect())
             .unwrap_or_default();
 
         let client_ip = headers
@@ -159,10 +157,8 @@ impl ResponseRequest {
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
 
-        let user_agent = headers
-            .get("user-agent")
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string());
+        let user_agent =
+            headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
         Self {
             method,
@@ -182,9 +178,7 @@ impl ResponseRequest {
 
     /// Get header value
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .get(name)
-            .and_then(|h| h.to_str().ok())
+        self.headers.get(name).and_then(|h| h.to_str().ok())
     }
 
     /// Get query parameter value
@@ -215,9 +209,7 @@ impl ResponseRequest {
 
         // Simple glob matching (can be enhanced with proper glob library)
         if pattern.contains('*') {
-            let regex_pattern = pattern
-                .replace('.', r"\.")
-                .replace('*', ".*");
+            let regex_pattern = pattern.replace('.', r"\.").replace('*', ".*");
             regex::Regex::new(&format!("^{}$", regex_pattern))
                 .map(|re| re.is_match(&self.path))
                 .unwrap_or(false)
@@ -268,40 +260,24 @@ impl ResponseData {
     /// Create JSON response
     pub fn json<T: Serialize>(status_code: u16, data: &T) -> Result<Self> {
         let body = serde_json::to_vec(data)
-            .map_err(|e| PluginError::execution(&format!("JSON serialization error: {}", e)))?;
+            .map_err(|e| PluginError::execution(format!("JSON serialization error: {}", e)))?;
 
-        Ok(Self::new(
-            status_code,
-            "application/json".to_string(),
-            body,
-        ))
+        Ok(Self::new(status_code, "application/json".to_string(), body))
     }
 
     /// Create text response
     pub fn text<S: Into<String>>(status_code: u16, text: S) -> Self {
-        Self::new(
-            status_code,
-            "text/plain".to_string(),
-            text.into().into_bytes(),
-        )
+        Self::new(status_code, "text/plain".to_string(), text.into().into_bytes())
     }
 
     /// Create HTML response
     pub fn html<S: Into<String>>(status_code: u16, html: S) -> Self {
-        Self::new(
-            status_code,
-            "text/html".to_string(),
-            html.into().into_bytes(),
-        )
+        Self::new(status_code, "text/html".to_string(), html.into().into_bytes())
     }
 
     /// Create XML response
     pub fn xml<S: Into<String>>(status_code: u16, xml: S) -> Self {
-        Self::new(
-            status_code,
-            "application/xml".to_string(),
-            xml.into().into_bytes(),
-        )
+        Self::new(status_code, "application/xml".to_string(), xml.into().into_bytes())
     }
 
     /// Add header
@@ -336,8 +312,8 @@ impl ResponseData {
 
     /// Convert to axum response
     pub fn to_axum_response(self) -> Result<axum::response::Response> {
-        use axum::response::Response;
         use axum::http::HeaderValue;
+        use axum::response::Response;
 
         let mut response = Response::new(axum::body::Body::from(self.body));
         *response.status_mut() = StatusCode::from_u16(self.status_code)
@@ -345,10 +321,9 @@ impl ResponseData {
 
         // Add headers
         for (key, value) in self.headers {
-            if let (Ok(header_name), Ok(header_value)) = (
-                key.parse::<axum::http::HeaderName>(),
-                value.parse::<HeaderValue>(),
-            ) {
+            if let (Ok(header_name), Ok(header_value)) =
+                (key.parse::<axum::http::HeaderName>(), value.parse::<HeaderValue>())
+            {
                 response.headers_mut().insert(header_name, header_value);
             }
         }
@@ -423,9 +398,11 @@ impl ResponsePluginEntry {
     pub fn can_handle_request(&self, request: &ResponseRequest) -> bool {
         self.is_enabled()
             && request.matches_method(&self.config.methods)
-            && self.config.url_patterns.iter().any(|pattern| {
-                request.matches_url_pattern(pattern)
-            })
+            && self
+                .config
+                .url_patterns
+                .iter()
+                .any(|pattern| request.matches_url_pattern(pattern))
     }
 }
 
@@ -449,9 +426,8 @@ pub mod helpers {
             }
         });
 
-        ResponseData::json(status_code, &error_data).unwrap_or_else(|_| {
-            ResponseData::text(status_code, format!("Error: {}", message))
-        })
+        ResponseData::json(status_code, &error_data)
+            .unwrap_or_else(|_| ResponseData::text(status_code, format!("Error: {}", message)))
     }
 
     /// Create a success response with data

@@ -1,4 +1,4 @@
-use mockforge_ws::{is_jsonpath_pattern, evaluate_jsonpath_on_message, message_matches_pattern};
+use mockforge_ws::{evaluate_jsonpath_on_message, is_jsonpath_pattern, message_matches_pattern};
 
 #[test]
 fn test_jsonpath_pattern_detection() {
@@ -107,7 +107,10 @@ fn test_complex_jsonpath_queries() {
 
     // Test deeply nested properties
     assert!(evaluate_jsonpath_on_message("$.user.profile.preferences.theme", complex_json));
-    assert!(evaluate_jsonpath_on_message("$.user.profile.preferences.notifications", complex_json));
+    assert!(evaluate_jsonpath_on_message(
+        "$.user.profile.preferences.notifications",
+        complex_json
+    ));
 
     // Test nested array access
     assert!(evaluate_jsonpath_on_message("$.orders[0].items[0].name", complex_json));

@@ -4,8 +4,8 @@
 //! including deterministic generation, relationship awareness, and validation.
 
 use mockforge_grpc::reflection::{
-    smart_mock_generator::{SmartMockGenerator, SmartMockConfig},
-    validation_framework::{ValidationFramework, ValidationConfig, GeneratedEntity},
+    smart_mock_generator::{SmartMockConfig, SmartMockGenerator},
+    validation_framework::{GeneratedEntity, ValidationConfig, ValidationFramework},
 };
 use std::collections::HashMap;
 use std::time::SystemTime;
@@ -23,31 +23,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         deterministic: true,
         ..Default::default()
     };
-    
+
     let mut generator = SmartMockGenerator::new(config);
-    
+
     // 2. Generate deterministic UUIDs and data
     println!("🎲 Generating deterministic data...");
     let user_id = generator.generate_uuid();
     let order_id = generator.generate_uuid();
     let session_token = generator.generate_random_string(32);
-    
+
     println!("   User ID: {}", user_id);
     println!("   Order ID: {}", order_id);
     println!("   Session Token: {}", session_token);
-    
+
     // 3. Reset and verify deterministic behavior
     println!("\n🔄 Resetting generator and verifying deterministic behavior...");
     generator.reset();
     let user_id_2 = generator.generate_uuid();
     let order_id_2 = generator.generate_uuid();
     let session_token_2 = generator.generate_random_string(32);
-    
+
     assert_eq!(user_id, user_id_2);
     assert_eq!(order_id, order_id_2);
     assert_eq!(session_token, session_token_2);
     println!("   ✅ Deterministic generation verified!");
-    
+
     // 4. Set up validation framework
     println!("\n🛡️  Setting up cross-endpoint validation...");
     let validation_config = ValidationConfig {
@@ -55,12 +55,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         strict_mode: false,
         ..Default::default()
     };
-    
+
     let mut validator = ValidationFramework::new(validation_config);
-    
+
     // 5. Generate coherent entities with relationships
     println!("🔗 Generating related entities...");
-    
+
     // Create users
     let users = vec![
         GeneratedEntity {
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             generated_at: SystemTime::now(),
         },
     ];
-    
+
     // Create orders that reference users
     let orders = vec![
         GeneratedEntity {
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             generated_at: SystemTime::now(),
         },
     ];
-    
+
     // 6. Register all entities
     println!("📝 Registering entities for validation...");
     for user in users {
@@ -137,24 +137,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             return Err(e);
         }
     }
-    
+
     for order in orders {
         if let Err(e) = validator.register_entity(order) {
             eprintln!("Failed to register order: {}", e);
             return Err(e);
         }
     }
-    
+
     // 7. Run validation
     println!("🔍 Running cross-endpoint validation...");
     let result = validator.validate_all_entities();
-    
+
     // 8. Display results
     println!("\n📈 Validation Results:");
     println!("   Valid: {}", result.is_valid);
     println!("   Errors: {}", result.errors.len());
     println!("   Warnings: {}", result.warnings.len());
-    
+
     if !result.errors.is_empty() {
         println!("\n❌ Validation Errors:");
         for error in &result.errors {
@@ -164,29 +164,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
     }
-    
+
     if !result.warnings.is_empty() {
         println!("\n⚠️  Validation Warnings:");
         for warning in &result.warnings {
             println!("   • {}", warning.message);
         }
     }
-    
+
     // 9. Display statistics
     let stats = validator.get_statistics();
     println!("\n📊 Statistics:");
     println!("   Total entities: {}", stats.total_entities);
     println!("   Entity types: {}", stats.entity_type_count);
     println!("   Indexed foreign keys: {}", stats.indexed_foreign_keys);
-    
+
     // 10. Demonstrate field inference capabilities
     println!("\n🧠 Smart Field Inference Examples:");
     generator.reset();
-    
+
     // Simulate different field types
     let field_examples = vec![
         ("email", "Email addresses"),
-        ("phone_number", "Phone numbers"),  
+        ("phone_number", "Phone numbers"),
         ("user_id", "User IDs"),
         ("created_at", "Timestamps"),
         ("uuid", "UUIDs"),
@@ -194,12 +194,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ("latitude", "Geographic coordinates"),
         ("price", "Monetary values"),
     ];
-    
+
     for (field_name, description) in field_examples {
         let sample_data = generator.generate_random_string(10); // Simplified for example
         println!("   • {}: {} → Sample: {}", field_name, description, sample_data);
     }
-    
+
     println!("\n✨ Advanced Data Synthesis Demo Complete!");
     println!("   This example demonstrated:");
     println!("   • Deterministic data generation with seeded randomness");
@@ -207,6 +207,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("   • Intelligent field type inference");
     println!("   • Comprehensive error reporting and suggestions");
     println!("   • Statistical analysis of generated data");
-    
+
     Ok(())
 }

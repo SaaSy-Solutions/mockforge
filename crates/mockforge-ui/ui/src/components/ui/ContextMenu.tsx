@@ -102,3 +102,19 @@ export function ContextMenu({ items, position, onClose, className }: ContextMenu
     </div>
   );
 }
+
+export function ContextMenuTrigger({ children, onContextMenu }: { children: React.ReactNode; onContextMenu?: (e: React.MouseEvent) => void }) {
+  return (
+    <div onContextMenu={onContextMenu}>
+      {children}
+    </div>
+  );
+}
+
+export function ContextMenuContent({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("bg-white border border-gray-200 rounded-md shadow-lg py-1 min-w-[200px]", className)}>
+      {children}
+    </div>
+  );
+}

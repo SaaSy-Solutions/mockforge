@@ -44,7 +44,11 @@ impl RouterBuilder {
     /// Create a new router builder from an OpenAPI spec
     pub fn new(spec: OpenApiSpec) -> Self {
         let registry = OpenApiRouteRegistry::new(spec);
-        Self { registry, middleware: None, custom_routes: None }
+        Self {
+            registry,
+            middleware: None,
+            custom_routes: None,
+        }
     }
 
     /// Create a new router builder with custom validation options
@@ -53,7 +57,11 @@ impl RouterBuilder {
         options: crate::openapi_routes::ValidationOptions,
     ) -> Self {
         let registry = OpenApiRouteRegistry::new_with_options(spec, options);
-        Self { registry, middleware: None, custom_routes: None }
+        Self {
+            registry,
+            middleware: None,
+            custom_routes: None,
+        }
     }
 
     /// Add middleware to all routes
@@ -99,7 +107,10 @@ pub fn create_route_handler(
     // Create a handler function that matches Axum's expectations
     let handler = move || async move {
         let (status, response) = route_clone.mock_response_with_status();
-        (axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK), axum::response::Json(response))
+        (
+            axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK),
+            axum::response::Json(response),
+        )
     };
 
     match route.method.as_str() {
@@ -114,8 +125,6 @@ pub fn create_route_handler(
     }
 }
 
-
-
 /// Merge multiple routers into a single router
 pub fn merge_routers(routers: Vec<Router>) -> Router {
     let mut merged = Router::new();
@@ -128,10 +137,7 @@ pub fn merge_routers(routers: Vec<Router>) -> Router {
 }
 
 /// Middleware function to handle errors and panics
-pub async fn error_handler(
-    request: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn error_handler(request: Request<Body>, next: Next) -> Response {
     // Extract request details before moving the request
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -225,7 +231,8 @@ pub async fn validate_request(
 
     // Parse body if present
     let body = std::mem::take(request.body_mut());
-    let body_bytes = axum::body::to_bytes(body, usize::MAX).await
+    let body_bytes = axum::body::to_bytes(body, usize::MAX)
+        .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
     let body_json = if !body_bytes.is_empty() {
         serde_json::from_slice(&body_bytes).ok()
@@ -234,23 +241,25 @@ pub async fn validate_request(
     };
 
     // Validate the request
-    if validator.validate_request_with_all(
-        &path,
-        method.as_str(),
-        &path_map,
-        &query_map,
-        &header_map,
-        &cookie_map,
-        body_json.as_ref(),
-    ).is_err() {
+    if validator
+        .validate_request_with_all(
+            &path,
+            method.as_str(),
+            &path_map,
+            &query_map,
+            &header_map,
+            &cookie_map,
+            body_json.as_ref(),
+        )
+        .is_err()
+    {
         // Return validation error status
-        let status_code = validator.options.validation_status
-            .unwrap_or_else(|| {
-                std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                    .ok()
-                    .and_then(|s| s.parse::<u16>().ok())
-                    .unwrap_or(400)
-            });
+        let status_code = validator.options.validation_status.unwrap_or_else(|| {
+            std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                .ok()
+                .and_then(|s| s.parse::<u16>().ok())
+                .unwrap_or(400)
+        });
         return Err(StatusCode::from_u16(status_code).unwrap_or(StatusCode::BAD_REQUEST));
     }
 
@@ -259,21 +268,13 @@ pub async fn validate_request(
 }
 
 /// Middleware function to log incoming requests
-pub async fn request_logger(
-    request: Request<Body>,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn request_logger(request: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     let method = request.method().clone();
     let uri = request.uri().clone();
     let version = request.version();
 
     // Log the incoming request
-    tracing::info!(
-        "Request: {} {} {:?}",
-        method,
-        uri,
-        version
-    );
+    tracing::info!("Request: {} {} {:?}", method, uri, version);
 
     // Log headers if debug logging is enabled
     if tracing::level_enabled!(tracing::Level::DEBUG) {
@@ -292,13 +293,7 @@ pub async fn request_logger(
     let duration = start.elapsed();
 
     // Log the response
-    tracing::info!(
-        "Response: {} {} - {} in {:?}",
-        method,
-        uri,
-        response.status(),
-        duration
-    );
+    tracing::info!("Response: {} {} - {} in {:?}", method, uri, response.status(), duration);
 
     Ok(response)
 }

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::{
-    routing::{get, post, put, delete},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -21,10 +21,15 @@ pub fn create_admin_router(
     api_enabled: bool,
 ) -> Router {
     // Initialize global logger if not already initialized
-    let logger = get_global_logger()
-        .unwrap_or_else(|| init_global_logger(1000));
+    let logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
 
-    let state = AdminState::new(http_server_addr, ws_server_addr, grpc_server_addr, graphql_server_addr);
+    let state = AdminState::new(
+        http_server_addr,
+        ws_server_addr,
+        grpc_server_addr,
+        graphql_server_addr,
+        api_enabled,
+    );
 
     // Start system monitoring background task to poll CPU, memory, and thread metrics
     let state_clone = state.clone();
@@ -35,6 +40,7 @@ pub fn create_admin_router(
         .route("/", get(serve_admin_html))
         .route("/assets/index.css", get(serve_admin_css))
         .route("/assets/index.js", get(serve_admin_js))
+        .route("/api-docs", get(serve_api_docs))
         .route("/mockforge-icon.png", get(serve_icon))
         .route("/mockforge-icon-32.png", get(serve_icon_32))
         .route("/mockforge-icon-48.png", get(serve_icon_48))
@@ -58,6 +64,10 @@ pub fn create_admin_router(
             .route("/__mockforge/logs", delete(clear_logs))
             .route("/__mockforge/restart", post(restart_servers))
             .route("/__mockforge/restart/status", get(get_restart_status))
+            .route("/__mockforge/fixtures", get(get_fixtures))
+            .route("/__mockforge/fixtures/{id}", delete(delete_fixture))
+            .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
+            .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
             .route("/__mockforge/import/insomnia", post(import_insomnia));
     }
 

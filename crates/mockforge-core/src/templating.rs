@@ -13,8 +13,8 @@ use once_cell::sync::OnceCell;
 use rand::{rng, Rng};
 use regex::Regex;
 use serde_json::Value;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Template engine for processing template strings with various token types
 #[derive(Debug, Clone)]
@@ -38,7 +38,9 @@ impl TemplateEngine {
     }
 
     /// Create a new template engine with configuration
-    pub fn new_with_config(config: Config) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new_with_config(
+        config: Config,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         Ok(Self { _config: config })
     }
 
@@ -115,7 +117,10 @@ impl TemplatingContext {
     }
 
     /// Create context with both chain and environment contexts
-    pub fn with_both(chain_context: ChainTemplatingContext, variables: HashMap<String, String>) -> Self {
+    pub fn with_both(
+        chain_context: ChainTemplatingContext,
+        variables: HashMap<String, String>,
+    ) -> Self {
         Self {
             chain_context: Some(chain_context),
             env_context: Some(EnvironmentTemplatingContext::new(variables)),
@@ -132,7 +137,9 @@ pub fn expand_tokens(v: &Value) -> Value {
 pub fn expand_tokens_with_context(v: &Value, context: &TemplatingContext) -> Value {
     match v {
         Value::String(s) => Value::String(expand_str_with_context(s, context)),
-        Value::Array(a) => Value::Array(a.iter().map(|item| expand_tokens_with_context(item, context)).collect()),
+        Value::Array(a) => {
+            Value::Array(a.iter().map(|item| expand_tokens_with_context(item, context)).collect())
+        }
         Value::Object(o) => {
             let mut map = serde_json::Map::new();
             for (k, vv) in o {
@@ -202,157 +209,6 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
         out = replace_encryption_tokens(&out);
     }
 
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use crate::request_chaining::{ChainContext, ChainTemplatingContext, ChainResponse};
-
-    #[test]
-    fn test_expand_str_with_context() {
-        let chain_context = ChainTemplatingContext::new(ChainContext::new());
-        let context = TemplatingContext::with_chain(chain_context);
-        let result = expand_str_with_context("{{uuid}}", &context);
-        assert!(result.len() > 0);
-    }
-
-    #[test]
-    fn test_replace_env_tokens() {
-        let mut vars = HashMap::new();
-        vars.insert("api_key".to_string(), "secret123".to_string());
-        let env_context = EnvironmentTemplatingContext::new(vars);
-        let result = replace_env_tokens("{{api_key}}", &env_context);
-        assert_eq!(result, "secret123");
-    }
-
-    #[test]
-    fn test_replace_chain_tokens() {
-        let chain_ctx = ChainContext::new();
-        let template_ctx = ChainTemplatingContext::new(chain_ctx);
-        let context = Some(&template_ctx);
-        // Note: This test would need a proper response stored in the chain context
-        let result = replace_chain_tokens("{{chain.test.body}}", context);
-        assert_eq!(result, "null");
-    }
-
-    #[test]
-    fn test_response_function() {
-        // Test with no chain context
-        let result = replace_response_function(r#"response('login', 'body.user_id')"#, None);
-        assert_eq!(result, r#"response('login', 'body.user_id')"#);
-
-        // Test with chain context but no matching response
-        let chain_ctx = ChainContext::new();
-        let template_ctx = ChainTemplatingContext::new(chain_ctx);
-        let context = Some(&template_ctx);
-        let result = replace_response_function(r#"response('login', 'body.user_id')"#, context);
-        assert_eq!(result, "null");
-
-        // Test with stored response
-        let mut chain_ctx = ChainContext::new();
-        let response = ChainResponse {
-            status: 200,
-            headers: HashMap::new(),
-            body: Some(json!({"user_id": 12345})),
-            duration_ms: 150,
-            executed_at: "2023-01-01T00:00:00Z".to_string(),
-            error: None,
-        };
-        chain_ctx.store_response("login".to_string(), response);
-        let template_ctx = ChainTemplatingContext::new(chain_ctx);
-        let context = Some(&template_ctx);
-        let result = replace_response_function(r#"response('login', 'body.user_id')"#, context);
-        assert_eq!(result, "12345");
-    }
-
-    #[test]
-    fn test_fs_readfile() {
-        // Create a temporary file for testing
-        use std::fs;
-        use std::io::Write;
-
-        let temp_file = "/tmp/mockforge_test_file.txt";
-        let test_content = "Hello, this is test content!";
-        fs::write(temp_file, test_content).unwrap();
-
-        // Test successful file reading
-        let template = format!(r#"{{\{{fs.readFile "{}"}}}}"#, temp_file);
-        let result = expand_str(&template);
-        assert_eq!(result, test_content);
-
-        // Test with parentheses
-        let template = format!(r#"{{\{{fs.readFile('{}')}}}}"#, temp_file);
-        let result = expand_str(&template);
-        assert_eq!(result, test_content);
-
-        // Test file not found
-        let template = r#"{{fs.readFile "/nonexistent/file.txt"}}"#;
-        let result = expand_str(template);
-        assert!(result.contains("fs.readFile error:"));
-
-        // Test empty path
-        let template = r#"{{fs.readFile ""}}"#;
-        let result = expand_str(template);
-        assert_eq!(result, "<fs.readFile: empty path>");
-
-        // Clean up
-        let _ = fs::remove_file(temp_file);
-    }
-}
-
-fn replace_faker_tokens(input: &str) -> String {
-    // If a provider is registered (e.g., from mockforge-data), use it; else fallback
-    if let Some(provider) = FAKER_PROVIDER.get() {
-        return replace_with_provider(input, provider.as_ref());
-    }
-    replace_with_fallback(input)
-}
-
-fn replace_with_provider(input: &str, p: &dyn FakerProvider) -> String {
-    let mut out = input.to_string();
-    let map = [
-        ("{{faker.uuid}}", p.uuid()),
-        ("{{faker.email}}", p.email()),
-        ("{{faker.name}}", p.name()),
-        ("{{faker.address}}", p.address()),
-        ("{{faker.phone}}", p.phone()),
-        ("{{faker.company}}", p.company()),
-        ("{{faker.url}}", p.url()),
-        ("{{faker.ip}}", p.ip()),
-        ("{{faker.color}}", p.color()),
-        ("{{faker.word}}", p.word()),
-        ("{{faker.sentence}}", p.sentence()),
-        ("{{faker.paragraph}}", p.paragraph()),
-    ];
-    for (pat, val) in map {
-        if out.contains(pat) {
-            out = out.replace(pat, &val);
-        }
-    }
-    out
-}
-
-fn replace_with_fallback(input: &str) -> String {
-    let mut out = input.to_string();
-    if out.contains("{{faker.uuid}}") {
-        out = out.replace("{{faker.uuid}}", &uuid::Uuid::new_v4().to_string());
-    }
-    if out.contains("{{faker.email}}") {
-        let user: String = (0..8).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
-        let dom: String = (0..6).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
-        out = out.replace("{{faker.email}}", &format!("{}@{}.example", user, dom));
-    }
-    if out.contains("{{faker.name}}") {
-        let firsts = ["Alex", "Sam", "Taylor", "Jordan", "Casey", "Riley"];
-        let lasts = ["Smith", "Lee", "Patel", "Garcia", "Kim", "Brown"];
-        let fi: i64 = rng().random_range(0..firsts.len() as i64);
-        let li: i64 = rng().random_range(0..lasts.len() as i64);
-        out = out
-            .replace("{{faker.name}}", &format!("{} {}", firsts[fi as usize], lasts[li as usize]));
-    }
     out
 }
 
@@ -452,13 +308,14 @@ fn replace_env_tokens(input: &str, env_context: &EnvironmentTemplatingContext) -
         let var_name = caps.get(1).unwrap().as_str();
 
         // Skip built-in tokens (uuid, now, rand.*, faker.*, chain.*, encrypt.*, decrypt.*, secure.*)
-        if matches!(var_name, "uuid" | "now") ||
-           var_name.starts_with("rand.") ||
-           var_name.starts_with("faker.") ||
-           var_name.starts_with("chain.") ||
-           var_name.starts_with("encrypt") ||
-           var_name.starts_with("decrypt") ||
-           var_name.starts_with("secure") {
+        if matches!(var_name, "uuid" | "now")
+            || var_name.starts_with("rand.")
+            || var_name.starts_with("faker.")
+            || var_name.starts_with("chain.")
+            || var_name.starts_with("encrypt")
+            || var_name.starts_with("decrypt")
+            || var_name.starts_with("secure")
+        {
             return caps.get(0).unwrap().as_str().to_string();
         }
 
@@ -467,7 +324,8 @@ fn replace_env_tokens(input: &str, env_context: &EnvironmentTemplatingContext) -
             Some(value) => value.clone(),
             None => format!("{{{{{}}}}}", var_name), // Keep original if not found
         }
-    }).to_string()
+    })
+    .to_string()
 }
 
 /// Replace chain context tokens in a template string
@@ -485,7 +343,8 @@ fn replace_chain_tokens(input: &str, chain_context: Option<&ChainTemplatingConte
                 Some(val) => serde_json::to_string(&val).unwrap_or_else(|_| "null".to_string()),
                 None => "null".to_string(), // Return null for missing values instead of empty string
             }
-        }).to_string()
+        })
+        .to_string()
     } else {
         // No chain context available, return input unchanged
         input.to_string()
@@ -493,30 +352,35 @@ fn replace_chain_tokens(input: &str, chain_context: Option<&ChainTemplatingConte
 }
 
 /// Replace response function tokens (new response() syntax)
-fn replace_response_function(input: &str, chain_context: Option<&ChainTemplatingContext>) -> String {
+fn replace_response_function(
+    input: &str,
+    chain_context: Option<&ChainTemplatingContext>,
+) -> String {
     // Match response('request_id', 'jsonpath') - handle both single and double quotes
     let re = Regex::new(r#"response\s*\(\s*['"]([^'"]*)['"]\s*,\s*['"]([^'"]*)['"]\s*\)"#).unwrap();
 
     if let Some(context) = chain_context {
-        let result = re.replace_all(input, |caps: &regex::Captures| {
-            let request_id = caps.get(1).unwrap().as_str();
-            let json_path = caps.get(2).unwrap().as_str();
+        let result = re
+            .replace_all(input, |caps: &regex::Captures| {
+                let request_id = caps.get(1).unwrap().as_str();
+                let json_path = caps.get(2).unwrap().as_str();
 
-            // Build the full path like "request_id.json_path"
-            let full_path = if json_path.is_empty() {
-                request_id.to_string()
-            } else {
-                format!("{}.{}", request_id, json_path)
-            };
+                // Build the full path like "request_id.json_path"
+                let full_path = if json_path.is_empty() {
+                    request_id.to_string()
+                } else {
+                    format!("{}.{}", request_id, json_path)
+                };
 
-            match context.extract_value(&full_path) {
-                Some(Value::String(s)) => s,
-                Some(Value::Number(n)) => n.to_string(),
-                Some(Value::Bool(b)) => b.to_string(),
-                Some(val) => serde_json::to_string(&val).unwrap_or_else(|_| "null".to_string()),
-                None => "null".to_string(), // Return null for missing values
-            }
-        }).to_string();
+                match context.extract_value(&full_path) {
+                    Some(Value::String(s)) => s,
+                    Some(Value::Number(n)) => n.to_string(),
+                    Some(Value::Bool(b)) => b.to_string(),
+                    Some(val) => serde_json::to_string(&val).unwrap_or_else(|_| "null".to_string()),
+                    None => "null".to_string(), // Return null for missing values
+                }
+            })
+            .to_string();
 
         result
     } else {
@@ -536,103 +400,111 @@ fn replace_encryption_tokens(input: &str) -> String {
     let mut out = input.to_string();
 
     // Handle {{encrypt "text"}} or {{encrypt key_id "text"}}
-    let encrypt_re = Regex::new(r#"\{\{\s*encrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
+    let encrypt_re =
+        Regex::new(r#"\{\{\s*encrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
 
     // Handle {{secure "text"}} or {{secure key_id "text"}}
     let secure_re = Regex::new(r#"\{\{\s*secure\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
 
     // Process encrypt tokens
-    out = encrypt_re.replace_all(&out, |caps: &regex::Captures| {
-        let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
-        let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+    out = encrypt_re
+        .replace_all(&out, |caps: &regex::Captures| {
+            let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
+            let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-        match key_store.get_key(key_id) {
-            Some(key) => match key.encrypt(plaintext, None) {
-                Ok(ciphertext) => ciphertext,
-                Err(_) => "<encryption_error>".to_string(),
-            },
-            None => {
-                // Create a default key if none exists
-                let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                    .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                    &password,
-                    None,
-                    crate::encryption::EncryptionAlgorithm::Aes256Gcm,
-                ) {
-                    Ok(key) => match key.encrypt(plaintext, None) {
-                        Ok(ciphertext) => ciphertext,
-                        Err(_) => "<encryption_error>".to_string(),
-                    },
-                    Err(_) => "<key_creation_error>".to_string(),
-                }
-            }
-        }
-    }).to_string();
-
-    // Process secure tokens (ChaCha20-Poly1305)
-    out = secure_re.replace_all(&out, |caps: &regex::Captures| {
-        let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
-        let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-
-        match key_store.get_key(key_id) {
-            Some(key) => {
-                // Use ChaCha20-Poly1305 for secure() function
-                match key.encrypt_chacha20(plaintext, None) {
+            match key_store.get_key(key_id) {
+                Some(key) => match key.encrypt(plaintext, None) {
                     Ok(ciphertext) => ciphertext,
                     Err(_) => "<encryption_error>".to_string(),
+                },
+                None => {
+                    // Create a default key if none exists
+                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
+                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
+                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
+                        &password,
+                        None,
+                        crate::encryption::EncryptionAlgorithm::Aes256Gcm,
+                    ) {
+                        Ok(key) => match key.encrypt(plaintext, None) {
+                            Ok(ciphertext) => ciphertext,
+                            Err(_) => "<encryption_error>".to_string(),
+                        },
+                        Err(_) => "<key_creation_error>".to_string(),
+                    }
                 }
-            },
-            None => {
-                // Create a default key if none exists
-                let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                    .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                    &password,
-                    None,
-                    crate::encryption::EncryptionAlgorithm::ChaCha20Poly1305,
-                ) {
-                    Ok(key) => match key.encrypt_chacha20(plaintext, None) {
+            }
+        })
+        .to_string();
+
+    // Process secure tokens (ChaCha20-Poly1305)
+    out = secure_re
+        .replace_all(&out, |caps: &regex::Captures| {
+            let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
+            let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+
+            match key_store.get_key(key_id) {
+                Some(key) => {
+                    // Use ChaCha20-Poly1305 for secure() function
+                    match key.encrypt_chacha20(plaintext, None) {
                         Ok(ciphertext) => ciphertext,
                         Err(_) => "<encryption_error>".to_string(),
-                    },
-                    Err(_) => "<key_creation_error>".to_string(),
+                    }
+                }
+                None => {
+                    // Create a default key if none exists
+                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
+                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
+                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
+                        &password,
+                        None,
+                        crate::encryption::EncryptionAlgorithm::ChaCha20Poly1305,
+                    ) {
+                        Ok(key) => match key.encrypt_chacha20(plaintext, None) {
+                            Ok(ciphertext) => ciphertext,
+                            Err(_) => "<encryption_error>".to_string(),
+                        },
+                        Err(_) => "<key_creation_error>".to_string(),
+                    }
                 }
             }
-        }
-    }).to_string();
+        })
+        .to_string();
 
     // Handle {{decrypt "ciphertext"}} or {{decrypt key_id "ciphertext"}}
-    let decrypt_re = Regex::new(r#"\{\{\s*decrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
+    let decrypt_re =
+        Regex::new(r#"\{\{\s*decrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
 
     // Process decrypt tokens
-    out = decrypt_re.replace_all(&out, |caps: &regex::Captures| {
-        let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
-        let ciphertext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+    out = decrypt_re
+        .replace_all(&out, |caps: &regex::Captures| {
+            let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
+            let ciphertext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-        match key_store.get_key(key_id) {
-            Some(key) => match key.decrypt(ciphertext, None) {
-                Ok(plaintext) => plaintext,
-                Err(_) => "<decryption_error>".to_string(),
-            },
-            None => {
-                // Create a default key if none exists
-                let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                    .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                    &password,
-                    None,
-                    crate::encryption::EncryptionAlgorithm::Aes256Gcm,
-                ) {
-                    Ok(key) => match key.decrypt(ciphertext, None) {
-                        Ok(plaintext) => plaintext,
-                        Err(_) => "<decryption_error>".to_string(),
-                    },
-                    Err(_) => "<key_creation_error>".to_string(),
+            match key_store.get_key(key_id) {
+                Some(key) => match key.decrypt(ciphertext, None) {
+                    Ok(plaintext) => plaintext,
+                    Err(_) => "<decryption_error>".to_string(),
+                },
+                None => {
+                    // Create a default key if none exists
+                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
+                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
+                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
+                        &password,
+                        None,
+                        crate::encryption::EncryptionAlgorithm::Aes256Gcm,
+                    ) {
+                        Ok(key) => match key.decrypt(ciphertext, None) {
+                            Ok(plaintext) => plaintext,
+                            Err(_) => "<decryption_error>".to_string(),
+                        },
+                        Err(_) => "<key_creation_error>".to_string(),
+                    }
                 }
             }
-        }
-    }).to_string();
+        })
+        .to_string();
 
     out
 }
@@ -640,7 +512,8 @@ fn replace_encryption_tokens(input: &str) -> String {
 /// Replace file system tokens in a template string
 fn replace_fs_tokens(input: &str) -> String {
     // Handle {{fs.readFile "path/to/file"}} or {{fs.readFile('path/to/file')}}
-    let re = Regex::new(r#"\{\{\s*fs\.readFile\s*(?:\(?\s*(?:'([^']*)'|"([^"]*)")\s*\)?)?\s*\}\}"#).unwrap();
+    let re = Regex::new(r#"\{\{\s*fs\.readFile\s*(?:\(?\s*(?:'([^']*)'|"([^"]*)")\s*\)?)?\s*\}\}"#)
+        .unwrap();
 
     re.replace_all(input, |caps: &regex::Captures| {
         let file_path = caps.get(2).or_else(|| caps.get(3)).map(|m| m.as_str()).unwrap_or("");
@@ -653,5 +526,155 @@ fn replace_fs_tokens(input: &str) -> String {
             Ok(content) => content,
             Err(e) => format!("<fs.readFile error: {}>", e),
         }
-    }).to_string()
+    })
+    .to_string()
+}
+
+fn replace_faker_tokens(input: &str) -> String {
+    // If a provider is registered (e.g., from mockforge-data), use it; else fallback
+    if let Some(provider) = FAKER_PROVIDER.get() {
+        return replace_with_provider(input, provider.as_ref());
+    }
+    replace_with_fallback(input)
+}
+
+fn replace_with_provider(input: &str, p: &dyn FakerProvider) -> String {
+    let mut out = input.to_string();
+    let map = [
+        ("{{faker.uuid}}", p.uuid()),
+        ("{{faker.email}}", p.email()),
+        ("{{faker.name}}", p.name()),
+        ("{{faker.address}}", p.address()),
+        ("{{faker.phone}}", p.phone()),
+        ("{{faker.company}}", p.company()),
+        ("{{faker.url}}", p.url()),
+        ("{{faker.ip}}", p.ip()),
+        ("{{faker.color}}", p.color()),
+        ("{{faker.word}}", p.word()),
+        ("{{faker.sentence}}", p.sentence()),
+        ("{{faker.paragraph}}", p.paragraph()),
+    ];
+    for (pat, val) in map {
+        if out.contains(pat) {
+            out = out.replace(pat, &val);
+        }
+    }
+    out
+}
+
+fn replace_with_fallback(input: &str) -> String {
+    let mut out = input.to_string();
+    if out.contains("{{faker.uuid}}") {
+        out = out.replace("{{faker.uuid}}", &uuid::Uuid::new_v4().to_string());
+    }
+    if out.contains("{{faker.email}}") {
+        let user: String = (0..8).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
+        let dom: String = (0..6).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
+        out = out.replace("{{faker.email}}", &format!("{}@{}.example", user, dom));
+    }
+    if out.contains("{{faker.name}}") {
+        let firsts = ["Alex", "Sam", "Taylor", "Jordan", "Casey", "Riley"];
+        let lasts = ["Smith", "Lee", "Patel", "Garcia", "Kim", "Brown"];
+        let fi = rng().random::<u8>() as usize % firsts.len();
+        let li = rng().random::<u8>() as usize % lasts.len();
+        out = out.replace("{{faker.name}}", &format!("{} {}", firsts[fi], lasts[li]));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::request_chaining::{ChainContext, ChainResponse, ChainTemplatingContext};
+    use serde_json::json;
+
+    #[test]
+    fn test_expand_str_with_context() {
+        let chain_context = ChainTemplatingContext::new(ChainContext::new());
+        let context = TemplatingContext::with_chain(chain_context);
+        let result = expand_str_with_context("{{uuid}}", &context);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_replace_env_tokens() {
+        let mut vars = HashMap::new();
+        vars.insert("api_key".to_string(), "secret123".to_string());
+        let env_context = EnvironmentTemplatingContext::new(vars);
+        let result = replace_env_tokens("{{api_key}}", &env_context);
+        assert_eq!(result, "secret123");
+    }
+
+    #[test]
+    fn test_replace_chain_tokens() {
+        let chain_ctx = ChainContext::new();
+        let template_ctx = ChainTemplatingContext::new(chain_ctx);
+        let context = Some(&template_ctx);
+        // Note: This test would need a proper response stored in the chain context
+        let result = replace_chain_tokens("{{chain.test.body}}", context);
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_response_function() {
+        // Test with no chain context
+        let result = replace_response_function(r#"response('login', 'body.user_id')"#, None);
+        assert_eq!(result, r#"response('login', 'body.user_id')"#);
+
+        // Test with chain context but no matching response
+        let chain_ctx = ChainContext::new();
+        let template_ctx = ChainTemplatingContext::new(chain_ctx);
+        let context = Some(&template_ctx);
+        let result = replace_response_function(r#"response('login', 'body.user_id')"#, context);
+        assert_eq!(result, "null");
+
+        // Test with stored response
+        let mut chain_ctx = ChainContext::new();
+        let response = ChainResponse {
+            status: 200,
+            headers: HashMap::new(),
+            body: Some(json!({"user_id": 12345})),
+            duration_ms: 150,
+            executed_at: "2023-01-01T00:00:00Z".to_string(),
+            error: None,
+        };
+        chain_ctx.store_response("login".to_string(), response);
+        let template_ctx = ChainTemplatingContext::new(chain_ctx);
+        let context = Some(&template_ctx);
+        let result = replace_response_function(r#"response('login', 'body.user_id')"#, context);
+        assert_eq!(result, "12345");
+    }
+
+    #[test]
+    fn test_fs_readfile() {
+        // Create a temporary file for testing
+        use std::fs;
+
+        let temp_file = "/tmp/mockforge_test_file.txt";
+        let test_content = "Hello, this is test content!";
+        fs::write(temp_file, test_content).unwrap();
+
+        // Test successful file reading
+        let template = format!(r#"{{\{{fs.readFile "{}"}}}}"#, temp_file);
+        let result = expand_str(&template);
+        assert_eq!(result, test_content);
+
+        // Test with parentheses
+        let template = format!(r#"{{\{{fs.readFile('{}')}}}}"#, temp_file);
+        let result = expand_str(&template);
+        assert_eq!(result, test_content);
+
+        // Test file not found
+        let template = r#"{{fs.readFile "/nonexistent/file.txt"}}"#;
+        let result = expand_str(template);
+        assert!(result.contains("fs.readFile error:"));
+
+        // Test empty path
+        let template = r#"{{fs.readFile ""}}"#;
+        let result = expand_str(template);
+        assert_eq!(result, "<fs.readFile: empty path>");
+
+        // Clean up
+        let _ = fs::remove_file(temp_file);
+    }
 }

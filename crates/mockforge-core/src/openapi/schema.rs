@@ -27,26 +27,25 @@ impl OpenApiSchema {
         match serde_json::to_value(&self.schema) {
             Ok(schema_json) => {
                 // Create JSON Schema validator
-                match jsonschema::options()
-                    .with_draft(Draft::Draft7)
-                    .build(&schema_json)
-                {
+                match jsonschema::options().with_draft(Draft::Draft7).build(&schema_json) {
                     Ok(validator) => {
                         // Validate the value against the schema
-                        let errors: Vec<String> = validator
-                            .iter_errors(value)
-                            .map(|error| error.to_string())
-                            .collect();
+                        let errors: Vec<String> =
+                            validator.iter_errors(value).map(|error| error.to_string()).collect();
                         if errors.is_empty() {
                             Ok(())
                         } else {
                             Err(Error::validation(errors.join("; ")))
                         }
                     }
-                    Err(e) => Err(Error::validation(format!("Failed to create schema validator: {}", e))),
+                    Err(e) => {
+                        Err(Error::validation(format!("Failed to create schema validator: {}", e)))
+                    }
                 }
             }
-            Err(e) => Err(Error::validation(format!("Failed to convert OpenAPI schema to JSON: {}", e))),
+            Err(e) => {
+                Err(Error::validation(format!("Failed to convert OpenAPI schema to JSON: {}", e)))
+            }
         }
     }
 }

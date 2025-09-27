@@ -13,8 +13,9 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use wasmtime::{Engine, Linker, Module, Store};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
+use wasmtime_wasi::p2::WasiCtxBuilder;
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
+use wasmtime_wasi::{DirPerms, FilePerms};
 
 /// WebAssembly runtime for plugin execution
 pub struct PluginRuntime {
@@ -51,21 +52,18 @@ impl PluginRuntime {
 
         // Load WASM module
         let module = Module::from_file(&self.engine, wasm_path)
-            .map_err(|e| PluginError::wasm(&format!("Failed to load WASM module: {}", e)))?;
+            .map_err(|e| PluginError::wasm(format!("Failed to load WASM module: {}", e)))?;
 
         // Validate module against declared capabilities
         ModuleValidator::validate_module(&module, &plugin_capabilities)?;
 
         // Create plugin instance
-        let instance = PluginInstance::new(
-            plugin_id.clone(),
-            manifest,
-            module,
-            self.config.clone(),
-        ).await?;
+        let instance =
+            PluginInstance::new(plugin_id.clone(), manifest, module, self.config.clone()).await?;
 
         // Store plugin instance
         let mut plugins = self.plugins.write().await;
+        #[allow(clippy::arc_with_non_send_sync)]
         plugins.insert(plugin_id, Arc::new(RwLock::new(instance)));
 
         Ok(())
@@ -93,7 +91,8 @@ impl PluginRuntime {
         T: serde::de::DeserializeOwned,
     {
         let plugins = self.plugins.read().await;
-        let instance = plugins.get(plugin_id)
+        let instance = plugins
+            .get(plugin_id)
             .ok_or_else(|| PluginError::execution("Plugin not found"))?;
 
         let mut instance = instance.write().await;
@@ -103,7 +102,8 @@ impl PluginRuntime {
     /// Get plugin health status
     pub async fn get_plugin_health(&self, plugin_id: &PluginId) -> Result<PluginHealth> {
         let plugins = self.plugins.read().await;
-        let instance = plugins.get(plugin_id)
+        let instance = plugins
+            .get(plugin_id)
             .ok_or_else(|| PluginError::execution("Plugin not found"))?;
 
         let instance = instance.read().await;
@@ -119,7 +119,8 @@ impl PluginRuntime {
     /// Get plugin metrics
     pub async fn get_plugin_metrics(&self, plugin_id: &PluginId) -> Result<PluginMetrics> {
         let plugins = self.plugins.read().await;
-        let instance = plugins.get(plugin_id)
+        let instance = plugins
+            .get(plugin_id)
             .ok_or_else(|| PluginError::execution("Plugin not found"))?;
 
         let instance = instance.read().await;
@@ -130,34 +131,33 @@ impl PluginRuntime {
     fn validate_capabilities(&self, capabilities: &PluginCapabilities) -> Result<()> {
         // Check memory limits
         if capabilities.resources.max_memory_bytes > self.config.max_memory_per_plugin {
-            return Err(PluginError::security(&format!(
+            return Err(PluginError::security(format!(
                 "Plugin memory limit {} exceeds runtime limit {}",
-                capabilities.resources.max_memory_bytes,
-                self.config.max_memory_per_plugin
+                capabilities.resources.max_memory_bytes, self.config.max_memory_per_plugin
             )));
         }
 
         // Check CPU limits
         if capabilities.resources.max_cpu_percent > self.config.max_cpu_per_plugin {
-            return Err(PluginError::security(&format!(
+            return Err(PluginError::security(format!(
                 "Plugin CPU limit {:.2}% exceeds runtime limit {:.2}%",
-                capabilities.resources.max_cpu_percent,
-                self.config.max_cpu_per_plugin
+                capabilities.resources.max_cpu_percent, self.config.max_cpu_per_plugin
             )));
         }
 
         // Check execution time limits
         if capabilities.resources.max_execution_time_ms > self.config.max_execution_time_ms {
-            return Err(PluginError::security(&format!(
+            return Err(PluginError::security(format!(
                 "Plugin execution time limit {}ms exceeds runtime limit {}ms",
-                capabilities.resources.max_execution_time_ms,
-                self.config.max_execution_time_ms
+                capabilities.resources.max_execution_time_ms, self.config.max_execution_time_ms
             )));
         }
 
         // Check network permissions
         if capabilities.network.allow_http && !self.config.allow_network_access {
-            return Err(PluginError::security("Plugin requires network access but runtime disallows it"));
+            return Err(PluginError::security(
+                "Plugin requires network access but runtime disallows it",
+            ));
         }
 
         Ok(())
@@ -189,8 +189,8 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             max_memory_per_plugin: 10 * 1024 * 1024, // 10MB
-            max_cpu_per_plugin: 0.5,                  // 50% of one core
-            max_execution_time_ms: 5000,              // 5 seconds
+            max_cpu_per_plugin: 0.5,                 // 50% of one core
+            max_execution_time_ms: 5000,             // 5 seconds
             allow_network_access: false,
             allowed_fs_paths: vec![],
             max_concurrent_executions: 10,
@@ -200,13 +200,13 @@ impl Default for RuntimeConfig {
     }
 }
 
-
-
 /// Plugin instance wrapper
 pub struct PluginInstance {
     /// Plugin ID
+    #[allow(dead_code)]
     plugin_id: PluginId,
     /// Plugin manifest
+    #[allow(dead_code)]
     manifest: PluginManifest,
     /// WebAssembly instance with WASI support
     instance: wasmtime::Instance,
@@ -217,8 +217,10 @@ pub struct PluginInstance {
     /// Plugin metrics
     metrics: PluginMetrics,
     /// Runtime configuration
+    #[allow(dead_code)]
     config: RuntimeConfig,
     /// Creation time
+    #[allow(dead_code)]
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -234,26 +236,32 @@ impl PluginInstance {
         let mut wasi_ctx_builder = WasiCtxBuilder::new();
 
         // Configure WASI based on runtime config
-        let mut wasi_ctx_builder = wasi_ctx_builder.inherit_stdio();
+        let wasi_ctx_builder = wasi_ctx_builder.inherit_stdio();
 
         // Preopen allowed filesystem paths
         for path in &config.allowed_fs_paths {
-            wasi_ctx_builder.preopened_dir(Path::new(path), path.as_str(), DirPerms::all(), FilePerms::all())?;
+            wasi_ctx_builder.preopened_dir(
+                Path::new(path),
+                path.as_str(),
+                DirPerms::all(),
+                FilePerms::all(),
+            )?;
         }
 
         let wasi_ctx = wasi_ctx_builder.build_p1();
 
         // Create WebAssembly store with WASI context
-        let mut store = Store::new(&module.engine(), wasi_ctx);
+        let mut store = Store::new(module.engine(), wasi_ctx);
 
         // Link WASI functions to the store
-        let mut linker = Linker::<WasiP1Ctx>::new(&module.engine());
+        let mut linker = Linker::<WasiP1Ctx>::new(module.engine());
         preview1::add_to_linker_sync(&mut linker, |t| t)
             .map_err(|e| PluginError::wasm(format!("Failed to add WASI to linker: {}", e)))?;
 
         // Instantiate the module with WASI support
-        let instance = linker.instantiate(&mut store, &module)
-            .map_err(|e| PluginError::wasm(&format!("Failed to instantiate WASM module with WASI: {}", e)))?;
+        let instance = linker.instantiate(&mut store, &module).map_err(|e| {
+            PluginError::wasm(format!("Failed to instantiate WASM module with WASI: {}", e))
+        })?;
 
         // Note: Component model support can be added here when available
         // The component model will provide better interface definitions and composition
@@ -275,7 +283,7 @@ impl PluginInstance {
         &mut self,
         function_name: &str,
         context: &PluginContext,
-        input: &[u8],
+        _input: &[u8],
     ) -> Result<PluginResult<T>>
     where
         T: serde::de::DeserializeOwned,
@@ -288,7 +296,7 @@ impl PluginInstance {
 
         // Prepare input parameters
         let context_json = serde_json::to_string(context)
-            .map_err(|e| PluginError::execution(&format!("Failed to serialize context: {}", e)))?;
+            .map_err(|e| PluginError::execution(format!("Failed to serialize context: {}", e)))?;
 
         // Execute function (this is a simplified implementation)
         // In practice, you'd need to handle the WASM calling convention
@@ -296,10 +304,10 @@ impl PluginInstance {
 
         // Update metrics
         let execution_time = start_time.elapsed();
-        self.metrics.avg_execution_time_ms = (
-            self.metrics.avg_execution_time_ms * (self.metrics.total_executions - 1) as f64
-            + execution_time.as_millis() as f64
-        ) / self.metrics.total_executions as f64;
+        self.metrics.avg_execution_time_ms = (self.metrics.avg_execution_time_ms
+            * (self.metrics.total_executions - 1) as f64
+            + execution_time.as_millis() as f64)
+            / self.metrics.total_executions as f64;
 
         if execution_time.as_millis() as u64 > self.metrics.max_execution_time_ms {
             self.metrics.max_execution_time_ms = execution_time.as_millis() as u64;
@@ -315,7 +323,7 @@ impl PluginInstance {
                     Ok(data) => Ok(PluginResult::success(data, execution_time.as_millis() as u64)),
                     Err(e) => {
                         self.metrics.failed_executions += 1;
-                        Err(PluginError::execution(&format!("Failed to deserialize result: {}", e)))
+                        Err(PluginError::execution(format!("Failed to deserialize result: {}", e)))
                     }
                 }
             }
@@ -327,64 +335,108 @@ impl PluginInstance {
     }
 
     /// Call a plugin function (simplified implementation)
-    async fn call_plugin_function(
-        &mut self,
-        function_name: &str,
-        input: &str,
-    ) -> Result<Vec<u8>> {
+    async fn call_plugin_function(&mut self, function_name: &str, input: &str) -> Result<Vec<u8>> {
         // Get the exported function from the WASM instance
-        let func = self.instance.get_func(&mut self.store, function_name)
-            .ok_or_else(|| PluginError::execution(&format!("Function '{}' not found in WASM module", function_name)))?;
+        let func = self.instance.get_func(&mut self.store, function_name).ok_or_else(|| {
+            PluginError::execution(&format!(
+                "Function '{}' not found in WASM module",
+                function_name
+            ))
+        })?;
 
         // Allocate memory in the WASM store for the input string
         let input_bytes = input.as_bytes();
         let input_len = input_bytes.len() as i32;
 
         // Allocate space for the input string in WASM memory
-        let alloc_func = self.instance.get_func(&mut self.store, "alloc")
-            .ok_or_else(|| PluginError::execution("WASM module must export an 'alloc' function for memory allocation"))?;
+        let alloc_func = self.instance.get_func(&mut self.store, "alloc").ok_or_else(|| {
+            PluginError::execution(
+                "WASM module must export an 'alloc' function for memory allocation",
+            )
+        })?;
 
         let mut alloc_result = [wasmtime::Val::I32(0)];
-        alloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
-            .map_err(|e| PluginError::execution(&format!("Failed to allocate memory for input: {}", e)))?;
+        alloc_func
+            .call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
+            .map_err(|e| {
+                PluginError::execution(&format!("Failed to allocate memory for input: {}", e))
+            })?;
 
         let input_ptr = match alloc_result[0] {
             wasmtime::Val::I32(ptr) => ptr,
-            _ => return Err(PluginError::execution("alloc function did not return a valid pointer")),
+            _ => {
+                return Err(PluginError::execution("alloc function did not return a valid pointer"))
+            }
         };
 
         // Write the input string to WASM memory
-        let memory = self.instance.get_memory(&mut self.store, "memory")
+        let memory = self
+            .instance
+            .get_memory(&mut self.store, "memory")
             .ok_or_else(|| PluginError::execution("WASM module must export a 'memory'"))?;
 
-        memory.write(&mut self.store, input_ptr as usize, input_bytes)
-            .map_err(|e| PluginError::execution(&format!("Failed to write input to WASM memory: {}", e)))?;
+        memory.write(&mut self.store, input_ptr as usize, input_bytes).map_err(|e| {
+            PluginError::execution(&format!("Failed to write input to WASM memory: {}", e))
+        })?;
 
         // Call the plugin function with the input pointer and length
         let mut func_result = [wasmtime::Val::I32(0), wasmtime::Val::I32(0)];
-        func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut func_result)
-            .map_err(|e| PluginError::execution(&format!("Failed to call WASM function '{}': {}", function_name, e)))?;
+        func.call(
+            &mut self.store,
+            &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)],
+            &mut func_result,
+        )
+        .map_err(|e| {
+            PluginError::execution(&format!(
+                "Failed to call WASM function '{}': {}",
+                function_name, e
+            ))
+        })?;
 
         // Extract the return values (assuming the function returns (ptr, len))
         let output_ptr = match func_result[0] {
             wasmtime::Val::I32(ptr) => ptr,
-            _ => return Err(PluginError::execution(&format!("Function '{}' did not return a valid output pointer", function_name))),
+            _ => {
+                return Err(PluginError::execution(&format!(
+                    "Function '{}' did not return a valid output pointer",
+                    function_name
+                )))
+            }
         };
 
         let output_len = match func_result[1] {
             wasmtime::Val::I32(len) => len,
-            _ => return Err(PluginError::execution(&format!("Function '{}' did not return a valid output length", function_name))),
+            _ => {
+                return Err(PluginError::execution(&format!(
+                    "Function '{}' did not return a valid output length",
+                    function_name
+                )))
+            }
         };
 
         // Read the output from WASM memory
         let mut output_bytes = vec![0u8; output_len as usize];
-        memory.read(&mut self.store, output_ptr as usize, &mut output_bytes)
-            .map_err(|e| PluginError::execution(&format!("Failed to read output from WASM memory: {}", e)))?;
+        memory
+            .read(&mut self.store, output_ptr as usize, &mut output_bytes)
+            .map_err(|e| {
+                PluginError::execution(&format!("Failed to read output from WASM memory: {}", e))
+            })?;
 
         // Deallocate the memory if there's a dealloc function
         if let Some(dealloc_func) = self.instance.get_func(&mut self.store, "dealloc") {
-            let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)], &mut []);
-            let _ = dealloc_func.call(&mut self.store, &[wasmtime::Val::I32(output_ptr), wasmtime::Val::I32(output_len)], &mut []);
+            let _ = dealloc_func.call(
+                &mut self.store,
+                &[wasmtime::Val::I32(input_ptr), wasmtime::Val::I32(input_len)],
+                &mut [],
+            );
+            let _ = dealloc_func.call(
+                &mut self.store,
+                &[
+                    wasmtime::Val::I32(output_ptr),
+                    wasmtime::Val::I32(output_len),
+                ],
+                &mut [],
+            );
         }
 
         Ok(output_bytes)
@@ -392,10 +444,7 @@ impl PluginInstance {
 
     /// Get plugin health
     async fn get_health(&self) -> PluginHealth {
-        PluginHealth::healthy(
-            "Plugin is running".to_string(),
-            self.metrics.clone(),
-        )
+        PluginHealth::healthy("Plugin is running".to_string(), self.metrics.clone())
     }
 
     /// Unload plugin
@@ -422,10 +471,10 @@ pub struct ExecutionLimits {
 impl Default for ExecutionLimits {
     fn default() -> Self {
         Self {
-            memory_limit: 10 * 1024 * 1024, // 10MB
-            cpu_time_limit: 5_000_000_000,  // 5 seconds
+            memory_limit: 10 * 1024 * 1024,  // 10MB
+            cpu_time_limit: 5_000_000_000,   // 5 seconds
             wall_time_limit: 10_000_000_000, // 10 seconds
-            fuel_limit: 1_000_000,          // 1M fuel units
+            fuel_limit: 1_000_000,           // 1M fuel units
         }
     }
 }
@@ -512,7 +561,8 @@ impl ModuleValidator {
                 }
                 _ => {
                     return Err(PluginError::security(&format!(
-                        "Disallowed import module: {}", module_name
+                        "Disallowed import module: {}",
+                        module_name
                     )));
                 }
             }
@@ -525,28 +575,44 @@ impl ModuleValidator {
     fn validate_wasi_import(field_name: &str, capabilities: &PluginCapabilities) -> Result<()> {
         // Check filesystem operations
         let filesystem_functions = [
-            "fd_read", "fd_write", "fd_close", "fd_fdstat_get",
-            "path_open", "path_readlink", "path_filestat_get",
+            "fd_read",
+            "fd_write",
+            "fd_close",
+            "fd_fdstat_get",
+            "path_open",
+            "path_readlink",
+            "path_filestat_get",
         ];
 
         if filesystem_functions.contains(&field_name) {
-            if capabilities.filesystem.read_paths.is_empty() && capabilities.filesystem.write_paths.is_empty() {
+            if capabilities.filesystem.read_paths.is_empty()
+                && capabilities.filesystem.write_paths.is_empty()
+            {
                 return Err(PluginError::security(&format!(
-                    "Plugin imports filesystem function '{}' but has no filesystem capabilities", field_name
+                    "Plugin imports filesystem function '{}' but has no filesystem capabilities",
+                    field_name
                 )));
             }
         }
 
         // Allow other safe WASI functions
         let allowed_functions = [
-            "fd_read", "fd_write", "fd_close", "fd_fdstat_get",
-            "path_open", "path_readlink", "path_filestat_get",
-            "clock_time_get", "proc_exit", "random_get",
+            "fd_read",
+            "fd_write",
+            "fd_close",
+            "fd_fdstat_get",
+            "path_open",
+            "path_readlink",
+            "path_filestat_get",
+            "clock_time_get",
+            "proc_exit",
+            "random_get",
         ];
 
         if !allowed_functions.contains(&field_name) {
             return Err(PluginError::security(&format!(
-                "Disallowed WASI function: {}", field_name
+                "Disallowed WASI function: {}",
+                field_name
             )));
         }
 
@@ -556,12 +622,16 @@ impl ModuleValidator {
     /// Validate host function imports
     fn validate_host_import(field_name: &str) -> Result<()> {
         let allowed_functions = [
-            "log_message", "get_config_value", "store_data", "retrieve_data",
+            "log_message",
+            "get_config_value",
+            "store_data",
+            "retrieve_data",
         ];
 
         if !allowed_functions.contains(&field_name) {
             return Err(PluginError::security(&format!(
-                "Disallowed host function: {}", field_name
+                "Disallowed host function: {}",
+                field_name
             )));
         }
 
@@ -592,19 +662,16 @@ impl ModuleValidator {
                     .collect();
 
                 // Convert WASM return type (assuming single return for simplicity)
-                let return_type = func_type
-                    .results()
-                    .next()
-                    .and_then(|result| match result {
-                        wasmtime::ValType::I32 => Some(ValueType::I32),
-                        wasmtime::ValType::I64 => Some(ValueType::I64),
-                        wasmtime::ValType::F32 => Some(ValueType::F32),
-                        wasmtime::ValType::F64 => Some(ValueType::F64),
-                        _ => {
-                            // Skip unsupported return types
-                            None
-                        }
-                    });
+                let return_type = func_type.results().next().and_then(|result| match result {
+                    wasmtime::ValType::I32 => Some(ValueType::I32),
+                    wasmtime::ValType::I64 => Some(ValueType::I64),
+                    wasmtime::ValType::F32 => Some(ValueType::F32),
+                    wasmtime::ValType::F64 => Some(ValueType::F64),
+                    _ => {
+                        // Skip unsupported return types
+                        None
+                    }
+                });
 
                 functions.push(PluginFunction {
                     name: export.name().to_string(),

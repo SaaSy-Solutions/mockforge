@@ -4,9 +4,7 @@
 //! manages their lifecycle, and provides access to plugin instances.
 
 use super::*;
-use mockforge_plugin_core::{
-    PluginId, PluginInstance, PluginHealth, PluginState, PluginMetrics, PluginVersion
-};
+use mockforge_plugin_core::{PluginHealth, PluginId, PluginInstance, PluginVersion};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -108,7 +106,8 @@ impl PluginRegistry {
 
     /// Get plugin health status
     pub fn get_plugin_health(&self, plugin_id: &PluginId) -> LoaderResult<PluginHealth> {
-        let plugin = self.get_plugin(plugin_id)
+        let plugin = self
+            .get_plugin(plugin_id)
             .ok_or_else(|| PluginLoaderError::not_found(plugin_id.clone()))?;
 
         Ok(plugin.health.clone())
@@ -141,16 +140,15 @@ impl PluginRegistry {
 
     /// Find plugins by capability
     pub fn find_plugins_by_capability(&self, capability: &str) -> Vec<&PluginInstance> {
-        self.plugins.values()
+        self.plugins
+            .values()
             .filter(|plugin| plugin.manifest.capabilities.contains(&capability.to_string()))
             .collect()
     }
 
     /// Get plugins in dependency order
     pub fn get_plugins_in_dependency_order(&self) -> Vec<&PluginInstance> {
-        self.load_order.iter()
-            .filter_map(|id| self.plugins.get(id))
-            .collect()
+        self.load_order.iter().filter_map(|id| self.plugins.get(id)).collect()
     }
 
     /// Validate plugin dependencies
@@ -159,7 +157,8 @@ impl PluginRegistry {
             // Check if dependency is loaded
             if !self.has_plugin(dep_id) {
                 return Err(PluginLoaderError::dependency(format!(
-                    "Required dependency {} not found", dep_id.0
+                    "Required dependency {} not found",
+                    dep_id.0
                 )));
             }
 
@@ -190,8 +189,6 @@ impl PluginRegistry {
 
         Ok(())
     }
-
-
 
     /// Get plugin dependency graph
     pub fn get_dependency_graph(&self) -> HashMap<PluginId, Vec<PluginId>> {

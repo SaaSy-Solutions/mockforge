@@ -2,11 +2,11 @@
 //! and priority-based response selection.
 
 use axum::http::{HeaderMap, Method, Uri};
+use openapiv3;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use openapiv3;
 
 /// Request fingerprint for unique identification
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,7 +147,10 @@ impl RequestFingerprint {
     }
 
     /// Find the OpenAPI operation that matches this fingerprint
-    fn find_operation<'a>(&self, spec: &'a crate::openapi::spec::OpenApiSpec) -> Option<&'a openapiv3::Operation> {
+    fn find_operation<'a>(
+        &self,
+        spec: &'a crate::openapi::spec::OpenApiSpec,
+    ) -> Option<&'a openapiv3::Operation> {
         // Look for the path in the spec
         if let Some(path_item) = spec.spec.paths.paths.get(&self.path) {
             if let Some(item) = path_item.as_item() {
