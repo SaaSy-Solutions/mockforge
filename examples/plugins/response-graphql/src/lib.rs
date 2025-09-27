@@ -15,6 +15,7 @@ use mockforge_plugin_core::*;
 use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use http::{HeaderMap, HeaderValue, Method};
 
 /// Plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -495,7 +496,7 @@ mod tests {
     #[test]
     fn test_mock_field_generation() {
         let config = GraphQLConfig::default();
-        let mut plugin = GraphQLResponsePlugin::new(config);
+        let plugin = GraphQLResponsePlugin::new(config);
 
         let id_value = plugin.generate_mock_field("id");
         assert!(id_value.is_string());
@@ -525,16 +526,42 @@ mod tests {
         let plugin = GraphQLResponsePlugin::new(config);
 
         // Test GraphQL content type
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/graphql".to_string());
-        let context = PluginContext::new("POST".to_string(), "/graphql".to_string(), headers, None);
-        assert!(plugin.is_graphql_request(&context));
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("application/graphql"));
+        let request = mockforge_plugin_core::ResponseRequest {
+            method: Method::POST,
+            uri: "/graphql".to_string(),
+            path: "/graphql".to_string(),
+            query_params: HashMap::new(),
+            headers: headers.clone(),
+            body: None,
+            path_params: HashMap::new(),
+            client_ip: Some("127.0.0.1".to_string()),
+            user_agent: Some("test-agent".to_string()),
+            timestamp: chrono::Utc::now(),
+            auth_context: None,
+            custom: HashMap::new(),
+        };
+        assert!(plugin.is_graphql_request(&request));
 
         // Test JSON content type
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
-        let context = PluginContext::new("POST".to_string(), "/graphql".to_string(), headers, None);
-        assert!(plugin.is_graphql_request(&context));
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
+        let request = mockforge_plugin_core::ResponseRequest {
+            method: Method::POST,
+            uri: "/graphql".to_string(),
+            path: "/graphql".to_string(),
+            query_params: HashMap::new(),
+            headers: headers.clone(),
+            body: None,
+            path_params: HashMap::new(),
+            client_ip: Some("127.0.0.1".to_string()),
+            user_agent: Some("test-agent".to_string()),
+            timestamp: chrono::Utc::now(),
+            auth_context: None,
+            custom: HashMap::new(),
+        };
+        assert!(plugin.is_graphql_request(&request));
     }
 
     #[tokio::test]
@@ -542,21 +569,32 @@ mod tests {
         let config = GraphQLConfig::default();
         let plugin = GraphQLResponsePlugin::new(config);
 
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
 
         let body = serde_json::json!({
             "query": "query { user { id name email } }"
         });
+        let body_bytes = serde_json::to_vec(&body).unwrap();
 
-        let context =
-            PluginContext::new("POST".to_string(), "/graphql".to_string(), headers, Some(body));
+        let context = PluginContext::new(
+            PluginId::new("graphql-response"),
+            PluginVersion::new(1, 0, 0)
+        );
 
         let request = mockforge_plugin_core::ResponseRequest {
-            method: "POST".to_string(),
+            method: Method::POST,
+            uri: "/graphql".to_string(),
             path: "/graphql".to_string(),
+            query_params: HashMap::new(),
             headers: headers.clone(),
-            body: Some(body.clone()),
+            body: Some(body_bytes),
+            path_params: HashMap::new(),
+            client_ip: Some("127.0.0.1".to_string()),
+            user_agent: Some("test-agent".to_string()),
+            timestamp: chrono::Utc::now(),
+            auth_context: None,
+            custom: HashMap::new(),
         };
         let result = plugin
             .generate_response(&context, &request, &ResponsePluginConfig::default())

@@ -8,7 +8,7 @@ mod admin_handlers_tests {
     use chrono::Utc;
 
     fn create_test_state() -> AdminState {
-        use mockforge_core::{init_global_logger, CentralizedRequestLogger};
+        use mockforge_core::init_global_logger;
         use std::sync::Arc;
 
         let logger = Arc::new(init_global_logger(1000).clone());

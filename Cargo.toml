@@ -9,9 +9,9 @@ members = [
     "crates/mockforge-data",
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-loader",
+    "crates/mockforge-ui",
     "examples/plugins/response-graphql",
     "test_openapi_demo"
-    # "crates/mockforge-ui"  # Temporarily excluded due to Send + Sync issues
 ]
 exclude = [
    # "test_openapi_demo"

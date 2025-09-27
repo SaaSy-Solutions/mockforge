@@ -309,16 +309,4 @@ async fn start_grpc_only_server(
     Ok(())
 }
 
-/// Start combined gRPC + HTTP server
-async fn start_combined_server(
-    _port: u16,
-    _config: &DynamicGrpcConfig,
-    _registry_arc: Arc<ServiceRegistry>,
-    _mock_proxy: MockReflectionProxy,
-) -> Result<
-    tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>,
-    Box<dyn std::error::Error + Send + Sync>,
-> {
-    // HTTP bridge temporarily disabled for compilation
-    Err("HTTP bridge not yet implemented".into())
-}
+// start_combined_server removed - was a stub that was never implemented

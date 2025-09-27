@@ -146,6 +146,7 @@ impl SmartMockGenerator {
     }
 
     /// Generate a deterministic random number within a range
+    #[allow(dead_code)] // Used in future smart generation features
     fn next_random_range(&mut self, min: i64, max: i64) -> i64 {
         if let Some(ref mut rng) = self.rng {
             rng.gen_range(min..=max)

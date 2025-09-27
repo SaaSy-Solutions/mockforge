@@ -135,6 +135,7 @@ struct ForeignKeyPattern {
     /// How to extract entity name from field name
     entity_extraction: EntityExtractionMethod,
     /// Confidence score for this pattern
+    #[allow(dead_code)] // Used in future relationship analysis
     confidence: f64,
 }
 
@@ -144,8 +145,10 @@ enum EntityExtractionMethod {
     /// Remove suffix (user_id -> user)
     RemoveSuffix(String),
     /// Direct mapping
+    #[allow(dead_code)] // Used in future entity extraction
     Direct,
     /// Custom transform function
+    #[allow(dead_code)] // Used in future entity extraction
     Custom(fn(&str) -> Option<String>),
 }
 

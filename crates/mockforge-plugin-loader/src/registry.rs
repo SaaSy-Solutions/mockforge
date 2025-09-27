@@ -330,6 +330,7 @@ impl RegistryHealth {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockforge_plugin_core::{PluginState, PluginMetrics};
 
     #[test]
     fn test_registry_creation() {

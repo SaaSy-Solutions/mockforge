@@ -33,18 +33,14 @@ pub enum ConversionError {
 }
 
 impl ConversionError {
-    fn with_field(
-        field: impl Into<String>,
-    ) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> Self {
-        let field = field.into();
-        move |err| ConversionError::ProtobufError(format!("Field '{}': {}", field, err))
-    }
+    // with_field method removed - was unused
 }
 
 /// Converter for JSON to Protobuf and vice versa
 #[derive(Debug, Clone)]
 pub struct ProtobufJsonConverter {
     /// Descriptor pool containing protobuf definitions
+    #[allow(dead_code)] // Used in future implementations
     pool: DescriptorPool,
 }
 
@@ -540,6 +536,7 @@ impl ProtobufJsonConverter {
     }
 
     /// Handle repeated field conversion for JSON arrays
+    #[allow(dead_code)] // Used in future implementations
     fn convert_json_array_to_protobuf_list(
         &self,
         field: &FieldDescriptor,

@@ -2,7 +2,7 @@ use axum::{body::Body, http::Request};
 use mockforge_ui::create_admin_router;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
+// use std::process::Command; // Unused for now
 use tower::ServiceExt;
 
 /// Test that the admin UI builds successfully and serves assets correctly
