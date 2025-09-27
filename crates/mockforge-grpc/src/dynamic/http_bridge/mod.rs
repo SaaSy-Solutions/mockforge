@@ -7,18 +7,16 @@ pub mod converters;
 pub mod handlers;
 pub mod route_generator;
 
-use crate::dynamic::proto_parser::ProtoService;
-use crate::reflection::{MockReflectionProxy, ProxyConfig};
+use crate::reflection::MockReflectionProxy;
 use axum::{
     body::Bytes,
     extract::{Path, Query, State},
     http::Method,
-    response::{IntoResponse, Json, Sse},
-    routing::{delete, get, patch, post, put},
+    response::{IntoResponse, Json},
+    routing::{get, post},
     Router,
 };
-use converters::{ConversionError, ProtobufJsonConverter};
-use futures_util::stream::Stream;
+use converters::ProtobufJsonConverter;
 use route_generator::RouteGenerator;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -26,7 +24,6 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info, warn};
 
@@ -200,7 +197,7 @@ impl HttpBridge {
 
     /// Health check handler
     async fn health_check(
-        State(bridge): State<Arc<HttpBridge>>,
+        State(_bridge): State<Arc<HttpBridge>>,
     ) -> axum::response::Json<serde_json::Value> {
         axum::response::Json(serde_json::json!({"status": "ok", "bridge": "healthy"}))
     }
@@ -363,7 +360,7 @@ impl HttpBridge {
     > {
         Box::new(
             move |state: State<Arc<Self>>,
-                  path: Path<HashMap<String, String>>,
+                  _path: Path<HashMap<String, String>>,
                   query: Query<BridgeQuery>,
                   body: Bytes| {
                 let service_name = service_name.clone();
@@ -471,12 +468,12 @@ impl HttpBridge {
     /// Handle a bridge request by calling the appropriate gRPC method
     async fn handle_bridge_request(
         proxy: &MockReflectionProxy,
-        converter: &ProtobufJsonConverter,
+        _converter: &ProtobufJsonConverter,
         service_name: &str,
         method_name: &str,
-        client_streaming: bool,
+        _client_streaming: bool,
         server_streaming: bool,
-        query: Query<BridgeQuery>,
+        _query: Query<BridgeQuery>,
         body: Bytes,
     ) -> Result<BridgeResponse<Value>, Box<dyn std::error::Error + Send + Sync>> {
         debug!("Handling bridge request for {}.{}", service_name, method_name);
@@ -498,7 +495,7 @@ impl HttpBridge {
             // Handle streaming response
             Self::handle_streaming_request(
                 proxy,
-                converter,
+                _converter,
                 service_name,
                 method_name,
                 json_request,
@@ -506,7 +503,7 @@ impl HttpBridge {
             .await
         } else {
             // Handle unary request
-            Self::handle_unary_request(proxy, converter, service_name, method_name, json_request)
+            Self::handle_unary_request(proxy, _converter, service_name, method_name, json_request)
                 .await
         }
     }
@@ -514,7 +511,7 @@ impl HttpBridge {
     /// Handle unary request (no streaming)
     async fn handle_unary_request(
         proxy: &MockReflectionProxy,
-        converter: &ProtobufJsonConverter,
+        _converter: &ProtobufJsonConverter,
         service_name: &str,
         method_name: &str,
         json_request: Value,
@@ -563,11 +560,11 @@ impl HttpBridge {
 
     /// Handle streaming request (returns SSE stream)
     async fn handle_streaming_request(
-        proxy: &MockReflectionProxy,
-        converter: &ProtobufJsonConverter,
-        service_name: &str,
-        method_name: &str,
-        json_request: Value,
+        _proxy: &MockReflectionProxy,
+        _converter: &ProtobufJsonConverter,
+        _service_name: &str,
+        _method_name: &str,
+        _json_request: Value,
     ) -> Result<BridgeResponse<Value>, Box<dyn std::error::Error + Send + Sync>> {
         // For now, return an error indicating streaming is not yet implemented via HTTP
         // Full streaming implementation would use Server-Sent Events

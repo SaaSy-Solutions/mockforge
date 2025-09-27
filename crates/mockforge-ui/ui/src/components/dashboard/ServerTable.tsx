@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
-import { Server, Globe, Zap, Database, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Server, Globe, Zap, Database, RefreshCw, AlertTriangle } from 'lucide-react';
 import { ModernCard, ModernBadge, EmptyState, Alert } from '../ui/DesignSystem';
 import { useDashboard } from '../../hooks/useApi';
 import { useErrorToast } from '../../components/ui/ToastProvider';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
+import { SkeletonCard } from '../ui/Skeleton';
 
 
 
@@ -131,11 +132,11 @@ export function ServerTable() {
         subtitle="Running MockForge services"
         icon={<Server className="h-6 w-6" />}
       >
-        <EmptyState
-          icon={<Loader2 className="h-8 w-8 animate-spin" />}
-          title="Loading server data..."
-          description="Fetching server status and configuration."
-        />
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <SkeletonCard key={i} className="h-24" />
+          ))}
+        </div>
       </ModernCard>
     );
   }

@@ -13,9 +13,6 @@ pub mod proxy;
 pub mod validation;
 
 // Re-export commonly used types
-pub use handlers::*;
-pub use middleware::*;
 pub use proxy::*;
-pub use validation::*;
 
 // Legacy code removed - using proxy.rs implementation instead

@@ -4,7 +4,7 @@
 //! files for the admin UI.
 
 use axum::{
-    http::{self, StatusCode},
+    http,
     response::{Html, IntoResponse},
 };
 

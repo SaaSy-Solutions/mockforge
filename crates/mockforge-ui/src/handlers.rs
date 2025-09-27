@@ -14,7 +14,7 @@ use axum::{
     http::{self, StatusCode},
     response::{Html, IntoResponse, Json},
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use mockforge_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -41,7 +41,6 @@ pub mod admin;
 pub mod assets;
 
 // Re-export commonly used types
-pub use admin::*;
 pub use assets::*;
 
 // Import workspace persistence
@@ -287,7 +286,7 @@ impl AdminState {
                 let cpu_usage = sys.global_cpu_usage();
 
                 // Get memory usage
-                let total_memory = sys.total_memory() as f64;
+                let _total_memory = sys.total_memory() as f64;
                 let used_memory = sys.used_memory() as f64;
                 let memory_usage_mb = used_memory / 1024.0 / 1024.0;
 
@@ -720,12 +719,14 @@ pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'stati
 
 /// Get dashboard data
 pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<DashboardData>> {
-    let uptime = (Utc::now() - state.start_time).num_seconds() as u64;
+    let uptime = Utc::now()
+        .signed_duration_since(state.start_time)
+        .num_seconds() as u64;
 
     // Get real metrics from state
     let metrics = state.get_metrics().await;
     let system_metrics = state.get_system_metrics().await;
-    let config = state.get_config().await;
+    let _config = state.get_config().await;
 
     // Get recent logs from centralized logger
     let recent_logs: Vec<RequestLog> =
@@ -2612,8 +2613,8 @@ pub async fn serve_logo_80() -> impl IntoResponse {
 
 // Missing handler functions that routes.rs expects
 pub async fn update_traffic_shaping(
-    State(state): State<AdminState>,
-    Json(config): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    Json(_config): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Traffic shaping updated".to_string()))
 }
@@ -2746,7 +2747,6 @@ pub async fn import_insomnia(
     State(state): State<AdminState>,
     Json(request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
-    use mockforge_core::workspace_import::create_workspace_from_insomnia;
     use uuid::Uuid;
 
     let content = request.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -2784,7 +2784,7 @@ pub async fn import_insomnia(
         .and_then(|f| f.split('.').next())
         .unwrap_or("Imported Insomnia Collection");
 
-    let config = WorkspaceImportConfig {
+    let _config = WorkspaceImportConfig {
         create_folders: true,
         base_folder_name: None,
         preserve_hierarchy: true,
@@ -2856,8 +2856,8 @@ pub async fn import_insomnia(
 }
 
 pub async fn import_openapi(
-    State(state): State<AdminState>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("OpenAPI import completed".to_string()))
 }
@@ -2963,7 +2963,7 @@ pub async fn import_curl(
 }
 
 pub async fn preview_import(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
     Json(request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     use mockforge_core::import::{
@@ -3131,7 +3131,7 @@ pub async fn get_import_history(
 }
 
 pub async fn get_admin_api_state(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "status": "active"
@@ -3139,7 +3139,7 @@ pub async fn get_admin_api_state(
 }
 
 pub async fn get_admin_api_replay(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "replay": []
@@ -3147,7 +3147,7 @@ pub async fn get_admin_api_replay(
 }
 
 pub async fn get_sse_status(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "available": true,
@@ -3161,7 +3161,7 @@ pub async fn get_sse_status(
 }
 
 pub async fn get_sse_connections(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "active_connections": 0
@@ -3170,27 +3170,27 @@ pub async fn get_sse_connections(
 
 // Workspace management functions
 pub async fn get_workspaces(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn create_workspace(
-    State(state): State<AdminState>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspace created".to_string()))
 }
 
 pub async fn open_workspace_from_directory(
-    State(state): State<AdminState>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspace opened from directory".to_string()))
 }
 
 pub async fn get_workspace(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
     axum::extract::Path(workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
@@ -3201,39 +3201,39 @@ pub async fn get_workspace(
 }
 
 pub async fn delete_workspace(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspace deleted".to_string()))
 }
 
 pub async fn set_active_workspace(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspace activated".to_string()))
 }
 
 pub async fn create_folder(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Folder created".to_string()))
 }
 
 pub async fn create_request(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Request created".to_string()))
 }
 
 pub async fn execute_workspace_request(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, request_id)): axum::extract::Path<(String, String)>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _request_id)): axum::extract::Path<(String, String)>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "status": "executed",
@@ -3242,15 +3242,15 @@ pub async fn execute_workspace_request(
 }
 
 pub async fn get_request_history(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, request_id)): axum::extract::Path<(String, String)>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _request_id)): axum::extract::Path<(String, String)>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn get_folder(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, folder_id)): axum::extract::Path<(String, String)>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, folder_id)): axum::extract::Path<(String, String)>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "id": folder_id,
@@ -3259,76 +3259,76 @@ pub async fn get_folder(
 }
 
 pub async fn import_to_workspace(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Import to workspace completed".to_string()))
 }
 
 pub async fn export_workspaces(
-    State(state): State<AdminState>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspaces exported".to_string()))
 }
 
 // Environment management functions
 pub async fn get_environments(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn create_environment(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment created".to_string()))
 }
 
 pub async fn update_environment(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment updated".to_string()))
 }
 
 pub async fn delete_environment(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment deleted".to_string()))
 }
 
 pub async fn set_active_environment(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment activated".to_string()))
 }
 
 pub async fn get_environment_variables(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
 ) -> Json<ApiResponse<HashMap<String, String>>> {
     Json(ApiResponse::success(HashMap::new()))
 }
 
 pub async fn set_environment_variable(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id)): axum::extract::Path<(String, String)>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment variable set".to_string()))
 }
 
 pub async fn remove_environment_variable(
-    State(state): State<AdminState>,
-    axum::extract::Path((workspace_id, environment_id, variable_name)): axum::extract::Path<(
+    State(_state): State<AdminState>,
+    axum::extract::Path((_workspace_id, _environment_id, _variable_name)): axum::extract::Path<(
         String,
         String,
         String,
@@ -3339,9 +3339,9 @@ pub async fn remove_environment_variable(
 
 // Autocomplete functions
 pub async fn get_autocomplete_suggestions(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "suggestions": [],
@@ -3352,8 +3352,8 @@ pub async fn get_autocomplete_suggestions(
 
 // Sync management functions
 pub async fn get_sync_status(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "status": "disabled"
@@ -3361,65 +3361,65 @@ pub async fn get_sync_status(
 }
 
 pub async fn configure_sync(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync configured".to_string()))
 }
 
 pub async fn disable_sync(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync disabled".to_string()))
 }
 
 pub async fn trigger_sync(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync triggered".to_string()))
 }
 
 pub async fn get_sync_changes(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn confirm_sync_changes(
-    State(state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync changes confirmed".to_string()))
 }
 
 // Plugin management functions
 pub async fn get_plugins(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn delete_plugin(
-    State(state): State<AdminState>,
-    axum::extract::Path(plugin_id): axum::extract::Path<String>,
+    State(_state): State<AdminState>,
+    axum::extract::Path(_plugin_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Plugin deleted".to_string()))
 }
 
 pub async fn validate_plugin(
-    State(state): State<AdminState>,
-    Json(request): Json<serde_json::Value>,
+    State(_state): State<AdminState>,
+    Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Plugin validated".to_string()))
 }
 
 pub async fn get_plugin_status(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "status": "active"
@@ -3434,7 +3434,7 @@ pub async fn clear_import_history(State(state): State<AdminState>) -> Json<ApiRe
 }
 
 pub async fn get_plugin(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
     axum::extract::Path(plugin_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
@@ -3445,6 +3445,6 @@ pub async fn get_plugin(
     })))
 }
 
-pub async fn reload_plugins(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
+pub async fn reload_plugins(State(_state): State<AdminState>) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Plugins reloaded".to_string()))
 }

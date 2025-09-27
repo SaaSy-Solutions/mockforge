@@ -5,14 +5,13 @@
 
 use crate::reflection::metrics::{record_error, record_success};
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use prost_reflect::{DynamicMessage, Kind, ReflectMessage};
 use std::time::Instant;
 use tonic::{
     metadata::{Ascii, MetadataKey, MetadataValue},
     Code, Request, Status,
 };
-use tracing::{debug, error, warn};
+use tracing::error;
 
 impl MockReflectionProxy {
     /// Apply request preprocessing middleware
@@ -40,9 +39,9 @@ impl MockReflectionProxy {
         request
             .get_ref()
             .encode(&mut buf)
-            .map_err(|e| Status::internal("Failed to encode request".to_string()))?;
+            .map_err(|_e| Status::internal("Failed to encode request".to_string()))?;
         let dynamic_message = DynamicMessage::decode(descriptor.clone(), &buf[..])
-            .map_err(|e| Status::internal("Failed to decode request".to_string()))?;
+            .map_err(|_e| Status::internal("Failed to decode request".to_string()))?;
         if let Err(e) = self.validate_request_message(&dynamic_message) {
             return Err(Status::internal(format!("Request validation failed: {}", e)));
         }
@@ -291,7 +290,7 @@ impl MockReflectionProxy {
         method_name: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Basic validation: check that required fields are present
-        let descriptor = message.descriptor();
+        let _descriptor = message.descriptor();
 
         // Note: In proto3, all fields are effectively optional
         // Required field validation removed as is_required() method is no longer available
@@ -336,8 +335,8 @@ impl MockReflectionProxy {
     fn validate_message_schema(
         &self,
         message: &DynamicMessage,
-        service_name: &str,
-        method_name: &str,
+        _service_name: &str,
+        _method_name: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let descriptor = message.descriptor();
 
@@ -408,7 +407,7 @@ impl MockReflectionProxy {
             }
 
             // Date/timestamp validation
-            if (field_name.contains("date") || field_name.contains("timestamp")) {
+            if field_name.contains("date") || field_name.contains("timestamp") {
                 match field.kind() {
                     Kind::String => {
                         if let Some(date_str) = field_value.as_str() {

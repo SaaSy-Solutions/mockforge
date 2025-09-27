@@ -10,7 +10,7 @@
 //! - Support for nested queries and fragments
 //! - Configurable data complexity levels
 
-use graphql_parser::query::{parse_query, Definition, Field, OperationDefinition, Selection};
+use graphql_parser::query::{parse_query, Definition, OperationDefinition, Selection};
 use mockforge_plugin_core::*;
 use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -145,13 +145,13 @@ impl GraphQLResponsePlugin {
         match field_name.to_lowercase().as_str() {
             "id" => {
                 if field_name.contains("user") || field_name.contains("User") {
-                    serde_json::json!(format!("user_{:04X}", rng.gen::<u16>()))
+                    serde_json::json!(format!("user_{:04X}", rng.random::<u16>()))
                 } else if field_name.contains("product") || field_name.contains("Product") {
-                    serde_json::json!(format!("prod_{:04X}", rng.gen::<u16>()))
+                    serde_json::json!(format!("prod_{:04X}", rng.random::<u16>()))
                 } else if field_name.contains("order") || field_name.contains("Order") {
-                    serde_json::json!(format!("order_{:04X}", rng.gen::<u16>()))
+                    serde_json::json!(format!("order_{:04X}", rng.random::<u16>()))
                 } else {
-                    serde_json::json!(format!("id_{:04X}", rng.gen::<u16>()))
+                    serde_json::json!(format!("id_{:04X}", rng.random::<u16>()))
                 }
             }
 
@@ -170,24 +170,24 @@ impl GraphQLResponsePlugin {
                     "Laptop Computer",
                     "Coffee Maker",
                 ];
-                serde_json::json!(names[rng.gen_range(0..names.len())])
+                serde_json::json!(names[rng.random_range(0..names.len())])
             }
 
             "email" => {
                 let domains = ["gmail.com", "yahoo.com", "hotmail.com", "example.com"];
-                let local = format!("user{:03}", rng.gen_range(1..999));
-                let domain = domains[rng.gen_range(0..domains.len())];
+                let local = format!("user{:03}", rng.random_range(1..999));
+                let domain = domains[rng.random_range(0..domains.len())];
                 serde_json::json!(format!("{}@{}", local, domain))
             }
 
             "price" | "amount" | "total" | "cost" => {
-                let amount = rng.gen_range(10.0..1000.0);
+                let amount = rng.random_range(10.0..1000.0);
                 serde_json::json!(format!("${:.2}", amount))
             }
 
             "status" => {
                 let statuses = ["pending", "processing", "shipped", "delivered", "cancelled"];
-                serde_json::json!(statuses[rng.gen_range(0..statuses.len())])
+                serde_json::json!(statuses[rng.random_range(0..statuses.len())])
             }
 
             "createdat" | "updatedat" | "timestamp" => {
@@ -195,7 +195,7 @@ impl GraphQLResponsePlugin {
             }
 
             "count" | "quantity" | "stock" => {
-                serde_json::json!(rng.gen_range(1..100))
+                serde_json::json!(rng.random_range(1..100))
             }
 
             "description" | "bio" | "summary" => {
@@ -205,7 +205,7 @@ impl GraphQLResponsePlugin {
                     "Reliable and durable construction.",
                     "User-friendly interface with advanced capabilities.",
                 ];
-                serde_json::json!(descriptions[rng.gen_range(0..descriptions.len())])
+                serde_json::json!(descriptions[rng.random_range(0..descriptions.len())])
             }
 
             "category" | "type" | "kind" => {
@@ -217,18 +217,18 @@ impl GraphQLResponsePlugin {
                     "Sports",
                     "Music",
                 ];
-                serde_json::json!(categories[rng.gen_range(0..categories.len())])
+                serde_json::json!(categories[rng.random_range(0..categories.len())])
             }
 
             "url" | "image" | "avatar" => {
                 serde_json::json!(format!(
                     "https://example.com/image_{}.jpg",
-                    rng.gen_range(1..100)
+                    rng.random_range(1..100)
                 ))
             }
 
             "active" | "enabled" | "isactive" => {
-                serde_json::json!(rng.gen_bool(0.8)) // 80% chance of being true
+                serde_json::json!(rng.random_bool(0.8)) // 80% chance of being true
             }
 
             _ => {
@@ -236,19 +236,19 @@ impl GraphQLResponsePlugin {
                 match self.config.mock_data_complexity.as_str() {
                     "simple" => serde_json::json!("mock_value"),
                     "medium" => {
-                        serde_json::json!(format!("mock_{}_{}", field_name, rng.gen_range(1..100)))
+                        serde_json::json!(format!("mock_{}_{}", field_name, rng.random_range(1..100)))
                     }
                     "complex" => {
                         // Generate more complex mock data
                         let mock_types = ["string", "number", "boolean", "array", "object"];
-                        match mock_types[rng.gen_range(0..mock_types.len())] {
+                        match mock_types[rng.random_range(0..mock_types.len())] {
                             "string" => serde_json::json!(format!("complex_mock_{}", field_name)),
-                            "number" => serde_json::json!(rng.gen_range(1..1000)),
-                            "boolean" => serde_json::json!(rng.gen_bool(0.5)),
-                            "array" => serde_json::json!([1, 2, 3, rng.gen_range(4..10)]),
+                            "number" => serde_json::json!(rng.random_range(1..1000)),
+                            "boolean" => serde_json::json!(rng.random_bool(0.5)),
+                            "array" => serde_json::json!([1, 2, 3, rng.random_range(4..10)]),
                             "object" => serde_json::json!({
                                 "nested_field": format!("nested_{}", field_name),
-                                "value": rng.gen_range(1..100)
+                                "value": rng.random_range(1..100)
                             }),
                             _ => serde_json::json!("default_mock"),
                         }

@@ -4,17 +4,15 @@
 //! part of the main dynamic routing.
 
 use super::{BridgeResponse, HttpBridgeConfig};
-use crate::reflection::smart_mock_generator::SmartMockGenerator;
 use axum::response::{IntoResponse, Sse};
-use prost_reflect::DynamicMessage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-use tonic::{Request, Response, Status, Streaming};
-use tracing::{debug, warn};
+use tonic::Request;
+use tracing::warn;
 
 /// Stream handler for server-sent events
 pub struct StreamHandler;
@@ -29,7 +27,7 @@ pub struct StreamingMessage {
 impl StreamHandler {
     /// Create a server-sent events stream for bidirectional communication
     pub async fn create_sse_stream(
-        config: HttpBridgeConfig,
+        _config: HttpBridgeConfig,
         service_name: String,
         method_name: String,
     ) -> impl IntoResponse {
@@ -234,7 +232,7 @@ impl StreamHandler {
             .descriptor_pool()
             .get_message_by_name(&method_info.input_type)
             .ok_or_else(|| format!("Input type '{}' not found", method_info.input_type))?;
-        let output_descriptor = registry
+        let _output_descriptor = registry
             .descriptor_pool()
             .get_message_by_name(&method_info.output_type)
             .ok_or_else(|| format!("Output type '{}' not found", method_info.output_type))?;
@@ -316,7 +314,7 @@ impl StreamHandler {
             mpsc::channel::<Result<prost_reflect::DynamicMessage, tonic::Status>>(10);
 
         // Create the request with the client stream
-        let request = Request::new(ReceiverStream::new(client_rx));
+        let _request = Request::new(ReceiverStream::new(client_rx));
 
         // Spawn task to send client messages
         let client_tx_clone = client_tx.clone();

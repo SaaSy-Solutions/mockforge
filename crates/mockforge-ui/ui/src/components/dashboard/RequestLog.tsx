@@ -1,11 +1,15 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { cn } from '../../utils/cn';
-import { StatusBadge } from '../ui/StatusBadge';
-import { FileText, Clock, Globe, Filter, Loader2 } from 'lucide-react';
+import { FileText, Clock, Globe, Filter } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { useLogs } from '../../hooks/useApi';
+import { ResponsiveTable, type ResponsiveTableColumn } from '../ui/ResponsiveTable';
+import { Badge } from '../ui/DesignSystem';
+import { SkeletonTable } from '../ui/Skeleton';
+import { useApiErrorHandling } from '../../hooks/useErrorHandling';
+import { CompactErrorFallback, DataErrorFallback } from '../error/ErrorFallbacks';
 
 type StatusFamily = 'all' | '2xx' | '4xx' | '5xx';
 
@@ -26,16 +30,27 @@ export function RequestLog() {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
 
+  const { handleApiError, retry, clearError, errorState, canRetry } = useApiErrorHandling();
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 250);
     return () => clearTimeout(t);
   }, [search]);
 
   // Get logs with filters
-  const { data: logsData, isLoading, error } = useLogs({
+  const { data: logsData, isLoading, error, refetch } = useLogs({
     method: method ?? undefined,
     path: debounced || undefined,
   });
+
+  // Handle API errors
+  useEffect(() => {
+    if (error) {
+      handleApiError(error, 'fetch_logs');
+    } else {
+      clearError();
+    }
+  }, [error, handleApiError, clearError]);
 
   const logs = useMemo(() => {
     if (!logsData) return [];
@@ -46,12 +61,82 @@ export function RequestLog() {
     return logsData.filter((l: any) => l.status_code >= start && l.status_code <= end);
   }, [logsData, statusFamily]);
 
-  const statusToBadge = (code: number): 'running' | 'warning' | 'error' | 'info' => {
-    if (code >= 200 && code < 300) return 'running';
-    if (code >= 400 && code < 500) return 'warning';
-    if (code >= 500) return 'error';
-    return 'info';
-  };
+  // Define table columns
+  const columns: ResponsiveTableColumn[] = [
+    {
+      key: 'method',
+      label: 'Method',
+      priority: 'high',
+      render: (method: string) => (
+        <span className={cn('text-xs font-semibold px-3 py-1.5 rounded-md uppercase tracking-wide', methodClass(method))}>
+          {method}
+        </span>
+      ),
+      width: '80px'
+    },
+    {
+      key: 'path',
+      label: 'Path',
+      priority: 'high',
+      mobileLabel: 'Endpoint',
+      render: (path: string) => (
+        <span className="font-mono text-sm text-primary truncate" title={path}>
+          {path}
+        </span>
+      )
+    },
+    {
+      key: 'status_code',
+      label: 'Status',
+      priority: 'high',
+      render: (statusCode: number) => {
+        return (
+          <Badge variant={statusCode >= 200 && statusCode < 300 ? 'success' : 
+                         statusCode >= 400 && statusCode < 500 ? 'warning' : 'error'}>
+            {statusCode}
+          </Badge>
+        );
+      },
+      width: '80px'
+    },
+    {
+      key: 'response_time_ms',
+      label: 'Response Time',
+      priority: 'medium',
+      mobileLabel: 'Duration',
+      render: (time: number) => (
+        <span className="font-mono text-sm">
+          {time}ms
+        </span>
+      ),
+      width: '100px'
+    },
+    {
+      key: 'timestamp',
+      label: 'Time',
+      priority: 'medium',
+      render: (timestamp: string) => (
+        <div className="flex items-center gap-1">
+          <Clock className="h-3 w-3 text-tertiary" />
+          <span className="font-mono text-sm">{fmtTime(timestamp)}</span>
+        </div>
+      ),
+      width: '100px'
+    },
+    {
+      key: 'client_ip',
+      label: 'Client IP',
+      priority: 'low',
+      hideOnMobile: true,
+      render: (ip: string) => (
+        <div className="flex items-center gap-1">
+          <Globe className="h-3 w-3 text-tertiary" />
+          <span className="font-mono text-sm">{ip}</span>
+        </div>
+      ),
+      width: '120px'
+    }
+  ];
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour12: false });
 
@@ -80,23 +165,29 @@ export function RequestLog() {
   if (isLoading) {
     return (
       <Card title="Recent Requests" icon={<FileText className="h-5 w-5" />}>
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-text-secondary" />
-          <span className="ml-2 text-text-secondary">Loading logs...</span>
+        <div className="space-y-6">
+          {/* Filter skeleton */}
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <SkeletonTable rows={1} cols={3} className="h-8" />
+            </div>
+            <SkeletonTable rows={1} cols={1} className="h-10 w-96" />
+          </div>
+          
+          {/* Table skeleton */}
+          <SkeletonTable rows={5} cols={5} />
         </div>
       </Card>
     );
   }
 
-  if (error) {
+  if (errorState.error) {
     return (
       <Card title="Recent Requests" icon={<FileText className="h-5 w-5" />}>
-        <div className="py-8 text-center">
-          <div className="text-red-500 mb-2">Failed to load logs</div>
-          <div className="text-sm text-text-secondary">
-            {error instanceof Error ? error.message : 'Unknown error'}
-          </div>
-        </div>
+        <DataErrorFallback 
+          retry={canRetry ? () => retry(async () => { await refetch(); }) : undefined}
+          resetError={clearError}
+        />
       </Card>
     );
   }
@@ -154,63 +245,15 @@ export function RequestLog() {
       </div>
 
       {/* Request List */}
-      <div className="max-h-80 overflow-y-auto custom-scrollbar">
-        {logs.length === 0 ? (
-          <div className="py-12 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-bg-tertiary mb-4">
-              <FileText className="h-8 w-8 text-text-tertiary" />
-            </div>
-            <div className="text-lg font-medium text-text-primary mb-2">No requests found</div>
-            <div className="text-sm text-text-tertiary max-w-sm mx-auto">
-              {method || search || statusFamily !== 'all'
-                ? 'Try adjusting your filters to see more results'
-                : 'Requests will appear here as they come in'
-              }
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {logs.map((r: any) => (
-              <div key={r.id} className="group p-4 rounded-lg hover:bg-bg-tertiary/50 transition-all duration-150 border border-transparent hover:border-border/50">
-                <div className="flex items-center gap-6">
-                  {/* Method Badge */}
-                  <div className="flex-shrink-0">
-                    <span className={cn('text-xs font-semibold px-3 py-1.5 rounded-md uppercase tracking-wide', methodClass(r.method))}>
-                      {r.method}
-                    </span>
-                  </div>
-
-                  {/* Request Path */}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-mono text-sm text-text-primary truncate" title={r.path}>
-                      {r.path}
-                    </div>
-                  </div>
-
-                  {/* Time and IP */}
-                  <div className="flex items-center gap-4 text-xs text-text-tertiary flex-shrink-0">
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      <span className="font-mono">{fmtTime(r.timestamp)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Globe className="h-3 w-3" />
-                      <span className="font-mono">{r.client_ip}</span>
-                    </div>
-                    <div className="font-mono font-medium">
-                      {r.response_time_ms}ms
-                    </div>
-                  </div>
-
-                  {/* Status Badge */}
-                  <div className="flex-shrink-0">
-                    <StatusBadge status={statusToBadge(r.status_code)} size="sm" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="max-h-80 overflow-y-auto">
+        <ResponsiveTable
+          columns={columns}
+          data={logs}
+          stackOnMobile={true}
+          sortable={true}
+          emptyMessage="No requests found"
+          className="animate-fade-in-up"
+        />
       </div>
     </Card>
   );

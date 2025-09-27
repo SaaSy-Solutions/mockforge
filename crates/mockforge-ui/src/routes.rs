@@ -1,9 +1,8 @@
 //! Route definitions for the admin UI
 
-use std::sync::Arc;
 
 use axum::{
-    routing::{delete, get, post, put},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -21,7 +20,7 @@ pub fn create_admin_router(
     api_enabled: bool,
 ) -> Router {
     // Initialize global logger if not already initialized
-    let logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
+    let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
 
     let state = AdminState::new(
         http_server_addr,

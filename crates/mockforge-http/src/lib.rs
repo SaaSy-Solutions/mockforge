@@ -18,7 +18,6 @@ use mockforge_core::TrafficShaper;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::*;
 
@@ -230,8 +229,8 @@ pub async fn start_with_auth_and_injectors(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
     auth_config: Option<mockforge_core::config::AuthConfig>,
-    latency_profile: Option<LatencyProfile>,
-    failure_injector: Option<mockforge_core::FailureInjector>,
+    _latency_profile: Option<LatencyProfile>,
+    _failure_injector: Option<mockforge_core::FailureInjector>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // For now, ignore latency and failure injectors and just use auth
     let app = build_router_with_auth(spec_path, options, auth_config).await;
@@ -313,8 +312,8 @@ pub async fn start_with_injectors(
     port: u16,
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
-    latency_profile: Option<LatencyProfile>,
-    failure_injector: Option<mockforge_core::FailureInjector>,
+    _latency_profile: Option<LatencyProfile>,
+    _failure_injector: Option<mockforge_core::FailureInjector>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // For now, ignore latency and failure injectors and just use basic router
     let app = build_router(spec_path, options, None).await;

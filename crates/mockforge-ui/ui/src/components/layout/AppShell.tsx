@@ -7,6 +7,8 @@ import { Logo } from '../ui/Logo';
 import { Input } from '../ui/input';
 import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
+import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
+import { useSkipLinks } from '../../hooks/useFocusManagement';
 import {
   BarChart3,
   Server,
@@ -46,57 +48,90 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
   const [globalQuery, setGlobalQuery] = useState('');
   const [isMac, setIsMac] = useState(false);
 
-  // Cmd/Ctrl-K to focus global search
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((isMac ? e.metaKey : e.ctrlKey) && (e.key.toLowerCase() === 'k')) {
-        e.preventDefault();
-        const input = document.getElementById('global-search-input') as HTMLInputElement | null;
-        if (input) input.focus();
+  // Setup keyboard shortcuts
+  useAppShortcuts({
+    onSearch: () => {
+      const searchInput = document.getElementById('global-search-input') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
       }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isMac]);
+    },
+    onRefresh: onRefresh,
+    onEscape: () => {
+      if (sidebarOpen) {
+        setSidebarOpen(false);
+      } else {
+        // Clear search if active
+        const searchInput = document.getElementById('global-search-input') as HTMLInputElement;
+        if (searchInput && document.activeElement === searchInput) {
+          setGlobalQuery('');
+          setLogFilter({ path_pattern: undefined });
+          setGlobalSearch(undefined);
+          searchInput.blur();
+        }
+      }
+    },
+  });
+
+  // Skip links functionality
+  const { createSkipLink } = useSkipLinks();
 
   React.useEffect(() => {
-    setIsMac(navigator.platform.toUpperCase().indexOf('MAC') >= 0);
+    setIsMac(navigator.userAgent.toUpperCase().indexOf('MAC') >= 0);
   }, []);
 
   return (
     <div className="min-h-screen bg-bg-secondary">
+      {/* Skip Links */}
+      <nav className="sr-only focus-within:not-sr-only">
+        <a {...createSkipLink('main-navigation', 'Skip to navigation')} />
+        <a {...createSkipLink('main-content', 'Skip to main content')} />
+        <a {...createSkipLink('global-search-input', 'Skip to search')} />
+      </nav>
+
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <aside className="fixed left-0 top-0 h-full w-64 bg-bg-primary border-r border-border">
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-2">
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" 
+            onClick={() => setSidebarOpen(false)} 
+          />
+          <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-gray-200 dark:border-gray-800 shadow-2xl animate-slide-in-left">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
+              <div className="flex items-center gap-3">
                 <Logo variant="icon" size="md" />
-                <span className="font-semibold text-text-primary">MockForge</span>
+                <span className="text-heading-md text-primary">MockForge</span>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(false)} className="h-8 w-8 p-0">
-                <X className="h-4 w-4" />
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => setSidebarOpen(false)} 
+                className="h-10 w-10 p-0 rounded-full spring-hover"
+              >
+                <X className="h-5 w-5" />
               </Button>
             </div>
-            <nav className="p-4 space-y-1">
-              {navItems.map((item) => {
+            <nav className="p-6 space-y-2 overflow-y-auto">
+              {navItems.map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <Button
                     key={item.id}
                     variant={activeTab === item.id ? 'default' : 'ghost'}
                     className={cn(
-                      'w-full justify-start gap-3 h-10 nav-item-hover focus-ring',
+                      'w-full justify-start gap-4 h-12 text-body-lg nav-item-hover focus-ring spring-hover',
+                      'animate-slide-in-up',
                       activeTab === item.id
-                        ? 'bg-brand text-white hover:bg-brand-600'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                        ? 'bg-brand text-white shadow-md'
+                        : 'text-secondary hover:text-primary hover:bg-muted/50'
                     )}
+                    style={{ animationDelay: `${index * 50}ms` }}
                     onClick={() => {
                       onTabChange(item.id);
                       setSidebarOpen(false);
                     }}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-5 w-5" />
                     {item.label}
                   </Button>
                 );
@@ -114,7 +149,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
               <Logo variant="icon" size="md" />
               <span className="font-semibold text-text-primary">MockForge</span>
             </div>
-            <nav className="flex-1 px-4 py-4 space-y-1">
+            <nav id="main-navigation" className="flex-1 px-4 py-4 space-y-2" role="navigation" aria-label="Main navigation">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -122,10 +157,10 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                     key={item.id}
                     variant={activeTab === item.id ? 'default' : 'ghost'}
                     className={cn(
-                      'w-full justify-start gap-3 h-10 transition-all duration-200 nav-item-hover focus-ring',
+                      'w-full justify-start gap-3 h-11 transition-all duration-200 nav-item-hover focus-ring spring-hover',
                       activeTab === item.id
-                        ? 'bg-brand text-white hover:bg-brand-600 shadow-sm'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                        ? 'bg-brand text-white hover:bg-brand-600 shadow-lg'
+                        : 'text-secondary hover:text-primary hover:bg-muted/50'
                     )}
                     onClick={() => onTabChange(item.id)}
                   >
@@ -186,7 +221,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
             </div>
           </header>
 
-          <main className="flex-1">
+          <main id="main-content" className="flex-1" role="main" aria-label="Main content">
             <div className="w-full max-w-[1400px] mx-auto px-6 py-6">{children}</div>
           </main>
         </div>

@@ -197,7 +197,7 @@ async fn start_grpc_only_server(
     port: u16,
     config: &DynamicGrpcConfig,
     registry_arc: Arc<ServiceRegistry>,
-    mock_proxy: MockReflectionProxy,
+    _mock_proxy: MockReflectionProxy,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create a gRPC server with the mock proxy
     let mut server_builder = Server::builder();

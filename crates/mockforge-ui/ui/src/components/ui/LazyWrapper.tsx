@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import type { ComponentType } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Skeleton } from './Skeleton';
 
 interface LazyWrapperProps {
   children: React.ReactNode;
@@ -18,9 +18,16 @@ export function LazyWrapper({
   errorFallback,
 }: LazyWrapperProps) {
   const defaultFallback = (
-    <div className="flex items-center justify-center p-8">
-      <Loader2 className="h-6 w-6 animate-spin text-text-secondary" />
-      <span className="ml-2 text-text-secondary">Loading...</span>
+    <div className="p-8 space-y-4 animate-fade-in">
+      <div className="space-y-2">
+        <Skeleton height={28} width="40%" />
+        <Skeleton height={16} width="60%" />
+      </div>
+      <div className="space-y-3">
+        <Skeleton height={20} />
+        <Skeleton height={20} />
+        <Skeleton height={20} width="80%" />
+      </div>
     </div>
   );
 

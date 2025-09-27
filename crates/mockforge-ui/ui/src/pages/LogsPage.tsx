@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, Search, Download, RefreshCw } from 'lucide-react';
+import { FileText, Search, Download, RefreshCw, ChevronDown } from 'lucide-react';
 import { useLogs } from '../hooks/useApi';
 import {
   PageHeader,
@@ -42,6 +42,7 @@ export function LogsPage() {
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [limit, setLimit] = useState(100);
+  const [displayLimit, setDisplayLimit] = useState(50);
 
   const { data: logs, isLoading, error, refetch } = useLogs({
     method: methodFilter === 'ALL' ? undefined : methodFilter,
@@ -58,18 +59,21 @@ export function LogsPage() {
     if (statusFilter !== 'all') {
       const start = statusFilter === '2xx' ? 200 : statusFilter === '4xx' ? 400 : 500;
       const end = start + 99;
-      filtered = filtered.filter(log => log.status_code >= start && log.status_code <= end);
+      filtered = filtered.filter((log: any) => log.status_code >= start && log.status_code <= end);
     }
 
-    return filtered;
-  }, [logs, statusFilter]);
+    // Apply display limit for progressive loading
+    return filtered.slice(0, displayLimit);
+  }, [logs, statusFilter, displayLimit]);
+
+  const hasMoreToShow = logs && filteredLogs.length < logs.length;
 
   const handleExport = () => {
     if (!filteredLogs.length) return;
 
     const csvContent = [
       ['Timestamp', 'Method', 'Path', 'Status Code', 'Response Time (ms)', 'Client IP', 'User Agent'].join(','),
-      ...filteredLogs.map(log => [
+      ...filteredLogs.map((log: any) => [
         log.timestamp,
         log.method,
         `"${log.path}"`,
@@ -213,10 +217,10 @@ export function LogsPage() {
               </select>
             </div>
 
-            {/* Limit */}
+            {/* Fetch Limit */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Max Results
+                Fetch Limit
               </label>
               <select
                 value={limit}
@@ -236,7 +240,7 @@ export function LogsPage() {
 
       <Section
         title={`Request Logs (${filteredLogs.length})`}
-        subtitle={`Showing ${filteredLogs.length} of ${logs?.length || 0} total requests`}
+        subtitle={`Showing ${filteredLogs.length} of ${logs?.length || 0} loaded requests${hasMoreToShow ? ' • More available' : ''}`}
       >
         <ModernCard>
           {filteredLogs.length === 0 ? (
@@ -250,8 +254,9 @@ export function LogsPage() {
               }
             />
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {filteredLogs.map((log: any) => (
+            <div className="space-y-4">
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {filteredLogs.map((log: any) => (
                 <div
                   key={log.id}
                   className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -297,6 +302,21 @@ export function LogsPage() {
                   </div>
                 </div>
               ))}
+              </div>
+              
+              {/* Load More Button */}
+              {hasMoreToShow && (
+                <div className="flex justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <Button
+                    variant="outline"
+                    onClick={() => setDisplayLimit(prev => prev + 50)}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    Show more logs ({logs.length - filteredLogs.length} remaining)
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </ModernCard>

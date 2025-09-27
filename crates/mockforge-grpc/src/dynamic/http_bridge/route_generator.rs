@@ -5,8 +5,6 @@
 
 use super::HttpBridgeConfig;
 use regex::Regex;
-use std::collections::HashMap;
-use tracing::{debug, warn};
 
 /// Generates HTTP routes from protobuf service definitions
 #[derive(Debug, Clone)]
@@ -171,7 +169,7 @@ impl RouteGenerator {
                     "\n- Server Streaming: No"
                 }
             ),
-            "tags": [service_name.clone()],
+            "tags": [service_name],
             "parameters": self.generate_openapi_parameters(),
         });
 

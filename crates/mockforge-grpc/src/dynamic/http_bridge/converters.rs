@@ -8,7 +8,6 @@ use prost_reflect::{
     DescriptorPool, DynamicMessage, FieldDescriptor, Kind, MessageDescriptor, ReflectMessage, Value,
 };
 use serde_json::{self, Value as JsonValue};
-use std::collections::HashMap;
 use std::string::String as StdString;
 use tracing::{debug, warn};
 

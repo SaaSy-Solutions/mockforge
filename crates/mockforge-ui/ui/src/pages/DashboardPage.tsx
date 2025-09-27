@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
-import { Clock, Cpu, HardDrive, Activity as ActivityIcon, Activity, Loader2, AlertTriangle, XCircle } from 'lucide-react';
 import { useDashboard, useLogs, useMetrics } from '../hooks/useApi';
 import {
   PageHeader,
@@ -11,6 +10,8 @@ import {
   EmptyState,
   Section
 } from '../components/ui/DesignSystem';
+import { MetricIcon, StatusIcon, Icons } from '../components/ui/IconSystem';
+import { DashboardLoading, ErrorState } from '../components/ui/LoadingStates';
 
 function formatUptime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -67,31 +68,30 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-8">
+      <div className="content-width space-y-8">
         <PageHeader
           title="Dashboard"
           subtitle="System overview and performance metrics"
+          className="space-section"
         />
-        <EmptyState
-          icon={<Loader2 className="h-8 w-8 animate-spin" />}
-          title="Loading dashboard data..."
-          description="Please wait while we fetch the latest system information."
-        />
+        <DashboardLoading />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="space-y-8">
+      <div className="content-width space-y-8">
         <PageHeader
           title="Dashboard"
           subtitle="System overview and performance metrics"
+          className="space-section"
         />
-        <Alert
-          type="error"
+        <ErrorState
           title="Failed to load dashboard"
-          message={error instanceof Error ? error.message : 'Unknown error occurred. Please try refreshing the page.'}
+          description="Unable to retrieve dashboard data. Please try refreshing the page."
+          error={error}
+          retry={() => window.location.reload()}
         />
       </div>
     );
@@ -116,79 +116,95 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="content-width">
       <PageHeader
         title="Dashboard"
         subtitle="Real-time system overview and performance metrics"
+        className="space-section"
       />
 
       <Section
         title="System Metrics"
         subtitle="Current system performance indicators"
+        className="space-section section-breathing"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 grid-gap-lg">
           <MetricCard
             title="Uptime"
             value={formatUptime(system.uptime_seconds)}
             subtitle="system uptime"
             trend={{ direction: 'up', value: '+2.5%' }}
-            icon={<Clock className="h-6 w-6" />}
+            icon={<MetricIcon metric="uptime" size="lg" />}
+            className="animate-stagger-in animate-delay-75"
           />
           <MetricCard
             title="CPU Usage"
             value={`${system.cpu_usage_percent.toFixed(1)}%`}
             subtitle="current utilization"
             trend={{ direction: 'down', value: '-1.2%' }}
-            icon={<Cpu className="h-6 w-6" />}
+            icon={<MetricIcon metric="cpu" size="lg" />}
+            className="animate-stagger-in animate-delay-150"
           />
           <MetricCard
             title="Memory"
             value={`${system.memory_usage_mb} MB`}
             subtitle="allocated"
             trend={{ direction: 'up', value: '+5.3%' }}
-            icon={<HardDrive className="h-6 w-6" />}
+            icon={<MetricIcon metric="memory" size="lg" />}
+            className="animate-stagger-in animate-delay-200"
           />
           <MetricCard
             title="Active Threads"
             value={system.active_threads.toString()}
             subtitle="running threads"
             trend={{ direction: 'neutral', value: '0%' }}
-            icon={<ActivityIcon className="h-6 w-6" />}
+            icon={<MetricIcon metric="activity" size="lg" />}
+            className="animate-stagger-in animate-delay-300"
           />
         </div>
 
         {/* Failure Counters */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="divider-soft my-8"></div>
+        <div className="visual-group">
+          <h3 className="text-heading-sm text-primary mb-4">Response Status Distribution</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 grid-gap-md">
           <MetricCard
             title="Success Responses"
             value={failureCounters.total2xx.toString()}
             subtitle="2xx responses"
             trend={{ direction: 'up', value: `${((failureCounters.total2xx / (failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)) * 100).toFixed(1)}%` }}
-            icon={<Activity className="h-6 w-6 text-green-500" />}
+            icon={<StatusIcon status="success" size="lg" />}
+            className="animate-fade-in-up animate-delay-100"
           />
           <MetricCard
             title="Client Errors"
             value={failureCounters.total4xx.toString()}
             subtitle="4xx responses"
             trend={{ direction: 'neutral', value: `${((failureCounters.total4xx / (failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)) * 100).toFixed(1)}%` }}
-            icon={<AlertTriangle className="h-6 w-6 text-yellow-500" />}
+            icon={<StatusIcon status="warning" size="lg" />}
+            className="animate-fade-in-up animate-delay-200"
           />
           <MetricCard
             title="Server Errors"
             value={failureCounters.total5xx.toString()}
             subtitle="5xx responses"
             trend={{ direction: 'down', value: `${((failureCounters.total5xx / (failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)) * 100).toFixed(1)}%` }}
-            icon={<XCircle className="h-6 w-6 text-red-500" />}
+            icon={<StatusIcon status="error" size="lg" />}
+            className="animate-fade-in-up animate-delay-300"
           />
+          </div>
         </div>
       </Section>
+
+      <div className="divider-accent my-12"></div>
 
       {/* Performance Metrics Section */}
       <Section
         title="Performance Metrics"
         subtitle="Response time distribution and latency analysis"
+        className="space-section section-breathing"
       >
-        <div className="space-y-6">
+        <div className="space-component">
           {mockLatencyMetrics.length > 0 ? (
             <LatencyHistogram
               metrics={mockLatencyMetrics}
@@ -198,7 +214,7 @@ export function DashboardPage() {
           ) : (
             <div className="text-center py-8">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
-                <Clock className="h-8 w-8 text-gray-400" />
+                <MetricIcon metric="performance" size="2xl" />
               </div>
               <div className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
                 No Latency Data Available
@@ -211,11 +227,14 @@ export function DashboardPage() {
         </div>
       </Section>
 
+      <div className="divider-soft my-8"></div>
+
       <Section
         title="System Status"
         subtitle="Server instances and recent activity"
+        className="space-section"
       >
-        <div className="space-y-8">
+        <div className="space-component">
           {/* Server Instances - Full Width */}
           <div>
             <ServerTable />
@@ -232,8 +251,9 @@ export function DashboardPage() {
       <Section
         title="System Health"
         subtitle="Overall system status and alerts"
+        className="space-section"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 grid-gap-lg">
           <Alert
             type="success"
             title="All Systems Operational"

@@ -5,20 +5,14 @@
 
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
-    response::{Html, IntoResponse, Json},
+    response::Json,
 };
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::Arc;
-use sysinfo::System;
 
 use crate::handlers::AdminState;
 use crate::models::*;
-use mockforge_core::{CentralizedRequestLogger, Error, Result};
-use tracing::{error, info};
 
 /// Request metrics for tracking
 #[derive(Debug, Clone, Default)]
@@ -58,7 +52,7 @@ pub async fn get_health() -> Json<HealthCheck> {
 
 /// Get logs
 pub async fn get_logs(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<ApiResponse<Vec<LogEntry>>> {
     // Parse query parameters for filtering

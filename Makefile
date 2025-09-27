@@ -118,6 +118,7 @@ docker-run: ## Run Docker container with basic configuration
 		-e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 		mockforge
 
+
 docker-compose-up: ## Start services with docker-compose
 	docker-compose up -d
 

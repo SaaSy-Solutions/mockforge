@@ -17,9 +17,6 @@ pub mod middleware;
 pub mod state;
 pub mod types;
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 pub mod authenticator;
 pub mod oauth2;
 

@@ -1,7 +1,9 @@
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import { Button } from '../ui/button';
+import { Button } from '../ui/DesignSystem';
+import { StatusIcon, ActionIcon } from '../ui/IconSystem';
+import { ErrorState } from '../ui/LoadingStates';
 
 interface Props {
   children: ReactNode;
@@ -50,58 +52,59 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen bg-bg-primary flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-bg-secondary border border-red-200 rounded-lg shadow-lg p-6">
-            <div className="flex items-center mb-4">
-              <AlertTriangle className="h-8 w-8 text-red-500 mr-3" />
-              <div>
-                <h2 className="text-xl font-semibold text-text-primary">
-                  Something went wrong
-                </h2>
-                <p className="text-text-secondary mt-1">
-                  An unexpected error occurred in the application
-                </p>
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="max-w-lg w-full bg-card border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl p-8 spring-in">
+            <div className="text-center">
+              <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-6 inline-flex">
+                <StatusIcon status="error" size="3xl" />
               </div>
-            </div>
+              
+              <h2 className="text-heading-xl text-primary mb-3">
+                Something went wrong
+              </h2>
+              <p className="text-body-lg text-secondary mb-8">
+                An unexpected error occurred in the application. Please try refreshing the page or contact support if the issue persists.
+              </p>
 
-            {import.meta.env.DEV && this.state.error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm font-mono text-red-800 max-h-32 overflow-y-auto">
-                <div className="font-semibold mb-1">Error Details:</div>
-                <div className="whitespace-pre-wrap break-all">
-                  {this.state.error.message}
-                </div>
-                {this.state.errorInfo && (
-                  <div className="mt-2 pt-2 border-t border-red-200">
-                    <div className="font-semibold">Component Stack:</div>
-                    <div className="whitespace-pre-wrap break-all text-xs">
-                      {this.state.errorInfo.componentStack}
-                    </div>
+              {import.meta.env.DEV && this.state.error && (
+                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-left">
+                  <div className="text-label-md text-weight-semibold text-danger mb-2">Error Details:</div>
+                  <div className="text-mono-sm text-danger whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                    {this.state.error.message}
                   </div>
-                )}
+                  {this.state.errorInfo && (
+                    <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
+                      <div className="text-label-sm text-weight-semibold text-danger mb-1">Component Stack:</div>
+                      <div className="text-mono-xs text-danger whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
+                        {this.state.errorInfo.componentStack}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-center">
+                <Button
+                  onClick={this.handleRetry}
+                  className="flex items-center gap-2 spring-hover"
+                  variant="primary"
+                >
+                  <ActionIcon action="view" />
+                  Try Again
+                </Button>
+                <Button
+                  onClick={this.handleGoHome}
+                  variant="secondary"
+                  className="flex items-center gap-2 spring-hover"
+                >
+                  <ActionIcon action="view" />
+                  Go Home
+                </Button>
               </div>
-            )}
 
-            <div className="flex gap-3">
-              <Button
-                onClick={this.handleRetry}
-                className="flex items-center gap-2"
-                variant="secondary"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Try Again
-              </Button>
-              <Button
-                onClick={this.handleGoHome}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Home className="h-4 w-4" />
-                Go Home
-              </Button>
-            </div>
-
-            <div className="mt-4 text-xs text-text-tertiary">
-              If this problem persists, please contact support with the error details above.
+              <div className="mt-6 text-body-sm text-tertiary">
+                If this problem persists, please contact support with the error details above.
+              </div>
             </div>
           </div>
         </div>

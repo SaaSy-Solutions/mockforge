@@ -5,10 +5,9 @@
 //! business logic constraints in generated mock data.
 
 use crate::reflection::schema_graph::{ForeignKeyMapping, Relationship, SchemaGraph};
-use prost_reflect::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Configuration for cross-endpoint validation
 #[derive(Debug, Clone, Serialize, Deserialize)]

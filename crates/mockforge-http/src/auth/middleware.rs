@@ -19,7 +19,7 @@ pub async fn auth_middleware(
     next: Next,
 ) -> Response {
     let path = req.uri().path().to_string();
-    let method = req.method().clone();
+    let _method = req.method().clone();
 
     // Skip authentication for health checks and admin endpoints
     if path.starts_with("/health") || path.starts_with("/__mockforge") {

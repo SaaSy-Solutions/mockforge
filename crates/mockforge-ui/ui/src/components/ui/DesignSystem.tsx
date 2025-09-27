@@ -218,11 +218,11 @@ export function Alert({ type, title, message, className }: AlertProps) {
 
   return (
     <div className={cn(
-      'flex items-start gap-3 p-4 border rounded-xl transition-all duration-200',
+      'flex items-start gap-3 p-4 border rounded-xl transition-all duration-200 spring-in',
       colors[type],
       className
     )}>
-      <Icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
+      <Icon className="h-5 w-5 mt-0.5 flex-shrink-0 spring-hover" />
       <div className="flex-1 min-w-0">
         <h4 className="font-semibold text-sm">{title}</h4>
         {message && (
@@ -269,7 +269,8 @@ export function ModernCard({
   return (
     <div
       className={cn(
-        'rounded-xl transition-all duration-200 hover:shadow-md',
+        'rounded-xl transition-all duration-200 hover:shadow-md animate-fade-in-scale',
+        'card-hover',
         variants[variant],
         className
       )}
@@ -368,16 +369,16 @@ export function MetricCard({
     <ModernCard className={className}>
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+          <p className="text-label-md text-tertiary truncate">
             {title}
           </p>
           <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            <p className="text-display-sm text-weight-bold text-primary">
               {typeof value === 'number' ? value.toLocaleString() : value}
             </p>
             {trend && (
               <span className={cn(
-                'text-sm font-medium',
+                'text-body-sm text-weight-medium',
                 trendColors[trend.direction]
               )}>
                 {trend.value}
@@ -385,13 +386,13 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-body-sm text-secondary mt-1">
               {subtitle}
             </p>
           )}
         </div>
         {icon && (
-          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 spring-hover">
             {icon}
           </div>
         )}
@@ -456,11 +457,11 @@ export function PageHeader({ title, subtitle, action, className }: PageHeaderPro
       className
     )}>
       <div className="min-w-0">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">
+        <h1 className="text-display-sm text-primary truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">
+          <p className="text-body-xl text-secondary mt-2">
             {subtitle}
           </p>
         )}
@@ -485,12 +486,12 @@ export function Section({ title, subtitle, action, className, children }: Sectio
         <div className="flex items-center justify-between mb-6">
           <div className="min-w-0">
             {title && (
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              <h2 className="text-heading-lg text-primary">
                 {title}
               </h2>
             )}
             {subtitle && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-body-md text-secondary mt-1">
                 {subtitle}
               </p>
             )}
@@ -521,10 +522,10 @@ export function Button({
   ...props
 }: ButtonProps) {
   const variants = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md',
-    secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100',
-    danger: 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md',
-    success: 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md',
+    primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
+    secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
+    danger: 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
+    success: 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
   };
 
   const sizes = {
@@ -603,15 +604,20 @@ interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, '
 
 export function Input({ className, size = 'md', ...props }: InputProps) {
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
+    sm: 'px-3 py-1.5 text-body-sm',
+    md: 'px-4 py-2.5 text-body-lg',
+    lg: 'px-6 py-3.5 text-body-xl',
   };
 
   return (
     <input
       className={cn(
-        'w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-4 py-2 text-base text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200',
+        'w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900',
+        'text-primary placeholder-tertiary',
+        'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20',
+        'hover:border-gray-300 dark:hover:border-gray-600',
+        'transition-all duration-200 ease-out',
+        'shadow-sm hover:shadow-md focus:shadow-lg',
         sizes[size],
         className
       )}
@@ -627,15 +633,21 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 export function Textarea({ className, size = 'md', ...props }: TextareaProps) {
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
+    sm: 'px-3 py-1.5 text-body-sm',
+    md: 'px-4 py-2.5 text-body-lg',
+    lg: 'px-6 py-3.5 text-body-xl',
   };
 
   return (
     <textarea
       className={cn(
-        'w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-4 py-2 text-base text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 resize-none transition-colors duration-200',
+        'w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900',
+        'text-primary placeholder-tertiary',
+        'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20',
+        'hover:border-gray-300 dark:hover:border-gray-600',
+        'transition-all duration-200 ease-out',
+        'shadow-sm hover:shadow-md focus:shadow-lg',
+        'resize-none',
         sizes[size],
         className
       )}
@@ -654,15 +666,21 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
 
 export function Select({ className, size = 'md', children, ...props }: SelectProps) {
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
+    sm: 'px-3 py-1.5 text-body-sm',
+    md: 'px-4 py-2.5 text-body-lg',
+    lg: 'px-6 py-3.5 text-body-xl',
   };
 
   return (
     <select
       className={cn(
-        'w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-4 py-2 text-base text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200',
+        'w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900',
+        'text-primary',
+        'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20',
+        'hover:border-gray-300 dark:hover:border-gray-600',
+        'transition-all duration-200 ease-out',
+        'shadow-sm hover:shadow-md focus:shadow-lg',
+        'cursor-pointer',
         sizes[size],
         className
       )}
@@ -682,13 +700,13 @@ export function Label({ className, required, children, ...props }: LabelProps) {
   return (
     <label
       className={cn(
-        'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2',
+        'block text-label-lg text-weight-medium text-primary mb-2',
         className
       )}
       {...props}
     >
       {children}
-      {required && <span className="text-red-500 ml-1">*</span>}
+      {required && <span className="text-danger ml-1">*</span>}
     </label>
   );
 }

@@ -16,10 +16,12 @@ pub mod utils;
 
 // Re-export commonly used types
 pub use config::*;
-pub use engine::*;
 pub use providers::*;
-pub use storage::*;
 pub use utils::*;
+
+// Re-export engine and storage types with explicit names to avoid conflicts
+pub use engine::StorageStats as EngineStorageStats;
+pub use storage::StorageStats as StorageStorageStats;
 
 // Legacy imports for compatibility
 use crate::{schema::SchemaDefinition, DataConfig};

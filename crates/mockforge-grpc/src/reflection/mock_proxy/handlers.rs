@@ -4,13 +4,12 @@
 //! including mock response generation and request validation.
 
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
-use prost_reflect::{DynamicMessage, MessageDescriptor, ReflectMessage};
-use prost_types::Any;
+use prost_reflect::{DynamicMessage, MessageDescriptor};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 impl MockReflectionProxy {
     /// Handle a unary gRPC request
