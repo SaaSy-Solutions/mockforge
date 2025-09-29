@@ -53,6 +53,7 @@ pub struct HarPageTimings {
 #[derive(Debug, Deserialize)]
 pub struct HarEntry {
     pub pageref: Option<String>,
+    #[serde(rename = "startedDateTime")]
     pub started_date_time: String,
     pub time: f64,
     pub request: HarRequest,
@@ -66,13 +67,17 @@ pub struct HarEntry {
 pub struct HarRequest {
     pub method: String,
     pub url: String,
+    #[serde(rename = "httpVersion")]
     pub http_version: String,
     pub cookies: Vec<HarCookie>,
     pub headers: Vec<HarHeader>,
-    #[serde(default)]
+    #[serde(default, rename = "queryString")]
     pub query_string: Vec<HarQueryParam>,
+    #[serde(rename = "postData")]
     pub post_data: Option<HarPostData>,
+    #[serde(rename = "headersSize")]
     pub headers_size: i64,
+    #[serde(rename = "bodySize")]
     pub body_size: i64,
 }
 
@@ -80,13 +85,18 @@ pub struct HarRequest {
 #[derive(Debug, Deserialize)]
 pub struct HarResponse {
     pub status: u16,
+    #[serde(rename = "statusText")]
     pub status_text: String,
+    #[serde(rename = "httpVersion")]
     pub http_version: String,
     pub cookies: Vec<HarCookie>,
     pub headers: Vec<HarHeader>,
     pub content: HarContent,
+    #[serde(rename = "redirectURL")]
     pub redirect_url: String,
+    #[serde(rename = "headersSize")]
     pub headers_size: i64,
+    #[serde(rename = "bodySize")]
     pub body_size: i64,
 }
 
@@ -124,6 +134,7 @@ pub struct HarQueryParam {
 /// HAR post data
 #[derive(Debug, Deserialize)]
 pub struct HarPostData {
+    #[serde(rename = "mimeType")]
     pub mime_type: String,
     #[serde(default)]
     pub params: Vec<HarParam>,
@@ -136,9 +147,9 @@ pub struct HarPostData {
 pub struct HarParam {
     pub name: String,
     pub value: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "fileName")]
     pub file_name: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "contentType")]
     pub content_type: Option<String>,
 }
 
@@ -148,6 +159,7 @@ pub struct HarContent {
     pub size: i64,
     #[serde(default)]
     pub compression: Option<i64>,
+    #[serde(rename = "mimeType")]
     pub mime_type: String,
     #[serde(default)]
     pub text: Option<String>,
@@ -162,9 +174,12 @@ pub struct HarCache {}
 /// HAR timing information
 #[derive(Debug, Deserialize)]
 pub struct HarTimings {
-    pub send: f64,
-    pub wait: f64,
-    pub receive: f64,
+    #[serde(default)]
+    pub send: Option<f64>,
+    #[serde(default)]
+    pub wait: Option<f64>,
+    #[serde(default)]
+    pub receive: Option<f64>,
 }
 
 /// HAR root structure
@@ -300,7 +315,9 @@ fn extract_path_from_url(url: &str, base_url: Option<&str>) -> Result<String, St
 fn extract_request_body(request: &HarRequest) -> Option<String> {
     if let Some(post_data) = &request.post_data {
         if let Some(text) = &post_data.text {
-            return Some(text.clone());
+            if !text.is_empty() {
+                return Some(text.clone());
+            }
         }
 
         // Handle form parameters
@@ -322,13 +339,15 @@ fn extract_request_body(request: &HarRequest) -> Option<String> {
 /// Extract response body from HAR response
 fn extract_response_body(response: &HarResponse) -> Value {
     if let Some(text) = &response.content.text {
-        // Try to parse as JSON first
-        if let Ok(json_value) = serde_json::from_str::<Value>(text) {
-            return json_value;
-        }
+        if !text.is_empty() {
+            // Try to parse as JSON first
+            if let Ok(json_value) = serde_json::from_str::<Value>(text) {
+                return json_value;
+            }
 
-        // If not JSON, return as string
-        return Value::String(text.clone());
+            // If not JSON, return as string
+            return Value::String(text.clone());
+        }
     }
 
     // Default empty response

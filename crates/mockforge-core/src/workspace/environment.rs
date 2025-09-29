@@ -146,11 +146,8 @@ impl EnvironmentManager {
         let variables = if let Some(active_env) = self.get_active_environment() {
             &active_env.variables
         } else {
-            return VariableSubstitution {
-                value: template.to_string(),
-                success: true,
-                errors: vec![],
-            };
+            // No active environment, so return empty variables (will fail on any variable reference)
+            &std::collections::HashMap::new()
         };
 
         let mut chars = template.chars().peekable();

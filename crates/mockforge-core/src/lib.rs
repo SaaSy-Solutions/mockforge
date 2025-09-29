@@ -2,6 +2,7 @@
 //!
 //! Shared logic for MockForge including routing, validation, latency injection, and proxy functionality.
 
+pub mod cache;
 pub mod chain_execution;
 pub mod conditions;
 pub mod config;
@@ -13,6 +14,7 @@ pub mod latency;
 pub mod openapi;
 pub mod openapi_routes;
 pub mod overrides;
+pub mod performance;
 pub mod priority_handler;
 pub mod proxy;
 pub mod record_replay;

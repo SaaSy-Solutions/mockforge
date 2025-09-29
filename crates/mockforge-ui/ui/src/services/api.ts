@@ -24,6 +24,7 @@ import {
   ExecuteRequestResponse,
   RequestHistoryResponse,
   EnvironmentListResponse,
+  EnvironmentVariablesResponse,
   CreateEnvironmentRequest,
   CreateEnvironmentResponse,
   UpdateEnvironmentRequest,
@@ -36,7 +37,7 @@ import {
   ConfirmSyncChangesRequest,
   ImportRequest,
   ImportHistoryResponse
-} from '@/types';
+} from '../types';
 
 // Re-export FixtureInfo from types for backwards compatibility
 export type { FixtureInfo } from '../types/index';

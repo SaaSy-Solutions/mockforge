@@ -20,6 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         proto_dir,
         enable_reflection: true,
         excluded_services: vec!["grpc.reflection.v1alpha.ServerReflection".to_string()],
+        http_bridge: None,
     };
 
     println!("Starting MockForge gRPC server with flexible proto discovery");

@@ -38,16 +38,16 @@ export function MetricsDashboard() {
   };
 
   const getOverallStats = () => {
-    const totalRequests = failureMetrics.reduce((sum, metric) => sum + metric.total_requests, 0);
-    const totalFailures = failureMetrics.reduce((sum, metric) => sum + metric.failure_count, 0);
+    const totalRequests = failureMetrics.reduce((sum, metric) => sum + (metric.total_requests || 0), 0);
+    const totalFailures = failureMetrics.reduce((sum, metric) => sum + (metric.failure_count || 0), 0);
     const overallErrorRate = totalRequests > 0 ? totalFailures / totalRequests : 0;
     
     const avgP50 = latencyMetrics.length > 0 
-      ? Math.round(latencyMetrics.reduce((sum, metric) => sum + metric.p50, 0) / latencyMetrics.length)
+      ? Math.round(latencyMetrics.reduce((sum, metric) => sum + (metric.p50 || 0), 0) / latencyMetrics.length)
       : 0;
     
     const avgP95 = latencyMetrics.length > 0
-      ? Math.round(latencyMetrics.reduce((sum, metric) => sum + metric.p95, 0) / latencyMetrics.length)
+      ? Math.round(latencyMetrics.reduce((sum, metric) => sum + (metric.p95 || 0), 0) / latencyMetrics.length)
       : 0;
 
     return {
@@ -135,8 +135,8 @@ export function MetricsDashboard() {
             const slaErrorRate = 0.05; // 5% error rate SLA
             const failureMetric = failureMetrics.find(f => f.service === metric.service);
             
-            const p95Status = metric.p95 <= slaP95;
-            const errorRateStatus = failureMetric ? failureMetric.error_rate <= slaErrorRate : true;
+            const p95Status = (metric.p95 || 0) <= slaP95;
+            const errorRateStatus = failureMetric ? (failureMetric.error_rate || 0) <= slaErrorRate : true;
             const overallStatus = p95Status && errorRateStatus;
             
             return (
@@ -147,11 +147,11 @@ export function MetricsDashboard() {
                 </div>
                 <div className="flex items-center space-x-6 text-sm">
                   <div className={`flex items-center space-x-1 ${p95Status ? 'text-green-600' : 'text-red-600'}`}>
-                    <span>P95: {metric.p95}ms</span>
+                    <span>P95: {metric.p95 || 0}ms</span>
                     <span>{p95Status ? '✓' : '✗'}</span>
                   </div>
                   <div className={`flex items-center space-x-1 ${errorRateStatus ? 'text-green-600' : 'text-red-600'}`}>
-                    <span>Error Rate: {failureMetric ? (failureMetric.error_rate * 100).toFixed(2) : '0.00'}%</span>
+                    <span>Error Rate: {failureMetric ? ((failureMetric.error_rate || 0) * 100).toFixed(2) : '0.00'}%</span>
                     <span>{errorRateStatus ? '✓' : '✗'}</span>
                   </div>
                 </div>

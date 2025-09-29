@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 
 export interface FocusableElement {
   element: HTMLElement;
@@ -302,16 +302,14 @@ export function useFocusAnnouncement() {
     setTimeout(() => setAnnouncement(''), 1000);
   }, []);
 
-  const AnnouncementRegion = useCallback(() => (
-    <div
-      ref={announcementRef}
-      aria-live="polite"
-      aria-atomic="true"
-      className="sr-only"
-    >
-      {announcement}
-    </div>
-  ), [announcement]);
+  const AnnouncementRegion = useCallback(() => {
+    return React.createElement('div', {
+      ref: announcementRef,
+      'aria-live': 'polite',
+      'aria-atomic': 'true',
+      className: 'sr-only'
+    }, announcement);
+  }, [announcement]);
 
   return {
     announce,

@@ -54,7 +54,7 @@ impl Default for WorkspaceImportConfig {
             create_folders: true,
             base_folder_name: None,
             preserve_hierarchy: true,
-            max_depth: 5,
+            max_depth: 2,
         }
     }
 }
@@ -261,10 +261,15 @@ fn determine_folder_path(route_path: &str, config: &WorkspaceImportConfig) -> St
     }
 
     // Split path into segments
-    let segments: Vec<&str> = route_path.trim_start_matches('/').split('/').collect();
+    let segments: Vec<&str> = route_path.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect();
 
-    // Create folder path based on first few segments
-    let depth = std::cmp::min(config.max_depth, segments.len().saturating_sub(1));
+    // Handle empty segments (root path)
+    if segments.is_empty() {
+        return config.base_folder_name.clone().unwrap_or_else(|| "Root".to_string());
+    }
+
+    // Create folder path based on first few segments (exclude the final resource path)
+    let depth = std::cmp::min(config.max_depth, std::cmp::max(1, segments.len().saturating_sub(1)));
     let folder_segments = &segments[..depth];
 
     if folder_segments.is_empty() {

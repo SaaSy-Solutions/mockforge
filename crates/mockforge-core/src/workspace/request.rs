@@ -3,6 +3,8 @@
 //! This module provides functionality for processing mock requests,
 //! including request matching, response generation, and request execution.
 
+use crate::cache::{Cache, ResponseCache, CachedResponse};
+use crate::performance::PerformanceMonitor;
 use crate::templating::TemplateEngine;
 use crate::workspace::core::{EntityId, Folder, MockRequest, MockResponse, Workspace};
 use crate::{
@@ -12,6 +14,8 @@ use crate::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Request execution result
 #[derive(Debug, Clone)]
@@ -50,6 +54,14 @@ pub struct RequestProcessor {
     _template_engine: TemplateEngine,
     /// Environment manager for variable resolution
     environment_manager: Option<crate::workspace::environment::EnvironmentManager>,
+    /// Performance monitoring
+    performance_monitor: Arc<PerformanceMonitor>,
+    /// Response cache for frequently accessed responses
+    response_cache: Arc<ResponseCache>,
+    /// Request validation cache
+    validation_cache: Arc<Cache<String, RequestValidationResult>>,
+    /// Enable performance optimizations
+    optimizations_enabled: bool,
 }
 
 /// Request validation result
@@ -101,6 +113,10 @@ impl RequestProcessor {
         Self {
             _template_engine: TemplateEngine::new(),
             environment_manager: None,
+            performance_monitor: Arc::new(PerformanceMonitor::new()),
+            response_cache: Arc::new(ResponseCache::new(1000, Duration::from_secs(300))), // 5 min TTL
+            validation_cache: Arc::new(Cache::with_ttl(500, Duration::from_secs(60))), // 1 min TTL
+            optimizations_enabled: true,
         }
     }
 
@@ -111,7 +127,38 @@ impl RequestProcessor {
         Self {
             _template_engine: TemplateEngine::new(),
             environment_manager: Some(environment_manager),
+            performance_monitor: Arc::new(PerformanceMonitor::new()),
+            response_cache: Arc::new(ResponseCache::new(1000, Duration::from_secs(300))),
+            validation_cache: Arc::new(Cache::with_ttl(500, Duration::from_secs(60))),
+            optimizations_enabled: true,
         }
+    }
+
+    /// Create a request processor with custom performance settings
+    pub fn with_performance_config(
+        environment_manager: Option<crate::workspace::environment::EnvironmentManager>,
+        cache_size: usize,
+        cache_ttl: Duration,
+        enable_optimizations: bool,
+    ) -> Self {
+        Self {
+            _template_engine: TemplateEngine::new(),
+            environment_manager,
+            performance_monitor: Arc::new(PerformanceMonitor::new()),
+            response_cache: Arc::new(ResponseCache::new(cache_size, cache_ttl)),
+            validation_cache: Arc::new(Cache::with_ttl(cache_size / 2, Duration::from_secs(60))),
+            optimizations_enabled: enable_optimizations,
+        }
+    }
+
+    /// Get performance monitor
+    pub fn performance_monitor(&self) -> Arc<PerformanceMonitor> {
+        self.performance_monitor.clone()
+    }
+
+    /// Enable or disable performance optimizations
+    pub fn set_optimizations_enabled(&mut self, enabled: bool) {
+        self.optimizations_enabled = enabled;
     }
 
     /// Find a request that matches the given criteria
@@ -175,7 +222,7 @@ impl RequestProcessor {
     }
 
     /// Check if URL matches pattern
-    fn url_matches_pattern(&self, pattern: &str, url: &str) -> bool {
+    pub fn url_matches_pattern(&self, pattern: &str, url: &str) -> bool {
         // Exact match
         if pattern == url {
             return true;
@@ -290,16 +337,54 @@ impl RequestProcessor {
         request_id: &EntityId,
         context: &RequestExecutionContext,
     ) -> Result<RequestExecutionResult> {
+        // Start performance tracking
+        let _perf_guard = if self.optimizations_enabled {
+            self.performance_monitor.start_tracking_named("execute_request")
+        } else {
+            None
+        };
+
+        // Generate cache key for response caching if optimizations are enabled
+        let cache_key = if self.optimizations_enabled {
+            self.generate_response_cache_key(request_id, context)
+        } else {
+            String::new()
+        };
+
+        // Check response cache first
+        if self.optimizations_enabled && !cache_key.is_empty() {
+            if let Some(cached_response) = self.response_cache.get_response(&cache_key).await {
+                self.performance_monitor.record_cache_hit();
+                return Ok(RequestExecutionResult {
+                    request_id: request_id.clone(),
+                    response: Some(self.convert_cached_response_to_mock_response(cached_response)),
+                    duration_ms: 1, // Cached responses are nearly instant
+                    success: true,
+                    error: None,
+                });
+            } else {
+                self.performance_monitor.record_cache_miss();
+            }
+        }
+
         // Find the request
         let request = self
             .find_request_in_workspace(workspace, request_id)
-            .ok_or_else(|| format!("Request with ID {} not found", request_id))?;
+            .ok_or_else(|| {
+                if self.optimizations_enabled {
+                    self.performance_monitor.record_error();
+                }
+                format!("Request with ID {} not found", request_id)
+            })?;
 
         let start_time = std::time::Instant::now();
 
-        // Validate request
-        let validation = self.validate_request(request, context);
+        // Validate request with caching
+        let validation = self.validate_request_cached(request, context).await?;
         if !validation.is_valid {
+            if self.optimizations_enabled {
+                self.performance_monitor.record_error();
+            }
             return Err(Error::Validation {
                 message: format!("Request validation failed: {:?}", validation.errors),
             });
@@ -308,12 +393,23 @@ impl RequestProcessor {
         // Get active response
         let response = request
             .active_response()
-            .ok_or_else(|| Error::generic("No active response found for request"))?;
+            .ok_or_else(|| {
+                if self.optimizations_enabled {
+                    self.performance_monitor.record_error();
+                }
+                Error::generic("No active response found for request")
+            })?;
 
         // Apply variable substitution
         let processed_response = self.process_response(response, context).await?;
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        // Cache the response if optimizations are enabled
+        if self.optimizations_enabled && !cache_key.is_empty() {
+            let cached_response = self.convert_mock_response_to_cached_response(&processed_response);
+            self.response_cache.cache_response(cache_key, cached_response).await;
+        }
 
         // Record response usage
         if let Some(request_mut) = self.find_request_in_workspace_mut(workspace, request_id) {
@@ -705,6 +801,103 @@ impl RequestProcessor {
         }
 
         Ok(())
+    }
+
+    // Performance optimization helper methods
+
+    /// Generate cache key for response caching
+    fn generate_response_cache_key(&self, request_id: &EntityId, context: &RequestExecutionContext) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        request_id.hash(&mut hasher);
+        context.workspace_id.hash(&mut hasher);
+        
+        // Hash environment variables
+        for (key, value) in &context.environment_variables {
+            key.hash(&mut hasher);
+            value.hash(&mut hasher);
+        }
+        
+        // Hash global headers
+        for (key, value) in &context.global_headers {
+            key.hash(&mut hasher);
+            value.hash(&mut hasher);
+        }
+
+        format!("req_{}_{}", hasher.finish(), request_id)
+    }
+
+    /// Validate request with caching
+    async fn validate_request_cached(
+        &self,
+        request: &MockRequest,
+        context: &RequestExecutionContext,
+    ) -> Result<RequestValidationResult> {
+        if !self.optimizations_enabled {
+            return Ok(self.validate_request(request, context));
+        }
+
+        // Generate validation cache key
+        let cache_key = format!("val_{}_{}", request.id, context.workspace_id);
+
+        // Check cache first
+        if let Some(cached_result) = self.validation_cache.get(&cache_key).await {
+            return Ok(cached_result);
+        }
+
+        // Perform validation
+        let result = self.validate_request(request, context);
+
+        // Cache the result
+        self.validation_cache.insert(cache_key, result.clone(), None).await;
+
+        Ok(result)
+    }
+
+    /// Convert MockResponse to CachedResponse
+    fn convert_mock_response_to_cached_response(&self, response: &MockResponse) -> CachedResponse {
+        CachedResponse {
+            status_code: response.status_code,
+            headers: response.headers.clone(),
+            body: response.body.clone(),
+            content_type: response.headers.get("Content-Type").cloned(),
+        }
+    }
+
+    /// Convert CachedResponse to MockResponse
+    fn convert_cached_response_to_mock_response(&self, cached: CachedResponse) -> MockResponse {
+        MockResponse {
+            id: EntityId::new(),
+            name: "Cached Response".to_string(),
+            status_code: cached.status_code,
+            headers: cached.headers,
+            body: cached.body,
+            delay: 0, // Cached responses have no additional delay
+            active: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            history: Vec::new(),
+        }
+    }
+
+    /// Get performance summary
+    pub async fn get_performance_summary(&self) -> crate::performance::PerformanceSummary {
+        self.performance_monitor.get_summary().await
+    }
+
+    /// Get cache statistics
+    pub async fn get_cache_stats(&self) -> (crate::cache::CacheStats, crate::cache::CacheStats) {
+        let response_cache_stats = self.response_cache.stats().await;
+        let validation_cache_stats = self.validation_cache.stats().await;
+        (response_cache_stats, validation_cache_stats)
+    }
+
+    /// Clear all caches
+    pub async fn clear_caches(&self) {
+        self.response_cache.get_response("").await; // Dummy call to access underlying cache
+        self.validation_cache.clear().await;
     }
 }
 

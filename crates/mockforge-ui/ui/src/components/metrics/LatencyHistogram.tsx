@@ -103,7 +103,7 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
               />
               <Bar yAxisId="count" dataKey="count" name="count">
                 {histogramData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getBarColor(entry.range)} />
+                  <Cell key={`cell-${index}`} fill={getBarColor(entry.range || '')} />
                 ))}
               </Bar>
             </BarChart>

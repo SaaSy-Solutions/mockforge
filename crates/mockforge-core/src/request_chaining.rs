@@ -719,7 +719,7 @@ mod tests {
         assert!(json_str.contains("POST"));
         assert!(json_str.contains("Content-Type"));
         assert!(json_str.contains("req1"));
-        assert!(json_str.contains("pre_script"));
+        assert!(json_str.contains("preScript"));
 
         let deserialized: ChainRequest = serde_json::from_str(&json_str).unwrap();
         assert_eq!(deserialized.id, request.id);
@@ -983,6 +983,9 @@ mod tests {
             variables: HashMap::new(),
         };
         let exec_ctx = ChainExecutionContext::new(chain_def);
+
+        // Add a small delay to ensure some time has elapsed
+        std::thread::sleep(std::time::Duration::from_millis(1));
 
         // Test elapsed time
         assert!(exec_ctx.elapsed_ms() > 0);

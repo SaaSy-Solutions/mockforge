@@ -10,7 +10,7 @@ interface FixtureEditorProps {
 }
 
 export function FixtureEditor({ fixture, onSave, onClose, readOnly = false }: FixtureEditorProps) {
-  const [content, setContent] = useState(fixture.content);
+  const [content, setContent] = useState(typeof fixture.content === 'string' ? fixture.content : JSON.stringify(fixture.content, null, 2));
   const [hasChanges, setHasChanges] = useState(false);
 
   const handleContentChange = (newContent: string) => {
@@ -20,7 +20,7 @@ export function FixtureEditor({ fixture, onSave, onClose, readOnly = false }: Fi
 
   const handleSave = () => {
     if (hasChanges) {
-      onSave(fixture.id, content);
+      onSave(fixture.id, content || '');
       setHasChanges(false);
     }
   };
@@ -69,8 +69,8 @@ export function FixtureEditor({ fixture, onSave, onClose, readOnly = false }: Fi
             <h3 className="font-semibold">{fixture.name}</h3>
             <div className="flex items-center space-x-4 text-xs text-muted-foreground">
               <span>{fixture.path}</span>
-              <span>{formatFileSize(fixture.size_bytes)}</span>
-              <span>Modified: {new Date(fixture.last_modified).toLocaleString()}</span>
+              <span>{formatFileSize(fixture.size_bytes || 0)}</span>
+              <span>Modified: {new Date(fixture.last_modified || fixture.updatedAt).toLocaleString()}</span>
               {fixture.route_path && (
                 <>
                   <span>•</span>

@@ -33,6 +33,8 @@ mod tests {
     use authenticator::{authenticate_api_key, authenticate_basic};
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use serde_json::json;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
     use std::collections::HashMap;
 
     #[test]

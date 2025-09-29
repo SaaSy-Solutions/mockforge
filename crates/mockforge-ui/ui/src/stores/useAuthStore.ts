@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 
 interface AuthStore extends AuthState, AuthActions {
-  loading: boolean;
   checkAuth: () => Promise<void>;
 }
 
@@ -63,6 +62,7 @@ const validateToken = (token: string): User | null => {
     return {
       id: payload.sub,
       username: payload.username,
+      email: payload.email || '',
       role: payload.role,
     };
   } catch {
@@ -80,10 +80,10 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       refreshToken: null,
       isAuthenticated: false,
-      loading: false,
+      isLoading: false,
 
       login: async (username: string, password: string) => {
-        set({ loading: true });
+        set({ isLoading: true });
 
         try {
           // Simulate API call delay
@@ -102,15 +102,15 @@ export const useAuthStore = create<AuthStore>()(
             token,
             refreshToken,
             isAuthenticated: true,
-            loading: false,
+            isLoading: false,
           });
         } catch (error) {
-          set({ loading: false });
+          set({ isLoading: false });
           throw error;
         }
       },
 
-      logout: () => {
+      logout: async () => {
         set({
           user: null,
           token: null,
@@ -165,7 +165,7 @@ export const useAuthStore = create<AuthStore>()(
           return;
         }
 
-        set({ loading: true });
+        set({ isLoading: true });
 
         try {
           await delay(200);
@@ -175,7 +175,7 @@ export const useAuthStore = create<AuthStore>()(
             set({
               user,
               isAuthenticated: true,
-              loading: false,
+              isLoading: false,
             });
           } else {
             // Token is invalid, try to refresh
@@ -191,7 +191,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       updateProfile: async (userData: User) => {
-        set({ loading: true });
+        set({ isLoading: true });
 
         try {
           // Simulate API call delay
@@ -201,7 +201,7 @@ export const useAuthStore = create<AuthStore>()(
           // For now, we'll just update the local state
           set({
             user: userData,
-            loading: false,
+            isLoading: false,
           });
 
           // Update the token to reflect the new user data
@@ -213,9 +213,20 @@ export const useAuthStore = create<AuthStore>()(
             refreshToken: newRefreshToken,
           });
         } catch (error) {
-          set({ loading: false });
+          set({ isLoading: false });
           throw error;
         }
+      },
+
+      setAuthenticated: (user: User, token: string) => {
+        const refreshToken = `refresh_${token}`;
+        set({
+          user,
+          token,
+          refreshToken,
+          isAuthenticated: true,
+          isLoading: false,
+        });
       },
     }),
     {

@@ -516,7 +516,7 @@ fn replace_fs_tokens(input: &str) -> String {
         .unwrap();
 
     re.replace_all(input, |caps: &regex::Captures| {
-        let file_path = caps.get(2).or_else(|| caps.get(3)).map(|m| m.as_str()).unwrap_or("");
+        let file_path = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
 
         if file_path.is_empty() {
             return "<fs.readFile: empty path>".to_string();
@@ -641,7 +641,8 @@ mod tests {
         chain_ctx.store_response("login".to_string(), response);
         let template_ctx = ChainTemplatingContext::new(chain_ctx);
         let context = Some(&template_ctx);
-        let result = replace_response_function(r#"response('login', 'body.user_id')"#, context);
+        
+        let result = replace_response_function(r#"response('login', 'user_id')"#, context);
         assert_eq!(result, "12345");
     }
 
@@ -655,12 +656,12 @@ mod tests {
         fs::write(temp_file, test_content).unwrap();
 
         // Test successful file reading
-        let template = format!(r#"{{\{{fs.readFile "{}"}}}}"#, temp_file);
+        let template = format!(r#"{{{{fs.readFile "{}"}}}}"#, temp_file);
         let result = expand_str(&template);
         assert_eq!(result, test_content);
 
         // Test with parentheses
-        let template = format!(r#"{{\{{fs.readFile('{}')}}}}"#, temp_file);
+        let template = format!(r#"{{{{fs.readFile('{}')}}}}"#, temp_file);
         let result = expand_str(&template);
         assert_eq!(result, test_content);
 

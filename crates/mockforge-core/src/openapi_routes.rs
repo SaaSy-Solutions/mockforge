@@ -687,27 +687,62 @@ impl OpenApiRouteRegistry {
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
                 if let Some(value) = body {
-                    if aggregate {
-                        if let Some(content) =
-                            schema.as_item().and_then(|rb| rb.content.get("application/json"))
-                        {
-                            if let Some(_schema_ref) = &content.schema {
-                                // Basic JSON validation - schema validation deferred
-                                if serde_json::from_value::<serde_json::Value>(value.clone())
-                                    .is_err()
-                                {
-                                    errors.push("body: invalid JSON".to_string());
+                    // First resolve the request body reference if it's a reference
+                    let request_body = match schema {
+                        openapiv3::ReferenceOr::Item(rb) => Some(rb),
+                        openapiv3::ReferenceOr::Reference { reference } => {
+                            // Try to resolve request body reference through spec
+                            self.spec.spec.components.as_ref()
+                                .and_then(|components| components.request_bodies.get(reference.trim_start_matches("#/components/requestBodies/")))
+                                .and_then(|rb_ref| rb_ref.as_item())
+                        }
+                    };
+                    
+                    if let Some(rb) = request_body {
+                        if let Some(content) = rb.content.get("application/json") {
+                            if let Some(schema_ref) = &content.schema {
+                            // Resolve schema reference and validate
+                            match schema_ref {
+                                openapiv3::ReferenceOr::Item(schema) => {
+                                    // Direct schema - validate immediately
+                                    if let Err(validation_error) =
+                                        OpenApiSchema::new(schema.clone()).validate(value)
+                                    {
+                                        let error_msg = validation_error.to_string();
+                                        errors.push(format!("body validation failed: {}", error_msg));
+                                        if aggregate {
+                                            details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
+                                        }
+                                    }
+                                }
+                                openapiv3::ReferenceOr::Reference { reference } => {
+                                    // Referenced schema - resolve and validate
+                                    if let Some(resolved_schema_ref) = self.spec.get_schema(reference) {
+                                        if let Err(validation_error) =
+                                            OpenApiSchema::new(resolved_schema_ref.schema.clone()).validate(value)
+                                        {
+                                            let error_msg = validation_error.to_string();
+                                            errors.push(format!("body validation failed: {}", error_msg));
+                                            if aggregate {
+                                                details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
+                                            }
+                                        }
+                                    } else {
+                                        // Schema reference couldn't be resolved
+                                        errors.push(format!("body validation failed: could not resolve schema reference {}", reference));
+                                        if aggregate {
+                                            details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve schema reference"}));
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    } else if let Some(content) =
-                        schema.as_item().and_then(|rb| rb.content.get("application/json"))
-                    {
-                        if let Some(_schema_ref) = &content.schema {
-                            // Basic JSON validation - schema validation deferred
-                            if serde_json::from_value::<serde_json::Value>(value.clone()).is_err() {
-                                errors.push("invalid JSON".to_string());
                             }
+                        }
+                    } else {
+                        // Request body reference couldn't be resolved or no application/json content
+                        errors.push("body validation failed: could not resolve request body or no application/json content".to_string());
+                        if aggregate {
+                            details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve request body reference"}));
                         }
                     }
                 } else {
@@ -733,14 +768,21 @@ impl OpenApiRouteRegistry {
                                 &mut details,
                             );
                         }
-                        openapiv3::Parameter::Query { parameter_data, .. } => {
+                        openapiv3::Parameter::Query { parameter_data, style, .. } => {
                             // For query deepObject, reconstruct value from key-likes: name[prop]
                             let deep_value = None; // Simplified for now
+                            let style_str = match style {
+                                openapiv3::QueryStyle::Form => Some("form"),
+                                openapiv3::QueryStyle::SpaceDelimited => Some("spaceDelimited"),
+                                openapiv3::QueryStyle::PipeDelimited => Some("pipeDelimited"),
+                                openapiv3::QueryStyle::DeepObject => Some("deepObject"),
+                            };
                             validate_parameter_with_deep_object(
                                 parameter_data,
                                 query_params,
                                 "query",
                                 deep_value,
+                                style_str,
                                 aggregate,
                                 &mut errors,
                                 &mut details,
@@ -902,10 +944,37 @@ pub fn get_validation_errors() -> Vec<serde_json::Value> {
 /// Applies only to param contexts (not request bodies). Conservative conversions:
 /// - integer/number: parse from string; arrays: split comma-separated strings and coerce items
 /// - boolean: parse true/false (case-insensitive) from string
-fn coerce_value_for_schema(value: &Value, _schema: &openapiv3::Schema) -> Value {
+fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
     // Basic coercion: try to parse strings as appropriate types
     match value {
         Value::String(s) => {
+            // Check if schema expects an array and we have a comma-separated string
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) = &schema.schema_kind {
+                if s.contains(',') {
+                    // Split comma-separated string into array
+                    let parts: Vec<&str> = s.split(',').map(|s| s.trim()).collect();
+                    let mut array_values = Vec::new();
+                    
+                    for part in parts {
+                        // Coerce each part based on array item type
+                        if let Some(items_schema) = &array_type.items {
+                            if let Some(items_schema_obj) = items_schema.as_item() {
+                                let part_value = Value::String(part.to_string());
+                                let coerced_part = coerce_value_for_schema(&part_value, items_schema_obj);
+                                array_values.push(coerced_part);
+                            } else {
+                                // If items schema is a reference or not available, keep as string
+                                array_values.push(Value::String(part.to_string()));
+                            }
+                        } else {
+                            // No items schema defined, keep as string
+                            array_values.push(Value::String(part.to_string()));
+                        }
+                    }
+                    return Value::Array(array_values);
+                }
+            }
+            
             // Try to parse as number first
             if let Ok(n) = s.parse::<f64>() {
                 if let Some(num) = serde_json::Number::from_f64(n) {
@@ -926,11 +995,44 @@ fn coerce_value_for_schema(value: &Value, _schema: &openapiv3::Schema) -> Value 
 }
 
 /// Apply style-aware coercion for query params
-fn coerce_by_style(value: &Value, _schema: &openapiv3::Schema, _style: Option<&str>) -> Value {
-    // Basic coercion: try to parse strings as appropriate types
-    // Style-specific coercion can be implemented later
+fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str>) -> Value {
+    // Style-aware coercion for query parameters
     match value {
         Value::String(s) => {
+            // Check if schema expects an array and we have a delimited string
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) = &schema.schema_kind {
+                let delimiter = match style {
+                    Some("spaceDelimited") => " ",
+                    Some("pipeDelimited") => "|",
+                    Some("form") | None => ",", // Default to form style (comma-separated)
+                    _ => ",", // Fallback to comma
+                };
+                
+                if s.contains(delimiter) {
+                    // Split delimited string into array
+                    let parts: Vec<&str> = s.split(delimiter).map(|s| s.trim()).collect();
+                    let mut array_values = Vec::new();
+                    
+                    for part in parts {
+                        // Coerce each part based on array item type
+                        if let Some(items_schema) = &array_type.items {
+                            if let Some(items_schema_obj) = items_schema.as_item() {
+                                let part_value = Value::String(part.to_string());
+                                let coerced_part = coerce_by_style(&part_value, items_schema_obj, style);
+                                array_values.push(coerced_part);
+                            } else {
+                                // If items schema is a reference or not available, keep as string
+                                array_values.push(Value::String(part.to_string()));
+                            }
+                        } else {
+                            // No items schema defined, keep as string
+                            array_values.push(Value::String(part.to_string()));
+                        }
+                    }
+                    return Value::Array(array_values);
+                }
+            }
+            
             // Try to parse as number first
             if let Ok(n) = s.parse::<f64>() {
                 if let Some(num) = serde_json::Number::from_f64(n) {
@@ -1123,6 +1225,7 @@ fn validate_parameter_with_deep_object(
     params_map: &Map<String, Value>,
     prefix: &str,
     deep_value: Option<Value>,
+    style: Option<&str>,
     aggregate: bool,
     errors: &mut Vec<String>,
     details: &mut Vec<serde_json::Value>,
@@ -1131,7 +1234,7 @@ fn validate_parameter_with_deep_object(
         Some(v) => {
             if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
                 if let Some(schema) = s.as_item() {
-                    let coerced = coerce_by_style(v, schema, Some("form")); // Default to form style for now
+                    let coerced = coerce_by_style(v, schema, style); // Use the actual style
                                                                             // Validate the coerced value against the schema
                     if let Err(validation_error) =
                         OpenApiSchema::new(schema.clone()).validate(&coerced)
@@ -1658,12 +1761,12 @@ mod tests {
                                             {"type": "object", "required": ["base"], "properties": {"base": {"type": "string"}}}
                                         ],
                                         "oneOf": [
-                                            {"type": "object", "properties": {"a": {"type": "integer"}}},
-                                            {"type": "object", "properties": {"b": {"type": "integer"}}}
+                                            {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"], "not": {"required": ["b"]}},
+                                            {"type": "object", "properties": {"b": {"type": "integer"}}, "required": ["b"], "not": {"required": ["a"]}}
                                         ],
                                         "anyOf": [
-                                            {"type": "object", "properties": {"flag": {"type": "boolean"}}},
-                                            {"type": "object", "properties": {"extra": {"type": "string"}}}
+                                            {"type": "object", "properties": {"flag": {"type": "boolean"}}, "required": ["flag"]},
+                                            {"type": "object", "properties": {"extra": {"type": "string"}}, "required": ["extra"]}
                                         ]
                                     }
                                 }

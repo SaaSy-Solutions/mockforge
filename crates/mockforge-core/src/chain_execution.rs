@@ -563,7 +563,21 @@ mod tests {
         graph.insert("D".to_string(), vec!["B".to_string(), "C".to_string()]);
 
         let topo_order = engine.topological_sort(&graph).unwrap();
-        assert_eq!(topo_order, vec!["D", "C", "B", "A"]);
+        
+        // Verify this is a valid topological ordering
+        // D should come before B and C (its dependencies)
+        // B should come before A (its dependency)  
+        // C should come before A (its dependency)
+        let d_pos = topo_order.iter().position(|x| x == "D").unwrap();
+        let b_pos = topo_order.iter().position(|x| x == "B").unwrap();
+        let c_pos = topo_order.iter().position(|x| x == "C").unwrap();
+        let a_pos = topo_order.iter().position(|x| x == "A").unwrap();
+        
+        assert!(d_pos < b_pos, "D should come before B");
+        assert!(d_pos < c_pos, "D should come before C");
+        assert!(b_pos < a_pos, "B should come before A");
+        assert!(c_pos < a_pos, "C should come before A");
+        assert_eq!(topo_order.len(), 4, "Should have all 4 nodes");
     }
 
     #[tokio::test]

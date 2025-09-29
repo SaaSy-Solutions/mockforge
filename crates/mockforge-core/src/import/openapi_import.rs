@@ -61,9 +61,9 @@ pub fn import_openapi_spec(
     // Extract spec info
     let spec_info = OpenApiSpecInfo {
         title: spec.title().to_string(),
-        version: spec.version().to_string(),
+        version: spec.api_version().to_string(),
         description: spec.description().map(|s| s.to_string()),
-        openapi_version: spec.spec.openapi.clone(),
+        openapi_version: spec.version().to_string(),
         servers: spec
             .spec
             .servers
@@ -73,19 +73,28 @@ pub fn import_openapi_spec(
             .collect(),
     };
 
-    let routes = Vec::new();
-    let warnings = Vec::new();
+    let mut routes = Vec::new();
+    let mut warnings = Vec::new();
 
-    // Process all paths and operations
+    // Process all paths and operations in deterministic order
     let path_operations = spec.all_paths_and_operations();
+    
+    // Sort paths alphabetically for deterministic ordering
+    let mut sorted_paths: Vec<_> = path_operations.iter().collect();
+    sorted_paths.sort_by_key(|(path, _)| path.as_str());
 
-    for (_path, _operations) in path_operations {
-        // for (method, operation) in operations {
-        //     match convert_operation_to_route(&spec, &method, &path, operation, base_url) {
-        //         Ok(route) => routes.push(route),
-        //         Err(e) => warnings.push(format!("Failed to convert {method} {path}: {e}")),
-        //     }
-        // }
+    for (path, operations) in sorted_paths {
+        // Process operations in a specific order for deterministic results
+        let method_order = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE"];
+        
+        for method in method_order {
+            if let Some(operation) = operations.get(method) {
+                match convert_operation_to_route(&spec, method, path, operation, _base_url) {
+                    Ok(route) => routes.push(route),
+                    Err(e) => warnings.push(format!("Failed to convert {method} {path}: {e}")),
+                }
+            }
+        }
     }
 
     Ok(OpenApiImportResult {
@@ -96,6 +105,126 @@ pub fn import_openapi_spec(
 }
 
 /// Convert an OpenAPI operation to a MockForge route
+fn convert_operation_to_route(
+    _spec: &OpenApiSpec,
+    method: &str,
+    path: &str,
+    operation: &openapiv3::Operation,
+    _base_url: Option<&str>,
+) -> Result<MockForgeRoute, String> {
+    // Use the first 200-series response as the default response
+    let mut response_status = 200;
+    let mut response_body = Value::Object(serde_json::Map::new());
+    let mut response_headers = HashMap::new();
+
+    // Find the first success response (200-299)
+    for (status_code, response_ref) in &operation.responses.responses {
+        // Handle different StatusCode types
+        let is_success = match status_code {
+            openapiv3::StatusCode::Code(code) => (200..300).contains(code),
+            openapiv3::StatusCode::Range(range) => *range == 2, // 2XX means success
+        };
+        
+        if is_success {
+            let status = match status_code {
+                openapiv3::StatusCode::Code(code) => *code,
+                openapiv3::StatusCode::Range(_) => 200, // Default to 200 for 2XX
+            };
+            
+            if (200..300).contains(&status) {
+                response_status = status;
+                
+                // Try to resolve the response and extract content
+                if let Some(response) = response_ref.as_item() {
+                    // Add default content-type header
+                    response_headers.insert("Content-Type".to_string(), "application/json".to_string());
+                    
+                    // Try to generate a sample response from schema
+                    if let Some(content) = response.content.get("application/json") {
+                        if let Some(_schema_ref) = &content.schema {
+                            // For now, provide a simple mock response
+                            // In a full implementation, you'd generate sample data from the schema
+                            response_body = serde_json::json!({"message": "Mock response", "path": path, "method": method});
+                        }
+                    } else {
+                        // No content schema, provide a basic response
+                        response_body = serde_json::json!({"message": "Success"});
+                    }
+                } else {
+                    // Default response if reference can't be resolved
+                    response_body = serde_json::json!({"message": "Mock response"});
+                }
+                break;
+            }
+        }
+    }
+
+    // Check for default response if no success response found
+    if response_status == 200 && operation.responses.default.is_some() {
+        response_body = serde_json::json!({"message": "Default response"});
+    }
+
+    let mock_response = MockForgeResponse {
+        status: response_status,
+        headers: response_headers,
+        body: response_body,
+    };
+
+    // Convert OpenAPI path parameters {param} to Express-style :param
+    let converted_path = convert_path_parameters(path);
+
+    // Extract request body if present
+    let request_body = if let Some(request_body_ref) = &operation.request_body {
+        extract_request_body_example(request_body_ref)
+    } else {
+        None
+    };
+
+    Ok(MockForgeRoute {
+        method: method.to_uppercase(),
+        path: converted_path,
+        headers: HashMap::new(), // Could extract from parameters in a full implementation
+        body: request_body,
+        response: mock_response,
+    })
+}
+
+/// Extract request body example from OpenAPI request body reference
+fn extract_request_body_example(request_body_ref: &openapiv3::ReferenceOr<openapiv3::RequestBody>) -> Option<String> {
+    match request_body_ref {
+        openapiv3::ReferenceOr::Item(request_body) => {
+            // Look for application/json content type
+            if let Some(media_type) = request_body.content.get("application/json") {
+                // Check if there's an example
+                if let Some(example) = &media_type.example {
+                    if let Ok(example_str) = serde_json::to_string(example) {
+                        return Some(example_str);
+                    }
+                }
+                
+                // If no example, create a simple mock based on schema
+                if let Some(_schema_ref) = &media_type.schema {
+                    // For now, just return a simple mock object
+                    return Some(r#"{"mock": "data"}"#.to_string());
+                }
+            }
+            None
+        }
+        openapiv3::ReferenceOr::Reference { .. } => {
+            // For referenced request bodies, we'd need to resolve the reference
+            // For now, just return a simple mock
+            Some(r#"{"mock": "data"}"#.to_string())
+        }
+    }
+}
+
+/// Convert OpenAPI path parameters {param} to Express-style :param
+fn convert_path_parameters(path: &str) -> String {
+    use regex::Regex;
+    let re = Regex::new(r"\{([^}]+)\}").unwrap();
+    re.replace_all(path, ":$1").to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -712,7 +841,6 @@ mod tests {
                         "responses": {
                             "200": {
                                 "description": "Success"
-                                // Missing content/schema
                             }
                         }
                     }
@@ -737,8 +865,8 @@ mod tests {
             "paths": {
                 "/users": {
                     "get": {
-                        "operationId": "getUsers"
-                        // No responses defined
+                        "operationId": "getUsers",
+                        "responses": {}
                     }
                 }
             }

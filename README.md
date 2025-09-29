@@ -10,19 +10,37 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 
 ## ✨ Features
 
-- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, and WebSocket connections
+- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, and WebSocket connections
 - **Advanced Data Synthesis**: Intelligent mock data generation with:
   - **Smart Field Inference**: Automatic data type detection from field names
   - **Deterministic Seeding**: Reproducible test fixtures for stable testing
   - **RAG-Driven Generation**: Context-aware data using domain knowledge
   - **Relationship Awareness**: Foreign key detection and cross-reference validation
   - **Schema Graph Extraction**: Automatic relationship discovery from protobuf schemas
+- **Plugin System**: WebAssembly-based extensible architecture with:
+  - **Custom Response Generators**: Build plugins for specialized mock data
+  - **Authentication Providers**: JWT, OAuth2, and custom auth plugins
+  - **Data Source Connectors**: CSV, database, and external API integrations
+  - **Template Extensions**: Custom template functions and filters
+  - **Security Sandbox**: Isolated plugin execution with resource limits
+- **End-to-End Encryption**: Enterprise-grade security features:
+  - **Multi-Algorithm Support**: AES-256-GCM and ChaCha20-Poly1305 encryption
+  - **Key Management**: Hierarchical key system with secure storage
+  - **Auto-Encryption**: Automatic encryption of sensitive configuration data
+  - **Template Functions**: Built-in encryption/decryption in templates
+- **Workspace Synchronization**: Bidirectional sync with version control:
+  - **File System Watching**: Real-time sync between workspaces and directories
+  - **Git Integration**: Version control your mock configurations
+  - **Team Collaboration**: Shared workspaces with conflict resolution
 - **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
 - **Cross-Endpoint Validation**: Ensure referential integrity across different endpoints
-- **Admin UI**: Modern web-based interface for managing mock servers and viewing metrics
+- **Admin UI v2**: Modern React-based interface with:
+  - **Role-Based Authentication**: Admin and viewer access control
+  - **Real-time Monitoring**: Live logs, metrics, and performance tracking
+  - **Visual Configuration**: Drag-and-drop fixture management
+  - **Advanced Search**: Full-text search across services and logs
 - **Configuration Management**: Flexible configuration via YAML/JSON files with environment variable overrides
 - **Built-in Data Templates**: Pre-configured schemas for common data types (users, products, orders)
-- **Extensible Architecture**: Plugin system for custom response generators and data sources
 - **Production Ready**: Comprehensive testing, security audits, and automated releases
 
 ## 📖 Documentation
@@ -120,6 +138,9 @@ cargo run -p mockforge-cli -- data template user --rows 50 --output users.json
 
 # Start Admin UI only (standalone server)
 cargo run -p mockforge-cli -- admin --port 8080
+
+# Start workspace synchronization daemon
+cargo run -p mockforge-cli -- sync start --directory ./workspace-sync
 
 # Access Admin Interface
 

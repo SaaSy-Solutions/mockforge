@@ -39,6 +39,7 @@ pub struct CollectionItem {
 #[derive(Debug, Deserialize)]
 pub struct PostmanRequest {
     pub method: String,
+    #[serde(default)]
     pub header: Vec<Header>,
     pub url: UrlOrString,
     #[serde(default)]
@@ -234,6 +235,44 @@ fn convert_request_to_route(
         Some(body) if body.mode == "raw" => {
             body.raw.as_ref().map(|raw| resolve_variables(raw, variables))
         }
+        Some(body) if body.mode == "urlencoded" => {
+            if let Some(form_params) = &body.urlencoded {
+                let encoded_params: Vec<String> = form_params
+                    .iter()
+                    .map(|param| {
+                        let key = resolve_variables(&param.key, variables);
+                        let value = resolve_variables(&param.value, variables);
+                        format!("{}={}", key, value)
+                    })
+                    .collect();
+                if encoded_params.is_empty() {
+                    None
+                } else {
+                    Some(encoded_params.join("&"))
+                }
+            } else {
+                None
+            }
+        }
+        Some(body) if body.mode == "formdata" => {
+            if let Some(form_params) = &body.formdata {
+                let encoded_params: Vec<String> = form_params
+                    .iter()
+                    .map(|param| {
+                        let key = resolve_variables(&param.key, variables);
+                        let value = resolve_variables(&param.value, variables);
+                        format!("{}={}", key, value)
+                    })
+                    .collect();
+                if encoded_params.is_empty() {
+                    None
+                } else {
+                    Some(encoded_params.join("&"))
+                }
+            } else {
+                None
+            }
+        }
         _ => None,
     };
 
@@ -321,7 +360,12 @@ fn build_url(
     // If base_url is provided, make path relative
     if let Some(base) = base_url {
         if raw_url.starts_with(base) {
-            return Ok(raw_url.trim_start_matches(base).trim_start_matches('/').to_string());
+            let relative_path = raw_url.trim_start_matches(base).trim_start_matches('/');
+            return Ok(if relative_path.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{}", relative_path)
+            });
         }
     }
 

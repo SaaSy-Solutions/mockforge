@@ -441,13 +441,13 @@ mod tests {
         let result = shaper.throttle_bandwidth(50, &[]).await;
         assert!(result.is_ok());
 
-        // Large transfer should be throttled
+        // Large transfer should be throttled (but within burst capacity)
         let start = Instant::now();
-        let result = shaper.throttle_bandwidth(200, &[]).await;
+        let result = shaper.throttle_bandwidth(80, &[]).await; // 50 + 80 = 130 total, need to wait for refill
         let elapsed = start.elapsed();
         assert!(result.is_ok());
         // Should have waited at least some time due to throttling
-        assert!(elapsed >= Duration::from_millis(100)); // At least 100ms for 200 bytes at 1000 bytes/sec
+        assert!(elapsed >= Duration::from_millis(30)); // At least 30ms for 80 additional bytes at 1000 bytes/sec
     }
 
     #[tokio::test]

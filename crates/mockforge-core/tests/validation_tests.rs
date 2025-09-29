@@ -596,7 +596,7 @@ mod validation_tests {
         let validator = Validator::from_openapi(&spec).unwrap();
 
         // Verify it's the OpenApi variant with stored spec
-        match validator {
+        match &validator {
             Validator::OpenApi(stored_spec) => {
                 // Verify the spec was stored correctly
                 assert_eq!(stored_spec.spec.openapi, "3.0.0");

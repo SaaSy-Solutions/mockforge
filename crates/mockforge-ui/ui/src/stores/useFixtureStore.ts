@@ -43,7 +43,9 @@ const mockFixtures: FixtureInfo[] = [
 }`,
     size_bytes: 234,
     last_modified: '2024-01-15T10:30:00Z',
-    version: 1,
+    createdAt: '2024-01-15T10:30:00Z',
+    updatedAt: '2024-01-15T10:30:00Z',
+    version: '1',
     route_path: '/api/users',
     method: 'GET',
   },
@@ -64,7 +66,9 @@ const mockFixtures: FixtureInfo[] = [
 }`,
     size_bytes: 178,
     last_modified: '2024-01-14T15:45:00Z',
-    version: 2,
+    createdAt: '2024-01-14T15:45:00Z',
+    updatedAt: '2024-01-14T15:45:00Z',
+    version: '2',
     route_path: '/api/users',
     method: 'POST',
   },
@@ -89,7 +93,9 @@ const mockFixtures: FixtureInfo[] = [
 }`,
     size_bytes: 298,
     last_modified: '2024-01-16T08:20:00Z',
-    version: 1,
+    createdAt: '2024-01-16T08:20:00Z',
+    updatedAt: '2024-01-16T08:20:00Z',
+    version: '1',
     route_path: '/api/orders/{orderId}',
     method: 'GET',
   },
@@ -117,7 +123,10 @@ const mockFixtures: FixtureInfo[] = [
 }`,
     size_bytes: 445,
     last_modified: '2024-01-13T14:12:00Z',
-    version: 1,
+    createdAt: '2024-01-13T14:12:00Z',
+    updatedAt: '2024-01-13T14:12:00Z',
+    version: '1',
+    method: 'GET',
     route_path: 'inventory.InventoryService/GetItem',
   },
 ];
@@ -147,6 +156,7 @@ const generateTextDiff = (oldContent: string, newContent: string): DiffChange[] 
         } else {
           changes.push({
             type: 'add',
+            path: 'fixture',
             line_number: lineNumber,
             content: line,
           });
@@ -155,6 +165,7 @@ const generateTextDiff = (oldContent: string, newContent: string): DiffChange[] 
       } else if (patch.removed) {
         changes.push({
           type: 'remove',
+          path: 'fixture',
           line_number: lineNumber,
           content: line,
         });
@@ -192,7 +203,7 @@ export const useFixtureStore = create<FixtureStore>((set, get) => ({
         ? { 
             ...f, 
             content, 
-            version: f.version + 1,
+            version: String((parseInt(f.version || '1')) + 1),
             size_bytes: new Blob([content]).size,
             last_modified: new Date().toISOString(),
           }
@@ -256,7 +267,7 @@ export const useFixtureStore = create<FixtureStore>((set, get) => ({
       throw new Error(`Fixture with id ${fixtureId} not found`);
     }
 
-    const changes = generateTextDiff(fixture.content, newContent);
+    const changes = generateTextDiff(String(fixture.content), String(newContent));
     
     return {
       id: `${fixtureId}-${Date.now()}`,

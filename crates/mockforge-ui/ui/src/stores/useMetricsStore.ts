@@ -32,6 +32,7 @@ const generateLatencyHistogram = (service: string): HistogramBucket[] => {
     const total = 1000;
     return {
       range,
+      le: index * 100, // Convert to numeric value for le
       count,
       percentage: (count / total) * 100,
     };
@@ -47,14 +48,28 @@ const generateLatencyMetrics = (): LatencyMetrics[] => {
     { name: 'notification-service', route: '/api/notifications' },
   ];
 
-  return services.map(service => ({
-    service: service.name,
-    route: service.route,
-    p50: Math.floor(Math.random() * 100) + 30,
-    p95: Math.floor(Math.random() * 300) + 200,
-    p99: Math.floor(Math.random() * 800) + 500,
-    histogram: generateLatencyHistogram(service.name),
-  }));
+  return services.map(service => {
+    const avg = Math.floor(Math.random() * 150) + 50;
+    const min = Math.floor(Math.random() * 30) + 10;
+    const max = Math.floor(Math.random() * 1000) + 500;
+    const p50 = Math.floor(Math.random() * 100) + 30;
+    const totalRequests = Math.floor(Math.random() * 5000) + 1000;
+    return {
+      service: service.name,
+      route: service.route,
+      total_requests: totalRequests,
+      avg_response_time: avg,
+      min_response_time: min,
+      max_response_time: max,
+      p50_response_time: p50,
+      p95_response_time: Math.floor(Math.random() * 300) + 200,
+      p99_response_time: Math.floor(Math.random() * 800) + 500,
+      p50: p50,
+      p95: Math.floor(Math.random() * 300) + 200,
+      p99: Math.floor(Math.random() * 800) + 500,
+      histogram: generateLatencyHistogram(service.name),
+    };
+  });
 };
 
 const generateFailureMetrics = (): FailureMetrics[] => {
@@ -96,8 +111,13 @@ const generateFailureMetrics = (): FailureMetrics[] => {
       total_requests: totalRequests,
       success_count: successCount,
       failure_count: failureCount,
+      total_errors: failureCount,
       error_rate: failureCount / totalRequests,
+      error_rate_percentage: (failureCount / totalRequests) * 100,
       status_codes: statusCodes,
+      error_by_status_code: Object.fromEntries(
+        Object.entries(statusCodes).filter(([code]) => parseInt(code) >= 400)
+      ),
     };
   });
 };

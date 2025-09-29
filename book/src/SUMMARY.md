@@ -18,10 +18,15 @@
   - [Protocol Buffers](user-guide/grpc-mocking/protobuf.md)
   - [Streaming](user-guide/grpc-mocking/streaming.md)
   - [Advanced Data Synthesis](user-guide/grpc-mocking/advanced-data-synthesis.md)
+- [GraphQL Mocking](user-guide/graphql-mocking.md)
 - [WebSocket Mocking](user-guide/websocket-mocking.md)
   - [Replay Mode](user-guide/websocket-mocking/replay.md)
   - [Interactive Mode](user-guide/websocket-mocking/interactive.md)
+- [Plugin System](user-guide/plugins.md)
+- [Security & Encryption](user-guide/security.md)
+- [Directory Synchronization](user-guide/sync.md)
 - [Admin UI](user-guide/admin-ui.md)
+- [Admin UI v2](user-guide/admin-ui-v2.md)
 
 ## Configuration
 

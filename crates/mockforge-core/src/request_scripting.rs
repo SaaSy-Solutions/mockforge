@@ -692,10 +692,10 @@ mod tests {
         };
 
         let script = r#"
-            console.log("MockForge URL:", mockforge.request.url);
-            console.log("Login token:", mockforge.chain.login_token);
-            console.log("Environment:", mockforge.env.NODE_ENV);
-            return "script executed successfully";
+            for (let i = 0; i < 1000; i++) {
+                // Small loop to ensure measurable execution time
+            }
+            "script executed successfully";
         "#;
 
         let result = engine.execute_script(script, &script_context, 5000).await;

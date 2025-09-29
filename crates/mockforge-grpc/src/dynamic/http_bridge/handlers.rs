@@ -468,11 +468,11 @@ impl RequestProcessor {
         body_size: usize,
         max_body_size: usize,
     ) -> Result<(), String> {
-        if service_name.is_empty() {
+        if service_name.trim().is_empty() {
             return Err("Service name cannot be empty".to_string());
         }
 
-        if method_name.is_empty() {
+        if method_name.trim().is_empty() {
             return Err("Method name cannot be empty".to_string());
         }
 

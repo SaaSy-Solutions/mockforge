@@ -220,6 +220,110 @@ mockforge-cli admin
 mockforge-cli admin --port 9090
 ```
 
+### `sync` - Workspace Synchronization
+
+Manage bidirectional synchronization between workspaces and external directories for version control and team collaboration.
+
+```bash
+mockforge-cli sync <SUBCOMMAND>
+```
+
+#### Subcommands
+
+##### `start` - Start Sync Daemon
+
+Start a background synchronization daemon for continuous monitoring and syncing.
+
+```bash
+mockforge-cli sync start [OPTIONS]
+```
+
+**Options:**
+- `--directory <PATH>`: Target directory to sync with (required)
+- `--workspace-id <ID>`: Specific workspace ID to sync
+- `--mode <MODE>`: Sync mode (bidirectional, one-way, manual) (default: bidirectional)
+- `--watch`: Enable real-time file system watching (default: true)
+- `--structure <TYPE>`: Directory structure (flat, nested) (default: nested)
+
+**Examples:**
+
+```bash
+# Start bidirectional sync with Git repository
+mockforge-cli sync start --directory /path/to/git/repo
+
+# Start one-way sync (workspace -> directory)
+mockforge-cli sync start --directory ./sync --mode one-way
+
+# Sync specific workspace with custom structure
+mockforge-cli sync start --workspace-id my-workspace --directory ./workspaces --structure flat
+```
+
+##### `trigger` - Manual Sync
+
+Trigger a one-time synchronization operation.
+
+```bash
+mockforge-cli sync trigger [OPTIONS]
+```
+
+**Options:**
+- `--workspace-id <ID>`: Workspace ID to sync (required)
+- `--direction <DIR>`: Sync direction (to-directory, from-directory, bidirectional) (default: bidirectional)
+
+**Examples:**
+
+```bash
+# Trigger bidirectional sync for workspace
+mockforge-cli sync trigger --workspace-id my-workspace
+
+# Force sync from directory to workspace
+mockforge-cli sync trigger --workspace-id my-workspace --direction from-directory
+```
+
+##### `status` - Check Sync Status
+
+Check the current synchronization status for workspaces.
+
+```bash
+mockforge-cli sync status [OPTIONS]
+```
+
+**Options:**
+- `--workspace-id <ID>`: Specific workspace ID to check
+- `--all`: Show status for all workspaces
+
+**Examples:**
+
+```bash
+# Check status of specific workspace
+mockforge-cli sync status --workspace-id my-workspace
+
+# Check status of all synced workspaces
+mockforge-cli sync status --all
+```
+
+##### `stop` - Stop Sync
+
+Stop synchronization for a workspace or all workspaces.
+
+```bash
+mockforge-cli sync stop [OPTIONS]
+```
+
+**Options:**
+- `--workspace-id <ID>`: Specific workspace ID to stop syncing
+- `--all`: Stop all active sync operations
+
+**Examples:**
+
+```bash
+# Stop sync for specific workspace
+mockforge-cli sync stop --workspace-id my-workspace
+
+# Stop all active sync operations
+mockforge-cli sync stop --all
+```
+
 ## Configuration File Format
 
 MockForge supports YAML configuration files that can be used instead of command-line options.
@@ -292,6 +396,9 @@ export MOCKFORGE_GRPC_PORT=50051
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
 export MOCKFORGE_ADMIN_PORT=8080
+export MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
+export MOCKFORGE_ADMIN_SESSION_TIMEOUT=86400
+export MOCKFORGE_ADMIN_AUTH_ENABLED=true
 
 # Validation
 export MOCKFORGE_VALIDATION_MODE=enforce
@@ -303,6 +410,29 @@ export MOCKFORGE_GRPC_REFLECTION_ENABLED=true
 
 # WebSocket settings
 export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
+
+# Plugin system
+export MOCKFORGE_PLUGINS_ENABLED=true
+export MOCKFORGE_PLUGINS_DIRECTORY=~/.mockforge/plugins
+export MOCKFORGE_PLUGIN_MEMORY_LIMIT=64
+export MOCKFORGE_PLUGIN_CPU_LIMIT=10
+export MOCKFORGE_PLUGIN_TIMEOUT=5000
+
+# Encryption
+export MOCKFORGE_ENCRYPTION_ENABLED=true
+export MOCKFORGE_ENCRYPTION_ALGORITHM=aes-256-gcm
+export MOCKFORGE_KEY_STORE_PATH=~/.mockforge/keys
+
+# Synchronization
+export MOCKFORGE_SYNC_ENABLED=true
+export MOCKFORGE_SYNC_DIRECTORY=./workspace-sync
+export MOCKFORGE_SYNC_MODE=bidirectional
+export MOCKFORGE_SYNC_WATCH=true
+
+# Data generation
+export MOCKFORGE_DATA_RAG_ENABLED=true
+export MOCKFORGE_DATA_RAG_PROVIDER=openai
+export MOCKFORGE_DATA_RAG_API_KEY=your-api-key
 ```
 
 ## Exit Codes

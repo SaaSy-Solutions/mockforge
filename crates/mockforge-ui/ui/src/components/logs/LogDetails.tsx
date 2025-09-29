@@ -98,7 +98,7 @@ export function LogDetails({ log, onClose }: LogDetailsProps) {
           </div>
 
           {/* Request Headers */}
-          {Object.keys(log.headers).length > 0 && (
+          {log.headers && Object.keys(log.headers).length > 0 && (
             <div className="space-y-2">
               <h3 className="font-semibold text-sm">Request Headers</h3>
               <div className="border rounded">
@@ -109,7 +109,7 @@ export function LogDetails({ log, onClose }: LogDetailsProps) {
                   </div>
                 </div>
                 <div className="max-h-64 overflow-auto">
-                  {Object.entries(log.headers).map(([key, value]) => (
+                  {Object.entries(log.headers || {}).map(([key, value]) => (
                     <div key={key} className="p-3 border-b last:border-b-0 grid grid-cols-2 gap-4 text-sm font-mono">
                       <div className="font-semibold">{key}</div>
                       <div className="break-all text-muted-foreground">{value}</div>

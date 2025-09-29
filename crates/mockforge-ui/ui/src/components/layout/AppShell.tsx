@@ -57,21 +57,6 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
         searchInput.select();
       }
     },
-    onRefresh: onRefresh,
-    onEscape: () => {
-      if (sidebarOpen) {
-        setSidebarOpen(false);
-      } else {
-        // Clear search if active
-        const searchInput = document.getElementById('global-search-input') as HTMLInputElement;
-        if (searchInput && document.activeElement === searchInput) {
-          setGlobalQuery('');
-          setLogFilter({ path_pattern: undefined });
-          setGlobalSearch(undefined);
-          searchInput.blur();
-        }
-      }
-    },
   });
 
   // Skip links functionality

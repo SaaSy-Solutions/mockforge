@@ -32,3 +32,8 @@ regex = "1.10"
 base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3.8"

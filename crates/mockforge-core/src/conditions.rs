@@ -162,7 +162,7 @@ pub fn evaluate_condition(
     }
 
     // Handle XPath queries
-    if condition.starts_with("/") {
+    if condition.starts_with("/") || condition.starts_with("//") {
         return evaluate_xpath(condition, context);
     }
 
@@ -252,17 +252,25 @@ fn evaluate_xpath(query: &str, context: &ConditionContext) -> Result<bool, Condi
     };
 
     let Some(xml_content) = xml_content else {
+        println!("Debug - No XML content available for query: {}", query);
         return Ok(false); // No XML content to query
     };
+
+    println!("Debug - Evaluating XPath '{}' against XML content: {}", query, xml_content);
 
     match Document::parse(xml_content) {
         Ok(doc) => {
             // Simple XPath evaluation - check if any nodes match
             let root = doc.root_element();
+            println!("Debug - XML root element: {}", root.tag_name().name());
             let matches = evaluate_xpath_simple(&root, query);
+            println!("Debug - XPath result: {}", matches);
             Ok(matches)
         }
-        Err(_) => Err(ConditionError::InvalidXml(xml_content.clone())),
+        Err(e) => {
+            println!("Debug - Failed to parse XML: {}", e);
+            Err(ConditionError::InvalidXml(xml_content.clone()))
+        }
     }
 }
 
@@ -270,6 +278,25 @@ fn evaluate_xpath(query: &str, context: &ConditionContext) -> Result<bool, Condi
 fn evaluate_xpath_simple(node: &Node, xpath: &str) -> bool {
     // This is a simplified XPath implementation
     // For production use, consider a more complete XPath library
+
+    // Handle descendant-or-self axis: //element (check this FIRST before stripping //)
+    if let Some(element_name) = xpath.strip_prefix("//") {
+        println!("Debug - Checking descendant-or-self for element '{}' on node '{}'", element_name, node.tag_name().name());
+        if node.tag_name().name() == element_name {
+            println!("Debug - Found match: {} == {}", node.tag_name().name(), element_name);
+            return true;
+        }
+        // Check descendants
+        for child in node.children() {
+            if child.is_element() {
+                println!("Debug - Checking child element: {}", child.tag_name().name());
+                if evaluate_xpath_simple(&child, &format!("//{}", element_name)) {
+                    return true;
+                }
+            }
+        }
+        return false; // If no descendant found, return false
+    }
 
     let xpath = xpath.trim_start_matches('/');
 
@@ -316,19 +343,6 @@ fn evaluate_xpath_simple(node: &Node, xpath: &str) -> bool {
     if let Some(text_query) = xpath.strip_suffix("/text()") {
         if node.tag_name().name() == text_query {
             return node.text().is_some_and(|t| !t.trim().is_empty());
-        }
-    }
-
-    // Handle descendant-or-self axis: //element
-    if let Some(element_name) = xpath.strip_prefix("//") {
-        if node.tag_name().name() == element_name {
-            return true;
-        }
-        // Check descendants
-        for child in node.children() {
-            if child.is_element() && evaluate_xpath_simple(&child, xpath) {
-                return true;
-            }
         }
     }
 

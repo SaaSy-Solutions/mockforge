@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 
 export interface KeyboardShortcut {
   key: string;
@@ -6,24 +6,29 @@ export interface KeyboardShortcut {
   shift?: boolean;
   alt?: boolean;
   meta?: boolean;
-  callback: (event: KeyboardEvent) => void;
+  handler: (event: KeyboardEvent) => void;
+  description?: string;
   preventDefault?: boolean;
   stopPropagation?: boolean;
-  description?: string;
+  element?: HTMLElement | null;
+  enabled?: boolean;
 }
 
 export interface UseKeyboardNavigationOptions {
+  shortcuts?: KeyboardShortcut[];
+  element?: HTMLElement | null;
   enabled?: boolean;
-  stopPropagation?: boolean;
-  preventDefault?: boolean;
+  capture?: boolean;
 }
 
-export function useKeyboardNavigation(
-  shortcuts: KeyboardShortcut[],
-  options: UseKeyboardNavigationOptions = {}
-) {
-  const { enabled = true, stopPropagation = false, preventDefault = true } = options;
-  const shortcutsRef = useRef(shortcuts);
+export function useKeyboardNavigation({
+  shortcuts = [],
+  element = null,
+  enabled = true,
+  capture = false,
+}: UseKeyboardNavigationOptions = {}) {
+  const [isEnabled, setIsEnabled] = useState(enabled);
+  const shortcutsRef = useRef<KeyboardShortcut[]>(shortcuts);
 
   // Update shortcuts ref when shortcuts change
   useEffect(() => {
@@ -31,249 +36,333 @@ export function useKeyboardNavigation(
   }, [shortcuts]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (!enabled) return;
+    if (!isEnabled) return;
 
-    for (const shortcut of shortcutsRef.current) {
-      const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
-      const ctrlMatches = !!shortcut.ctrl === event.ctrlKey;
-      const shiftMatches = !!shortcut.shift === event.shiftKey;
-      const altMatches = !!shortcut.alt === event.altKey;
-      const metaMatches = !!shortcut.meta === event.metaKey;
+    const activeShortcuts = shortcutsRef.current.filter(shortcut => 
+      shortcut.enabled !== false
+    );
 
-      if (keyMatches && ctrlMatches && shiftMatches && altMatches && metaMatches) {
-        if (shortcut.preventDefault ?? preventDefault) {
+    for (const shortcut of activeShortcuts) {
+      const isMatch = 
+        event.key.toLowerCase() === shortcut.key.toLowerCase() &&
+        !!event.ctrlKey === !!shortcut.ctrl &&
+        !!event.shiftKey === !!shortcut.shift &&
+        !!event.altKey === !!shortcut.alt &&
+        !!event.metaKey === !!shortcut.meta;
+
+      if (isMatch) {
+        if (shortcut.preventDefault !== false) {
           event.preventDefault();
         }
-        if (shortcut.stopPropagation ?? stopPropagation) {
+        if (shortcut.stopPropagation) {
           event.stopPropagation();
         }
-        shortcut.callback(event);
-        break;
+        
+        shortcut.handler(event);
+        break; // Only handle the first matching shortcut
       }
     }
-  }, [enabled, preventDefault, stopPropagation]);
+  }, [isEnabled]);
 
   useEffect(() => {
-    if (enabled) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [enabled, handleKeyDown]);
+    const targetElement = element || document;
+    
+    if (!isEnabled || !targetElement) return;
+
+    targetElement.addEventListener('keydown', handleKeyDown, capture);
+
+    return () => {
+      targetElement.removeEventListener('keydown', handleKeyDown, capture);
+    };
+  }, [element, isEnabled, handleKeyDown, capture]);
+
+  const addShortcut = useCallback((shortcut: KeyboardShortcut) => {
+    shortcutsRef.current = [...shortcutsRef.current, shortcut];
+  }, []);
+
+  const removeShortcut = useCallback((key: string, modifiers?: {
+    ctrl?: boolean;
+    shift?: boolean;
+    alt?: boolean;
+    meta?: boolean;
+  }) => {
+    shortcutsRef.current = shortcutsRef.current.filter(shortcut => {
+      if (shortcut.key.toLowerCase() !== key.toLowerCase()) return true;
+      
+      if (modifiers) {
+        return !(
+          !!shortcut.ctrl === !!modifiers.ctrl &&
+          !!shortcut.shift === !!modifiers.shift &&
+          !!shortcut.alt === !!modifiers.alt &&
+          !!shortcut.meta === !!modifiers.meta
+        );
+      }
+      
+      return false;
+    });
+  }, []);
+
+  const enable = useCallback(() => setIsEnabled(true), []);
+  const disable = useCallback(() => setIsEnabled(false), []);
+  const toggle = useCallback(() => setIsEnabled(prev => !prev), []);
 
   return {
-    shortcuts: shortcutsRef.current,
+    addShortcut,
+    removeShortcut,
+    enable,
+    disable,
+    toggle,
+    isEnabled,
   };
 }
 
-// Hook for common application shortcuts
-export function useAppShortcuts({
-  onSearch,
-  onRefresh,
-  onToggleTheme,
-  onEscape,
-  onHelp,
-}: {
-  onSearch?: () => void;
-  onRefresh?: () => void;
-  onToggleTheme?: () => void;
+// Hook for managing common navigation shortcuts
+export function useCommonShortcuts(options: {
   onEscape?: () => void;
-  onHelp?: () => void;
+  onEnter?: () => void;
+  onSpace?: () => void;
+  onArrowUp?: () => void;
+  onArrowDown?: () => void;
+  onArrowLeft?: () => void;
+  onArrowRight?: () => void;
+  onHome?: () => void;
+  onEnd?: () => void;
+  onPageUp?: () => void;
+  onPageDown?: () => void;
+  enabled?: boolean;
 } = {}) {
-  const shortcuts: KeyboardShortcut[] = [
-    ...(onSearch ? [{
+  const shortcuts: KeyboardShortcut[] = [];
+
+  if (options.onEscape) {
+    shortcuts.push({
+      key: 'Escape',
+      handler: options.onEscape,
+      description: 'Close/Cancel',
+    });
+  }
+
+  if (options.onEnter) {
+    shortcuts.push({
+      key: 'Enter',
+      handler: options.onEnter,
+      description: 'Confirm/Select',
+    });
+  }
+
+  if (options.onSpace) {
+    shortcuts.push({
+      key: ' ',
+      handler: options.onSpace,
+      description: 'Activate/Toggle',
+    });
+  }
+
+  if (options.onArrowUp) {
+    shortcuts.push({
+      key: 'ArrowUp',
+      handler: options.onArrowUp,
+      description: 'Move up',
+    });
+  }
+
+  if (options.onArrowDown) {
+    shortcuts.push({
+      key: 'ArrowDown',
+      handler: options.onArrowDown,
+      description: 'Move down',
+    });
+  }
+
+  if (options.onArrowLeft) {
+    shortcuts.push({
+      key: 'ArrowLeft',
+      handler: options.onArrowLeft,
+      description: 'Move left',
+    });
+  }
+
+  if (options.onArrowRight) {
+    shortcuts.push({
+      key: 'ArrowRight',
+      handler: options.onArrowRight,
+      description: 'Move right',
+    });
+  }
+
+  if (options.onHome) {
+    shortcuts.push({
+      key: 'Home',
+      handler: options.onHome,
+      description: 'Go to beginning',
+    });
+  }
+
+  if (options.onEnd) {
+    shortcuts.push({
+      key: 'End',
+      handler: options.onEnd,
+      description: 'Go to end',
+    });
+  }
+
+  if (options.onPageUp) {
+    shortcuts.push({
+      key: 'PageUp',
+      handler: options.onPageUp,
+      description: 'Page up',
+    });
+  }
+
+  if (options.onPageDown) {
+    shortcuts.push({
+      key: 'PageDown',
+      handler: options.onPageDown,
+      description: 'Page down',
+    });
+  }
+
+  return useKeyboardNavigation({
+    shortcuts,
+    enabled: options.enabled,
+  });
+}
+
+// Hook for managing application-level shortcuts
+export function useAppShortcuts(options: {
+  onSearch?: () => void;
+  onHelp?: () => void;
+  onSettings?: () => void;
+  onToggleSidebar?: () => void;
+  onNewItem?: () => void;
+  onSave?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onCopy?: () => void;
+  onPaste?: () => void;
+  onCut?: () => void;
+  onSelectAll?: () => void;
+  enabled?: boolean;
+} = {}) {
+  const shortcuts: KeyboardShortcut[] = [];
+
+  if (options.onSearch) {
+    shortcuts.push({
       key: 'k',
       ctrl: true,
-      callback: onSearch,
-      description: 'Open search',
-    }] : []),
-    ...(onRefresh ? [{
-      key: 'r',
-      ctrl: true,
-      callback: onRefresh,
-      description: 'Refresh data',
-    }] : []),
-    ...(onToggleTheme ? [{
-      key: 'd',
-      ctrl: true,
-      shift: true,
-      callback: onToggleTheme,
-      description: 'Toggle dark mode',
-    }] : []),
-    ...(onEscape ? [{
-      key: 'Escape',
-      callback: onEscape,
-      description: 'Close modal/cancel action',
-    }] : []),
-    ...(onHelp ? [{
+      handler: options.onSearch,
+      description: 'Search',
+    });
+  }
+
+  if (options.onHelp) {
+    shortcuts.push({
       key: '?',
-      callback: onHelp,
-      description: 'Show keyboard shortcuts',
-    }] : []),
-  ];
+      shift: true,
+      handler: options.onHelp,
+      description: 'Help',
+    });
+  }
 
-  useKeyboardNavigation(shortcuts);
+  if (options.onSettings) {
+    shortcuts.push({
+      key: ',',
+      ctrl: true,
+      handler: options.onSettings,
+      description: 'Settings',
+    });
+  }
 
-  return { shortcuts };
-}
+  if (options.onToggleSidebar) {
+    shortcuts.push({
+      key: 'b',
+      ctrl: true,
+      handler: options.onToggleSidebar,
+      description: 'Toggle sidebar',
+    });
+  }
 
-// Hook for table/list navigation
-export function useListNavigation<T>({
-  items,
-  onSelect,
-  onActivate,
-  enabled = true,
-  loop = true,
-}: {
-  items: T[];
-  onSelect?: (item: T, index: number) => void;
-  onActivate?: (item: T, index: number) => void;
-  enabled?: boolean;
-  loop?: boolean;
-}) {
-  const selectedIndexRef = useRef(-1);
+  if (options.onNewItem) {
+    shortcuts.push({
+      key: 'n',
+      ctrl: true,
+      handler: options.onNewItem,
+      description: 'New item',
+    });
+  }
 
-  const selectItem = useCallback((index: number) => {
-    if (!enabled || items.length === 0) return;
+  if (options.onSave) {
+    shortcuts.push({
+      key: 's',
+      ctrl: true,
+      handler: options.onSave,
+      description: 'Save',
+    });
+  }
 
-    let newIndex = index;
-    
-    if (loop) {
-      if (newIndex < 0) {
-        newIndex = items.length - 1;
-      } else if (newIndex >= items.length) {
-        newIndex = 0;
-      }
-    } else {
-      newIndex = Math.max(0, Math.min(newIndex, items.length - 1));
-    }
+  if (options.onUndo) {
+    shortcuts.push({
+      key: 'z',
+      ctrl: true,
+      handler: options.onUndo,
+      description: 'Undo',
+    });
+  }
 
-    selectedIndexRef.current = newIndex;
-    if (onSelect) {
-      onSelect(items[newIndex], newIndex);
-    }
-  }, [items, onSelect, enabled, loop]);
+  if (options.onRedo) {
+    shortcuts.push({
+      key: 'y',
+      ctrl: true,
+      handler: options.onRedo,
+      description: 'Redo',
+    });
+  }
 
-  const shortcuts: KeyboardShortcut[] = [
-    {
-      key: 'ArrowDown',
-      callback: () => selectItem(selectedIndexRef.current + 1),
-      description: 'Select next item',
-    },
-    {
-      key: 'ArrowUp',
-      callback: () => selectItem(selectedIndexRef.current - 1),
-      description: 'Select previous item',
-    },
-    {
-      key: 'Home',
-      callback: () => selectItem(0),
-      description: 'Select first item',
-    },
-    {
-      key: 'End',
-      callback: () => selectItem(items.length - 1),
-      description: 'Select last item',
-    },
-    {
-      key: 'Enter',
-      callback: () => {
-        if (selectedIndexRef.current >= 0 && onActivate) {
-          onActivate(items[selectedIndexRef.current], selectedIndexRef.current);
-        }
-      },
-      description: 'Activate selected item',
-    },
-    {
-      key: ' ',
-      callback: () => {
-        if (selectedIndexRef.current >= 0 && onActivate) {
-          onActivate(items[selectedIndexRef.current], selectedIndexRef.current);
-        }
-      },
-      description: 'Activate selected item',
-    },
-  ];
+  if (options.onCopy) {
+    shortcuts.push({
+      key: 'c',
+      ctrl: true,
+      handler: options.onCopy,
+      description: 'Copy',
+    });
+  }
 
-  useKeyboardNavigation(shortcuts, { enabled });
+  if (options.onPaste) {
+    shortcuts.push({
+      key: 'v',
+      ctrl: true,
+      handler: options.onPaste,
+      description: 'Paste',
+    });
+  }
 
-  return {
-    selectedIndex: selectedIndexRef.current,
-    selectItem,
+  if (options.onCut) {
+    shortcuts.push({
+      key: 'x',
+      ctrl: true,
+      handler: options.onCut,
+      description: 'Cut',
+    });
+  }
+
+  if (options.onSelectAll) {
+    shortcuts.push({
+      key: 'a',
+      ctrl: true,
+      handler: options.onSelectAll,
+      description: 'Select all',
+    });
+  }
+
+  return useKeyboardNavigation({
     shortcuts,
-  };
+    enabled: options.enabled,
+  });
 }
 
-// Hook for modal keyboard navigation
-export function useModalNavigation({
-  onClose,
-  onConfirm,
-  onCancel,
-  enabled = true,
-}: {
-  onClose?: () => void;
-  onConfirm?: () => void;
-  onCancel?: () => void;
-  enabled?: boolean;
-} = {}) {
-  const shortcuts: KeyboardShortcut[] = [
-    ...(onClose ? [{
-      key: 'Escape',
-      callback: onClose,
-      description: 'Close modal',
-    }] : []),
-    ...(onConfirm ? [{
-      key: 'Enter',
-      ctrl: true,
-      callback: onConfirm,
-      description: 'Confirm action',
-    }] : []),
-    ...(onCancel ? [{
-      key: 'Escape',
-      callback: onCancel,
-      description: 'Cancel action',
-    }] : []),
-  ];
-
-  useKeyboardNavigation(shortcuts, { enabled });
-
-  return { shortcuts };
-}
-
-// Hook for form navigation
-export function useFormNavigation({
-  onSubmit,
-  onReset,
-  enabled = true,
-}: {
-  onSubmit?: () => void;
-  onReset?: () => void;
-  enabled?: boolean;
-} = {}) {
-  const shortcuts: KeyboardShortcut[] = [
-    ...(onSubmit ? [{
-      key: 'Enter',
-      ctrl: true,
-      callback: onSubmit,
-      description: 'Submit form',
-    }] : []),
-    ...(onReset ? [{
-      key: 'r',
-      ctrl: true,
-      alt: true,
-      callback: onReset,
-      description: 'Reset form',
-    }] : []),
-  ];
-
-  useKeyboardNavigation(shortcuts, { enabled });
-
-  return { shortcuts };
-}
-
-// Hook for creating a keyboard shortcuts help component
-export function useKeyboardShortcutsHelp(shortcuts: KeyboardShortcut[]) {
+// Utility hook for displaying keyboard shortcuts help
+export function useShortcutsHelp(shortcuts: KeyboardShortcut[]) {
   const formatShortcut = useCallback((shortcut: KeyboardShortcut) => {
-    const keys = [];
+    const keys: string[] = [];
     if (shortcut.ctrl) keys.push('Ctrl');
     if (shortcut.shift) keys.push('Shift');
     if (shortcut.alt) keys.push('Alt');
@@ -282,23 +371,34 @@ export function useKeyboardShortcutsHelp(shortcuts: KeyboardShortcut[]) {
     return keys.join(' + ');
   }, []);
 
-  const ShortcutsHelpComponent = useCallback(() => (
-    <div className="space-y-4">
-      <h3 className="text-heading-md text-primary">Keyboard Shortcuts</h3>
-      <div className="space-y-2">
-        {shortcuts
-          .filter(shortcut => shortcut.description)
-          .map((shortcut, index) => (
-            <div key={index} className="flex justify-between items-center">
-              <span className="text-body-md text-secondary">{shortcut.description}</span>
-              <kbd className="px-2 py-1 bg-muted border border-border rounded text-mono-sm">
-                {formatShortcut(shortcut)}
-              </kbd>
-            </div>
-          ))}
-      </div>
-    </div>
-  ), [shortcuts, formatShortcut]);
+  const ShortcutsHelpComponent = useCallback(() => {
+    return React.createElement('div', { className: 'space-y-4' }, [
+      React.createElement('h3', { 
+        key: 'title',
+        className: 'text-heading-md text-primary' 
+      }, 'Keyboard Shortcuts'),
+      React.createElement('div', { 
+        key: 'content',
+        className: 'space-y-2' 
+      }, shortcuts
+        .filter(shortcut => shortcut.description)
+        .map((shortcut, index) => 
+          React.createElement('div', {
+            key: index,
+            className: 'flex justify-between items-center'
+          }, [
+            React.createElement('span', {
+              key: 'desc',
+              className: 'text-body-md text-secondary'
+            }, shortcut.description),
+            React.createElement('kbd', {
+              key: 'kbd',
+              className: 'px-2 py-1 bg-muted border border-border rounded text-mono-sm'
+            }, formatShortcut(shortcut))
+          ])
+        ))
+    ]);
+  }, [shortcuts, formatShortcut]);
 
   return {
     formatShortcut,

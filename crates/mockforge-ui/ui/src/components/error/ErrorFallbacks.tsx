@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home, WifiOff, Database, Clock } from 'lucide-react';
-import { Button } from '../ui/DesignSystem';
+import { Button } from '../ui/button';
 import { StatusIcon } from '../ui/IconSystem';
 
 export interface ErrorFallbackProps {

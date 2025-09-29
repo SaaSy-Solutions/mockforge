@@ -249,7 +249,8 @@ export interface CreateEnvironmentResponse {
   message: string;
 }
 
-export interface AutocompleteResponse {
+// Legacy autocomplete response (use AutocompleteResponse below instead)
+export interface LegacyAutocompleteResponse {
   suggestions: string[];
   total: number;
 }
@@ -551,6 +552,17 @@ export interface Workspace {
   updatedAt: string;
   folders: Folder[];
   requests: Request[];
+}
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+  config_count: number;
+  service_count: number;
 }
 
 export interface Folder {

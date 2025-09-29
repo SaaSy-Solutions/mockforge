@@ -22,8 +22,8 @@ impl RouteGenerator {
     pub fn new(config: HttpBridgeConfig) -> Self {
         Self {
             config,
-            service_name_regex: Regex::new(r"[^a-zA-Z0-9_-]").unwrap(),
-            method_name_regex: Regex::new(r"[^a-zA-Z0-9_-]").unwrap(),
+            service_name_regex: Regex::new(r"[^a-zA-Z0-9_.-]").unwrap(),
+            method_name_regex: Regex::new(r"[^a-zA-Z0-9_.-]").unwrap(),
         }
     }
 
@@ -39,9 +39,9 @@ impl RouteGenerator {
 
     /// Generate URL pattern from route path
     pub fn generate_url_pattern(&self, service_name: &str, method_name: &str) -> String {
-        let path = self.generate_route_path(service_name, method_name);
+        let template = format!("{}{}", self.config.base_path, self.config.route_pattern);
         // Replace path parameters with regex patterns
-        path.replace("{service}", "[^/]+").replace("{method}", "[^/]+")
+        template.replace("{service}", "[^/]+").replace("{method}", "[^/]+")
     }
 
     /// Clean service name for HTTP routing
@@ -352,14 +352,8 @@ impl RouteGenerator {
             type_name
         };
 
-        // Convert to PascalCase and append "Message" if not already present
-        let schema_name = short_name.chars().enumerate().fold(String::new(), |mut acc, (i, c)| {
-            if c.is_uppercase() && i > 0 {
-                acc.push('_');
-            }
-            acc.push(c.to_uppercase().next().unwrap_or(c));
-            acc
-        });
+        // Keep the name as PascalCase and append "Message" if not already present
+        let schema_name = short_name.to_string();
 
         if !schema_name.ends_with("Message") {
             format!("{}Message", schema_name)
@@ -680,7 +674,7 @@ impl RouteGenerator {
             let path_without_base = &path[self.config.base_path.len()..];
             let parts: Vec<&str> = path_without_base.trim_start_matches('/').split('/').collect();
 
-            if parts.len() >= 2 {
+            if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
                 Some(parts[0].to_string())
             } else {
                 None
@@ -696,7 +690,7 @@ impl RouteGenerator {
             let path_without_base = &path[self.config.base_path.len()..];
             let parts: Vec<&str> = path_without_base.trim_start_matches('/').split('/').collect();
 
-            if parts.len() >= 2 {
+            if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
                 Some(parts[1].to_string())
             } else {
                 None
@@ -741,9 +735,9 @@ mod tests {
         let generator = RouteGenerator::new(config);
 
         let path = generator.generate_route_path("mockforge.greeter.Greeter", "SayHello");
-        assert_eq!(path, "/api/{service}/{method}");
-        // Note: This test assumes the default route_pattern
-        // In actual usage, this would be replaced with actual service/method names
+        assert_eq!(path, "/api/greeter/sayhello");
+        // Note: Service name is cleaned (package prefix removed, lowercased)
+        // Method name is cleaned (lowercased)
     }
 
     #[test]
@@ -924,73 +918,95 @@ mod tests {
 
     #[test]
     fn test_extract_service_name_comprehensive() {
-        let test_configs = vec![
-            ("/api", "/{service}/{method}"),
-            ("/v1", "/{service}/{method}"),
-            ("/api/v1", "/{service}/{method}"),
-            ("", "/{service}/{method}"),
+        // Test with /api base path
+        let config = HttpBridgeConfig {
+            base_path: "/api".to_string(),
+            route_pattern: "/{service}/{method}".to_string(),
+            ..Default::default()
+        };
+        let generator = RouteGenerator::new(config);
+
+        let test_paths = vec![
+            ("/api/greeter/sayhello", Some("greeter".to_string())),
+            ("/api/user/get", Some("user".to_string())),
+            ("/api/complex.service/name", Some("complex.service".to_string())),
+            ("/api/single", None), // Not enough parts
+            ("/v1/test/method", None), // Wrong base path
+            ("/other/path", None), // Wrong base path
+            ("", None),
+            ("/api/", None),
+            ("/api/greeter/", None), // Empty method name
         ];
 
-        for (base_path, route_pattern) in test_configs {
-            let config = HttpBridgeConfig {
-                base_path: base_path.to_string(),
-                route_pattern: route_pattern.to_string(),
-                ..Default::default()
-            };
-            let generator = RouteGenerator::new(config);
+        for (path, expected) in test_paths {
+            let result = generator.extract_service_name(path);
+            assert_eq!(result, expected, "Failed for path: {} with base /api", path);
+        }
 
-            let test_paths = vec![
-                ("/api/greeter/sayhello", Some("greeter")),
-                ("/api/user/get", Some("user")),
-                ("/api/complex.service/name", Some("complex.service")),
-                ("/v1/test/method", Some("test")),
-                ("/api/single", None),
-                ("/other/path", None),
-                ("", None),
-                ("/api/", None),
-                ("/api/greeter/", None),
-            ];
+        // Test with /v1 base path
+        let config = HttpBridgeConfig {
+            base_path: "/v1".to_string(),
+            route_pattern: "/{service}/{method}".to_string(),
+            ..Default::default()
+        };
+        let generator = RouteGenerator::new(config);
 
-            for (path, expected) in test_paths {
-                let result = generator.extract_service_name(path);
-                assert_eq!(result, expected, "Failed for path: {}", path);
-            }
+        let test_paths = vec![
+            ("/v1/test/method", Some("test".to_string())),
+            ("/v1/service/action", Some("service".to_string())),
+            ("/api/greeter/sayhello", None), // Wrong base path
+        ];
+
+        for (path, expected) in test_paths {
+            let result = generator.extract_service_name(path);
+            assert_eq!(result, expected, "Failed for path: {} with base /v1", path);
         }
     }
 
     #[test]
     fn test_extract_method_name_comprehensive() {
-        let test_configs = vec![
-            ("/api", "/{service}/{method}"),
-            ("/v1", "/{service}/{method}"),
-            ("/api/v1", "/{service}/{method}"),
-            ("", "/{service}/{method}"),
+        // Test with /api base path
+        let config = HttpBridgeConfig {
+            base_path: "/api".to_string(),
+            route_pattern: "/{service}/{method}".to_string(),
+            ..Default::default()
+        };
+        let generator = RouteGenerator::new(config);
+
+        let test_paths = vec![
+            ("/api/greeter/sayhello", Some("sayhello".to_string())),
+            ("/api/user/get", Some("get".to_string())),
+            ("/api/complex.service/method_name", Some("method_name".to_string())),
+            ("/api/single", None), // Not enough parts
+            ("/v1/test/method", None), // Wrong base path
+            ("/other/path", None), // Wrong base path
+            ("", None),
+            ("/api/", None),
+            ("/api/greeter/", None), // Empty method name
         ];
 
-        for (base_path, route_pattern) in test_configs {
-            let config = HttpBridgeConfig {
-                base_path: base_path.to_string(),
-                route_pattern: route_pattern.to_string(),
-                ..Default::default()
-            };
-            let generator = RouteGenerator::new(config);
+        for (path, expected) in test_paths {
+            let result = generator.extract_method_name(path);
+            assert_eq!(result, expected, "Failed for path: {} with base /api", path);
+        }
 
-            let test_paths = vec![
-                ("/api/greeter/sayhello", Some("sayhello")),
-                ("/api/user/get", Some("get")),
-                ("/api/complex.service/method_name", Some("method_name")),
-                ("/v1/test/method", Some("method")),
-                ("/api/single", None),
-                ("/other/path", None),
-                ("", None),
-                ("/api/", None),
-                ("/api/greeter/", None),
-            ];
+        // Test with /v1 base path
+        let config = HttpBridgeConfig {
+            base_path: "/v1".to_string(),
+            route_pattern: "/{service}/{method}".to_string(),
+            ..Default::default()
+        };
+        let generator = RouteGenerator::new(config);
 
-            for (path, expected) in test_paths {
-                let result = generator.extract_method_name(path);
-                assert_eq!(result, expected, "Failed for path: {}", path);
-            }
+        let test_paths = vec![
+            ("/v1/test/method", Some("method".to_string())),
+            ("/v1/service/action", Some("action".to_string())),
+            ("/api/greeter/sayhello", None), // Wrong base path
+        ];
+
+        for (path, expected) in test_paths {
+            let result = generator.extract_method_name(path);
+            assert_eq!(result, expected, "Failed for path: {} with base /v1", path);
         }
     }
 
@@ -1042,7 +1058,7 @@ mod tests {
             ("GetUserRequest", "GetUserRequestMessage"),
             ("Request", "RequestMessage"),
             ("Response", "ResponseMessage"),
-            ("Message", "MessageMessage"),
+            ("Message", "Message"),
             ("com.example.v1.GetUserRequest", "GetUserRequestMessage"),
             ("org.test.APIRequest", "APIRequestMessage"),
         ];
@@ -1085,16 +1101,16 @@ mod tests {
         let config = HttpBridgeConfig::default();
         let generator = RouteGenerator::new(config);
 
-        // Test service name regex
+        // Test service name regex (should be lowercased)
         let service_test_cases = vec![
-            ("MyService", "MyService"),
-            ("My-Service", "My-Service"),
-            ("My_Service", "My_Service"),
-            ("My123Service", "My123Service"),
-            ("My.Service", "My.Service"),
-            ("My@Service", "My@Service"),
-            ("My#Service", "My#Service"),
-            ("My$Service", "My$Service"),
+            ("MyService", "myservice"),
+            ("My-Service", "my-service"),
+            ("My_Service", "my_service"),
+            ("My123Service", "my123service"),
+            ("My.Service", "service"),
+            ("My@Service", "my-service"),
+            ("My#Service", "my-service"),
+            ("My$Service", "my-service"),
         ];
 
         for (input, expected) in service_test_cases {
@@ -1102,16 +1118,16 @@ mod tests {
             assert_eq!(cleaned, expected, "Service name regex failed for: {}", input);
         }
 
-        // Test method name regex
+        // Test method name regex (should be lowercased)
         let method_test_cases = vec![
-            ("GetUser", "GetUser"),
-            ("Get-User", "Get-User"),
-            ("Get_User", "Get_User"),
-            ("Get123User", "Get123User"),
-            ("Get.User", "Get.User"),
-            ("Get@User", "Get@User"),
-            ("Get#User", "Get#User"),
-            ("Get$User", "Get$User"),
+            ("GetUser", "getuser"),
+            ("Get-User", "get-user"),
+            ("Get_User", "get_user"),
+            ("Get123User", "get123user"),
+            ("Get.User", "get.user"),
+            ("Get@User", "get-user"),
+            ("Get#User", "get-user"),
+            ("Get$User", "get-user"),
         ];
 
         for (input, expected) in method_test_cases {

@@ -46,16 +46,28 @@ impl PluginRuntime {
         manifest: PluginManifest,
         wasm_path: &Path,
     ) -> Result<()> {
+        // Security: Validate plugin path is within allowed directories
+        self.validate_plugin_path(wasm_path)?;
+        
+        // Security: Check file size limits
+        self.validate_file_size(wasm_path)?;
+        
         // Validate plugin capabilities against runtime limits
         let plugin_capabilities = PluginCapabilities::from_strings(&manifest.capabilities);
         self.validate_capabilities(&plugin_capabilities)?;
 
-        // Load WASM module
+        // Security: Validate manifest integrity
+        self.validate_manifest_security(&manifest)?;
+
+        // Load WASM module with additional validation
         let module = Module::from_file(&self.engine, wasm_path)
             .map_err(|e| PluginError::wasm(format!("Failed to load WASM module: {}", e)))?;
 
-        // Validate module against declared capabilities
+        // Security: Validate module against declared capabilities
         ModuleValidator::validate_module(&module, &plugin_capabilities)?;
+        
+        // Security: Check for dangerous imports/exports
+        self.validate_module_security(&module)?;
 
         // Create plugin instance
         let instance =
@@ -157,6 +169,134 @@ impl PluginRuntime {
         if capabilities.network.allow_http && !self.config.allow_network_access {
             return Err(PluginError::security(
                 "Plugin requires network access but runtime disallows it",
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Security: Validate plugin path is within allowed directories
+    fn validate_plugin_path(&self, wasm_path: &Path) -> Result<()> {
+        let canonicalized = wasm_path.canonicalize()
+            .map_err(|e| PluginError::security(format!("Invalid plugin path: {}", e)))?;
+        
+        // Check if path is within allowed plugin directories
+        if self.config.allowed_fs_paths.is_empty() {
+            return Err(PluginError::security("No allowed plugin paths configured"));
+        }
+        
+        for allowed_path in &self.config.allowed_fs_paths {
+            if canonicalized.starts_with(allowed_path) {
+                return Ok(());
+            }
+        }
+        
+        Err(PluginError::security(format!(
+            "Plugin path {} is not within allowed directories", 
+            canonicalized.display()
+        )))
+    }
+
+    /// Security: Check file size limits
+    fn validate_file_size(&self, wasm_path: &Path) -> Result<()> {
+        let metadata = std::fs::metadata(wasm_path)
+            .map_err(|e| PluginError::security(format!("Cannot read plugin file metadata: {}", e)))?;
+        
+        const MAX_PLUGIN_SIZE: u64 = 50 * 1024 * 1024; // 50MB limit
+        if metadata.len() > MAX_PLUGIN_SIZE {
+            return Err(PluginError::security(format!(
+                "Plugin file size {} exceeds maximum allowed size {}",
+                metadata.len(), MAX_PLUGIN_SIZE
+            )));
+        }
+        
+        Ok(())
+    }
+
+    /// Security: Validate manifest integrity and security properties
+    fn validate_manifest_security(&self, manifest: &PluginManifest) -> Result<()> {
+        // Validate plugin name contains only safe characters
+        if !manifest.info.name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+            return Err(PluginError::security("Plugin name contains unsafe characters"));
+        }
+
+        // Check for dangerous capabilities
+        let dangerous_caps = ["raw_syscalls", "kernel_access", "direct_memory"];
+        for cap in &manifest.capabilities {
+            if dangerous_caps.contains(&cap.as_str()) {
+                return Err(PluginError::security(format!(
+                    "Dangerous capability not allowed: {}", cap
+                )));
+            }
+        }
+
+        // Validate author field exists and is reasonable
+        if manifest.info.author.name.is_empty() || manifest.info.author.name.len() > 100 {
+            return Err(PluginError::security("Invalid author field in manifest"));
+        }
+
+        // Validate plugin ID format
+        if manifest.info.id.0.is_empty() || manifest.info.id.0.len() > 100 {
+            return Err(PluginError::security("Invalid plugin ID format"));
+        }
+
+        // Validate description length
+        if manifest.info.description.len() > 1000 {
+            return Err(PluginError::security("Plugin description too long"));
+        }
+
+        Ok(())
+    }
+
+    /// Security: Check for dangerous imports/exports in WASM module
+    fn validate_module_security(&self, module: &Module) -> Result<()> {
+        // Check imports for dangerous functions
+        for import in module.imports() {
+            match import.module() {
+                "env" => {
+                    // Allow basic environment functions
+                    match import.name() {
+                        "memory" | "table" => continue,
+                        name if name.starts_with("__") => {
+                            return Err(PluginError::security(format!(
+                                "Dangerous import function: {}", name
+                            )));
+                        }
+                        _ => continue,
+                    }
+                }
+                "wasi_snapshot_preview1" => {
+                    // Allow standard WASI functions
+                    continue;
+                }
+                module_name => {
+                    return Err(PluginError::security(format!(
+                        "Dangerous import module: {}", module_name
+                    )));
+                }
+            }
+        }
+
+        // Check exports for required functions
+        let mut has_init = false;
+        let mut has_process = false;
+        
+        for export in module.exports() {
+            match export.name() {
+                "init" => has_init = true,
+                "process" => has_process = true,
+                name if name.starts_with("_") => {
+                    return Err(PluginError::security(format!(
+                        "Private export function not allowed: {}", name
+                    )));
+                }
+                _ => continue,
+            }
+        }
+
+        if !has_init || !has_process {
+            return Err(PluginError::security(
+                "Plugin must export 'init' and 'process' functions"
             ));
         }
 

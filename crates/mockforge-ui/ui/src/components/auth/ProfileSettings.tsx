@@ -67,7 +67,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
       await updateProfile({
         ...user,
         username: formData.username.trim(),
-        email: formData.email.trim() === '' ? undefined : formData.email.trim(),
+        email: formData.email.trim() || user.email,
       });
 
       onOpenChange(false);

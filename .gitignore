@@ -111,6 +111,7 @@ htmlcov/
 mock_data/
 recordings/
 replays/
+.mockforge/
 
 # Local agent work directory
 .code/

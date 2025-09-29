@@ -93,7 +93,7 @@ export function LogFilters({
         <div className="space-y-2">
           <label className="text-sm font-medium">Status Code</label>
           <select
-            value={filter.status_code || ''}
+            value={filter.status_code?.toString() || ''}
             onChange={(e) => onFilterChange({ status_code: e.target.value ? Number(e.target.value) : undefined })}
             className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground text-sm"
           >

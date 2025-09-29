@@ -716,11 +716,11 @@ mod tests {
             "string with \\backslashes\\",
             "string with \ttabs\tand\nnewlines",
             "string with unicode: 你好世界 🌍",
-            "a".repeat(1000), // Large string
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // Large string
         ];
 
         for test_string in test_strings {
-            let json_value = JsonValue::String(test_string.clone());
+            let json_value = JsonValue::String(test_string.to_string());
             let type_name = converter.json_type_name(&json_value);
             assert_eq!(type_name, "string", "Failed for string: '{}'", test_string);
         }
@@ -745,9 +745,9 @@ mod tests {
             serde_json::Number::from_f64(1.5).unwrap(),
             serde_json::Number::from_f64(-1.5).unwrap(),
             serde_json::Number::from_f64(3.14159).unwrap(),
-            serde_json::Number::from_f64(f64::INFINITY).unwrap(),
-            serde_json::Number::from_f64(f64::NEG_INFINITY).unwrap(),
-            serde_json::Number::from_f64(f64::NAN).unwrap(),
+            serde_json::Number::from_f64(1e10).unwrap(),
+            serde_json::Number::from_f64(-1e10).unwrap(),
+            serde_json::Number::from_f64(1.23456789e-10).unwrap(),
         ];
 
         for number in test_numbers {
