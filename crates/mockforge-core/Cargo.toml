@@ -51,7 +51,7 @@ notify = "6.1"
 # Windows Credential Manager
 windows = { version = "0.58", features = ["Win32_Security_Credentials"] }
 # JavaScript runtime for scripting
-rquickjs = { version = "0.8", features = ["macro", "classes"] }
+rquickjs = { version = "0.9", features = ["macro", "classes"] }
 
 [dev-dependencies]
 tempfile = "3.10"
