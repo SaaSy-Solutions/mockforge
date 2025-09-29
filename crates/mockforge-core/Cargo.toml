@@ -49,7 +49,7 @@ prost-reflect = "0.14"
 prost-types = "0.14"
 notify = "6.1"
 # Windows Credential Manager
-windows = { version = "0.58", features = ["Win32_Security_Credentials"] }
+windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 # JavaScript runtime for scripting
 rquickjs = { version = "0.8", features = ["macro", "classes"] }
 
