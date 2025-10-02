@@ -19,5 +19,19 @@ export default tseslint.config([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Allow fast refresh warnings in certain component files
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+
+      // Allow unused vars prefixed with underscore
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_'
+      }],
+
+      // Relax React Hooks exhaustive deps to warnings for portfolio quality
+      'react-hooks/exhaustive-deps': 'warn',
+    },
   },
 ])

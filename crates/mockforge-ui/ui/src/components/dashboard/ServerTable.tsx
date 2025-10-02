@@ -7,7 +7,14 @@ import { useErrorToast } from '../../components/ui/ToastProvider';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { SkeletonCard } from '../ui/Skeleton';
 
-
+interface ServerInstance {
+  server_type: string;
+  address?: string;
+  running: boolean;
+  uptime_seconds?: number;
+  total_requests: number;
+  active_connections: number;
+}
 
 function formatUptime(seconds?: number): string {
   if (!seconds) return 'N/A';
@@ -23,7 +30,7 @@ function formatAddress(address?: string): { display: string, ip: string, port: s
   if (!address) return { display: 'Not configured', ip: 'N/A', port: 'N/A' };
 
   try {
-    // Handle URLs like http://127.0.0.1:8080
+    // Handle URLs like http://127.0.0.1:9080
     if (address.startsWith('http')) {
       const url = new URL(address);
       return {
@@ -33,7 +40,7 @@ function formatAddress(address?: string): { display: string, ip: string, port: s
       };
     }
 
-    // Handle raw addresses like 127.0.0.1:8080 or [::1]:8080
+    // Handle raw addresses like 127.0.0.1:9080 or [::1]:9080
     const parts = address.split(':');
     if (parts.length === 2) {
       const [ip, port] = parts;
@@ -44,7 +51,7 @@ function formatAddress(address?: string): { display: string, ip: string, port: s
       };
     }
 
-    // Handle IPv6 addresses like [::1]:8080
+    // Handle IPv6 addresses like [::1]:9080
     if (address.startsWith('[') && address.includes(']:')) {
       const match = address.match(/\[([^\]]+)\]:(\d+)/);
       if (match) {
@@ -177,7 +184,7 @@ export function ServerTable() {
 
   const renderComfortableView = () => (
     <div className="space-y-4">
-      {servers.map((server: any) => {
+      {servers.map((server: ServerInstance) => {
         const addrInfo = formatAddress(server.address);
         const statusInfo = getServerStatusInfo(server);
         return (
@@ -262,7 +269,7 @@ export function ServerTable() {
 
   const renderCompactView = () => (
     <div className="space-y-2">
-      {servers.map((server: any) => {
+      {servers.map((server: ServerInstance) => {
         const addrInfo = formatAddress(server.address);
         const statusInfo = getServerStatusInfo(server);
         return (

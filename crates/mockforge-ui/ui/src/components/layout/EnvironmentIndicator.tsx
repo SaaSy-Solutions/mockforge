@@ -22,14 +22,14 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
   const { data: environments, isLoading } = useEnvironments(workspaceId);
   const setActiveEnvironment = useSetActiveEnvironment(workspaceId);
 
-  const activeEnvironment = environments?.environments.find((env: EnvironmentSummary) => env.active);
+  const activeEnvironment = (environments?.environments as EnvironmentSummary[] | undefined)?.find((env: EnvironmentSummary) => env.active) as EnvironmentSummary | undefined;
 
   const handleEnvironmentSwitch = async (environment: EnvironmentSummary) => {
     try {
       const envId = environment.is_global ? 'global' : environment.id;
       await setActiveEnvironment.mutateAsync(envId);
       toast.success(`Switched to "${environment.name}" environment`);
-    } catch (error) {
+    } catch {
       toast.error('Failed to switch environment');
     }
   };
@@ -52,7 +52,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
     );
   }
 
-  const availableEnvironments = environments?.environments.filter((env: EnvironmentSummary) => !env.active) || [];
+  const availableEnvironments = (environments?.environments as EnvironmentSummary[] | undefined)?.filter((env: EnvironmentSummary) => !env.active) || [];
 
   if (compact) {
     return (
@@ -112,7 +112,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
           <>
             <DropdownMenuSeparator />
             <DropdownMenuLabel>Switch Environment</DropdownMenuLabel>
-            {availableEnvironments.map((environment: EnvironmentSummary) => (
+            {(availableEnvironments as EnvironmentSummary[]).map((environment: EnvironmentSummary) => (
               <DropdownMenuItem
                 key={environment.id}
                 onClick={() => handleEnvironmentSwitch(environment)}

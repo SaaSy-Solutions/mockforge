@@ -41,7 +41,7 @@ mockforge-cli serve [OPTIONS]
 
 **Admin UI Control:**
 - `--admin`: Enable admin UI
-- `--admin-port <PORT>`: Admin UI port (default: 8080)
+- `--admin-port <PORT>`: Admin UI port (default: 9080)
 - `--admin-embed`: Force embedding Admin UI under HTTP server
 - `--admin-mount-path <PATH>`: Explicit mount path for embedded Admin UI (implies `--admin-embed`)
 - `--admin-standalone`: Force standalone Admin UI on separate port (overrides embed)
@@ -86,7 +86,7 @@ mockforge-cli serve \
   --ws-port 3001 \
   --grpc-port 50051 \
   --admin \
-  --admin-port 8080 \
+  --admin-port 9080 \
   --response-template-expand
 ```
 
@@ -208,7 +208,7 @@ mockforge-cli admin [OPTIONS]
 
 #### Options
 
-- `--port <PORT>`: Server port (default: 8080)
+- `--port <PORT>`: Server port (default: 9080)
 
 #### Examples
 
@@ -343,7 +343,7 @@ spec: examples/openapi-demo.json
 # Admin UI configuration
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   embedded: false
   mount_path: "/admin"
   standalone: true
@@ -395,7 +395,7 @@ export MOCKFORGE_GRPC_PORT=50051
 
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
-export MOCKFORGE_ADMIN_PORT=8080
+export MOCKFORGE_ADMIN_PORT=9080
 export MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
 export MOCKFORGE_ADMIN_SESSION_TIMEOUT=86400
 export MOCKFORGE_ADMIN_AUTH_ENABLED=true
@@ -492,7 +492,7 @@ mockforge-cli serve \
   --ws-port 3001 \
   --grpc-port 50051 \
   --admin \
-  --admin-port 8080 \
+  --admin-port 9080 \
   --response-template-expand \
   --validation warn
 ```

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Download, Trash2, Search, Eye, Plus, GitCompare, Edit3, Move } from 'lucide-react';
+import { FileText, Download, Trash2, Search, Eye, Plus, Edit3, Move } from 'lucide-react';
 import { useFixtures } from '../hooks/useApi';
 import type { FixtureInfo } from '../services/api';
 import {
@@ -18,23 +18,22 @@ export function FixturesPage() {
   const [selectedMethod, setSelectedMethod] = useState<string>('all');
   const [selectedFixture, setSelectedFixture] = useState<FixtureInfo | null>(null);
   const [isViewingFixture, setIsViewingFixture] = useState(false);
-  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
-  const [fixturesToCompare, setFixturesToCompare] = useState<FixtureInfo[]>([]);
+  const [_fixturesToCompare, _setFixturesToCompare] = useState<FixtureInfo[]>([]);
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [fixtureToRename, setFixtureToRename] = useState<FixtureInfo | null>(null);
   const [newFixtureName, setNewFixtureName] = useState('');
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [fixtureToMove, setFixtureToMove] = useState<FixtureInfo | null>(null);
   const [newFixturePath, setNewFixturePath] = useState('');
-  const [selectedBulkAction, setSelectedBulkAction] = useState<string>('');
+  const [_selectedBulkAction, _setSelectedBulkAction] = useState<string>('');
 
   const { data: fixtures, isLoading, error, refetch } = useFixtures();
 
   const filteredFixtures = fixtures?.filter(fixture => {
     const matchesSearch = searchTerm === '' ||
       fixture.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      fixture.method.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      fixture.protocol.toLowerCase().includes(searchTerm.toLowerCase());
+      fixture.method?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      fixture.protocol?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesMethod = selectedMethod === 'all' || fixture.method === selectedMethod;
 
@@ -217,7 +216,7 @@ export function FixturesPage() {
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {formatFileSize(filteredFixtures.reduce((acc, f) => acc + f.file_size, 0))}
+                    {formatFileSize(filteredFixtures.reduce((acc, f) => acc + (f.file_size || 0), 0))}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     Total Size
@@ -285,11 +284,11 @@ export function FixturesPage() {
                       </div>
 
                       <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span>{formatFileSize(fixture.file_size)}</span>
+                        <span>{formatFileSize(fixture.file_size || 0)}</span>
                         <span>•</span>
                         <span>{fixture.protocol}</span>
                         <span>•</span>
-                        <span>{formatDate(fixture.saved_at)}</span>
+                        <span>{formatDate(fixture.saved_at || '')}</span>
                       </div>
                     </div>
                   </div>
@@ -400,10 +399,10 @@ export function FixturesPage() {
                       <span className="font-medium">Protocol:</span> {selectedFixture.protocol}
                     </div>
                     <div>
-                      <span className="font-medium">Size:</span> {formatFileSize(selectedFixture.file_size)}
+                      <span className="font-medium">Size:</span> {formatFileSize(selectedFixture.file_size ?? 0)}
                     </div>
                     <div>
-                      <span className="font-medium">Saved:</span> {formatDate(selectedFixture.saved_at)}
+                      <span className="font-medium">Saved:</span> {formatDate(selectedFixture.saved_at ?? '')}
                     </div>
                   </div>
 

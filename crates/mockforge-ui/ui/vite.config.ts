@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/__mockforge': {
-        target: 'http://localhost:9080',
+        target: `http://localhost:${process.env.ADMIN_PORT || '9080'}`,
         changeOrigin: true,
         secure: false,
       }

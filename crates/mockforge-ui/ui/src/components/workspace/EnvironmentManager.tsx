@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Settings, Trash2, Play, Palette, MoreHorizontal, GripVertical } from 'lucide-react';
+import { Plus, Settings, Trash2, Play, GripVertical } from 'lucide-react';
 import { useEnvironments, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment, useSetActiveEnvironment, useEnvironmentVariables, useUpdateEnvironmentsOrder } from '../../hooks/useApi';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../ui/Dialog';
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '../ui/ContextMenu';
-import { ModernCard } from '../ui/DesignSystem';
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/ContextMenu';
+import { ModernCard, ContextMenuItem } from '../ui/DesignSystem';
 import type { EnvironmentSummary, CreateEnvironmentRequest, UpdateEnvironmentRequest, EnvironmentColor } from '../../types';
 import { toast } from '../ui/Toast';
 
@@ -47,7 +47,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
     }
 
     try {
-      const result = await createEnvironment.mutateAsync({
+      await createEnvironment.mutateAsync({
         ...createForm,
         name: createForm.name.trim(),
       });
@@ -55,7 +55,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       toast.success(`Environment "${createForm.name}" created successfully`);
       setCreateForm({ name: '', description: '' });
       setIsCreateDialogOpen(false);
-    } catch (error) {
+    } catch {
       toast.error('Failed to create environment');
     }
   };
@@ -69,7 +69,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       setEditingEnvironment(null);
       setEditForm({});
       setSelectedColor(null);
-    } catch (error) {
+    } catch {
       toast.error('Failed to update environment');
     }
   };
@@ -87,7 +87,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
     try {
       await deleteEnvironment.mutateAsync(environment.id);
       toast.success(`Environment "${environment.name}" deleted successfully`);
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete environment');
     }
   };
@@ -98,7 +98,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       await setActiveEnvironment.mutateAsync(envId);
       toast.success(`Switched to "${environment.name}" environment`);
       onEnvironmentSelect?.(environment.id);
-    } catch (error) {
+    } catch {
       toast.error('Failed to switch environment');
     }
   };
@@ -155,11 +155,11 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       try {
         await updateEnvironmentsOrder.mutateAsync(environmentIds);
         toast.success('Environment order updated');
-      } catch (error) {
+      } catch {
         toast.error('Failed to update environment order');
         throw error;
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update environment order');
     } finally {
       setDraggedItem(null);
@@ -226,7 +226,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
             {variables && variables.variables.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex flex-wrap gap-1">
-                  {variables.variables.slice(0, 3).map((variable: any) => (
+                  {variables.variables.slice(0, 3).map((variable: unknown) => (
                     <span
                       key={variable.name}
                       className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
@@ -359,14 +359,14 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {environments?.environments
-          .sort((a: any, b: any) => {
+          .sort((a: unknown, b: unknown) => {
             // Global environment always first
             if (a.is_global && !b.is_global) return -1;
             if (!a.is_global && b.is_global) return 1;
             // Then sort by order field
             return (a.order || 0) - (b.order || 0);
           })
-          .map((environment: any) => (
+          .map((environment: unknown) => (
             <EnvironmentCard key={environment.id} environment={environment} />
           ))}
       </div>

@@ -9,14 +9,14 @@ export interface ContextMenuItem {
   separator?: boolean;
 }
 
-interface ContextMenuProps {
+interface ContextMenuWithItemsProps {
   items: ContextMenuItem[];
   position: { x: number; y: number };
   onClose: () => void;
   className?: string;
 }
 
-export function ContextMenu({ items, position, onClose, className }: ContextMenuProps) {
+export function ContextMenuWithItems({ items, position, onClose, className }: ContextMenuWithItemsProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,6 +101,11 @@ export function ContextMenu({ items, position, onClose, className }: ContextMenu
       ))}
     </div>
   );
+}
+
+// Compound component pattern for ContextMenu
+export function ContextMenu({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }
 
 export function ContextMenuTrigger({ children, onContextMenu }: { children: React.ReactNode; onContextMenu?: (e: React.MouseEvent) => void }) {

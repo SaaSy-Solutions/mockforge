@@ -98,6 +98,9 @@ clean-all: clean ## Clean everything including target directories
 dev: ## Start development mode with watch
 	cargo watch -x "check --workspace" -x "test --workspace" -x "clippy --all-targets"
 
+dev-full: ## Start both Rust backend and UI dev server
+	./scripts/dev.sh
+
 check-all: fmt-check clippy audit test ## Run all checks
 
 # Install CLI tool locally
@@ -106,14 +109,14 @@ install: ## Install the CLI tool locally
 
 # Examples
 run-example: ## Run with example configuration
-	MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051 --admin --admin-port 8080
+	MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051 --admin --admin-port 9080
 
 # Docker
 docker-build: ## Build Docker image
 	docker build -t mockforge .
 
 docker-run: ## Run Docker container with basic configuration
-	docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+	docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
 		-e MOCKFORGE_ADMIN_ENABLED=true \
 		-e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 		mockforge

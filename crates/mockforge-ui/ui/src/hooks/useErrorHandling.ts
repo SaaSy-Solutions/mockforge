@@ -141,7 +141,7 @@ export function useApiErrorHandling() {
     });
   }, [handleError]);
 
-  const retryApiCall = useCallback(async (apiCall: () => Promise<any>) => {
+  const retryApiCall = useCallback(async (apiCall: () => Promise<unknown>) => {
     try {
       const result = await apiCall();
       clearError();
@@ -186,7 +186,7 @@ export function setupGlobalErrorHandlers() {
 }
 
 // Utility for wrapping async operations with error handling
-export function withErrorHandling<T extends any[], R>(
+export function withErrorHandling<T extends unknown[], R>(
   fn: (...args: T) => Promise<R>,
   errorHandler: (error: Error) => void,
   context?: Partial<ErrorContext>

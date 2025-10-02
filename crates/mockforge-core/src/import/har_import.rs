@@ -766,7 +766,7 @@ mod tests {
             ("https://api.example.com", Some("https://api.example.com"), "/"),
             ("https://api.example.com/users", None, "/users"),
             ("https://api.example.com/users/", None, "/users/"),
-            ("http://localhost:8080/api/test", Some("http://localhost:8080"), "/api/test"),
+            ("http://localhost:9080/api/test", Some("http://localhost:9080"), "/api/test"),
             (
                 "https://subdomain.example.com/api/v1/test",
                 Some("https://subdomain.example.com"),

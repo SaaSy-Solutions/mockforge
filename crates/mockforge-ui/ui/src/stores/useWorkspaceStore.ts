@@ -36,7 +36,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
           set({ workspaces: response.workspaces, loading: false });
 
           // Set the first active workspace as the default active workspace
-          const activeWorkspace = response.workspaces.find(w => w.is_active);
+          const activeWorkspace = response.workspaces.find((w: WorkspaceSummary) => w.is_active);
           if (activeWorkspace) {
             set({ activeWorkspace });
           }
@@ -55,7 +55,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
           const response = await apiService.listWorkspaces();
           set({ workspaces: response.workspaces, loading: false });
 
-          const activeWorkspace = response.workspaces.find(w => w.is_active);
+          const activeWorkspace = response.workspaces.find((w: WorkspaceSummary) => w.is_active);
           set({ activeWorkspace });
         } catch (error) {
           set({

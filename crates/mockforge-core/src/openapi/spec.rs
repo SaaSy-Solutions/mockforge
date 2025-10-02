@@ -333,4 +333,16 @@ impl OpenApiSpec {
         }
         None
     }
+
+    /// Resolve an example reference
+    pub fn get_example(&self, reference: &str) -> Option<&openapiv3::Example> {
+        if let Some(components) = &self.spec.components {
+            if let Some(example_name) = reference.strip_prefix("#/components/examples/") {
+                if let Some(example_ref) = components.examples.get(example_name) {
+                    return example_ref.as_item();
+                }
+            }
+        }
+        None
+    }
 }

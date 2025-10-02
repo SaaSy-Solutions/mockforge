@@ -3,7 +3,7 @@
 
 # HTTP server configuration
 http:
-  port: 8080
+  port: 9080
   host: "0.0.0.0"  # Bind to all interfaces in production
   cors_enabled: false  # Disable CORS in production for security
   request_timeout_secs: 10  # Shorter timeout for performance

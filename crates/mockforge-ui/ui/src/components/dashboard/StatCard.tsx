@@ -31,16 +31,16 @@ export function StatCard({
     )}>
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-medium text-text-secondary uppercase tracking-wide mb-2">
+          <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">
             {title}
           </h4>
 
           <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-3xl font-bold text-text-primary tabular-nums">
+            <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
               {value}
             </span>
             {subtitle && (
-              <span className="text-sm font-medium text-text-secondary">
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
                 {subtitle}
               </span>
             )}
@@ -54,12 +54,12 @@ export function StatCard({
                   <span className="text-xs font-semibold">{trendValue}</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-red-700 dark:text-red-500-400">
                   <ArrowDown className="h-3 w-3" />
                   <span className="text-xs font-semibold">{trendValue}</span>
                 </div>
               )}
-              <span className="text-xs text-text-tertiary ml-1">vs last hour</span>
+              <span className="text-xs text-gray-600 dark:text-gray-400 ml-1">vs last hour</span>
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import { useFixtureStore } from '../../stores/useFixtureStore';
 import { useLogStore } from '../../stores/useLogStore';
 import { useMetricsStore } from '../../stores/useMetricsStore';
 import { useAuthStore } from '../../stores/useAuthStore';
+import type { FixtureInfo } from '../../types';
 
 interface TestResult {
   id: string;
@@ -260,7 +261,7 @@ export function WorkflowValidator() {
     }
 
     const testFixture = fixtures[0];
-    const modifiedContent = testFixture.content.replace('test', 'TEST_MODIFIED');
+    const modifiedContent = String(testFixture.content || '').replace('test', 'TEST_MODIFIED');
     
     try {
       const diff = fixtureStore.generateDiff(testFixture.id, modifiedContent);
@@ -391,7 +392,7 @@ export function WorkflowValidator() {
 
     // Test fixture search
     const fixtures = fixtureStore.fixtures;
-    const fixturesWithContent = fixtures.filter(f => f.content && f.content.length > 0);
+    const fixturesWithContent = fixtures.filter((f: FixtureInfo) => f.content && String(f.content).length > 0);
     if (fixturesWithContent.length === 0) {
       throw new Error('No fixtures with content to search');
     }

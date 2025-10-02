@@ -2,15 +2,15 @@ import React, { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
+import { LatencyMetrics } from '../types';
 import { useDashboard, useLogs, useMetrics } from '../hooks/useApi';
 import {
   PageHeader,
   MetricCard,
   Alert,
-  EmptyState,
   Section
 } from '../components/ui/DesignSystem';
-import { MetricIcon, StatusIcon, Icons } from '../components/ui/IconSystem';
+import { MetricIcon, StatusIcon } from '../components/ui/IconSystem';
 import { DashboardLoading, ErrorState } from '../components/ui/LoadingStates';
 
 function formatUptime(seconds: number): string {
@@ -24,14 +24,20 @@ function formatUptime(seconds: number): string {
 
 export function DashboardPage() {
   const { data: dashboard, isLoading, error } = useDashboard();
-  const { data: logs } = useLogs({ limit: 100 });
-  const { data: metrics } = useMetrics();
+  // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates
+  const { data: logs } = useLogs({ limit: 100, refetchInterval: 3000 });
+  const { data: _metrics } = useMetrics();
+
+  interface LogEntry {
+    status_code: number;
+    response_time_ms?: number;
+  }
 
   // Calculate failure counters
   const failureCounters = useMemo(() => {
-    if (!logs) return { total2xx: 0, total4xx: 0, total5xx: 0 };
+    if (!logs || !Array.isArray(logs)) return { total2xx: 0, total4xx: 0, total5xx: 0 };
 
-    return logs.reduce((acc, log) => {
+    return (logs as LogEntry[]).reduce((acc: { total2xx: number; total4xx: number; total5xx: number }, log) => {
       const code = log.status_code;
       if (code >= 500) acc.total5xx++;
       else if (code >= 400) acc.total4xx++;
@@ -42,9 +48,9 @@ export function DashboardPage() {
 
   // Mock latency data for demonstration
   const mockLatencyMetrics = useMemo(() => {
-    if (!logs) return [];
+    if (!logs || !Array.isArray(logs)) return [];
 
-    const latencyData = logs.reduce((acc, log) => {
+    const latencyData = (logs as LogEntry[]).reduce((acc: Record<string, number>, log) => {
       if (log.response_time_ms) {
         const rounded = Math.floor(log.response_time_ms / 10) * 10;
         const range = `${rounded}-${rounded + 9}`;
@@ -56,12 +62,16 @@ export function DashboardPage() {
     return [{
       service: 'MockForge',
       route: 'api/*',
-      p50: 25,
-      p95: 75,
-      p99: 125,
+      avg_response_time: 50,
+      min_response_time: 10,
+      max_response_time: 200,
+      p50_response_time: 25,
+      p95_response_time: 75,
+      p99_response_time: 125,
+      total_requests: (logs as LogEntry[]).length,
       histogram: Object.entries(latencyData)
         .sort(([a], [b]) => parseInt(a) - parseInt(b))
-        .map(([range, count]) => ({ range, count }))
+        .map(([range, count]) => ({ range, count: count as number }))
         .slice(0, 20) // Limit to first 20 ranges
     }];
   }, [logs]);
@@ -166,7 +176,7 @@ export function DashboardPage() {
         {/* Failure Counters */}
         <div className="divider-soft my-8"></div>
         <div className="visual-group">
-          <h3 className="text-heading-sm text-primary mb-4">Response Status Distribution</h3>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Response Status Distribution</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 grid-gap-md">
           <MetricCard
             title="Success Responses"
@@ -206,11 +216,11 @@ export function DashboardPage() {
       >
         <div className="space-component">
           {mockLatencyMetrics.length > 0 ? (
-            <LatencyHistogram
-              metrics={mockLatencyMetrics}
-              selectedService={undefined}
-              onServiceChange={() => {}}
-            />
+             <LatencyHistogram
+               metrics={mockLatencyMetrics as LatencyMetrics[]}
+               selectedService={undefined}
+               onServiceChange={() => {}}
+             />
           ) : (
             <div className="text-center py-8">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">

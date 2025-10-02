@@ -55,7 +55,7 @@ RUN chown -R mockforge:mockforge /app
 USER mockforge
 
 # Expose ports (HTTP, WebSocket, gRPC, Admin UI)
-EXPOSE 3000 3001 50051 8080
+EXPOSE 3000 3001 50051 9080
 
 # Set default environment variables
 ENV MOCKFORGE_LATENCY_ENABLED=true

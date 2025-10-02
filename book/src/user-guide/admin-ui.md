@@ -8,10 +8,10 @@ The Admin UI is automatically available when you start MockForge with the `--adm
 
 ```bash
 # Start with Admin UI enabled
-mockforge serve --spec api-spec.json --admin --admin-port 8080 --http-port 3000
+mockforge serve --spec api-spec.json --admin --admin-port 9080 --http-port 3000
 ```
 
-The Admin UI will be available at: **http://localhost:8080** (default port)
+The Admin UI will be available at: **http://localhost:9080** (default port)
 
 ### Configuration Options
 
@@ -30,7 +30,7 @@ mockforge serve --spec api-spec.json --no-admin
 MOCKFORGE_ADMIN_ENABLED=true
 
 # Set admin UI port
-MOCKFORGE_ADMIN_PORT=8080
+MOCKFORGE_ADMIN_PORT=9080
 
 # Set admin UI bind address (default: 0.0.0.0)
 MOCKFORGE_ADMIN_BIND=127.0.0.1
@@ -234,7 +234,7 @@ The Files tab provides access to configuration and data files:
 
 ### Common Issues
 
-**Admin UI not loading**: Check that `--admin` flag is used and port 8080 is accessible
+**Admin UI not loading**: Check that `--admin` flag is used and port 9080 is accessible
 
 **Slow performance**: Reduce auto-refresh interval or disable real-time updates
 

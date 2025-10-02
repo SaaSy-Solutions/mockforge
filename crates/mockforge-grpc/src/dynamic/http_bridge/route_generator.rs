@@ -134,7 +134,7 @@ impl RouteGenerator {
                 }
             },
             "servers": [{
-                "url": "http://localhost:8080",
+                "url": "http://localhost:9080",
                 "description": "Local development server"
             }],
             "security": [],

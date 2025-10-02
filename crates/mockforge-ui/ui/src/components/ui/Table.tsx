@@ -1,17 +1,17 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 
-interface TableProps extends React.HTMLAttributes<HTMLTableElement> {}
+type TableProps = React.HTMLAttributes<HTMLTableElement>
 
-interface TableHeaderProps extends React.HTMLAttributes<HTMLTableSectionElement> {}
+type TableHeaderProps = React.HTMLAttributes<HTMLTableSectionElement>
 
-interface TableBodyProps extends React.HTMLAttributes<HTMLTableSectionElement> {}
+type TableBodyProps = React.HTMLAttributes<HTMLTableSectionElement>
 
-interface TableRowProps extends React.HTMLAttributes<HTMLTableRowElement> {}
+type TableRowProps = React.HTMLAttributes<HTMLTableRowElement>
 
-interface TableHeadProps extends React.ThHTMLAttributes<HTMLTableCellElement> {}
+type TableHeadProps = React.ThHTMLAttributes<HTMLTableCellElement>
 
-interface TableCellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {}
+type TableCellProps = React.TdHTMLAttributes<HTMLTableCellElement>
 
 const Table = React.forwardRef<HTMLTableElement, TableProps>(
   ({ className, ...props }, ref) => (

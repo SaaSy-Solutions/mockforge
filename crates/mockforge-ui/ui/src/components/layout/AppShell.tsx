@@ -85,7 +85,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
               <div className="flex items-center gap-3">
                 <Logo variant="icon" size="md" />
-                <span className="text-heading-md text-primary">MockForge</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">MockForge</span>
               </div>
               <Button 
                 variant="secondary" 
@@ -104,11 +104,11 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                     key={item.id}
                     variant={activeTab === item.id ? 'default' : 'ghost'}
                     className={cn(
-                      'w-full justify-start gap-4 h-12 text-body-lg nav-item-hover focus-ring spring-hover',
+                      'w-full justify-start gap-4 h-12 text-lg nav-item-hover focus-ring spring-hover',
                       'animate-slide-in-up',
                       activeTab === item.id
                         ? 'bg-brand text-white shadow-md'
-                        : 'text-secondary hover:text-primary hover:bg-muted/50'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 hover:bg-muted/50'
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                     onClick={() => {
@@ -132,7 +132,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
           <div className="flex flex-col flex-grow bg-bg-primary border-r border-border">
             <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
               <Logo variant="icon" size="md" />
-              <span className="font-semibold text-text-primary">MockForge</span>
+              <span className="font-semibold text-gray-900 dark:text-gray-100">MockForge</span>
             </div>
             <nav id="main-navigation" className="flex-1 px-4 py-4 space-y-2" role="navigation" aria-label="Main navigation">
               {navItems.map((item) => {
@@ -145,7 +145,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                       'w-full justify-start gap-3 h-11 transition-all duration-200 nav-item-hover focus-ring spring-hover',
                       activeTab === item.id
                         ? 'bg-brand text-white hover:bg-brand-600 shadow-lg'
-                        : 'text-secondary hover:text-primary hover:bg-muted/50'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 hover:bg-muted/50'
                     )}
                     onClick={() => onTabChange(item.id)}
                   >
@@ -165,9 +165,9 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm text-text-tertiary">Home</span>
-                <span className="text-text-tertiary">/</span>
-                <span className="text-sm font-medium text-text-primary truncate capitalize">{navItems.find(n=>n.id===activeTab)?.label ?? activeTab}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Home</span>
+                <span className="text-gray-600 dark:text-gray-400">/</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">{navItems.find(n=>n.id===activeTab)?.label ?? activeTab}</span>
               </div>
               <div className="flex flex-1" />
               <div className="hidden sm:flex w-72 relative items-center">
@@ -191,7 +191,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                     }
                   }}
                 />
-                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary border border-border rounded px-1 py-0.5 bg-bg-primary">
+                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
                   {isMac ? '⌘K' : 'Ctrl K'}
                 </span>
               </div>

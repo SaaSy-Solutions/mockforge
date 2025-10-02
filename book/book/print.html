@@ -209,7 +209,7 @@ MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl cargo run -p mockforge-cli -- se
 # Full configuration with Admin UI
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
-cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin --admin-port 8080
+cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin --admin-port 9080
 
 # Use configuration file
 cargo run -p mockforge-cli -- serve --config demo-config.yaml
@@ -274,7 +274,7 @@ cargo run -p mockforge-cli -- serve --config demo-config.yaml
 <pre><code class="language-bash">docker pull SaaSy-Solutions/mockforge
 </code></pre>
 <h3 id="run-with-basic-configuration"><a class="header" href="#run-with-basic-configuration">Run with basic configuration</a></h3>
-<pre><code class="language-bash">docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+<pre><code class="language-bash">docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   mockforge
@@ -326,7 +326,7 @@ sudo usermod -aG docker $USER
 # Log out and back in for changes to take effect
 </code></pre>
 <h3 id="port-conflicts"><a class="header" href="#port-conflicts">Port conflicts</a></h3>
-<p>If default ports (3000, 3001, 8080, 50051) are in use:</p>
+<p>If default ports (3000, 3001, 9080, 50051) are in use:</p>
 <pre><code class="language-bash"># Check what's using the ports
 lsof -i :3000
 lsof -i :3001
@@ -438,10 +438,10 @@ ws.on('close', () =&gt; console.log('Connection closed'));
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 mockforge serve --spec examples/openapi-demo.json \
-  --admin --admin-port 8080 \
+  --admin --admin-port 9080 \
   --http-port 3000 --ws-port 3001
 </code></pre>
-<p>Access the admin interface at: http://localhost:8080</p>
+<p>Access the admin interface at: http://localhost:9080</p>
 <h2 id="step-7-using-configuration-files"><a class="header" href="#step-7-using-configuration-files">Step 7: Using Configuration Files</a></h2>
 <p>Instead of environment variables, you can use a configuration file:</p>
 <pre><code class="language-bash"># Stop the server, then start with config file
@@ -451,7 +451,7 @@ mockforge serve --config demo-config.yaml
 <p>If you prefer Docker:</p>
 <pre><code class="language-bash"># Build and run with Docker
 docker build -t mockforge .
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
+docker run -p 3000:3000 -p 3001:3001 -p 9080:9080 \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   -e MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
   mockforge
@@ -467,7 +467,7 @@ docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server won’t start</a></h3>
 <ul>
-<li>Check if ports 3000, 3001, or 8080 are already in use</li>
+<li>Check if ports 3000, 3001, or 9080 are already in use</li>
 <li>Verify the OpenAPI spec file path is correct</li>
 <li>Ensure MockForge is properly installed</li>
 </ul>
@@ -1118,7 +1118,7 @@ mockforge serve \
   --http-port 3000 \
   --ws-port 3001 \
   --grpc-port 50051 \
-  --admin --admin-port 8080
+  --admin --admin-port 9080
 </code></pre>
 <h2 id="proto-file-setup"><a class="header" href="#proto-file-setup">Proto File Setup</a></h2>
 <h3 id="directory-structure"><a class="header" href="#directory-structure">Directory Structure</a></h3>
@@ -2437,7 +2437,7 @@ let uuid2 = generator.generate_uuid(); // Same as uuid1
 <pre><code class="language-protobuf">message Order {
   string id = 1;
   string user_id = 2;     // → Detected as foreign key to User
-  string customer_ref = 3; // → Detected as reference to Customer  
+  string customer_ref = 3; // → Detected as reference to Customer
   int64 timestamp = 4;
 }
 
@@ -2469,7 +2469,7 @@ message User {
     rag:
       enabled: true
       api_endpoint: "https://api.openai.com/v1/chat/completions"
-      model: "gpt-3.5-turbo" 
+      model: "gpt-3.5-turbo"
       embedding_model: "text-embedding-ada-002"
       similarity_threshold: 0.7
       max_documents: 5
@@ -2480,7 +2480,7 @@ message User {
         weight: 1.0
       - id: "examples"
         type: "examples"
-        path: "./examples/sample_data.json" 
+        path: "./examples/sample_data.json"
         weight: 0.8
 </code></pre>
 <h3 id="business-rule-extraction"><a class="header" href="#business-rule-extraction">Business Rule Extraction</a></h3>
@@ -2494,7 +2494,7 @@ message User {
 <h3 id="domain-aware-generation"><a class="header" href="#domain-aware-generation">Domain-Aware Generation</a></h3>
 <p>Instead of generic random data, RAG generates contextually appropriate values:</p>
 <pre><code class="language-protobuf">message User {
-  string role = 1; // Context: "admin", "user", "moderator" 
+  string role = 1; // Context: "admin", "user", "moderator"
   string department = 2; // Context: "engineering", "marketing", "sales"
   string location = 3; // Context: "San Francisco", "New York", "London"
 }
@@ -2523,7 +2523,7 @@ message User {
           type: "format"
           pattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
           error: "Invalid email format"
-        - name: "age_range" 
+        - name: "age_range"
           applies_to: ["User"]
           fields: ["age"]
           type: "range"
@@ -2544,7 +2544,7 @@ message User {
 <pre><code class="language-bash"># Enable advanced data synthesis
 MOCKFORGE_DATA_SYNTHESIS_ENABLED=true
 
-# Deterministic generation  
+# Deterministic generation
 MOCKFORGE_DATA_SYNTHESIS_SEED=12345
 MOCKFORGE_DATA_SYNTHESIS_DETERMINISTIC=true
 
@@ -2574,7 +2574,7 @@ MOCKFORGE_VALIDATION_STRICT_MODE=false
       api_endpoint: "https://api.openai.com/v1/chat/completions"
       api_key: "${RAG_API_KEY}"
       model: "gpt-3.5-turbo"
-      embedding_model: "text-embedding-ada-002"  
+      embedding_model: "text-embedding-ada-002"
       similarity_threshold: 0.7
       max_context_length: 2000
       cache_contexts: true
@@ -2644,7 +2644,7 @@ grpcurl -plaintext -d '{"user_id": "123"}' \
 MOCKFORGE_DATA_SYNTHESIS_SEED=100 \
 mockforge serve --grpc-port 50051 --proto-dir user-proto &amp;
 
-# Start order service with same seed for consistency  
+# Start order service with same seed for consistency
 MOCKFORGE_DATA_SYNTHESIS_SEED=100 \
 mockforge serve --grpc-port 50052 --proto-dir order-proto &amp;
 </code></pre>
@@ -2666,7 +2666,7 @@ mockforge serve --grpc-port 50052 --proto-dir order-proto &amp;
         applies_to: ["Invoice", "Payment", "Transaction"]
         rules:
           - field_pattern: "*_amount"
-            type: "range" 
+            type: "range"
             min: 0.01
             max: 10000.00
           - field_pattern: "*_currency"
@@ -3725,9 +3725,9 @@ kill $SERVER_PID
 <h2 id="accessing-the-admin-ui"><a class="header" href="#accessing-the-admin-ui">Accessing the Admin UI</a></h2>
 <p>The Admin UI is automatically available when you start MockForge with the <code>--admin</code> flag:</p>
 <pre><code class="language-bash"># Start with Admin UI enabled
-mockforge serve --spec api-spec.json --admin --admin-port 8080 --http-port 3000
+mockforge serve --spec api-spec.json --admin --admin-port 9080 --http-port 3000
 </code></pre>
-<p>The Admin UI will be available at: <strong>http://localhost:8080</strong> (default port)</p>
+<p>The Admin UI will be available at: <strong>http://localhost:9080</strong> (default port)</p>
 <h3 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h3>
 <pre><code class="language-bash"># Custom admin port
 mockforge serve --admin --admin-port 9090
@@ -3740,7 +3740,7 @@ mockforge serve --spec api-spec.json --no-admin
 MOCKFORGE_ADMIN_ENABLED=true
 
 # Set admin UI port
-MOCKFORGE_ADMIN_PORT=8080
+MOCKFORGE_ADMIN_PORT=9080
 
 # Set admin UI bind address (default: 0.0.0.0)
 MOCKFORGE_ADMIN_BIND=127.0.0.1
@@ -3950,7 +3950,7 @@ MOCKFORGE_ADMIN_BIND=127.0.0.1
 </ul>
 <h2 id="troubleshooting-7"><a class="header" href="#troubleshooting-7">Troubleshooting</a></h2>
 <h3 id="common-issues-4"><a class="header" href="#common-issues-4">Common Issues</a></h3>
-<p><strong>Admin UI not loading</strong>: Check that <code>--admin</code> flag is used and port 8080 is accessible</p>
+<p><strong>Admin UI not loading</strong>: Check that <code>--admin</code> flag is used and port 9080 is accessible</p>
 <p><strong>Slow performance</strong>: Reduce auto-refresh interval or disable real-time updates</p>
 <p><strong>Missing data</strong>: Ensure proper permissions for file system access</p>
 <p><strong>Configuration not applying</strong>: Some changes may require server restart</p>
@@ -4154,7 +4154,7 @@ MOCKFORGE_ADMIN_BIND=127.0.0.1
 </ul>
 </li>
 <li>
-<p><code>MOCKFORGE_ADMIN_PORT=8080</code> (default: <code>8080</code>)</p>
+<p><code>MOCKFORGE_ADMIN_PORT=9080</code> (default: <code>9080</code>)</p>
 <ul>
 <li>Port for the Admin UI server to listen on</li>
 </ul>
@@ -4234,7 +4234,7 @@ MOCKFORGE_ADMIN_BIND=127.0.0.1
 <pre><code class="language-bash">export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 export MOCKFORGE_ADMIN_ENABLED=true
-cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 8080
+cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 9080
 </code></pre>
 <h3 id="full-websocket-support"><a class="header" href="#full-websocket-support">Full WebSocket Support</a></h3>
 <pre><code class="language-bash">export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
@@ -4352,7 +4352,7 @@ grpc:
 # Admin UI configuration
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   host: "127.0.0.1"
   mount_path: null
   api_enabled: true
@@ -4422,7 +4422,7 @@ data:
 <h3 id="standalone-mode-default"><a class="header" href="#standalone-mode-default">Standalone Mode (Default)</a></h3>
 <pre><code class="language-yaml">admin:
   enabled: true
-  port: 8080
+  port: 9080
   host: "127.0.0.1"
   api_enabled: true
 </code></pre>
@@ -4563,7 +4563,7 @@ http:
 
 admin:
   enabled: true
-  port: 8080
+  port: 9080
 
 core:
   latency_enabled: false  # Disable latency for faster development
@@ -5467,7 +5467,7 @@ impl TemplateEngine {
 <p><strong>Admin UI Control:</strong></p>
 <ul>
 <li><code>--admin</code>: Enable admin UI</li>
-<li><code>--admin-port &lt;PORT&gt;</code>: Admin UI port (default: 8080)</li>
+<li><code>--admin-port &lt;PORT&gt;</code>: Admin UI port (default: 9080)</li>
 <li><code>--admin-embed</code>: Force embedding Admin UI under HTTP server</li>
 <li><code>--admin-mount-path &lt;PATH&gt;</code>: Explicit mount path for embedded Admin UI (implies <code>--admin-embed</code>)</li>
 <li><code>--admin-standalone</code>: Force standalone Admin UI on separate port (overrides embed)</li>
@@ -5512,7 +5512,7 @@ impl TemplateEngine {
   --ws-port 3001 \
   --grpc-port 50051 \
   --admin \
-  --admin-port 8080 \
+  --admin-port 9080 \
   --response-template-expand
 </code></pre>
 <p><strong>Development Configuration:</strong></p>
@@ -5604,7 +5604,7 @@ mockforge-cli data open-api --endpoint /users --method post api-spec.yaml
 </code></pre>
 <h4 id="options"><a class="header" href="#options">Options</a></h4>
 <ul>
-<li><code>--port &lt;PORT&gt;</code>: Server port (default: 8080)</li>
+<li><code>--port &lt;PORT&gt;</code>: Server port (default: 9080)</li>
 </ul>
 <h4 id="examples-2"><a class="header" href="#examples-2">Examples</a></h4>
 <pre><code class="language-bash"># Start admin UI on default port
@@ -5628,7 +5628,7 @@ spec: examples/openapi-demo.json
 # Admin UI configuration
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   embedded: false
   mount_path: "/admin"
   standalone: true
@@ -5675,7 +5675,7 @@ export MOCKFORGE_GRPC_PORT=50051
 
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
-export MOCKFORGE_ADMIN_PORT=8080
+export MOCKFORGE_ADMIN_PORT=9080
 
 # Validation
 export MOCKFORGE_VALIDATION_MODE=enforce
@@ -5736,7 +5736,7 @@ mockforge-cli serve \
   --ws-port 3001 \
   --grpc-port 50051 \
   --admin \
-  --admin-port 8080 \
+  --admin-port 9080 \
   --response-template-expand \
   --validation warn
 </code></pre>
@@ -6298,7 +6298,7 @@ docker run -it --rm \
   -p 3000:3000 \
   -p 3001:3001 \
   -p 50051:50051 \
-  -p 8080:8080 \
+  -p 9080:9080 \
   mockforge-dev
 </code></pre>
 <h3 id="testing-with-docker"><a class="header" href="#testing-with-docker">Testing with Docker</a></h3>
@@ -7651,7 +7651,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 RUN apt-get update &amp;&amp; apt-get install -y ca-certificates &amp;&amp; rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/mockforge-cli /usr/local/bin/mockforge-cli
-EXPOSE 3000 3001 50051 8080
+EXPOSE 3000 3001 50051 9080
 CMD ["mockforge-cli", "serve"]
 </code></pre>
 <pre><code class="language-bash"># Build and push Docker image
@@ -7997,7 +7997,7 @@ logging:       # Logging configuration
 <h3 id="serverhttp_port-integer-default-3000"><a class="header" href="#serverhttp_port-integer-default-3000"><code>server.http_port</code> (integer, default: 3000)</a></h3>
 <p>HTTP server port for REST API endpoints.</p>
 <pre><code class="language-yaml">server:
-  http_port: 8080
+  http_port: 9080
 </code></pre>
 <h3 id="serverws_port-integer-default-3001"><a class="header" href="#serverws_port-integer-default-3001"><code>server.ws_port</code> (integer, default: 3001)</a></h3>
 <p>WebSocket server port for real-time connections.</p>
@@ -8020,7 +8020,7 @@ logging:       # Logging configuration
 <pre><code class="language-yaml">admin:
   enabled: true
 </code></pre>
-<h3 id="adminport-integer-default-8080"><a class="header" href="#adminport-integer-default-8080"><code>admin.port</code> (integer, default: 8080)</a></h3>
+<h3 id="adminport-integer-default-9080"><a class="header" href="#adminport-integer-default-9080"><code>admin.port</code> (integer, default: 9080)</a></h3>
 <p>Port for the admin UI server.</p>
 <pre><code class="language-yaml">admin:
   port: 9090
@@ -8208,7 +8208,7 @@ server:
 
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   embedded: false
   standalone: true
 
@@ -8249,7 +8249,7 @@ logging:
 <h2 id="environment-variable-mapping"><a class="header" href="#environment-variable-mapping">Environment Variable Mapping</a></h2>
 <p>All configuration options can be set via environment variables using the <code>MOCKFORGE_</code> prefix with underscore-separated paths:</p>
 <pre><code class="language-bash"># Server configuration
-export MOCKFORGE_SERVER_HTTP_PORT=8080
+export MOCKFORGE_SERVER_HTTP_PORT=9080
 export MOCKFORGE_SERVER_BIND="127.0.0.1"
 
 # Admin UI
@@ -8281,7 +8281,7 @@ mockforge-cli validate-config --check-deprecated config.yaml
 <li>Logging level adjustments</li>
 </ul>
 <pre><code class="language-bash"># Update validation mode at runtime
-curl -X POST http://localhost:8080/__mockforge/config \
+curl -X POST http://localhost:9080/__mockforge/config \
   -H "Content-Type: application/json" \
   -d '{"validation": {"mode": "warn"}}'
 </code></pre>
@@ -8308,7 +8308,7 @@ logging:
 <h3 id="production-configuration-1"><a class="header" href="#production-configuration-1">Production Configuration</a></h3>
 <pre><code class="language-yaml"># production.yaml
 server:
-  http_port: 8080
+  http_port: 9080
   bind: "127.0.0.1"
 
 admin:
@@ -9426,11 +9426,11 @@ core:
 ps aux | grep mockforge
 
 # Check listening ports
-netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+netstat -tlnp | grep -E ":(3000|3001|50051|9080)"
 
 # Test basic connectivity
 curl -I http://localhost:3000/health 2&gt;/dev/null || echo "HTTP server not responding"
-curl -I http://localhost:8080/health 2&gt;/dev/null || echo "Admin UI not responding"
+curl -I http://localhost:9080/health 2&gt;/dev/null || echo "Admin UI not responding"
 </code></pre>
 <h3 id="check-logs"><a class="header" href="#check-logs">Check Logs</a></h3>
 <p>Enable verbose logging to see detailed information:</p>
@@ -9691,7 +9691,7 @@ grpcurl -plaintext -v -d '{"user_id": "123"}' localhost:50051 mockforge.user.Use
 <li>
 <p><strong>Check admin port</strong>:</p>
 <pre><code class="language-bash"># Verify port is listening
-curl -I http://localhost:8080 2&gt;/dev/null || echo "Admin UI not accessible"
+curl -I http://localhost:9080 2&gt;/dev/null || echo "Admin UI not accessible"
 
 # Try different port
 mockforge serve --admin --admin-port 9090
@@ -9721,7 +9721,7 @@ mockforge serve --admin --admin-embed
 <li>
 <p><strong>Check admin API</strong>:</p>
 <pre><code class="language-bash"># Test admin API directly
-curl http://localhost:8080/__mockforge/status
+curl http://localhost:9080/__mockforge/status
 </code></pre>
 </li>
 <li>
@@ -9882,7 +9882,7 @@ cargo --version
 echo "=== Running Processes ==="
 ps aux | grep mockforge
 echo "=== Listening Ports ==="
-netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+netstat -tlnp | grep -E ":(3000|3001|50051|9080)"
 echo "=== Disk Space ==="
 df -h
 echo "=== Memory Usage ==="

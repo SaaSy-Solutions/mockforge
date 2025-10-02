@@ -42,10 +42,10 @@ impl Default for ProxyRule {
     fn default() -> Self {
         Self {
             path_pattern: "/".to_string(),
-            target_url: "http://localhost:8080".to_string(),
+            target_url: "http://localhost:9080".to_string(),
             enabled: true,
             pattern: "/".to_string(),
-            upstream_url: "http://localhost:8080".to_string(),
+            upstream_url: "http://localhost:9080".to_string(),
         }
     }
 }
@@ -70,14 +70,14 @@ impl ProxyConfig {
         if !self.enabled {
             return false;
         }
-        
+
         // If there are rules, check if any rule matches
         for rule in &self.rules {
             if rule.enabled && self.path_matches_pattern(&rule.path_pattern, path) {
                 return true;
             }
         }
-        
+
         // If no rules match, check prefix logic
         match &self.prefix {
             None => true, // No prefix means proxy everything
@@ -93,7 +93,7 @@ impl ProxyConfig {
                 return rule.target_url.clone();
             }
         }
-        
+
         // If no rule matches, use the default target URL
         if let Some(base_url) = &self.target_url {
             base_url.clone()
@@ -121,7 +121,7 @@ impl ProxyConfig {
             None => path.to_string(), // No prefix to strip
         }
     }
-    
+
     /// Check if a path matches a pattern (supports wildcards)
     fn path_matches_pattern(&self, pattern: &str, path: &str) -> bool {
         if pattern.ends_with("/*") {

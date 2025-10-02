@@ -128,7 +128,7 @@ make run-example
 ### Port Configuration:
 - HTTP: 3000 (configurable)
 - WebSocket: 3001 (configurable)
-- Admin UI: 8080 (configurable)
+- Admin UI: 9080 (configurable)
 - gRPC: 50051 (configurable)
 
 ### Template Expansion:
@@ -249,7 +249,7 @@ ws.on('error', (err) => {
 ps aux | grep mockforge
 
 # Check listening ports
-ss -tlnp | grep -E ":(3000|3001|8080)"
+ss -tlnp | grep -E ":(3000|3001|9080)"
 
 # Test basic connectivity
 curl -v http://localhost:3000/

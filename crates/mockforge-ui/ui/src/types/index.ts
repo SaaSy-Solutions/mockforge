@@ -30,7 +30,7 @@ export interface FixtureInfo {
   id: string;
   name: string;
   path: string;
-  method: string;
+  method?: string;
   description?: string;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +40,15 @@ export interface FixtureInfo {
   size_bytes?: number;
   last_modified?: string;
   route_path?: string;
+  protocol?: string;
+  saved_at?: string;
+  fingerprint?: string;
+  metadata?: Record<string, unknown>;
+  file_size?: number;
+  file_path?: string;
+  size?: number;
+  created_at?: string;
+  modified_at?: string;
 }
 
 export interface DiffChange {
@@ -69,14 +78,10 @@ export interface RequestLog {
   path: string;
   status_code: number;
   response_time_ms: number;
-  request_size_bytes: number;
-  response_size_bytes: number;
-  user_agent?: string;
-  ip_address?: string;
   client_ip?: string;
-  headers?: Record<string, string>;
-  query_params?: Record<string, string>;
-  body?: unknown;
+  user_agent?: string;
+  headers: Record<string, string>;
+  response_size_bytes: number;
   error_message?: string;
 }
 
@@ -96,6 +101,97 @@ export interface LogFilter {
 }
 
 // ==================== METRICS TYPES ====================
+
+export interface MetricsData {
+  requests_by_endpoint: Record<string, number>;
+  response_time_percentiles: Record<string, number>;
+  error_rate_by_endpoint: Record<string, number>;
+  memory_usage_over_time: Array<[string, number]>;
+  cpu_usage_over_time: Array<[string, number]>;
+}
+
+export interface ValidationSettings {
+  mode: string;
+  aggregate_errors: boolean;
+  validate_responses: boolean;
+  overrides: Record<string, string>;
+}
+
+export interface LatencyProfile {
+  name: string;
+  base_ms: number;
+  jitter_ms: number;
+  tag_overrides: Record<string, number>;
+}
+
+export interface FaultConfig {
+  enabled: boolean;
+  failure_rate: number;
+  status_codes: number[];
+  active_failures: number;
+}
+
+export interface ProxyConfig {
+  enabled: boolean;
+  upstream_url?: string;
+  timeout_seconds: number;
+  requests_proxied: number;
+}
+
+export interface ServerInfo {
+  version: string;
+  build_time: string;
+  git_sha: string;
+  http_server?: string;
+  ws_server?: string;
+  grpc_server?: string;
+  graphql_server?: string;
+  api_enabled: boolean;
+  admin_port: number;
+}
+
+export interface DashboardSystemInfo {
+  os: string;
+  arch: string;
+  uptime: number;
+  memory_usage: number;
+}
+
+export interface SimpleMetricsData {
+  total_requests: number;
+  active_requests: number;
+  average_response_time: number;
+  error_rate: number;
+}
+
+export interface ServerStatus {
+  server_type: string;
+  address?: string;
+  running: boolean;
+  start_time?: string;
+  uptime_seconds?: number;
+  active_connections: number;
+  total_requests: number;
+}
+
+export interface SystemInfo {
+  version: string;
+  uptime_seconds: number;
+  memory_usage_mb: number;
+  cpu_usage_percent: number;
+  active_threads: number;
+  total_routes: number;
+  total_fixtures: number;
+}
+
+export interface DashboardData {
+  server_info: ServerInfo;
+  system_info: DashboardSystemInfo;
+  metrics: SimpleMetricsData;
+  servers: ServerStatus[];
+  recent_logs: RequestLog[];
+  system: SystemInfo;
+}
 
 export interface LatencyMetrics {
   avg_response_time: number;
@@ -231,6 +327,8 @@ export interface RouteInfo {
   latency_ms?: number;
   error_count?: number;
   priority?: number;
+  has_fixtures?: boolean;
+  service_id?: string;
 }
 
 // ==================== API SERVICE TYPES ====================
@@ -563,6 +661,8 @@ export interface WorkspaceSummary {
   is_active: boolean;
   config_count: number;
   service_count: number;
+  request_count?: number;
+  folder_count?: number;
 }
 
 export interface Folder {
@@ -586,6 +686,12 @@ export interface ImportData {
   format: ImportFormat;
   data: string;
   workspaceId?: string;
+}
+
+export interface ChainValidationResponse {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 // ==================== CHAIN TYPES ====================
@@ -732,6 +838,9 @@ export interface ImportRoute {
   };
 }
 
+// Export for use in other files
+export type { ImportRoute as ImportedRoute };
+
 export interface ImportResponse {
   success: boolean;
   routes?: ImportRoute[];
@@ -753,11 +862,206 @@ export interface ImportHistoryEntry {
   format: string;
   timestamp: string;
   routeCount: number;
+  routes_count?: number; // Alias for routeCount
   success: boolean;
   filename?: string;
+  variables_count?: number;
+  warnings_count?: number;
+  environment?: string;
+  base_url?: string;
+  error_message?: string;
 }
 
 export interface ImportHistoryResponse {
   imports: ImportHistoryEntry[];
   total: number;
+}
+
+// ==================== ENCRYPTION TYPES ====================
+
+export interface EncryptionStatus {
+  enabled: boolean;
+  algorithm?: string;
+  key_id?: string;
+  last_rotated?: string;
+  backupKey?: string;
+  masterKeySet?: boolean;
+  workspaceKeySet?: boolean;
+}
+
+export interface AutoEncryptionConfig {
+  enabled: boolean;
+  patterns?: string[];
+  algorithm?: string;
+  sensitiveHeaders?: string[];
+  sensitiveFields?: string[];
+  sensitiveEnvVars?: string[];
+  customPatterns?: string[];
+}
+
+export interface SecurityCheckResult {
+  passed: boolean;
+  checks: Array<{
+    name: string;
+    passed: boolean;
+    message?: string;
+  }>;
+  isSecure?: boolean;
+  warnings?: string[];
+  errors?: string[];
+  recommendations?: string[];
+}
+
+export interface SecurityWarning {
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  details?: string;
+}
+
+// ==================== WORKSPACE API TYPES ====================
+
+export interface CreateWorkspaceRequest {
+  name: string;
+  description?: string;
+}
+
+export interface CreateFolderRequest {
+  name: string;
+  description?: string;
+  parent_id?: string;
+}
+
+export interface CreateRequestRequest {
+  name: string;
+  description?: string;
+  method: string;
+  path: string;
+  status_code?: number;
+  response_body?: string;
+  folder_id?: string;
+}
+
+export interface FolderSummary {
+  id: string;
+  name: string;
+  description?: string;
+  parent_id?: string;
+  subfolder_count: number;
+  request_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequestSummary {
+  id: string;
+  name: string;
+  description?: string;
+  method: string;
+  path: string;
+  status_code: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceListResponse {
+  workspaces: WorkspaceSummary[];
+}
+
+export interface WorkspaceResponse {
+  summary: WorkspaceSummary;
+  folders: FolderSummary[];
+  requests: RequestSummary[];
+}
+
+export interface CreateWorkspaceResponse {
+  id: string;
+  message: string;
+}
+
+export interface FolderResponse {
+  summary: FolderSummary;
+  subfolders: FolderSummary[];
+  requests: RequestSummary[];
+}
+
+export interface CreateFolderResponse {
+  id: string;
+  message: string;
+}
+
+export interface CreateRequestResponse {
+  id: string;
+  message: string;
+}
+
+export interface ExecuteRequestRequest {
+  variables?: Record<string, unknown>;
+}
+
+export interface ExecuteRequestResponse {
+  executed_at: string;
+  request_method: string;
+  request_path: string;
+  request_headers: Record<string, string>;
+  request_body?: string;
+  response_status_code: number;
+  response_headers: Record<string, string>;
+  response_body?: string;
+  response_time_ms: number;
+  response_size_bytes: number;
+  error_message?: string;
+}
+
+// ==================== ADMIN API TYPES ====================
+
+export interface HealthCheck {
+  status: string;
+  services: Record<string, string>;
+  last_check: string;
+  issues: string[];
+}
+
+export interface RestartStatus {
+  restarting: boolean;
+  progress: number;
+  message: string;
+}
+
+export interface ConfigurationState {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface SmokeTestResult {
+  test_name: string;
+  passed: boolean;
+  response_time_ms?: number;
+  error_message?: string;
+}
+
+export interface SmokeTestContext {
+  suite_name: string;
+  total_tests: number;
+  passed_tests: number;
+  failed_tests: number;
+  start_time: string;
+  end_time?: string;
+}
+
+export interface FileContentRequest {
+  path: string;
+  encoding?: string;
+}
+
+export interface FileContentResponse {
+  content: string;
+  encoding: string;
+  size: number;
+}
+
+export interface SaveFileRequest {
+  path: string;
+  content: string;
+  encoding?: string;
 }

@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Calendar,
   User,
   Globe,
   Shield,
@@ -26,6 +25,22 @@ import {
   Alert
 } from '../ui/DesignSystem';
 
+interface NetworkCapabilities {
+  allow_http_outbound: boolean;
+  allowed_hosts: string[];
+}
+
+interface FilesystemCapabilities {
+  allow_read: boolean;
+  allow_write: boolean;
+  allowed_paths: string[];
+}
+
+interface ResourceCapabilities {
+  max_memory_bytes: number;
+  max_cpu_percent: number;
+}
+
 interface PluginDetails {
   id: string;
   name: string;
@@ -38,9 +53,9 @@ interface PluginDetails {
   homepage?: string;
   repository?: string;
   capabilities: {
-    network: any;
-    filesystem: any;
-    resources: any;
+    network: NetworkCapabilities;
+    filesystem: FilesystemCapabilities;
+    resources: ResourceCapabilities;
   };
   health: {
     status: string;
@@ -59,11 +74,7 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchPluginDetails();
-  }, [pluginId]);
-
-  const fetchPluginDetails = async () => {
+  const fetchPluginDetails = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/__mockforge/plugins/${pluginId}`);
@@ -74,12 +85,16 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
       } else {
         setError(data.error);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch plugin details');
     } finally {
       setLoading(false);
     }
-  };
+  }, [pluginId]);
+
+  useEffect(() => {
+    fetchPluginDetails();
+  }, [fetchPluginDetails]);
 
   const getStatusIcon = (healthy: boolean) => {
     return healthy ? (

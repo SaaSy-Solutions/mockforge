@@ -737,7 +737,7 @@ mod tests {
         let mut headers = HeaderMap::new();
 
         // Add various header types
-        headers.insert("host", "localhost:8080".parse().unwrap());
+        headers.insert("host", "localhost:9080".parse().unwrap());
         headers.insert("content-length", "123".parse().unwrap());
         headers.insert("accept", "application/json".parse().unwrap());
         headers.insert("x-forwarded-for", "192.168.1.1".parse().unwrap());

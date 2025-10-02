@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { FileText, Search, Download, RefreshCw, ChevronDown } from 'lucide-react';
 import { useLogs } from '../hooks/useApi';
+import type { RequestLog } from '../types';
 import {
   PageHeader,
   ModernCard,
@@ -59,7 +60,7 @@ export function LogsPage() {
     if (statusFilter !== 'all') {
       const start = statusFilter === '2xx' ? 200 : statusFilter === '4xx' ? 400 : 500;
       const end = start + 99;
-      filtered = filtered.filter((log: any) => log.status_code >= start && log.status_code <= end);
+      filtered = filtered.filter((log: RequestLog) => log.status_code >= start && log.status_code <= end);
     }
 
     // Apply display limit for progressive loading
@@ -73,7 +74,7 @@ export function LogsPage() {
 
     const csvContent = [
       ['Timestamp', 'Method', 'Path', 'Status Code', 'Response Time (ms)', 'Client IP', 'User Agent'].join(','),
-      ...filteredLogs.map((log: any) => [
+      ...filteredLogs.map((log: RequestLog) => [
         log.timestamp,
         log.method,
         `"${log.path}"`,
@@ -256,7 +257,7 @@ export function LogsPage() {
           ) : (
             <div className="space-y-4">
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {filteredLogs.map((log: any) => (
+                {filteredLogs.map((log: RequestLog) => (
                 <div
                   key={log.id}
                   className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"

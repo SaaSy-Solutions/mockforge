@@ -1,0 +1,323 @@
+
+> ui-v2@0.0.0 build
+> tsc -b && vite build
+
+src/components/layout/EnvironmentIndicator.tsx(25,61): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: Environment, index: number, obj: Environment[]) => value is Environment, thisArg?: any): Environment | undefined', gave the following error.
+    Argument of type '(env: EnvironmentSummary) => boolean | undefined' is not assignable to parameter of type '(value: Environment, index: number, obj: Environment[]) => value is Environment'.
+      Types of parameters 'env' and 'value' are incompatible.
+        Property 'variable_count' is missing in type 'Environment' but required in type 'EnvironmentSummary'.
+  Overload 2 of 2, '(predicate: (value: Environment, index: number, obj: Environment[]) => unknown, thisArg?: any): Environment | undefined', gave the following error.
+    Argument of type '(env: EnvironmentSummary) => boolean | undefined' is not assignable to parameter of type '(value: Environment, index: number, obj: Environment[]) => unknown'.
+      Types of parameters 'env' and 'value' are incompatible.
+        Property 'variable_count' is missing in type 'Environment' but required in type 'EnvironmentSummary'.
+src/components/layout/EnvironmentIndicator.tsx(55,67): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: Environment, index: number, array: Environment[]) => value is Environment, thisArg?: any): Environment[] | undefined', gave the following error.
+    Argument of type '(env: EnvironmentSummary) => boolean' is not assignable to parameter of type '(value: Environment, index: number, array: Environment[]) => value is Environment'.
+      Types of parameters 'env' and 'value' are incompatible.
+        Property 'variable_count' is missing in type 'Environment' but required in type 'EnvironmentSummary'.
+  Overload 2 of 2, '(predicate: (value: Environment, index: number, array: Environment[]) => unknown, thisArg?: any): Environment[] | undefined', gave the following error.
+    Argument of type '(env: EnvironmentSummary) => boolean' is not assignable to parameter of type '(value: Environment, index: number, array: Environment[]) => unknown'.
+      Types of parameters 'env' and 'value' are incompatible.
+        Property 'variable_count' is missing in type 'Environment' but required in type 'EnvironmentSummary'.
+src/components/layout/EnvironmentIndicator.tsx(89,30): error TS2339: Property 'is_global' does not exist on type 'Environment'.
+src/components/layout/EnvironmentIndicator.tsx(106,30): error TS2339: Property 'is_global' does not exist on type 'Environment'.
+src/components/layout/EnvironmentIndicator.tsx(115,40): error TS2345: Argument of type '(environment: EnvironmentSummary) => JSX.Element' is not assignable to parameter of type '(value: Environment, index: number, array: Environment[]) => Element'.
+  Types of parameters 'environment' and 'value' are incompatible.
+    Property 'variable_count' is missing in type 'Environment' but required in type 'EnvironmentSummary'.
+src/components/plugins/InstallPluginModal.tsx(103,24): error TS2322: Type '{ children: Element; open: true; onOpenChange: () => void; className: string; }' is not assignable to type 'IntrinsicAttributes & ModalProps'.
+  Property 'onOpenChange' does not exist on type 'IntrinsicAttributes & ModalProps'.
+src/components/plugins/InstallPluginModal.tsx(122,37): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/components/plugins/InstallPluginModal.tsx(137,36): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/components/plugins/InstallPluginModal.tsx(182,12): error TS2322: Type '{ children: Element[]; variant: string; className: string; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/components/plugins/InstallPluginModal.tsx(189,12): error TS2322: Type '{ children: Element[]; variant: string; className: string; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/components/plugins/InstallPluginModal.tsx(196,19): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/InstallPluginModal.tsx(208,21): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginDetails.tsx(106,26): error TS2322: Type '{ children: Element; open: true; onOpenChange: () => void; }' is not assignable to type 'IntrinsicAttributes & ModalProps'.
+  Property 'onOpenChange' does not exist on type 'IntrinsicAttributes & ModalProps'.
+src/components/plugins/PluginDetails.tsx(120,26): error TS2322: Type '{ children: Element; open: true; onOpenChange: () => void; }' is not assignable to type 'IntrinsicAttributes & ModalProps'.
+  Property 'onOpenChange' does not exist on type 'IntrinsicAttributes & ModalProps'.
+src/components/plugins/PluginDetails.tsx(122,12): error TS2322: Type '{ children: Element[]; variant: string; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/components/plugins/PluginDetails.tsx(137,24): error TS2322: Type '{ children: Element; open: true; onOpenChange: () => void; className: string; }' is not assignable to type 'IntrinsicAttributes & ModalProps'.
+  Property 'onOpenChange' does not exist on type 'IntrinsicAttributes & ModalProps'.
+src/components/plugins/PluginDetails.tsx(147,19): error TS2322: Type '"ghost"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginDetails.tsx(169,26): error TS2322: Type '"destructive" | "success"' is not assignable to type '"default" | "outline" | "success" | "error" | "warning" | "info" | undefined'.
+  Type '"destructive"' is not assignable to type '"default" | "outline" | "success" | "error" | "warning" | "info" | undefined'.
+src/components/plugins/PluginDetails.tsx(205,26): error TS2322: Type '"destructive" | "success"' is not assignable to type '"default" | "outline" | "success" | "error" | "warning" | "info" | undefined'.
+  Type '"destructive"' is not assignable to type '"default" | "outline" | "success" | "error" | "warning" | "info" | undefined'.
+src/components/plugins/PluginDetails.tsx(216,20): error TS2322: Type '{ children: string; variant: string; className: string; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/components/plugins/PluginDetails.tsx(225,15): error TS2322: Type '{ children: Element[]; defaultValue: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsProps'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & TabsProps'.
+src/components/plugins/PluginDetails.tsx(232,45): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/components/plugins/PluginDetails.tsx(263,42): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/components/plugins/PluginDetails.tsx(288,40): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/components/plugins/PluginDetails.tsx(290,23): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginDetails.tsx(294,23): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginDetails.tsx(297,23): error TS2322: Type '"destructive"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginList.tsx(118,14): error TS2322: Type '"destructive" | "success"' is not assignable to type '"default" | "outline" | "success" | "error" | "warning" | "info" | undefined'.
+  Type '"destructive"' is not assignable to type '"default" | "outline" | "success" | "error" | "warning" | "info" | undefined'.
+src/components/plugins/PluginList.tsx(149,8): error TS2322: Type '{ children: Element[]; variant: string; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/components/plugins/PluginList.tsx(166,21): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginList.tsx(178,19): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginList.tsx(183,10): error TS2739: Type '{ children: Element[]; }' is missing the following properties from type 'TableProps': columns, data
+src/components/plugins/PluginList.tsx(214,31): error TS2322: Type '"ghost"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/plugins/PluginStatus.tsx(96,8): error TS2322: Type '{ children: Element[]; variant: string; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/components/plugins/PluginStatus.tsx(186,21): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/components/ui/Card.tsx(4,11): error TS2430: Interface 'CardProps' incorrectly extends interface 'HTMLAttributes<HTMLDivElement>'.
+  Types of property 'title' are incompatible.
+    Type 'ReactNode' is not assignable to type 'string | undefined'.
+      Type 'null' is not assignable to type 'string | undefined'.
+src/components/ui/DesignSystem.tsx(972,41): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and 'onValueChange' does not exist in type 'Partial<unknown> & Attributes'.
+src/components/ui/DesignSystem.tsx(1109,40): error TS2307: Cannot find module '@radix-ui/react-dropdown-menu' or its corresponding type declarations.
+src/components/ui/ThemeToggle.tsx(13,11): error TS2339: Property 'theme' does not exist on type 'ThemePaletteState'.
+src/components/ui/ThemeToggle.tsx(13,18): error TS2339: Property 'setTheme' does not exist on type 'ThemePaletteState'.
+src/components/ui/ThemeToggle.tsx(67,11): error TS2339: Property 'theme' does not exist on type 'ThemePaletteState'.
+src/components/ui/ThemeToggle.tsx(67,33): error TS2339: Property 'setTheme' does not exist on type 'ThemePaletteState'.
+src/components/ui/select.tsx(2,34): error TS2307: Cannot find module '@radix-ui/react-select' or its corresponding type declarations.
+src/components/workspace/EncryptionSettings.tsx(11,58): error TS2307: Cannot find module '../ui/tabs' or its corresponding type declarations.
+src/components/workspace/EncryptionSettings.tsx(12,53): error TS2307: Cannot find module '../ui/alert' or its corresponding type declarations.
+src/components/workspace/EncryptionSettings.tsx(14,3): error TS2305: Module '"../../types"' has no exported member 'EncryptionStatus'.
+src/components/workspace/EncryptionSettings.tsx(15,3): error TS2305: Module '"../../types"' has no exported member 'AutoEncryptionConfig'.
+src/components/workspace/EncryptionSettings.tsx(16,3): error TS2305: Module '"../../types"' has no exported member 'SecurityCheckResult'.
+src/components/workspace/EncryptionSettings.tsx(17,3): error TS2305: Module '"../../types"' has no exported member 'SecurityWarning'.
+src/components/workspace/EncryptionSettings.tsx(81,30): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(90,30): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(100,13): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(118,13): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(132,30): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(146,13): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(161,13): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(178,13): error TS2304: Cannot find name 'apiService'.
+src/components/workspace/EncryptionSettings.tsx(501,34): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/components/workspace/EncryptionSettings.tsx(552,34): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/components/workspace/EnvironmentManager.tsx(7,43): error TS1484: 'ContextMenuItem' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/workspace/EnvironmentManager.tsx(174,8): error TS2739: Type '{ children: Element[]; }' is missing the following properties from type 'ContextMenuProps': items, position, onClose
+src/components/workspace/EnvironmentManager.tsx(249,12): error TS2693: 'ContextMenuItem' only refers to a type, but is being used as a value here.
+src/components/workspace/EnvironmentManager.tsx(252,13): error TS2693: 'ContextMenuItem' only refers to a type, but is being used as a value here.
+src/components/workspace/EnvironmentManager.tsx(253,12): error TS2693: 'ContextMenuItem' only refers to a type, but is being used as a value here.
+src/components/workspace/EnvironmentManager.tsx(256,13): error TS2693: 'ContextMenuItem' only refers to a type, but is being used as a value here.
+src/components/workspace/EnvironmentManager.tsx(258,14): error TS2693: 'ContextMenuItem' only refers to a type, but is being used as a value here.
+src/components/workspace/EnvironmentManager.tsx(264,15): error TS2693: 'ContextMenuItem' only refers to a type, but is being used as a value here.
+src/components/workspace/EnvironmentManager.tsx(313,26): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/components/workspace/ResponseHistory.tsx(189,25): error TS2322: Type '{ children: Element[]; defaultValue: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsProps'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & TabsProps'.
+src/components/workspace/SyncStatusIndicator.tsx(5,10): error TS2305: Module '"lucide-react"' has no exported member 'Sync'.
+src/components/workspace/WorkspaceSettingsDialog.tsx(257,14): error TS2304: Cannot find name 'X'.
+src/hooks/useApi.ts(102,48): error TS2551: Property 'restartServers' does not exist on type 'ServerApiService'. Did you mean 'restartServer'?
+src/hooks/useApi.ts(261,37): error TS2554: Expected 1 arguments, but got 2.
+src/hooks/useApi.ts(270,38): error TS2554: Expected 1 arguments, but got 2.
+src/hooks/useApi.ts(322,5): error TS2322: Type '(fixtureId: string, newName: string) => Promise<void>' is not assignable to type 'MutationFunction<void, string>'.
+  Target signature provides too few arguments. Expected 2 or more, but got 1.
+src/hooks/useApi.ts(333,5): error TS2322: Type '(fixtureId: string, newPath: string) => Promise<void>' is not assignable to type 'MutationFunction<void, string>'.
+  Target signature provides too few arguments. Expected 2 or more, but got 1.
+src/hooks/useKeyboardNavigation.ts(72,47): error TS2345: Argument of type '(event: KeyboardEvent) => void' is not assignable to parameter of type 'EventListenerOrEventListenerObject'.
+  Type '(event: KeyboardEvent) => void' is not assignable to type 'EventListener'.
+    Types of parameters 'event' and 'evt' are incompatible.
+      Type 'Event' is missing the following properties from type 'KeyboardEvent': altKey, charCode, code, ctrlKey, and 17 more.
+src/hooks/useKeyboardNavigation.ts(75,52): error TS2345: Argument of type '(event: KeyboardEvent) => void' is not assignable to parameter of type 'EventListenerOrEventListenerObject'.
+  Type '(event: KeyboardEvent) => void' is not assignable to type 'EventListener'.
+    Types of parameters 'event' and 'evt' are incompatible.
+      Type 'Event' is missing the following properties from type 'KeyboardEvent': altKey, charCode, code, ctrlKey, and 17 more.
+src/hooks/useOptimisticUpdates.ts(27,47): error TS2503: Cannot find namespace 'NodeJS'.
+src/hooks/useOptimisticUpdates.ts(204,30): error TS2554: Expected 1 arguments, but got 0.
+src/hooks/useOptimisticUpdates.ts(204,37): error TS2503: Cannot find namespace 'NodeJS'.
+src/hooks/useSSE.ts(72,34): error TS2503: Cannot find namespace 'NodeJS'.
+src/pages/ChainsPage.tsx(2,10): error TS2305: Module '"../components/ui/StatusBadge"' has no exported member 'Badge'.
+src/pages/ChainsPage.tsx(3,24): error TS2307: Cannot find module '../components/ui/Button' or its corresponding type declarations.
+src/pages/ChainsPage.tsx(6,35): error TS2307: Cannot find module '../types/chains' or its corresponding type declarations.
+src/pages/ChainsPage.tsx(21,32): error TS2304: Cannot find name 'apiService'.
+src/pages/ChainsPage.tsx(40,13): error TS2304: Cannot find name 'apiService'.
+src/pages/ChainsPage.tsx(129,45): error TS7006: Parameter 'tag' implicitly has an 'any' type.
+src/pages/DashboardPage.tsx(34,25): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/pages/DashboardPage.tsx(34,30): error TS7006: Parameter 'log' implicitly has an 'any' type.
+src/pages/DashboardPage.tsx(47,38): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/pages/DashboardPage.tsx(47,43): error TS7006: Parameter 'log' implicitly has an 'any' type.
+src/pages/DashboardPage.tsx(210,15): error TS2322: Type '{ service: string; route: string; p50: number; p95: number; p99: number; histogram: { range: string; count: unknown; }[]; }[]' is not assignable to type 'LatencyMetrics[]'.
+  Type '{ service: string; route: string; p50: number; p95: number; p99: number; histogram: { range: string; count: unknown; }[]; }' is missing the following properties from type 'LatencyMetrics': avg_response_time, min_response_time, max_response_time, p50_response_time, and 3 more.
+src/pages/FixturesPage.tsx(36,15): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(37,15): error TS2339: Property 'protocol' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(39,63): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(53,23): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(55,25): error TS2339: Property 'protocol' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(56,25): error TS2339: Property 'saved_at' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(57,28): error TS2339: Property 'fingerprint' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(58,25): error TS2339: Property 'metadata' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(220,81): error TS2339: Property 'file_size' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(271,34): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(272,120): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(273,38): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(288,55): error TS2339: Property 'file_size' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(290,40): error TS2339: Property 'protocol' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(292,51): error TS2339: Property 'saved_at' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(370,62): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(397,85): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(400,87): error TS2339: Property 'protocol' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(403,98): error TS2339: Property 'file_size' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(406,95): error TS2339: Property 'saved_at' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(418,51): error TS2339: Property 'protocol' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(419,49): error TS2339: Property 'method' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(421,51): error TS2339: Property 'saved_at' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(422,52): error TS2339: Property 'file_size' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(423,52): error TS2339: Property 'file_path' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(424,54): error TS2339: Property 'fingerprint' does not exist on type 'FixtureInfo'.
+src/pages/FixturesPage.tsx(425,51): error TS2339: Property 'metadata' does not exist on type 'FixtureInfo'.
+src/pages/ImportPage.tsx(24,10): error TS1484: 'ImportRequest' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/ImportPage.tsx(24,25): error TS1484: 'ImportResponse' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/ImportPage.tsx(24,41): error TS2305: Module '"../services/api"' has no exported member 'ImportRoute'.
+src/pages/ImportPage.tsx(24,54): error TS2305: Module '"../services/api"' has no exported member 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(144,19): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/ImportPage.tsx(174,13): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/ImportPage.tsx(184,13): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/ImportPage.tsx(284,8): error TS2322: Type '{ children: (string | Element)[]; type: "error"; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/pages/ImportPage.tsx(306,11): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/ImportPage.tsx(346,42): error TS2551: Property 'routes_count' does not exist on type 'ImportHistoryEntry'. Did you mean 'routeCount'?
+src/pages/ImportPage.tsx(347,28): error TS2339: Property 'variables_count' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(348,47): error TS2339: Property 'variables_count' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(350,28): error TS2339: Property 'warnings_count' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(352,42): error TS2339: Property 'warnings_count' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(357,26): error TS2339: Property 'environment' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(359,43): error TS2339: Property 'environment' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(363,26): error TS2339: Property 'base_url' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(365,40): error TS2339: Property 'base_url' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(369,26): error TS2339: Property 'error_message' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(371,37): error TS2339: Property 'error_message' does not exist on type 'ImportHistoryEntry'.
+src/pages/ImportPage.tsx(379,19): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/ImportPage.tsx(522,40): error TS2322: Type '{ children: (false | Element)[]; value: TabType; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/pages/ImportPage.tsx(528,57): error TS2322: Type 'TabType' is not assignable to type 'ImportFormat'.
+  Type '"history"' is not assignable to type 'ImportFormat'.
+src/pages/ImportPage.tsx(577,17): error TS2322: Type '{ children: (string | Element)[]; onClick: () => Promise<void>; disabled: boolean; loading: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'loading' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+src/pages/ImportPage.tsx(586,22): error TS2322: Type '{ children: (string | number | Element)[]; type: "success"; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/pages/ImportPage.tsx(591,22): error TS2322: Type '{ children: (string | Element | undefined)[]; type: "error"; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/pages/ImportPage.tsx(598,22): error TS2322: Type '{ children: Element[]; type: "warning"; }' is not assignable to type 'IntrinsicAttributes & AlertProps'.
+  Property 'children' does not exist on type 'IntrinsicAttributes & AlertProps'.
+src/pages/ImportPage.tsx(632,17): error TS2322: Type '{ children: (string | number | Element)[]; onClick: () => Promise<void>; disabled: boolean; loading: boolean; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.
+  Property 'loading' does not exist on type 'IntrinsicAttributes & ButtonProps'.
+src/pages/ImportPage.tsx(647,38): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/pages/MetricsPage.tsx(146,23): error TS18046: 'rate' is of type 'unknown'.
+src/pages/MetricsPage.tsx(147,12): error TS18046: 'rate' is of type 'unknown'.
+src/pages/MetricsPage.tsx(147,40): error TS18046: 'rate' is of type 'unknown'.
+src/pages/MetricsPage.tsx(180,20): error TS2571: Object is of type 'unknown'.
+src/pages/MetricsPage.tsx(180,81): error TS18046: 'a' is of type 'unknown'.
+src/pages/MetricsPage.tsx(180,85): error TS18046: 'b' is of type 'unknown'.
+src/pages/MetricsPage.tsx(186,34): error TS2571: Object is of type 'unknown'.
+src/pages/MetricsPage.tsx(186,100): error TS18046: 'a' is of type 'unknown'.
+src/pages/MetricsPage.tsx(186,104): error TS18046: 'b' is of type 'unknown'.
+src/pages/MetricsPage.tsx(192,24): error TS2571: Object is of type 'unknown'.
+src/pages/MetricsPage.tsx(192,87): error TS18046: 'a' is of type 'unknown'.
+src/pages/MetricsPage.tsx(192,91): error TS18046: 'b' is of type 'unknown'.
+src/pages/MetricsPage.tsx(212,31): error TS2322: Type '{ label: string; value: unknown; color: string; }[]' is not assignable to type '{ label: string; value: number; color: string; }[]'.
+  Type '{ label: string; value: unknown; color: string; }' is not assignable to type '{ label: string; value: number; color: string; }'.
+    Types of property 'value' are incompatible.
+      Type 'unknown' is not assignable to type 'number'.
+src/pages/MetricsPage.tsx(251,62): error TS7031: Binding element 'timestamp' implicitly has an 'any' type.
+src/pages/MetricsPage.tsx(251,73): error TS7031: Binding element 'value' implicitly has an 'any' type.
+src/pages/MetricsPage.tsx(260,59): error TS7031: Binding element 'timestamp' implicitly has an 'any' type.
+src/pages/MetricsPage.tsx(260,70): error TS7031: Binding element 'value' implicitly has an 'any' type.
+src/pages/MetricsPage.tsx(301,26): error TS18046: 'requestCount' is of type 'unknown'.
+src/pages/PluginsPage.tsx(46,9): error TS2322: Type '{ title: string; description: string; icon: Element; actions: Element; }' is not assignable to type 'IntrinsicAttributes & PageHeaderProps'.
+  Property 'description' does not exist on type 'IntrinsicAttributes & PageHeaderProps'.
+src/pages/PluginsPage.tsx(51,15): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/PluginsPage.tsx(58,21): error TS2322: Type '"outline"' is not assignable to type '"secondary" | "success" | "primary" | "danger" | undefined'.
+src/pages/PluginsPage.tsx(90,40): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/pages/PluginsPage.tsx(98,37): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/pages/PluginsPage.tsx(102,42): error TS2322: Type '{ children: Element; value: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsContentProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & TabsContentProps'.
+src/pages/WorkspacesPage.tsx(2,28): error TS2307: Cannot find module '../../services/api' or its corresponding type declarations.
+src/pages/WorkspacesPage.tsx(3,42): error TS2307: Cannot find module '../../hooks/useApi' or its corresponding type declarations.
+src/pages/WorkspacesPage.tsx(4,35): error TS2307: Cannot find module '../../stores/useWorkspaceStore' or its corresponding type declarations.
+src/pages/WorkspacesPage.tsx(15,8): error TS2307: Cannot find module '../../types' or its corresponding type declarations.
+src/pages/WorkspacesPage.tsx(27,26): error TS2307: Cannot find module '../components/ui/checkbox' or its corresponding type declarations.
+src/pages/WorkspacesPage.tsx(288,55): error TS7006: Parameter '_' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(317,49): error TS7006: Parameter 'ws' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(318,48): error TS7006: Parameter 'ws' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(330,7): error TS2304: Cannot find name 'setWorkspaces'.
+src/pages/WorkspacesPage.tsx(345,7): error TS2304: Cannot find name 'loadWorkspaces'.
+src/pages/WorkspacesPage.tsx(377,28): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/pages/WorkspacesPage.tsx(441,28): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/pages/WorkspacesPage.tsx(480,26): error TS7006: Parameter 'workspace' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(547,34): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/pages/WorkspacesPage.tsx(592,34): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/pages/WorkspacesPage.tsx(620,45): error TS7006: Parameter 'value' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(680,34): error TS2322: Type '{ children: Element; asChild: true; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+  Property 'asChild' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; }'.
+src/pages/WorkspacesPage.tsx(693,27): error TS2322: Type '{ children: Element[]; defaultValue: string; className: string; }' is not assignable to type 'IntrinsicAttributes & TabsProps'.
+  Property 'defaultValue' does not exist on type 'IntrinsicAttributes & TabsProps'.
+src/pages/WorkspacesPage.tsx(704,45): error TS7006: Parameter 'value' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(731,47): error TS7006: Parameter 'checked' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(770,28): error TS2304: Cannot find name 'importHistory'.
+src/pages/WorkspacesPage.tsx(773,29): error TS2304: Cannot find name 'importHistory'.
+src/pages/WorkspacesPage.tsx(773,48): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(773,54): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(824,53): error TS7006: Parameter 'folder' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(858,53): error TS7006: Parameter 'request' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(889,54): error TS7006: Parameter 'request' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(945,82): error TS7006: Parameter '_' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(958,18): error TS2739: Type '{ children: Element[]; }' is missing the following properties from type 'AlertProps': type, title
+src/pages/WorkspacesPage.tsx(972,49): error TS7006: Parameter 'route' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(977,43): error TS7006: Parameter 'checked' implicitly has an 'any' type.
+src/pages/WorkspacesPage.tsx(1026,12): error TS2739: Type '{ requestId: string; }' is missing the following properties from type 'ResponseHistoryProps': workspaceId, requestName
+src/pages/WorkspacesPage.tsx(1039,12): error TS2741: Property 'workspaceName' is missing in type '{ workspaceId: any; }' but required in type 'EncryptionSettingsProps'.
+src/services/api.ts(110,35): error TS2304: Cannot find name 'WorkspaceListResponse'.
+src/services/api.ts(114,52): error TS2304: Cannot find name 'WorkspaceResponse'.
+src/services/api.ts(118,34): error TS2304: Cannot find name 'CreateWorkspaceRequest'.
+src/services/api.ts(118,67): error TS2304: Cannot find name 'CreateWorkspaceResponse'.
+src/services/api.ts(128,64): error TS2304: Cannot find name 'CreateWorkspaceResponse'.
+src/services/api.ts(150,67): error TS2304: Cannot find name 'FolderResponse'.
+src/services/api.ts(154,52): error TS2304: Cannot find name 'CreateFolderRequest'.
+src/services/api.ts(154,82): error TS2304: Cannot find name 'CreateFolderResponse'.
+src/services/api.ts(164,53): error TS2304: Cannot find name 'CreateRequestRequest'.
+src/services/api.ts(164,84): error TS2304: Cannot find name 'CreateRequestResponse'.
+src/services/api.ts(194,83): error TS2304: Cannot find name 'ExecuteRequestRequest'.
+src/services/api.ts(194,115): error TS2304: Cannot find name 'ExecuteRequestResponse'.
+src/stores/useServiceStore.ts(24,7): error TS2739: Type '{ method: string; path: string; priority: number; has_fixtures: true; request_count: number; error_count: number; latency_ms: number; enabled: true; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, statusCode
+src/stores/useServiceStore.ts(36,7): error TS2739: Type '{ method: string; path: string; priority: number; has_fixtures: true; request_count: number; error_count: number; latency_ms: number; enabled: true; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, statusCode
+src/stores/useServiceStore.ts(48,7): error TS2739: Type '{ method: string; path: string; priority: number; has_fixtures: true; request_count: number; error_count: number; latency_ms: number; enabled: false; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, statusCode
+src/stores/useServiceStore.ts(69,7): error TS2739: Type '{ method: string; path: string; priority: number; has_fixtures: true; request_count: number; error_count: number; latency_ms: number; enabled: true; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, statusCode
+src/stores/useServiceStore.ts(81,7): error TS2739: Type '{ method: string; path: string; priority: number; has_fixtures: true; request_count: number; error_count: number; latency_ms: number; enabled: true; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, statusCode
+src/stores/useServiceStore.ts(102,7): error TS2739: Type '{ path: string; priority: number; has_fixtures: false; request_count: number; error_count: number; latency_ms: number; enabled: false; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, method, statusCode
+src/stores/useServiceStore.ts(113,7): error TS2739: Type '{ path: string; priority: number; has_fixtures: false; request_count: number; error_count: number; latency_ms: number; enabled: false; service_id: string; tags: string[]; }' is missing the following properties from type 'RouteInfo': id, method, statusCode
+src/stores/useWorkspaceStore.ts(39,60): error TS7006: Parameter 'w' implicitly has an 'any' type.
+src/stores/useWorkspaceStore.ts(58,60): error TS7006: Parameter 'w' implicitly has an 'any' type.
+src/test/setup.ts(1,8): error TS2307: Cannot find module '@testing-library/jest-dom' or its corresponding type declarations.
+src/test/setup.ts(2,39): error TS2307: Cannot find module 'vitest' or its corresponding type declarations.
+src/test/setup.ts(3,25): error TS2307: Cannot find module '@testing-library/react' or its corresponding type declarations.
+src/test/setup.ts(4,27): error TS2307: Cannot find module '@testing-library/jest-dom/matchers' or its corresponding type declarations.
+src/test/setup.ts(15,1): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(25,1): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(34,37): error TS7006: Parameter 'query' implicitly has an 'any' type.
+src/test/setup.ts(53,1): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(56,23): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(63,1): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(64,1): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(77,1): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(88,3): error TS2304: Cannot find name 'global'.
+src/test/setup.ts(92,1): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+src/test/setup.ts(93,6): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.

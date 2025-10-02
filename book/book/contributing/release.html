@@ -345,7 +345,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 RUN apt-get update &amp;&amp; apt-get install -y ca-certificates &amp;&amp; rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/mockforge-cli /usr/local/bin/mockforge-cli
-EXPOSE 3000 3001 50051 8080
+EXPOSE 3000 3001 50051 9080
 CMD ["mockforge-cli", "serve"]
 </code></pre>
 <pre><code class="language-bash"># Build and push Docker image

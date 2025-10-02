@@ -27,6 +27,7 @@ impl OpenApiRouteRegistry {
     }
 
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
+        tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
         let options = ValidationOptions {
@@ -63,6 +64,7 @@ impl OpenApiRouteRegistry {
 
     /// Construct with explicit options
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
+        tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
         Self {
@@ -75,11 +77,14 @@ impl OpenApiRouteRegistry {
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
+        tracing::debug!("Generating routes from OpenAPI spec with {} paths", spec.spec.paths.paths.len());
 
         for (path, path_item) in &spec.spec.paths.paths {
+            tracing::debug!("Processing path: {}", path);
             if let Some(item) = path_item.as_item() {
                 // Generate route for each HTTP method
                 if let Some(op) = &item.get {
+                    tracing::debug!("  Adding GET route for path: {}", path);
                     routes.push(OpenApiRoute::from_operation(
                         "GET",
                         path.clone(),
@@ -146,6 +151,7 @@ impl OpenApiRouteRegistry {
             }
         }
 
+        tracing::debug!("Generated {} total routes from OpenAPI spec", routes.len());
         routes
     }
 
@@ -168,6 +174,104 @@ impl OpenApiRouteRegistry {
     pub fn options_mut(&mut self) -> &mut ValidationOptions {
         &mut self.options
     }
+
+    /// Build an Axum router from the generated routes
+    pub fn build_router(&self) -> axum::Router {
+        use axum::routing::{get, post, put, delete, patch};
+        
+        let mut router = axum::Router::new();
+        tracing::debug!("Building router from {} routes", self.routes.len());
+        
+        for route in &self.routes {
+            tracing::debug!("Adding route: {} {}", route.method, route.path);
+            
+            let route_clone = route.clone();
+            let handler = move || {
+                let route = route_clone.clone();
+                async move {
+                    tracing::debug!("Handling request for route: {} {}", route.method, route.path);
+                    let (_status, response) = route.mock_response_with_status();
+                    axum::Json(response)
+                }
+            };
+            
+            match route.method.as_str() {
+                "GET" => router = router.route(&route.path, get(handler)),
+                "POST" => router = router.route(&route.path, post(handler)),
+                "PUT" => router = router.route(&route.path, put(handler)),
+                "DELETE" => router = router.route(&route.path, delete(handler)),
+                "PATCH" => router = router.route(&route.path, patch(handler)),
+                _ => tracing::warn!("Unsupported HTTP method: {}", route.method),
+            }
+        }
+        
+        router
+    }
+
+    /// Build router with injectors (latency, failure)
+    pub fn build_router_with_injectors(
+        &self,
+        latency_injector: crate::latency::LatencyInjector,
+        failure_injector: Option<crate::failure_injection::FailureInjector>,
+    ) -> axum::Router {
+        use axum::routing::{get, post, put, delete, patch};
+        
+        let mut router = axum::Router::new();
+        tracing::debug!("Building router with injectors from {} routes", self.routes.len());
+        
+        for route in &self.routes {
+            tracing::debug!("Adding route with injectors: {} {}", route.method, route.path);
+            
+            let route_clone = route.clone();
+            let latency_injector_clone = latency_injector.clone();
+            let failure_injector_clone = failure_injector.clone();
+            
+            let handler = move || {
+                let route = route_clone.clone();
+                let latency_injector = latency_injector_clone.clone();
+                let failure_injector = failure_injector_clone.clone();
+                
+                async move {
+                    tracing::debug!("Handling request with injectors for route: {} {}", route.method, route.path);
+                    
+                    // Extract tags from the operation
+                    let tags = route.operation.tags.clone();
+                    
+                    // Inject latency if configured
+                    if let Err(e) = latency_injector.inject_latency(&tags).await {
+                        tracing::warn!("Failed to inject latency: {}", e);
+                    }
+                    
+                    // Check for failure injection
+                    if let Some(ref injector) = failure_injector {
+                        if injector.should_inject_failure(&tags) {
+                            // Return a failure response
+                            return axum::Json(serde_json::json!({
+                                "error": "Injected failure",
+                                "code": 500
+                            }));
+                        }
+                    }
+                    
+                    // Generate normal response
+                    let (_status, response) = route.mock_response_with_status();
+                    axum::Json(response)
+                }
+            };
+            
+            match route.method.as_str() {
+                "GET" => router = router.route(&route.path, get(handler)),
+                "POST" => router = router.route(&route.path, post(handler)),
+                "PUT" => router = router.route(&route.path, put(handler)),
+                "DELETE" => router = router.route(&route.path, delete(handler)),
+                "PATCH" => router = router.route(&route.path, patch(handler)),
+                _ => tracing::warn!("Unsupported HTTP method: {}", route.method),
+            }
+        }
+        
+        router
+    }
+
 
     /// Extract path parameters from a request path by matching against known routes
     pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {

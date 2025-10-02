@@ -21,7 +21,8 @@ import {
   TabsTrigger,
   EmptyState,
 } from '../components/ui/DesignSystem';
-import { ImportRequest, ImportResponse, ImportRoute, ImportHistoryEntry } from '../services/api';
+import type { ImportRequest, ImportResponse, ImportHistoryEntry } from '../services/api';
+import type { ImportedRoute as ImportRoute } from '../types';
 
 // Import format types
 type ImportFormat = 'postman' | 'insomnia' | 'curl';
@@ -140,8 +141,8 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
           className="hidden"
           id={`file-upload-${format}`}
         />
-        <label htmlFor={`file-upload-${format}`}>
-          <Button variant="outline" as="span">
+        <label htmlFor={`file-upload-${format}`} style={{ cursor: 'pointer' }}>
+          <Button variant="outline" type="button">
             Choose File
           </Button>
         </label>
@@ -344,10 +345,10 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
 
                   <div className="flex items-center space-x-4 text-sm">
                     <span>Routes: {entry.routes_count}</span>
-                    {entry.variables_count > 0 && (
+                    {(entry.variables_count ?? 0) > 0 && (
                       <span>Variables: {entry.variables_count}</span>
                     )}
-                    {entry.warnings_count > 0 && (
+                    {(entry.warnings_count ?? 0) > 0 && (
                       <span className="text-yellow-600 dark:text-yellow-400">
                         Warnings: {entry.warnings_count}
                       </span>
@@ -525,7 +526,7 @@ export function ImportPage() {
             title="Upload File"
             subtitle={`Upload your ${activeTab} collection or export file`}
           >
-            <FileUpload onFileSelect={handleFileSelect} format={activeTab} />
+            <FileUpload onFileSelect={handleFileSelect} format={activeTab === 'history' ? 'postman' : activeTab} />
           </Section>
 
           {/* Configuration Section */}

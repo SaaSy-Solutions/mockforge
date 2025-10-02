@@ -9,12 +9,12 @@ http:
 # Admin UI configuration
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   host: "127.0.0.1"
   auth_required: false
   api_enabled: true
 
-# Core configuration  
+# Core configuration
 core:
   latency_enabled: true
   failures_enabled: false

@@ -6,8 +6,6 @@ import {
   Input,
   Label,
   Alert,
-  RadioGroup,
-  RadioGroupItem,
   Tabs,
   TabsContent,
   TabsList,
@@ -59,7 +57,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
       } else {
         setError(data.error);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to install plugin');
     } finally {
       setLoading(false);
@@ -92,7 +90,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
       } else {
         setError(data.error || 'Plugin validation failed');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to validate plugin');
     } finally {
       setLoading(false);

@@ -7,7 +7,7 @@ pub mod request_logging;
 pub mod sse;
 
 use axum::middleware::from_fn_with_state;
-use axum::Router;
+use axum::{Router, extract::State, response::Json};
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
 use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
@@ -18,8 +18,59 @@ use mockforge_core::TrafficShaper;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::*;
+
+/// Route info for storing in state
+#[derive(Clone)]
+pub struct RouteInfo {
+    pub method: String,
+    pub path: String,
+    pub operation_id: Option<String>,
+    pub summary: Option<String>,
+    pub description: Option<String>,
+    pub parameters: Vec<String>,
+}
+
+/// Shared state for tracking OpenAPI routes
+#[derive(Clone)]
+pub struct HttpServerState {
+    pub routes: Vec<RouteInfo>,
+}
+
+impl HttpServerState {
+    pub fn new() -> Self {
+        Self {
+            routes: Vec::new(),
+        }
+    }
+    
+    pub fn with_routes(routes: Vec<RouteInfo>) -> Self {
+        Self {
+            routes,
+        }
+    }
+}
+
+/// Handler to return OpenAPI routes information
+async fn get_routes_handler(State(state): State<HttpServerState>) -> Json<serde_json::Value> {
+    let route_info: Vec<serde_json::Value> = state.routes.iter().map(|route| {
+        serde_json::json!({
+            "method": route.method,
+            "path": route.path,
+            "operation_id": route.operation_id,
+            "summary": route.summary,
+            "description": route.description,
+            "parameters": route.parameters
+        })
+    }).collect();
+    
+    Json(serde_json::json!({
+        "routes": route_info,
+        "total": state.routes.len()
+    }))
+}
 
 /// Build the base HTTP router, optionally from an OpenAPI spec.
 pub async fn build_router(
@@ -29,27 +80,52 @@ pub async fn build_router(
 ) -> Router {
     // Set up the basic router
     let mut app = Router::new();
+    let mut state = HttpServerState::new();
 
     // If an OpenAPI spec is provided, integrate it
     if let Some(spec_path) = spec_path {
+        tracing::debug!("Processing OpenAPI spec path: {}", spec_path);
         match OpenApiSpec::from_file(&spec_path).await {
             Ok(openapi) => {
                 info!("Loaded OpenAPI spec from {}", spec_path);
+                tracing::debug!("Creating OpenAPI route registry...");
                 let registry = if let Some(opts) = options {
+                    tracing::debug!("Using custom validation options");
                     OpenApiRouteRegistry::new_with_options(openapi, opts)
                 } else {
+                    tracing::debug!("Using environment-based options");
                     OpenApiRouteRegistry::new_with_env(openapi)
                 };
 
-                app = if let Some(failure_config) = &failure_config {
+                // Extract route information for introspection
+                let route_info: Vec<RouteInfo> = registry.routes().iter().map(|route| {
+                    RouteInfo {
+                        method: route.method.clone(),
+                        path: route.path.clone(),
+                        operation_id: route.operation.operation_id.clone(),
+                        summary: route.operation.summary.clone(),
+                        description: route.operation.description.clone(),
+                        parameters: route.parameters.clone(),
+                    }
+                }).collect();
+                state.routes = route_info;
+
+                tracing::debug!("Building router from registry...");
+                let openapi_router = if let Some(failure_config) = &failure_config {
+                    tracing::debug!("Building router with failure injection");
                     let failure_injector = FailureInjector::new(Some(failure_config.clone()), true);
                     registry.build_router_with_injectors(
                         LatencyInjector::default(),
                         Some(failure_injector),
                     )
                 } else {
+                    tracing::debug!("Building basic router");
                     registry.build_router()
                 };
+                
+                tracing::debug!("Merging OpenAPI router with main router");
+                app = app.merge(openapi_router);
+                tracing::debug!("Router built successfully");
             }
             Err(e) => {
                 warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec_path, e);
@@ -67,6 +143,17 @@ pub async fn build_router(
     )
     // Add SSE endpoints
     .merge(sse::sse_router());
+
+    // Create a router with state for the routes endpoint
+    let routes_router = Router::new()
+        .route("/__mockforge/routes", axum::routing::get(get_routes_handler))
+        .with_state(state);
+
+    // Merge the routes router with the main app
+    app = app.merge(routes_router);
+
+    // Add request logging middleware to capture all requests
+    app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
 
     app
 }

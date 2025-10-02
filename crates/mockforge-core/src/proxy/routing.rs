@@ -152,14 +152,14 @@ mod tests {
         let route = crate::routing::Route::new(HttpMethod::GET, "/api/*".to_string());
         router.add_proxy_route(route).unwrap();
 
-        let base_url = "http://backend:8080";
+        let base_url = "http://backend:9080";
         assert_eq!(
             router.get_target_url(&HttpMethod::GET, "/api/users", base_url),
-            Some("http://backend:8080/users".to_string())
+            Some("http://backend:9080/users".to_string())
         );
         assert_eq!(
             router.get_target_url(&HttpMethod::GET, "/api/posts", base_url),
-            Some("http://backend:8080/posts".to_string())
+            Some("http://backend:9080/posts".to_string())
         );
         assert_eq!(router.get_target_url(&HttpMethod::GET, "/admin/users", base_url), None);
     }

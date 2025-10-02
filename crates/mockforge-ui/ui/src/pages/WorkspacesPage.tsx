@@ -1,18 +1,44 @@
 import React, { useState } from 'react';
-import { apiService } from '../../services/api';
-import { useUpdateWorkspacesOrder } from '../../hooks/useApi';
-import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
-import {
+import { apiService } from '../services/api';
+import { useUpdateWorkspacesOrder } from '../hooks/useApi';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import type {
   WorkspaceSummary,
-  WorkspaceDetail,
-  FolderDetail,
-  CreateWorkspaceRequest,
-  CreateFolderRequest,
-  CreateRequestRequest,
   ImportToWorkspaceRequest,
   ImportResponse,
   ImportHistoryEntry
-} from '../../types';
+} from '../types';
+
+// Define local types for workspace operations (to be moved to types later)
+interface WorkspaceDetail {
+  summary: WorkspaceSummary;
+  folders: Array<{ id: string; name: string; description?: string; request_count: number }>;
+  requests: Array<{ id: string; name: string; method: string; path: string }>;
+}
+
+interface FolderDetail {
+  summary: { id: string; name: string; description?: string };
+  requests: Array<{ id: string; name: string; method: string; path: string }>;
+}
+
+interface CreateWorkspaceRequest {
+  name: string;
+  description?: string;
+}
+
+interface CreateFolderRequest {
+  name: string;
+  description?: string;
+}
+
+interface CreateRequestRequest {
+  name: string;
+  method: string;
+  path: string;
+  status_code: number;
+  response_body: string;
+  folder_id?: string;
+}
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -24,7 +50,7 @@ import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/DesignSystem';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
 import { Folder, FolderOpen, FileText, Plus, Upload, Settings, Trash2, History, Play, Shield, GripVertical, AlertTriangle } from 'lucide-react';
-import { Checkbox } from '../components/ui/checkbox';
+import { Checkbox } from '../components/ui/DesignSystem';
 import { toast } from 'sonner';
 import ResponseHistory from '../components/workspace/ResponseHistory';
 import EncryptionSettings from '../components/workspace/EncryptionSettings';
@@ -46,6 +72,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importPreviewData, setImportPreviewData] = useState<ImportResponse | null>(null);
   const [selectedRoutes, setSelectedRoutes] = useState<Set<number>>(new Set());
+  const [importHistory] = useState<ImportHistoryEntry[]>([]); // Add import history state
 
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [encryptionSettingsOpen, setEncryptionSettingsOpen] = useState(false);
@@ -254,8 +281,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
     };
 
     try {
-      const response = await apiService.importToWorkspace(selectedWorkspace.summary.id, importRequest);
-      toast.success(response.message);
+      await apiService.importToWorkspace(selectedWorkspace.summary.id, importRequest);
+      toast.success('Import completed successfully');
       setImportOpen(false);
       setImportPreviewOpen(false);
       setImportData({
@@ -285,7 +312,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const response = await apiService.previewImport(previewRequest);
       setImportPreviewData(response);
       // Select all routes by default
-      setSelectedRoutes(new Set(response.routes?.map((_, index: number) => index) || []));
+      setSelectedRoutes(new Set(response.routes?.map((_: unknown, index: number) => index) || []));
       setImportOpen(false);
       setImportPreviewOpen(true);
     } catch (err) {
@@ -327,7 +354,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       newWorkspaces.splice(targetIndex, 0, draggedWs);
 
       // Update the local state immediately for better UX
-      setWorkspaces(newWorkspaces);
+      // Note: setWorkspaces is handled by the store
 
       // Update the order by sending the new order to the API
       const workspaceIds = newWorkspaces.map(ws => ws.id);
@@ -342,7 +369,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
     } catch {
       toast.error('Failed to update workspace order');
       // Reload workspaces to revert the optimistic update
-      loadWorkspaces();
+      const { refreshWorkspaces } = useWorkspaceStore.getState();
+      await refreshWorkspaces();
     } finally {
       setDraggedWorkspace(null);
     }
@@ -728,7 +756,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                           <Checkbox
                             id="create-folders"
                             checked={importData.create_folders}
-                            onCheckedChange={(checked) => setImportData({ ...importData, create_folders: checked as boolean })}
+                            onCheckedChange={(checked: boolean) => setImportData({ ...importData, create_folders: checked as boolean })}
                           />
                           <Label htmlFor="create-folders">Create folders for organization</Label>
                         </div>
@@ -974,7 +1002,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     <div className="flex items-start space-x-3">
                       <Checkbox
                         checked={selectedRoutes.has(index)}
-                        onCheckedChange={(checked) => {
+                        onCheckedChange={(checked: boolean) => {
                           const newSelected = new Set(selectedRoutes);
                           if (checked) {
                             newSelected.add(index);
@@ -995,8 +1023,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                         )}
                         <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                           <span>Status: {route.status_code || 200}</span>
-                          {route.headers && route.headers.length > 0 && (
-                            <span>{route.headers.length} headers</span>
+                          {route.headers && (Array.isArray(route.headers) ? route.headers.length : 0) > 0 && (
+                            <span>{Array.isArray(route.headers) ? route.headers.length : 0} headers</span>
                           )}
                         </div>
                       </div>
@@ -1023,7 +1051,11 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
           <DialogHeader>
             <DialogTitle>Request History - {selectedRequestForHistory?.name}</DialogTitle>
           </DialogHeader>
-          <ResponseHistory requestId={selectedRequestForHistory?.id || ''} />
+          <ResponseHistory
+            workspaceId={selectedWorkspace?.summary.id || ''}
+            requestId={selectedRequestForHistory?.id || ''}
+            requestName={selectedRequestForHistory?.name || ''}
+          />
         </DialogContent>
       </Dialog>
 
@@ -1036,7 +1068,10 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
               Configure encryption settings for this workspace.
             </DialogDescription>
           </DialogHeader>
-          <EncryptionSettings workspaceId={selectedWorkspace?.summary.id || ''} />
+          <EncryptionSettings
+            workspaceId={selectedWorkspace?.summary.id || ''}
+            workspaceName={selectedWorkspace?.summary.name || ''}
+          />
         </DialogContent>
       </Dialog>
     </div>

@@ -15,6 +15,10 @@ interface ThemePaletteState {
   mode: ThemeMode;
   resolvedMode: ResolvedTheme;
 
+  // Aliases for compatibility
+  theme: ThemeMode;
+  setTheme: (mode: ThemeMode) => void;
+
   // Actions
   setThemePalette: (themeId: string) => void;
   setMode: (mode: ThemeMode) => void;
@@ -32,6 +36,14 @@ export const useThemePaletteStore = create<ThemePaletteState>()(
       currentTheme: getDefaultTheme(),
       mode: 'system',
       resolvedMode: 'light',
+
+      // Aliases for compatibility
+      get theme() {
+        return get().mode;
+      },
+      setTheme: (mode: ThemeMode) => {
+        get().setMode(mode);
+      },
 
       setThemePalette: (themeId: string) => {
         const theme = getThemeById(themeId);

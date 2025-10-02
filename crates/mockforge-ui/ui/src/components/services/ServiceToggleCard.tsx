@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
-import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
+import { ContextMenuWithItems, type ContextMenuItem } from '../ui/ContextMenu';
 import type { ServiceInfo } from '../../types';
 import { cn } from '../../utils/cn';
 import { generateCurlCommand, copyToClipboard } from '../../utils/curlGenerator';
@@ -161,7 +161,7 @@ export function ServiceToggleCard({
 
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.route && (
-        <ContextMenu
+        <ContextMenuWithItems
           items={getContextMenuItems(contextMenu.route)}
           position={contextMenu.position}
           onClose={handleContextMenuClose}

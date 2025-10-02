@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/StatusBadge';
-import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
-import { ChainSummary } from '@/types/chains';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
+import { apiService } from '../services/api';
+import type { ChainSummary } from '../types/chains';
 
 interface ChainsPageProps {
   className?: string;

@@ -116,7 +116,7 @@ MockForge supports extensive configuration through environment variables. This p
   - Enable/disable the Admin UI
   - When enabled, provides web interface for management
 
-- `MOCKFORGE_ADMIN_PORT=8080` (default: `8080`)
+- `MOCKFORGE_ADMIN_PORT=9080` (default: `9080`)
   - Port for the Admin UI server to listen on
 
 - `MOCKFORGE_ADMIN_HOST=127.0.0.1` (default: `127.0.0.1`)
@@ -172,7 +172,7 @@ MockForge supports extensive configuration through environment variables. This p
 export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 export MOCKFORGE_ADMIN_ENABLED=true
-cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 8080
+cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 9080
 ```
 
 ### Full WebSocket Support

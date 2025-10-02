@@ -173,8 +173,8 @@ mod tests {
 
     #[test]
     fn test_create_socket_addr() {
-        let addr = create_socket_addr("127.0.0.1", 8080).unwrap();
-        assert_eq!(addr.to_string(), "127.0.0.1:8080");
+        let addr = create_socket_addr("127.0.0.1", 9080).unwrap();
+        assert_eq!(addr.to_string(), "127.0.0.1:9080");
     }
 
     #[test]
@@ -187,13 +187,13 @@ mod tests {
 
     #[test]
     fn test_localhost_socket_addr() {
-        let addr = localhost_socket_addr(8080);
-        assert_eq!(addr.to_string(), "127.0.0.1:8080");
+        let addr = localhost_socket_addr(9080);
+        assert_eq!(addr.to_string(), "127.0.0.1:9080");
     }
 
     #[test]
     fn test_wildcard_socket_addr() {
-        let addr = wildcard_socket_addr(8080);
-        assert_eq!(addr.to_string(), "0.0.0.0:8080");
+        let addr = wildcard_socket_addr(9080);
+        assert_eq!(addr.to_string(), "0.0.0.0:9080");
     }
 }

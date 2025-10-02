@@ -85,7 +85,7 @@ export function SyncConfirmationDialog({
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {requiringConfirmation.length > 0 && (
             <div>
-              <h4 className="font-medium text-text-primary mb-2">Changes requiring confirmation:</h4>
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Changes requiring confirmation:</h4>
               <div className="space-y-2">
                 {requiringConfirmation.map((change, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 bg-bg-secondary rounded-lg">
@@ -95,11 +95,11 @@ export function SyncConfirmationDialog({
                         <Badge variant={getChangeBadgeVariant(change.change_type)}>
                           {change.change_type}
                         </Badge>
-                        <code className="text-sm text-text-secondary truncate">
+                        <code className="text-sm text-gray-600 dark:text-gray-400 truncate">
                           {change.path}
                         </code>
                       </div>
-                      <p className="text-sm text-text-secondary">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         {change.description}
                       </p>
                     </div>
@@ -111,7 +111,7 @@ export function SyncConfirmationDialog({
 
           {autoApplied.length > 0 && (
             <div>
-              <h4 className="font-medium text-text-primary mb-2">Changes that will be applied automatically:</h4>
+              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Changes that will be applied automatically:</h4>
               <div className="space-y-2">
                 {autoApplied.map((change, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 bg-bg-tertiary rounded-lg opacity-75">
@@ -121,11 +121,11 @@ export function SyncConfirmationDialog({
                         <Badge variant={getChangeBadgeVariant(change.change_type)}>
                           {change.change_type}
                         </Badge>
-                        <code className="text-sm text-text-secondary truncate">
+                        <code className="text-sm text-gray-600 dark:text-gray-400 truncate">
                           {change.path}
                         </code>
                       </div>
-                      <p className="text-sm text-text-secondary">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         {change.description}
                       </p>
                     </div>
@@ -136,7 +136,7 @@ export function SyncConfirmationDialog({
           )}
 
           {changes.length === 0 && (
-            <div className="text-center py-8 text-text-secondary">
+            <div className="text-center py-8 text-gray-600 dark:text-gray-400">
               No changes detected.
             </div>
           )}
@@ -151,7 +151,7 @@ export function SyncConfirmationDialog({
               onChange={(e) => setApplyAll(e.target.checked)}
               className="rounded border-border"
             />
-            <label htmlFor="apply-all" className="text-sm text-text-primary">
+            <label htmlFor="apply-all" className="text-sm text-gray-900 dark:text-gray-100">
               Apply all changes including those requiring confirmation
             </label>
           </div>

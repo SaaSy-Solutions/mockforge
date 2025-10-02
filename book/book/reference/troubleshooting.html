@@ -191,11 +191,11 @@
 ps aux | grep mockforge
 
 # Check listening ports
-netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+netstat -tlnp | grep -E ":(3000|3001|50051|9080)"
 
 # Test basic connectivity
 curl -I http://localhost:3000/health 2&gt;/dev/null || echo "HTTP server not responding"
-curl -I http://localhost:8080/health 2&gt;/dev/null || echo "Admin UI not responding"
+curl -I http://localhost:9080/health 2&gt;/dev/null || echo "Admin UI not responding"
 </code></pre>
 <h3 id="check-logs"><a class="header" href="#check-logs">Check Logs</a></h3>
 <p>Enable verbose logging to see detailed information:</p>
@@ -456,7 +456,7 @@ grpcurl -plaintext -v -d '{"user_id": "123"}' localhost:50051 mockforge.user.Use
 <li>
 <p><strong>Check admin port</strong>:</p>
 <pre><code class="language-bash"># Verify port is listening
-curl -I http://localhost:8080 2&gt;/dev/null || echo "Admin UI not accessible"
+curl -I http://localhost:9080 2&gt;/dev/null || echo "Admin UI not accessible"
 
 # Try different port
 mockforge serve --admin --admin-port 9090
@@ -486,7 +486,7 @@ mockforge serve --admin --admin-embed
 <li>
 <p><strong>Check admin API</strong>:</p>
 <pre><code class="language-bash"># Test admin API directly
-curl http://localhost:8080/__mockforge/status
+curl http://localhost:9080/__mockforge/status
 </code></pre>
 </li>
 <li>
@@ -647,7 +647,7 @@ cargo --version
 echo "=== Running Processes ==="
 ps aux | grep mockforge
 echo "=== Listening Ports ==="
-netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+netstat -tlnp | grep -E ":(3000|3001|50051|9080)"
 echo "=== Disk Space ==="
 df -h
 echo "=== Memory Usage ==="

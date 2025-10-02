@@ -12,19 +12,22 @@
 use axum::{
     extract::{Query, State},
     http::{self, StatusCode},
-    response::{Html, IntoResponse, Json},
+    response::{Html, IntoResponse, Json, sse::{Event, Sse}},
 };
 use chrono::Utc;
+use futures_util::stream::{self, Stream};
 use mockforge_core::{Error, Result};
+use mockforge_plugin_loader::PluginRegistry;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::process::Command;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::System;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 // Import all types from models
 use crate::models::{
@@ -39,9 +42,11 @@ use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
 // Handler sub-modules
 pub mod admin;
 pub mod assets;
+pub mod plugin;
 
 // Re-export commonly used types
 pub use assets::*;
+pub use plugin::*;
 
 // Import workspace persistence
 use mockforge_core::workspace_import::WorkspaceImportConfig;
@@ -246,6 +251,8 @@ pub struct AdminState {
     pub graphql_server_addr: Option<std::net::SocketAddr>,
     /// Whether API endpoints are enabled
     pub api_enabled: bool,
+    /// Admin server port
+    pub admin_port: u16,
     /// Start time
     pub start_time: chrono::DateTime<chrono::Utc>,
     /// Request metrics (protected by RwLock)
@@ -266,6 +273,8 @@ pub struct AdminState {
     pub import_history: Arc<RwLock<Vec<ImportHistoryEntry>>>,
     /// Workspace persistence
     pub workspace_persistence: Arc<WorkspacePersistence>,
+    /// Plugin registry (protected by RwLock)
+    pub plugin_registry: Arc<RwLock<PluginRegistry>>,
 }
 
 impl AdminState {
@@ -325,6 +334,7 @@ impl AdminState {
         grpc_server_addr: Option<std::net::SocketAddr>,
         graphql_server_addr: Option<std::net::SocketAddr>,
         api_enabled: bool,
+        admin_port: u16,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -334,6 +344,7 @@ impl AdminState {
             grpc_server_addr,
             graphql_server_addr,
             api_enabled,
+            admin_port,
             start_time,
             metrics: Arc::new(RwLock::new(RequestMetrics::default())),
             system_metrics: Arc::new(RwLock::new(SystemMetrics {
@@ -378,6 +389,7 @@ impl AdminState {
             smoke_test_results: Arc::new(RwLock::new(Vec::new())),
             import_history: Arc::new(RwLock::new(Vec::new())),
             workspace_persistence: Arc::new(WorkspacePersistence::new("./workspaces")),
+            plugin_registry: Arc::new(RwLock::new(PluginRegistry::new())),
         }
     }
 
@@ -723,19 +735,48 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         .signed_duration_since(state.start_time)
         .num_seconds() as u64;
 
-    // Get real metrics from state
-    let metrics = state.get_metrics().await;
+    // Get system metrics from state
     let system_metrics = state.get_system_metrics().await;
     let _config = state.get_config().await;
 
-    // Get recent logs from centralized logger
-    let recent_logs: Vec<RequestLog> =
+    // Get recent logs and calculate metrics from centralized logger
+    let (recent_logs, calculated_metrics): (Vec<RequestLog>, RequestMetrics) =
         if let Some(global_logger) = mockforge_core::get_global_logger() {
-            // Get logs from centralized logger
-            let centralized_logs = global_logger.get_recent_logs(Some(20)).await;
+            // Get all logs to calculate metrics
+            let all_logs = global_logger.get_recent_logs(None).await;
+            let recent_logs_subset = global_logger.get_recent_logs(Some(20)).await;
+
+            // Calculate metrics from logs
+            let total_requests = all_logs.len() as u64;
+            let mut requests_by_endpoint = HashMap::new();
+            let mut errors_by_endpoint = HashMap::new();
+            let mut response_times = Vec::new();
+            let mut last_request_by_endpoint = HashMap::new();
+
+            for log in &all_logs {
+                let endpoint_key = format!("{} {}", log.method, log.path);
+                *requests_by_endpoint.entry(endpoint_key.clone()).or_insert(0) += 1;
+
+                if log.status_code >= 400 {
+                    *errors_by_endpoint.entry(endpoint_key.clone()).or_insert(0) += 1;
+                }
+
+                response_times.push(log.response_time_ms);
+                last_request_by_endpoint.insert(endpoint_key, log.timestamp);
+            }
+
+            let calculated_metrics = RequestMetrics {
+                total_requests,
+                active_connections: 0, // We don't track this from logs
+                requests_by_endpoint,
+                response_times,
+                response_times_by_endpoint: HashMap::new(), // Simplified for now
+                errors_by_endpoint,
+                last_request_by_endpoint,
+            };
 
             // Convert to RequestLog format for admin UI
-            centralized_logs
+            let recent_logs = recent_logs_subset
                 .into_iter()
                 .map(|log| RequestLog {
                     id: log.id,
@@ -750,12 +791,18 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
                     response_size_bytes: log.response_size_bytes,
                     error_message: log.error_message,
                 })
-                .collect()
+                .collect();
+
+            (recent_logs, calculated_metrics)
         } else {
             // Fallback to local logs if centralized logger not available
             let logs = state.logs.read().await;
-            logs.iter().rev().take(10).cloned().collect()
+            let recent_logs = logs.iter().rev().take(10).cloned().collect();
+            let metrics = state.get_metrics().await;
+            (recent_logs, metrics)
         };
+
+    let metrics = calculated_metrics;
 
     let system_info = SystemInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -824,6 +871,12 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
             version: env!("CARGO_PKG_VERSION").to_string(),
             build_time: option_env!("VERGEN_BUILD_TIMESTAMP").unwrap_or("unknown").to_string(),
             git_sha: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown").to_string(),
+            http_server: state.http_server_addr.map(|addr| addr.to_string()),
+            ws_server: state.ws_server_addr.map(|addr| addr.to_string()),
+            grpc_server: state.grpc_server_addr.map(|addr| addr.to_string()),
+            graphql_server: state.graphql_server_addr.map(|addr| addr.to_string()),
+            api_enabled: state.api_enabled,
+            admin_port: state.admin_port,
         },
         system_info: DashboardSystemInfo {
             os: std::env::consts::OS.to_string(),
@@ -885,7 +938,8 @@ pub async fn get_server_info(State(state): State<AdminState>) -> Json<serde_json
     Json(json!({
         "http_server": state.http_server_addr.map(|addr| addr.to_string()),
         "ws_server": state.ws_server_addr.map(|addr| addr.to_string()),
-        "grpc_server": state.grpc_server_addr.map(|addr| addr.to_string())
+        "grpc_server": state.grpc_server_addr.map(|addr| addr.to_string()),
+        "admin_port": state.admin_port
     }))
 }
 
@@ -967,9 +1021,120 @@ pub async fn get_logs(
     Json(ApiResponse::success(logs))
 }
 
+// Configuration for recent logs display
+const RECENT_LOGS_LIMIT: usize = 20;
+const RECENT_LOGS_TTL_MINUTES: i64 = 5;
+
+/// SSE endpoint for real-time log streaming
+pub async fn logs_sse(
+    State(_state): State<AdminState>,
+) -> Sse<impl Stream<Item = std::result::Result<Event, Infallible>>> {
+    tracing::info!("SSE endpoint /logs/sse accessed - starting real-time log streaming for recent requests only");
+
+    let stream = stream::unfold(std::collections::HashSet::new(), |mut seen_ids| async move {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Get recent logs from centralized logger (limit to recent entries for dashboard)
+        if let Some(global_logger) = mockforge_core::get_global_logger() {
+            let centralized_logs = global_logger.get_recent_logs(Some(RECENT_LOGS_LIMIT)).await;
+
+            tracing::debug!("SSE: Checking logs - total logs: {}, seen logs: {}", centralized_logs.len(), seen_ids.len());
+
+            // Filter for recent logs within TTL
+            let now = chrono::Utc::now();
+            let ttl_cutoff = now - chrono::Duration::minutes(RECENT_LOGS_TTL_MINUTES);
+
+            // Find new logs that haven't been seen before
+            let new_logs: Vec<RequestLog> = centralized_logs
+                .into_iter()
+                .filter(|log| {
+                    // Only include logs from the last X minutes and not yet seen
+                    log.timestamp > ttl_cutoff && !seen_ids.contains(&log.id)
+                })
+                .map(|log| RequestLog {
+                    id: log.id,
+                    timestamp: log.timestamp,
+                    method: log.method,
+                    path: log.path,
+                    status_code: log.status_code,
+                    response_time_ms: log.response_time_ms,
+                    client_ip: log.client_ip,
+                    user_agent: log.user_agent,
+                    headers: log.headers,
+                    response_size_bytes: log.response_size_bytes,
+                    error_message: log.error_message,
+                })
+                .collect();
+
+            // Add new log IDs to the seen set
+            for log in &new_logs {
+                seen_ids.insert(log.id.clone());
+            }
+
+            // Send new logs if any
+            if !new_logs.is_empty() {
+                tracing::info!("SSE: Sending {} new logs to client", new_logs.len());
+
+                let event_data = serde_json::to_string(&new_logs).unwrap_or_default();
+                let event = Ok(Event::default()
+                    .event("new_logs")
+                    .data(event_data));
+
+                return Some((event, seen_ids));
+            }
+        }
+
+        // Send keep-alive
+        let event = Ok(Event::default()
+            .event("keep_alive")
+            .data(""));
+        Some((event, seen_ids))
+    });
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keep-alive-text"),
+    )
+}
+
 /// Get metrics data
 pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<MetricsData>> {
-    let metrics = state.get_metrics().await;
+    // Get metrics from global logger (same as get_dashboard)
+    let metrics = if let Some(global_logger) = mockforge_core::get_global_logger() {
+        let all_logs = global_logger.get_recent_logs(None).await;
+
+        let total_requests = all_logs.len() as u64;
+        let mut requests_by_endpoint = HashMap::new();
+        let mut errors_by_endpoint = HashMap::new();
+        let mut response_times = Vec::new();
+        let mut last_request_by_endpoint = HashMap::new();
+
+        for log in &all_logs {
+            let endpoint_key = format!("{} {}", log.method, log.path);
+            *requests_by_endpoint.entry(endpoint_key.clone()).or_insert(0) += 1;
+
+            if log.status_code >= 400 {
+                *errors_by_endpoint.entry(endpoint_key.clone()).or_insert(0) += 1;
+            }
+
+            response_times.push(log.response_time_ms);
+            last_request_by_endpoint.insert(endpoint_key, log.timestamp);
+        }
+
+        RequestMetrics {
+            total_requests,
+            active_connections: 0,
+            requests_by_endpoint,
+            response_times,
+            response_times_by_endpoint: HashMap::new(),
+            errors_by_endpoint,
+            last_request_by_endpoint,
+        }
+    } else {
+        state.get_metrics().await
+    };
+
     let system_metrics = state.get_system_metrics().await;
     let time_series = state.get_time_series_data().await;
 
@@ -3277,8 +3442,24 @@ pub async fn export_workspaces(
 pub async fn get_environments(
     State(_state): State<AdminState>,
     axum::extract::Path(_workspace_id): axum::extract::Path<String>,
-) -> Json<ApiResponse<Vec<serde_json::Value>>> {
-    Json(ApiResponse::success(vec![]))
+) -> Json<ApiResponse<serde_json::Value>> {
+    // Return a default global environment
+    let environments = vec![
+        serde_json::json!({
+            "id": "global",
+            "name": "Global",
+            "description": "Global environment variables",
+            "variable_count": 0,
+            "is_global": true,
+            "active": true,
+            "order": 0
+        })
+    ];
+
+    Json(ApiResponse::success(serde_json::json!({
+        "environments": environments,
+        "total": 1
+    })))
 }
 
 pub async fn create_environment(
@@ -3311,11 +3492,21 @@ pub async fn set_active_environment(
     Json(ApiResponse::success("Environment activated".to_string()))
 }
 
+pub async fn update_environments_order(
+    State(_state): State<AdminState>,
+    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Json(_request): Json<serde_json::Value>,
+) -> Json<ApiResponse<String>> {
+    Json(ApiResponse::success("Environment order updated".to_string()))
+}
+
 pub async fn get_environment_variables(
     State(_state): State<AdminState>,
     axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
-) -> Json<ApiResponse<HashMap<String, String>>> {
-    Json(ApiResponse::success(HashMap::new()))
+) -> Json<ApiResponse<serde_json::Value>> {
+    Json(ApiResponse::success(serde_json::json!({
+        "variables": []
+    })))
 }
 
 pub async fn set_environment_variable(
@@ -3398,19 +3589,6 @@ pub async fn confirm_sync_changes(
 }
 
 // Plugin management functions
-pub async fn get_plugins(
-    State(_state): State<AdminState>,
-) -> Json<ApiResponse<Vec<serde_json::Value>>> {
-    Json(ApiResponse::success(vec![]))
-}
-
-pub async fn delete_plugin(
-    State(_state): State<AdminState>,
-    axum::extract::Path(_plugin_id): axum::extract::Path<String>,
-) -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Plugin deleted".to_string()))
-}
-
 pub async fn validate_plugin(
     State(_state): State<AdminState>,
     Json(_request): Json<serde_json::Value>,
@@ -3418,33 +3596,9 @@ pub async fn validate_plugin(
     Json(ApiResponse::success("Plugin validated".to_string()))
 }
 
-pub async fn get_plugin_status(
-    State(_state): State<AdminState>,
-) -> Json<ApiResponse<serde_json::Value>> {
-    Json(ApiResponse::success(serde_json::json!({
-        "status": "active"
-    })))
-}
-
 // Missing functions that routes.rs expects
 pub async fn clear_import_history(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
     let mut history = state.import_history.write().await;
     history.clear();
     Json(ApiResponse::success("Import history cleared".to_string()))
-}
-
-pub async fn get_plugin(
-    State(_state): State<AdminState>,
-    axum::extract::Path(plugin_id): axum::extract::Path<String>,
-) -> Json<ApiResponse<serde_json::Value>> {
-    Json(ApiResponse::success(serde_json::json!({
-        "id": plugin_id,
-        "name": "Mock Plugin",
-        "version": "1.0.0",
-        "status": "active"
-    })))
-}
-
-pub async fn reload_plugins(State(_state): State<AdminState>) -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Plugins reloaded".to_string()))
 }

@@ -116,7 +116,7 @@ export const useAuthStore = create<AuthStore>()(
           token: null,
           refreshToken: null,
           isAuthenticated: false,
-          loading: false,
+          isLoading: false,
         });
       },
 
@@ -161,7 +161,7 @@ export const useAuthStore = create<AuthStore>()(
       checkAuth: async () => {
         const { token } = get();
         if (!token) {
-          set({ isAuthenticated: false, loading: false });
+          set({ isAuthenticated: false, isLoading: false });
           return;
         }
 

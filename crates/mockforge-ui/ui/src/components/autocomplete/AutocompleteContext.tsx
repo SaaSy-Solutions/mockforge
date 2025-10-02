@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext } from 'react';
 import type { ReactNode } from 'react';
 
 export interface AutocompleteSuggestion {
@@ -23,7 +23,7 @@ export interface ChainContext {
   }[];
 }
 
-interface AutocompleteContextType {
+export interface AutocompleteContextType {
   suggestions: AutocompleteSuggestion[];
   chainContext: ChainContext | null;
   getSuggestionsForPosition: (text: string, position: number) => AutocompleteSuggestion[];
@@ -212,12 +212,4 @@ export const AutocompleteProvider: React.FC<AutocompleteProviderProps> = ({ chil
       {children}
     </AutocompleteContext.Provider>
   );
-};
-
-export const useAutocomplete = (): AutocompleteContextType => {
-  const context = useContext(AutocompleteContext);
-  if (context === undefined) {
-    throw new Error('useAutocomplete must be used within an AutocompleteProvider');
-  }
-  return context;
 };

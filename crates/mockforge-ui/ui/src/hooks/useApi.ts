@@ -5,6 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  apiService,
   dashboardApi,
   serverApi,
   routesApi,
@@ -17,18 +18,13 @@ import {
   fixturesApi,
   smokeTestsApi,
   importApi,
-  type DashboardData,
-  type RequestLog,
-  type MetricsData,
-  type FixtureInfo,
-  type ValidationSettings,
-  type LatencyProfile,
-  type FaultConfig,
-  type ProxyConfig,
-  type ImportRequest,
-  type ImportResponse,
-  type ImportHistoryResponse,
 } from '../services/api';
+import type {
+  CreateEnvironmentRequest,
+  UpdateEnvironmentRequest,
+  SetVariableRequest,
+  AutocompleteRequest,
+} from '../types';
 
 // Query keys for React Query
 export const queryKeys = {
@@ -54,7 +50,13 @@ export const queryKeys = {
 export function useDashboard() {
   return useQuery({
     queryKey: queryKeys.dashboard,
-    queryFn: dashboardApi.getDashboard,
+    queryFn: async () => {
+      if (!dashboardApi) {
+        console.error('dashboardApi is undefined!');
+        throw new Error('dashboardApi service not initialized');
+      }
+      return dashboardApi.getDashboard();
+    },
     refetchInterval: 30000, // Refetch every 30 seconds
     staleTime: 10000, // Consider data stale after 10 seconds
   });
@@ -92,7 +94,7 @@ export function useRestartServers() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (reason?: string) => serverApi.restartServers(reason),
+    mutationFn: (reason?: string) => serverApi.restartServer(reason),
     onSuccess: () => {
       // Invalidate and refetch restart status
       queryClient.invalidateQueries({ queryKey: queryKeys.restartStatus });
@@ -120,11 +122,14 @@ export function useLogs(params?: {
   path?: string;
   status?: number;
   limit?: number;
+  refetchInterval?: number;
 }) {
+  const { refetchInterval, ...apiParams } = params || {};
   return useQuery({
-    queryKey: [...queryKeys.logs, params],
-    queryFn: () => logsApi.getLogs(params),
+    queryKey: [...queryKeys.logs, apiParams],
+    queryFn: () => logsApi.getLogs(apiParams),
     staleTime: 5000, // Logs can change frequently
+    refetchInterval: refetchInterval, // Optional auto-refetch interval
   });
 }
 
@@ -147,7 +152,13 @@ export function useClearLogs() {
 export function useMetrics() {
   return useQuery({
     queryKey: queryKeys.metrics,
-    queryFn: metricsApi.getMetrics,
+    queryFn: async () => {
+      if (!metricsApi) {
+        console.error('metricsApi is undefined!');
+        throw new Error('metricsApi service not initialized');
+      }
+      return metricsApi.getMetrics();
+    },
     refetchInterval: 15000, // Update metrics every 15 seconds
     staleTime: 5000,
   });
@@ -251,16 +262,16 @@ export function useUpdateEnvVar() {
 export function useFileContent() {
   return useMutation({
     mutationFn: ({ path, type }: { path: string; type: string }) =>
-      filesApi.getFileContent(path, type),
+      filesApi.getFileContent({ path, type }),
   });
 }
 
 export function useSaveFileContent() {
-  const queryClient = useQueryClient();
+  const _queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ path, content }: { path: string; content: string }) =>
-      filesApi.saveFileContent(path, content),
+      filesApi.saveFileContent({ path, content }),
     onSuccess: () => {
       // Could invalidate file-related queries here if we had them
     },
@@ -272,8 +283,26 @@ export function useSaveFileContent() {
  */
 export function useFixtures() {
   return useQuery({
-    queryKey: queryKeys.fixtures,
-    queryFn: fixturesApi.getFixtures,
+    queryKey: ['fixtures-v2'], // Changed key to force cache invalidation
+    queryFn: async () => {
+      console.log('[FIXTURES DEBUG v3] Starting fetch');
+      try {
+        // Direct fetch to avoid class binding issues
+        const response = await fetch('/__mockforge/fixtures');
+        console.log('[FIXTURES DEBUG v3] Response status:', response.status);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log('[FIXTURES DEBUG v3] Data received:', data);
+        // Ensure we return an array - data.data is the array from the API response
+        return Array.isArray(data.data) ? data.data : [];
+      } catch (error) {
+        console.error('[FIXTURES DEBUG v3] Error:', error);
+        throw error;
+      }
+    },
+    retry: false, // Disable retry to see errors immediately
     staleTime: 30000,
   });
 }
@@ -312,7 +341,8 @@ export function useRenameFixture() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: fixturesApi.renameFixture,
+    mutationFn: ({ oldPath, newPath }: { oldPath: string; newPath: string }) =>
+      fixturesApi.renameFixture(oldPath, newPath),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fixtures });
     },
@@ -323,7 +353,8 @@ export function useMoveFixture() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: fixturesApi.moveFixture,
+    mutationFn: ({ sourcePath, destinationPath }: { sourcePath: string; destinationPath: string }) =>
+      fixturesApi.moveFixture(sourcePath, destinationPath),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fixtures });
     },

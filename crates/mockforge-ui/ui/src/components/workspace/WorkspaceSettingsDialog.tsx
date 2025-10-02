@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
-import { FolderOpen, Settings, Save } from 'lucide-react';
+import { FolderOpen, Settings, Save, X } from 'lucide-react';
 import type { SyncConfig, SyncDirection, SyncDirectoryStructure } from '../../types';
 
 interface WorkspaceSettingsDialogProps {
@@ -21,7 +21,6 @@ interface WorkspaceSettingsDialogProps {
 export function WorkspaceSettingsDialog({
   open,
   onOpenChange,
-  workspaceId,
   workspaceName,
   currentConfig,
   onSave,
@@ -55,11 +54,16 @@ export function WorkspaceSettingsDialog({
     }
   };
 
+  interface WindowWithDirectoryPicker extends Window {
+    showDirectoryPicker?: () => Promise<DirectoryHandle>;
+  }
+
   const handleDirectorySelect = async () => {
     try {
       // Use the File System Access API if available, fallback to input
-      if ('showDirectoryPicker' in window) {
-        const dirHandle = await (window as any).showDirectoryPicker();
+      const windowWithPicker = window as WindowWithDirectoryPicker;
+      if ('showDirectoryPicker' in window && windowWithPicker.showDirectoryPicker) {
+        const dirHandle = await windowWithPicker.showDirectoryPicker();
         const path = await getDirectoryPath(dirHandle);
         setConfig(prev => ({ ...prev, target_directory: path }));
       }
@@ -68,7 +72,11 @@ export function WorkspaceSettingsDialog({
     }
   };
 
-  const getDirectoryPath = async (dirHandle: any): Promise<string> => {
+  interface DirectoryHandle {
+    name: string;
+  }
+
+  const getDirectoryPath = async (dirHandle: DirectoryHandle): Promise<string> => {
     // This is a simplified implementation - in a real app you'd need to handle permissions
     // and construct the full path. For now, we'll just use the directory name.
     return dirHandle.name;
@@ -95,12 +103,12 @@ export function WorkspaceSettingsDialog({
         <div className="space-y-6">
           {/* Sync Configuration Section */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-text-primary">Directory Synchronization</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Directory Synchronization</h3>
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <Label htmlFor="sync-enabled">Enable Directory Sync</Label>
-                <p className="text-sm text-text-secondary">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Automatically sync workspace changes with a local directory
                 </p>
               </div>
@@ -133,7 +141,7 @@ export function WorkspaceSettingsDialog({
                       <FolderOpen className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-sm text-text-secondary">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Directory where workspace files will be synchronized
                   </p>
                 </div>
@@ -143,7 +151,7 @@ export function WorkspaceSettingsDialog({
                     <Label htmlFor="sync-direction">Sync Direction</Label>
                     <Select
                       value={config.sync_direction}
-                      onValueChange={(value: SyncDirection) => setConfig(prev => ({ ...prev, sync_direction: value }))}
+                      onValueChange={(value: string) => setConfig(prev => ({ ...prev, sync_direction: value as SyncDirection }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -160,7 +168,7 @@ export function WorkspaceSettingsDialog({
                     <Label htmlFor="directory-structure">Directory Structure</Label>
                     <Select
                       value={config.directory_structure}
-                      onValueChange={(value: SyncDirectoryStructure) => setConfig(prev => ({ ...prev, directory_structure: value }))}
+                      onValueChange={(value: string) => setConfig(prev => ({ ...prev, directory_structure: value as SyncDirectoryStructure }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -182,7 +190,7 @@ export function WorkspaceSettingsDialog({
                     onChange={(e) => setConfig(prev => ({ ...prev, filename_pattern: e.target.value }))}
                     placeholder="{name}"
                   />
-                  <p className="text-sm text-text-secondary">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Pattern for exported files. Use {'{name}'} for workspace name, {'{id}'} for workspace ID
                   </p>
                 </div>
@@ -191,7 +199,7 @@ export function WorkspaceSettingsDialog({
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <Label htmlFor="realtime-monitoring">Real-time Monitoring</Label>
-                      <p className="text-sm text-text-secondary">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         Automatically sync changes as they happen
                       </p>
                     </div>
@@ -205,7 +213,7 @@ export function WorkspaceSettingsDialog({
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <Label htmlFor="include-metadata">Include Metadata</Label>
-                      <p className="text-sm text-text-secondary">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         Include workspace metadata files in sync
                       </p>
                     </div>
@@ -219,7 +227,7 @@ export function WorkspaceSettingsDialog({
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <Label htmlFor="force-overwrite">Force Overwrite</Label>
-                      <p className="text-sm text-text-secondary">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         Overwrite existing files without confirmation
                       </p>
                     </div>
@@ -239,7 +247,7 @@ export function WorkspaceSettingsDialog({
                     onChange={(e) => setConfig(prev => ({ ...prev, exclude_pattern: e.target.value }))}
                     placeholder="*.tmp,*.log"
                   />
-                  <p className="text-sm text-text-secondary">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Regex pattern for files to exclude from sync
                   </p>
                 </div>

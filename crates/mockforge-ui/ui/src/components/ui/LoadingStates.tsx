@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
-import { Skeleton, SkeletonCard, SkeletonMetricCard, SkeletonChart, SkeletonTable, SkeletonList } from './Skeleton';
+import { SkeletonCard, SkeletonMetricCard, SkeletonChart, SkeletonTable, SkeletonList } from './Skeleton';
 import { Icon, StatusIcon, Icons } from './IconSystem';
 import { Button } from './DesignSystem';
 
@@ -77,9 +77,9 @@ export function LoadingState({
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand/10 mb-4 pulse-subtle">
           <Icon icon={Icons.Activity} size="xl" color="brand" />
         </div>
-        <h3 className="text-heading-sm text-primary mb-2">{title}</h3>
+        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
         {description && (
-          <p className="text-body-md text-secondary max-w-md mx-auto">{description}</p>
+          <p className="text-base text-gray-600 dark:text-gray-400 max-w-md mx-auto">{description}</p>
         )}
       </div>
     );
@@ -88,9 +88,9 @@ export function LoadingState({
   return (
     <div className={cn('flex flex-col items-center justify-center text-center', sizeClasses[size], className)}>
       <Spinner size={size === 'sm' ? 'md' : size === 'md' ? 'lg' : 'xl'} className="mb-4" />
-      <h3 className="text-heading-sm text-primary mb-2">{title}</h3>
+      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
       {description && (
-        <p className="text-body-md text-secondary max-w-md">{description}</p>
+        <p className="text-base text-gray-600 dark:text-gray-400 max-w-md">{description}</p>
       )}
     </div>
   );
@@ -141,11 +141,11 @@ export function EmptyState({
       <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-800 mb-6 spring-in">
         {icon || defaultIcon}
       </div>
-      <h3 className="text-heading-lg text-primary mb-3">
+      <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
         {title}
       </h3>
       {description && (
-        <p className="text-body-lg text-secondary mb-8 max-w-md">
+        <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md">
           {description}
         </p>
       )}
@@ -197,17 +197,17 @@ export function ErrorState({
       <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-6 spring-in">
         <StatusIcon status="error" size="3xl" />
       </div>
-      <h3 className="text-heading-lg text-primary mb-3">
+      <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
         {title}
       </h3>
       <div className="space-y-3">
         {description && (
-          <p className="text-body-lg text-secondary max-w-md">
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-md">
             {description}
           </p>
         )}
         {errorMessage && (
-          <div className="text-mono-sm text-danger bg-red-50 dark:bg-red-900/20 rounded-lg p-3 max-w-md">
+          <div className="text-sm font-mono text-red-700 dark:text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 max-w-md">
             {errorMessage}
           </div>
         )}
@@ -259,11 +259,11 @@ export function SuccessState({
       <div className="p-4 rounded-full bg-green-50 dark:bg-green-900/20 mb-6 spring-bounce">
         <StatusIcon status="success" size="3xl" />
       </div>
-      <h3 className="text-heading-lg text-primary mb-3">
+      <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
         {title}
       </h3>
       {description && (
-        <p className="text-body-lg text-secondary mb-8 max-w-md">
+        <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md">
           {description}
         </p>
       )}

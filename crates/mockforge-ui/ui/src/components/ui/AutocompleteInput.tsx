@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAutocomplete } from '../../hooks/useApi';
-import type { AutocompleteSuggestion, AutocompleteRequest } from '../../types';
+import type { AutocompleteSuggestion } from '../../types';
 
 interface AutocompleteInputProps {
   value: string;
@@ -23,7 +23,6 @@ export function AutocompleteInput({
   context,
   disabled = false,
 }: AutocompleteInputProps) {
-  const [cursorPosition, setCursorPosition] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,12 +30,34 @@ export function AutocompleteInput({
 
   const autocomplete = useAutocomplete(workspaceId);
 
+  const handleSuggestionSelect = useCallback((suggestion: AutocompleteSuggestion) => {
+    if (!autocomplete.data) return;
+
+    const { start_position, end_position } = autocomplete.data;
+    const beforeToken = value.slice(0, start_position);
+    const afterToken = value.slice(end_position);
+
+    const newValue = `${beforeToken}{{${suggestion.text}}}}${afterToken}`;
+    const newCursorPosition = beforeToken.length + suggestion.text.length + 4; // 4 = {{}}
+
+    onChange(newValue);
+    onSelect?.(suggestion);
+
+    // Update cursor position after state update
+    setTimeout(() => {
+      inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+      inputRef.current?.focus();
+    }, 0);
+
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
+  }, [value, onChange, onSelect, autocomplete.data]);
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     const newCursorPosition = e.target.selectionStart || 0;
 
     onChange(newValue);
-    setCursorPosition(newCursorPosition);
 
     // Check if we should show autocomplete (look for {{ pattern)
     const textBeforeCursor = newValue.slice(0, newCursorPosition);
@@ -106,30 +127,7 @@ export function AutocompleteInput({
         setSelectedIndex(-1);
         break;
     }
-  }, [showSuggestions, selectedIndex, autocomplete.data, context]);
-
-  const handleSuggestionSelect = useCallback((suggestion: AutocompleteSuggestion) => {
-    if (!autocomplete.data) return;
-
-    const { start_position, end_position } = autocomplete.data;
-    const beforeToken = value.slice(0, start_position);
-    const afterToken = value.slice(end_position);
-
-    const newValue = `${beforeToken}{{${suggestion.text}}}}${afterToken}`;
-    const newCursorPosition = beforeToken.length + suggestion.text.length + 4; // 4 = {{}}
-
-    onChange(newValue);
-    onSelect?.(suggestion);
-
-    // Update cursor position after state update
-    setTimeout(() => {
-      inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
-      inputRef.current?.focus();
-    }, 0);
-
-    setShowSuggestions(false);
-    setSelectedIndex(-1);
-  }, [value, onChange, onSelect, autocomplete.data]);
+  }, [showSuggestions, selectedIndex, autocomplete.data, context, autocomplete, handleSuggestionSelect]);
 
   // Handle clicks outside to close suggestions
   useEffect(() => {
@@ -149,12 +147,6 @@ export function AutocompleteInput({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Update cursor position when input value changes externally
-  useEffect(() => {
-    if (inputRef.current) {
-      setCursorPosition(inputRef.current.selectionStart || 0);
-    }
-  }, [value]);
 
   const suggestions = autocomplete.data?.suggestions || [];
 
@@ -202,9 +194,9 @@ export function AutocompleteInput({
                   </span>
                 </div>
               </div>
-              {suggestion.description && (
+              {suggestion.documentation && (
                 <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {suggestion.description}
+                  {suggestion.documentation}
                 </div>
               )}
             </div>

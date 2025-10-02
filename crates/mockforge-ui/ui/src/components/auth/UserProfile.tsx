@@ -46,7 +46,7 @@ export function UserProfile() {
         className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-accent transition-colors"
       >
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-medium">
+          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground text-sm font-medium">
             {user.username.charAt(0).toUpperCase()}
           </div>
           <div className="text-left">
@@ -74,7 +74,7 @@ export function UserProfile() {
           <div className="absolute right-0 mt-2 w-64 bg-background border rounded-md shadow-lg z-20">
             <div className="p-4 border-b">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-medium">
+                <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground font-medium">
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <div>

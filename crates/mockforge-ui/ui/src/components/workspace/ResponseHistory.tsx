@@ -161,7 +161,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {history.map((entry: any, index: number) => (
+            {history.map((entry: ResponseHistoryEntry) => (
               <Card key={entry.executed_at} className="border-l-4 border-l-blue-500">
                 <CardContent className="pt-4">
                   <div className="flex items-start justify-between mb-3">
@@ -229,9 +229,9 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                           <div>
                             <h4 className="font-medium text-sm mb-2">Request Headers</h4>
                             <div className="bg-gray-50 border rounded p-3">
-                              {Object.entries(entry.request_headers).map(([key, value]: [string, any]) => (
+                              {Object.entries(entry.request_headers as Record<string, unknown>).map(([key, value]) => (
                                 <div key={key} className="text-sm">
-                                  <span className="font-medium">{key}:</span> {value}
+                                  <span className="font-medium">{key}:</span> {String(value)}
                                 </div>
                               ))}
                             </div>
@@ -245,10 +245,10 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                         <div>
                           <h4 className="font-medium text-sm mb-2">Response Headers</h4>
                           <div className="bg-gray-50 border rounded p-3">
-                            {Object.keys(entry.response_headers).length > 0 ? (
-                              Object.entries(entry.response_headers).map(([key, value]: [string, any]) => (
+                            {Object.keys(entry.response_headers as Record<string, unknown>).length > 0 ? (
+                              Object.entries(entry.response_headers as Record<string, unknown>).map(([key, value]) => (
                                 <div key={key} className="text-sm">
-                                  <span className="font-medium">{key}:</span> {value}
+                                  <span className="font-medium">{key}:</span> {String(value)}
                                 </div>
                               ))
                             ) : (

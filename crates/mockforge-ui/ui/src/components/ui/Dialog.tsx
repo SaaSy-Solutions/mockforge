@@ -77,7 +77,7 @@ export function DialogHeader({ children, className }: DialogHeaderProps) {
 
 export function DialogTitle({ children, className }: DialogTitleProps) {
   return (
-    <h2 className={cn("text-lg font-semibold text-text-primary", className)}>
+    <h2 className={cn("text-lg font-semibold text-primary", className)}>
       {children}
     </h2>
   );
@@ -85,7 +85,7 @@ export function DialogTitle({ children, className }: DialogTitleProps) {
 
 export function DialogDescription({ children, className }: DialogDescriptionProps) {
   return (
-    <p className={cn("text-sm text-text-secondary mt-1", className)}>
+    <p className={cn("text-sm text-secondary mt-1", className)}>
       {children}
     </p>
   );
@@ -99,7 +99,10 @@ export function DialogFooter({ children, className }: DialogFooterProps) {
   );
 }
 
-export function DialogTrigger({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+export function DialogTrigger({ children, onClick, asChild }: { children: React.ReactNode; onClick?: () => void; asChild?: boolean }) {
+  if (asChild) {
+    return <>{children}</>;
+  }
   return (
     <div onClick={onClick}>
       {children}

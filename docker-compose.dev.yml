@@ -10,7 +10,7 @@ services:
       - "3000:3000"   # HTTP server
       - "3001:3001"   # WebSocket server
       - "50051:50051" # gRPC server
-      - "8080:8080"   # Admin UI
+      - "9080:9080"   # Admin UI
     volumes:
       # Mount source code for development
       - .:/app:cached
@@ -42,7 +42,7 @@ services:
 
       # Admin UI configuration
       - MOCKFORGE_ADMIN_ENABLED=true
-      - MOCKFORGE_ADMIN_PORT=8080
+      - MOCKFORGE_ADMIN_PORT=9080
 
       # Development settings
       - RUST_BACKTRACE=1

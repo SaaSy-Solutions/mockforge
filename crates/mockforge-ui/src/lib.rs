@@ -27,6 +27,7 @@ pub async fn start_admin_server(
         grpc_server_addr,
         graphql_server_addr,
         api_enabled,
+        addr.port(),
     );
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);

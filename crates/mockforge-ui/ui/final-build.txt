@@ -1,0 +1,31 @@
+
+> ui-v2@0.0.0 build
+> tsc -b && vite build
+
+You are using Node.js 20.18.1. Vite requires Node.js version 20.19+ or 22.12+. Please upgrade your Node.js version.
+vite v7.1.5 building for production...
+transforming...
+Error: Cannot apply unknown utility class `text-heading-xl`
+    at onInvalidCandidate (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:18:1529)
+    at ge (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:13:29888)
+    at /home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:18:373
+    at L (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:3:1656)
+    at je (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:18:172)
+    at bi (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:35:780)
+    at async yi (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/tailwindcss/dist/lib.js:35:1123)
+    at async Or (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/@tailwindcss/node/dist/index.js:10:3384)
+    at async W (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/@tailwindcss/postcss/dist/index.js:10:4048)
+    at async Object.Once (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-ui/ui/node_modules/@tailwindcss/postcss/dist/index.js:10:4318)
+✓ 2589 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/.vite/manifest.json    0.17 kB │ gzip:   0.12 kB
+dist/index.html             0.55 kB │ gzip:   0.31 kB
+dist/assets/index.css       0.00 kB │ gzip:   0.02 kB
+dist/assets/index.js      939.70 kB │ gzip: 257.51 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 6.35s

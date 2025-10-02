@@ -4,7 +4,7 @@ interface UseProgressiveLoadingOptions<T> {
   loadData: (offset: number, limit: number) => Promise<T[]>;
   pageSize?: number;
   initialLoad?: boolean;
-  dependencies?: any[];
+  dependencies?: unknown[];
 }
 
 interface UseProgressiveLoadingResult<T> {
@@ -162,7 +162,7 @@ export function useVirtualizedLoading<T>({
   pageSize?: number;
   bufferSize?: number;
   itemHeight?: number;
-  dependencies?: any[];
+  dependencies?: unknown[];
 }) {
   const [data, setData] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(false);

@@ -17,13 +17,18 @@ const mockServices: ServiceInfo[] = [
   {
     id: 'user-service',
     name: 'User Service',
+    baseUrl: 'http://localhost:3000',
     enabled: true,
     tags: ['api', 'users'],
     description: 'Handles user authentication and profile management',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     routes: [
       {
+        id: 'user-service-get-users',
         method: 'GET',
         path: '/api/users',
+        statusCode: 200,
         priority: 1,
         has_fixtures: true,
         request_count: 234,
@@ -34,8 +39,10 @@ const mockServices: ServiceInfo[] = [
         tags: ['api', 'users'],
       },
       {
+        id: 'user-service-post-users',
         method: 'POST',
         path: '/api/users',
+        statusCode: 201,
         priority: 1,
         has_fixtures: true,
         request_count: 89,
@@ -46,8 +53,10 @@ const mockServices: ServiceInfo[] = [
         tags: ['api', 'users'],
       },
       {
+        id: 'user-service-get-user-id',
         method: 'GET',
         path: '/api/users/{id}',
+        statusCode: 200,
         priority: 1,
         has_fixtures: true,
         request_count: 156,
@@ -62,13 +71,18 @@ const mockServices: ServiceInfo[] = [
   {
     id: 'order-service',
     name: 'Order Service',
+    baseUrl: 'http://localhost:3001',
     enabled: true,
     tags: ['api', 'orders', 'ecommerce'],
     description: 'Manages orders and order processing',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     routes: [
       {
+        id: 'order-service-get-orders',
         method: 'GET',
         path: '/api/orders',
+        statusCode: 200,
         priority: 1,
         has_fixtures: true,
         request_count: 445,
@@ -79,8 +93,10 @@ const mockServices: ServiceInfo[] = [
         tags: ['api', 'orders'],
       },
       {
+        id: 'order-service-post-orders',
         method: 'POST',
         path: '/api/orders',
+        statusCode: 201,
         priority: 1,
         has_fixtures: true,
         request_count: 123,
@@ -95,12 +111,18 @@ const mockServices: ServiceInfo[] = [
   {
     id: 'grpc-inventory',
     name: 'Inventory gRPC',
+    baseUrl: 'grpc://localhost:50051',
     enabled: false,
     tags: ['grpc', 'inventory'],
     description: 'gRPC service for inventory management',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     routes: [
       {
+        id: 'grpc-inventory-get-item',
+        method: 'GRPC',
         path: 'inventory.InventoryService/GetItem',
+        statusCode: 0,
         priority: 1,
         has_fixtures: false,
         request_count: 67,
@@ -111,7 +133,10 @@ const mockServices: ServiceInfo[] = [
         tags: ['grpc', 'inventory'],
       },
       {
+        id: 'grpc-inventory-update-stock',
+        method: 'GRPC',
         path: 'inventory.InventoryService/UpdateStock',
+        statusCode: 0,
         priority: 1,
         has_fixtures: false,
         request_count: 34,
@@ -136,7 +161,7 @@ const filterRoutes = (services: ServiceInfo[], query?: string): RouteInfo[] => {
   );
 };
 
-export const useServiceStore = create<ServiceStore>((set, get) => ({
+export const useServiceStore = create<ServiceStore>((set, _get) => ({
   services: mockServices,
   filteredRoutes: filterRoutes(mockServices),
 

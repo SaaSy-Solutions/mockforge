@@ -216,7 +216,7 @@
 <p><strong>Admin UI Control:</strong></p>
 <ul>
 <li><code>--admin</code>: Enable admin UI</li>
-<li><code>--admin-port &lt;PORT&gt;</code>: Admin UI port (default: 8080)</li>
+<li><code>--admin-port &lt;PORT&gt;</code>: Admin UI port (default: 9080)</li>
 <li><code>--admin-embed</code>: Force embedding Admin UI under HTTP server</li>
 <li><code>--admin-mount-path &lt;PATH&gt;</code>: Explicit mount path for embedded Admin UI (implies <code>--admin-embed</code>)</li>
 <li><code>--admin-standalone</code>: Force standalone Admin UI on separate port (overrides embed)</li>
@@ -261,7 +261,7 @@
   --ws-port 3001 \
   --grpc-port 50051 \
   --admin \
-  --admin-port 8080 \
+  --admin-port 9080 \
   --response-template-expand
 </code></pre>
 <p><strong>Development Configuration:</strong></p>
@@ -353,7 +353,7 @@ mockforge-cli data open-api --endpoint /users --method post api-spec.yaml
 </code></pre>
 <h4 id="options"><a class="header" href="#options">Options</a></h4>
 <ul>
-<li><code>--port &lt;PORT&gt;</code>: Server port (default: 8080)</li>
+<li><code>--port &lt;PORT&gt;</code>: Server port (default: 9080)</li>
 </ul>
 <h4 id="examples-1"><a class="header" href="#examples-1">Examples</a></h4>
 <pre><code class="language-bash"># Start admin UI on default port
@@ -377,7 +377,7 @@ spec: examples/openapi-demo.json
 # Admin UI configuration
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   embedded: false
   mount_path: "/admin"
   standalone: true
@@ -424,7 +424,7 @@ export MOCKFORGE_GRPC_PORT=50051
 
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
-export MOCKFORGE_ADMIN_PORT=8080
+export MOCKFORGE_ADMIN_PORT=9080
 
 # Validation
 export MOCKFORGE_VALIDATION_MODE=enforce
@@ -485,7 +485,7 @@ mockforge-cli serve \
   --ws-port 3001 \
   --grpc-port 50051 \
   --admin \
-  --admin-port 8080 \
+  --admin-port 9080 \
   --response-template-expand \
   --validation warn
 </code></pre>

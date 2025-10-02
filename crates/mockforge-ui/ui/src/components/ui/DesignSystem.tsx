@@ -193,18 +193,24 @@ export const spacing = {
 // ============================================================================
 
 interface AlertProps {
-  type: 'success' | 'warning' | 'error' | 'info';
-  title: string;
+  type?: 'success' | 'warning' | 'error' | 'info' | 'destructive' | 'default';
+  variant?: 'success' | 'warning' | 'error' | 'info' | 'destructive' | 'default';
+  title?: string;
   message?: string;
   className?: string;
+  children?: React.ReactNode;
 }
 
-export function Alert({ type, title, message, className }: AlertProps) {
+export function Alert({ type, variant, title, message, className, children }: AlertProps) {
+  const alertType = type || variant || 'info';
+
   const icons = {
     success: CheckCircle,
     warning: AlertTriangle,
     error: AlertCircle,
     info: Info,
+    destructive: AlertCircle,
+    default: Info,
   };
 
   const colors = {
@@ -212,22 +218,25 @@ export function Alert({ type, title, message, className }: AlertProps) {
     warning: 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400',
     error: 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400',
     info: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400',
+    destructive: 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400',
+    default: 'bg-gray-50 border-gray-200 text-gray-800 dark:bg-gray-900/20 dark:border-gray-800 dark:text-gray-400',
   };
 
-  const Icon = icons[type];
+  const Icon = icons[alertType];
 
   return (
     <div className={cn(
       'flex items-start gap-3 p-4 border rounded-xl transition-all duration-200 spring-in',
-      colors[type],
+      colors[alertType],
       className
     )}>
       <Icon className="h-5 w-5 mt-0.5 flex-shrink-0 spring-hover" />
       <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-sm">{title}</h4>
+        {title && <h4 className="font-semibold text-sm">{title}</h4>}
         {message && (
           <p className="text-sm opacity-90 mt-1">{message}</p>
         )}
+        {children}
       </div>
     </div>
   );
@@ -301,7 +310,7 @@ export function ModernCard({
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'outline';
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'outline' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -319,6 +328,7 @@ export function ModernBadge({
     error: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
     info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
     outline: 'border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300',
+    destructive: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
   };
 
   const sizes = {
@@ -369,16 +379,16 @@ export function MetricCard({
     <ModernCard className={className}>
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-label-md text-tertiary truncate">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 truncate">
             {title}
           </p>
           <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-display-sm text-weight-bold text-primary">
+            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
               {typeof value === 'number' ? value.toLocaleString() : value}
             </p>
             {trend && (
               <span className={cn(
-                'text-body-sm text-weight-medium',
+                'text-sm font-medium',
                 trendColors[trend.direction]
               )}>
                 {trend.value}
@@ -386,7 +396,7 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-body-sm text-secondary mt-1">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {subtitle}
             </p>
           )}
@@ -457,11 +467,11 @@ export function PageHeader({ title, subtitle, action, className }: PageHeaderPro
       className
     )}>
       <div className="min-w-0">
-        <h1 className="text-display-sm text-primary truncate">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-body-xl text-secondary mt-2">
+          <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">
             {subtitle}
           </p>
         )}
@@ -486,12 +496,12 @@ export function Section({ title, subtitle, action, className, children }: Sectio
         <div className="flex items-center justify-between mb-6">
           <div className="min-w-0">
             {title && (
-              <h2 className="text-heading-lg text-primary">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {title}
               </h2>
             )}
             {subtitle && (
-              <p className="text-body-md text-secondary mt-1">
+              <p className="text-base text-gray-600 dark:text-gray-400 mt-1">
                 {subtitle}
               </p>
             )}
@@ -510,8 +520,9 @@ export function Section({ title, subtitle, action, className, children }: Sectio
 
 // Button Component
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'success';
+  variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
 }
 
 export function Button({
@@ -519,6 +530,8 @@ export function Button({
   variant = 'primary',
   size = 'md',
   className,
+  loading,
+  disabled,
   ...props
 }: ButtonProps) {
   const variants = {
@@ -526,6 +539,9 @@ export function Button({
     secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-900 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
     danger: 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
     success: 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
+    outline: 'border border-gray-300 dark:border-gray-700 bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300',
+    ghost: 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300',
+    destructive: 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm',
   };
 
   const sizes = {
@@ -542,8 +558,15 @@ export function Button({
         sizes[size],
         className
       )}
+      disabled={disabled || loading}
       {...props}
     >
+      {loading && (
+        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      )}
       {children}
     </button>
   );
@@ -558,20 +581,25 @@ export const Badge = ModernBadge;
 // Modal Component
 interface ModalProps {
   open: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  onOpenChange?: (open: boolean) => void;
   title?: string;
   children: React.ReactNode;
   className?: string;
 }
 
-export function Modal({ open, onClose, title, children, className }: ModalProps) {
+export function Modal({ open, onClose, onOpenChange, title, children, className }: ModalProps) {
+  const handleClose = () => {
+    onClose?.();
+    onOpenChange?.(false);
+  };
   if (!open) return null;
 
   return (
     <>
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onClose}
+        onClick={handleClose}
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <ModernCard className={cn('max-w-md w-full max-h-[90vh] overflow-y-auto', className)}>
@@ -581,7 +609,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
                 {title}
               </h3>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
               >
                 <X className="h-5 w-5" />
@@ -604,9 +632,9 @@ interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, '
 
 export function Input({ className, size = 'md', ...props }: InputProps) {
   const sizes = {
-    sm: 'px-3 py-1.5 text-body-sm',
-    md: 'px-4 py-2.5 text-body-lg',
-    lg: 'px-6 py-3.5 text-body-xl',
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2.5 text-lg',
+    lg: 'px-6 py-3.5 text-lg',
   };
 
   return (
@@ -633,9 +661,9 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 export function Textarea({ className, size = 'md', ...props }: TextareaProps) {
   const sizes = {
-    sm: 'px-3 py-1.5 text-body-sm',
-    md: 'px-4 py-2.5 text-body-lg',
-    lg: 'px-6 py-3.5 text-body-xl',
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2.5 text-lg',
+    lg: 'px-6 py-3.5 text-lg',
   };
 
   return (
@@ -666,9 +694,9 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
 
 export function Select({ className, size = 'md', children, ...props }: SelectProps) {
   const sizes = {
-    sm: 'px-3 py-1.5 text-body-sm',
-    md: 'px-4 py-2.5 text-body-lg',
-    lg: 'px-6 py-3.5 text-body-xl',
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2.5 text-lg',
+    lg: 'px-6 py-3.5 text-lg',
   };
 
   return (
@@ -700,13 +728,13 @@ export function Label({ className, required, children, ...props }: LabelProps) {
   return (
     <label
       className={cn(
-        'block text-label-lg text-weight-medium text-primary mb-2',
+        'block text-lg font-medium text-gray-900 dark:text-gray-100 mb-2',
         className
       )}
       {...props}
     >
       {children}
-      {required && <span className="text-danger ml-1">*</span>}
+      {required && <span className="text-red-700 dark:text-red-500 ml-1">*</span>}
     </label>
   );
 }
@@ -714,15 +742,15 @@ export function Label({ className, required, children, ...props }: LabelProps) {
 // Table Component
 interface TableProps {
   columns: TableColumn[];
-  data: any[];
+  data: unknown[];
   className?: string;
-  onRowClick?: (row: any) => void;
+  onRowClick?: (row: unknown) => void;
 }
 
 interface TableColumn {
   key: string;
   label: string;
-  render?: (value: any, row: any) => React.ReactNode;
+  render?: (value: unknown, row: unknown) => React.ReactNode;
   sortable?: boolean;
   width?: string;
 }
@@ -775,17 +803,33 @@ export function Table({ columns, data, className, onRowClick }: TableProps) {
 
 // Tabs Components
 interface TabsProps {
-  value: string;
-  onValueChange: (value: string) => void;
+  value?: string;
+  defaultValue?: string;
+  onValueChange?: (value: string) => void;
   children: React.ReactNode;
   className?: string;
 }
 
-export function Tabs({ value, onValueChange, children, className }: TabsProps) {
-  // onValueChange is passed through to child components via context or props
+export function Tabs({ value, defaultValue, onValueChange, children, className }: TabsProps) {
+  const [internalValue, setInternalValue] = React.useState(defaultValue || value || '');
+  const currentValue = value || internalValue;
+
+  const handleValueChange = (newValue: string) => {
+    setInternalValue(newValue);
+    onValueChange?.(newValue);
+  };
+
   return (
-    <div className={cn('', className)} data-value={value} data-on-change={!!onValueChange}>
-      {children}
+    <div className={cn('', className)} data-value={currentValue}>
+      {React.Children.map(children, (child) => {
+        if (React.isValidElement(child)) {
+          return React.cloneElement(child as React.ReactElement<{ value?: string; onValueChange?: (v: string) => void }>, {
+            value: currentValue,
+            onValueChange: handleValueChange,
+          });
+        }
+        return child;
+      })}
     </div>
   );
 }
@@ -793,11 +837,12 @@ export function Tabs({ value, onValueChange, children, className }: TabsProps) {
 interface TabsContentProps {
   value: string;
   children: React.ReactNode;
+  className?: string;
 }
 
-export function TabsContent({ value, children }: TabsContentProps) {
+export function TabsContent({ value, children, className }: TabsContentProps) {
   return (
-    <div data-value={value}>
+    <div data-value={value} className={className}>
       {children}
     </div>
   );
@@ -882,8 +927,8 @@ export function ContextMenuContent({ children }: { children: React.ReactNode }) 
   return <div>{children}</div>;
 }
 
-export function ContextMenuItem({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
+export function ContextMenuItem({ children, onClick, className }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
+  return <div onClick={onClick} className={className}>{children}</div>;
 }
 
 export function ContextMenuTrigger({ children }: { children: React.ReactNode }) {
@@ -969,7 +1014,7 @@ export function RadioGroup({ value, onValueChange, children, className }: RadioG
     <div className={cn('space-y-2', className)} data-value={value}>
       {React.Children.map(children, (child) =>
         React.isValidElement(child)
-          ? React.cloneElement(child, { onValueChange })
+          ? React.cloneElement(child, { onValueChange } as Partial<unknown>)
           : child
       )}
     </div>
@@ -981,6 +1026,35 @@ interface RadioGroupItemProps {
   children: React.ReactNode;
   onValueChange?: (value: string) => void;
   className?: string;
+}
+
+// ============================================================================
+// CHECKBOX COMPONENTS
+// ============================================================================
+
+interface CheckboxProps {
+  id?: string;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function Checkbox({ id, checked, onCheckedChange, disabled, className }: CheckboxProps) {
+  return (
+    <input
+      id={id}
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      disabled={disabled}
+      className={cn(
+        'h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500',
+        disabled && 'opacity-50 cursor-not-allowed',
+        className
+      )}
+    />
+  );
 }
 
 export function RadioGroupItem({ value, children, onValueChange, className }: RadioGroupItemProps) {
@@ -1103,17 +1177,15 @@ export function Tooltip({ content, children, className }: TooltipProps) {
 }
 
 // ============================================================================
-// DROPDOWN MENU COMPONENTS
+// DROPDOWN MENU COMPONENTS (Fallback implementation without Radix)
 // ============================================================================
-
-import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 
 interface DropdownMenuProps {
   children: React.ReactNode;
 }
 
 export function DropdownMenu({ children }: DropdownMenuProps) {
-  return <DropdownMenuPrimitive.Root>{children}</DropdownMenuPrimitive.Root>;
+  return <div className="relative inline-block">{children}</div>;
 }
 
 interface DropdownMenuTriggerProps {
@@ -1123,11 +1195,10 @@ interface DropdownMenuTriggerProps {
 }
 
 export function DropdownMenuTrigger({ children, asChild, className }: DropdownMenuTriggerProps) {
-  return (
-    <DropdownMenuPrimitive.Trigger asChild={asChild} className={className}>
-      {children}
-    </DropdownMenuPrimitive.Trigger>
-  );
+  if (asChild) {
+    return <>{children}</>;
+  }
+  return <div className={className}>{children}</div>;
 }
 
 interface DropdownMenuContentProps {
@@ -1137,18 +1208,18 @@ interface DropdownMenuContentProps {
 }
 
 export function DropdownMenuContent({ children, align = 'end', className }: DropdownMenuContentProps) {
+  const alignClass = align === 'start' ? 'left-0' : align === 'end' ? 'right-0' : 'left-1/2 -translate-x-1/2';
+
   return (
-    <DropdownMenuPrimitive.Portal>
-      <DropdownMenuPrimitive.Content
-        align={align}
-        className={cn(
-          'z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1 text-gray-900 dark:text-gray-100 shadow-md',
-          className
-        )}
-      >
-        {children}
-      </DropdownMenuPrimitive.Content>
-    </DropdownMenuPrimitive.Portal>
+    <div
+      className={cn(
+        'absolute z-50 mt-2 min-w-[8rem] overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1 text-gray-900 dark:text-gray-100 shadow-md',
+        alignClass,
+        className
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -1161,17 +1232,17 @@ interface DropdownMenuItemProps {
 
 export function DropdownMenuItem({ children, onClick, disabled, className }: DropdownMenuItemProps) {
   return (
-    <DropdownMenuPrimitive.Item
+    <button
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-gray-100 dark:focus:bg-gray-800 focus:text-gray-900 dark:focus:text-gray-100',
+        'relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-gray-100 dark:focus:bg-gray-800',
         disabled && 'pointer-events-none opacity-50',
         className
       )}
     >
       {children}
-    </DropdownMenuPrimitive.Item>
+    </button>
   );
 }
 
@@ -1182,11 +1253,9 @@ interface DropdownMenuLabelProps {
 
 export function DropdownMenuLabel({ children, className }: DropdownMenuLabelProps) {
   return (
-    <DropdownMenuPrimitive.Label
-      className={cn('px-2 py-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100', className)}
-    >
+    <div className={cn('px-2 py-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100', className)}>
       {children}
-    </DropdownMenuPrimitive.Label>
+    </div>
   );
 }
 
@@ -1195,9 +1264,5 @@ interface DropdownMenuSeparatorProps {
 }
 
 export function DropdownMenuSeparator({ className }: DropdownMenuSeparatorProps) {
-  return (
-    <DropdownMenuPrimitive.Separator
-      className={cn('-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-800', className)}
-    />
-  );
+  return <div className={cn('-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-800', className)} />;
 }

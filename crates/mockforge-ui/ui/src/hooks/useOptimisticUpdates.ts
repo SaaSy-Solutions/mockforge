@@ -10,7 +10,7 @@ export interface OptimisticUpdate<T> {
 }
 
 export interface UseOptimisticUpdatesOptions<T> {
-  queryKey: any[];
+  queryKey: unknown[];
   getId: (item: T) => string;
   onSuccess?: (data: T) => void;
   onError?: (error: Error, rollback: () => void) => void;
@@ -24,7 +24,7 @@ export function useOptimisticUpdates<T>({
 }: UseOptimisticUpdatesOptions<T>) {
   const queryClient = useQueryClient();
   const [pendingUpdates, setPendingUpdates] = useState<Map<string, OptimisticUpdate<T>>>(new Map());
-  const rollbackTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const rollbackTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const applyOptimisticUpdate = useCallback(
     (type: OptimisticUpdate<T>['type'], data: T, rollbackDelay = 5000) => {
@@ -201,7 +201,7 @@ export function useOptimisticToggle(
 ) {
   const [optimisticValue, setOptimisticValue] = useState(initialValue);
   const [isPending, setIsPending] = useState(false);
-  const rollbackTimeoutRef = useRef<NodeJS.Timeout>();
+  const rollbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toggle = useCallback(async () => {
     if (isPending) return;
@@ -221,9 +221,9 @@ export function useOptimisticToggle(
 
     try {
       const actualValue = await onToggle(newValue);
-      
+
       // Clear timeout
-      if (rollbackTimeoutRef.current) {
+      if (rollbackTimeoutRef.current !== null) {
         clearTimeout(rollbackTimeoutRef.current);
       }
 
@@ -232,7 +232,7 @@ export function useOptimisticToggle(
       setIsPending(false);
     } catch (error) {
       // Rollback on error
-      if (rollbackTimeoutRef.current) {
+      if (rollbackTimeoutRef.current !== null) {
         clearTimeout(rollbackTimeoutRef.current);
       }
       setOptimisticValue(previousValue);
@@ -242,7 +242,7 @@ export function useOptimisticToggle(
   }, [optimisticValue, isPending, onToggle, rollbackDelay]);
 
   const setValue = useCallback((value: boolean) => {
-    if (rollbackTimeoutRef.current) {
+    if (rollbackTimeoutRef.current !== null) {
       clearTimeout(rollbackTimeoutRef.current);
     }
     setOptimisticValue(value);

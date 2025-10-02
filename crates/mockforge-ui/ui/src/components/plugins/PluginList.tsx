@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   MoreHorizontal,
   Eye,
@@ -7,12 +7,10 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Settings,
-  Loader2
+  Settings
 } from 'lucide-react';
 import {
   Card,
-  Table,
   Badge,
   Button,
   DropdownMenu,
@@ -44,11 +42,7 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchPlugins();
-  }, []);
-
-  const fetchPlugins = async () => {
+  const fetchPlugins = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -63,12 +57,16 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
       } else {
         setError(data.error);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch plugins');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType, filterStatus]);
+
+  useEffect(() => {
+    fetchPlugins();
+  }, [fetchPlugins]);
 
   const handleDeletePlugin = async (pluginId: string) => {
     if (!confirm(`Are you sure you want to delete plugin "${pluginId}"?`)) {
@@ -86,7 +84,7 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
       } else {
         alert(`Failed to delete plugin: ${data.error}`);
       }
-    } catch (err) {
+    } catch {
       alert('Failed to delete plugin');
     }
   };
@@ -105,7 +103,7 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
       } else {
         alert(`Failed to reload plugin: ${data.error}`);
       }
-    } catch (err) {
+    } catch {
       alert('Failed to reload plugin');
     }
   };
@@ -180,64 +178,66 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
           </Button>
         </div>
 
-        <Table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Version</th>
-              <th>Types</th>
-              <th>Status</th>
-              <th>Author</th>
-              <th className="w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {plugins.map((plugin) => (
-              <tr key={plugin.id} className="hover:bg-gray-50">
-                <td>
-                  <div>
-                    <div className="font-medium">{plugin.name}</div>
-                    <div className="text-sm text-gray-500">{plugin.description}</div>
-                  </div>
-                </td>
-                <td className="text-sm">{plugin.version}</td>
-                <td>
-                  <div className="flex gap-1 flex-wrap">
-                    {getTypeBadges(plugin.types)}
-                  </div>
-                </td>
-                <td>{getStatusBadge(plugin.status, plugin.healthy)}</td>
-                <td className="text-sm">{plugin.author}</td>
-                <td>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onSelectPlugin(plugin.id)}>
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleReloadPlugin(plugin.id)}>
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Reload
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDeletePlugin(plugin.id)}
-                        className="text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Version</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Types</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Author</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-12"></th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              {plugins.map((plugin) => (
+                <tr key={plugin.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-6 py-4">
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{plugin.name}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{plugin.description}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{plugin.version}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-1 flex-wrap">
+                      {getTypeBadges(plugin.types)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">{getStatusBadge(plugin.status, plugin.healthy)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{plugin.author}</td>
+                  <td className="px-6 py-4">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onSelectPlugin(plugin.id)}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleReloadPlugin(plugin.id)}>
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Reload
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDeletePlugin(plugin.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </Card>
   );

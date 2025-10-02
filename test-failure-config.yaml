@@ -25,7 +25,7 @@ grpc:
 
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   mount_path: null
   api_enabled: true
 

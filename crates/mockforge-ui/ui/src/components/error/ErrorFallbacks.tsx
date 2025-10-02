@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw, Home, WifiOff, Database, Clock } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Home, Database, Clock } from 'lucide-react';
 import { Button } from '../ui/button';
 import { StatusIcon } from '../ui/IconSystem';
 
@@ -31,16 +31,16 @@ export function ErrorFallback({
         <StatusIcon status="error" size="lg" />
       </div>
       
-      <h3 className="text-heading-md text-primary mb-2">{title}</h3>
-      <p className="text-body-md text-secondary mb-6 max-w-md">{description}</p>
+      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
+      <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">{description}</p>
 
       {showDetails && error && (
         <details className="mb-6 w-full max-w-md">
-          <summary className="cursor-pointer text-label-sm text-secondary hover:text-primary mb-2">
+          <summary className="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 mb-2">
             Show error details
           </summary>
           <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-left">
-            <div className="text-mono-sm text-danger break-all">
+            <div className="text-sm font-mono text-red-700 dark:text-red-500 break-all">
               {error.message}
             </div>
           </div>
@@ -103,8 +103,8 @@ export function DataErrorFallback({ retry, resetError }: { retry?: () => void; r
         <Database className="h-8 w-8 text-orange-600 dark:text-orange-400" />
       </div>
       
-      <h3 className="text-heading-md text-primary mb-2">Data Loading Failed</h3>
-      <p className="text-body-md text-secondary mb-6 max-w-md">
+      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Data Loading Failed</h3>
+      <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">
         There was a problem loading the data. This might be a temporary issue.
       </p>
 
@@ -141,8 +141,8 @@ export function TimeoutErrorFallback({ retry, resetError }: { retry?: () => void
         <Clock className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
       </div>
       
-      <h3 className="text-heading-md text-primary mb-2">Request Timed Out</h3>
-      <p className="text-body-md text-secondary mb-6 max-w-md">
+      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Request Timed Out</h3>
+      <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">
         The request took too long to complete. This might be due to a slow connection or server issues.
       </p>
 
@@ -187,9 +187,9 @@ export function CompactErrorFallback({
       <div className="flex items-center gap-3">
         <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
         <div>
-          <div className="text-label-md text-danger">{message}</div>
+          <div className="text-sm font-medium text-red-700 dark:text-red-500">{message}</div>
           {error && (
-            <div className="text-body-sm text-secondary">{error.message}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">{error.message}</div>
           )}
         </div>
       </div>
@@ -209,29 +209,12 @@ export function CompactErrorFallback({
   );
 }
 
-// HOC for wrapping components with error boundaries
-export function withErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
-  fallback?: React.ComponentType<ErrorFallbackProps>
-) {
-  const WrappedComponent = (props: P) => {
-    return (
-      <ErrorBoundaryWrapper fallback={fallback}>
-        <Component {...props} />
-      </ErrorBoundaryWrapper>
-    );
-  };
-
-  WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
-  return WrappedComponent;
-}
-
 // Lightweight error boundary wrapper
 class ErrorBoundaryWrapper extends React.Component<
   { children: React.ReactNode; fallback?: React.ComponentType<ErrorFallbackProps> },
   { hasError: boolean; error?: Error }
 > {
-  constructor(props: any) {
+  constructor(props: { children: React.ReactNode; fallback?: React.ComponentType<ErrorFallbackProps> }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -257,4 +240,21 @@ class ErrorBoundaryWrapper extends React.Component<
 
     return this.props.children;
   }
+}
+
+// HOC for wrapping components with error boundaries
+export function withErrorBoundary<P extends object>(
+  Component: React.ComponentType<P>,
+  fallback?: React.ComponentType<ErrorFallbackProps>
+) {
+  const WrappedComponent = (props: P) => {
+    return (
+      <ErrorBoundaryWrapper fallback={fallback}>
+        <Component {...props} />
+      </ErrorBoundaryWrapper>
+    );
+  };
+
+  WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
+  return WrappedComponent;
 }

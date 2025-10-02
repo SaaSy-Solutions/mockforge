@@ -20,7 +20,7 @@ pub struct WsProxyRule {
 
 /// WebSocket proxy configuration
 /// Environment variables:
-/// - MOCKFORGE_WS_PROXY_UPSTREAM_URL: Default upstream WebSocket URL for proxy (default: ws://localhost:8080)
+/// - MOCKFORGE_WS_PROXY_UPSTREAM_URL: Default upstream WebSocket URL for proxy (default: ws://localhost:9080)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsProxyConfig {
     /// Default upstream WebSocket URL
@@ -43,7 +43,7 @@ impl Default for WsProxyConfig {
     fn default() -> Self {
         Self {
             upstream_url: std::env::var("MOCKFORGE_WS_PROXY_UPSTREAM_URL")
-                .unwrap_or_else(|_| "ws://localhost:8080".to_string()),
+                .unwrap_or_else(|_| "ws://localhost:9080".to_string()),
             enabled: false,
             rules: Vec::new(),
             passthrough_by_default: true,

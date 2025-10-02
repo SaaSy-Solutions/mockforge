@@ -200,7 +200,7 @@ logging:       # Logging configuration
 <h3 id="serverhttp_port-integer-default-3000"><a class="header" href="#serverhttp_port-integer-default-3000"><code>server.http_port</code> (integer, default: 3000)</a></h3>
 <p>HTTP server port for REST API endpoints.</p>
 <pre><code class="language-yaml">server:
-  http_port: 8080
+  http_port: 9080
 </code></pre>
 <h3 id="serverws_port-integer-default-3001"><a class="header" href="#serverws_port-integer-default-3001"><code>server.ws_port</code> (integer, default: 3001)</a></h3>
 <p>WebSocket server port for real-time connections.</p>
@@ -223,7 +223,7 @@ logging:       # Logging configuration
 <pre><code class="language-yaml">admin:
   enabled: true
 </code></pre>
-<h3 id="adminport-integer-default-8080"><a class="header" href="#adminport-integer-default-8080"><code>admin.port</code> (integer, default: 8080)</a></h3>
+<h3 id="adminport-integer-default-9080"><a class="header" href="#adminport-integer-default-9080"><code>admin.port</code> (integer, default: 9080)</a></h3>
 <p>Port for the admin UI server.</p>
 <pre><code class="language-yaml">admin:
   port: 9090
@@ -411,7 +411,7 @@ server:
 
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   embedded: false
   standalone: true
 
@@ -452,7 +452,7 @@ logging:
 <h2 id="environment-variable-mapping"><a class="header" href="#environment-variable-mapping">Environment Variable Mapping</a></h2>
 <p>All configuration options can be set via environment variables using the <code>MOCKFORGE_</code> prefix with underscore-separated paths:</p>
 <pre><code class="language-bash"># Server configuration
-export MOCKFORGE_SERVER_HTTP_PORT=8080
+export MOCKFORGE_SERVER_HTTP_PORT=9080
 export MOCKFORGE_SERVER_BIND="127.0.0.1"
 
 # Admin UI
@@ -484,7 +484,7 @@ mockforge-cli validate-config --check-deprecated config.yaml
 <li>Logging level adjustments</li>
 </ul>
 <pre><code class="language-bash"># Update validation mode at runtime
-curl -X POST http://localhost:8080/__mockforge/config \
+curl -X POST http://localhost:9080/__mockforge/config \
   -H "Content-Type: application/json" \
   -d '{"validation": {"mode": "warn"}}'
 </code></pre>
@@ -511,7 +511,7 @@ logging:
 <h3 id="production-configuration"><a class="header" href="#production-configuration">Production Configuration</a></h3>
 <pre><code class="language-yaml"># production.yaml
 server:
-  http_port: 8080
+  http_port: 9080
   bind: "127.0.0.1"
 
 admin:

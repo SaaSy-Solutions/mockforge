@@ -977,4 +977,16 @@ pub struct ServerInfo {
     pub build_time: String,
     /// Git SHA
     pub git_sha: String,
+    /// HTTP server address (optional)
+    pub http_server: Option<String>,
+    /// WebSocket server address (optional)
+    pub ws_server: Option<String>,
+    /// gRPC server address (optional)
+    pub grpc_server: Option<String>,
+    /// GraphQL server address (optional)
+    pub graphql_server: Option<String>,
+    /// Whether API endpoints are enabled
+    pub api_enabled: bool,
+    /// Admin server port
+    pub admin_port: u16,
 }

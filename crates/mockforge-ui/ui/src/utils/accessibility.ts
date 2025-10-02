@@ -16,7 +16,7 @@ export interface AriaLabelOptions {
 }
 
 export function getAriaAttributes(options: AriaLabelOptions) {
-  const attrs: Record<string, any> = {};
+  const attrs: Record<string, string | boolean> = {};
 
   if (options.label) attrs['aria-label'] = options.label;
   if (options.labelledBy) attrs['aria-labelledby'] = options.labelledBy;
@@ -155,7 +155,7 @@ export function isScreenReaderActive(): boolean {
     window.navigator?.userAgent?.includes('NVDA') ||
     window.navigator?.userAgent?.includes('JAWS') ||
     window.speechSynthesis ||
-    (window as any).speechSynthesis?.getVoices?.()?.length > 0
+    (window as Window & { speechSynthesis?: { getVoices?: () => unknown[] } }).speechSynthesis?.getVoices?.()?.length > 0
   );
 }
 

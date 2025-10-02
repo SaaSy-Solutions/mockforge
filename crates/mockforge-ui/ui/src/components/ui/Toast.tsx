@@ -5,7 +5,6 @@ import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 export interface ToastProps {
-  id: string;
   type: ToastType;
   title: string;
   message?: string;
@@ -14,7 +13,6 @@ export interface ToastProps {
 }
 
 export function Toast({
-  id,
   type,
   title,
   message,
@@ -44,21 +42,21 @@ export function Toast({
 
   if (!isVisible) return null;
 
-  const icons = {
+  const icons: Record<ToastType, React.ComponentType<{ className?: string }>> = {
     success: CheckCircle,
     error: XCircle,
     warning: AlertCircle,
     info: Info,
   };
 
-  const colors = {
+  const colors: Record<ToastType, string> = {
     success: 'bg-green-50 border-green-200 text-green-800',
     error: 'bg-red-50 border-red-200 text-red-800',
     warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
     info: 'bg-blue-50 border-blue-200 text-blue-800',
   };
 
-  const iconColors = {
+  const iconColors: Record<ToastType, string> = {
     success: 'text-green-500',
     error: 'text-red-500',
     warning: 'text-yellow-500',
@@ -96,7 +94,7 @@ export function Toast({
 
 // Toast function for convenience
 let toastIdCounter = 0;
-const toastCallbacks: { [key: string]: () => void } = {};
+// const toastCallbacks: { [key: string]: () => void } = {};
 
 function showToast(type: ToastType, title: string, message?: string, duration?: number) {
   const id = `toast-${++toastIdCounter}`;
@@ -139,13 +137,19 @@ function showToast(type: ToastType, title: string, message?: string, duration?: 
   `;
 
   // Add close callback
-  (window as any).toastCallbacks = (window as any).toastCallbacks || {};
-  (window as any).toastCallbacks[id] = () => {
+  interface WindowWithCallbacks extends Window {
+    toastCallbacks?: Record<string, () => void>;
+  }
+  const windowWithCallbacks = window as WindowWithCallbacks;
+  windowWithCallbacks.toastCallbacks = windowWithCallbacks.toastCallbacks || {};
+  windowWithCallbacks.toastCallbacks[id] = () => {
     const element = document.getElementById(id);
     if (element) {
       element.remove();
     }
-    delete (window as any).toastCallbacks[id];
+    if (windowWithCallbacks.toastCallbacks) {
+      delete windowWithCallbacks.toastCallbacks[id];
+    }
   };
 
   document.body.appendChild(toastElement);
@@ -157,7 +161,10 @@ function showToast(type: ToastType, title: string, message?: string, duration?: 
       if (element) {
         element.remove();
       }
-      delete (window as any).toastCallbacks[id];
+      const windowWithCallbacks = window as WindowWithCallbacks;
+      if (windowWithCallbacks.toastCallbacks) {
+        delete windowWithCallbacks.toastCallbacks[id];
+      }
     }, duration);
   }
 

@@ -161,22 +161,22 @@ export function LogFilters({
         <div className="flex items-center space-x-2 text-sm">
           <span className="text-muted-foreground">Active filters:</span>
           {filter.method && (
-            <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">
+            <span className="bg-primary/10 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs">
               Method: {filter.method}
             </span>
           )}
           {filter.status_code && (
-            <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">
+            <span className="bg-primary/10 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs">
               Status: {filter.status_code}
             </span>
           )}
           {filter.level && (
-            <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">
+            <span className="bg-primary/10 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs">
               Level: {filter.level}
             </span>
           )}
           {filter.path_pattern && (
-            <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">
+            <span className="bg-primary/10 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs">
               Search: "{filter.path_pattern}"
             </span>
           )}

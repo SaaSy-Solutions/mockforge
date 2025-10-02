@@ -1,8 +1,8 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  title?: string;
+interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+  title?: string | React.ReactNode;
   icon?: React.ReactNode;
 }
 
@@ -21,8 +21,8 @@ export function Card({ title, icon, children, className, ...props }: CardProps) 
     >
       {title && (
         <div className="border-b border-border/50 px-6 py-4 bg-brand-50 dark:bg-brand-900/10 rounded-t-xl">
-          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-3">
-            {icon && (
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+            {icon && typeof title === 'string' && (
               <span className="p-1.5 rounded-lg bg-brand-50 text-brand-600 group-hover:bg-brand-100 transition-colors duration-200 dark:bg-brand-900/20 dark:text-brand-400">
                 {icon}
               </span>

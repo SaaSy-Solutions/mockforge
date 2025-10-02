@@ -139,11 +139,11 @@ For a visual interface to manage your mock server:
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 mockforge serve --spec examples/openapi-demo.json \
-  --admin --admin-port 8080 \
+  --admin --admin-port 9080 \
   --http-port 3000 --ws-port 3001
 ```
 
-Access the admin interface at: http://localhost:8080
+Access the admin interface at: http://localhost:9080
 
 ## Step 7: Using Configuration Files
 
@@ -161,7 +161,7 @@ If you prefer Docker:
 ```bash
 # Build and run with Docker
 docker build -t mockforge .
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
+docker run -p 3000:3000 -p 3001:3001 -p 9080:9080 \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   -e MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
   mockforge
@@ -179,7 +179,7 @@ Congratulations! You now have a fully functional mock server running. Here are s
 ## Troubleshooting
 
 ### Server won't start
-- Check if ports 3000, 3001, or 8080 are already in use
+- Check if ports 3000, 3001, or 9080 are already in use
 - Verify the OpenAPI spec file path is correct
 - Ensure MockForge is properly installed
 

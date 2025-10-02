@@ -194,10 +194,6 @@ describe('ErrorBoundary', () => {
   });
 
   it('provides error context information', () => {
-    const errorInfo = {
-      componentStack: '\n    in ThrowError\n    in ErrorBoundary',
-    };
-
     render(
       <ErrorBoundary>
         <ThrowError shouldThrow={true} />

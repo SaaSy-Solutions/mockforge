@@ -434,7 +434,7 @@ RUN cargo build --release --package mockforge-ui
 
 FROM debian:bookworm-slim
 COPY --from=builder /app/target/release/mockforge-ui /usr/local/bin/
-EXPOSE 8080
+EXPOSE 9080
 CMD ["mockforge-ui"]
 ```
 
@@ -459,7 +459,7 @@ spec:
       - name: mockforge-ui
         image: mockforge-ui:latest
         ports:
-        - containerPort: 8080
+        - containerPort: 9080
         env:
         - name: RUST_LOG
           value: info

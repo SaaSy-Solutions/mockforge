@@ -187,9 +187,9 @@
 <h2 id="accessing-the-admin-ui"><a class="header" href="#accessing-the-admin-ui">Accessing the Admin UI</a></h2>
 <p>The Admin UI is automatically available when you start MockForge with the <code>--admin</code> flag:</p>
 <pre><code class="language-bash"># Start with Admin UI enabled
-mockforge serve --spec api-spec.json --admin --admin-port 8080 --http-port 3000
+mockforge serve --spec api-spec.json --admin --admin-port 9080 --http-port 3000
 </code></pre>
-<p>The Admin UI will be available at: <strong>http://localhost:8080</strong> (default port)</p>
+<p>The Admin UI will be available at: <strong>http://localhost:9080</strong> (default port)</p>
 <h3 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h3>
 <pre><code class="language-bash"># Custom admin port
 mockforge serve --admin --admin-port 9090
@@ -202,7 +202,7 @@ mockforge serve --spec api-spec.json --no-admin
 MOCKFORGE_ADMIN_ENABLED=true
 
 # Set admin UI port
-MOCKFORGE_ADMIN_PORT=8080
+MOCKFORGE_ADMIN_PORT=9080
 
 # Set admin UI bind address (default: 0.0.0.0)
 MOCKFORGE_ADMIN_BIND=127.0.0.1
@@ -412,7 +412,7 @@ MOCKFORGE_ADMIN_BIND=127.0.0.1
 </ul>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
-<p><strong>Admin UI not loading</strong>: Check that <code>--admin</code> flag is used and port 8080 is accessible</p>
+<p><strong>Admin UI not loading</strong>: Check that <code>--admin</code> flag is used and port 9080 is accessible</p>
 <p><strong>Slow performance</strong>: Reduce auto-refresh interval or disable real-time updates</p>
 <p><strong>Missing data</strong>: Ensure proper permissions for file system access</p>
 <p><strong>Configuration not applying</strong>: Some changes may require server restart</p>

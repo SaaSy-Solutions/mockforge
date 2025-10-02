@@ -107,7 +107,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
           )}
 
           <div className="space-y-2">
-            <label htmlFor="username" className="text-sm font-medium text-text-primary">
+            <label htmlFor="username" className="text-sm font-medium text-gray-900 dark:text-gray-100">
               Username
             </label>
             <Input
@@ -124,7 +124,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-text-primary">
+            <label htmlFor="email" className="text-sm font-medium text-gray-900 dark:text-gray-100">
               Email (Optional)
             </label>
             <Input
@@ -141,7 +141,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-text-primary">
+            <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
               Role
             </label>
             <div className="flex items-center gap-2">
@@ -152,7 +152,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
               }`}>
                 {user.role === 'admin' ? '🔑' : '👁️'} {user.role}
               </span>
-              <span className="text-sm text-text-secondary">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
                 (Contact administrator to change role)
               </span>
             </div>

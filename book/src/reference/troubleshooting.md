@@ -13,11 +13,11 @@ First, verify that MockForge is running and accessible:
 ps aux | grep mockforge
 
 # Check listening ports
-netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+netstat -tlnp | grep -E ":(3000|3001|50051|9080)"
 
 # Test basic connectivity
 curl -I http://localhost:3000/health 2>/dev/null || echo "HTTP server not responding"
-curl -I http://localhost:8080/health 2>/dev/null || echo "Admin UI not responding"
+curl -I http://localhost:9080/health 2>/dev/null || echo "Admin UI not responding"
 ```
 
 ### Check Logs
@@ -280,7 +280,7 @@ grep "WARN" mockforge.log
 1. **Check admin port**:
    ```bash
    # Verify port is listening
-   curl -I http://localhost:8080 2>/dev/null || echo "Admin UI not accessible"
+   curl -I http://localhost:9080 2>/dev/null || echo "Admin UI not accessible"
 
    # Try different port
    mockforge serve --admin --admin-port 9090
@@ -308,7 +308,7 @@ grep "WARN" mockforge.log
 1. **Check admin API**:
    ```bash
    # Test admin API directly
-   curl http://localhost:8080/__mockforge/status
+   curl http://localhost:9080/__mockforge/status
    ```
 
 2. **Enable admin API**:
@@ -476,7 +476,7 @@ cargo --version
 echo "=== Running Processes ==="
 ps aux | grep mockforge
 echo "=== Listening Ports ==="
-netstat -tlnp | grep -E ":(3000|3001|50051|8080)"
+netstat -tlnp | grep -E ":(3000|3001|50051|9080)"
 echo "=== Disk Space ==="
 df -h
 echo "=== Memory Usage ==="

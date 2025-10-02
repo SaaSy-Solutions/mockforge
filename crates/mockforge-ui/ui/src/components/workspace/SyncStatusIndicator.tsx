@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/Tooltip';
-import { Sync, AlertCircle, CheckCircle, Clock, Play, Square } from 'lucide-react';
+import { RefreshCw, AlertCircle, CheckCircle, Clock, Play, Square } from 'lucide-react';
 import type { SyncStatus } from '../../types';
 
 interface SyncStatusIndicatorProps {
@@ -21,7 +21,7 @@ export function SyncStatusIndicator({
   const getStatusIcon = () => {
     switch (status.status.toLowerCase()) {
       case 'syncing':
-        return <Sync className="h-4 w-4 animate-spin text-blue-500" />;
+        return <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />;
       case 'success':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'error':
@@ -90,14 +90,14 @@ export function SyncStatusIndicator({
             </Badge>
             {status.target_directory && (
               <Tooltip content={`Syncing to: ${status.target_directory}`}>
-                <code className="text-xs text-text-secondary truncate max-w-32">
+                <code className="text-xs text-gray-600 dark:text-gray-400 truncate max-w-32">
                   {status.target_directory.split('/').pop()}
                 </code>
               </Tooltip>
             )}
           </div>
           {status.last_sync && (
-            <span className="text-xs text-text-secondary">
+            <span className="text-xs text-gray-600 dark:text-gray-400">
               Last sync: {formatLastSync(status.last_sync)}
             </span>
           )}

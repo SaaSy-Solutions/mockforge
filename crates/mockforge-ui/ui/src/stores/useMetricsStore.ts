@@ -10,13 +10,13 @@ interface MetricsStore {
   
   setLatencyMetrics: (metrics: LatencyMetrics[]) => void;
   setFailureMetrics: (metrics: FailureMetrics[]) => void;
-  setSelectedService: (service: string | null) => void;
+  setSelectedService: (_service: string | null) => void;
   setLoading: (loading: boolean) => void;
   refreshMetrics: () => Promise<void>;
 }
 
 // Mock data generators
-const generateLatencyHistogram = (service: string): HistogramBucket[] => {
+const generateLatencyHistogram = (_service: string): HistogramBucket[] => {
   const ranges = [
     '0-50ms', '50-100ms', '100-200ms', '200-500ms', 
     '500ms-1s', '1s-2s', '2s-5s', '5s+'
@@ -125,7 +125,7 @@ const generateFailureMetrics = (): FailureMetrics[] => {
 const mockLatencyMetrics = generateLatencyMetrics();
 const mockFailureMetrics = generateFailureMetrics();
 
-export const useMetricsStore = create<MetricsStore>((set, get) => ({
+export const useMetricsStore = create<MetricsStore>((set, _get) => ({
   latencyMetrics: mockLatencyMetrics,
   failureMetrics: mockFailureMetrics,
   selectedService: null,

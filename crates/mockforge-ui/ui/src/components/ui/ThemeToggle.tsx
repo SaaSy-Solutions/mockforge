@@ -10,7 +10,7 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ className, size = 'md' }: ThemeToggleProps) {
-  const { theme, setTheme } = useThemeStore();
+  const { theme, setTheme } = useThemePaletteStore();
 
   const iconSizes = {
     sm: 'h-4 w-4',
@@ -64,7 +64,11 @@ export function ThemeToggle({ className, size = 'md' }: ThemeToggleProps) {
 
 // Simple toggle version for minimal UI
 export function SimpleThemeToggle({ className, size = 'md' }: ThemeToggleProps) {
-  const { toggleTheme, resolvedTheme } = useThemeStore();
+  const { theme: resolvedTheme, setTheme } = useThemePaletteStore();
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
 
   const sizeClasses = {
     sm: 'h-8 w-8',

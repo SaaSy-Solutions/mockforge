@@ -191,7 +191,7 @@ npm run test  # Run test suite
 ### Environment Variables
 ```bash
 MOCKFORGE_ADMIN_UI_V2_ENABLED=true    # Enable v2 interface
-MOCKFORGE_ADMIN_PORT=8080             # Admin port
+MOCKFORGE_ADMIN_PORT=9080             # Admin port
 MOCKFORGE_ADMIN_AUTH_ENABLED=true     # Enable authentication
 MOCKFORGE_ADMIN_JWT_SECRET=secret     # JWT signing key
 ```

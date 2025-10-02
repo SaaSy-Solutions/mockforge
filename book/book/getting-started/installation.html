@@ -213,7 +213,7 @@
 <pre><code class="language-bash">docker pull SaaSy-Solutions/mockforge
 </code></pre>
 <h3 id="run-with-basic-configuration"><a class="header" href="#run-with-basic-configuration">Run with basic configuration</a></h3>
-<pre><code class="language-bash">docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+<pre><code class="language-bash">docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   mockforge
@@ -265,7 +265,7 @@ sudo usermod -aG docker $USER
 # Log out and back in for changes to take effect
 </code></pre>
 <h3 id="port-conflicts"><a class="header" href="#port-conflicts">Port conflicts</a></h3>
-<p>If default ports (3000, 3001, 8080, 50051) are in use:</p>
+<p>If default ports (3000, 3001, 9080, 50051) are in use:</p>
 <pre><code class="language-bash"># Check what's using the ports
 lsof -i :3000
 lsof -i :3001

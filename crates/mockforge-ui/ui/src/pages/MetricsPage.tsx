@@ -129,9 +129,9 @@ export function MetricsPage() {
   }
 
   // Process metrics data
-  const endpointData = Object.entries(metrics.requests_by_endpoint).map(([endpoint, count]) => ({
+  const endpointData = Object.entries(metrics.requests_by_endpoint).map(([endpoint, count]: [string, unknown]) => ({
     label: endpoint.split(' ')[1] || endpoint, // Extract path from "METHOD /path"
-    value: count,
+    value: count as number,
     color: 'bg-blue-500'
   }));
 
@@ -141,11 +141,14 @@ export function MetricsPage() {
     { label: 'P99', value: metrics.response_time_percentiles['p99'] || 0, color: 'bg-red-500' },
   ];
 
-  const errorRateData = Object.entries(metrics.error_rate_by_endpoint).map(([endpoint, rate]) => ({
-    label: endpoint.split(' ')[1] || endpoint,
-    value: Math.round(rate * 100),
-    color: rate > 0.1 ? 'bg-red-500' : rate > 0.05 ? 'bg-yellow-500' : 'bg-green-500'
-  }));
+  const errorRateData = Object.entries(metrics.error_rate_by_endpoint).map(([endpoint, rate]: [string, unknown]) => {
+    const errorRate = rate as number;
+    return {
+      label: endpoint.split(' ')[1] || endpoint,
+      value: Math.round(errorRate * 100),
+      color: errorRate > 0.1 ? 'bg-red-500' : errorRate > 0.05 ? 'bg-yellow-500' : 'bg-green-500'
+    };
+  });
 
   return (
     <div className="space-y-8">
@@ -177,19 +180,19 @@ export function MetricsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="Total Requests"
-            value={Object.values(metrics.requests_by_endpoint).reduce((a, b) => a + b, 0).toLocaleString()}
+            value={(Object.values(metrics.requests_by_endpoint) as number[]).reduce((a: number, b: number) => a + b, 0).toLocaleString()}
             subtitle="all endpoints"
             icon={<Activity className="h-6 w-6" />}
           />
           <MetricCard
             title="Avg Response Time"
-            value={`${Math.round(Object.values(metrics.response_time_percentiles).reduce((a, b) => a + b, 0) / Object.keys(metrics.response_time_percentiles).length)}ms`}
+            value={`${Math.round((Object.values(metrics.response_time_percentiles) as number[]).reduce((a: number, b: number) => a + b, 0) / Object.keys(metrics.response_time_percentiles).length)}ms`}
             subtitle="median"
             icon={<Clock className="h-6 w-6" />}
           />
           <MetricCard
             title="Error Rate"
-            value={`${(Object.values(metrics.error_rate_by_endpoint).reduce((a, b) => a + b, 0) / Object.keys(metrics.error_rate_by_endpoint).length * 100).toFixed(1)}%`}
+            value={`${((Object.values(metrics.error_rate_by_endpoint) as number[]).reduce((a: number, b: number) => a + b, 0) / Object.keys(metrics.error_rate_by_endpoint).length * 100).toFixed(1)}%`}
             subtitle="average"
             trend={{ direction: 'down', value: '-2.1%' }}
             icon={<TrendingUp className="h-6 w-6" />}
@@ -248,7 +251,7 @@ export function MetricsPage() {
             <div className="space-y-6">
               {metrics.memory_usage_over_time.length > 0 && (
                 <SimpleLineChart
-                  data={metrics.memory_usage_over_time.map(([timestamp, value]) => ({
+                  data={metrics.memory_usage_over_time.map(([timestamp, value]: [string, number]) => ({
                     timestamp,
                     value
                   }))}
@@ -257,7 +260,7 @@ export function MetricsPage() {
               )}
               {metrics.cpu_usage_over_time.length > 0 && (
                 <SimpleLineChart
-                  data={metrics.cpu_usage_over_time.map(([timestamp, value]) => ({
+                  data={metrics.cpu_usage_over_time.map(([timestamp, value]: [string, number]) => ({
                     timestamp,
                     value
                   }))}
@@ -298,7 +301,7 @@ export function MetricsPage() {
                         {endpoint}
                       </td>
                       <td className="py-3 px-4 text-right text-gray-900 dark:text-gray-100">
-                        {requestCount.toLocaleString()}
+                        {(requestCount as number).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <ModernBadge

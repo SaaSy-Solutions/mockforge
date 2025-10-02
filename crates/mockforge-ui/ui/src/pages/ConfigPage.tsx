@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
-import { useConfig, useValidation } from '../hooks/useApi';
+import { useConfig, useValidation, useServerInfo } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import {
   PageHeader,
@@ -13,6 +13,12 @@ import { Input } from '../components/ui/input';
 import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import { AutocompleteInput } from '../components/ui/AutocompleteInput';
 
+function extractPort(address?: string): string {
+  if (!address) return '';
+  const parts = address.split(':');
+  return parts[parts.length - 1] || '';
+}
+
 export function ConfigPage() {
   const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment'>('general');
   const { activeWorkspace } = useWorkspaceStore();
@@ -20,6 +26,7 @@ export function ConfigPage() {
 
   const { isLoading: configLoading } = useConfig();
   const { isLoading: validationLoading } = useValidation();
+  const { data: serverInfo, isLoading: serverInfoLoading } = useServerInfo();
 
   const [formData, setFormData] = useState({
     latency: { base_ms: 0, jitter_ms: 0 },
@@ -59,7 +66,7 @@ export function ConfigPage() {
     // Here you would reset the form data
   };
 
-  if (configLoading || validationLoading) {
+  if (configLoading || validationLoading || serverInfoLoading) {
     return (
       <div className="space-y-8">
         <PageHeader
@@ -155,25 +162,25 @@ export function ConfigPage() {
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           HTTP Port
                         </label>
-                        <Input type="number" defaultValue="3000" />
+                        <Input type="number" defaultValue={extractPort(serverInfo?.http_server) || "3000"} />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           WebSocket Port
                         </label>
-                        <Input type="number" defaultValue="3001" />
+                        <Input type="number" defaultValue={extractPort(serverInfo?.ws_server) || "3001"} />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           gRPC Port
                         </label>
-                        <Input type="number" defaultValue="50051" />
+                        <Input type="number" defaultValue={extractPort(serverInfo?.grpc_server) || "50051"} />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           Admin Port
                         </label>
-                        <Input type="number" defaultValue="8080" />
+                        <Input type="number" defaultValue={serverInfo?.admin_port?.toString() || "9080"} />
                       </div>
                     </div>
                   </div>

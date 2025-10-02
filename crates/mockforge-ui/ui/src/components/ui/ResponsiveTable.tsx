@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
-import { ChevronIcon, ActionIcon, Icons } from './IconSystem';
-import { Button, Badge } from './DesignSystem';
-import { MoreHorizontal, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronIcon, Icons } from './IconSystem';
+import { Button } from './DesignSystem';
 
 // Enhanced column definition with responsive options
-export interface ResponsiveTableColumn<T = any> {
+export interface ResponsiveTableColumn<T = unknown> {
   key: string;
   label: string;
-  render?: (value: any, row: T) => React.ReactNode;
+  render?: (value: unknown, row: T) => React.ReactNode;
   sortable?: boolean;
   width?: string;
   minWidth?: string;
@@ -20,7 +19,7 @@ export interface ResponsiveTableColumn<T = any> {
   mobileLabel?: string; // Alternative label for mobile view
 }
 
-export interface ResponsiveTableProps<T = any> {
+export interface ResponsiveTableProps<T = unknown> {
   columns: ResponsiveTableColumn<T>[];
   data: T[];
   className?: string;
@@ -76,15 +75,15 @@ function MobileCard<T>({
       {/* High priority info - always visible */}
       <div className="space-y-2">
         {highPriorityColumns.map((column) => {
-          const value = (row as any)[column.key];
+          const value = (row as Record<string, unknown>)[column.key];
           const displayValue = column.render ? column.render(value, row) : value;
           
           return (
             <div key={column.key} className="flex items-center justify-between">
-              <span className="text-label-md text-secondary">
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
                 {column.mobileLabel || column.label}
               </span>
-              <span className="text-body-md text-primary font-medium">
+              <span className="text-base text-gray-900 dark:text-gray-100 font-medium">
                 {displayValue}
               </span>
             </div>
@@ -98,7 +97,7 @@ function MobileCard<T>({
           <div className="divider-subtle"></div>
           
           <button
-            className="flex items-center justify-between w-full text-body-sm text-secondary hover:text-primary transition-colors"
+            className="flex items-center justify-between w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setIsExpanded(!isExpanded);
@@ -113,15 +112,15 @@ function MobileCard<T>({
           {isExpanded && (
             <div className="space-y-2 animate-fade-in-up">
               {otherColumns.map((column) => {
-                const value = (row as any)[column.key];
+                const value = (row as Record<string, unknown>)[column.key];
                 const displayValue = column.render ? column.render(value, row) : value;
                 
                 return (
                   <div key={column.key} className="flex items-center justify-between">
-                    <span className="text-label-sm text-tertiary">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
                       {column.mobileLabel || column.label}
                     </span>
-                    <span className="text-body-sm text-secondary">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
                       {displayValue}
                     </span>
                   </div>
@@ -163,10 +162,10 @@ function DesktopTable<T>({
 
   const sortedData = React.useMemo(() => {
     if (!sortColumn) return data;
-    
+
     return [...data].sort((a, b) => {
-      const aValue = (a as any)[sortColumn];
-      const bValue = (b as any)[sortColumn];
+      const aValue = (a as Record<string, unknown>)[sortColumn];
+      const bValue = (b as Record<string, unknown>)[sortColumn];
       
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
@@ -183,7 +182,7 @@ function DesktopTable<T>({
               <th
                 key={column.key}
                 className={cn(
-                  'px-6 py-3 text-left text-label-sm text-weight-medium text-tertiary uppercase tracking-wider',
+                  'px-6 py-3 text-left text-xs font-medium font-medium text-tertiary uppercase tracking-wider',
                   column.width && `w-[${column.width}]`,
                   column.minWidth && `min-w-[${column.minWidth}]`,
                   sortable && column.sortable && 'cursor-pointer hover:text-primary transition-colors'
@@ -235,13 +234,13 @@ function DesktopTable<T>({
               onClick={() => onRowClick?.(row)}
             >
               {columns.map((column) => {
-                const value = (row as any)[column.key];
+                const value = (row as Record<string, unknown>)[column.key];
                 const displayValue = column.render ? column.render(value, row) : value;
                 
                 return (
                   <td
                     key={column.key}
-                    className="px-6 py-4 whitespace-nowrap text-body-md text-primary"
+                    className="px-6 py-4 whitespace-nowrap text-base text-gray-900 dark:text-gray-100"
                   >
                     {displayValue}
                   </td>
@@ -274,10 +273,10 @@ export function ResponsiveTable<T>({
   // Filter data based on search
   const filteredData = React.useMemo(() => {
     if (!searchable || !searchQuery.trim()) return data;
-    
+
     return data.filter(row => {
       return columns.some(column => {
-        const value = (row as any)[column.key];
+        const value = (row as Record<string, unknown>)[column.key];
         return String(value).toLowerCase().includes(searchQuery.toLowerCase());
       });
     });
@@ -298,11 +297,11 @@ export function ResponsiveTable<T>({
   if (filteredData.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="text-heading-md text-secondary mb-2">
+        <div className="text-xl font-bold text-gray-600 dark:text-gray-400 mb-2">
           {searchQuery ? 'No matching results' : emptyMessage}
         </div>
         {searchQuery && (
-          <p className="text-body-md text-tertiary">
+          <p className="text-base text-gray-600 dark:text-gray-400">
             Try adjusting your search terms
           </p>
         )}
@@ -321,9 +320,9 @@ export function ResponsiveTable<T>({
               placeholder={searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-body-md bg-background focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-base bg-background focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors"
             />
-            <Icons.Search className="absolute left-3 top-2.5 h-4 w-4 text-tertiary" />
+            <Icons.Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-600 dark:text-gray-400" />
           </div>
           
           {searchQuery && (
@@ -369,7 +368,7 @@ export function ResponsiveTable<T>({
       </div>
 
       {/* Results summary */}
-      <div className="flex items-center justify-between text-body-sm text-tertiary">
+      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
         <span>
           Showing {filteredData.length} of {data.length} {data.length === 1 ? 'item' : 'items'}
         </span>

@@ -38,7 +38,7 @@ grpc:
 # Admin UI configuration
 admin:
   enabled: false
-  port: 8080
+  port: 9080
   host: "127.0.0.1"
   auth_required: false
   username: null

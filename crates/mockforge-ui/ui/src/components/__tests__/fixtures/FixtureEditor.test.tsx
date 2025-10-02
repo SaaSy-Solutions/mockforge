@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FixtureEditor } from '../fixtures/FixtureEditor';
@@ -15,7 +15,7 @@ const mockUseFixtureStore = vi.mocked(useFixtureStore);
 
 // Mock Monaco Editor
 vi.mock('@monaco-editor/react', () => ({
-  default: ({ value, onChange, options, language }) => (
+  default: ({ value, onChange, language }: { value: string; onChange?: (val: string) => void; language: string }) => (
     <textarea
       data-testid="monaco-editor"
       value={value}

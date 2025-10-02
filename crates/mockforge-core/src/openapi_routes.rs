@@ -93,6 +93,7 @@ impl OpenApiRouteRegistry {
     }
 
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
+        tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
         let options = ValidationOptions {
@@ -129,6 +130,7 @@ impl OpenApiRouteRegistry {
 
     /// Construct with explicit options
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
+        tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
         let routes = Self::generate_routes(&spec);
         Self {
@@ -149,8 +151,12 @@ impl OpenApiRouteRegistry {
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
+        
+        let all_paths_ops = spec.all_paths_and_operations();
+        tracing::debug!("Generating routes from OpenAPI spec with {} paths", all_paths_ops.len());
 
-        for (path, operations) in spec.all_paths_and_operations() {
+        for (path, operations) in all_paths_ops {
+            tracing::debug!("Processing path: {}", path);
             for (method, operation) in operations {
                 routes.push(OpenApiRoute::from_operation(
                     &method,
@@ -161,6 +167,7 @@ impl OpenApiRouteRegistry {
             }
         }
 
+        tracing::debug!("Generated {} total routes from OpenAPI spec", routes.len());
         routes
     }
 
@@ -177,15 +184,18 @@ impl OpenApiRouteRegistry {
     /// Build an Axum router from the OpenAPI spec (simplified)
     pub fn build_router(self) -> Router {
         let mut router = Router::new();
+        tracing::debug!("Building router from {} routes", self.routes.len());
 
         // Create individual routes for each operation
         for route in &self.routes {
+            tracing::debug!("Adding route: {} {}", route.method, route.path);
             let axum_path = route.axum_path();
             let operation = route.operation.clone();
             let method = route.method.clone();
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
             let (_selected_status, mock_response) = route.mock_response_with_status();
+            tracing::debug!("Generated mock response for {} {}: {:?}", method, path_template, mock_response);
 
             // Handler: validate path/query/header/cookie/body, then return mock
             let handler = move |AxumPath(path_params): AxumPath<
@@ -194,6 +204,7 @@ impl OpenApiRouteRegistry {
                                 RawQuery(raw_query): RawQuery,
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
+                tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = serde_json::Map::new();
@@ -914,6 +925,7 @@ impl OpenApiRouteRegistry {
     pub fn convert_path_to_axum(openapi_path: &str) -> String {
         openapi_path.replace("{", ":").replace("}", "")
     }
+
 }
 
 // Note: templating helpers are now in core::templating (shared across modules)

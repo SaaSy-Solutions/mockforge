@@ -80,7 +80,7 @@ async fn test_admin_ui_build_and_serve() {
 /// Test that the admin UI serves correctly when built assets exist
 #[tokio::test]
 async fn test_admin_ui_serves_built_assets() {
-    let app = create_admin_router(None, None, None, None, true);
+    let app = create_admin_router(None, None, None, None, true, 9080);
 
     // Test that main HTML page serves
     let response = app
@@ -110,7 +110,7 @@ async fn test_admin_ui_serves_built_assets() {
     );
 
     // Test CSS asset serving
-    let app2 = create_admin_router(None, None, None, None, true);
+    let app2 = create_admin_router(None, None, None, None, true, 9080);
     let css_response = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
@@ -131,7 +131,7 @@ async fn test_admin_ui_serves_built_assets() {
     }
 
     // Test JavaScript asset serving
-    let app3 = create_admin_router(None, None, None, None, true);
+    let app3 = create_admin_router(None, None, None, None, true, 9080);
     let js_response = app3
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
@@ -210,7 +210,7 @@ async fn test_ui_handles_missing_assets() {
     // This test verifies that the server doesn't crash when UI assets are missing
     // and provides reasonable fallbacks
 
-    let app = create_admin_router(None, None, None, None, true);
+    let app = create_admin_router(None, None, None, None, true, 9080);
 
     // Test main page
     let response = app
@@ -231,7 +231,7 @@ async fn test_ui_handles_missing_assets() {
     }
 
     // Test CSS endpoint
-    let app2 = create_admin_router(None, None, None, None, true);
+    let app2 = create_admin_router(None, None, None, None, true, 9080);
     let css_response = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
@@ -245,7 +245,7 @@ async fn test_ui_handles_missing_assets() {
     );
 
     // Test JS endpoint
-    let app3 = create_admin_router(None, None, None, None, true);
+    let app3 = create_admin_router(None, None, None, None, true, 9080);
     let js_response = app3
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
@@ -303,7 +303,7 @@ async fn test_ui_build_process() {
 /// Test that the UI serves proper security headers
 #[tokio::test]
 async fn test_ui_security_headers() {
-    let app = create_admin_router(None, None, None, None, true);
+    let app = create_admin_router(None, None, None, None, true, 9080);
 
     let response = app
         .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())

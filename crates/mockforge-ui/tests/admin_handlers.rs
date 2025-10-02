@@ -18,6 +18,7 @@ mod admin_handlers_tests {
             Some("127.0.0.1:50051".parse().unwrap()),
             None, // graphql_server_addr
             true, // api_enabled
+            9080, // admin_port
         )
     }
 

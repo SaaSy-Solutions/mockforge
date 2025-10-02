@@ -1,9 +1,7 @@
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '../ui/DesignSystem';
 import { StatusIcon, ActionIcon } from '../ui/IconSystem';
-import { ErrorState } from '../ui/LoadingStates';
 
 interface Props {
   children: ReactNode;
@@ -59,23 +57,23 @@ export class ErrorBoundary extends Component<Props, State> {
                 <StatusIcon status="error" size="3xl" />
               </div>
               
-              <h2 className="text-heading-xl text-primary mb-3">
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-3">
                 Something went wrong
               </h2>
-              <p className="text-body-lg text-secondary mb-8">
+              <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
                 An unexpected error occurred in the application. Please try refreshing the page or contact support if the issue persists.
               </p>
 
               {import.meta.env.DEV && this.state.error && (
                 <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-left">
-                  <div className="text-label-md text-weight-semibold text-danger mb-2">Error Details:</div>
-                  <div className="text-mono-sm text-danger whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                  <div className="text-sm font-semibold text-red-800 dark:text-red-400 mb-2">Error Details:</div>
+                  <div className="text-sm font-mono text-red-700 dark:text-red-500 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
                     {this.state.error.message}
                   </div>
                   {this.state.errorInfo && (
                     <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
-                      <div className="text-label-sm text-weight-semibold text-danger mb-1">Component Stack:</div>
-                      <div className="text-mono-xs text-danger whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
+                      <div className="text-xs font-semibold text-red-800 dark:text-red-400 mb-1">Component Stack:</div>
+                      <div className="text-xs font-mono text-red-700 dark:text-red-500 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
                         {this.state.errorInfo.componentStack}
                       </div>
                     </div>
@@ -102,7 +100,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 </Button>
               </div>
 
-              <div className="mt-6 text-body-sm text-tertiary">
+              <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
                 If this problem persists, please contact support with the error details above.
               </div>
             </div>

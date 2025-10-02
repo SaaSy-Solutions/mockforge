@@ -25,7 +25,7 @@ The Admin UI v2 is enabled by default when starting MockForge with the admin int
 mockforge serve --admin-ui
 ```
 
-Access the interface at `http://localhost:8080/admin` (or your configured admin port).
+Access the interface at `http://localhost:9080/admin` (or your configured admin port).
 
 ### Authentication
 
@@ -196,8 +196,8 @@ Configure Admin UI v2 behavior through environment variables:
 # Enable Admin UI v2 (default: true)
 MOCKFORGE_ADMIN_UI_V2_ENABLED=true
 
-# Admin UI port (default: 8080)
-MOCKFORGE_ADMIN_PORT=8080
+# Admin UI port (default: 9080)
+MOCKFORGE_ADMIN_PORT=9080
 
 # Authentication settings
 MOCKFORGE_ADMIN_AUTH_ENABLED=true
@@ -297,7 +297,7 @@ WS /api/v2/config/stream
 MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
 
 # Verify admin credentials
-curl -X POST http://localhost:8080/api/v2/auth/login \
+curl -X POST http://localhost:9080/api/v2/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}'
 ```
@@ -305,10 +305,10 @@ curl -X POST http://localhost:8080/api/v2/auth/login \
 #### WebSocket Connection Issues
 ```bash
 # Check WebSocket endpoint
-wscat -c ws://localhost:8080/api/v2/logs/stream
+wscat -c ws://localhost:9080/api/v2/logs/stream
 
 # Verify proxy configuration if behind reverse proxy
-ProxyPass /api/v2/ ws://localhost:8080/api/v2/
+ProxyPass /api/v2/ ws://localhost:9080/api/v2/
 ```
 
 #### Performance Issues

@@ -45,7 +45,7 @@ grpc:
 # Admin UI configuration
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   host: "127.0.0.1"
   mount_path: null
   api_enabled: true
@@ -138,7 +138,7 @@ grpc:
 ```yaml
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   host: "127.0.0.1"
   api_enabled: true
 ```
@@ -309,7 +309,7 @@ http:
 
 admin:
   enabled: true
-  port: 8080
+  port: 9080
 
 core:
   latency_enabled: false  # Disable latency for faster development

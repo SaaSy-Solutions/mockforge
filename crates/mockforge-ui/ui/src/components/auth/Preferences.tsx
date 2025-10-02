@@ -125,7 +125,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
             <TabsContent value="theme" className="space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-3 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
                     Theme Mode
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -150,7 +150,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-3 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
                     Accent Color
                   </label>
                   <div className="flex gap-2">
@@ -172,10 +172,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       High Contrast
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Increase contrast for better accessibility
                     </p>
                   </div>
@@ -191,10 +191,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Auto-scroll
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Automatically scroll to new log entries
                     </p>
                   </div>
@@ -206,10 +206,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Pause on Error
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Pause log streaming when errors occur
                     </p>
                   </div>
@@ -221,10 +221,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Show Timestamps
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Display timestamps in log entries
                     </p>
                   </div>
@@ -236,10 +236,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Compact View
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Use compact layout for log entries
                     </p>
                   </div>
@@ -250,7 +250,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
                     Default Time Range (hours)
                   </label>
                   <Input
@@ -264,7 +264,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
                     Items Per Page
                   </label>
                   <Input
@@ -284,10 +284,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Enable Sounds
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Play notification sounds
                     </p>
                   </div>
@@ -299,10 +299,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Show Toasts
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Display toast notifications
                     </p>
                   </div>
@@ -314,10 +314,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Notify on Errors
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Show notifications for error events
                     </p>
                   </div>
@@ -329,10 +329,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Notify on Success
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Show notifications for successful operations
                     </p>
                   </div>
@@ -343,7 +343,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
                     Toast Duration (seconds)
                   </label>
                   <Input
@@ -361,7 +361,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
             <TabsContent value="search" className="space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-3 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
                     Default Search Scope
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -388,10 +388,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Case Sensitive
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Match case in search queries
                     </p>
                   </div>
@@ -403,10 +403,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Regex Enabled
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Allow regular expressions in search
                     </p>
                   </div>
@@ -417,7 +417,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
                     Max History Items
                   </label>
                   <Input
@@ -436,10 +436,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Sidebar Collapsed
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Start with collapsed sidebar
                     </p>
                   </div>
@@ -451,10 +451,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Confirm Delete
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Show confirmation dialogs for delete actions
                     </p>
                   </div>
@@ -466,10 +466,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Auto-save
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Automatically save changes
                     </p>
                   </div>
@@ -481,10 +481,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       Keyboard Shortcuts
                     </label>
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       Enable keyboard shortcuts
                     </p>
                   </div>
@@ -495,7 +495,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
                     Default Page
                   </label>
                   <select

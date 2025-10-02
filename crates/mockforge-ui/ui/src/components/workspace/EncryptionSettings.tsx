@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/Badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/Dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
+import { Switch } from '../ui/switch';
+import { Badge } from '../ui/Badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { apiService } from '../../services/api';
+import type {
   EncryptionStatus,
   AutoEncryptionConfig,
   SecurityCheckResult,
-  SecurityWarning
-} from '@/types';
+} from '../../types';
 import {
   Shield,
   Key,
@@ -30,10 +29,7 @@ import {
   RefreshCw,
   Lock,
   Unlock,
-  FileText,
   Database,
-  Globe,
-  Server
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -66,7 +62,6 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
   const [showBackupKey, setShowBackupKey] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [backupKey, setBackupKey] = useState('');
   const [exportPath, setExportPath] = useState('');
   const [importPath, setImportPath] = useState('');
   const [importBackupKey, setImportBackupKey] = useState('');
@@ -192,6 +187,13 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
     }
   };
 
+  interface SecurityItem {
+    severity: string;
+    message: string;
+    location: string;
+    suggestion: string;
+  }
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'critical': return 'text-red-600 bg-red-50 border-red-200';
@@ -217,7 +219,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Shield className="w-6 h-6 text-primary" />
+          <Shield className="w-6 h-6 text-gray-900 dark:text-gray-100" />
           <div>
             <h2 className="text-xl font-semibold">Encryption Settings</h2>
             <p className="text-sm text-muted-foreground">
@@ -406,11 +408,11 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                   ) : (
                     <>
                       {/* Warnings */}
-                      {securityCheck.warnings.length > 0 && (
+                      {securityCheck.warnings && securityCheck.warnings.length > 0 && (
                         <div className="space-y-2">
                           <h4 className="font-medium text-orange-800">Warnings ({securityCheck.warnings.length})</h4>
                           <div className="space-y-2">
-                            {securityCheck.warnings.map((warning: any, index: number) => (
+                            {(securityCheck.warnings as SecurityItem[]).map((warning, index: number) => (
                               <div key={index} className={`p-3 border rounded-lg ${getSeverityColor(warning.severity)}`}>
                                 <div className="flex items-start gap-2">
                                   {getSeverityIcon(warning.severity)}
@@ -427,11 +429,11 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                       )}
 
                       {/* Errors */}
-                      {securityCheck.errors.length > 0 && (
+                      {securityCheck.errors && securityCheck.errors.length > 0 && (
                         <div className="space-y-2">
                           <h4 className="font-medium text-red-800">Errors ({securityCheck.errors.length})</h4>
                           <div className="space-y-2">
-                            {securityCheck.errors.map((error: any, index: number) => (
+                            {(securityCheck.errors as SecurityItem[]).map((error, index: number) => (
                               <div key={index} className={`p-3 border rounded-lg ${getSeverityColor(error.severity)}`}>
                                 <div className="flex items-start gap-2">
                                   {getSeverityIcon(error.severity)}
@@ -448,11 +450,11 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                       )}
 
                       {/* Recommendations */}
-                      {securityCheck.recommendations.length > 0 && (
+                      {securityCheck.recommendations && securityCheck.recommendations.length > 0 && (
                         <div className="space-y-2">
                           <h4 className="font-medium">Recommendations</h4>
                           <ul className="list-disc list-inside space-y-1 text-sm">
-                            {securityCheck.recommendations.map((rec: any, index: number) => (
+                            {(securityCheck.recommendations as string[]).map((rec, index: number) => (
                               <li key={index}>{rec}</li>
                             ))}
                           </ul>
@@ -499,9 +501,11 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
               <CardContent>
                 <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button className="w-full" disabled={!status.enabled}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Encrypted Workspace
+                    <Button asChild className="w-full" disabled={!status.enabled}>
+                      <div>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Encrypted Workspace
+                      </div>
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
@@ -550,9 +554,11 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
               <CardContent>
                 <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full">
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import Encrypted Workspace
+                    <Button asChild variant="outline" className="w-full">
+                      <div>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Encrypted Workspace
+                      </div>
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
@@ -631,14 +637,14 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                   Headers that contain sensitive data and should be automatically encrypted
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {config.sensitiveHeaders.map((header: any, index: number) => (
+                  {config.sensitiveHeaders?.map((header, index: number) => (
                     <Badge key={index} variant="secondary">
                       {header}
                     </Badge>
                   ))}
                 </div>
                 <Textarea
-                  value={config.sensitiveHeaders.join('\n')}
+                  value={config.sensitiveHeaders?.join('\n') || ''}
                   onChange={(e) => setConfig({
                     ...config,
                     sensitiveHeaders: e.target.value.split('\n').filter(h => h.trim())
@@ -655,14 +661,14 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                   JSON field names that contain sensitive data
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {config.sensitiveFields.map((field: any, index: number) => (
+                  {config.sensitiveFields?.map((field, index: number) => (
                     <Badge key={index} variant="secondary">
                       {field}
                     </Badge>
                   ))}
                 </div>
                 <Textarea
-                  value={config.sensitiveFields.join('\n')}
+                  value={config.sensitiveFields?.join('\n') || ''}
                   onChange={(e) => setConfig({
                     ...config,
                     sensitiveFields: e.target.value.split('\n').filter(f => f.trim())
@@ -679,14 +685,14 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                   Environment variable names that contain sensitive data
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {config.sensitiveEnvVars.map((env: any, index: number) => (
+                  {config.sensitiveEnvVars?.map((env, index: number) => (
                     <Badge key={index} variant="secondary">
                       {env}
                     </Badge>
                   ))}
                 </div>
                 <Textarea
-                  value={config.sensitiveEnvVars.join('\n')}
+                  value={config.sensitiveEnvVars?.join('\n') || ''}
                   onChange={(e) => setConfig({
                     ...config,
                     sensitiveEnvVars: e.target.value.split('\n').filter(e => e.trim())
@@ -703,7 +709,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                   Regular expressions to detect additional sensitive patterns
                 </div>
                 <Textarea
-                  value={config.customPatterns.join('\n')}
+                  value={config.customPatterns?.join('\n') || ''}
                   onChange={(e) => setConfig({
                     ...config,
                     customPatterns: e.target.value.split('\n').filter(p => p.trim())

@@ -482,7 +482,7 @@ Save file content.
 ```json
 {
   "file_path": "config.yaml",
-  "content": "http:\n  port: 8080\n"
+  "content": "http:\n  port: 9080\n"
 }
 ```
 

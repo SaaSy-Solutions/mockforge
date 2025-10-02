@@ -2,8 +2,9 @@ import React from 'react';
 import { cn } from '../../utils/cn';
 
 interface TabsProps {
-  value: string;
-  onValueChange: (value: string) => void;
+  value?: string;
+  defaultValue?: string;
+  onValueChange?: (value: string) => void;
   children: React.ReactNode;
   className?: string;
 }
@@ -25,11 +26,21 @@ interface TabsContentProps {
   className?: string;
 }
 
-export function Tabs({ value, onValueChange, children, className }: TabsProps) {
+export function Tabs({ value, defaultValue, onValueChange, children, className }: TabsProps) {
+  const [internalValue, setInternalValue] = React.useState(defaultValue || value || '');
+  const currentValue = value || internalValue;
+
+  const handleValueChange = (newValue: string) => {
+    setInternalValue(newValue);
+    onValueChange?.(newValue);
+  };
+
   return (
-    <div className={cn("w-full", className)}>
-      {children}
-    </div>
+    <TabsProvider value={currentValue} onValueChange={handleValueChange}>
+      <div className={cn("w-full", className)}>
+        {children}
+      </div>
+    </TabsProvider>
   );
 }
 
@@ -37,7 +48,7 @@ export function TabsList({ children, className }: TabsListProps) {
   return (
     <div
       className={cn(
-        "inline-flex h-10 items-center justify-center rounded-md bg-bg-tertiary p-1 text-text-secondary",
+        "inline-flex h-10 items-center justify-center rounded-md bg-bg-tertiary p-1 text-secondary",
         className
       )}
     >
@@ -47,18 +58,19 @@ export function TabsList({ children, className }: TabsListProps) {
 }
 
 export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
-  const isActive = value === React.useContext(TabsContext)?.activeTab;
+  const context = React.useContext(TabsContext);
+  const isActive = value === context?.activeTab;
 
   return (
     <button
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-bg-primary transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
         isActive
-          ? "bg-bg-primary text-text-primary shadow-sm"
-          : "text-text-secondary hover:text-text-primary",
+          ? "bg-bg-primary text-primary shadow-sm"
+          : "text-secondary hover:text-primary",
         className
       )}
-      onClick={() => React.useContext(TabsContext)?.onTabChange(value)}
+      onClick={() => context?.onTabChange(value)}
     >
       {children}
     </button>

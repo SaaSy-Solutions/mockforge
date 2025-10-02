@@ -191,7 +191,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/mockforge-cli /usr/local/bin/mockforge-cli
-EXPOSE 3000 3001 50051 8080
+EXPOSE 3000 3001 50051 9080
 CMD ["mockforge-cli", "serve"]
 ```
 

@@ -99,8 +99,12 @@ impl OpenApiRoute {
             200,
             Some("application/json"),
         ) {
-            Ok(response_body) => (200, response_body),
-            Err(_) => {
+            Ok(response_body) => {
+                tracing::debug!("ResponseGenerator succeeded for {} {}: {:?}", self.method, self.path, response_body);
+                (200, response_body)
+            },
+            Err(e) => {
+                tracing::debug!("ResponseGenerator failed for {} {}: {}, using fallback", self.method, self.path, e);
                 // Fallback to simple mock response if schema-based generation fails
                 let response_body = serde_json::json!({
                     "message": format!("Mock response for {} {}", self.method, self.path),

@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import {
   Card,
-  Badge,
   Button,
   Alert,
   Progress
@@ -58,7 +57,7 @@ export function PluginStatus() {
       } else {
         setError(data.error);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch plugin status');
     } finally {
       setLoading(false);

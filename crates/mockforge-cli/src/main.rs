@@ -42,7 +42,7 @@ enum Commands {
         admin: bool,
 
         /// Admin UI port (when running standalone)
-        #[arg(long, default_value = "8080")]
+        #[arg(long, default_value = "9080")]
         admin_port: u16,
 
         /// OpenAPI spec file for HTTP server
@@ -75,7 +75,7 @@ enum Commands {
     /// Start admin UI only (standalone server)
     Admin {
         /// Admin UI port
-        #[arg(short, long, default_value = "8080")]
+        #[arg(short, long, default_value = "9080")]
         port: u16,
 
         /// Configuration file path

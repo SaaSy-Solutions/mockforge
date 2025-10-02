@@ -112,7 +112,7 @@ make docker-build && make docker-run
 docker build -t mockforge .
 
 # Run with examples
-docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -v $(pwd)/examples:/app/examples:ro \
   -e MOCKFORGE_ADMIN_ENABLED=true \
   -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
@@ -128,7 +128,7 @@ See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment
 cargo build
 
 # Start all mock servers with Admin UI (separate port)
-cargo run -p mockforge-cli -- serve --admin --admin-port 8080
+cargo run -p mockforge-cli -- serve --admin --admin-port 9080
 
 # Start with custom configuration
 cargo run -p mockforge-cli -- serve --config config.yaml --admin
@@ -137,14 +137,14 @@ cargo run -p mockforge-cli -- serve --config config.yaml --admin
 cargo run -p mockforge-cli -- data template user --rows 50 --output users.json
 
 # Start Admin UI only (standalone server)
-cargo run -p mockforge-cli -- admin --port 8080
+cargo run -p mockforge-cli -- admin --port 9080
 
 # Start workspace synchronization daemon
 cargo run -p mockforge-cli -- sync start --directory ./workspace-sync
 
 # Access Admin Interface
 
-- Standalone Admin: http://localhost:8080/
+- Standalone Admin: http://localhost:9080/
 - Admin embedded under HTTP (when configured): http://localhost:3000/admin/
 
 # Quick development setup with environment variables
@@ -469,7 +469,7 @@ echo -e '{"name":"first"}\n{"name":"second"}' | grpcurl -plaintext -proto crates
 
 MockForge ships a built-in Admin UI that can run as either:
 
-- A standalone server (default when `--admin` is used): `http://localhost:8080/`.
+- A standalone server (default when `--admin` is used): `http://localhost:9080/`.
 - Embedded under the HTTP server at a mount path, e.g. `http://localhost:3000/admin/` when `admin.mount_path: "/admin"` is configured.
 
 The Admin UI provides:
@@ -513,7 +513,7 @@ cargo run -p mockforge-cli -- serve
 
 Notes:
 - Static assets are served relative to the mount path (e.g., `/admin/admin.css`).
-- Switching back to standalone mode: remove `mount_path` (or unset env) and run with `--admin --admin-port 8080`.
+- Switching back to standalone mode: remove `mount_path` (or unset env) and run with `--admin --admin-port 9080`.
 
 ### Admin Mode Flags (CLI)
 
@@ -526,8 +526,8 @@ cargo run -p mockforge-cli -- serve --admin-embed
 # Embedded with explicit mount
 cargo run -p mockforge-cli -- serve --admin-embed --admin-mount-path /tools
 
-# Force standalone mode on port 8080 (overrides embed)
-cargo run -p mockforge-cli -- serve --admin --admin-standalone --admin-port 8080
+# Force standalone mode on port 9080 (overrides embed)
+cargo run -p mockforge-cli -- serve --admin --admin-standalone --admin-port 9080
 
 # Disable Admin APIs (UI loads but __mockforge/* endpoints are absent)
 cargo run -p mockforge-cli -- serve --admin-embed --disable-admin-api
@@ -573,7 +573,7 @@ Override any configuration setting with environment variables:
 
 ```bash
 # Server ports
-export MOCKFORGE_HTTP_PORT=8080
+export MOCKFORGE_HTTP_PORT=9080
 export MOCKFORGE_WS_PORT=8081
 export MOCKFORGE_GRPC_PORT=9090
 export MOCKFORGE_ADMIN_PORT=9091

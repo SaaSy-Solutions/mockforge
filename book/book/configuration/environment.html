@@ -369,7 +369,7 @@
 </ul>
 </li>
 <li>
-<p><code>MOCKFORGE_ADMIN_PORT=8080</code> (default: <code>8080</code>)</p>
+<p><code>MOCKFORGE_ADMIN_PORT=9080</code> (default: <code>9080</code>)</p>
 <ul>
 <li>Port for the Admin UI server to listen on</li>
 </ul>
@@ -449,7 +449,7 @@
 <pre><code class="language-bash">export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 export MOCKFORGE_ADMIN_ENABLED=true
-cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 8080
+cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 9080
 </code></pre>
 <h3 id="full-websocket-support"><a class="header" href="#full-websocket-support">Full WebSocket Support</a></h3>
 <pre><code class="language-bash">export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl

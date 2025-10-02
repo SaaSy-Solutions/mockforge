@@ -25,7 +25,7 @@ HTTP server port for REST API endpoints.
 
 ```yaml
 server:
-  http_port: 8080
+  http_port: 9080
 ```
 
 ### `server.ws_port` (integer, default: 3001)
@@ -62,7 +62,7 @@ admin:
   enabled: true
 ```
 
-### `admin.port` (integer, default: 8080)
+### `admin.port` (integer, default: 9080)
 Port for the admin UI server.
 
 ```yaml
@@ -357,7 +357,7 @@ server:
 
 admin:
   enabled: true
-  port: 8080
+  port: 9080
   embedded: false
   standalone: true
 
@@ -403,7 +403,7 @@ All configuration options can be set via environment variables using the `MOCKFO
 
 ```bash
 # Server configuration
-export MOCKFORGE_SERVER_HTTP_PORT=8080
+export MOCKFORGE_SERVER_HTTP_PORT=9080
 export MOCKFORGE_SERVER_BIND="127.0.0.1"
 
 # Admin UI
@@ -442,7 +442,7 @@ Some configuration options support runtime updates without restart:
 
 ```bash
 # Update validation mode at runtime
-curl -X POST http://localhost:8080/__mockforge/config \
+curl -X POST http://localhost:9080/__mockforge/config \
   -H "Content-Type: application/json" \
   -d '{"validation": {"mode": "warn"}}'
 ```
@@ -476,7 +476,7 @@ logging:
 ```yaml
 # production.yaml
 server:
-  http_port: 8080
+  http_port: 9080
   bind: "127.0.0.1"
 
 admin:

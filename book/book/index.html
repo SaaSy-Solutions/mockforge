@@ -211,7 +211,7 @@ MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl cargo run -p mockforge-cli -- se
 # Full configuration with Admin UI
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
-cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin --admin-port 8080
+cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin --admin-port 9080
 
 # Use configuration file
 cargo run -p mockforge-cli -- serve --config demo-config.yaml

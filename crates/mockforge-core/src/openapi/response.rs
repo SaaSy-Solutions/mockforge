@@ -9,6 +9,7 @@ use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
 use rand::{rng, Rng};
 use serde_json::Value;
 use std::collections::HashMap;
+use uuid;
 
 /// Response generator for creating mock responses
 pub struct ResponseGenerator;
@@ -102,6 +103,40 @@ impl ResponseGenerator {
         spec: &OpenApiSpec,
         media_type: &openapiv3::MediaType,
     ) -> Result<Value> {
+        // First, check if there's an explicit example
+        if let Some(example) = &media_type.example {
+            tracing::debug!("Using explicit example from media type: {:?}", example);
+            // Expand templates in the example
+            let expanded_example = Self::expand_templates(example);
+            return Ok(expanded_example);
+        }
+
+        // Then check examples map
+        if !media_type.examples.is_empty() {
+            if let Some((_, example_ref)) = media_type.examples.iter().next() {
+                match example_ref {
+                    ReferenceOr::Item(example) => {
+                        if let Some(value) = &example.value {
+                            tracing::debug!("Using example from examples map: {:?}", value);
+                            return Ok(value.clone());
+                        }
+                    }
+                    ReferenceOr::Reference { reference } => {
+                        // Resolve the example reference
+                        if let Some(example) = spec.get_example(reference) {
+                            if let Some(value) = &example.value {
+                                tracing::debug!("Using resolved example reference: {:?}", value);
+                                return Ok(value.clone());
+                            }
+                        } else {
+                            tracing::warn!("Example reference '{}' not found", reference);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fall back to schema-based generation
         match &media_type.schema {
             Some(schema_ref) => {
                 match schema_ref {
@@ -233,7 +268,7 @@ impl ResponseGenerator {
                             return Ok(Some(value.clone()));
                         }
                     }
-                    // Skip references for now - could be resolved later if needed
+                    // Reference resolution would require spec parameter to be added to this function
                 }
             }
         }
@@ -252,11 +287,35 @@ impl ResponseGenerator {
                         return Ok(Some(value.clone()));
                     }
                 }
-                // Skip references for now
+                // Reference resolution would require spec parameter to be added to this function
             }
         }
 
         Ok(None)
+    }
+
+    /// Expand templates like {{now}} and {{uuid}} in JSON values
+    fn expand_templates(value: &Value) -> Value {
+        match value {
+            Value::String(s) => {
+                let expanded = s
+                    .replace("{{now}}", &chrono::Utc::now().to_rfc3339())
+                    .replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
+                Value::String(expanded)
+            }
+            Value::Object(map) => {
+                let mut new_map = serde_json::Map::new();
+                for (key, val) in map {
+                    new_map.insert(key.clone(), Self::expand_templates(val));
+                }
+                Value::Object(new_map)
+            }
+            Value::Array(arr) => {
+                let new_arr: Vec<Value> = arr.iter().map(|v| Self::expand_templates(v)).collect();
+                Value::Array(new_arr)
+            }
+            _ => value.clone(),
+        }
     }
 }
 

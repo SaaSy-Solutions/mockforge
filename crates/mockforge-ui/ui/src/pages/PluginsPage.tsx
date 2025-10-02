@@ -3,24 +3,13 @@ import {
   Puzzle,
   Plus,
   RefreshCw,
-  Trash2,
-  Eye,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
   Upload,
-  Settings
 } from 'lucide-react';
 import {
   PageHeader,
   Button,
   Card,
-  Table,
-  Badge,
-  Alert,
-  Modal,
   Input,
-  Select,
   Tabs,
   TabsContent,
   TabsList,
@@ -43,9 +32,8 @@ export function PluginsPage() {
     <div className="space-y-8">
       <PageHeader
         title="Plugin Management"
-        description="Manage authentication, template, and response plugins"
-        icon={<Puzzle className="w-6 h-6" />}
-        actions={
+        subtitle="Manage authentication, template, and response plugins"
+        action={
           <div className="flex gap-3">
             <Button
               variant="outline"

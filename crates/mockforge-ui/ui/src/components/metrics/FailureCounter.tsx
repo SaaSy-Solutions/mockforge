@@ -53,7 +53,7 @@ export function FailureCounter({ metrics, selectedService, onServiceChange }: Fa
   const successFailureData = getSuccessFailureData();
   const statusCodeData = getStatusCodeData();
 
-  const renderCustomTooltip = (data: any) => {
+  const renderCustomTooltip = (data: { active?: boolean; payload?: Array<{ payload: { name: string; value: number } }> }) => {
     if (data.active && data.payload && data.payload[0]) {
       const payload = data.payload[0].payload;
       return (

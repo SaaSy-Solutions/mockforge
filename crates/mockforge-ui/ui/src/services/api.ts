@@ -1,27 +1,11 @@
-import {
-  ChainSummary,
+import type {
   ChainListResponse,
   ChainDefinition,
   ChainCreationResponse,
-  ChainExecutionResponse
-} from '../types';
-import {
-  WorkspaceSummary,
-  WorkspaceDetail,
-  FolderDetail,
-  CreateWorkspaceRequest,
-  CreateFolderRequest,
-  CreateRequestRequest,
+  ChainExecutionResponse,
+  ChainValidationResponse,
   ImportToWorkspaceRequest,
-  WorkspaceListResponse,
-  WorkspaceResponse,
-  FolderResponse,
-  CreateWorkspaceResponse,
-  CreateFolderResponse,
-  CreateRequestResponse,
   ImportResponse,
-  ExecuteRequestRequest,
-  ExecuteRequestResponse,
   RequestHistoryResponse,
   EnvironmentListResponse,
   EnvironmentVariablesResponse,
@@ -36,30 +20,73 @@ import {
   SyncChange,
   ConfirmSyncChangesRequest,
   ImportRequest,
-  ImportHistoryResponse
+  ImportHistoryResponse,
+  RequestLog,
+  MetricsData,
+  ValidationSettings,
+  LatencyProfile,
+  FaultConfig,
+  ProxyConfig,
+  DashboardData,
+  WorkspaceListResponse,
+  WorkspaceResponse,
+  CreateWorkspaceRequest,
+  CreateWorkspaceResponse,
+  FolderResponse,
+  CreateFolderRequest,
+  CreateFolderResponse,
+  CreateRequestRequest,
+  CreateRequestResponse,
+  ExecuteRequestRequest,
+  ExecuteRequestResponse,
+  HealthCheck,
+  RestartStatus,
+  ConfigurationState,
+  SmokeTestResult,
+  SmokeTestContext,
+  RouteInfo,
+  ServerInfo,
+  FileContentRequest,
+  FileContentResponse,
+  SaveFileRequest,
+  EncryptionStatus,
+  AutoEncryptionConfig,
+  SecurityCheckResult,
+  FixtureInfo
 } from '../types';
 
-// Re-export FixtureInfo from types for backwards compatibility
-export type { FixtureInfo } from '../types/index';
+// Admin API type definitions
+export type { RequestLog, MetricsData, ValidationSettings, LatencyProfile, FaultConfig, ProxyConfig, DashboardData } from '../types';
+export type { HealthCheck, RestartStatus, ConfigurationState, SmokeTestResult, SmokeTestContext } from '../types';
+export type { ImportRequest, ImportResponse, ImportHistoryResponse, ImportHistoryEntry } from '../types';
+
+// FixtureInfo moved to types/index.ts - import from there
+export type { FixtureInfo } from '../types';
+
+// Workspace API types
+export type { WorkspaceListResponse, WorkspaceResponse, CreateWorkspaceRequest, CreateWorkspaceResponse } from '../types';
+export type { FolderResponse, CreateFolderRequest, CreateFolderResponse } from '../types';
+export type { CreateRequestRequest, CreateRequestResponse, ExecuteRequestRequest, ExecuteRequestResponse } from '../types';
 
 const API_BASE = '/__mockforge/chains';
 const WORKSPACE_API_BASE = '/__mockforge/workspaces';
 
 class ApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
   async listChains(): Promise<ChainListResponse> {
-    return this.fetchJson(API_BASE);
+    return this.fetchJson(API_BASE) as Promise<ChainListResponse>;
   }
 
   async getChain(chainId: string): Promise<ChainDefinition> {
-    return this.fetchJson(`${API_BASE}/${chainId}`);
+    return this.fetchJson(`${API_BASE}/${chainId}`) as Promise<ChainDefinition>;
   }
 
   async createChain(definition: string): Promise<ChainCreationResponse> {
@@ -69,7 +96,7 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ definition }),
-    });
+    }) as Promise<ChainCreationResponse>;
   }
 
   async updateChain(chainId: string, definition: string): Promise<ChainCreationResponse> {
@@ -79,39 +106,39 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ definition }),
-    });
+    }) as Promise<ChainCreationResponse>;
   }
 
-  async deleteChain(chainId: string): Promise<any> {
+  async deleteChain(chainId: string): Promise<{ message: string }> {
     return this.fetchJson(`${API_BASE}/${chainId}`, {
       method: 'DELETE',
-    });
+    }) as Promise<{ message: string }>;
   }
 
-  async executeChain(chainId: string, variables?: any): Promise<ChainExecutionResponse> {
+  async executeChain(chainId: string, variables?: unknown): Promise<ChainExecutionResponse> {
     return this.fetchJson(`${API_BASE}/${chainId}/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ variables: variables || {} }),
-    });
+    }) as Promise<ChainExecutionResponse>;
   }
 
-  async validateChain(chainId: string): Promise<any> {
+  async validateChain(chainId: string): Promise<ChainValidationResponse> {
     return this.fetchJson(`${API_BASE}/${chainId}/validate`, {
       method: 'POST',
-    });
+    }) as Promise<ChainValidationResponse>;
   }
 
   // ==================== WORKSPACE API METHODS ====================
 
   async listWorkspaces(): Promise<WorkspaceListResponse> {
-    return this.fetchJson(WORKSPACE_API_BASE);
+    return this.fetchJson(WORKSPACE_API_BASE) as Promise<WorkspaceListResponse>;
   }
 
   async getWorkspace(workspaceId: string): Promise<WorkspaceResponse> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}`) as Promise<WorkspaceResponse>;
   }
 
   async createWorkspace(request: CreateWorkspaceRequest): Promise<CreateWorkspaceResponse> {
@@ -121,7 +148,7 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<CreateWorkspaceResponse>;
   }
 
   async openWorkspaceFromDirectory(directory: string): Promise<CreateWorkspaceResponse> {
@@ -131,23 +158,23 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ directory }),
-    });
+    }) as Promise<CreateWorkspaceResponse>;
   }
 
   async deleteWorkspace(workspaceId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}`, {
       method: 'DELETE',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async setActiveWorkspace(workspaceId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/activate`, {
       method: 'POST',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async getFolder(workspaceId: string, folderId: string): Promise<FolderResponse> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/folders/${folderId}`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/folders/${folderId}`) as Promise<FolderResponse>;
   }
 
   async createFolder(workspaceId: string, request: CreateFolderRequest): Promise<CreateFolderResponse> {
@@ -157,7 +184,7 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<CreateFolderResponse>;
   }
 
   async createRequest(workspaceId: string, request: CreateRequestRequest): Promise<CreateRequestResponse> {
@@ -167,7 +194,7 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<CreateRequestResponse>;
   }
 
   async importToWorkspace(workspaceId: string, request: ImportToWorkspaceRequest): Promise<ImportResponse> {
@@ -177,7 +204,7 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async previewImport(request: ImportToWorkspaceRequest): Promise<ImportResponse> {
@@ -187,7 +214,7 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async executeRequest(workspaceId: string, requestId: string, executionRequest?: ExecuteRequestRequest): Promise<ExecuteRequestResponse> {
@@ -197,17 +224,17 @@ class ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(executionRequest || {}),
-    });
+    }) as Promise<ExecuteRequestResponse>;
   }
 
   async getRequestHistory(workspaceId: string, requestId: string): Promise<RequestHistoryResponse> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/requests/${requestId}/history`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/requests/${requestId}/history`) as Promise<RequestHistoryResponse>;
   }
 
   // ==================== ENVIRONMENT API METHODS ====================
 
   async getEnvironments(workspaceId: string): Promise<EnvironmentListResponse> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments`) as Promise<EnvironmentListResponse>;
   }
 
   async createEnvironment(workspaceId: string, request: CreateEnvironmentRequest): Promise<CreateEnvironmentResponse> {
@@ -215,7 +242,7 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<CreateEnvironmentResponse>;
   }
 
   async updateEnvironment(workspaceId: string, environmentId: string, request: UpdateEnvironmentRequest): Promise<{ message: string }> {
@@ -223,23 +250,23 @@ class ApiService {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async deleteEnvironment(workspaceId: string, environmentId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments/${environmentId}`, {
       method: 'DELETE',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async setActiveEnvironment(workspaceId: string, environmentId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments/${environmentId}/activate`, {
       method: 'POST',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async getEnvironmentVariables(workspaceId: string, environmentId: string): Promise<EnvironmentVariablesResponse> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments/${environmentId}/variables`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments/${environmentId}/variables`) as Promise<EnvironmentVariablesResponse>;
   }
 
   async setEnvironmentVariable(workspaceId: string, environmentId: string, request: SetVariableRequest): Promise<{ message: string }> {
@@ -247,13 +274,13 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async removeEnvironmentVariable(workspaceId: string, environmentId: string, variableName: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/environments/${environmentId}/variables/${encodeURIComponent(variableName)}`, {
       method: 'DELETE',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async getAutocompleteSuggestions(workspaceId: string, request: AutocompleteRequest): Promise<AutocompleteResponse> {
@@ -261,7 +288,7 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<AutocompleteResponse>;
   }
 
   // ==================== ORDERING API METHODS ====================
@@ -271,7 +298,7 @@ class ApiService {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workspace_ids: workspaceIds }),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async updateEnvironmentsOrder(workspaceId: string, environmentIds: string[]): Promise<{ message: string }> {
@@ -279,13 +306,13 @@ class ApiService {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ environment_ids: environmentIds }),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   // ==================== SYNC API METHODS ====================
 
   async getSyncStatus(workspaceId: string): Promise<SyncStatus> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/sync/status`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/sync/status`) as Promise<SyncStatus>;
   }
 
   async configureSync(workspaceId: string, request: ConfigureSyncRequest): Promise<{ message: string }> {
@@ -293,23 +320,23 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async disableSync(workspaceId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/sync/disable`, {
       method: 'POST',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async triggerSync(workspaceId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/sync/trigger`, {
       method: 'POST',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async getSyncChanges(workspaceId: string): Promise<SyncChange[]> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/sync/changes`);
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/sync/changes`) as Promise<SyncChange[]>;
   }
 
   async confirmSyncChanges(workspaceId: string, request: ConfirmSyncChangesRequest): Promise<{ message: string }> {
@@ -317,35 +344,35 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   // ==================== ENCRYPTION API METHODS ====================
 
-  async getWorkspaceEncryptionStatus(workspaceId: string): Promise<any> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/status`);
+  async getWorkspaceEncryptionStatus(workspaceId: string): Promise<EncryptionStatus> {
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/status`) as Promise<EncryptionStatus>;
   }
 
-  async getWorkspaceEncryptionConfig(workspaceId: string): Promise<any> {
-    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/config`);
+  async getWorkspaceEncryptionConfig(workspaceId: string): Promise<AutoEncryptionConfig> {
+    return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/config`) as Promise<AutoEncryptionConfig>;
   }
 
   async enableWorkspaceEncryption(workspaceId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/enable`, {
       method: 'POST',
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async disableWorkspaceEncryption(workspaceId: string): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/disable`, {
       method: 'POST',
-    });
+    }) as Promise<{ message: string }>;
   }
 
-  async checkWorkspaceSecurity(workspaceId: string): Promise<any> {
+  async checkWorkspaceSecurity(workspaceId: string): Promise<SecurityCheckResult> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/security-check`, {
       method: 'POST',
-    });
+    }) as Promise<SecurityCheckResult>;
   }
 
   async exportWorkspaceEncrypted(workspaceId: string, exportPath: string): Promise<{ message: string }> {
@@ -353,7 +380,7 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ export_path: exportPath }),
-    });
+    }) as Promise<{ message: string }>;
   }
 
   async importWorkspaceEncrypted(importPath: string, workspaceId: string, backupKey: string): Promise<{ message: string }> {
@@ -361,25 +388,26 @@ class ApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ import_path: importPath, backup_key: backupKey }),
-    });
+    }) as Promise<{ message: string }>;
   }
 
-  async updateWorkspaceEncryptionConfig(workspaceId: string, config: any): Promise<{ message: string }> {
+  async updateWorkspaceEncryptionConfig(workspaceId: string, config: unknown): Promise<{ message: string }> {
     return this.fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/encryption/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
-    });
+    }) as Promise<{ message: string }>;
   }
 }
 
 class ImportApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
   async importPostman(request: ImportRequest): Promise<ImportResponse> {
@@ -389,7 +417,7 @@ class ImportApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async importInsomnia(request: ImportRequest): Promise<ImportResponse> {
@@ -399,7 +427,7 @@ class ImportApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async importCurl(request: ImportRequest): Promise<ImportResponse> {
@@ -409,7 +437,7 @@ class ImportApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async importOpenApi(request: ImportRequest): Promise<ImportResponse> {
@@ -419,7 +447,7 @@ class ImportApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async previewImport(request: ImportRequest): Promise<ImportResponse> {
@@ -429,37 +457,48 @@ class ImportApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
-    });
+    }) as Promise<ImportResponse>;
   }
 
   async getImportHistory(): Promise<ImportHistoryResponse> {
-    return this.fetchJson('/__mockforge/import/history');
+    return this.fetchJson('/__mockforge/import/history') as Promise<ImportHistoryResponse>;
   }
 
   async clearImportHistory(): Promise<void> {
     return this.fetchJson('/__mockforge/import/history/clear', {
       method: 'POST',
-    });
+    }) as Promise<void>;
   }
 }
 
 class FixturesApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  constructor() {
+    // Bind all methods to ensure 'this' context is preserved
+    this.getFixtures = this.getFixtures.bind(this);
+    this.deleteFixture = this.deleteFixture.bind(this);
+    this.deleteFixturesBulk = this.deleteFixturesBulk.bind(this);
+    this.downloadFixture = this.downloadFixture.bind(this);
+    this.renameFixture = this.renameFixture.bind(this);
+    this.moveFixture = this.moveFixture.bind(this);
+  }
+
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getFixtures(): Promise<FixtureInfo[]> {
-    return this.fetchJson('/__mockforge/fixtures');
+  async getFixtures(): Promise<import('../types').FixtureInfo[]> {
+    return this.fetchJson('/__mockforge/fixtures') as Promise<FixtureInfo[]>;
   }
 
   async deleteFixture(fixtureId: string): Promise<void> {
     return this.fetchJson(`/__mockforge/fixtures/${fixtureId}`, {
       method: 'DELETE',
-    });
+    }) as Promise<void>;
   }
 
   async deleteFixturesBulk(fixtureIds: string[]): Promise<void> {
@@ -469,7 +508,7 @@ class FixturesApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ fixture_ids: fixtureIds }),
-    });
+    }) as Promise<void>;
   }
 
   async downloadFixture(fixtureId: string): Promise<Blob> {
@@ -487,7 +526,7 @@ class FixturesApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ new_name: newName }),
-    });
+    }) as Promise<void>;
   }
 
   async moveFixture(fixtureId: string, newPath: string): Promise<void> {
@@ -497,226 +536,257 @@ class FixturesApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ new_path: newPath }),
-    });
+    }) as Promise<void>;
   }
 }
 
 // ==================== ADMIN API METHODS ====================
 
 class DashboardApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getDashboard(): Promise<any> {
-    return this.fetchJson('/__mockforge/dashboard');
+  async getDashboard(): Promise<DashboardData> {
+    return this.fetchJson('/__mockforge/dashboard') as Promise<DashboardData>;
   }
 
-  async getHealth(): Promise<any> {
-    return this.fetchJson('/__mockforge/health');
+  async getHealth(): Promise<HealthCheck> {
+    return this.fetchJson('/__mockforge/health') as Promise<HealthCheck>;
   }
 }
 
 class ServerApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getServerInfo(): Promise<any> {
-    return this.fetchJson('/__mockforge/server-info');
+  async getServerInfo(): Promise<ServerInfo> {
+    return this.fetchJson('/__mockforge/server-info') as Promise<ServerInfo>;
   }
 
-  async restartServer(reason?: string): Promise<any> {
+  async restartServer(reason?: string): Promise<RestartStatus> {
     return this.fetchJson('/__mockforge/servers/restart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: reason || 'Manual restart' }),
-    });
+    }) as Promise<RestartStatus>;
   }
 
-  async getRestartStatus(): Promise<any> {
-    return this.fetchJson('/__mockforge/servers/restart/status');
+  async getRestartStatus(): Promise<RestartStatus> {
+    return this.fetchJson('/__mockforge/servers/restart/status') as Promise<RestartStatus>;
   }
 }
 
 class RoutesApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getRoutes(): Promise<any> {
-    return this.fetchJson('/__mockforge/routes');
+  async getRoutes(): Promise<RouteInfo[]> {
+    return this.fetchJson('/__mockforge/routes') as Promise<RouteInfo[]>;
   }
 }
 
 class LogsApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getLogs(params?: any): Promise<any> {
-    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
-    return this.fetchJson(`/__mockforge/logs${queryString}`);
+  async getLogs(params?: Record<string, string | number>): Promise<RequestLog[]> {
+    if (!params || Object.keys(params).length === 0) {
+      return this.fetchJson('/__mockforge/logs') as Promise<RequestLog[]>;
+    }
+    // Convert all values to strings for URLSearchParams
+    const stringParams: Record<string, string> = {};
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        stringParams[key] = String(value);
+      }
+    }
+    if (Object.keys(stringParams).length === 0) {
+      return this.fetchJson('/__mockforge/logs') as Promise<RequestLog[]>;
+    }
+    const queryString = '?' + new URLSearchParams(stringParams).toString();
+    return this.fetchJson(`/__mockforge/logs${queryString}`) as Promise<RequestLog[]>;
   }
 
-  async clearLogs(): Promise<any> {
+  async clearLogs(): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/logs', {
       method: 'DELETE',
-    });
+    }) as Promise<{ message: string }>;
   }
 }
 
 class MetricsApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  constructor() {
+    this.getMetrics = this.getMetrics.bind(this);
+  }
+
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getMetrics(): Promise<any> {
-    return this.fetchJson('/__mockforge/metrics');
+  async getMetrics(): Promise<MetricsData> {
+    return this.fetchJson('/__mockforge/metrics') as Promise<MetricsData>;
   }
 }
 
 class ConfigApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getConfig(): Promise<any> {
-    return this.fetchJson('/__mockforge/config');
+  async getConfig(): Promise<ConfigurationState> {
+    return this.fetchJson('/__mockforge/config') as Promise<ConfigurationState>;
   }
 
-  async updateLatency(config: any): Promise<any> {
+  async updateLatency(config: LatencyProfile): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/config/latency', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
-    });
+    }) as Promise<{ message: string }>;
   }
 
-  async updateFaults(config: any): Promise<any> {
+  async updateFaults(config: FaultConfig): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/config/faults', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
-    });
+    }) as Promise<{ message: string }>;
   }
 
-  async updateProxy(config: any): Promise<any> {
+  async updateProxy(config: ProxyConfig): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/config/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
-    });
+    }) as Promise<{ message: string }>;
   }
 }
 
 class ValidationApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async updateValidation(config: any): Promise<any> {
+  async getValidation(): Promise<ValidationSettings> {
+    return this.fetchJson('/__mockforge/validation') as Promise<ValidationSettings>;
+  }
+
+  async updateValidation(config: ValidationSettings): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/validation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
-    });
+    }) as Promise<{ message: string }>;
   }
 }
 
 class EnvApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getEnv(): Promise<any> {
-    return this.fetchJson('/__mockforge/env');
+  async getEnvVars(): Promise<Record<string, string>> {
+    return this.fetchJson('/__mockforge/env') as Promise<Record<string, string>>;
   }
 
-  async updateEnv(key: string, value: string): Promise<any> {
+  async updateEnvVar(key: string, value: string): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/env', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value }),
-    });
+    }) as Promise<{ message: string }>;
   }
 }
 
 class FilesApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getFileContent(request: any): Promise<any> {
+  async getFileContent(request: FileContentRequest): Promise<FileContentResponse> {
     return this.fetchJson('/__mockforge/files/content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<FileContentResponse>;
   }
 
-  async saveFileContent(request: any): Promise<any> {
+  async saveFileContent(request: SaveFileRequest): Promise<{ message: string }> {
     return this.fetchJson('/__mockforge/files/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    });
+    }) as Promise<{ message: string }>;
   }
 }
 
 class SmokeTestsApiService {
-  private async fetchJson(url: string, options?: RequestInit): Promise<any> {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    return json.data || json;
   }
 
-  async getSmokeTests(): Promise<any> {
-    return this.fetchJson('/__mockforge/smoke');
+  async getSmokeTests(): Promise<SmokeTestResult[]> {
+    return this.fetchJson('/__mockforge/smoke') as Promise<SmokeTestResult[]>;
   }
 
-  async runSmokeTests(): Promise<any> {
+  async runSmokeTests(): Promise<SmokeTestContext> {
     return this.fetchJson('/__mockforge/smoke/run', {
       method: 'GET',
-    });
+    }) as Promise<SmokeTestContext>;
   }
 }
 
@@ -736,5 +806,22 @@ export const envApi = new EnvApiService();
 export const filesApi = new FilesApiService();
 export const smokeTestsApi = new SmokeTestsApiService();
 
+// Debug: Log to verify services are created
+console.log('API Services initialized:', {
+  apiService: !!apiService,
+  importApi: !!importApi,
+  fixturesApi: !!fixturesApi,
+  fixturesApiGetFixtures: typeof fixturesApi?.getFixtures,
+  dashboardApi: !!dashboardApi,
+  serverApi: !!serverApi,
+  routesApi: !!routesApi,
+  logsApi: !!logsApi,
+  metricsApi: !!metricsApi,
+  configApi: !!configApi,
+  validationApi: !!validationApi,
+  envApi: !!envApi,
+  filesApi: !!filesApi,
+  smokeTestsApi: !!smokeTestsApi,
+});
+
 // Type exports for backwards compatibility
-export type DashboardData = any;

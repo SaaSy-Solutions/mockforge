@@ -245,7 +245,7 @@ impl Default for AdminConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            port: 8080,
+            port: 9080,
             host: "127.0.0.1".to_string(),
             auth_required: false,
             username: None,
@@ -610,7 +610,7 @@ mod tests {
         assert_eq!(config.http.port, 3000);
         assert_eq!(config.websocket.port, 3001);
         assert_eq!(config.grpc.port, 50051);
-        assert_eq!(config.admin.port, 8080);
+        assert_eq!(config.admin.port, 9080);
     }
 
     #[test]

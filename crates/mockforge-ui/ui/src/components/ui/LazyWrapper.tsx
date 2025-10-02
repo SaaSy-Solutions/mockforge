@@ -5,7 +5,6 @@ import { Skeleton } from './Skeleton';
 interface LazyWrapperProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
-  errorFallback?: React.ReactNode;
 }
 
 /**
@@ -15,7 +14,6 @@ interface LazyWrapperProps {
 export function LazyWrapper({
   children,
   fallback,
-  errorFallback,
 }: LazyWrapperProps) {
   const defaultFallback = (
     <div className="p-8 space-y-4 animate-fade-in">

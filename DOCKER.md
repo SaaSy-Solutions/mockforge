@@ -21,7 +21,7 @@ make docker-compose-build
 MockForge will be available at:
 - **HTTP API**: http://localhost:3000
 - **WebSocket**: ws://localhost:3001
-- **Admin UI**: http://localhost:8080
+- **Admin UI**: http://localhost:9080
 - **gRPC**: localhost:50051
 
 ### Using Docker Directly
@@ -39,7 +39,7 @@ make docker-run
 - Docker Engine 20.10+
 - Docker Compose 2.0+ (for compose functionality)
 - At least 2GB of available RAM
-- Ports 3000, 3001, 50051, and 8080 available
+- Ports 3000, 3001, 50051, and 9080 available
 
 ## 🏗️ Docker Configuration
 
@@ -77,7 +77,7 @@ Configure MockForge through environment variables:
 # Basic configuration
 export MOCKFORGE_HTTP_PORT=3000
 export MOCKFORGE_WS_PORT=3001
-export MOCKFORGE_ADMIN_PORT=8080
+export MOCKFORGE_ADMIN_PORT=9080
 export MOCKFORGE_GRPC_PORT=50051
 
 # Feature flags
@@ -130,13 +130,13 @@ docker run -p 3001:3001 \
 
 ```bash
 # Start all services
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
+docker run -p 3000:3000 -p 3001:3001 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
   -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
   -e MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
   mockforge
 
-# Access Admin UI at http://localhost:8080
+# Access Admin UI at http://localhost:9080
 ```
 
 ### Using Docker Compose
@@ -228,7 +228,7 @@ services:
     image: mockforge:latest
     ports:
       - "80:3000"    # HTTP
-      - "8081:8080"  # Admin UI (internal only)
+      - "8081:9080"  # Admin UI (internal only)
     environment:
       - MOCKFORGE_LOG_LEVEL=warn
       - MOCKFORGE_ADMIN_ENABLED=true
@@ -314,7 +314,7 @@ The Admin UI provides metrics at runtime. For production monitoring:
 curl http://localhost:3000/health
 
 # Admin metrics (if enabled)
-curl http://localhost:8080/__mockforge/metrics
+curl http://localhost:9080/__mockforge/metrics
 ```
 
 ## 🚀 CI/CD Integration

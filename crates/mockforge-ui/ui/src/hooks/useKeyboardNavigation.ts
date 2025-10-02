@@ -35,30 +35,31 @@ export function useKeyboardNavigation({
     shortcutsRef.current = shortcuts;
   }, [shortcuts]);
 
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+  const handleKeyDown = useCallback((event: Event) => {
     if (!isEnabled) return;
 
-    const activeShortcuts = shortcutsRef.current.filter(shortcut => 
+    const keyboardEvent = event as KeyboardEvent;
+    const activeShortcuts = shortcutsRef.current.filter(shortcut =>
       shortcut.enabled !== false
     );
 
     for (const shortcut of activeShortcuts) {
-      const isMatch = 
-        event.key.toLowerCase() === shortcut.key.toLowerCase() &&
-        !!event.ctrlKey === !!shortcut.ctrl &&
-        !!event.shiftKey === !!shortcut.shift &&
-        !!event.altKey === !!shortcut.alt &&
-        !!event.metaKey === !!shortcut.meta;
+      const isMatch =
+        keyboardEvent.key.toLowerCase() === shortcut.key.toLowerCase() &&
+        !!keyboardEvent.ctrlKey === !!shortcut.ctrl &&
+        !!keyboardEvent.shiftKey === !!shortcut.shift &&
+        !!keyboardEvent.altKey === !!shortcut.alt &&
+        !!keyboardEvent.metaKey === !!shortcut.meta;
 
       if (isMatch) {
         if (shortcut.preventDefault !== false) {
-          event.preventDefault();
+          keyboardEvent.preventDefault();
         }
         if (shortcut.stopPropagation) {
-          event.stopPropagation();
+          keyboardEvent.stopPropagation();
         }
-        
-        shortcut.handler(event);
+
+        shortcut.handler(keyboardEvent);
         break; // Only handle the first matching shortcut
       }
     }
@@ -373,9 +374,9 @@ export function useShortcutsHelp(shortcuts: KeyboardShortcut[]) {
 
   const ShortcutsHelpComponent = useCallback(() => {
     return React.createElement('div', { className: 'space-y-4' }, [
-      React.createElement('h3', { 
+      React.createElement('h3', {
         key: 'title',
-        className: 'text-heading-md text-primary' 
+        className: 'text-xl font-bold text-gray-900 dark:text-gray-100'
       }, 'Keyboard Shortcuts'),
       React.createElement('div', { 
         key: 'content',
@@ -389,11 +390,11 @@ export function useShortcutsHelp(shortcuts: KeyboardShortcut[]) {
           }, [
             React.createElement('span', {
               key: 'desc',
-              className: 'text-body-md text-secondary'
+              className: 'text-base text-gray-600 dark:text-gray-400'
             }, shortcut.description),
             React.createElement('kbd', {
               key: 'kbd',
-              className: 'px-2 py-1 bg-muted border border-border rounded text-mono-sm'
+              className: 'px-2 py-1 bg-muted border border-border rounded text-sm font-mono'
             }, formatShortcut(shortcut))
           ])
         ))

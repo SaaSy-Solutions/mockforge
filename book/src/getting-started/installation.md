@@ -48,7 +48,7 @@ docker pull SaaSy-Solutions/mockforge
 ### Run with basic configuration
 
 ```bash
-docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 8080:8080 \
+docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   mockforge
@@ -126,7 +126,7 @@ sudo usermod -aG docker $USER
 
 ### Port conflicts
 
-If default ports (3000, 3001, 8080, 50051) are in use:
+If default ports (3000, 3001, 9080, 50051) are in use:
 
 ```bash
 # Check what's using the ports

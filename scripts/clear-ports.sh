@@ -4,7 +4,7 @@
 echo "🔍 Checking for processes using MockForge ports..."
 
 # Check which ports are in use
-PORTS=(3000 3001 50051 8080)
+PORTS=(3000 3001 50051 9080)
 PIDS=()
 
 for port in "${PORTS[@]}"; do

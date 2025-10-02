@@ -284,10 +284,10 @@ ws.on('close', () =&gt; console.log('Connection closed'));
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 mockforge serve --spec examples/openapi-demo.json \
-  --admin --admin-port 8080 \
+  --admin --admin-port 9080 \
   --http-port 3000 --ws-port 3001
 </code></pre>
-<p>Access the admin interface at: http://localhost:8080</p>
+<p>Access the admin interface at: http://localhost:9080</p>
 <h2 id="step-7-using-configuration-files"><a class="header" href="#step-7-using-configuration-files">Step 7: Using Configuration Files</a></h2>
 <p>Instead of environment variables, you can use a configuration file:</p>
 <pre><code class="language-bash"># Stop the server, then start with config file
@@ -297,7 +297,7 @@ mockforge serve --config demo-config.yaml
 <p>If you prefer Docker:</p>
 <pre><code class="language-bash"># Build and run with Docker
 docker build -t mockforge .
-docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
+docker run -p 3000:3000 -p 3001:3001 -p 9080:9080 \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   -e MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
   mockforge
@@ -313,7 +313,7 @@ docker run -p 3000:3000 -p 3001:3001 -p 8080:8080 \
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server won’t start</a></h3>
 <ul>
-<li>Check if ports 3000, 3001, or 8080 are already in use</li>
+<li>Check if ports 3000, 3001, or 9080 are already in use</li>
 <li>Verify the OpenAPI spec file path is correct</li>
 <li>Ensure MockForge is properly installed</li>
 </ul>

@@ -18,6 +18,7 @@ pub fn create_admin_router(
     grpc_server_addr: Option<std::net::SocketAddr>,
     graphql_server_addr: Option<std::net::SocketAddr>,
     api_enabled: bool,
+    admin_port: u16,
 ) -> Router {
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
@@ -28,6 +29,7 @@ pub fn create_admin_router(
         grpc_server_addr,
         graphql_server_addr,
         api_enabled,
+        admin_port,
     );
 
     // Start system monitoring background task to poll CPU, memory, and thread metrics
@@ -45,30 +47,55 @@ pub fn create_admin_router(
         .route("/mockforge-icon-48.png", get(serve_icon_48))
         .route("/mockforge-logo.png", get(serve_logo))
         .route("/mockforge-logo-40.png", get(serve_logo_40))
-        .route("/mockforge-logo-80.png", get(serve_logo_80))
-        // SPA fallback: serve index.html for any unmatched routes to support client-side routing
-        .route("/{*path}", get(serve_admin_html));
+        .route("/mockforge-logo-80.png", get(serve_logo_80));
 
-    if api_enabled {
-        router = router
-            .route("/__mockforge/dashboard", get(get_dashboard))
-            .route("/__mockforge/health", get(get_health))
-            .route("/admin/server-info", get(get_server_info))
-            .route("/__mockforge/logs", get(get_logs))
-            .route("/__mockforge/metrics", get(get_metrics))
-            .route("/__mockforge/config", get(get_config))
-            .route("/__mockforge/config/latency", post(update_latency))
-            .route("/__mockforge/config/faults", post(update_faults))
-            .route("/__mockforge/config/proxy", post(update_proxy))
-            .route("/__mockforge/logs", delete(clear_logs))
-            .route("/__mockforge/restart", post(restart_servers))
-            .route("/__mockforge/restart/status", get(get_restart_status))
-            .route("/__mockforge/fixtures", get(get_fixtures))
-            .route("/__mockforge/fixtures/{id}", delete(delete_fixture))
-            .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
-            .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
-            .route("/__mockforge/import/insomnia", post(import_insomnia));
-    }
+    router = router
+        .route("/__mockforge/dashboard", get(get_dashboard))
+        .route("/__mockforge/health", get(get_health))
+        .route("/admin/server-info", get(get_server_info))
+        .route("/__mockforge/server-info", get(get_server_info))
+        .route("/__mockforge/routes", get(get_routes))
+        .route("/__mockforge/logs", get(get_logs))
+        .route("/__mockforge/logs/sse", get(logs_sse))
+        .route("/__mockforge/metrics", get(get_metrics))
+        .route("/__mockforge/config", get(get_config))
+        .route("/__mockforge/config/latency", post(update_latency))
+        .route("/__mockforge/config/faults", post(update_faults))
+        .route("/__mockforge/config/proxy", post(update_proxy))
+        .route("/__mockforge/logs", delete(clear_logs))
+        .route("/__mockforge/restart", post(restart_servers))
+        .route("/__mockforge/restart/status", get(get_restart_status))
+        .route("/__mockforge/fixtures", get(get_fixtures))
+        .route("/__mockforge/fixtures/{id}", delete(delete_fixture))
+        .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
+        .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
+        .route("/__mockforge/import/insomnia", post(import_insomnia))
+        // Plugin management routes
+        .route("/__mockforge/plugins", get(get_plugins))
+        .route("/__mockforge/plugins/status", get(get_plugin_status))
+        .route("/__mockforge/plugins/{id}", get(get_plugin_details))
+        .route("/__mockforge/plugins/{id}", delete(delete_plugin))
+        .route("/__mockforge/plugins/reload", post(reload_plugin))
+        // Workspace management routes
+        .route("/__mockforge/workspaces", get(get_workspaces))
+        .route("/__mockforge/workspaces", post(create_workspace))
+        .route("/__mockforge/workspaces/{workspace_id}", get(get_workspace))
+        .route("/__mockforge/workspaces/{workspace_id}", delete(delete_workspace))
+        .route("/__mockforge/workspaces/{workspace_id}/activate", post(set_active_workspace))
+        // Environment management routes
+        .route("/__mockforge/workspaces/{workspace_id}/environments", get(get_environments))
+        .route("/__mockforge/workspaces/{workspace_id}/environments", post(create_environment))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/order", axum::routing::put(update_environments_order))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}", axum::routing::put(update_environment))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}", delete(delete_environment))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/activate", post(set_active_environment))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables", get(get_environment_variables))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables", post(set_environment_variable))
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables/{variable_name}", delete(remove_environment_variable));
+
+    // SPA fallback: serve index.html for any unmatched routes to support client-side routing
+    // IMPORTANT: This must be AFTER all API routes
+    router = router.route("/{*path}", get(serve_admin_html));
 
     router.layer(CorsLayer::permissive()).with_state(state)
 }
