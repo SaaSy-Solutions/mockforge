@@ -3,12 +3,14 @@ import { Button } from '../ui/button';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { ProfileSettings } from './ProfileSettings';
 import { Preferences } from './Preferences';
+import { HelpSupport } from './HelpSupport';
 
 export function UserProfile() {
   const { user, logout } = useAuthStore();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [showHelpSupport, setShowHelpSupport] = useState(false);
 
   if (!user) return null;
 
@@ -123,7 +125,7 @@ export function UserProfile() {
                   System
                 </div>
                  <a
-                   href="/api-docs"
+                   href="https://docs.mockforge.dev/api/admin-ui-rest.html"
                    target="_blank"
                    rel="noopener noreferrer"
                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors block"
@@ -133,7 +135,10 @@ export function UserProfile() {
                  </a>
                 <button
                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
-                  onClick={() => setShowDropdown(false)}
+                  onClick={() => {
+                    setShowDropdown(false);
+                    setShowHelpSupport(true);
+                  }}
                 >
                   Help & Support
                 </button>
@@ -161,6 +166,11 @@ export function UserProfile() {
       <Preferences
         open={showPreferences}
         onOpenChange={setShowPreferences}
+      />
+
+      <HelpSupport
+        open={showHelpSupport}
+        onOpenChange={setShowHelpSupport}
       />
     </div>
   );

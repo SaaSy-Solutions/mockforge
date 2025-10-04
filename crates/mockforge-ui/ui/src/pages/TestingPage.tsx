@@ -8,6 +8,8 @@ import {
 } from '../components/ui/DesignSystem';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { dashboardApi, smokeTestsApi } from '../services/api';
+import type { SmokeTestResult } from '../types';
 
 interface TestResult {
   id: string;
@@ -39,119 +41,198 @@ export function TestingPage() {
       name: 'Smoke Tests',
       description: 'Basic functionality and endpoint availability tests',
       status: 'idle',
-      totalTests: 8,
+      totalTests: 0,
+      passedTests: 0,
+      failedTests: 0,
+      duration: 0,
+      tests: []
+    },
+    {
+      id: 'health-check',
+      name: 'Health Check',
+      description: 'System health and service availability check',
+      status: 'idle',
+      totalTests: 1,
       passedTests: 0,
       failedTests: 0,
       duration: 0,
       tests: [
-        { id: 'health-check', name: 'Health Check', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'dashboard-access', name: 'Dashboard Access', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'api-endpoints', name: 'API Endpoints', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'websocket-connection', name: 'WebSocket Connection', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'grpc-reflection', name: 'gRPC Reflection', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'fixture-loading', name: 'Fixture Loading', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'config-validation', name: 'Configuration Validation', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'performance-baseline', name: 'Performance Baseline', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
+        { id: 'health', name: 'Health Endpoint', status: 'pending', duration: 0, timestamp: new Date().toISOString() }
       ]
     },
     {
       id: 'integration-tests',
       name: 'Integration Tests',
-      description: 'End-to-end workflow and data flow validation',
+      description: 'Custom integration tests for API endpoints',
       status: 'idle',
-      totalTests: 6,
+      totalTests: 0,
       passedTests: 0,
       failedTests: 0,
       duration: 0,
-      tests: [
-        { id: 'user-workflow', name: 'User Workflow', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'data-persistence', name: 'Data Persistence', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'concurrent-requests', name: 'Concurrent Requests', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'error-handling', name: 'Error Handling', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'cleanup-process', name: 'Cleanup Process', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-        { id: 'resource-limits', name: 'Resource Limits', status: 'pending', duration: 0, timestamp: new Date().toISOString() },
-      ]
+      tests: []
     }
   ]);
 
+  // Convert SmokeTestResult to TestResult
+  const convertSmokeTestResult = (result: SmokeTestResult, index: number): TestResult => ({
+    id: `smoke-${index}`,
+    name: result.test_name,
+    status: result.passed ? 'passed' : 'failed',
+    duration: result.response_time_ms || 0,
+    error: result.error_message,
+    timestamp: new Date().toISOString()
+  });
 
-  const runTestSuite = async (suiteId: string) => {
+  const runSmokeTests = async () => {
     setIsRunningTests(true);
-    const suite = testResults.find(s => s.id === suiteId);
-    if (!suite) return;
 
-    // Update suite status
+    // Update suite status to running
     setTestResults(prev => prev.map(s =>
-      s.id === suiteId
+      s.id === 'smoke-tests'
         ? { ...s, status: 'running' as const }
         : s
     ));
 
-    // Simulate running tests
-    for (let i = 0; i < suite.tests.length; i++) {
-      const test = suite.tests[i];
+    try {
+      const startTime = Date.now();
+      const context = await smokeTestsApi.runSmokeTests();
+      const endTime = Date.now();
 
-      // Update test status to running
+      // Get the actual test results
+      const smokeResults = await smokeTestsApi.getSmokeTests();
+      const tests = smokeResults.map((result, index) => convertSmokeTestResult(result, index));
+
       setTestResults(prev => prev.map(s =>
-        s.id === suiteId
+        s.id === 'smoke-tests'
           ? {
               ...s,
-              tests: s.tests.map(t =>
-                t.id === test.id
-                  ? { ...t, status: 'running' as const }
-                  : t
-              )
+              status: context.failed_tests > 0 ? 'failed' : 'completed',
+              totalTests: context.total_tests,
+              passedTests: context.passed_tests,
+              failedTests: context.failed_tests,
+              duration: endTime - startTime,
+              tests
             }
           : s
       ));
-
-      // Simulate test execution time
-      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1500));
-
-      // Randomly pass/fail tests (for demo purposes)
-      const passed = Math.random() > 0.2; // 80% success rate
-
-      // Update test result
+    } catch (error) {
       setTestResults(prev => prev.map(s =>
-        s.id === suiteId
+        s.id === 'smoke-tests'
           ? {
               ...s,
-              tests: s.tests.map(t =>
-                t.id === test.id
-                  ? {
-                      ...t,
-                      status: passed ? 'passed' : 'failed',
-                      duration: 500 + Math.random() * 1500,
-                      error: passed ? undefined : 'Test failed with mock error',
-                      timestamp: new Date().toISOString()
-                    }
-                  : t
-              ),
-              passedTests: s.passedTests + (passed ? 1 : 0),
-              failedTests: s.failedTests + (passed ? 0 : 1)
+              status: 'failed',
+              failedTests: 1,
+              tests: [{
+                id: 'smoke-error',
+                name: 'Smoke Tests Execution',
+                status: 'failed',
+                duration: 0,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                timestamp: new Date().toISOString()
+              }]
             }
           : s
       ));
+    } finally {
+      setIsRunningTests(false);
     }
+  };
 
-    // Update suite status to completed
+  const runHealthCheck = async () => {
+    setIsRunningTests(true);
+
+    // Update suite status to running
     setTestResults(prev => prev.map(s =>
-      s.id === suiteId
-        ? {
-            ...s,
-            status: s.failedTests > 0 ? 'failed' : 'completed',
-            duration: s.tests.reduce((acc, t) => acc + t.duration, 0)
-          }
+      s.id === 'health-check'
+        ? { ...s, status: 'running' as const, tests: s.tests.map(t => ({ ...t, status: 'running' as const })) }
         : s
     ));
 
-    setIsRunningTests(false);
+    try {
+      const startTime = Date.now();
+      const health = await dashboardApi.getHealth();
+      const endTime = Date.now();
+
+      const passed = health.status === 'healthy' || health.status === 'ok';
+      const issues = health.issues || [];
+
+      setTestResults(prev => prev.map(s =>
+        s.id === 'health-check'
+          ? {
+              ...s,
+              status: passed ? 'completed' : 'failed',
+              passedTests: passed ? 1 : 0,
+              failedTests: passed ? 0 : 1,
+              duration: endTime - startTime,
+              tests: [{
+                id: 'health',
+                name: 'Health Endpoint',
+                status: passed ? 'passed' : 'failed',
+                duration: endTime - startTime,
+                error: issues.length > 0 ? issues.join(', ') : undefined,
+                timestamp: new Date().toISOString()
+              }]
+            }
+          : s
+      ));
+    } catch (error) {
+      setTestResults(prev => prev.map(s =>
+        s.id === 'health-check'
+          ? {
+              ...s,
+              status: 'failed',
+              failedTests: 1,
+              passedTests: 0,
+              tests: [{
+                id: 'health',
+                name: 'Health Endpoint',
+                status: 'failed',
+                duration: 0,
+                error: error instanceof Error ? error.message : 'Failed to fetch health status',
+                timestamp: new Date().toISOString()
+              }]
+            }
+          : s
+      ));
+    } finally {
+      setIsRunningTests(false);
+    }
+  };
+
+  const runTestSuite = async (suiteId: string) => {
+    switch (suiteId) {
+      case 'smoke-tests':
+        await runSmokeTests();
+        break;
+      case 'health-check':
+        await runHealthCheck();
+        break;
+      case 'integration-tests':
+        // Placeholder for custom integration tests
+        setIsRunningTests(true);
+        setTestResults(prev => prev.map(s =>
+          s.id === suiteId
+            ? {
+                ...s,
+                status: 'completed',
+                tests: [{
+                  id: 'integration-placeholder',
+                  name: 'Custom integration tests not configured',
+                  status: 'pending',
+                  duration: 0,
+                  timestamp: new Date().toISOString()
+                }]
+              }
+            : s
+        ));
+        setIsRunningTests(false);
+        break;
+    }
   };
 
   const runAllTests = async () => {
-    for (const suite of testResults) {
-      await runTestSuite(suite.id);
-    }
+    await runHealthCheck();
+    await runSmokeTests();
   };
 
   const getStatusIcon = (status: string) => {

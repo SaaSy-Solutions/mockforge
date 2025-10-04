@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
-import { useConfig, useValidation, useServerInfo } from '../hooks/useApi';
+import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { toast } from 'sonner';
 import {
   PageHeader,
   ModernCard,
@@ -10,6 +11,15 @@ import {
 } from '../components/ui/DesignSystem';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose
+} from '../components/ui/Dialog';
 import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import { AutocompleteInput } from '../components/ui/AutocompleteInput';
 
@@ -19,16 +29,48 @@ function extractPort(address?: string): string {
   return parts[parts.length - 1] || '';
 }
 
+// Validation functions
+function isValidUrl(url: string): boolean {
+  if (!url) return true; // Empty URL is valid (optional field)
+  try {
+    const urlObj = new URL(url);
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isValidPort(port: number): boolean {
+  return port >= 1 && port <= 65535;
+}
+
 export function ConfigPage() {
   const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment'>('general');
   const { activeWorkspace } = useWorkspaceStore();
   const workspaceId = activeWorkspace?.id || 'default-workspace';
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showRestartDialog, setShowRestartDialog] = useState(false);
 
-  const { isLoading: configLoading } = useConfig();
-  const { isLoading: validationLoading } = useValidation();
+  const { data: config, isLoading: configLoading } = useConfig();
+  const { data: validation, isLoading: validationLoading } = useValidation();
   const { data: serverInfo, isLoading: serverInfoLoading } = useServerInfo();
 
+  // Mutations
+  const updateLatency = useUpdateLatency();
+  const updateFaults = useUpdateFaults();
+  const updateProxy = useUpdateProxy();
+  const updateValidation = useUpdateValidation();
+  const restartServers = useRestartServers();
+  const { data: restartStatus } = useRestartStatus();
+
   const [formData, setFormData] = useState({
+    general: {
+      http_port: 3000,
+      ws_port: 3001,
+      grpc_port: 50051,
+      admin_port: 9080
+    },
+    restartInProgress: false,
     latency: { base_ms: 0, jitter_ms: 0 },
     faults: { enabled: false, failure_rate: 0, status_codes: [] as number[] },
     trafficShaping: {
@@ -56,14 +98,439 @@ export function ConfigPage() {
     templateTest: ''
   });
 
-  const handleSave = (section: string) => {
-    console.log(`Saving ${section} configuration:`, formData[section as keyof typeof formData]);
-    // Here you would make API calls to save the configuration
+  // Save port configuration to localStorage for persistence across restarts
+  const savePortConfig = (ports: typeof formData.general) => {
+    localStorage.setItem('mockforge_pending_port_config', JSON.stringify(ports));
+  };
+
+  // Load pending port configuration on mount
+  useEffect(() => {
+    const pendingConfig = localStorage.getItem('mockforge_pending_port_config');
+    if (pendingConfig) {
+      try {
+        const ports = JSON.parse(pendingConfig);
+        setFormData(prev => ({
+          ...prev,
+          general: { ...prev.general, ...ports }
+        }));
+      } catch (error) {
+        console.error('Failed to parse pending port config:', error);
+        localStorage.removeItem('mockforge_pending_port_config');
+      }
+    }
+  }, []);
+
+  // Monitor restart status
+  useEffect(() => {
+    if (restartStatus && formData.restartInProgress) {
+      if (!restartStatus.restarting) {
+        setFormData(prev => ({ ...prev, restartInProgress: false }));
+        toast.success('Server restarted successfully! Port configuration applied.');
+        localStorage.removeItem('mockforge_pending_port_config');
+      }
+    }
+  }, [restartStatus, formData.restartInProgress]);
+
+  // Initialize form data from API when data loads
+  useEffect(() => {
+    if (config?.latency) {
+      setFormData(prev => ({
+        ...prev,
+        latency: {
+          base_ms: config.latency.base_ms,
+          jitter_ms: config.latency.jitter_ms
+        }
+      }));
+    }
+    if (config?.faults) {
+      setFormData(prev => ({
+        ...prev,
+        faults: {
+          enabled: config.faults.enabled,
+          failure_rate: config.faults.failure_rate,
+          status_codes: config.faults.status_codes
+        }
+      }));
+    }
+    if (config?.proxy) {
+      setFormData(prev => ({
+        ...prev,
+        proxy: {
+          enabled: config.proxy.enabled,
+          upstream_url: config.proxy.upstream_url || '',
+          timeout_seconds: config.proxy.timeout_seconds
+        }
+      }));
+    }
+  }, [config]);
+
+  useEffect(() => {
+    if (serverInfo) {
+      setFormData(prev => ({
+        ...prev,
+        general: {
+          http_port: parseInt(extractPort(serverInfo.http_server)) || 3000,
+          ws_port: parseInt(extractPort(serverInfo.ws_server)) || 3001,
+          grpc_port: parseInt(extractPort(serverInfo.grpc_server)) || 50051,
+          admin_port: serverInfo.admin_port || 9080
+        }
+      }));
+    }
+  }, [serverInfo]);
+
+  useEffect(() => {
+    if (validation) {
+      setFormData(prev => ({
+        ...prev,
+        validation: {
+          mode: validation.mode as 'enforce' | 'warn' | 'off',
+          aggregate_errors: validation.aggregate_errors,
+          validate_responses: validation.validate_responses,
+          overrides: validation.overrides
+        }
+      }));
+    }
+  }, [validation]);
+
+  // Detect changes by comparing current form data to server data
+  useEffect(() => {
+    let hasChanges = false;
+
+    // Check general settings
+    if (serverInfo) {
+      const currentHttpPort = parseInt(extractPort(serverInfo.http_server)) || 3000;
+      const currentWsPort = parseInt(extractPort(serverInfo.ws_server)) || 3001;
+      const currentGrpcPort = parseInt(extractPort(serverInfo.grpc_server)) || 50051;
+      const currentAdminPort = serverInfo.admin_port || 9080;
+
+      if (formData.general.http_port !== currentHttpPort ||
+          formData.general.ws_port !== currentWsPort ||
+          formData.general.grpc_port !== currentGrpcPort ||
+          formData.general.admin_port !== currentAdminPort) {
+        hasChanges = true;
+      }
+    }
+
+    // Check latency settings
+    if (config?.latency) {
+      if (formData.latency.base_ms !== config.latency.base_ms ||
+          formData.latency.jitter_ms !== config.latency.jitter_ms) {
+        hasChanges = true;
+      }
+    }
+
+    // Check fault settings
+    if (config?.faults) {
+      if (formData.faults.enabled !== config.faults.enabled ||
+          formData.faults.failure_rate !== config.faults.failure_rate ||
+          JSON.stringify(formData.faults.status_codes) !== JSON.stringify(config.faults.status_codes)) {
+        hasChanges = true;
+      }
+    }
+
+    // Check proxy settings
+    if (config?.proxy) {
+      if (formData.proxy.enabled !== config.proxy.enabled ||
+          formData.proxy.upstream_url !== (config.proxy.upstream_url || '') ||
+          formData.proxy.timeout_seconds !== config.proxy.timeout_seconds) {
+        hasChanges = true;
+      }
+    }
+
+    // Check validation settings
+    if (validation) {
+      if (formData.validation.mode !== validation.mode ||
+          formData.validation.aggregate_errors !== validation.aggregate_errors ||
+          formData.validation.validate_responses !== validation.validate_responses) {
+        hasChanges = true;
+      }
+    }
+
+    setHasUnsavedChanges(hasChanges);
+  }, [formData, config, validation, serverInfo]);
+
+  // Warn before leaving page with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleSave = async (section: string) => {
+    // Validate before saving
+    if (section === 'proxy' && formData.proxy.enabled) {
+      if (!formData.proxy.upstream_url) {
+        toast.error('Upstream URL is required when proxy is enabled');
+        return;
+      }
+      if (!isValidUrl(formData.proxy.upstream_url)) {
+        toast.error('Invalid upstream URL. Must be a valid HTTP or HTTPS URL');
+        return;
+      }
+      if (!isValidPort(formData.proxy.timeout_seconds)) {
+        toast.error('Invalid timeout. Must be between 1 and 300 seconds');
+        return;
+      }
+    }
+
+    if (section === 'general') {
+      if (!isValidPort(formData.general.http_port)) {
+        toast.error('Invalid HTTP port. Must be between 1 and 65535');
+        return;
+      }
+      if (!isValidPort(formData.general.ws_port)) {
+        toast.error('Invalid WebSocket port. Must be between 1 and 65535');
+        return;
+      }
+      if (!isValidPort(formData.general.grpc_port)) {
+        toast.error('Invalid gRPC port. Must be between 1 and 65535');
+        return;
+      }
+      if (!isValidPort(formData.general.admin_port)) {
+        toast.error('Invalid Admin port. Must be between 1 and 65535');
+        return;
+      }
+    }
+
+    try {
+      switch (section) {
+        case 'latency':
+          await updateLatency.mutateAsync({
+            name: 'default',
+            base_ms: formData.latency.base_ms,
+            jitter_ms: formData.latency.jitter_ms,
+            tag_overrides: {}
+          });
+          toast.success('Latency configuration saved successfully');
+          break;
+
+        case 'faults':
+          await updateFaults.mutateAsync({
+            enabled: formData.faults.enabled,
+            failure_rate: formData.faults.failure_rate,
+            status_codes: formData.faults.status_codes,
+            active_failures: 0
+          });
+          toast.success('Fault injection configuration saved successfully');
+          break;
+
+        case 'proxy':
+          await updateProxy.mutateAsync({
+            enabled: formData.proxy.enabled,
+            upstream_url: formData.proxy.upstream_url,
+            timeout_seconds: formData.proxy.timeout_seconds,
+            requests_proxied: 0
+          });
+          toast.success('Proxy configuration saved successfully');
+          break;
+
+        case 'validation':
+          await updateValidation.mutateAsync({
+            mode: formData.validation.mode,
+            aggregate_errors: formData.validation.aggregate_errors,
+            validate_responses: formData.validation.validate_responses,
+            overrides: formData.validation.overrides
+          });
+          toast.success('Validation settings saved successfully');
+          break;
+
+        case 'general': {
+          // Save port configuration to localStorage for persistence
+          savePortConfig(formData.general);
+
+          // Show confirmation dialog
+          setShowRestartDialog(true);
+          break;
+        }
+
+        case 'traffic-shaping':
+          // Traffic shaping configuration
+          try {
+            const response = await fetch('/__mockforge/config/traffic-shaping', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                config_type: 'traffic-shaping',
+                data: formData.trafficShaping
+              })
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            toast.success('Traffic shaping configuration saved successfully');
+          } catch (error) {
+            console.error('Error saving traffic shaping:', error);
+            toast.error('Failed to save traffic shaping configuration');
+          }
+          break;
+
+        default:
+          toast.error(`Unknown section: ${section}`);
+      }
+    } catch (error) {
+      console.error(`Error saving ${section} configuration:`, error);
+      toast.error(`Failed to save ${section} configuration`);
+    }
+  };
+
+  const handleConfirmRestart = async () => {
+    setShowRestartDialog(false);
+    try {
+      setFormData(prev => ({ ...prev, restartInProgress: true }));
+      toast.info('Saving configuration and restarting server...');
+
+      await restartServers.mutateAsync('Port configuration updated');
+
+      // The restart status monitoring will handle success feedback
+    } catch (error) {
+      setFormData(prev => ({ ...prev, restartInProgress: false }));
+      toast.error('Failed to restart server. Please restart manually.');
+      console.error('Server restart failed:', error);
+    }
+  };
+
+  const handleCancelRestart = () => {
+    setShowRestartDialog(false);
+    toast.info('Configuration saved locally. Restart the server manually to apply changes.');
   };
 
   const handleReset = (section: string) => {
-    console.log(`Resetting ${section} configuration`);
-    // Here you would reset the form data
+    switch (section) {
+      case 'general':
+        if (serverInfo) {
+          setFormData(prev => ({
+            ...prev,
+            general: {
+              http_port: parseInt(extractPort(serverInfo.http_server)) || 3000,
+              ws_port: parseInt(extractPort(serverInfo.ws_server)) || 3001,
+              grpc_port: parseInt(extractPort(serverInfo.grpc_server)) || 50051,
+              admin_port: serverInfo.admin_port || 9080
+            }
+          }));
+          toast.info('General settings reset to server values');
+        }
+        break;
+
+      case 'latency':
+        if (config?.latency) {
+          setFormData(prev => ({
+            ...prev,
+            latency: {
+              base_ms: config.latency.base_ms,
+              jitter_ms: config.latency.jitter_ms
+            }
+          }));
+          toast.info('Latency configuration reset to server values');
+        }
+        break;
+
+      case 'faults':
+        if (config?.faults) {
+          setFormData(prev => ({
+            ...prev,
+            faults: {
+              enabled: config.faults.enabled,
+              failure_rate: config.faults.failure_rate,
+              status_codes: config.faults.status_codes
+            }
+          }));
+          toast.info('Fault injection configuration reset to server values');
+        }
+        break;
+
+      case 'proxy':
+        if (config?.proxy) {
+          setFormData(prev => ({
+            ...prev,
+            proxy: {
+              enabled: config.proxy.enabled,
+              upstream_url: config.proxy.upstream_url || '',
+              timeout_seconds: config.proxy.timeout_seconds
+            }
+          }));
+          toast.info('Proxy configuration reset to server values');
+        }
+        break;
+
+      case 'validation':
+        if (validation) {
+          setFormData(prev => ({
+            ...prev,
+            validation: {
+              mode: validation.mode as 'enforce' | 'warn' | 'off',
+              aggregate_errors: validation.aggregate_errors,
+              validate_responses: validation.validate_responses,
+              overrides: validation.overrides
+            }
+          }));
+          toast.info('Validation settings reset to server values');
+        }
+        break;
+
+      case 'traffic-shaping':
+        setFormData(prev => ({
+          ...prev,
+          trafficShaping: {
+            enabled: false,
+            bandwidth: {
+              enabled: false,
+              max_bytes_per_sec: 1048576,
+              burst_capacity_bytes: 10485760
+            },
+            burstLoss: {
+              enabled: false,
+              burst_probability: 0.1,
+              burst_duration_ms: 5000,
+              loss_rate_during_burst: 0.5,
+              recovery_time_ms: 30000
+            }
+          }
+        }));
+        toast.info('Traffic shaping configuration reset to defaults');
+        break;
+
+      default:
+        toast.error(`Unknown section: ${section}`);
+    }
+  };
+
+  const handleResetAll = () => {
+    handleReset('general');
+    handleReset('latency');
+    handleReset('faults');
+    handleReset('traffic-shaping');
+    handleReset('proxy');
+    handleReset('validation');
+    toast.success('All settings reset to server values');
+  };
+
+  const handleSaveAll = async () => {
+    const sections = ['general', 'latency', 'faults', 'traffic-shaping', 'proxy', 'validation'];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const section of sections) {
+      try {
+        await handleSave(section);
+        successCount++;
+      } catch (_error) {
+        errorCount++;
+      }
+    }
+
+    if (errorCount === 0) {
+      toast.success('All settings saved successfully');
+    } else {
+      toast.warning(`Saved ${successCount} sections, ${errorCount} failed`);
+    }
   };
 
   if (configLoading || validationLoading || serverInfoLoading) {
@@ -95,13 +562,18 @@ export function ConfigPage() {
     <div className="space-y-8">
       <PageHeader
         title="Configuration"
-        subtitle="Manage MockForge settings and preferences"
+        subtitle={
+          hasUnsavedChanges
+            ? "⚠️ You have unsaved changes"
+            : "Manage MockForge settings and preferences"
+        }
         action={
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
               size="sm"
               className="flex items-center gap-2"
+              onClick={handleResetAll}
             >
               <RefreshCw className="h-4 w-4" />
               Reset All
@@ -110,6 +582,7 @@ export function ConfigPage() {
               variant="default"
               size="sm"
               className="flex items-center gap-2"
+              onClick={handleSaveAll}
             >
               <Save className="h-4 w-4" />
               Save All Changes
@@ -162,35 +635,87 @@ export function ConfigPage() {
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           HTTP Port
                         </label>
-                        <Input type="number" defaultValue={extractPort(serverInfo?.http_server) || "3000"} />
+                        <Input
+                          type="number"
+                          min="1"
+                          max="65535"
+                          value={formData.general.http_port}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            general: { ...prev.general, http_port: parseInt(e.target.value) || 3000 }
+                          }))}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           WebSocket Port
                         </label>
-                        <Input type="number" defaultValue={extractPort(serverInfo?.ws_server) || "3001"} />
+                        <Input
+                          type="number"
+                          min="1"
+                          max="65535"
+                          value={formData.general.ws_port}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            general: { ...prev.general, ws_port: parseInt(e.target.value) || 3001 }
+                          }))}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           gRPC Port
                         </label>
-                        <Input type="number" defaultValue={extractPort(serverInfo?.grpc_server) || "50051"} />
+                        <Input
+                          type="number"
+                          min="1"
+                          max="65535"
+                          value={formData.general.grpc_port}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            general: { ...prev.general, grpc_port: parseInt(e.target.value) || 50051 }
+                          }))}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           Admin Port
                         </label>
-                        <Input type="number" defaultValue={serverInfo?.admin_port?.toString() || "9080"} />
+                        <Input
+                          type="number"
+                          min="1"
+                          max="65535"
+                          value={formData.general.admin_port}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            general: { ...prev.general, admin_port: parseInt(e.target.value) || 9080 }
+                          }))}
+                        />
                       </div>
                     </div>
                   </div>
 
+                  {formData.restartInProgress && (
+                    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg mb-4">
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                      <span className="text-sm text-blue-700 dark:text-blue-300">
+                        Server restart in progress... Configuration will be applied shortly.
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <Button variant="outline" onClick={() => handleReset('general')}>
+                    <Button variant="outline" onClick={() => handleReset('general')} disabled={formData.restartInProgress}>
                       Reset
                     </Button>
-                    <Button onClick={() => handleSave('general')}>
-                      Save Changes
+                    <Button onClick={() => handleSave('general')} disabled={formData.restartInProgress}>
+                      {formData.restartInProgress ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Restarting...
+                        </>
+                      ) : (
+                        'Save & Restart Server'
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -665,7 +1190,17 @@ export function ConfigPage() {
                             ...prev,
                             proxy: { ...prev.proxy, upstream_url: e.target.value }
                           }))}
+                          className={
+                            formData.proxy.upstream_url && !isValidUrl(formData.proxy.upstream_url)
+                              ? 'border-red-500 dark:border-red-500'
+                              : ''
+                          }
                         />
+                        {formData.proxy.upstream_url && !isValidUrl(formData.proxy.upstream_url) && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                            Must be a valid HTTP or HTTPS URL
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -781,8 +1316,7 @@ export function ConfigPage() {
             <Section title="Environments & Variables" subtitle="Manage environments and their variables">
               <EnvironmentManager
                 workspaceId={workspaceId}
-                onEnvironmentSelect={(envId) => {
-                  console.log('Environment selected:', envId);
+                onEnvironmentSelect={(_envId) => {
                   // Could update URL or notify other components
                 }}
               />
@@ -831,6 +1365,47 @@ export function ConfigPage() {
           )}
         </div>
       </div>
+
+      {/* Restart Confirmation Dialog */}
+      <Dialog open={showRestartDialog} onOpenChange={setShowRestartDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restart Server Required</DialogTitle>
+            <DialogClose onClick={handleCancelRestart} />
+          </DialogHeader>
+          <DialogDescription>
+            Port configuration changes require a server restart to take effect.
+          </DialogDescription>
+          <div className="py-4">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="font-medium">HTTP Port:</span>
+                <span>{formData.general.http_port}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">WebSocket Port:</span>
+                <span>{formData.general.ws_port}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">gRPC Port:</span>
+                <span>{formData.general.grpc_port}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">Admin Port:</span>
+                <span>{formData.general.admin_port}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelRestart}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmRestart}>
+              Restart Server
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -478,7 +478,7 @@ impl PluginInstance {
     async fn call_plugin_function(&mut self, function_name: &str, input: &str) -> Result<Vec<u8>> {
         // Get the exported function from the WASM instance
         let func = self.instance.get_func(&mut self.store, function_name).ok_or_else(|| {
-            PluginError::execution(&format!(
+            PluginError::execution(format!(
                 "Function '{}' not found in WASM module",
                 function_name
             ))
@@ -499,7 +499,7 @@ impl PluginInstance {
         alloc_func
             .call(&mut self.store, &[wasmtime::Val::I32(input_len)], &mut alloc_result)
             .map_err(|e| {
-                PluginError::execution(&format!("Failed to allocate memory for input: {}", e))
+                PluginError::execution(format!("Failed to allocate memory for input: {}", e))
             })?;
 
         let input_ptr = match alloc_result[0] {
@@ -516,7 +516,7 @@ impl PluginInstance {
             .ok_or_else(|| PluginError::execution("WASM module must export a 'memory'"))?;
 
         memory.write(&mut self.store, input_ptr as usize, input_bytes).map_err(|e| {
-            PluginError::execution(&format!("Failed to write input to WASM memory: {}", e))
+            PluginError::execution(format!("Failed to write input to WASM memory: {}", e))
         })?;
 
         // Call the plugin function with the input pointer and length
@@ -527,7 +527,7 @@ impl PluginInstance {
             &mut func_result,
         )
         .map_err(|e| {
-            PluginError::execution(&format!(
+            PluginError::execution(format!(
                 "Failed to call WASM function '{}': {}",
                 function_name, e
             ))
@@ -537,7 +537,7 @@ impl PluginInstance {
         let output_ptr = match func_result[0] {
             wasmtime::Val::I32(ptr) => ptr,
             _ => {
-                return Err(PluginError::execution(&format!(
+                return Err(PluginError::execution(format!(
                     "Function '{}' did not return a valid output pointer",
                     function_name
                 )))
@@ -547,7 +547,7 @@ impl PluginInstance {
         let output_len = match func_result[1] {
             wasmtime::Val::I32(len) => len,
             _ => {
-                return Err(PluginError::execution(&format!(
+                return Err(PluginError::execution(format!(
                     "Function '{}' did not return a valid output length",
                     function_name
                 )))
@@ -559,7 +559,7 @@ impl PluginInstance {
         memory
             .read(&mut self.store, output_ptr as usize, &mut output_bytes)
             .map_err(|e| {
-                PluginError::execution(&format!("Failed to read output from WASM memory: {}", e))
+                PluginError::execution(format!("Failed to read output from WASM memory: {}", e))
             })?;
 
         // Deallocate the memory if there's a dealloc function
@@ -700,7 +700,7 @@ impl ModuleValidator {
                     Self::validate_host_import(field_name)?;
                 }
                 _ => {
-                    return Err(PluginError::security(&format!(
+                    return Err(PluginError::security(format!(
                         "Disallowed import module: {}",
                         module_name
                     )));
@@ -724,15 +724,14 @@ impl ModuleValidator {
             "path_filestat_get",
         ];
 
-        if filesystem_functions.contains(&field_name) {
-            if capabilities.filesystem.read_paths.is_empty()
-                && capabilities.filesystem.write_paths.is_empty()
-            {
-                return Err(PluginError::security(&format!(
-                    "Plugin imports filesystem function '{}' but has no filesystem capabilities",
-                    field_name
-                )));
-            }
+        if filesystem_functions.contains(&field_name)
+            && capabilities.filesystem.read_paths.is_empty()
+            && capabilities.filesystem.write_paths.is_empty()
+        {
+            return Err(PluginError::security(format!(
+                "Plugin imports filesystem function '{}' but has no filesystem capabilities",
+                field_name
+            )));
         }
 
         // Allow other safe WASI functions
@@ -750,7 +749,7 @@ impl ModuleValidator {
         ];
 
         if !allowed_functions.contains(&field_name) {
-            return Err(PluginError::security(&format!(
+            return Err(PluginError::security(format!(
                 "Disallowed WASI function: {}",
                 field_name
             )));
@@ -769,7 +768,7 @@ impl ModuleValidator {
         ];
 
         if !allowed_functions.contains(&field_name) {
-            return Err(PluginError::security(&format!(
+            return Err(PluginError::security(format!(
                 "Disallowed host function: {}",
                 field_name
             )));

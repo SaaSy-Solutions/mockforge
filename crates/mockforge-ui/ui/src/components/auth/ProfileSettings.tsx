@@ -90,10 +90,10 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Profile Settings</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="sm:max-w-md bg-white dark:bg-gray-900">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">Profile Settings</DialogTitle>
+          <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
             Update your account information and preferences.
           </DialogDescription>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -116,7 +116,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
               value={formData.username}
               onChange={(e) => handleInputChange('username', e.target.value)}
               placeholder="Enter your username"
-              className={errors.username ? 'border-destructive' : ''}
+              className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 ${errors.username ? 'border-destructive' : ''}`}
             />
             {errors.username && (
               <p className="text-sm text-destructive">{errors.username}</p>
@@ -133,7 +133,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
               value={formData.email}
               onChange={(e) => handleInputChange('email', e.target.value)}
               placeholder="Enter your email address"
-              className={errors.email ? 'border-destructive' : ''}
+              className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 ${errors.email ? 'border-destructive' : ''}`}
             />
             {errors.email && (
               <p className="text-sm text-destructive">{errors.email}</p>

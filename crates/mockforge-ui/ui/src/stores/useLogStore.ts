@@ -9,7 +9,7 @@ interface LogStore {
   autoScroll: boolean;
   isPaused: boolean;
   connectionStatus: 'connected' | 'disconnected' | 'connecting';
-  
+
   setLogs: (logs: RequestLog[]) => void;
   addLog: (log: RequestLog) => void;
   selectLog: (log: RequestLog | null) => void;
@@ -20,6 +20,8 @@ interface LogStore {
   setConnectionStatus: (status: 'connected' | 'disconnected' | 'connecting') => void;
   applyFilter: () => void;
   clearLogs: () => void;
+  startLogStream: () => void;
+  stopLogStream: () => void;
 }
 
 // Mock log data generator
@@ -121,6 +123,10 @@ const applyLogFilter = (logs: RequestLog[], filter: LogFilter): RequestLog[] => 
   return filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 };
 
+// Log stream interval management
+let logStreamInterval: ReturnType<typeof setInterval> | null = null;
+let logCounter = 51;
+
 export const useLogStore = create<LogStore>((set, get) => ({
   logs: initialLogs,
   filteredLogs: applyLogFilter(initialLogs, defaultFilter),
@@ -173,18 +179,26 @@ export const useLogStore = create<LogStore>((set, get) => ({
   },
 
   clearLogs: () => set({ logs: [], filteredLogs: [], selectedLog: null }),
-}));
 
-// Simulate real-time log streaming
-let logCounter = 51;
-const simulateLogStream = () => {
-  setInterval(() => {
-    const store = useLogStore.getState();
-    if (!store.isPaused && store.connectionStatus === 'connected') {
-      store.addLog(generateMockLog(logCounter++));
+  startLogStream: () => {
+    // Clear any existing interval
+    if (logStreamInterval) {
+      clearInterval(logStreamInterval);
     }
-  }, 2000 + Math.random() * 3000); // Random interval between 2-5 seconds
-};
 
-// Start simulation
-simulateLogStream();
+    // Start new interval
+    logStreamInterval = setInterval(() => {
+      const store = get();
+      if (!store.isPaused && store.connectionStatus === 'connected') {
+        store.addLog(generateMockLog(logCounter++));
+      }
+    }, 2000 + Math.random() * 3000); // Random interval between 2-5 seconds
+  },
+
+  stopLogStream: () => {
+    if (logStreamInterval) {
+      clearInterval(logStreamInterval);
+      logStreamInterval = null;
+    }
+  },
+}));

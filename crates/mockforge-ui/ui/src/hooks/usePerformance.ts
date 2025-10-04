@@ -6,34 +6,33 @@ import { useEffect, useRef, useState } from 'react';
 export function useRenderPerformance(componentName: string) {
   const renderCount = useRef(0);
   const lastRenderTime = useRef(performance.now());
-  const [renderTimes, setRenderTimes] = useState<number[]>([]);
+  const renderTimesRef = useRef<number[]>([]);
+  const [averageTime, setAverageTime] = useState(0);
 
   useEffect(() => {
     const now = performance.now();
     const renderTime = now - lastRenderTime.current;
     renderCount.current += 1;
 
-    setRenderTimes(prev => {
-      const newTimes = [...prev, renderTime];
-      // Keep only last 10 render times
-      return newTimes.slice(-10);
-    });
+    // Update render times array
+    renderTimesRef.current = [...renderTimesRef.current, renderTime].slice(-10);
+
+    // Calculate average
+    const avg = renderTimesRef.current.reduce((a, b) => a + b, 0) / renderTimesRef.current.length;
+    setAverageTime(avg);
 
     lastRenderTime.current = now;
 
     // Log performance info in development
     if (import.meta.env.DEV && renderCount.current > 1) {
-      const avgRenderTime = renderTimes.reduce((a, b) => a + b, 0) / renderTimes.length;
-      console.log(`[${componentName}] Render #${renderCount.current}, Time: ${renderTime.toFixed(2)}ms, Avg: ${avgRenderTime.toFixed(2)}ms`);
+      console.log(`[${componentName}] Render #${renderCount.current}, Time: ${renderTime.toFixed(2)}ms, Avg: ${avg.toFixed(2)}ms`);
     }
   });
 
   return {
     renderCount: renderCount.current,
-    lastRenderTime: renderTimes[renderTimes.length - 1] || 0,
-    averageRenderTime: renderTimes.length > 0
-      ? renderTimes.reduce((a, b) => a + b, 0) / renderTimes.length
-      : 0,
+    lastRenderTime: renderTimesRef.current[renderTimesRef.current.length - 1] || 0,
+    averageRenderTime: averageTime,
   };
 }
 

@@ -11,7 +11,7 @@ export interface ResponsiveTableColumn<T = unknown> {
   sortable?: boolean;
   width?: string;
   minWidth?: string;
-  
+
   // Responsive options
   hideOnMobile?: boolean;
   showOnHover?: boolean;
@@ -24,25 +24,25 @@ export interface ResponsiveTableProps<T = unknown> {
   data: T[];
   className?: string;
   onRowClick?: (row: T) => void;
-  
+
   // Responsive options
   stackOnMobile?: boolean; // Stack rows as cards on mobile
   showExpandButton?: boolean; // Show expand/collapse for mobile cards
   sortable?: boolean;
   searchable?: boolean;
   searchPlaceholder?: string;
-  
+
   // Loading and empty states
   isLoading?: boolean;
   emptyMessage?: string;
 }
 
 // Mobile card view for a single row
-function MobileCard<T>({ 
-  row, 
-  columns, 
+function MobileCard<T>({
+  row,
+  columns,
   onRowClick,
-  showExpandButton = true 
+  showExpandButton = true
 }: {
   row: T;
   columns: ResponsiveTableColumn<T>[];
@@ -71,13 +71,13 @@ function MobileCard<T>({
       onRowClick && 'cursor-pointer'
     )}
     onClick={() => onRowClick?.(row)}>
-      
+
       {/* High priority info - always visible */}
       <div className="space-y-2">
         {highPriorityColumns.map((column) => {
           const value = (row as Record<string, unknown>)[column.key];
           const displayValue = column.render ? column.render(value, row) : value;
-          
+
           return (
             <div key={column.key} className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
@@ -95,9 +95,9 @@ function MobileCard<T>({
       {otherColumns.length > 0 && showExpandButton && (
         <>
           <div className="divider-subtle"></div>
-          
+
           <button
-            className="flex items-center justify-between w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 transition-colors"
+            className="flex items-center justify-between w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setIsExpanded(!isExpanded);
@@ -114,7 +114,7 @@ function MobileCard<T>({
               {otherColumns.map((column) => {
                 const value = (row as Record<string, unknown>)[column.key];
                 const displayValue = column.render ? column.render(value, row) : value;
-                
+
                 return (
                   <div key={column.key} className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -135,9 +135,9 @@ function MobileCard<T>({
 }
 
 // Desktop table view
-function DesktopTable<T>({ 
-  columns, 
-  data, 
+function DesktopTable<T>({
+  columns,
+  data,
   onRowClick,
   sortable = false
 }: {
@@ -151,7 +151,7 @@ function DesktopTable<T>({
 
   const handleSort = (columnKey: string) => {
     if (!sortable) return;
-    
+
     if (sortColumn === columnKey) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -166,7 +166,7 @@ function DesktopTable<T>({
     return [...data].sort((a, b) => {
       const aValue = (a as Record<string, unknown>)[sortColumn];
       const bValue = (b as Record<string, unknown>)[sortColumn];
-      
+
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
@@ -182,14 +182,14 @@ function DesktopTable<T>({
               <th
                 key={column.key}
                 className={cn(
-                  'px-6 py-3 text-left text-xs font-medium font-medium text-tertiary uppercase tracking-wider',
+                  'px-6 py-3 text-left text-xs font-medium text-tertiary uppercase tracking-wider',
                   column.width && `w-[${column.width}]`,
                   column.minWidth && `min-w-[${column.minWidth}]`,
                   sortable && column.sortable && 'cursor-pointer hover:text-primary transition-colors'
                 )}
-                style={{ 
+                style={{
                   width: column.width,
-                  minWidth: column.minWidth 
+                  minWidth: column.minWidth
                 }}
                 onClick={() => column.sortable && handleSort(column.key)}
               >
@@ -197,21 +197,21 @@ function DesktopTable<T>({
                   {column.label}
                   {sortable && column.sortable && (
                     <div className="flex flex-col">
-                      <ChevronIcon 
-                        direction="up" 
-                        size="xs" 
+                      <ChevronIcon
+                        direction="up"
+                        size="xs"
                         className={cn(
                           'transition-opacity',
-                          sortColumn === column.key && sortDirection === 'asc' 
+                          sortColumn === column.key && sortDirection === 'asc'
                             ? 'opacity-100' : 'opacity-30'
                         )}
                       />
-                      <ChevronIcon 
-                        direction="down" 
-                        size="xs" 
+                      <ChevronIcon
+                        direction="down"
+                        size="xs"
                         className={cn(
                           'transition-opacity -mt-1',
-                          sortColumn === column.key && sortDirection === 'desc' 
+                          sortColumn === column.key && sortDirection === 'desc'
                             ? 'opacity-100' : 'opacity-30'
                         )}
                       />
@@ -236,7 +236,7 @@ function DesktopTable<T>({
               {columns.map((column) => {
                 const value = (row as Record<string, unknown>)[column.key];
                 const displayValue = column.render ? column.render(value, row) : value;
-                
+
                 return (
                   <td
                     key={column.key}
@@ -324,7 +324,7 @@ export function ResponsiveTable<T>({
             />
             <Icons.Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-600 dark:text-gray-400" />
           </div>
-          
+
           {searchQuery && (
             <Button
               variant="secondary"
@@ -372,7 +372,7 @@ export function ResponsiveTable<T>({
         <span>
           Showing {filteredData.length} of {data.length} {data.length === 1 ? 'item' : 'items'}
         </span>
-        
+
         {searchQuery && (
           <span>
             Filtered by "{searchQuery}"

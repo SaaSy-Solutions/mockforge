@@ -13,7 +13,6 @@ use tokio::sync::RwLock;
 #[derive(Debug, Clone)]
 struct CacheEntry<V> {
     value: V,
-    created_at: Instant,
     expires_at: Option<Instant>,
     access_count: u64,
     last_accessed: Instant,
@@ -24,7 +23,6 @@ impl<V> CacheEntry<V> {
         let now = Instant::now();
         Self {
             value,
-            created_at: now,
             expires_at: ttl.map(|duration| now + duration),
             access_count: 0,
             last_accessed: now,

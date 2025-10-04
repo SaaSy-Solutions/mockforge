@@ -21,6 +21,9 @@ import {
   RefreshCw,
   X,
   Puzzle,
+  FolderOpen,
+  Import,
+  Link2,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -32,11 +35,14 @@ interface AppShellProps {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+  { id: 'workspaces', label: 'Workspaces', icon: FolderOpen },
+  { id: 'chains', label: 'Chains', icon: Link2 },
   { id: 'services', label: 'Services', icon: Server },
   { id: 'fixtures', label: 'Fixtures', icon: Database },
   { id: 'logs', label: 'Logs', icon: FileText },
   { id: 'metrics', label: 'Metrics', icon: Activity },
   { id: 'testing', label: 'Testing', icon: TestTube },
+  { id: 'import', label: 'Import', icon: Import },
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'config', label: 'Config', icon: Settings },
 ];
@@ -77,9 +83,9 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div 
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" 
-            onClick={() => setSidebarOpen(false)} 
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
+            onClick={() => setSidebarOpen(false)}
           />
           <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-gray-200 dark:border-gray-800 shadow-2xl animate-slide-in-left">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
@@ -87,10 +93,10 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                 <Logo variant="icon" size="md" />
                 <span className="text-xl font-bold text-gray-900 dark:text-gray-100">MockForge</span>
               </div>
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={() => setSidebarOpen(false)} 
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSidebarOpen(false)}
                 className="h-10 w-10 p-0 rounded-full spring-hover"
               >
                 <X className="h-5 w-5" />
@@ -108,7 +114,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                       'animate-slide-in-up',
                       activeTab === item.id
                         ? 'bg-brand text-white shadow-md'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 hover:bg-muted/50'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-muted/50'
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                     onClick={() => {
@@ -145,7 +151,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                       'w-full justify-start gap-3 h-11 transition-all duration-200 nav-item-hover focus-ring spring-hover',
                       activeTab === item.id
                         ? 'bg-brand text-white hover:bg-brand-600 shadow-lg'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 hover:bg-muted/50'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-muted/50'
                     )}
                     onClick={() => onTabChange(item.id)}
                   >

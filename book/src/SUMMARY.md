@@ -47,6 +47,7 @@
 ## API Reference
 
 - [CLI Reference](api/cli.md)
+- [Admin UI REST API](api/admin-ui-rest.md)
 - [Rust API](api/rust.md)
   - [HTTP Module](api/rust/http.md)
   - [gRPC Module](api/rust/grpc.md)

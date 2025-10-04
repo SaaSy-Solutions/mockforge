@@ -1,44 +1,18 @@
-import React, { useState } from 'react';
-import { apiService } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { apiService, importApi } from '../services/api';
 import { useUpdateWorkspacesOrder } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import type {
   WorkspaceSummary,
+  WorkspaceDetail,
+  FolderDetail,
+  CreateWorkspaceRequest,
+  CreateFolderRequest,
+  CreateRequestRequest,
   ImportToWorkspaceRequest,
   ImportResponse,
   ImportHistoryEntry
 } from '../types';
-
-// Define local types for workspace operations (to be moved to types later)
-interface WorkspaceDetail {
-  summary: WorkspaceSummary;
-  folders: Array<{ id: string; name: string; description?: string; request_count: number }>;
-  requests: Array<{ id: string; name: string; method: string; path: string }>;
-}
-
-interface FolderDetail {
-  summary: { id: string; name: string; description?: string };
-  requests: Array<{ id: string; name: string; method: string; path: string }>;
-}
-
-interface CreateWorkspaceRequest {
-  name: string;
-  description?: string;
-}
-
-interface CreateFolderRequest {
-  name: string;
-  description?: string;
-}
-
-interface CreateRequestRequest {
-  name: string;
-  method: string;
-  path: string;
-  status_code: number;
-  response_body: string;
-  folder_id?: string;
-}
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -54,6 +28,7 @@ import { Checkbox } from '../components/ui/DesignSystem';
 import { toast } from 'sonner';
 import ResponseHistory from '../components/workspace/ResponseHistory';
 import EncryptionSettings from '../components/workspace/EncryptionSettings';
+import { getErrorDetails, logError, sanitizeInput, validateFile } from '../utils/errorHandling';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface WorkspacesPageProps {}
@@ -72,12 +47,14 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importPreviewData, setImportPreviewData] = useState<ImportResponse | null>(null);
   const [selectedRoutes, setSelectedRoutes] = useState<Set<number>>(new Set());
-  const [importHistory] = useState<ImportHistoryEntry[]>([]); // Add import history state
+  const [importHistory, setImportHistory] = useState<ImportHistoryEntry[]>([]);
 
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [encryptionSettingsOpen, setEncryptionSettingsOpen] = useState(false);
   const [selectedRequestForHistory, setSelectedRequestForHistory] = useState<{ id: string; name: string } | null>(null);
   const [draggedWorkspace, setDraggedWorkspace] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<string | null>(null);
 
   // Form states
   const [newWorkspace, setNewWorkspace] = useState<CreateWorkspaceRequest>({
@@ -113,6 +90,13 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
 
   const updateWorkspacesOrder = useUpdateWorkspacesOrder();
 
+  // Load import history when import dialog opens
+  useEffect(() => {
+    if (importOpen) {
+      loadImportHistory();
+    }
+  }, [importOpen]);
+
   const handleCreateWorkspace = async () => {
     try {
       const response = await apiService.createWorkspace(newWorkspace);
@@ -128,8 +112,9 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
           });
           toast.success('Sync configured successfully');
         } catch (syncErr) {
-          toast.error('Workspace created but sync configuration failed');
-          console.error('Error configuring sync:', syncErr);
+          const syncErrorDetails = getErrorDetails(syncErr);
+          toast.error(`Workspace created but sync configuration failed: ${syncErrorDetails.message}`);
+          logError(syncErr, 'Sync configuration');
         }
       }
 
@@ -141,14 +126,17 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const { refreshWorkspaces } = useWorkspaceStore.getState();
       await refreshWorkspaces();
     } catch (err) {
-      toast.error('Failed to create workspace');
-      console.error('Error creating workspace:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to create workspace: ${errorDetails.message}`);
+      logError(err, 'Create workspace');
     }
   };
 
   const handleOpenFromDirectory = async () => {
     try {
-      await apiService.openWorkspaceFromDirectory(openFromDirectory.directory);
+      // Sanitize directory path
+      const sanitizedDir = sanitizeInput(openFromDirectory.directory);
+      await apiService.openWorkspaceFromDirectory(sanitizedDir);
       toast.success('Workspace opened from directory successfully');
       setOpenFromDirectoryOpen(false);
       setOpenFromDirectory({ directory: '' });
@@ -156,29 +144,36 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const { refreshWorkspaces } = useWorkspaceStore.getState();
       await refreshWorkspaces();
     } catch (err) {
-      toast.error('Failed to open workspace from directory');
-      console.error('Error opening workspace from directory:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to open workspace: ${errorDetails.message}`);
+      logError(err, 'Open workspace from directory');
     }
   };
 
-  const handleDeleteWorkspace = async (workspaceId: string) => {
-    if (!confirm('Are you sure you want to delete this workspace?')) {
-      return;
-    }
+  const handleDeleteWorkspace = async () => {
+    if (!workspaceToDelete) return;
 
     try {
-      await apiService.deleteWorkspace(workspaceId);
+      await apiService.deleteWorkspace(workspaceToDelete);
       toast.success('Workspace deleted successfully');
       // Refresh workspaces from the store
       const { refreshWorkspaces } = useWorkspaceStore.getState();
       await refreshWorkspaces();
-      if (selectedWorkspace?.summary.id === workspaceId) {
+      if (selectedWorkspace?.summary.id === workspaceToDelete) {
         setSelectedWorkspace(null);
       }
+      setDeleteConfirmOpen(false);
+      setWorkspaceToDelete(null);
     } catch (err) {
-      toast.error('Failed to delete workspace');
-      console.error('Error deleting workspace:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to delete workspace: ${errorDetails.message}`);
+      logError(err, 'Delete workspace');
     }
+  };
+
+  const confirmDeleteWorkspace = (workspaceId: string) => {
+    setWorkspaceToDelete(workspaceId);
+    setDeleteConfirmOpen(true);
   };
 
   const handleSetActiveWorkspace = async (workspaceId: string) => {
@@ -186,8 +181,9 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       await setActiveWorkspaceById(workspaceId);
       toast.success('Active workspace updated');
     } catch (err) {
-      toast.error('Failed to set active workspace');
-      console.error('Error setting active workspace:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to set active workspace: ${errorDetails.message}`);
+      logError(err, 'Set active workspace');
     }
   };
 
@@ -197,8 +193,9 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       setSelectedWorkspace(response.workspace);
       setSelectedFolder(null);
     } catch (err) {
-      toast.error('Failed to load workspace details');
-      console.error('Error loading workspace details:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to load workspace: ${errorDetails.message}`);
+      logError(err, 'Load workspace details');
     }
   };
 
@@ -209,16 +206,28 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const response = await apiService.getFolder(selectedWorkspace.summary.id, folderId);
       setSelectedFolder(response.folder);
     } catch (err) {
-      toast.error('Failed to load folder details');
-      console.error('Error loading folder details:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to load folder: ${errorDetails.message}`);
+      logError(err, 'Load folder details');
     }
   };
 
   const handleCreateFolder = async () => {
     if (!selectedWorkspace) return;
 
+    // Validate and sanitize inputs
+    if (!newFolder.name.trim()) {
+      toast.error('Folder name is required');
+      return;
+    }
+
+    const sanitizedFolder = {
+      name: sanitizeInput(newFolder.name),
+      description: newFolder.description ? sanitizeInput(newFolder.description) : undefined,
+    };
+
     try {
-      await apiService.createFolder(selectedWorkspace.summary.id, newFolder);
+      await apiService.createFolder(selectedWorkspace.summary.id, sanitizedFolder);
       toast.success('Folder created successfully');
       setCreateFolderOpen(false);
       setNewFolder({ name: '', description: '' });
@@ -226,8 +235,9 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const response = await apiService.getWorkspace(selectedWorkspace.summary.id);
       setSelectedWorkspace(response.workspace);
     } catch (err) {
-      toast.error('Failed to create folder');
-      console.error('Error creating folder:', err);
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to create folder: ${errorDetails.message}`);
+      logError(err, 'Create folder');
     }
   };
 
@@ -300,8 +310,6 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
     }
   };
 
-
-
   const handlePreviewImport = async () => {
     try {
       const previewRequest = {
@@ -321,6 +329,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
     }
   };
 
+  const loadImportHistory = async () => {
+    try {
+      const response = await importApi.getImportHistory();
+      setImportHistory(response.imports || []);
+    } catch (err) {
+      console.error('Failed to load import history:', err);
+      // Don't show error toast as this is a background operation
+    }
+  };
+
+  const handleReimport = (historyEntry: ImportHistoryEntry) => {
+    // Re-populate the import form with the data from history
+    setImportData({
+      format: historyEntry.format,
+      data: '', // We don't store the original data, user will need to provide it again
+      create_folders: true,
+    });
+    toast.info(`Format set to ${historyEntry.format}. Please paste or upload the data again.`);
+  };
+
   const handleWorkspaceDragStart = (e: React.DragEvent, workspaceId: string) => {
     setDraggedWorkspace(workspaceId);
     e.dataTransfer.effectAllowed = 'move';
@@ -334,7 +362,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const handleWorkspaceDrop = async (e: React.DragEvent, targetWorkspaceId: string) => {
     e.preventDefault();
 
-    if (!draggedWorkspace || draggedWorkspace === targetWorkspaceId) {
+    if (!draggedWorkspace || draggedWorkspace === targetWorkspaceId || !workspaces) {
       setDraggedWorkspace(null);
       return;
     }
@@ -408,30 +436,32 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                 New Workspace
               </Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Workspace</DialogTitle>
-                <DialogDescription>
+            <DialogContent className="bg-white dark:bg-gray-900">
+              <DialogHeader className="space-y-2">
+                <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">Create New Workspace</DialogTitle>
+                <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
                   Create a new workspace to organize your mock API endpoints.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="workspace-name">Name</Label>
+                  <Label htmlFor="workspace-name" className="text-gray-900 dark:text-gray-100">Name</Label>
                   <Input
                     id="workspace-name"
                     value={newWorkspace.name}
                     onChange={(e) => setNewWorkspace({ ...newWorkspace, name: e.target.value })}
                     placeholder="My Workspace"
+                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="workspace-description">Description</Label>
+                  <Label htmlFor="workspace-description" className="text-gray-900 dark:text-gray-100">Description</Label>
                   <Textarea
                     id="workspace-description"
                     value={newWorkspace.description}
                     onChange={(e) => setNewWorkspace({ ...newWorkspace, description: e.target.value })}
                     placeholder="Optional description..."
+                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
                 <div className="flex items-center space-x-2">
@@ -440,16 +470,17 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     checked={enableSync}
                     onCheckedChange={setEnableSync}
                   />
-                  <Label htmlFor="enable-sync">Enable directory sync</Label>
+                  <Label htmlFor="enable-sync" className="text-gray-900 dark:text-gray-100">Enable directory sync</Label>
                 </div>
                 {enableSync && (
                   <div>
-                    <Label htmlFor="sync-directory">Sync Directory</Label>
+                    <Label htmlFor="sync-directory" className="text-gray-900 dark:text-gray-100">Sync Directory</Label>
                     <Input
                       id="sync-directory"
                       value={syncDirectory}
                       onChange={(e) => setSyncDirectory(e.target.value)}
                       placeholder="/path/to/workspace"
+                      className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                     />
                   </div>
                 )}
@@ -504,8 +535,29 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       </div>
 
       {/* Workspaces Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {workspaces.map((workspace) => (
+      {workspaces && workspaces.length === 0 ? (
+        <Card className="col-span-full">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FolderOpen className="w-16 h-16 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">No Workspaces Yet</h3>
+            <p className="text-muted-foreground mb-6 text-center max-w-md">
+              Get started by creating a new workspace or opening an existing one from a directory.
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={() => setCreateWorkspaceOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Workspace
+              </Button>
+              <Button variant="outline" onClick={() => setOpenFromDirectoryOpen(true)}>
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Open from Directory
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {workspaces?.map((workspace) => (
           <Card
             key={workspace.id}
             className={`cursor-pointer transition-all hover:shadow-md ${
@@ -541,7 +593,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDeleteWorkspace(workspace.id);
+                    confirmDeleteWorkspace(workspace.id);
                   }}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -559,7 +611,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             </CardContent>
           </Card>
         ))}
-      </div>
+        </div>
+      )}
 
       {/* Selected Workspace Details */}
       {selectedWorkspace && (
@@ -774,6 +827,18 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
+                                // Validate file
+                                const validation = validateFile(file, {
+                                  maxSize: 10 * 1024 * 1024, // 10MB
+                                  allowedExtensions: ['json', 'yaml', 'yml', 'txt'],
+                                });
+
+                                if (!validation.valid) {
+                                  toast.error(validation.error || 'Invalid file');
+                                  e.target.value = '';
+                                  return;
+                                }
+
                                 const reader = new FileReader();
                                 reader.onload = (e) => {
                                   const content = e.target?.result as string;
@@ -785,6 +850,10 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                     format = 'curl';
                                   }
                                   setImportData({ ...importData, data: content, format });
+                                };
+                                reader.onerror = () => {
+                                  toast.error('Failed to read file');
+                                  logError(new Error('FileReader error'), 'File upload');
                                 };
                                 reader.readAsText(file);
                               }
@@ -798,8 +867,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                           {importHistory.length === 0 ? (
                             <p className="text-muted-foreground text-center py-8">No import history available</p>
                           ) : (
-                            importHistory.map((item, index) => (
-                              <div key={index} className="flex items-center justify-between p-3 border rounded">
+                            importHistory.map((item) => (
+                              <div key={`${item.timestamp}-${item.format}`} className="flex items-center justify-between p-3 border rounded">
                                 <div>
                                   <p className="font-medium">{item.format}</p>
                                   <p className="text-sm text-muted-foreground">
@@ -810,7 +879,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                   <Badge variant={item.success ? "default" : "destructive"}>
                                     {item.success ? "Success" : "Failed"}
                                   </Badge>
-                                  <Button variant="outline" size="sm">
+                                  <Button variant="outline" size="sm" onClick={() => handleReimport(item)}>
                                     Re-import
                                   </Button>
                                 </div>
@@ -988,8 +1057,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   <div>
                     <p className="font-medium">Warnings</p>
                     <ul className="list-disc list-inside mt-1">
-                      {importPreviewData.warnings.map((warning: string, index: number) => (
-                        <li key={index} className="text-sm">{warning}</li>
+                      {importPreviewData.warnings.map((warning: string) => (
+                        <li key={warning} className="text-sm">{warning}</li>
                       ))}
                     </ul>
                   </div>
@@ -998,7 +1067,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
 
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {importPreviewData.routes?.map((route, index: number) => (
-                  <Card key={index} className="p-4">
+                  <Card key={`${route.method}-${route.path}-${index}`} className="p-4">
                     <div className="flex items-start space-x-3">
                       <Checkbox
                         checked={selectedRoutes.has(index)}
@@ -1023,8 +1092,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                         )}
                         <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                           <span>Status: {route.status_code || 200}</span>
-                          {route.headers && (Array.isArray(route.headers) ? route.headers.length : 0) > 0 && (
-                            <span>{Array.isArray(route.headers) ? route.headers.length : 0} headers</span>
+                          {route.headers && Object.keys(route.headers).length > 0 && (
+                            <span>{Object.keys(route.headers).length} headers</span>
                           )}
                         </div>
                       </div>
@@ -1072,6 +1141,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             workspaceId={selectedWorkspace?.summary.id || ''}
             workspaceName={selectedWorkspace?.summary.name || ''}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Workspace</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this workspace? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteWorkspace}>
+              Delete Workspace
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

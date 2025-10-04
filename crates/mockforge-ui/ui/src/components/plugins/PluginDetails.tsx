@@ -18,12 +18,14 @@ import {
   Card,
   Badge,
   Button,
+  Alert
+} from '../ui/DesignSystem';
+import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  Alert
-} from '../ui/DesignSystem';
+} from '../ui/Tabs';
 
 interface NetworkCapabilities {
   allow_http_outbound: boolean;

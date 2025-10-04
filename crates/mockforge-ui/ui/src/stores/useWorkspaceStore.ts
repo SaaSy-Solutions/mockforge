@@ -32,18 +32,19 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
       loadWorkspaces: async () => {
         set({ loading: true, error: null });
         try {
-          const response = await apiService.listWorkspaces();
-          set({ workspaces: response.workspaces, loading: false });
+          const workspaces = await apiService.listWorkspaces();
+          set({ workspaces, loading: false });
 
           // Set the first active workspace as the default active workspace
-          const activeWorkspace = response.workspaces.find((w: WorkspaceSummary) => w.is_active);
+          const activeWorkspace = workspaces.find((w: WorkspaceSummary) => w.is_active);
           if (activeWorkspace) {
             set({ activeWorkspace });
           }
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Failed to load workspaces',
-            loading: false
+            loading: false,
+            workspaces: []
           });
         }
       },
@@ -52,15 +53,16 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
         set({ loading: true, error: null });
         try {
           await apiService.setActiveWorkspace(workspaceId);
-          const response = await apiService.listWorkspaces();
-          set({ workspaces: response.workspaces, loading: false });
+          const workspaces = await apiService.listWorkspaces();
+          set({ workspaces, loading: false });
 
-          const activeWorkspace = response.workspaces.find((w: WorkspaceSummary) => w.is_active);
+          const activeWorkspace = workspaces.find((w: WorkspaceSummary) => w.is_active);
           set({ activeWorkspace });
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Failed to set active workspace',
-            loading: false
+            loading: false,
+            workspaces: []
           });
         }
       },

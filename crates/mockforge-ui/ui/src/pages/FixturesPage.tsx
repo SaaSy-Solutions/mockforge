@@ -11,6 +11,16 @@ import {
 } from '../components/ui/DesignSystem';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose
+} from '../components/ui/Dialog';
+import { toast } from 'sonner';
 
 
 export function FixturesPage() {
@@ -18,18 +28,18 @@ export function FixturesPage() {
   const [selectedMethod, setSelectedMethod] = useState<string>('all');
   const [selectedFixture, setSelectedFixture] = useState<FixtureInfo | null>(null);
   const [isViewingFixture, setIsViewingFixture] = useState(false);
-  const [_fixturesToCompare, _setFixturesToCompare] = useState<FixtureInfo[]>([]);
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [fixtureToRename, setFixtureToRename] = useState<FixtureInfo | null>(null);
   const [newFixtureName, setNewFixtureName] = useState('');
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [fixtureToMove, setFixtureToMove] = useState<FixtureInfo | null>(null);
   const [newFixturePath, setNewFixturePath] = useState('');
-  const [_selectedBulkAction, _setSelectedBulkAction] = useState<string>('');
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [fixtureToDelete, setFixtureToDelete] = useState<FixtureInfo | null>(null);
 
   const { data: fixtures, isLoading, error, refetch } = useFixtures();
 
-  const filteredFixtures = fixtures?.filter(fixture => {
+  const filteredFixtures = fixtures?.filter((fixture: FixtureInfo) => {
     const matchesSearch = searchTerm === '' ||
       fixture.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
       fixture.method?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -216,7 +226,7 @@ export function FixturesPage() {
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {formatFileSize(filteredFixtures.reduce((acc, f) => acc + (f.file_size || 0), 0))}
+                    {formatFileSize(filteredFixtures.reduce((acc: number, f: FixtureInfo) => acc + (f.file_size || 0), 0))}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
                     Total Size
@@ -252,7 +262,7 @@ export function FixturesPage() {
             />
           ) : (
             <div className="space-y-4">
-              {filteredFixtures.map((fixture) => (
+              {filteredFixtures.map((fixture: FixtureInfo) => (
                 <div
                   key={fixture.id}
                   className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -275,11 +285,8 @@ export function FixturesPage() {
                       </div>
 
                       <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        <span className="truncate max-w-xs" title={fixture.path}>
-                          {fixture.path}
-                        </span>
-                        <span className="truncate max-w-xs" title={fixture.path}>
-                          {fixture.path}
+                        <span className="truncate" title={fixture.path}>
+                          Path: {fixture.path}
                         </span>
                       </div>
 
@@ -342,6 +349,10 @@ export function FixturesPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => {
+                          setFixtureToDelete(fixture);
+                          setIsDeleteDialogOpen(true);
+                        }}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -355,207 +366,241 @@ export function FixturesPage() {
         </ModernCard>
       </Section>
 
-      {/* Fixture Viewer Modal */}
-      {isViewingFixture && selectedFixture && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsViewingFixture(false)} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {selectedFixture.id}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {selectedFixture.path} ({selectedFixture.method})
-                  </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDownloadFixture(selectedFixture)}
-                  className="flex items-center gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsViewingFixture(false)}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
+      {/* Fixture Viewer Dialog */}
+      <Dialog open={isViewingFixture} onOpenChange={setIsViewingFixture}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{selectedFixture?.id}</DialogTitle>
+            <DialogClose onClick={() => setIsViewingFixture(false)} />
+          </DialogHeader>
+          <DialogDescription>
+            {selectedFixture?.path} ({selectedFixture?.method})
+          </DialogDescription>
 
-            <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
-              <div className="space-y-4">
-                  <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                    <div>
-                      <span className="font-medium">Method:</span> {selectedFixture.method}
-                    </div>
-                    <div>
-                      <span className="font-medium">Protocol:</span> {selectedFixture.protocol}
-                    </div>
-                    <div>
-                      <span className="font-medium">Size:</span> {formatFileSize(selectedFixture.file_size ?? 0)}
-                    </div>
-                    <div>
-                      <span className="font-medium">Saved:</span> {formatDate(selectedFixture.saved_at ?? '')}
-                    </div>
-                  </div>
-
+          <div className="py-4 overflow-y-auto max-h-[60vh]">
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-                    Metadata
-                  </h4>
-                  <pre className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 text-sm overflow-x-auto max-h-96 overflow-y-auto">
-                    <code className="text-gray-900 dark:text-gray-100">
-                      {JSON.stringify({
-                        id: selectedFixture.id,
-                        protocol: selectedFixture.protocol,
-                        method: selectedFixture.method,
-                        path: selectedFixture.path,
-                        saved_at: selectedFixture.saved_at,
-                        file_size: selectedFixture.file_size,
-                        file_path: selectedFixture.file_path,
-                        fingerprint: selectedFixture.fingerprint,
-                        metadata: selectedFixture.metadata
-                      }, null, 2)}
-                    </code>
-                  </pre>
+                  <span className="font-medium">Method:</span> {selectedFixture?.method}
                 </div>
+                <div>
+                  <span className="font-medium">Protocol:</span> {selectedFixture?.protocol}
+                </div>
+                <div>
+                  <span className="font-medium">Size:</span> {formatFileSize(selectedFixture?.file_size ?? 0)}
+                </div>
+                <div>
+                  <span className="font-medium">Saved:</span> {formatDate(selectedFixture?.saved_at ?? '')}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                  Metadata
+                </h4>
+                <pre className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 text-sm overflow-x-auto max-h-96 overflow-y-auto">
+                  <code className="text-gray-900 dark:text-gray-100">
+                    {JSON.stringify({
+                      id: selectedFixture?.id,
+                      protocol: selectedFixture?.protocol,
+                      method: selectedFixture?.method,
+                      path: selectedFixture?.path,
+                      saved_at: selectedFixture?.saved_at,
+                      file_size: selectedFixture?.file_size,
+                      file_path: selectedFixture?.file_path,
+                      fingerprint: selectedFixture?.fingerprint,
+                      metadata: selectedFixture?.metadata
+                    }, null, 2)}
+                  </code>
+                </pre>
               </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => selectedFixture && handleDownloadFixture(selectedFixture)}
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </Button>
+            <Button onClick={() => setIsViewingFixture(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Rename Dialog */}
-      {isRenameDialogOpen && fixtureToRename && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsRenameDialogOpen(false)} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Rename Fixture</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsRenameDialogOpen(false)}
-              >
-                ×
-              </Button>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Current name: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{fixtureToRename.id}</code>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100">New Name</label>
-                  <Input
-                    value={newFixtureName}
-                    onChange={(e) => setNewFixtureName(e.target.value)}
-                    placeholder="Enter new fixture name"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsRenameDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-    <Button
-      onClick={async () => {
-        try {
-          await fetch(`/__mockforge/fixtures/${fixtureToRename.id}/rename`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ new_name: newFixtureName }),
-          });
-          setIsRenameDialogOpen(false);
-          refetch();
-        } catch (error) {
-          console.error('Error renaming fixture:', error);
-        }
-      }}
-      disabled={!newFixtureName.trim() || newFixtureName === fixtureToRename.id}
-    >
-                    Rename
-                  </Button>
-                </div>
-              </div>
+      <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Fixture</DialogTitle>
+            <DialogClose onClick={() => setIsRenameDialogOpen(false)} />
+          </DialogHeader>
+          <DialogDescription>
+            Current name: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{fixtureToRename?.id}</code>
+          </DialogDescription>
+
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">New Name</label>
+              <Input
+                value={newFixtureName}
+                onChange={(e) => setNewFixtureName(e.target.value)}
+                placeholder="Enter new fixture name"
+              />
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsRenameDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!fixtureToRename) return;
+                try {
+                  await fetch(`/__mockforge/fixtures/${fixtureToRename.id}/rename`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ new_name: newFixtureName }),
+                  });
+                  toast.success('Fixture renamed successfully');
+                  setIsRenameDialogOpen(false);
+                  refetch();
+                } catch (error) {
+                  console.error('Error renaming fixture:', error);
+                  toast.error('Failed to rename fixture');
+                }
+              }}
+              disabled={!newFixtureName.trim() || newFixtureName === fixtureToRename?.id}
+            >
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Move Dialog */}
-      {isMoveDialogOpen && fixtureToMove && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setIsMoveDialogOpen(false)} />
-          <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Move Fixture</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsMoveDialogOpen(false)}
-              >
-                ×
-              </Button>
+      <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move Fixture</DialogTitle>
+            <DialogClose onClick={() => setIsMoveDialogOpen(false)} />
+          </DialogHeader>
+          <DialogDescription>
+            Moving: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{fixtureToMove?.id}</code>
+          </DialogDescription>
+
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">New Path</label>
+              <Input
+                value={newFixturePath}
+                onChange={(e) => setNewFixturePath(e.target.value)}
+                placeholder="Enter new path"
+              />
             </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Moving: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{fixtureToMove.id}</code>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsMoveDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!fixtureToMove) return;
+                try {
+                  await fetch(`/__mockforge/fixtures/${fixtureToMove.id}/move`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ new_path: newFixturePath }),
+                  });
+                  toast.success('Fixture moved successfully');
+                  setIsMoveDialogOpen(false);
+                  setNewFixturePath('');
+                  refetch();
+                } catch (error) {
+                  console.error('Error moving fixture:', error);
+                  toast.error('Failed to move fixture');
+                }
+              }}
+              disabled={!newFixturePath.trim()}
+            >
+              Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Fixture</DialogTitle>
+            <DialogClose onClick={() => setIsDeleteDialogOpen(false)} />
+          </DialogHeader>
+          <DialogDescription>
+            Are you sure you want to delete this fixture? This action cannot be undone.
+          </DialogDescription>
+
+          <div className="py-4">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="text-sm">
+                <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  {fixtureToDelete?.id}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100">New Path</label>
-                  <Input
-                    value={newFixturePath}
-                    onChange={(e) => setNewFixturePath(e.target.value)}
-                    placeholder="Enter new path"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsMoveDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={async () => {
-                      try {
-                        await fetch(`/__mockforge/fixtures/${fixtureToMove.id}/move`, {
-                          method: 'PUT',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
-                          body: JSON.stringify({ new_path: newFixturePath }),
-                        });
-                        setIsMoveDialogOpen(false);
-                        setNewFixturePath('');
-                        refetch();
-                      } catch (error) {
-                        console.error('Error moving fixture:', error);
-                      }
-                    }}
-                    disabled={!newFixturePath.trim()}
-                  >
-                    Move
-                  </Button>
+                <div className="text-gray-600 dark:text-gray-400">
+                  {fixtureToDelete?.path} ({fixtureToDelete?.method})
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={async () => {
+                if (!fixtureToDelete) return;
+                try {
+                  await fetch(`/__mockforge/fixtures/${fixtureToDelete.id}`, {
+                    method: 'DELETE',
+                  });
+                  toast.success('Fixture deleted successfully');
+                  setIsDeleteDialogOpen(false);
+                  setFixtureToDelete(null);
+                  refetch();
+                } catch (error) {
+                  console.error('Error deleting fixture:', error);
+                  toast.error('Failed to delete fixture');
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

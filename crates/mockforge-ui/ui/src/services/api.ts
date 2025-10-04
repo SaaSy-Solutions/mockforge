@@ -28,7 +28,6 @@ import type {
   FaultConfig,
   ProxyConfig,
   DashboardData,
-  WorkspaceListResponse,
   WorkspaceResponse,
   CreateWorkspaceRequest,
   CreateWorkspaceResponse,
@@ -41,7 +40,7 @@ import type {
   ExecuteRequestResponse,
   HealthCheck,
   RestartStatus,
-  ConfigurationState,
+  ServerConfiguration,
   SmokeTestResult,
   SmokeTestContext,
   RouteInfo,
@@ -52,12 +51,22 @@ import type {
   EncryptionStatus,
   AutoEncryptionConfig,
   SecurityCheckResult,
-  FixtureInfo
+  FixtureInfo,
+  PluginListResponse
 } from '../types';
+
+import {
+  WorkspaceListResponseSchema,
+  LogsResponseSchema,
+  DashboardResponseSchema,
+  FixturesResponseSchema,
+  safeValidateApiResponse,
+  type WorkspaceSummary,
+} from '../schemas/api';
 
 // Admin API type definitions
 export type { RequestLog, MetricsData, ValidationSettings, LatencyProfile, FaultConfig, ProxyConfig, DashboardData } from '../types';
-export type { HealthCheck, RestartStatus, ConfigurationState, SmokeTestResult, SmokeTestContext } from '../types';
+export type { HealthCheck, RestartStatus, SmokeTestResult, SmokeTestContext } from '../types';
 export type { ImportRequest, ImportResponse, ImportHistoryResponse, ImportHistoryEntry } from '../types';
 
 // FixtureInfo moved to types/index.ts - import from there
@@ -79,6 +88,24 @@ class ApiService {
     }
     const json = await response.json();
     return json.data || json;
+  }
+
+  private async fetchJsonWithValidation<T>(
+    url: string,
+    schema: Parameters<typeof safeValidateApiResponse>[0],
+    options?: RequestInit
+  ): Promise<T> {
+    const data = await this.fetchJson(url, options);
+    const result = safeValidateApiResponse(schema, data);
+
+    if (!result.success) {
+      if (import.meta.env.DEV) {
+        console.error('API validation error:', result.error.format());
+      }
+      throw new Error(`API response validation failed: ${result.error.message}`);
+    }
+
+    return result.data as T;
   }
 
   async listChains(): Promise<ChainListResponse> {
@@ -133,8 +160,11 @@ class ApiService {
 
   // ==================== WORKSPACE API METHODS ====================
 
-  async listWorkspaces(): Promise<WorkspaceListResponse> {
-    return this.fetchJson(WORKSPACE_API_BASE) as Promise<WorkspaceListResponse>;
+  async listWorkspaces(): Promise<WorkspaceSummary[]> {
+    return this.fetchJsonWithValidation<WorkspaceSummary[]>(
+      WORKSPACE_API_BASE,
+      WorkspaceListResponseSchema
+    );
   }
 
   async getWorkspace(workspaceId: string): Promise<WorkspaceResponse> {
@@ -491,8 +521,29 @@ class FixturesApiService {
     return json.data || json;
   }
 
+  private async fetchJsonWithValidation<T>(
+    url: string,
+    schema: Parameters<typeof safeValidateApiResponse>[0],
+    options?: RequestInit
+  ): Promise<T> {
+    const data = await this.fetchJson(url, options);
+    const result = safeValidateApiResponse(schema, data);
+
+    if (!result.success) {
+      if (import.meta.env.DEV) {
+        console.error('API validation error:', result.error.format());
+      }
+      throw new Error(`API response validation failed: ${result.error.message}`);
+    }
+
+    return result.data as T;
+  }
+
   async getFixtures(): Promise<import('../types').FixtureInfo[]> {
-    return this.fetchJson('/__mockforge/fixtures') as Promise<FixtureInfo[]>;
+    return this.fetchJsonWithValidation<FixtureInfo[]>(
+      '/__mockforge/fixtures',
+      FixturesResponseSchema
+    );
   }
 
   async deleteFixture(fixtureId: string): Promise<void> {
@@ -552,8 +603,29 @@ class DashboardApiService {
     return json.data || json;
   }
 
+  private async fetchJsonWithValidation<T>(
+    url: string,
+    schema: Parameters<typeof safeValidateApiResponse>[0],
+    options?: RequestInit
+  ): Promise<T> {
+    const data = await this.fetchJson(url, options);
+    const result = safeValidateApiResponse(schema, data);
+
+    if (!result.success) {
+      if (import.meta.env.DEV) {
+        console.error('API validation error:', result.error.format());
+      }
+      throw new Error(`API response validation failed: ${result.error.message}`);
+    }
+
+    return result.data as T;
+  }
+
   async getDashboard(): Promise<DashboardData> {
-    return this.fetchJson('/__mockforge/dashboard') as Promise<DashboardData>;
+    return this.fetchJsonWithValidation<DashboardData>(
+      '/__mockforge/dashboard',
+      DashboardResponseSchema
+    );
   }
 
   async getHealth(): Promise<HealthCheck> {
@@ -604,6 +676,11 @@ class RoutesApiService {
 }
 
 class LogsApiService {
+  constructor() {
+    this.getLogs = this.getLogs.bind(this);
+    this.clearLogs = this.clearLogs.bind(this);
+  }
+
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -613,22 +690,42 @@ class LogsApiService {
     return json.data || json;
   }
 
-  async getLogs(params?: Record<string, string | number>): Promise<RequestLog[]> {
-    if (!params || Object.keys(params).length === 0) {
-      return this.fetchJson('/__mockforge/logs') as Promise<RequestLog[]>;
+  private async fetchJsonWithValidation<T>(
+    url: string,
+    schema: Parameters<typeof safeValidateApiResponse>[0],
+    options?: RequestInit
+  ): Promise<T> {
+    const data = await this.fetchJson(url, options);
+    const result = safeValidateApiResponse(schema, data);
+
+    if (!result.success) {
+      if (import.meta.env.DEV) {
+        console.error('API validation error:', result.error.format());
+      }
+      throw new Error(`API response validation failed: ${result.error.message}`);
     }
-    // Convert all values to strings for URLSearchParams
-    const stringParams: Record<string, string> = {};
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        stringParams[key] = String(value);
+
+    return result.data as T;
+  }
+
+  async getLogs(params?: Record<string, string | number>): Promise<RequestLog[]> {
+    let url = '/__mockforge/logs';
+
+    if (params && Object.keys(params).length > 0) {
+      // Convert all values to strings for URLSearchParams
+      const stringParams: Record<string, string> = {};
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          stringParams[key] = String(value);
+        }
+      }
+      if (Object.keys(stringParams).length > 0) {
+        const queryString = '?' + new URLSearchParams(stringParams).toString();
+        url = `/__mockforge/logs${queryString}`;
       }
     }
-    if (Object.keys(stringParams).length === 0) {
-      return this.fetchJson('/__mockforge/logs') as Promise<RequestLog[]>;
-    }
-    const queryString = '?' + new URLSearchParams(stringParams).toString();
-    return this.fetchJson(`/__mockforge/logs${queryString}`) as Promise<RequestLog[]>;
+
+    return this.fetchJsonWithValidation<RequestLog[]>(url, LogsResponseSchema);
   }
 
   async clearLogs(): Promise<{ message: string }> {
@@ -667,8 +764,8 @@ class ConfigApiService {
     return json.data || json;
   }
 
-  async getConfig(): Promise<ConfigurationState> {
-    return this.fetchJson('/__mockforge/config') as Promise<ConfigurationState>;
+  async getConfig(): Promise<ServerConfiguration> {
+    return this.fetchJson('/__mockforge/config') as Promise<ServerConfiguration>;
   }
 
   async updateLatency(config: LatencyProfile): Promise<{ message: string }> {
@@ -790,6 +887,66 @@ class SmokeTestsApiService {
   }
 }
 
+class PluginsApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async getPlugins(params?: { type?: string; status?: string }): Promise<PluginListResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.status) queryParams.append('status', params.status);
+
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return this.fetchJson(`/__mockforge/plugins${queryString}`) as Promise<PluginListResponse>;
+  }
+
+  async getPluginStatus(): Promise<unknown> {
+    return this.fetchJson('/__mockforge/plugins/status');
+  }
+
+  async getPluginDetails(pluginId: string): Promise<unknown> {
+    return this.fetchJson(`/__mockforge/plugins/${pluginId}`);
+  }
+
+  async deletePlugin(pluginId: string): Promise<{ message: string }> {
+    return this.fetchJson(`/__mockforge/plugins/${pluginId}`, {
+      method: 'DELETE',
+    }) as Promise<{ message: string }>;
+  }
+
+  async reloadPlugin(pluginId: string): Promise<{ message: string; status: string }> {
+    return this.fetchJson('/__mockforge/plugins/reload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plugin_id: pluginId }),
+    }) as Promise<{ message: string; status: string }>;
+  }
+
+  async reloadAllPlugins(): Promise<{ message: string }> {
+    // Get all plugins first
+    const { plugins } = await this.getPlugins() as { plugins: Array<{ id: string }> };
+
+    // Reload each plugin
+    const results = await Promise.allSettled(
+      plugins.map(plugin => this.reloadPlugin(plugin.id))
+    );
+
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    if (failed > 0) {
+      throw new Error(`Failed to reload ${failed} plugin(s)`);
+    }
+
+    return { message: `Successfully reloaded ${plugins.length} plugin(s)` };
+  }
+}
+
 export const apiService = new ApiService();
 export const importApi = new ImportApiService();
 export const fixturesApi = new FixturesApiService();
@@ -805,6 +962,7 @@ export const validationApi = new ValidationApiService();
 export const envApi = new EnvApiService();
 export const filesApi = new FilesApiService();
 export const smokeTestsApi = new SmokeTestsApiService();
+export const pluginsApi = new PluginsApiService();
 
 // Debug: Log to verify services are created
 console.log('API Services initialized:', {
@@ -822,6 +980,7 @@ console.log('API Services initialized:', {
   envApi: !!envApi,
   filesApi: !!filesApi,
   smokeTestsApi: !!smokeTestsApi,
+  pluginsApi: !!pluginsApi,
 });
 
 // Type exports for backwards compatibility

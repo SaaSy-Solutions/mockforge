@@ -622,6 +622,8 @@ export interface LogEntry {
   url: string;
   responseTime: number;
   size: number;
+  status_code?: number;
+  response_time_ms?: number;
 }
 
 export interface ColumnType {
@@ -631,14 +633,46 @@ export interface ColumnType {
   render?: (value: unknown, row: LogEntry) => React.ReactNode;
 }
 
-// PluginsPage types (minimal placeholder, can be extended)
+// PluginsPage types
+export type PluginType = 'authentication' | 'template' | 'response' | 'datasource';
+export type PluginStatus = 'active' | 'inactive' | 'error' | 'loading';
+
 export interface PluginInfo {
   id: string;
   name: string;
-  type: 'authentication' | 'template' | 'response';
+  type: PluginType;
   enabled: boolean;
+  status: PluginStatus;
   description?: string;
   version?: string;
+  author?: string;
+  created_at?: string;
+  updated_at?: string;
+  config?: Record<string, unknown>;
+  error_message?: string;
+}
+
+export interface PluginListResponse {
+  plugins: PluginInfo[];
+  total: number;
+}
+
+export interface PluginMarketplaceItem {
+  id: string;
+  name: string;
+  description: string;
+  type: PluginType;
+  version: string;
+  author: string;
+  downloads: number;
+  rating: number;
+  installed: boolean;
+}
+
+export interface InstallPluginRequest {
+  source: 'marketplace' | 'file' | 'url';
+  identifier: string; // marketplace ID, file path, or URL
+  config?: Record<string, unknown>;
 }
 
 // WorkspacePage types
@@ -752,6 +786,7 @@ export interface ChainLink {
   request: ChainRequest;
   extract: Record<string, string>;
   storeAs?: string;
+  dependsOn?: string[];
 }
 
 // Chain Definition
@@ -967,21 +1002,30 @@ export interface WorkspaceListResponse {
   workspaces: WorkspaceSummary[];
 }
 
-export interface WorkspaceResponse {
+export interface WorkspaceDetail {
   summary: WorkspaceSummary;
   folders: FolderSummary[];
   requests: RequestSummary[];
 }
 
+export interface FolderDetail {
+  summary: FolderSummary;
+  requests: RequestSummary[];
+}
+
+export interface WorkspaceResponse {
+  workspace: WorkspaceDetail;
+}
+
 export interface CreateWorkspaceResponse {
-  id: string;
-  message: string;
+  data: {
+    id: string;
+    message: string;
+  };
 }
 
 export interface FolderResponse {
-  summary: FolderSummary;
-  subfolders: FolderSummary[];
-  requests: RequestSummary[];
+  folder: FolderDetail;
 }
 
 export interface CreateFolderResponse {
@@ -1031,6 +1075,40 @@ export interface ConfigurationState {
   valid: boolean;
   errors: string[];
   warnings: string[];
+}
+
+// Configuration data interfaces
+export interface LatencyConfig {
+  enabled: boolean;
+  base_ms: number;
+  jitter_ms: number;
+  tag_overrides: Record<string, number>;
+}
+
+export interface FaultConfig {
+  enabled: boolean;
+  failure_rate: number;
+  status_codes: number[];
+}
+
+export interface ServerProxyConfig {
+  enabled: boolean;
+  upstream_url: string | null;
+  timeout_seconds: number;
+}
+
+export interface ValidationConfig {
+  mode: string;
+  aggregate_errors: boolean;
+  validate_responses: boolean;
+  overrides: Record<string, string>;
+}
+
+export interface ServerConfiguration {
+  latency: LatencyConfig;
+  faults: FaultConfig;
+  proxy: ServerProxyConfig;
+  validation: ValidationConfig;
 }
 
 export interface SmokeTestResult {

@@ -62,7 +62,7 @@ start_backend() {
 
 # Function to wait for backend to be ready
 wait_for_backend() {
-    local max_attempts=30
+    local max_attempts=90
     local attempt=1
 
     echo -e "${YELLOW}Waiting for backend to be ready...${NC}"
@@ -73,7 +73,10 @@ wait_for_backend() {
             return 0
         fi
 
-        echo -e "${BLUE}Waiting... (attempt $attempt/$max_attempts)${NC}"
+        # Show progress every 5 attempts to reduce noise
+        if [ $((attempt % 5)) -eq 0 ] || [ $attempt -le 3 ]; then
+            echo -e "${BLUE}Waiting... (attempt $attempt/$max_attempts)${NC}"
+        fi
         sleep 1
         ((attempt++))
     done

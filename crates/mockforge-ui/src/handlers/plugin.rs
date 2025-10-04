@@ -121,15 +121,12 @@ pub async fn get_plugin_status(
     // Calculate stats from registry
     let mut loaded = 0;
     let mut failed = 0;
-    let mut healthy_count = 0;
-    let mut unhealthy_count = 0;
 
     let mut health: Vec<PluginHealthInfo> = Vec::new();
 
     for plugin_id in registry.list_plugins() {
         if let Some(plugin_instance) = registry.get_plugin(&plugin_id) {
             let is_loaded = matches!(plugin_instance.state, mockforge_plugin_core::PluginState::Ready);
-            let is_healthy = plugin_instance.is_healthy();
 
             if is_loaded {
                 loaded += 1;
@@ -137,11 +134,7 @@ pub async fn get_plugin_status(
                 failed += 1;
             }
 
-            if is_healthy {
-                healthy_count += 1;
-            } else {
-                unhealthy_count += 1;
-            }
+            let is_healthy = plugin_instance.is_healthy();
 
             health.push(PluginHealthInfo {
                 id: plugin_id.as_str().to_string(),

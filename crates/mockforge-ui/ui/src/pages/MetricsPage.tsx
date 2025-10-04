@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { BarChart3, TrendingUp, Clock, Activity, Zap } from 'lucide-react';
 import { useMetrics } from '../hooks/useApi';
 import {
@@ -15,6 +15,15 @@ import {
 function SimpleBarChart({ data, title }: { data: Array<{ label: string; value: number; color: string }>; title: string }) {
   const maxValue = Math.max(...data.map(d => d.value));
 
+  if (data.length === 0 || maxValue === 0) {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
@@ -29,7 +38,7 @@ function SimpleBarChart({ data, title }: { data: Array<{ label: string; value: n
                 <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                   <div
                     className={`h-3 rounded-full transition-all duration-500 ${item.color}`}
-                    style={{ width: `${maxValue > 0 ? (item.value / maxValue) * 100 : 0}%` }}
+                    style={{ width: `${(item.value / maxValue) * 100}%` }}
                   />
                 </div>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 min-w-[3rem] text-right">
@@ -78,7 +87,82 @@ function SimpleLineChart({ data, title }: { data: Array<{ timestamp: string; val
 
 export function MetricsPage() {
   const { data: metrics, isLoading, error } = useMetrics();
-  const [timeRange, setTimeRange] = useState<'1h' | '6h' | '24h' | '7d'>('1h');
+
+  // Helper function to safely convert to number
+  const toNumber = (value: unknown): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return parseFloat(value) || 0;
+    return 0;
+  };
+
+  // Process metrics data with memoization
+  const processedMetrics = useMemo(() => {
+    if (!metrics) return null;
+
+    const endpointData = Object.entries(metrics.requests_by_endpoint || {}).map(([endpoint, count]) => ({
+      label: endpoint.split(' ')[1] || endpoint, // Extract path from "METHOD /path"
+      value: toNumber(count),
+      color: 'bg-blue-500'
+    }));
+
+    const responseTimeData = [
+      { label: 'P50', value: toNumber(metrics.response_time_percentiles?.['p50']), color: 'bg-green-500' },
+      { label: 'P95', value: toNumber(metrics.response_time_percentiles?.['p95']), color: 'bg-yellow-500' },
+      { label: 'P99', value: toNumber(metrics.response_time_percentiles?.['p99']), color: 'bg-red-500' },
+    ];
+
+    const errorRateData = Object.entries(metrics.error_rate_by_endpoint || {}).map(([endpoint, rate]) => {
+      const errorRate = toNumber(rate);
+      return {
+        label: endpoint.split(' ')[1] || endpoint,
+        value: Math.round(errorRate * 100),
+        color: errorRate > 0.1 ? 'bg-red-500' : errorRate > 0.05 ? 'bg-yellow-500' : 'bg-green-500'
+      };
+    });
+
+    // Calculate KPI metrics safely
+    const requestsByEndpoint = Object.values(metrics.requests_by_endpoint || {}).map(toNumber);
+    const totalRequests = requestsByEndpoint.reduce((a, b) => a + b, 0);
+
+    const responseTimeValues = Object.values(metrics.response_time_percentiles || {}).map(toNumber);
+    const avgResponseTime = responseTimeValues.length > 0
+      ? Math.round(responseTimeValues.reduce((a, b) => a + b, 0) / responseTimeValues.length)
+      : 0;
+
+    const errorRates = Object.values(metrics.error_rate_by_endpoint || {}).map(toNumber);
+    const avgErrorRate = errorRates.length > 0
+      ? (errorRates.reduce((a, b) => a + b, 0) / errorRates.length * 100)
+      : 0;
+
+    const activeEndpoints = Object.keys(metrics.requests_by_endpoint || {}).length;
+
+    // Process time series data safely
+    const memoryData = (metrics.memory_usage_over_time || [])
+      .filter((item): item is [string, number] => Array.isArray(item) && item.length === 2)
+      .map(([timestamp, value]: [string, number]) => ({
+        timestamp: String(timestamp),
+        value: toNumber(value)
+      }));
+
+    const cpuData = (metrics.cpu_usage_over_time || [])
+      .filter((item): item is [string, number] => Array.isArray(item) && item.length === 2)
+      .map(([timestamp, value]: [string, number]) => ({
+        timestamp: String(timestamp),
+        value: toNumber(value)
+      }));
+
+    return {
+      endpointData,
+      responseTimeData,
+      errorRateData,
+      totalRequests,
+      avgResponseTime,
+      avgErrorRate,
+      activeEndpoints,
+      memoryData,
+      cpuData
+    };
+  }, [metrics]);
 
   if (isLoading) {
     return (
@@ -128,48 +212,27 @@ export function MetricsPage() {
     );
   }
 
-  // Process metrics data
-  const endpointData = Object.entries(metrics.requests_by_endpoint).map(([endpoint, count]: [string, unknown]) => ({
-    label: endpoint.split(' ')[1] || endpoint, // Extract path from "METHOD /path"
-    value: count as number,
-    color: 'bg-blue-500'
-  }));
-
-  const responseTimeData = [
-    { label: 'P50', value: metrics.response_time_percentiles['p50'] || 0, color: 'bg-green-500' },
-    { label: 'P95', value: metrics.response_time_percentiles['p95'] || 0, color: 'bg-yellow-500' },
-    { label: 'P99', value: metrics.response_time_percentiles['p99'] || 0, color: 'bg-red-500' },
-  ];
-
-  const errorRateData = Object.entries(metrics.error_rate_by_endpoint).map(([endpoint, rate]: [string, unknown]) => {
-    const errorRate = rate as number;
-    return {
-      label: endpoint.split(' ')[1] || endpoint,
-      value: Math.round(errorRate * 100),
-      color: errorRate > 0.1 ? 'bg-red-500' : errorRate > 0.05 ? 'bg-yellow-500' : 'bg-green-500'
-    };
-  });
+  if (!processedMetrics) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          title="Performance Metrics"
+          subtitle="Monitor system performance and request analytics"
+        />
+        <Alert
+          type="warning"
+          title="Processing metrics..."
+          message="Processing metrics data."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Performance Metrics"
         subtitle="Real-time system performance and request analytics"
-        action={
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Time Range:</span>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value as typeof timeRange)}
-              className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            >
-              <option value="1h">Last Hour</option>
-              <option value="6h">Last 6 Hours</option>
-              <option value="24h">Last 24 Hours</option>
-              <option value="7d">Last 7 Days</option>
-            </select>
-          </div>
-        }
       />
 
       {/* Key Metrics Overview */}
@@ -180,26 +243,25 @@ export function MetricsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="Total Requests"
-            value={(Object.values(metrics.requests_by_endpoint) as number[]).reduce((a: number, b: number) => a + b, 0).toLocaleString()}
+            value={processedMetrics.totalRequests.toLocaleString()}
             subtitle="all endpoints"
             icon={<Activity className="h-6 w-6" />}
           />
           <MetricCard
             title="Avg Response Time"
-            value={`${Math.round((Object.values(metrics.response_time_percentiles) as number[]).reduce((a: number, b: number) => a + b, 0) / Object.keys(metrics.response_time_percentiles).length)}ms`}
+            value={`${processedMetrics.avgResponseTime}ms`}
             subtitle="median"
             icon={<Clock className="h-6 w-6" />}
           />
           <MetricCard
             title="Error Rate"
-            value={`${((Object.values(metrics.error_rate_by_endpoint) as number[]).reduce((a: number, b: number) => a + b, 0) / Object.keys(metrics.error_rate_by_endpoint).length * 100).toFixed(1)}%`}
+            value={`${processedMetrics.avgErrorRate.toFixed(1)}%`}
             subtitle="average"
-            trend={{ direction: 'down', value: '-2.1%' }}
             icon={<TrendingUp className="h-6 w-6" />}
           />
           <MetricCard
             title="Active Endpoints"
-            value={Object.keys(metrics.requests_by_endpoint).length.toString()}
+            value={processedMetrics.activeEndpoints.toString()}
             subtitle="with traffic"
             icon={<Zap className="h-6 w-6" />}
           />
@@ -211,8 +273,8 @@ export function MetricsPage() {
         {/* Request Distribution */}
         <Section title="Request Distribution" subtitle="Traffic breakdown by endpoint">
           <ModernCard>
-            {endpointData.length > 0 ? (
-              <SimpleBarChart data={endpointData} title="Requests by Endpoint" />
+            {processedMetrics.endpointData.length > 0 ? (
+              <SimpleBarChart data={processedMetrics.endpointData} title="Requests by Endpoint" />
             ) : (
               <EmptyState
                 icon={<BarChart3 className="h-8 w-8" />}
@@ -226,15 +288,15 @@ export function MetricsPage() {
         {/* Response Time Percentiles */}
         <Section title="Response Time Analysis" subtitle="Latency percentiles across all requests">
           <ModernCard>
-            <SimpleBarChart data={responseTimeData} title="Response Time Percentiles (ms)" />
+            <SimpleBarChart data={processedMetrics.responseTimeData} title="Response Time Percentiles (ms)" />
           </ModernCard>
         </Section>
 
         {/* Error Rate Analysis */}
         <Section title="Error Rate Analysis" subtitle="Error rates by endpoint">
           <ModernCard>
-            {errorRateData.length > 0 ? (
-              <SimpleBarChart data={errorRateData} title="Error Rates by Endpoint (%)" />
+            {processedMetrics.errorRateData.length > 0 ? (
+              <SimpleBarChart data={processedMetrics.errorRateData} title="Error Rates by Endpoint (%)" />
             ) : (
               <EmptyState
                 icon={<TrendingUp className="h-8 w-8" />}
@@ -249,25 +311,19 @@ export function MetricsPage() {
         <Section title="System Resource Usage" subtitle="Memory and CPU usage over time">
           <ModernCard>
             <div className="space-y-6">
-              {metrics.memory_usage_over_time.length > 0 && (
+              {processedMetrics.memoryData.length > 0 && (
                 <SimpleLineChart
-                  data={metrics.memory_usage_over_time.map(([timestamp, value]: [string, number]) => ({
-                    timestamp,
-                    value
-                  }))}
+                  data={processedMetrics.memoryData}
                   title="Memory Usage (MB)"
                 />
               )}
-              {metrics.cpu_usage_over_time.length > 0 && (
+              {processedMetrics.cpuData.length > 0 && (
                 <SimpleLineChart
-                  data={metrics.cpu_usage_over_time.map(([timestamp, value]: [string, number]) => ({
-                    timestamp,
-                    value
-                  }))}
+                  data={processedMetrics.cpuData}
                   title="CPU Usage (%)"
                 />
               )}
-              {(!metrics.memory_usage_over_time.length && !metrics.cpu_usage_over_time.length) && (
+              {(!processedMetrics.memoryData.length && !processedMetrics.cpuData.length) && (
                 <EmptyState
                   icon={<Activity className="h-8 w-8" />}
                   title="No time series data"
@@ -284,24 +340,26 @@ export function MetricsPage() {
         <ModernCard>
           <div className="overflow-x-auto">
             <table className="w-full">
+              <caption className="sr-only">Endpoint performance metrics showing requests, error rates, and health status</caption>
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Endpoint</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Requests</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Error Rate</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Status</th>
+                  <th scope="col" className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Endpoint</th>
+                  <th scope="col" className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Requests</th>
+                  <th scope="col" className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Error Rate</th>
+                  <th scope="col" className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(metrics.requests_by_endpoint).map(([endpoint, requestCount]) => {
-                  const errorRate = metrics.error_rate_by_endpoint[endpoint] || 0;
+                {Object.entries(metrics.requests_by_endpoint || {}).map(([endpoint, requestCount]) => {
+                  const errorRate = toNumber(metrics.error_rate_by_endpoint?.[endpoint]);
+                  const requests = toNumber(requestCount);
                   return (
                     <tr key={endpoint} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="py-3 px-4 font-mono text-sm text-gray-900 dark:text-gray-100">
                         {endpoint}
                       </td>
                       <td className="py-3 px-4 text-right text-gray-900 dark:text-gray-100">
-                        {(requestCount as number).toLocaleString()}
+                        {requests.toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <ModernBadge

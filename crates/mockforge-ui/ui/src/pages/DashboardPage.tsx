@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
-import { LatencyMetrics } from '../types';
-import { useDashboard, useLogs, useMetrics } from '../hooks/useApi';
+import type { LatencyMetrics, LogEntry } from '../types';
+import { useDashboard, useLogs } from '../hooks/useApi';
 import {
   PageHeader,
   MetricCard,
@@ -22,22 +22,34 @@ function formatUptime(seconds: number): string {
   return `${minutes}m`;
 }
 
+function safePercentage(value: number, total: number): string {
+  return total === 0 ? '0.0' : ((value / total) * 100).toFixed(1);
+}
+
+// Type guard to validate LogEntry objects
+function isLogEntry(obj: unknown): obj is LogEntry {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const entry = obj as Record<string, unknown>;
+
+  return (
+    typeof entry.timestamp === 'string' &&
+    (typeof entry.status === 'number' || typeof entry.status_code === 'number') &&
+    typeof entry.method === 'string' &&
+    (typeof entry.url === 'string' || typeof entry.path === 'string')
+  );
+}
+
 export function DashboardPage() {
   const { data: dashboard, isLoading, error } = useDashboard();
   // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates
   const { data: logs } = useLogs({ limit: 100, refetchInterval: 3000 });
-  const { data: _metrics } = useMetrics();
-
-  interface LogEntry {
-    status_code: number;
-    response_time_ms?: number;
-  }
 
   // Calculate failure counters
   const failureCounters = useMemo(() => {
     if (!logs || !Array.isArray(logs)) return { total2xx: 0, total4xx: 0, total5xx: 0 };
 
-    return (logs as LogEntry[]).reduce((acc: { total2xx: number; total4xx: number; total5xx: number }, log) => {
+    const validLogs = logs.filter(isLogEntry);
+    return validLogs.reduce((acc: { total2xx: number; total4xx: number; total5xx: number }, log) => {
       const code = log.status_code;
       if (code >= 500) acc.total5xx++;
       else if (code >= 400) acc.total4xx++;
@@ -46,29 +58,45 @@ export function DashboardPage() {
     }, { total2xx: 0, total4xx: 0, total5xx: 0 });
   }, [logs]);
 
-  // Mock latency data for demonstration
-  const mockLatencyMetrics = useMemo(() => {
+  // Calculate latency metrics from logs
+  const latencyMetrics = useMemo(() => {
     if (!logs || !Array.isArray(logs)) return [];
 
-    const latencyData = (logs as LogEntry[]).reduce((acc: Record<string, number>, log) => {
-      if (log.response_time_ms) {
-        const rounded = Math.floor(log.response_time_ms / 10) * 10;
-        const range = `${rounded}-${rounded + 9}`;
-        acc[range] = (acc[range] || 0) + 1;
-      }
+    const logEntries = logs.filter(isLogEntry);
+    const responseTimes = logEntries
+      .map(log => log.response_time_ms)
+      .filter((time): time is number => time !== undefined);
+
+    if (responseTimes.length === 0) return [];
+
+    // Calculate statistics
+    const sorted = [...responseTimes].sort((a, b) => a - b);
+    const sum = responseTimes.reduce((acc, time) => acc + time, 0);
+    const avg = sum / responseTimes.length;
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const p50 = sorted[Math.floor(sorted.length * 0.5)];
+    const p95 = sorted[Math.floor(sorted.length * 0.95)];
+    const p99 = sorted[Math.floor(sorted.length * 0.99)];
+
+    // Build histogram
+    const latencyData = responseTimes.reduce((acc: Record<string, number>, time) => {
+      const rounded = Math.floor(time / 10) * 10;
+      const range = `${rounded}-${rounded + 9}`;
+      acc[range] = (acc[range] || 0) + 1;
       return acc;
     }, {});
 
     return [{
       service: 'MockForge',
       route: 'api/*',
-      avg_response_time: 50,
-      min_response_time: 10,
-      max_response_time: 200,
-      p50_response_time: 25,
-      p95_response_time: 75,
-      p99_response_time: 125,
-      total_requests: (logs as LogEntry[]).length,
+      avg_response_time: avg,
+      min_response_time: min,
+      max_response_time: max,
+      p50_response_time: p50,
+      p95_response_time: p95,
+      p99_response_time: p99,
+      total_requests: logEntries.length,
       histogram: Object.entries(latencyData)
         .sort(([a], [b]) => parseInt(a) - parseInt(b))
         .map(([range, count]) => ({ range, count: count as number }))
@@ -143,7 +171,6 @@ export function DashboardPage() {
             title="Uptime"
             value={formatUptime(system.uptime_seconds)}
             subtitle="system uptime"
-            trend={{ direction: 'up', value: '+2.5%' }}
             icon={<MetricIcon metric="uptime" size="lg" />}
             className="animate-stagger-in animate-delay-75"
           />
@@ -151,7 +178,6 @@ export function DashboardPage() {
             title="CPU Usage"
             value={`${system.cpu_usage_percent.toFixed(1)}%`}
             subtitle="current utilization"
-            trend={{ direction: 'down', value: '-1.2%' }}
             icon={<MetricIcon metric="cpu" size="lg" />}
             className="animate-stagger-in animate-delay-150"
           />
@@ -159,7 +185,6 @@ export function DashboardPage() {
             title="Memory"
             value={`${system.memory_usage_mb} MB`}
             subtitle="allocated"
-            trend={{ direction: 'up', value: '+5.3%' }}
             icon={<MetricIcon metric="memory" size="lg" />}
             className="animate-stagger-in animate-delay-200"
           />
@@ -167,7 +192,6 @@ export function DashboardPage() {
             title="Active Threads"
             value={system.active_threads.toString()}
             subtitle="running threads"
-            trend={{ direction: 'neutral', value: '0%' }}
             icon={<MetricIcon metric="activity" size="lg" />}
             className="animate-stagger-in animate-delay-300"
           />
@@ -181,24 +205,21 @@ export function DashboardPage() {
           <MetricCard
             title="Success Responses"
             value={failureCounters.total2xx.toString()}
-            subtitle="2xx responses"
-            trend={{ direction: 'up', value: `${((failureCounters.total2xx / (failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)) * 100).toFixed(1)}%` }}
+            subtitle={`${safePercentage(failureCounters.total2xx, failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)}% of total`}
             icon={<StatusIcon status="success" size="lg" />}
             className="animate-fade-in-up animate-delay-100"
           />
           <MetricCard
             title="Client Errors"
             value={failureCounters.total4xx.toString()}
-            subtitle="4xx responses"
-            trend={{ direction: 'neutral', value: `${((failureCounters.total4xx / (failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)) * 100).toFixed(1)}%` }}
+            subtitle={`${safePercentage(failureCounters.total4xx, failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)}% of total`}
             icon={<StatusIcon status="warning" size="lg" />}
             className="animate-fade-in-up animate-delay-200"
           />
           <MetricCard
             title="Server Errors"
             value={failureCounters.total5xx.toString()}
-            subtitle="5xx responses"
-            trend={{ direction: 'down', value: `${((failureCounters.total5xx / (failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)) * 100).toFixed(1)}%` }}
+            subtitle={`${safePercentage(failureCounters.total5xx, failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)}% of total`}
             icon={<StatusIcon status="error" size="lg" />}
             className="animate-fade-in-up animate-delay-300"
           />
@@ -215,9 +236,9 @@ export function DashboardPage() {
         className="space-section section-breathing"
       >
         <div className="space-component">
-          {mockLatencyMetrics.length > 0 ? (
+          {latencyMetrics.length > 0 ? (
              <LatencyHistogram
-               metrics={mockLatencyMetrics as LatencyMetrics[]}
+               metrics={latencyMetrics as LatencyMetrics[]}
                selectedService={undefined}
                onServiceChange={() => {}}
              />

@@ -15,10 +15,13 @@ RUN cargo install cargo-watch
 WORKDIR /app
 
 # Copy dependency files first for better layer caching
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 
 # Copy the crates directory
 COPY crates/ ./crates/
+
+# Generate lock file to ensure consistent dependencies
+RUN cargo generate-lockfile
 
 # Copy example files and configuration
 COPY examples/ ./examples/

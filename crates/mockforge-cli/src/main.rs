@@ -235,7 +235,7 @@ async fn handle_serve(
     // Initialize key store at startup
     init_key_store();
 
-    // Build HTTP router with OpenAPI spec and traffic shaping if enabled
+    // Build HTTP router with OpenAPI spec, chain support, and traffic shaping if enabled
     let http_app = if traffic_shaping {
         use mockforge_core::{
             BandwidthConfig, BurstLossConfig, TrafficShaper, TrafficShapingConfig,
@@ -253,10 +253,11 @@ async fn handle_serve(
         )
         .await
     } else {
-        mockforge_http::build_router(
+        // Use chain-enabled router for standard operation
+        mockforge_http::build_router_with_chains(
             spec.as_ref().map(|p| p.to_string_lossy().to_string()),
             None,
-            None,
+            None, // Use default chain config
         )
         .await
     };

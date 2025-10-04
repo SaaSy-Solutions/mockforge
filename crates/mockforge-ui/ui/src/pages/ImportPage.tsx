@@ -15,14 +15,17 @@ import {
   Button,
   Card,
   Badge,
+  EmptyState,
+} from '../components/ui/DesignSystem';
+import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  EmptyState,
-} from '../components/ui/DesignSystem';
+} from '../components/ui/Tabs';
+import { toast } from 'sonner';
 import type { ImportRequest, ImportResponse, ImportHistoryEntry } from '../services/api';
-import type { ImportedRoute as ImportRoute } from '../types';
+import type { ImportRoute } from '../types';
 
 // Import format types
 type ImportFormat = 'postman' | 'insomnia' | 'curl';
@@ -47,6 +50,16 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
     setIsDragOver(false);
   }, []);
 
+  const handleFile = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      onFileSelect(content, file.name);
+      setSelectedFile(file.name);
+    };
+    reader.readAsText(file);
+  }, [onFileSelect]);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -55,24 +68,15 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
     if (files.length > 0) {
       handleFile(files[0]);
     }
-  }, []);
+  }, [handleFile]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       handleFile(files[0]);
     }
-  }, []);
+  }, [handleFile]);
 
-  const handleFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      onFileSelect(content, file.name);
-      setSelectedFile(file.name);
-    };
-    reader.readAsText(file);
-  };
 
   const getFormatIcon = () => {
     switch (format) {
@@ -175,8 +179,12 @@ function RoutePreview({ routes, onToggleRoute, selectedRoutes }: RoutePreviewPro
             variant="outline"
             size="sm"
             onClick={() => {
-              // Select all
-              routes.forEach((_, index) => onToggleRoute(index));
+              // Select all routes that aren't already selected
+              routes.forEach((_, index) => {
+                if (!selectedRoutes.has(index)) {
+                  onToggleRoute(index);
+                }
+              });
             }}
           >
             Select All
@@ -464,18 +472,18 @@ export function ImportPage() {
       }
 
       if (result.success) {
-        alert(`Successfully imported ${selectedRoutes.size} routes!`);
+        toast?.success(`Successfully imported ${selectedRoutes.size} routes!`);
         // Reset form
         setFileContent('');
         setFilename('');
         setPreviewResult(null);
         setSelectedRoutes(new Set());
       } else {
-        alert(`Import failed: ${result.error}`);
+        toast?.error(`Import failed: ${result.error}`);
       }
     } catch (error) {
       console.error('Import failed:', error);
-      alert('Import failed. Please check the console for details.');
+      toast?.error('Import failed. Please check the console for details.');
     }
   };
 
@@ -520,17 +528,18 @@ export function ImportPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="space-y-6">
-          {/* File Upload Section */}
-          <Section
-            title="Upload File"
-            subtitle={`Upload your ${activeTab} collection or export file`}
-          >
-            <FileUpload onFileSelect={handleFileSelect} format={activeTab === 'history' ? 'postman' : activeTab} />
-          </Section>
+        {(activeTab === 'postman' || activeTab === 'insomnia' || activeTab === 'curl') && (
+          <TabsContent value={activeTab} className="space-y-6">
+            {/* File Upload Section */}
+            <Section
+              title="Upload File"
+              subtitle={`Upload your ${activeTab} collection or export file`}
+            >
+              <FileUpload onFileSelect={handleFileSelect} format={activeTab} />
+            </Section>
 
-          {/* Configuration Section */}
-          {(activeTab === 'insomnia' || activeTab === 'postman') && (
+            {/* Configuration Section */}
+            {(activeTab === 'insomnia' || activeTab === 'postman') && (
             <Section
               title="Configuration"
               subtitle="Optional settings for import processing"
@@ -644,6 +653,7 @@ export function ImportPage() {
             </div>
           </Section>
         </TabsContent>
+        )}
 
         <TabsContent value="history" className="space-y-6">
           <Section

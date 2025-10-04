@@ -4,6 +4,8 @@ import type { User, AuthState, AuthActions } from '../types';
 
 interface AuthStore extends AuthState, AuthActions {
   checkAuth: () => Promise<void>;
+  startTokenRefresh: () => void;
+  stopTokenRefresh: () => void;
 }
 
 // Mock user database
@@ -72,6 +74,9 @@ const validateToken = (token: string): User | null => {
 
 // Simulate API delay
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Token refresh interval management
+let tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
 export const useAuthStore = create<AuthStore>()(
   persist(
@@ -228,6 +233,40 @@ export const useAuthStore = create<AuthStore>()(
           isLoading: false,
         });
       },
+
+      startTokenRefresh: () => {
+        // Clear any existing interval
+        if (tokenRefreshInterval) {
+          clearInterval(tokenRefreshInterval);
+        }
+
+        // Start new interval
+        tokenRefreshInterval = setInterval(async () => {
+          const { token, refreshToken: refresh, isAuthenticated } = get();
+
+          if (isAuthenticated && token && refresh) {
+            try {
+              const payload = JSON.parse(atob(token.split('.')[2]));
+              const timeUntilExpiry = payload.exp - Math.floor(Date.now() / 1000);
+
+              // Refresh if token expires in less than 5 minutes
+              if (timeUntilExpiry < 300) {
+                await get().refreshTokenAction();
+              }
+            } catch {
+              // If we can't parse the token, logout
+              get().logout();
+            }
+          }
+        }, 60000); // Check every minute
+      },
+
+      stopTokenRefresh: () => {
+        if (tokenRefreshInterval) {
+          clearInterval(tokenRefreshInterval);
+          tokenRefreshInterval = null;
+        }
+      },
     }),
     {
       name: 'mockforge-auth',
@@ -240,23 +279,3 @@ export const useAuthStore = create<AuthStore>()(
     }
   )
 );
-
-// Auto-refresh token before expiration
-setInterval(async () => {
-  const { token, refreshToken: refresh, isAuthenticated } = useAuthStore.getState();
-
-  if (isAuthenticated && token && refresh) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[2]));
-      const timeUntilExpiry = payload.exp - Math.floor(Date.now() / 1000);
-
-      // Refresh if token expires in less than 5 minutes
-      if (timeUntilExpiry < 300) {
-        await useAuthStore.getState().refreshTokenAction();
-      }
-    } catch {
-      // If we can't parse the token, logout
-      useAuthStore.getState().logout();
-    }
-  }
-}, 60000); // Check every minute

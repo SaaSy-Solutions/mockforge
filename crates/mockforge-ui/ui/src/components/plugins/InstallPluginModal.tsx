@@ -5,12 +5,14 @@ import {
   Button,
   Input,
   Label,
-  Alert,
+  Alert
+} from '../ui/DesignSystem';
+import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger
-} from '../ui/DesignSystem';
+} from '../ui/Tabs';
 
 interface InstallPluginModalProps {
   onClose: () => void;
@@ -18,12 +20,15 @@ interface InstallPluginModalProps {
 
 export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
   const [installMethod, setInstallMethod] = useState<'file' | 'url'>('file');
-  const [source, setSource] = useState('');
+  const [filePath, setFilePath] = useState('');
+  const [url, setUrl] = useState('');
   const [pluginId, setPluginId] = useState('');
   const [skipValidation, setSkipValidation] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const source = installMethod === 'file' ? filePath : url;
 
   const handleInstall = async () => {
     if (!source.trim()) {
@@ -123,8 +128,8 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
               <Input
                 id="file-path"
                 placeholder="/path/to/plugin-directory"
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
+                value={filePath}
+                onChange={(e) => setFilePath(e.target.value)}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Path to a directory containing plugin.yaml and WebAssembly file
@@ -138,8 +143,8 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
               <Input
                 id="url"
                 placeholder="https://example.com/plugin.zip"
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
               />
               <p className="text-xs text-gray-500 mt-1">
                 URL to a plugin archive (.zip, .tar.gz) or Git repository

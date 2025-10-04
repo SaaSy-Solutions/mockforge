@@ -10,6 +10,7 @@ import { TestingPage } from './pages/TestingPage';
 import { ImportPage } from './pages/ImportPage';
 import WorkspacesPage from './pages/WorkspacesPage';
 import { PluginsPage } from './pages/PluginsPage';
+import { ChainsPage } from './pages/ChainsPage';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { ToastProvider } from './components/ui/ToastProvider';
@@ -18,7 +19,7 @@ import { useWorkspaceStore } from './stores/useWorkspaceStore';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { loadWorkspaces } = useWorkspaceStore();
+  const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
 
   // Prefetch data on startup for better performance
   useStartupPrefetch();
@@ -29,7 +30,7 @@ function App() {
   }, [loadWorkspaces]);
 
   const handleRefresh = () => {
-    console.log('Refreshing data...');
+    // Refresh data for the current page
   };
 
   const renderPage = () => {
@@ -38,6 +39,8 @@ function App() {
         return <DashboardPage />;
       case 'services':
         return <ServicesPage />;
+      case 'chains':
+        return <ChainsPage />;
       case 'logs':
         return <LogsPage />;
       case 'metrics':

@@ -35,7 +35,17 @@ function getStatusBadge(statusCode: number): 'success' | 'warning' | 'error' | '
 }
 
 function formatTimestamp(timestamp: string): string {
-  return new Date(timestamp).toLocaleString();
+  const date = new Date(timestamp);
+  const formatted = date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short'
+  });
+  return formatted;
 }
 
 export function LogsPage() {
@@ -51,12 +61,17 @@ export function LogsPage() {
     limit,
   });
 
+  // Reset display limit when filters change
+  React.useEffect(() => {
+    setDisplayLimit(50);
+  }, [searchTerm, methodFilter, statusFilter, limit]);
+
   const filteredLogs = useMemo(() => {
     if (!logs) return [];
 
     let filtered = logs;
 
-    // Apply status filter
+    // Apply status filter client-side
     if (statusFilter !== 'all') {
       const start = statusFilter === '2xx' ? 200 : statusFilter === '4xx' ? 400 : 500;
       const end = start + 99;
@@ -65,35 +80,50 @@ export function LogsPage() {
 
     // Apply display limit for progressive loading
     return filtered.slice(0, displayLimit);
-  }, [logs, statusFilter, displayLimit]);
+  }, [logs, displayLimit, statusFilter]);
 
-  const hasMoreToShow = logs && filteredLogs.length < logs.length;
+  const hasMoreToShow = useMemo(() => {
+    if (!logs) return false;
+    let filtered = logs;
+    if (statusFilter !== 'all') {
+      const start = statusFilter === '2xx' ? 200 : statusFilter === '4xx' ? 400 : 500;
+      const end = start + 99;
+      filtered = filtered.filter((log: RequestLog) => log.status_code >= start && log.status_code <= end);
+    }
+    return filteredLogs.length < filtered.length;
+  }, [logs, filteredLogs.length, statusFilter]);
 
   const handleExport = () => {
     if (!filteredLogs.length) return;
 
-    const csvContent = [
-      ['Timestamp', 'Method', 'Path', 'Status Code', 'Response Time (ms)', 'Client IP', 'User Agent'].join(','),
-      ...filteredLogs.map((log: RequestLog) => [
-        log.timestamp,
-        log.method,
-        `"${log.path}"`,
-        log.status_code,
-        log.response_time_ms,
-        log.client_ip || '',
-        `"${log.user_agent || ''}"`
-      ].join(','))
-    ].join('\n');
+    try {
+      const csvContent = [
+        ['Timestamp', 'Method', 'Path', 'Status Code', 'Response Time (ms)', 'Client IP', 'User Agent'].join(','),
+        ...filteredLogs.map((log: RequestLog) => [
+          log.timestamp,
+          log.method,
+          `"${log.path}"`,
+          log.status_code,
+          log.response_time_ms,
+          log.client_ip || '',
+          `"${log.user_agent || ''}"`
+        ].join(','))
+      ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `mockforge-logs-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `mockforge-logs-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export logs:', err);
+      alert('Failed to export logs. Please try again.');
+    }
   };
 
   if (isLoading) {
@@ -172,7 +202,7 @@ export function LogsPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Search paths, methods..."
+                  placeholder="Filter by path..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -264,7 +294,7 @@ export function LogsPage() {
                 >
                   <div className="flex items-center gap-4">
                     {/* Method Badge */}
-                    <div className={`px-3 py-1 rounded-full text-xs font-semibold ${methodColors[log.method as keyof typeof methodColors] || methodColors.GET}`}>
+                    <div className={`px-3 py-1 rounded-full text-xs font-semibold ${methodColors[log.method as keyof typeof methodColors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'}`}>
                       {log.method}
                     </div>
 
@@ -279,6 +309,11 @@ export function LogsPage() {
                           <span className="ml-2">• {log.client_ip}</span>
                         )}
                       </div>
+                      {log.user_agent && (
+                        <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">
+                          {log.user_agent}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -304,7 +339,7 @@ export function LogsPage() {
                 </div>
               ))}
               </div>
-              
+
               {/* Load More Button */}
               {hasMoreToShow && (
                 <div className="flex justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -314,7 +349,7 @@ export function LogsPage() {
                     className="flex items-center gap-2"
                   >
                     <ChevronDown className="h-4 w-4" />
-                    Show more logs ({logs.length - filteredLogs.length} remaining)
+                    Show more logs ({(logs?.length || 0) - filteredLogs.length} remaining)
                   </Button>
                 </div>
               )}

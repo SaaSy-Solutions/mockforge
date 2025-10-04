@@ -283,26 +283,22 @@ export function useSaveFileContent() {
  */
 export function useFixtures() {
   return useQuery({
-    queryKey: ['fixtures-v2'], // Changed key to force cache invalidation
+    queryKey: ['fixtures-v2'],
     queryFn: async () => {
-      console.log('[FIXTURES DEBUG v3] Starting fetch');
       try {
-        // Direct fetch to avoid class binding issues
         const response = await fetch('/__mockforge/fixtures');
-        console.log('[FIXTURES DEBUG v3] Response status:', response.status);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        console.log('[FIXTURES DEBUG v3] Data received:', data);
         // Ensure we return an array - data.data is the array from the API response
         return Array.isArray(data.data) ? data.data : [];
       } catch (error) {
-        console.error('[FIXTURES DEBUG v3] Error:', error);
+        console.error('[FIXTURES ERROR] Failed to fetch fixtures:', error);
         throw error;
       }
     },
-    retry: false, // Disable retry to see errors immediately
+    retry: false,
     staleTime: 30000,
   });
 }

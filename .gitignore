@@ -115,3 +115,11 @@ replays/
 
 # Local agent work directory
 .code/
+
+# Build artifacts and temporary files
+**/build-*.txt
+**/*.png
+server.log
+
+# Plugin marketplace (separate project)
+plugin-marketplace/

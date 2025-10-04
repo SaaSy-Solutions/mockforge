@@ -27,7 +27,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::System;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 // Import all types from models
 use crate::models::{
@@ -42,35 +42,17 @@ use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
 // Handler sub-modules
 pub mod admin;
 pub mod assets;
+pub mod chains;
 pub mod plugin;
 
 // Re-export commonly used types
 pub use assets::*;
+pub use chains::*;
 pub use plugin::*;
 
 // Import workspace persistence
 use mockforge_core::workspace_import::WorkspaceImportConfig;
 use mockforge_core::workspace_persistence::WorkspacePersistence;
-
-// Static assets - embedded at compile time
-const ADMIN_HTML: &str = r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MockForge Admin</title>
-    <link rel="stylesheet" href="/assets/index.css">
-</head>
-<body>
-    <div id="root"></div>
-    <script src="/assets/index.js"></script>
-</body>
-</html>"#;
-
-const ADMIN_CSS: &str =
-    r#"body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }"#;
-
-const ADMIN_JS: &str = r#"console.log('MockForge Admin UI');"#;
 
 /// Request metrics for tracking
 #[derive(Debug, Clone, Default)]
@@ -3359,9 +3341,15 @@ pub async fn get_workspace(
     axum::extract::Path(workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
-        "id": workspace_id,
-        "name": "Mock Workspace",
-        "description": "A mock workspace"
+        "workspace": {
+            "summary": {
+                "id": workspace_id,
+                "name": "Mock Workspace",
+                "description": "A mock workspace"
+            },
+            "folders": [],
+            "requests": []
+        }
     })))
 }
 
@@ -3418,8 +3406,14 @@ pub async fn get_folder(
     axum::extract::Path((_workspace_id, folder_id)): axum::extract::Path<(String, String)>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
-        "id": folder_id,
-        "name": "Mock Folder"
+        "folder": {
+            "summary": {
+                "id": folder_id,
+                "name": "Mock Folder",
+                "description": "A mock folder"
+            },
+            "requests": []
+        }
     })))
 }
 

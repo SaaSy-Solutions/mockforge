@@ -85,13 +85,13 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
             <Settings className="h-5 w-5" />
             Preferences
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
             Customize your experience with MockForge
           </DialogDescription>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -99,24 +99,24 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
         <TabsProvider value={activeTab} onValueChange={setActiveTab}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="theme" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-5 bg-gray-100 dark:bg-gray-800">
+              <TabsTrigger value="theme" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
                 <Palette className="h-4 w-4" />
                 <span className="hidden sm:inline">Theme</span>
               </TabsTrigger>
-              <TabsTrigger value="logs" className="flex items-center gap-2">
+              <TabsTrigger value="logs" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
                 <FileText className="h-4 w-4" />
                 <span className="hidden sm:inline">Logs</span>
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="flex items-center gap-2">
+              <TabsTrigger value="notifications" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
                 <Bell className="h-4 w-4" />
                 <span className="hidden sm:inline">Notifications</span>
               </TabsTrigger>
-              <TabsTrigger value="search" className="flex items-center gap-2">
+              <TabsTrigger value="search" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
                 <Search className="h-4 w-4" />
                 <span className="hidden sm:inline">Search</span>
               </TabsTrigger>
-              <TabsTrigger value="ui" className="flex items-center gap-2">
+              <TabsTrigger value="ui" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">UI</span>
               </TabsTrigger>
@@ -138,8 +138,8 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                         }}
                         className={`flex items-center gap-2 p-3 rounded-lg border transition-all ${
                           preferences.theme.theme === value
-                            ? 'border-brand bg-brand/10 text-brand'
-                            : 'border-border hover:border-brand/50'
+                            ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-600 text-gray-700 dark:text-gray-300'
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -160,8 +160,8 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                         onClick={() => updateTheme({ accentColor: value as string })}
                         className={`w-8 h-8 rounded-full border-2 transition-all ${
                           preferences.theme.accentColor === value
-                            ? 'border-gray-900 dark:border-gray-100 scale-110'
-                            : 'border-gray-300 dark:border-gray-600'
+                            ? 'border-gray-900 dark:border-gray-100 scale-110 shadow-lg'
+                            : 'border-gray-300 dark:border-gray-600 hover:scale-105'
                         }`}
                         style={{ backgroundColor: value }}
                         title={label}
@@ -259,7 +259,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     max="168"
                     value={preferences.logs.defaultTimeRange}
                     onChange={(e) => updateLogs({ defaultTimeRange: parseInt(e.target.value) || 24 })}
-                    className="w-24"
+                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
 
@@ -274,7 +274,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     step="10"
                     value={preferences.logs.itemsPerPage}
                     onChange={(e) => updateLogs({ itemsPerPage: parseInt(e.target.value) || 100 })}
-                    className="w-24"
+                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
               </div>
@@ -352,7 +352,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     max="30"
                     value={preferences.notifications.toastDuration}
                     onChange={(e) => updateNotifications({ toastDuration: parseInt(e.target.value) || 5 })}
-                    className="w-24"
+                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
               </div>
@@ -426,7 +426,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     max="50"
                     value={preferences.search.maxHistoryItems}
                     onChange={(e) => updateSearch({ maxHistoryItems: parseInt(e.target.value) || 10 })}
-                    className="w-24"
+                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
               </div>
@@ -501,7 +501,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                   <select
                     value={preferences.ui.defaultPage}
                     onChange={(e) => updateUI({ defaultPage: e.target.value })}
-                    className="w-full p-2 border border-border rounded-md bg-bg-primary"
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   >
                     <option value="dashboard">Dashboard</option>
                     <option value="services">Services</option>

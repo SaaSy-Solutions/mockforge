@@ -62,6 +62,7 @@ pub fn create_admin_router(
         .route("/__mockforge/config/latency", post(update_latency))
         .route("/__mockforge/config/faults", post(update_faults))
         .route("/__mockforge/config/proxy", post(update_proxy))
+        .route("/__mockforge/config/traffic-shaping", post(update_traffic_shaping))
         .route("/__mockforge/logs", delete(clear_logs))
         .route("/__mockforge/restart", post(restart_servers))
         .route("/__mockforge/restart/status", get(get_restart_status))
@@ -91,7 +92,16 @@ pub fn create_admin_router(
         .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/activate", post(set_active_environment))
         .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables", get(get_environment_variables))
         .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables", post(set_environment_variable))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables/{variable_name}", delete(remove_environment_variable));
+        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables/{variable_name}", delete(remove_environment_variable))
+        // Chain management routes - proxy to main HTTP server
+        .route("/__mockforge/chains", get(proxy_chains_list))
+        .route("/__mockforge/chains", post(proxy_chains_create))
+        .route("/__mockforge/chains/{id}", get(proxy_chain_get))
+        .route("/__mockforge/chains/{id}", axum::routing::put(proxy_chain_update))
+        .route("/__mockforge/chains/{id}", delete(proxy_chain_delete))
+        .route("/__mockforge/chains/{id}/execute", post(proxy_chain_execute))
+        .route("/__mockforge/chains/{id}/validate", post(proxy_chain_validate))
+        .route("/__mockforge/chains/{id}/history", get(proxy_chain_history));
 
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes

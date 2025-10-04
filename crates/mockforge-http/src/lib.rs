@@ -18,7 +18,6 @@ use mockforge_core::TrafficShaper;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::*;
 
@@ -371,12 +370,12 @@ pub async fn build_router_with_chains(
         Router::new()
             .route("/", get(chain_handlers::list_chains))
             .route("/", post(chain_handlers::create_chain))
-            .route("/:id", get(chain_handlers::get_chain))
-            .route("/:id", put(chain_handlers::update_chain))
-            .route("/:id", delete(chain_handlers::delete_chain))
-            .route("/:id/execute", post(chain_handlers::execute_chain))
-            .route("/:id/validate", post(chain_handlers::validate_chain))
-            .route("/:id/history", get(chain_handlers::get_chain_history))
+            .route("/{id}", get(chain_handlers::get_chain))
+            .route("/{id}", put(chain_handlers::update_chain))
+            .route("/{id}", delete(chain_handlers::delete_chain))
+            .route("/{id}/execute", post(chain_handlers::execute_chain))
+            .route("/{id}/validate", post(chain_handlers::validate_chain))
+            .route("/{id}/history", get(chain_handlers::get_chain_history))
             .with_state(chain_state),
     );
 

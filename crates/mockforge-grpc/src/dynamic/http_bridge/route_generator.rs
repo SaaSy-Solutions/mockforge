@@ -38,7 +38,7 @@ impl RouteGenerator {
     }
 
     /// Generate URL pattern from route path
-    pub fn generate_url_pattern(&self, service_name: &str, method_name: &str) -> String {
+    pub fn generate_url_pattern(&self, _service_name: &str, _method_name: &str) -> String {
         let template = format!("{}{}", self.config.base_path, self.config.route_pattern);
         // Replace path parameters with regex patterns
         template.replace("{service}", "[^/]+").replace("{method}", "[^/]+")

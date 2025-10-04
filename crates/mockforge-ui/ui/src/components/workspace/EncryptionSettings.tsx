@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -66,28 +66,28 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
   const [importPath, setImportPath] = useState('');
   const [importBackupKey, setImportBackupKey] = useState('');
 
-  useEffect(() => {
-    loadEncryptionStatus();
-    loadEncryptionConfig();
-  }, [workspaceId]);
-
-  const loadEncryptionStatus = async () => {
+  const loadEncryptionStatus = useCallback(async () => {
     try {
       const response = await apiService.getWorkspaceEncryptionStatus(workspaceId);
       setStatus(response);
     } catch (error) {
       console.error('Failed to load encryption status:', error);
     }
-  };
+  }, [workspaceId]);
 
-  const loadEncryptionConfig = async () => {
+  const loadEncryptionConfig = useCallback(async () => {
     try {
       const response = await apiService.getWorkspaceEncryptionConfig(workspaceId);
       setConfig(response);
     } catch (error) {
       console.error('Failed to load encryption config:', error);
     }
-  };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    loadEncryptionStatus();
+    loadEncryptionConfig();
+  }, [loadEncryptionStatus, loadEncryptionConfig]);
 
   const enableEncryption = async () => {
     setLoading(true);
@@ -412,7 +412,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                         <div className="space-y-2">
                           <h4 className="font-medium text-orange-800">Warnings ({securityCheck.warnings.length})</h4>
                           <div className="space-y-2">
-                            {(securityCheck.warnings as SecurityItem[]).map((warning, index: number) => (
+                            {(securityCheck.warnings as unknown as SecurityItem[]).map((warning, index: number) => (
                               <div key={index} className={`p-3 border rounded-lg ${getSeverityColor(warning.severity)}`}>
                                 <div className="flex items-start gap-2">
                                   {getSeverityIcon(warning.severity)}
@@ -433,7 +433,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                         <div className="space-y-2">
                           <h4 className="font-medium text-red-800">Errors ({securityCheck.errors.length})</h4>
                           <div className="space-y-2">
-                            {(securityCheck.errors as SecurityItem[]).map((error, index: number) => (
+                            {(securityCheck.errors as unknown as SecurityItem[]).map((error, index: number) => (
                               <div key={index} className={`p-3 border rounded-lg ${getSeverityColor(error.severity)}`}>
                                 <div className="flex items-start gap-2">
                                   {getSeverityIcon(error.severity)}
@@ -454,7 +454,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                         <div className="space-y-2">
                           <h4 className="font-medium">Recommendations</h4>
                           <ul className="list-disc list-inside space-y-1 text-sm">
-                            {(securityCheck.recommendations as string[]).map((rec, index: number) => (
+                            {(securityCheck.recommendations as unknown as string[]).map((rec, index: number) => (
                               <li key={index}>{rec}</li>
                             ))}
                           </ul>

@@ -740,22 +740,22 @@ export function Label({ className, required, children, ...props }: LabelProps) {
 }
 
 // Table Component
-interface TableProps {
-  columns: TableColumn[];
-  data: unknown[];
+interface TableProps<T = Record<string, unknown>> {
+  columns: TableColumn<T>[];
+  data: T[];
   className?: string;
-  onRowClick?: (row: unknown) => void;
+  onRowClick?: (row: T) => void;
 }
 
-interface TableColumn {
+interface TableColumn<T = Record<string, unknown>> {
   key: string;
   label: string;
-  render?: (value: unknown, row: unknown) => React.ReactNode;
+  render?: (value: unknown, row: T) => React.ReactNode;
   sortable?: boolean;
   width?: string;
 }
 
-export function Table({ columns, data, className, onRowClick }: TableProps) {
+export function Table<T = Record<string, unknown>>({ columns, data, className, onRowClick }: TableProps<T>) {
   return (
     <div className={cn('overflow-x-auto', className)}>
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -788,8 +788,8 @@ export function Table({ columns, data, className, onRowClick }: TableProps) {
                   className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100"
                 >
                   {column.render
-                    ? column.render(row[column.key], row)
-                    : row[column.key]
+                    ? column.render((row as Record<string, unknown>)[column.key], row)
+                    : String((row as Record<string, unknown>)[column.key] ?? '')
                   }
                 </td>
               ))}

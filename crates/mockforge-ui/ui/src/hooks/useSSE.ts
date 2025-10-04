@@ -73,7 +73,9 @@ export function useSSE<T = unknown>(
   
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
-      console.log('SSE: Disconnecting from', url);
+      if (import.meta.env.DEV) {
+        console.log('SSE: Disconnecting from', url);
+      }
       eventSourceRef.current.close();
       eventSourceRef.current = null;
       setReadyState(EventSource.CLOSED);
@@ -88,7 +90,9 @@ export function useSSE<T = unknown>(
   const connect = useCallback(() => {
     // Prevent multiple connections
     if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) {
-      console.log('SSE: Already connected to', url);
+      if (import.meta.env.DEV) {
+        console.log('SSE: Already connected to', url);
+      }
       return;
     }
 
@@ -96,67 +100,85 @@ export function useSSE<T = unknown>(
     disconnect();
 
     try {
-      console.log('SSE: Connecting to', url);
+      if (import.meta.env.DEV) {
+        console.log('SSE: Connecting to', url);
+      }
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
-      
+
       eventSource.onopen = () => {
-        console.log('SSE: Connection opened to', url);
+        if (import.meta.env.DEV) {
+          console.log('SSE: Connection opened to', url);
+        }
         setReadyState(EventSource.OPEN);
         setError(null);
         retryAttemptsRef.current = 0;
       };
-      
+
       eventSource.onmessage = (event) => {
         try {
           const parsedData = JSON.parse(event.data);
           setData(parsedData);
-        } catch (_e) {
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn('SSE: Failed to parse message data:', e);
+          }
           // If parsing fails, use raw data
           setData(event.data as T);
         }
       };
-      
+
       eventSource.onerror = (event) => {
-        console.error('SSE: Connection error', event, 'ReadyState:', eventSource.readyState);
+        if (import.meta.env.DEV) {
+          console.error('SSE: Connection error', event, 'ReadyState:', eventSource.readyState);
+        }
         setError(event);
         setReadyState(eventSource.readyState);
-        
+
         // Handle retry logic
         if (retry.enabled && retryAttemptsRef.current < (retry.maxAttempts || 3)) {
           retryAttemptsRef.current += 1;
-          console.log('SSE: Retrying connection, attempt', retryAttemptsRef.current);
-          
+          if (import.meta.env.DEV) {
+            console.log('SSE: Retrying connection, attempt', retryAttemptsRef.current);
+          }
+
           retryTimeoutRef.current = setTimeout(() => {
             connect();
           }, retry.delay || 1000);
         }
       };
-      
+
       // Handle custom events (like 'new_logs')
       eventSource.addEventListener('new_logs', (event: MessageEvent) => {
-        console.log('SSE: Received new_logs event', event.data);
+        if (import.meta.env.DEV) {
+          console.log('SSE: Received new_logs event');
+        }
         try {
           const parsedData = JSON.parse(event.data);
-          console.log('SSE: Parsed new logs:', parsedData);
           setData(parsedData);
-        } catch (_e) {
-          console.error('SSE: Failed to parse logs data:', _e);
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.error('SSE: Failed to parse logs data:', e);
+          }
           setData(event.data as T);
         }
       });
-      
+
       // Handle keep-alive events
       eventSource.addEventListener('keep_alive', () => {
-        console.log('SSE: Received keep_alive event');
+        if (import.meta.env.DEV) {
+          console.log('SSE: Received keep_alive event');
+        }
         // Just acknowledge the keep-alive, don't update data
       });
-      
+
       // Handle test events
       eventSource.addEventListener('test', (event) => {
-        console.log('SSE: Received test event:', event.data);
+        if (import.meta.env.DEV) {
+          console.log('SSE: Received test event:', event.data);
+        }
       });
-      
+
     } catch (e) {
       setError(e as Event);
       setReadyState(EventSource.CLOSED);
@@ -172,8 +194,7 @@ export function useSSE<T = unknown>(
     return () => {
       disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnect, url]);
+  }, [autoConnect, url, connect, disconnect]);
 
   // Update connection when URL changes - removed to prevent reconnection loops
   // The connection is already handled by the mount effect above

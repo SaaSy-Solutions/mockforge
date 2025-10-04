@@ -57,9 +57,11 @@ export function RequestLog() {
     refetchInterval: 2000, // Auto-refresh every 2 seconds
   });
 
-  // Debug logging
+  // Validate logs data format
   useEffect(() => {
-    console.log('RequestLog - logsData:', logsData, 'isArray:', Array.isArray(logsData), 'length:', logsData?.length);
+    if (import.meta.env.DEV && logsData && !Array.isArray(logsData)) {
+      console.warn('RequestLog - Expected array but got:', typeof logsData);
+    }
   }, [logsData]);
 
   // Handle API errors
@@ -108,9 +110,9 @@ export function RequestLog() {
       key: 'method',
       label: 'Method',
       priority: 'high',
-      render: (method: string) => (
-        <span className={cn('text-xs font-semibold px-3 py-1.5 rounded-md uppercase tracking-wide', methodClass(method))}>
-          {method}
+      render: (value: unknown) => (
+        <span className={cn('text-xs font-semibold px-3 py-1.5 rounded-md uppercase tracking-wide', methodClass(value as string))}>
+          {value as string}
         </span>
       ),
       width: '80px'
@@ -120,9 +122,9 @@ export function RequestLog() {
       label: 'Path',
       priority: 'high',
       mobileLabel: 'Endpoint',
-      render: (path: string) => (
-        <span className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate" title={path}>
-          {path}
+      render: (value: unknown) => (
+        <span className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate" title={value as string}>
+          {value as string}
         </span>
       )
     },
@@ -130,9 +132,10 @@ export function RequestLog() {
       key: 'status_code',
       label: 'Status',
       priority: 'high',
-      render: (statusCode: number) => {
+      render: (value: unknown) => {
+        const statusCode = value as number;
         return (
-          <Badge variant={statusCode >= 200 && statusCode < 300 ? 'success' : 
+          <Badge variant={statusCode >= 200 && statusCode < 300 ? 'success' :
                          statusCode >= 400 && statusCode < 500 ? 'warning' : 'error'}>
             {statusCode}
           </Badge>
@@ -145,9 +148,9 @@ export function RequestLog() {
       label: 'Response Time',
       priority: 'medium',
       mobileLabel: 'Duration',
-      render: (time: number) => (
+      render: (value: unknown) => (
         <span className="font-mono text-sm">
-          {time}ms
+          {value as number}ms
         </span>
       ),
       width: '100px'
@@ -156,10 +159,10 @@ export function RequestLog() {
       key: 'timestamp',
       label: 'Time',
       priority: 'medium',
-      render: (timestamp: string) => (
+      render: (value: unknown) => (
         <div className="flex items-center gap-1">
           <Clock className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-          <span className="font-mono text-sm">{fmtTime(timestamp)}</span>
+          <span className="font-mono text-sm">{fmtTime(value as string)}</span>
         </div>
       ),
       width: '100px'
@@ -169,10 +172,10 @@ export function RequestLog() {
       label: 'Client IP',
       priority: 'low',
       hideOnMobile: true,
-      render: (ip: string) => (
+      render: (value: unknown) => (
         <div className="flex items-center gap-1">
           <Globe className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-          <span className="font-mono text-sm">{ip}</span>
+          <span className="font-mono text-sm">{value as string}</span>
         </div>
       ),
       width: '120px'
@@ -215,7 +218,9 @@ export function RequestLog() {
       setSearch('');
       setDebounced('');
     } catch (error) {
-      console.error('Failed to clear logs:', error);
+      if (import.meta.env.DEV) {
+        console.error('Failed to clear logs:', error);
+      }
     }
   };
 
@@ -230,7 +235,7 @@ export function RequestLog() {
             </div>
             <SkeletonTable rows={1} cols={1} className="h-10 w-96" />
           </div>
-          
+
           {/* Table skeleton */}
           <SkeletonTable rows={5} cols={5} />
         </div>
@@ -241,7 +246,7 @@ export function RequestLog() {
   if (errorState.error) {
     return (
       <Card title={<CardTitle />}>
-        <DataErrorFallback 
+        <DataErrorFallback
           retry={canRetry ? () => retry(async () => { await refetch(); }) : undefined}
           resetError={clearError}
         />

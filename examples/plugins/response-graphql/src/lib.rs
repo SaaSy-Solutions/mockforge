@@ -15,7 +15,6 @@ use mockforge_plugin_core::*;
 use rand::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use http::{HeaderMap, HeaderValue, Method};
 
 /// Plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
