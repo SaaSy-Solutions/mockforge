@@ -41,9 +41,13 @@ export default defineConfig({
     pool: 'threads',
     poolOptions: {
       threads: {
-        singleThread: true,
+        singleThread: false,
+        minThreads: 1,
+        maxThreads: 4,
       },
     },
+    testTimeout: 10000,
+    hookTimeout: 10000,
   },
   resolve: {
     alias: {

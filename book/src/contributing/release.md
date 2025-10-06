@@ -281,14 +281,22 @@ cargo publish
 
 #### Docker Hub
 
-```bash
-# Tag and push Docker images
-docker tag mockforge:$VERSION mockforge/mockforge:$VERSION
-docker tag mockforge:$VERSION mockforge/mockforge:latest
+> **Note**: Docker Hub publishing is planned for future releases. The organization and repository need to be set up first.
 
-docker push mockforge/mockforge:$VERSION
-docker push mockforge/mockforge:latest
+Once Docker Hub is configured, use these commands:
+
+```bash
+# Build the Docker image with version tag
+docker build -t saasy-solutions/mockforge:$VERSION .
+docker tag saasy-solutions/mockforge:$VERSION saasy-solutions/mockforge:latest
+
+# Push to Docker Hub (requires authentication)
+docker login
+docker push saasy-solutions/mockforge:$VERSION
+docker push saasy-solutions/mockforge:latest
 ```
+
+For now, users should build the Docker image locally as documented in the [Installation Guide](../getting-started/installation.md#method-2-docker-containerized).
 
 ### 3. Homebrew (macOS)
 

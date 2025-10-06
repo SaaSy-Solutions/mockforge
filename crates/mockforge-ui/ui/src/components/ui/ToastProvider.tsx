@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { Toast } from './Toast';

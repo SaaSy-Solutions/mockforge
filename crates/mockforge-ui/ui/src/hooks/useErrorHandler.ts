@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { useState, useCallback } from 'react';
 
 interface ErrorState {

@@ -2,6 +2,10 @@
 **/target/
 **/*.rs.bk
 
+# Fuzzing
+**/fuzz/corpus/
+**/fuzz/artifacts/
+
 # IDE
 .vscode/
 .idea/
@@ -21,6 +25,7 @@ Thumbs.db
 # Logs
 *.log
 server_output.log
+nextest-output.log
 
 # Runtime data
 pids

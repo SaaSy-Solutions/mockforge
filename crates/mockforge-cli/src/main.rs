@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use mockforge_core::encryption::init_key_store;
 use mockforge_data;
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
@@ -89,6 +90,40 @@ enum Commands {
         #[arg(short, long)]
         workspace_dir: PathBuf,
 
+        /// Configuration file path
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
+    /// Initialize a new MockForge project
+    Init {
+        /// Project name (defaults to current directory name)
+        #[arg(default_value = ".")]
+        name: String,
+
+        /// Skip creating example files
+        #[arg(long)]
+        no_examples: bool,
+    },
+
+    /// Configuration management
+    Config {
+        #[command(subcommand)]
+        config_command: ConfigCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// Validate configuration file
+    Validate {
         /// Configuration file path
         #[arg(short, long)]
         config: Option<PathBuf>,
@@ -205,6 +240,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             config,
         } => {
             handle_sync(workspace_dir, config).await?;
+        }
+        Commands::Completions { shell } => {
+            handle_completions(shell);
+        }
+        Commands::Init { name, no_examples } => {
+            handle_init(name, no_examples).await?;
+        }
+        Commands::Config { config_command } => {
+            handle_config(config_command).await?;
         }
     }
 
@@ -697,4 +741,274 @@ async fn output_result(
     }
 
     Ok(())
+}
+
+/// Handle shell completions generation
+fn handle_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    let bin_name = cmd.get_name().to_string();
+    generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+}
+
+/// Handle project initialization
+async fn handle_init(
+    name: String,
+    no_examples: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::fs;
+
+    println!("🚀 Initializing MockForge project...");
+
+    // Determine project directory
+    let project_dir = if name == "." {
+        std::env::current_dir()?
+    } else {
+        PathBuf::from(&name)
+    };
+
+    // Create project directory if it doesn't exist
+    if !project_dir.exists() {
+        fs::create_dir_all(&project_dir)?;
+        println!("📁 Created directory: {}", project_dir.display());
+    }
+
+    // Create config file
+    let config_path = project_dir.join("mockforge.yaml");
+    if config_path.exists() {
+        println!("⚠️  Configuration file already exists: {}", config_path.display());
+    } else {
+        let config_content = r#"# MockForge Configuration
+http:
+  port: 3000
+  endpoints: []
+
+websocket:
+  port: 3001
+
+grpc:
+  port: 50051
+
+admin:
+  enabled: true
+  port: 9080
+"#;
+        fs::write(&config_path, config_content)?;
+        println!("✅ Created mockforge.yaml");
+    }
+
+    // Create examples directory if not skipped
+    if !no_examples {
+        let examples_dir = project_dir.join("examples");
+        fs::create_dir_all(&examples_dir)?;
+        println!("📁 Created examples directory");
+
+        // Create example OpenAPI spec
+        let openapi_path = examples_dir.join("openapi.json");
+        let openapi_content = r#"{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Example API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}"#;
+        fs::write(&openapi_path, openapi_content)?;
+        println!("✅ Created examples/openapi.json");
+
+        // Create example fixture
+        let fixtures_dir = project_dir.join("fixtures");
+        fs::create_dir_all(&fixtures_dir)?;
+        let fixture_path = fixtures_dir.join("users.json");
+        let fixture_content = r#"[
+  {
+    "id": 1,
+    "name": "Alice Johnson",
+    "email": "alice@example.com"
+  },
+  {
+    "id": 2,
+    "name": "Bob Smith",
+    "email": "bob@example.com"
+  }
+]"#;
+        fs::write(&fixture_path, fixture_content)?;
+        println!("✅ Created fixtures/users.json");
+    }
+
+    println!("\n🎉 MockForge project initialized successfully!");
+    println!("\nNext steps:");
+    println!("  1. cd {}", if name == "." { "." } else { &name });
+    println!("  2. Edit mockforge.yaml to configure your mock servers");
+    if !no_examples {
+        println!("  3. Review examples/openapi.json for API specifications");
+    }
+    println!("  4. Run: mockforge serve");
+
+    Ok(())
+}
+
+/// Handle config commands
+async fn handle_config(
+    config_command: ConfigCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match config_command {
+        ConfigCommands::Validate { config } => {
+            handle_config_validate(config).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Handle config validation
+async fn handle_config_validate(
+    config_path: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🔍 Validating MockForge configuration...");
+
+    // Auto-discover config file if not provided
+    let config_file = if let Some(path) = config_path {
+        path
+    } else {
+        discover_config_file()?
+    };
+
+    println!("📄 Checking configuration file: {}", config_file.display());
+
+    // Check if file exists
+    if !config_file.exists() {
+        return Err(format!("Configuration file not found: {}", config_file.display()).into());
+    }
+
+    // Read and parse YAML
+    let config_content = tokio::fs::read_to_string(&config_file).await?;
+    let config: serde_json::Value = serde_yaml::from_str(&config_content)
+        .map_err(|e| format!("Invalid YAML syntax: {}", e))?;
+
+    // Basic validation
+    let mut endpoints_count = 0;
+    let mut chains_count = 0;
+    let mut warnings = Vec::new();
+
+    // Validate HTTP section
+    if let Some(http) = config.get("http") {
+        if let Some(endpoints) = http.get("endpoints") {
+            if let Some(arr) = endpoints.as_array() {
+                endpoints_count = arr.len();
+            }
+        }
+    } else {
+        warnings.push("No HTTP configuration found");
+    }
+
+    // Validate chains section
+    if let Some(chains) = config.get("chains") {
+        if let Some(arr) = chains.as_array() {
+            chains_count = arr.len();
+        }
+    }
+
+    // Check for admin section
+    if config.get("admin").is_none() {
+        warnings.push("No admin UI configuration found");
+    }
+
+    println!("✅ Configuration is valid");
+    println!("\n📊 Summary:");
+    println!("   Found {} HTTP endpoints", endpoints_count);
+    println!("   Found {} chains", chains_count);
+
+    if !warnings.is_empty() {
+        println!("\n⚠️  Warnings:");
+        for warning in warnings {
+            println!("   - {}", warning);
+        }
+    }
+
+    Ok(())
+}
+
+/// Discover configuration file in current directory and parents
+fn discover_config_file() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    let current_dir = std::env::current_dir()?;
+    let config_names = vec!["mockforge.yaml", "mockforge.yml", ".mockforge.yaml", ".mockforge.yml"];
+
+    // Check current directory
+    for name in &config_names {
+        let path = current_dir.join(name);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    // Check parent directories (up to 5 levels)
+    let mut dir = current_dir.clone();
+    for _ in 0..5 {
+        if let Some(parent) = dir.parent() {
+            for name in &config_names {
+                let path = parent.join(name);
+                if path.exists() {
+                    return Ok(path);
+                }
+            }
+            dir = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
+    Err("No configuration file found. Expected one of: mockforge.yaml, mockforge.yml, .mockforge.yaml, .mockforge.yml".into())
 }

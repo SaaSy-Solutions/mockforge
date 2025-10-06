@@ -39,10 +39,15 @@ MockForge is also available as a Docker image, which is ideal for:
 - CI/CD pipelines
 - Systems without Rust installed
 
-### Pull from Docker Hub
+### Build Docker image
+
+Since pre-built images are not yet published to Docker Hub, build the image locally:
 
 ```bash
-docker pull SaaSy-Solutions/mockforge
+# Clone and build
+git clone https://github.com/SaaSy-Solutions/mockforge.git
+cd mockforge
+docker build -t mockforge .
 ```
 
 ### Run with basic configuration
@@ -54,7 +59,17 @@ docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   mockforge
 ```
 
-### Build from source
+### Alternative: Docker Compose
+
+For a complete setup with all services:
+
+```bash
+git clone https://github.com/SaaSy-Solutions/mockforge.git
+cd mockforge
+docker-compose up
+```
+
+### Build from source (without Docker)
 
 ```bash
 git clone https://github.com/SaaSy-Solutions/mockforge.git

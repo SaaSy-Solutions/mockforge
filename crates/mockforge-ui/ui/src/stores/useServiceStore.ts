@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { ServiceInfo, RouteInfo } from '../types';
 

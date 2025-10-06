@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 // Utility functions for accessibility
 
 export interface AriaLabelOptions {

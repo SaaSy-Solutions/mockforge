@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
 import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
@@ -114,7 +115,7 @@ export function ConfigPage() {
           general: { ...prev.general, ...ports }
         }));
       } catch (error) {
-        console.error('Failed to parse pending port config:', error);
+        logger.error('Failed to parse pending port config',error);
         localStorage.removeItem('mockforge_pending_port_config');
       }
     }
@@ -367,7 +368,7 @@ export function ConfigPage() {
 
             toast.success('Traffic shaping configuration saved successfully');
           } catch (error) {
-            console.error('Error saving traffic shaping:', error);
+            logger.error('Error saving traffic shaping',error);
             toast.error('Failed to save traffic shaping configuration');
           }
           break;
@@ -376,7 +377,7 @@ export function ConfigPage() {
           toast.error(`Unknown section: ${section}`);
       }
     } catch (error) {
-      console.error(`Error saving ${section} configuration:`, error);
+      logger.error(`Error saving ${section} configuration:`, error);
       toast.error(`Failed to save ${section} configuration`);
     }
   };
@@ -393,7 +394,7 @@ export function ConfigPage() {
     } catch (error) {
       setFormData(prev => ({ ...prev, restartInProgress: false }));
       toast.error('Failed to restart server. Please restart manually.');
-      console.error('Server restart failed:', error);
+      logger.error('Server restart failed',error);
     }
   };
 

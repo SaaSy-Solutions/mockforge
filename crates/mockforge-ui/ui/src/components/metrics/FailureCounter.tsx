@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import type { FailureMetrics } from '../../types';

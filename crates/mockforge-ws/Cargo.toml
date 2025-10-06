@@ -12,6 +12,9 @@ serde_json = { workspace = true }
 regex = { workspace = true }
 jsonpath = "0.1"
 tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+fastrand = "2.0"
 mockforge-core = { path = "../mockforge-core" }
 
 [dev-dependencies]

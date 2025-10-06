@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -37,7 +38,7 @@ export function useErrorHandling(maxRetries = 3) {
     }));
 
     // Log error for monitoring
-    console.error('Error handled:', {
+    logger.error('Error handled',{
       error: error.message,
       stack: error.stack,
       context,
@@ -49,7 +50,7 @@ export function useErrorHandling(maxRetries = 3) {
 
   const retry = useCallback(async (operation?: () => Promise<void>) => {
     if (errorState.retryCount >= maxRetries) {
-      console.warn('Max retries reached, not retrying');
+      logger.warn('Max retries reached, not retrying');
       return;
     }
 
@@ -167,7 +168,7 @@ export function useApiErrorHandling() {
 export function setupGlobalErrorHandlers() {
   if (typeof window !== 'undefined') {
     window.addEventListener('unhandledrejection', (event) => {
-      console.error('Unhandled promise rejection:', event.reason);
+      logger.error('Unhandled promise rejection',event.reason);
       
       // Prevent the default browser behavior
       event.preventDefault();
@@ -177,7 +178,7 @@ export function setupGlobalErrorHandlers() {
     });
 
     window.addEventListener('error', (event) => {
-      console.error('Global error:', event.error);
+      logger.error('Global error',event.error);
       
       // In production, you might want to send this to an error tracking service
       // logErrorToService(event.error, { operation: 'global_error' });
@@ -197,7 +198,7 @@ export function withErrorHandling<T extends unknown[], R>(
     } catch (error) {
       const errorObj = error instanceof Error ? error : new Error(String(error));
       errorHandler(errorObj);
-      console.error('Error in wrapped function:', errorObj, context);
+      logger.error('Error in wrapped function', errorObj,context);
       return undefined;
     }
   };

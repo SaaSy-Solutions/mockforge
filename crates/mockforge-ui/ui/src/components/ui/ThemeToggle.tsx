@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React from 'react';
 import { Moon, Sun, Monitor } from 'lucide-react';
 import { Button } from './button';

@@ -59,6 +59,11 @@ pub struct Overrides {
 }
 
 impl Overrides {
+    /// Get the loaded override rules
+    pub fn rules(&self) -> &[OverrideRule] {
+        &self.rules
+    }
+
     /// Load overrides from glob patterns, with support for MOCKFORGE_HTTP_OVERRIDES_GLOB
     pub async fn load_from_globs(patterns: &[&str]) -> anyhow::Result<Self> {
         // Check for environment variable override
@@ -91,8 +96,7 @@ impl Overrides {
 
                         // Compile regex patterns for performance
                         for target in &r.targets {
-                            if target.starts_with("regex:") || target.starts_with("path:") {
-                                let pattern = target.strip_prefix("regex:").or_else(|| target.strip_prefix("path:")).unwrap();
+                            if let Some(pattern) = target.strip_prefix("regex:").or_else(|| target.strip_prefix("path:")) {
                                 if !regex_cache.contains_key(pattern) {
                                     if let Ok(regex) = Regex::new(pattern) {
                                         regex_cache.insert(pattern.to_string(), regex);

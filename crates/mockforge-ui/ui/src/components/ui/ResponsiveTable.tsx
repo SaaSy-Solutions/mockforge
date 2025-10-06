@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { ChevronIcon, Icons } from './IconSystem';

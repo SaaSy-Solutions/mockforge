@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 // Predefined theme palettes for MockForge
 // Each theme defines light and dark variants with CSS custom property values
 

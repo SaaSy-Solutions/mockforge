@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { useContext } from 'react';
 import { AutocompleteContext } from './AutocompleteContext';
 import type { AutocompleteContextType } from './AutocompleteContext';

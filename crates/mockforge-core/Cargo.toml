@@ -65,6 +65,7 @@ tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
 mockforge-data = { path = "../mockforge-data" }
+proptest = "1.8.0"
 
 [[bench]]
 name = "core_benchmarks"

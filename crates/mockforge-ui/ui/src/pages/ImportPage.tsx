@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useCallback } from 'react';
 import { Upload, FileText, Code, Globe, AlertTriangle, CheckCircle, XCircle, Eye, Download, History, Trash2, Clock, File } from 'lucide-react';
 import {
@@ -440,7 +441,7 @@ export function ImportPage() {
         setSelectedRoutes(new Set(result.routes.map((_, index) => index)));
       }
     } catch (error) {
-      console.error('Preview failed:', error);
+      logger.error('Preview failed',error);
     }
   };
 
@@ -482,7 +483,7 @@ export function ImportPage() {
         toast?.error(`Import failed: ${result.error}`);
       }
     } catch (error) {
-      console.error('Import failed:', error);
+      logger.error('Import failed',error);
       toast?.error('Import failed. Please check the console for details.');
     }
   };

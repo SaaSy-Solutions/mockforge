@@ -1,0 +1,74 @@
+# Test configuration for failure injection
+http:
+  port: 3000
+  host: "0.0.0.0"
+  openapi_spec: null
+  cors_enabled: true
+  request_timeout_secs: 30
+  request_validation: "enforce"
+  aggregate_validation_errors: true
+  validate_responses: false
+  response_template_expand: false
+  validation_status: null
+  validation_overrides: {}
+  skip_admin_validation: true
+
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+  replay_file: null
+  connection_timeout_secs: 300
+
+grpc:
+  port: 50051
+  host: "0.0.0.0"
+
+admin:
+  enabled: true
+  port: 9080
+  mount_path: null
+  api_enabled: true
+
+core:
+  latency_enabled: true
+  failures_enabled: true
+  failure_config:
+    global_error_rate: 0.1  # 10% global error rate
+    default_status_codes: [500, 502, 503, 504]
+    tag_configs:
+      auth:
+        error_rate: 0.2  # 20% error rate for auth operations
+        status_codes: [401, 403]
+        error_message: "Authentication failed"
+      payments:
+        error_rate: 0.05  # 5% error rate for payment operations
+        status_codes: [402, 503]
+        error_message: "Payment processing failed"
+    include_tags: []  # Include all tags
+    exclude_tags: ["health", "metrics"]  # Exclude these tags
+  default_latency:
+    base_ms: 50
+    jitter_ms: 20
+    distribution: "fixed"
+    min_ms: 10
+    max_ms: 5000
+    tag_overrides: {}
+
+logging:
+  level: "info"
+  json_format: false
+  file_path: null
+  max_file_size_mb: 10
+  max_files: 5
+
+data:
+  default_rows: 100
+  default_format: "json"
+  locale: "en"
+  templates: {}
+  rag:
+    enabled: false
+    api_endpoint: null
+    api_key: null
+    model: null
+    context_window: 4000

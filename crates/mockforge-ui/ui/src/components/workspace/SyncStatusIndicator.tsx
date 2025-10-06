@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React from 'react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/button';

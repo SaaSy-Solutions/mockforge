@@ -47,7 +47,7 @@ async fn test_admin_ui_build_and_serve() {
 
         // Verify index.html content
         let html_content = fs::read_to_string(&index_html).unwrap();
-        assert!(html_content.contains("<!DOCTYPE html>"), "index.html should be valid HTML");
+        assert!(html_content.to_lowercase().contains("<!doctype html>"), "index.html should be valid HTML");
         assert!(html_content.contains("<html"), "index.html should contain html tag");
         assert!(html_content.contains("<head>"), "index.html should contain head tag");
         assert!(html_content.contains("<body>"), "index.html should contain body tag");
@@ -91,14 +91,14 @@ async fn test_admin_ui_serves_built_assets() {
     assert!(response.status().is_success(), "Main page should serve successfully");
 
     let content_type = response.headers().get("content-type").unwrap();
-    assert_eq!(content_type, "text/html", "Main page should serve HTML content");
+    assert_eq!(content_type, "text/html; charset=utf-8", "Main page should serve HTML content");
 
     // Verify HTML content contains expected elements
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html_content = String::from_utf8(body_bytes.to_vec()).unwrap();
 
     // Basic HTML structure checks
-    assert!(html_content.contains("<!DOCTYPE html>"), "HTML should have DOCTYPE");
+    assert!(html_content.to_lowercase().contains("<!doctype html>"), "HTML should have DOCTYPE");
     assert!(html_content.contains("<html"), "HTML should have html tag");
     assert!(html_content.contains("<head>"), "HTML should have head tag");
     assert!(html_content.contains("<body>"), "HTML should have body tag");
@@ -227,7 +227,7 @@ async fn test_ui_handles_missing_assets() {
 
     if response.status().is_success() {
         let content_type = response.headers().get("content-type").unwrap();
-        assert_eq!(content_type, "text/html", "Should serve HTML content");
+        assert_eq!(content_type, "text/html; charset=utf-8", "Should serve HTML content");
     }
 
     // Test CSS endpoint
@@ -327,7 +327,7 @@ async fn test_ui_security_headers() {
         "strict-transport-security",
     ];
 
-    let has_some_security_headers =
+    let _has_some_security_headers =
         security_headers.iter().any(|&header| headers.get(header).is_some());
 
     // At minimum, we should have content-type-options for security

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { Plus, Settings, Trash2, Play, GripVertical } from 'lucide-react';
 import { useEnvironments, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment, useSetActiveEnvironment, useEnvironmentVariables, useUpdateEnvironmentsOrder } from '../../hooks/useApi';

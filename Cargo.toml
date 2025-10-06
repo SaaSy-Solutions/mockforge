@@ -31,6 +31,11 @@ readme = "README.md"
 keywords = ["mock", "api", "testing", "grpc", "websocket"]
 categories = ["development-tools", "api-bindings", "web-programming"]
 
+# Configuration for docs.rs
+[workspace.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 # Workspace-wide linting configuration
 [workspace.lints.rust]
 # Deny these lints
@@ -110,3 +115,4 @@ mdbook = "0.4"
 cargo-release = "0.25"
 cargo-audit = "0.18"
 cargo-llvm-cov = "0.6"
+criterion = { version = "0.5", features = ["html_reports"] }

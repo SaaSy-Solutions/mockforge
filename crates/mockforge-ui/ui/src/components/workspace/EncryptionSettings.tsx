@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
@@ -71,7 +72,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       const response = await apiService.getWorkspaceEncryptionStatus(workspaceId);
       setStatus(response);
     } catch (error) {
-      console.error('Failed to load encryption status:', error);
+      logger.error('Failed to load encryption status',error);
     }
   }, [workspaceId]);
 
@@ -80,7 +81,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       const response = await apiService.getWorkspaceEncryptionConfig(workspaceId);
       setConfig(response);
     } catch (error) {
-      console.error('Failed to load encryption config:', error);
+      logger.error('Failed to load encryption config',error);
     }
   }, [workspaceId]);
 
@@ -97,7 +98,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       await loadEncryptionStatus();
     } catch (error) {
       toast.error('Failed to enable encryption');
-      console.error('Error enabling encryption:', error);
+      logger.error('Error enabling encryption',error);
     } finally {
       setLoading(false);
     }
@@ -115,7 +116,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       await loadEncryptionStatus();
     } catch (error) {
       toast.error('Failed to disable encryption');
-      console.error('Error disabling encryption:', error);
+      logger.error('Error disabling encryption',error);
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       toast.success('Security check completed');
     } catch (error) {
       toast.error('Failed to run security check');
-      console.error('Error running security check:', error);
+      logger.error('Error running security check',error);
     } finally {
       setLoading(false);
     }
@@ -144,7 +145,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       setExportPath('');
     } catch (error) {
       toast.error('Failed to export workspace');
-      console.error('Error exporting workspace:', error);
+      logger.error('Error exporting workspace',error);
     } finally {
       setLoading(false);
     }
@@ -161,7 +162,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       await loadEncryptionStatus();
     } catch (error) {
       toast.error('Failed to import workspace');
-      console.error('Error importing workspace:', error);
+      logger.error('Error importing workspace',error);
     } finally {
       setLoading(false);
     }
@@ -174,7 +175,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       toast.success('Encryption configuration updated');
     } catch (error) {
       toast.error('Failed to update configuration');
-      console.error('Error updating configuration:', error);
+      logger.error('Error updating configuration',error);
     } finally {
       setLoading(false);
     }

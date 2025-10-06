@@ -1,0 +1,30 @@
+# Benchmark configuration for MockForge workspace
+#
+# This file defines benchmarks that can be run with `cargo bench`
+#
+# To include this in your main Cargo.toml, add:
+# [workspace.metadata.benchmarks]
+# See benches/ directory for individual benchmark implementations
+
+[package]
+name = "mockforge-benchmarks"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mockforge-core = { path = "crates/mockforge-core" }
+mockforge-data = { path = "crates/mockforge-data" }
+serde_json = "1.0"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "core_benchmarks"
+harness = false
+path = "benches/core_benchmarks.rs"
+
+[lib]
+path = "benches/lib.rs"

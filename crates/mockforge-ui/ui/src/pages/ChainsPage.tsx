@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useEffect, useState } from 'react';
 import { Plus, Eye, Play, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
@@ -41,7 +42,7 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
       setChains(response.chains);
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch chains:', err);
+      logger.error('Failed to fetch chains',err);
       const errorMessage = err instanceof Error
         ? err.message.includes('not valid JSON') || err.message.includes('DOCTYPE')
           ? 'Chain API is not available. The backend may not be running with chain support enabled.'
@@ -86,7 +87,7 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
       const details = await apiService.getChain(chain.id);
       setChainDetails(details);
     } catch (err) {
-      console.error('Failed to fetch chain details:', err);
+      logger.error('Failed to fetch chain details',err);
     } finally {
       setLoadingDetails(false);
     }

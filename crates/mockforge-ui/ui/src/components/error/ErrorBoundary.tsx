@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '../ui/DesignSystem';
@@ -31,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    logger.error('ErrorBoundary caught an error', error,errorInfo);
     this.setState({
       error,
       errorInfo,
@@ -42,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
       reportError(error, errorInfo);
     } catch (e) {
       // Error reporting failed - log but don't crash
-      console.error('Failed to report error:', e);
+      logger.error('Failed to report error',e);
     }
   }
 

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { FileText, Download, Trash2, Search, Eye, Plus, Edit3, Move } from 'lucide-react';
 import { useFixtures } from '../hooks/useApi';
@@ -477,7 +478,7 @@ export function FixturesPage() {
                   setIsRenameDialogOpen(false);
                   refetch();
                 } catch (error) {
-                  console.error('Error renaming fixture:', error);
+                  logger.error('Error renaming fixture',error);
                   toast.error('Failed to rename fixture');
                 }
               }}
@@ -534,7 +535,7 @@ export function FixturesPage() {
                   setNewFixturePath('');
                   refetch();
                 } catch (error) {
-                  console.error('Error moving fixture:', error);
+                  logger.error('Error moving fixture',error);
                   toast.error('Failed to move fixture');
                 }
               }}
@@ -590,7 +591,7 @@ export function FixturesPage() {
                   setFixtureToDelete(null);
                   refetch();
                 } catch (error) {
-                  console.error('Error deleting fixture:', error);
+                  logger.error('Error deleting fixture',error);
                   toast.error('Failed to delete fixture');
                 }
               }}

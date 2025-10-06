@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useEffect } from 'react';
 import { LatencyHistogram } from './LatencyHistogram';
 import { FailureCounter } from './FailureCounter';

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../ui/Dialog';
 import { Button } from '../ui/button';
@@ -50,7 +51,7 @@ export function WorkspaceSettingsDialog({
       await onSave(config);
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to save workspace settings:', error);
+      logger.error('Failed to save workspace settings',error);
     }
   };
 
@@ -68,7 +69,7 @@ export function WorkspaceSettingsDialog({
         setConfig(prev => ({ ...prev, target_directory: path }));
       }
     } catch (error) {
-      console.error('Failed to select directory:', error);
+      logger.error('Failed to select directory',error);
     }
   };
 

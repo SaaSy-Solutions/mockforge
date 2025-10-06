@@ -1,0 +1,42 @@
+# Nextest configuration for MockForge
+# See https://nexte.st/book/configuration.html
+
+[profile.default]
+# Set a global test timeout of 60 seconds
+slow-timeout = { period = "60s", terminate-after = 3 }
+
+# Default number of retries for flaky tests
+retries = 0
+
+# Run tests in parallel
+test-threads = 4
+
+[[profile.default.overrides]]
+# Specific timeout for known slow tests
+filter = 'test(admin_handlers)'
+slow-timeout = { period = "10s", terminate-after = 2 }
+threads-required = 1
+
+[[profile.default.overrides]]
+# WebSocket tests can be a bit slower
+filter = 'test(ws_)'
+slow-timeout = { period = "30s" }
+
+[[profile.default.overrides]]
+# gRPC tests can be slower due to reflection
+filter = 'test(grpc|reflection)'
+slow-timeout = { period = "45s" }
+
+[profile.ci]
+# CI profile with stricter timeouts
+slow-timeout = { period = "30s", terminate-after = 2 }
+retries = 2
+test-threads = 2
+
+# Fail fast in CI
+fail-fast = true
+
+[[profile.ci.overrides]]
+# Allow more time for integration tests in CI
+filter = 'test(integration|e2e)'
+slow-timeout = { period = "60s" }

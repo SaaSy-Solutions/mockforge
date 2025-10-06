@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/Dialog';
 import { Button } from '../ui/button';
@@ -61,7 +62,7 @@ export function SyncConfirmationDialog({
       await onConfirm(applyAll);
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to confirm sync changes:', error);
+      logger.error('Failed to confirm sync changes',error);
     }
   };
 

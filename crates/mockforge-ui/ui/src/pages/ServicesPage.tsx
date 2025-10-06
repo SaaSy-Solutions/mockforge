@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React from 'react';
 import { Search } from 'lucide-react';
 import { ServicesPanel } from '../components/services/ServicesPanel';

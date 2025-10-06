@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { Button } from '../ui/button';
 import { UserProfile } from '../auth/UserProfile';
 

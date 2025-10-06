@@ -44,7 +44,7 @@ impl HttpServerState {
             routes: Vec::new(),
         }
     }
-    
+
     pub fn with_routes(routes: Vec<RouteInfo>) -> Self {
         Self {
             routes,
@@ -64,7 +64,7 @@ async fn get_routes_handler(State(state): State<HttpServerState>) -> Json<serde_
             "parameters": route.parameters
         })
     }).collect();
-    
+
     Json(serde_json::json!({
         "routes": route_info,
         "total": state.routes.len()
@@ -86,7 +86,7 @@ pub async fn build_router(
         tracing::debug!("Processing OpenAPI spec path: {}", spec_path);
         match OpenApiSpec::from_file(&spec_path).await {
             Ok(openapi) => {
-                info!("Loaded OpenAPI spec from {}", spec_path);
+                info!("Successfully loaded OpenAPI spec from {}", spec_path);
                 tracing::debug!("Creating OpenAPI route registry...");
                 let registry = if let Some(opts) = options {
                     tracing::debug!("Using custom validation options");
@@ -109,19 +109,45 @@ pub async fn build_router(
                 }).collect();
                 state.routes = route_info;
 
-                tracing::debug!("Building router from registry...");
+                tracing::debug!("Building router from registry with {} routes", registry.routes().len());
+
+                // Load overrides if environment variable is set
+                let overrides = if std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB").is_ok() {
+                    tracing::debug!("Loading overrides from environment variable");
+                    match mockforge_core::Overrides::load_from_globs(&[]).await {
+                        Ok(overrides) => {
+                            tracing::debug!("Loaded {} override rules", overrides.rules().len());
+                            Some(overrides)
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to load overrides: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                let overrides_enabled = overrides.is_some();
                 let openapi_router = if let Some(failure_config) = &failure_config {
-                    tracing::debug!("Building router with failure injection");
+                    tracing::debug!("Building router with failure injection and overrides");
                     let failure_injector = FailureInjector::new(Some(failure_config.clone()), true);
-                    registry.build_router_with_injectors(
+                    registry.build_router_with_injectors_and_overrides(
                         LatencyInjector::default(),
                         Some(failure_injector),
+                        overrides,
+                        overrides_enabled,
                     )
                 } else {
-                    tracing::debug!("Building basic router");
-                    registry.build_router()
+                    tracing::debug!("Building router with overrides");
+                    registry.build_router_with_injectors_and_overrides(
+                        LatencyInjector::default(),
+                        None,
+                        overrides,
+                        overrides_enabled,
+                    )
                 };
-                
+
                 tracing::debug!("Merging OpenAPI router with main router");
                 app = app.merge(openapi_router);
                 tracing::debug!("Router built successfully");

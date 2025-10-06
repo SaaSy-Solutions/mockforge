@@ -1,21 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import { logger } from '@/utils/logger';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AppShell } from './components/layout/AppShell';
-import { DashboardPage } from './pages/DashboardPage';
-import { ServicesPage } from './pages/ServicesPage';
-import { LogsPage } from './pages/LogsPage';
-import { MetricsPage } from './pages/MetricsPage';
-import { FixturesPage } from './pages/FixturesPage';
-import { ConfigPage } from './pages/ConfigPage';
-import { TestingPage } from './pages/TestingPage';
-import { ImportPage } from './pages/ImportPage';
-import WorkspacesPage from './pages/WorkspacesPage';
-import { PluginsPage } from './pages/PluginsPage';
-import { ChainsPage } from './pages/ChainsPage';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { ToastProvider } from './components/ui/ToastProvider';
 import { useStartupPrefetch } from './hooks/usePrefetch';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
+
+// Lazy load all pages for better code splitting
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ServicesPage = lazy(() => import('./pages/ServicesPage').then(m => ({ default: m.ServicesPage })));
+const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
+const MetricsPage = lazy(() => import('./pages/MetricsPage').then(m => ({ default: m.MetricsPage })));
+const FixturesPage = lazy(() => import('./pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
+const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
+const TestingPage = lazy(() => import('./pages/TestingPage').then(m => ({ default: m.TestingPage })));
+const ImportPage = lazy(() => import('./pages/ImportPage').then(m => ({ default: m.ImportPage })));
+const WorkspacesPage = lazy(() => import('./pages/WorkspacesPage'));
+const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
+const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -88,7 +91,16 @@ function App() {
         <AuthGuard>
           <AppShell activeTab={activeTab} onTabChange={setActiveTab} onRefresh={handleRefresh}>
             <ErrorBoundary>
-              {renderPage()}
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+                  </div>
+                </div>
+              }>
+                {renderPage()}
+              </Suspense>
             </ErrorBoundary>
           </AppShell>
         </AuthGuard>

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * Error handling utilities for consistent error processing across the app
  */
@@ -120,7 +121,7 @@ function getHttpErrorMessage(statusCode?: number): string {
 export function logError(error: unknown, context?: string): void {
   if (import.meta.env.DEV) {
     const details = getErrorDetails(error);
-    console.error(
+    logger.error(
       `[Error${context ? ` - ${context}` : ''}]`,
       details.message,
       '\nType:',

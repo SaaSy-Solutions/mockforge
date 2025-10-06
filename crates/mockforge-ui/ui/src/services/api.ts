@@ -63,6 +63,7 @@ import {
   safeValidateApiResponse,
   type WorkspaceSummary,
 } from '../schemas/api';
+import { logger } from '@/utils/logger';
 
 // Admin API type definitions
 export type { RequestLog, MetricsData, ValidationSettings, LatencyProfile, FaultConfig, ProxyConfig, DashboardData } from '../types';
@@ -100,7 +101,7 @@ class ApiService {
 
     if (!result.success) {
       if (import.meta.env.DEV) {
-        console.error('API validation error:', result.error.format());
+        logger.error('API validation error', result.error.format());
       }
       throw new Error(`API response validation failed: ${result.error.message}`);
     }
@@ -531,7 +532,7 @@ class FixturesApiService {
 
     if (!result.success) {
       if (import.meta.env.DEV) {
-        console.error('API validation error:', result.error.format());
+        logger.error('API validation error', result.error.format());
       }
       throw new Error(`API response validation failed: ${result.error.message}`);
     }
@@ -613,7 +614,7 @@ class DashboardApiService {
 
     if (!result.success) {
       if (import.meta.env.DEV) {
-        console.error('API validation error:', result.error.format());
+        logger.error('API validation error', result.error.format());
       }
       throw new Error(`API response validation failed: ${result.error.message}`);
     }
@@ -700,7 +701,7 @@ class LogsApiService {
 
     if (!result.success) {
       if (import.meta.env.DEV) {
-        console.error('API validation error:', result.error.format());
+        logger.error('API validation error', result.error.format());
       }
       throw new Error(`API response validation failed: ${result.error.message}`);
     }
@@ -965,7 +966,7 @@ export const smokeTestsApi = new SmokeTestsApiService();
 export const pluginsApi = new PluginsApiService();
 
 // Debug: Log to verify services are created
-console.log('API Services initialized:', {
+logger.info('API Services initialized', {
   apiService: !!apiService,
   importApi: !!importApi,
   fixturesApi: !!fixturesApi,

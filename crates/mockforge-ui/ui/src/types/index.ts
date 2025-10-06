@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 // ==================== AUTH TYPES ====================
 
 export interface User {

@@ -20,17 +20,45 @@ export default defineConfig({
   },
   build: {
     manifest: true,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        entryFileNames: `assets/[name].js`,
-        chunkFileNames: `assets/[name].js`,
-        assetFileNames: `assets/[name].[ext]`,
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-tabs', '@radix-ui/react-toast'],
-          'query-vendor': ['@tanstack/react-query', '@tanstack/react-query-devtools'],
-          'editor-vendor': ['@monaco-editor/react', 'monaco-editor'],
-          'chart-vendor': ['recharts'],
+        entryFileNames: `assets/[name].[hash].js`,
+        chunkFileNames: `assets/[name].[hash].js`,
+        assetFileNames: `assets/[name].[hash].[ext]`,
+        manualChunks: (id) => {
+          // Core React libraries
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            return 'react-vendor';
+          }
+          // Radix UI components
+          if (id.includes('node_modules/@radix-ui')) {
+            return 'ui-vendor';
+          }
+          // React Query and devtools
+          if (id.includes('node_modules/@tanstack/react-query')) {
+            // Exclude devtools from production vendor chunk
+            if (id.includes('devtools')) {
+              return 'query-devtools';
+            }
+            return 'query-vendor';
+          }
+          // Monaco Editor (large library)
+          if (id.includes('node_modules/monaco-editor') || id.includes('node_modules/@monaco-editor')) {
+            return 'editor-vendor';
+          }
+          // Charts library
+          if (id.includes('node_modules/recharts')) {
+            return 'chart-vendor';
+          }
+          // Zustand state management
+          if (id.includes('node_modules/zustand')) {
+            return 'state-vendor';
+          }
+          // MUI components
+          if (id.includes('node_modules/@mui') || id.includes('node_modules/@emotion')) {
+            return 'mui-vendor';
+          }
         }
       }
     }

@@ -1,6 +1,10 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Path, State};
 use axum::{response::IntoResponse, routing::get, Router};
 use mockforge_core::{latency::LatencyInjector, LatencyProfile, WsProxyHandler};
+use serde_json::Value;
+use tokio::fs;
+use tokio::time::{sleep, Duration};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use tracing::*;
@@ -28,7 +32,10 @@ pub fn router_with_proxy(proxy_handler: WsProxyHandler) -> Router {
     #[cfg(feature = "data-faker")]
     register_core_faker_provider();
 
-    Router::new().route("/ws", get(ws_handler_with_proxy)).with_state(proxy_handler)
+    Router::new()
+        .route("/ws", get(ws_handler_with_proxy))
+        .route("/ws/{*path}", get(ws_handler_with_proxy_path))
+        .with_state(proxy_handler)
 }
 
 /// Start WebSocket server with latency simulation
@@ -63,19 +70,169 @@ async fn ws_handler_with_state(
 
 async fn ws_handler_with_proxy(
     ws: WebSocketUpgrade,
-    axum::extract::State(_proxy): axum::extract::State<WsProxyHandler>,
+    State(proxy): State<WsProxyHandler>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(handle_socket)
+    ws.on_upgrade(move |socket| handle_socket_with_proxy(socket, proxy, "/ws".to_string()))
+}
+
+async fn ws_handler_with_proxy_path(
+    Path(path): Path<String>,
+    ws: WebSocketUpgrade,
+    State(proxy): State<WsProxyHandler>,
+) -> impl IntoResponse {
+    let full_path = format!("/ws/{}", path);
+    ws.on_upgrade(move |socket| handle_socket_with_proxy(socket, proxy, full_path))
 }
 
 async fn handle_socket(mut socket: WebSocket) {
-    while let Some(msg) = socket.recv().await {
-        if let Ok(Message::Text(text)) = msg {
-            // Echo the message back
-            if socket.send(Message::Text(text)).await.is_err() {
+    // Check if replay mode is enabled
+    if let Ok(replay_file) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
+        info!("WebSocket replay mode enabled with file: {}", replay_file);
+        handle_socket_with_replay(socket, &replay_file).await;
+    } else {
+        // Normal echo mode
+        while let Some(msg) = socket.recv().await {
+            if let Ok(Message::Text(text)) = msg {
+                // Echo the message back with "echo: " prefix
+                let response = format!("echo: {}", text);
+                if socket.send(Message::Text(response.into())).await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+async fn handle_socket_with_replay(mut socket: WebSocket, replay_file: &str) {
+    // Read the replay file
+    let content = match fs::read_to_string(replay_file).await {
+        Ok(content) => content,
+        Err(e) => {
+            error!("Failed to read replay file {}: {}", replay_file, e);
+            return;
+        }
+    };
+
+    // Parse JSONL file
+    let mut replay_entries = Vec::new();
+    for line in content.lines() {
+        if let Ok(entry) = serde_json::from_str::<Value>(line) {
+            replay_entries.push(entry);
+        }
+    }
+
+    info!("Loaded {} replay entries", replay_entries.len());
+
+    // Process replay entries
+    for entry in replay_entries {
+        // Check if we need to wait for a specific message
+        if let Some(wait_for) = entry.get("waitFor") {
+            if let Some(wait_pattern) = wait_for.as_str() {
+                info!("Waiting for pattern: {}", wait_pattern);
+                // Wait for matching message from client
+                let mut found = false;
+                while let Some(msg) = socket.recv().await {
+                    if let Ok(Message::Text(text)) = msg {
+                        if text.contains(wait_pattern) || wait_pattern == "^CLIENT_READY$" {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    break;
+                }
+            }
+        }
+
+        // Get the message text
+        if let Some(text) = entry.get("text").and_then(|v| v.as_str()) {
+            // Expand tokens if enabled
+            let expanded_text = if std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+            {
+                expand_tokens(text)
+            } else {
+                text.to_string()
+            };
+
+            info!("Sending replay message: {}", expanded_text);
+            if socket.send(Message::Text(expanded_text.into())).await.is_err() {
                 break;
             }
         }
+
+        // Wait for the specified time
+        if let Some(ts) = entry.get("ts").and_then(|v| v.as_u64()) {
+            sleep(Duration::from_millis(ts * 10)).await; // Convert to milliseconds
+        }
+    }
+}
+
+fn expand_tokens(text: &str) -> String {
+    let mut result = text.to_string();
+
+    // Expand {{uuid}}
+    result = result.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
+
+    // Expand {{now}}
+    result = result.replace("{{now}}", &chrono::Utc::now().to_rfc3339());
+
+    // Expand {{now+1m}} (add 1 minute)
+    if result.contains("{{now+1m}}") {
+        let now_plus_1m = chrono::Utc::now() + chrono::Duration::minutes(1);
+        result = result.replace("{{now+1m}}", &now_plus_1m.to_rfc3339());
+    }
+
+    // Expand {{now+1h}} (add 1 hour)
+    if result.contains("{{now+1h}}") {
+        let now_plus_1h = chrono::Utc::now() + chrono::Duration::hours(1);
+        result = result.replace("{{now+1h}}", &now_plus_1h.to_rfc3339());
+    }
+
+    // Expand {{randInt min max}}
+    while result.contains("{{randInt") {
+        if let Some(start) = result.find("{{randInt") {
+            if let Some(end) = result[start..].find("}}") {
+                let full_match = &result[start..start + end + 2];
+                let content = &result[start + 9..start + end]; // Skip "{{randInt"
+
+                if let Some(space_pos) = content.find(' ') {
+                    let min_str = &content[..space_pos];
+                    let max_str = &content[space_pos + 1..];
+
+                    if let (Ok(min), Ok(max)) = (min_str.parse::<i32>(), max_str.parse::<i32>()) {
+                        let random_value = fastrand::i32(min..=max);
+                        result = result.replace(full_match, &random_value.to_string());
+                    } else {
+                        result = result.replace(full_match, "0");
+                    }
+                } else {
+                    result = result.replace(full_match, "0");
+                }
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    result
+}
+
+async fn handle_socket_with_proxy(socket: WebSocket, proxy: WsProxyHandler, path: String) {
+    // Check if this connection should be proxied
+    if proxy.config.should_proxy(&path) {
+        info!("Proxying WebSocket connection for path: {}", path);
+        if let Err(e) = proxy.proxy_connection(&path, socket).await {
+            error!("Failed to proxy WebSocket connection: {}", e);
+        }
+    } else {
+        info!("Handling WebSocket connection locally for path: {}", path);
+        // Handle locally by echoing messages
+        handle_socket(socket).await;
     }
 }
 

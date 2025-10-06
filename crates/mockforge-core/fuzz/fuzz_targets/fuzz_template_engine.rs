@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use mockforge_core::templating::render_template;
+use mockforge_core::templating::{expand_str_with_context, TemplatingContext};
 use serde_json::json;
 
 fuzz_target!(|data: &[u8]| {
@@ -18,6 +18,7 @@ fuzz_target!(|data: &[u8]| {
         });
 
         // Attempt to render the template
-        let _ = render_template(template_str, &context);
+        let templating_context = TemplatingContext::empty();
+        let _ = expand_str_with_context(template_str, &templating_context);
     }
 });

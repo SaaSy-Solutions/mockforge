@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { Logo } from '../ui/Logo';
 
 export function Sidebar() {

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useEffect } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { LoginForm } from './LoginForm';

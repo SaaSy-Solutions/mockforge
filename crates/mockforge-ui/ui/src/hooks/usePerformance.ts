@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -25,7 +26,7 @@ export function useRenderPerformance(componentName: string) {
 
     // Log performance info in development
     if (import.meta.env.DEV && renderCount.current > 1) {
-      console.log(`[${componentName}] Render #${renderCount.current}, Time: ${renderTime.toFixed(2)}ms, Avg: ${avg.toFixed(2)}ms`);
+      logger.info(`[${componentName}] Render #${renderCount.current}, Time: ${renderTime.toFixed(2)}ms, Avg: ${avg.toFixed(2)}ms`);
     }
   });
 
@@ -60,7 +61,7 @@ export function useApiPerformance(apiName: string) {
 
     // Log slow API calls
     if (duration > 1000 && import.meta.env.DEV) {
-      console.warn(`[${apiName}] Slow API call: ${duration.toFixed(2)}ms`);
+      logger.warn(`[${apiName}] Slow API call: ${duration.toFixed(2)}ms`);
     }
 
     return duration;
@@ -139,7 +140,7 @@ export function useMemoizedComputation<T>(
 
     // Log slow computations
     if (computationTime.current > 50 && import.meta.env.DEV) {
-      console.warn(`Slow computation: ${computationTime.current.toFixed(2)}ms`);
+      logger.warn(`Slow computation: ${computationTime.current.toFixed(2)}ms`);
     }
   }, dependencies);
 

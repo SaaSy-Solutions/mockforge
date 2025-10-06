@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
@@ -54,9 +55,9 @@ export function ServiceToggleCard({
 
     if (success) {
       // Could add a toast notification here in the future
-      console.log('cURL command copied to clipboard:', curlCommand);
+      logger.info('cURL command copied to clipboard:', curlCommand);
     } else {
-      console.error('Failed to copy cURL command to clipboard');
+      logger.error('Failed to copy cURL command to clipboard');
     }
   };
 

@@ -2,6 +2,18 @@
 
 This directory contains example files demonstrating MockForge's capabilities with different protocols and configurations.
 
+## 📑 Quick Navigation
+
+| Example | Protocol | Features | Complexity |
+|---------|----------|----------|------------|
+| [OpenAPI Demo](#1-openapi-example-openapi-demojson) | HTTP | Templates, Path Params, Request Body | ⭐ Beginner |
+| [WebSocket Demo](#2-websocket-example-ws-demojsonl) | WebSocket | Replay Mode, Interactive Messages | ⭐ Beginner |
+| [WebSocket v2](#websocket-v2-example-ws-replay-v2-demojsonl) | WebSocket | Advanced Replay, JSONPath | ⭐⭐ Intermediate |
+| [Conditional Overrides](#conditional-overrides-example) | HTTP | Dynamic Routing, Conditions | ⭐⭐ Intermediate |
+| [Request Chaining](#request-chaining-example) | HTTP | Chain Execution, State Passing | ⭐⭐ Intermediate |
+| [Template Features](#template-features-examples) | HTTP | Advanced Templates, Data Generation | ⭐⭐⭐ Advanced |
+| [Plugins](#plugin-examples) | All | Custom Extensions, WASM | ⭐⭐⭐ Advanced |
+
 ## 📋 Examples Overview
 
 ### 1. OpenAPI Example (`openapi-demo.json`)
@@ -233,6 +245,64 @@ ws.on('error', (err) => {
 {"type":"notification","title":"System Update","message":"Server maintenance scheduled","timestamp":"2025-09-12T18:20:01.512504405+00:00"}
 ```
 
+### WebSocket v2 Example (`ws-replay-v2-demo.jsonl`)
+
+Advanced WebSocket replay with enhanced features and JSONPath support.
+
+See [README-websocket-jsonpath.md](README-websocket-jsonpath.md) for detailed documentation.
+
+### Conditional Overrides Example
+
+Demonstrates dynamic request routing based on conditions using `conditional-overrides.yaml`.
+
+Key Features:
+- Header-based routing
+- Query parameter conditions
+- Request body matching
+- Dynamic response selection
+
+See [README-conditional-overrides.md](README-conditional-overrides.md) for detailed documentation.
+
+### Request Chaining Example
+
+Chain multiple requests together with state passing between endpoints.
+
+Files:
+- `chain-example.yaml` - Advanced chaining configuration
+- `simple-chain.json` - Basic chain example
+
+### Template Features Examples
+
+Advanced template examples demonstrating all available template functions:
+
+- `template-examples.yaml` - Common template patterns
+- `advanced-template-features.yaml` - Advanced features including:
+  - Conditional rendering
+  - Loops and iteration
+  - Custom helpers
+  - Data generation integration
+
+## Plugin Examples
+
+Located in `examples/plugins/`, these demonstrate the WASM plugin system:
+
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `auth-jwt` | Authentication | JWT token validation and generation |
+| `auth-basic` | Authentication | Basic HTTP authentication |
+| `template-crypto` | Template Helper | Encryption/decryption functions |
+| `template-custom` | Template Helper | Custom template functions |
+| `datasource-csv` | Data Source | Load data from CSV files |
+| `response-graphql` | Response Generator | GraphQL response generation |
+
+Each plugin includes:
+- `plugin.yaml` - Plugin configuration
+- `Cargo.toml` - Build configuration
+- `src/lib.rs` - Implementation
+- `README.md` - Usage documentation (where applicable)
+
+See [plugins/README.md](plugins/README.md) for more details.
+
 ## 🔍 Troubleshooting
 
 ### Common Issues:
@@ -257,3 +327,10 @@ curl -v http://localhost:3000/
 # Test WebSocket port
 nc -z localhost 3001 && echo "WebSocket port open" || echo "WebSocket port closed"
 ```
+
+## 📚 Related Documentation
+
+- [Main README](../README.md) - Project overview
+- [MockForge Book](../book/README.md) - Comprehensive documentation
+- [API Reference](https://docs.rs/mockforge) - Rust API documentation
+- [Plugin Development](../docs/plugins/development-guide.md) - Plugin development guide

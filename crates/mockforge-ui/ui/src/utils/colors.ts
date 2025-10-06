@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 // Semantic color mappings for consistent UI theming
 export const semanticColors = {
   // Status colors with clear meanings

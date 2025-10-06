@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * React hooks for MockForge Admin API
  * Uses React Query for caching, background refetching, and optimistic updates
@@ -52,7 +53,7 @@ export function useDashboard() {
     queryKey: queryKeys.dashboard,
     queryFn: async () => {
       if (!dashboardApi) {
-        console.error('dashboardApi is undefined!');
+        logger.error('dashboardApi is undefined!');
         throw new Error('dashboardApi service not initialized');
       }
       return dashboardApi.getDashboard();
@@ -154,7 +155,7 @@ export function useMetrics() {
     queryKey: queryKeys.metrics,
     queryFn: async () => {
       if (!metricsApi) {
-        console.error('metricsApi is undefined!');
+        logger.error('metricsApi is undefined!');
         throw new Error('metricsApi service not initialized');
       }
       return metricsApi.getMetrics();
@@ -294,7 +295,7 @@ export function useFixtures() {
         // Ensure we return an array - data.data is the array from the API response
         return Array.isArray(data.data) ? data.data : [];
       } catch (error) {
-        console.error('[FIXTURES ERROR] Failed to fetch fixtures:', error);
+        logger.error('[FIXTURES ERROR] Failed to fetch fixtures',error);
         throw error;
       }
     },

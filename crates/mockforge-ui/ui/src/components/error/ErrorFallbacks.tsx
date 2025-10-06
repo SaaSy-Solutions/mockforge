@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home, Database, Clock } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -224,7 +225,7 @@ class ErrorBoundaryWrapper extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Component error caught:', error, errorInfo);
+    logger.error('Component error caught', error,errorInfo);
   }
 
   render() {

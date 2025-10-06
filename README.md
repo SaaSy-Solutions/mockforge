@@ -467,6 +467,10 @@ echo -e '{"name":"first"}\n{"name":"second"}' | grpcurl -plaintext -proto crates
 
 ## 🎛️ Admin Interface
 
+### Dashboard
+
+![Dashboard](docs/images/mockforge-dashboard.png)
+
 MockForge ships a built-in Admin UI that can run as either:
 
 - A standalone server (default when `--admin` is used): `http://localhost:9080/`.

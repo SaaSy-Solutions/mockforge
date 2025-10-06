@@ -1,0 +1,28 @@
+# Test configuration for Admin UI integration
+# HTTP server configuration
+http:
+  port: 3000
+  host: "127.0.0.1"
+  openapi_spec: "examples/openapi-demo.json"
+  cors_enabled: true
+
+# Admin UI configuration
+admin:
+  enabled: true
+  port: 9080
+  host: "127.0.0.1"
+  auth_required: false
+  api_enabled: true
+
+# Core configuration
+core:
+  latency_enabled: true
+  failures_enabled: false
+  default_latency:
+    base_ms: 50
+    jitter_ms: 20
+
+# Logging configuration
+logging:
+  level: "info"
+  json_format: false

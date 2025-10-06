@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useMemo } from 'react';
 import { BarChart3, TrendingUp, Clock, Activity, Zap } from 'lucide-react';
 import { useMetrics } from '../hooks/useApi';

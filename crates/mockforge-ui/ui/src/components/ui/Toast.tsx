@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';

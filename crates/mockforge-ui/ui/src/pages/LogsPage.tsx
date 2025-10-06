@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useMemo } from 'react';
 import { FileText, Search, Download, RefreshCw, ChevronDown } from 'lucide-react';
 import { useLogs } from '../hooks/useApi';
@@ -121,7 +122,7 @@ export function LogsPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Failed to export logs:', err);
+      logger.error('Failed to export logs',err);
       alert('Failed to export logs. Please try again.');
     }
   };

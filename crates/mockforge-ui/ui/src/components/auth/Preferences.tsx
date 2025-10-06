@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -59,7 +60,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
       await savePreferences();
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to save preferences:', error);
+      logger.error('Failed to save preferences',error);
     }
   };
 

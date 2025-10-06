@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';

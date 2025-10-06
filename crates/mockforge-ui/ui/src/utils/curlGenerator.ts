@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import type { RouteInfo } from '../types';
 
 export interface CurlOptions {
@@ -77,7 +78,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       document.body.removeChild(textArea);
       return successful;
     } catch (fallbackErr) {
-      console.error('Failed to copy to clipboard:', fallbackErr);
+      logger.error('Failed to copy to clipboard',fallbackErr);
       return false;
     }
   }

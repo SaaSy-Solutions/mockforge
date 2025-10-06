@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useMemo, useState, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { FileText, Clock, Globe, Filter } from 'lucide-react';
@@ -60,7 +61,7 @@ export function RequestLog() {
   // Validate logs data format
   useEffect(() => {
     if (import.meta.env.DEV && logsData && !Array.isArray(logsData)) {
-      console.warn('RequestLog - Expected array but got:', typeof logsData);
+      logger.warn('RequestLog - Expected array but got:', typeof logsData);
     }
   }, [logsData]);
 
@@ -219,7 +220,7 @@ export function RequestLog() {
       setDebounced('');
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.error('Failed to clear logs:', error);
+        logger.error('Failed to clear logs',error);
       }
     }
   };

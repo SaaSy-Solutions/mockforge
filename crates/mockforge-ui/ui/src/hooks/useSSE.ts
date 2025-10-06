@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * React hook for Server-Sent Events (SSE) connections
  */
@@ -74,7 +75,7 @@ export function useSSE<T = unknown>(
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
       if (import.meta.env.DEV) {
-        console.log('SSE: Disconnecting from', url);
+        logger.info('SSE: Disconnecting from', url);
       }
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -91,7 +92,7 @@ export function useSSE<T = unknown>(
     // Prevent multiple connections
     if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) {
       if (import.meta.env.DEV) {
-        console.log('SSE: Already connected to', url);
+        logger.info('SSE: Already connected to', url);
       }
       return;
     }
@@ -101,14 +102,14 @@ export function useSSE<T = unknown>(
 
     try {
       if (import.meta.env.DEV) {
-        console.log('SSE: Connecting to', url);
+        logger.info('SSE: Connecting to', url);
       }
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
         if (import.meta.env.DEV) {
-          console.log('SSE: Connection opened to', url);
+          logger.info('SSE: Connection opened to', url);
         }
         setReadyState(EventSource.OPEN);
         setError(null);
@@ -121,7 +122,7 @@ export function useSSE<T = unknown>(
           setData(parsedData);
         } catch (e) {
           if (import.meta.env.DEV) {
-            console.warn('SSE: Failed to parse message data:', e);
+            logger.warn('SSE: Failed to parse message data:', e);
           }
           // If parsing fails, use raw data
           setData(event.data as T);
@@ -130,7 +131,7 @@ export function useSSE<T = unknown>(
 
       eventSource.onerror = (event) => {
         if (import.meta.env.DEV) {
-          console.error('SSE: Connection error', event, 'ReadyState:', eventSource.readyState);
+          logger.error('SSE: Connection error', event, 'ReadyState:', eventSource.readyState);
         }
         setError(event);
         setReadyState(eventSource.readyState);
@@ -139,7 +140,7 @@ export function useSSE<T = unknown>(
         if (retry.enabled && retryAttemptsRef.current < (retry.maxAttempts || 3)) {
           retryAttemptsRef.current += 1;
           if (import.meta.env.DEV) {
-            console.log('SSE: Retrying connection, attempt', retryAttemptsRef.current);
+            logger.info('SSE: Retrying connection, attempt', retryAttemptsRef.current);
           }
 
           retryTimeoutRef.current = setTimeout(() => {
@@ -151,14 +152,14 @@ export function useSSE<T = unknown>(
       // Handle custom events (like 'new_logs')
       eventSource.addEventListener('new_logs', (event: MessageEvent) => {
         if (import.meta.env.DEV) {
-          console.log('SSE: Received new_logs event');
+          logger.info('SSE: Received new_logs event');
         }
         try {
           const parsedData = JSON.parse(event.data);
           setData(parsedData);
         } catch (e) {
           if (import.meta.env.DEV) {
-            console.error('SSE: Failed to parse logs data:', e);
+            logger.error('SSE: Failed to parse logs data',e);
           }
           setData(event.data as T);
         }
@@ -167,7 +168,7 @@ export function useSSE<T = unknown>(
       // Handle keep-alive events
       eventSource.addEventListener('keep_alive', () => {
         if (import.meta.env.DEV) {
-          console.log('SSE: Received keep_alive event');
+          logger.info('SSE: Received keep_alive event');
         }
         // Just acknowledge the keep-alive, don't update data
       });
@@ -175,7 +176,7 @@ export function useSSE<T = unknown>(
       // Handle test events
       eventSource.addEventListener('test', (event) => {
         if (import.meta.env.DEV) {
-          console.log('SSE: Received test event:', event.data);
+          logger.info('SSE: Received test event:', event.data);
         }
       });
 

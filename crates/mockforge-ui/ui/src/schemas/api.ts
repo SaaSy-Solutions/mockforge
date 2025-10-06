@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { z } from 'zod';
 
 // ==================== LOG SCHEMAS ====================
@@ -197,7 +198,7 @@ export function safeValidateApiResponse<T>(
     }
     return { success: false, error: result.error };
   } catch (error) {
-    console.error('[VALIDATION ERROR] Exception:', error);
+    logger.error('[VALIDATION ERROR] Exception',error);
     throw error;
   }
 }

@@ -1,0 +1,96 @@
+name: Fuzz Testing
+
+on:
+  schedule:
+    # Run fuzz tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Fuzzing duration in seconds'
+        required: false
+        default: '300'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Cache fuzz corpus
+        uses: actions/cache@v4
+        with:
+          path: crates/mockforge-core/fuzz/corpus
+          key: fuzz-corpus-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-
+
+      - name: Run OpenAPI parser fuzzer
+        working-directory: crates/mockforge-core
+        run: |
+          timeout ${{ github.event.inputs.duration || 300 }} \
+          cargo +nightly fuzz run fuzz_openapi_parser -- -max_total_time=${{ github.event.inputs.duration || 300 }} \
+          || [ $? -eq 124 ]
+
+      - name: Run template engine fuzzer
+        working-directory: crates/mockforge-core
+        run: |
+          timeout ${{ github.event.inputs.duration || 300 }} \
+          cargo +nightly fuzz run fuzz_template_engine -- -max_total_time=${{ github.event.inputs.duration || 300 }} \
+          || [ $? -eq 124 ]
+
+      - name: Run JSON validator fuzzer
+        working-directory: crates/mockforge-core
+        run: |
+          timeout ${{ github.event.inputs.duration || 300 }} \
+          cargo +nightly fuzz run fuzz_json_validator -- -max_total_time=${{ github.event.inputs.duration || 300 }} \
+          || [ $? -eq 124 ]
+
+      - name: Check for crashes
+        id: check_crashes
+        run: |
+          if [ -d "crates/mockforge-core/fuzz/artifacts" ]; then
+            crashes=$(find crates/mockforge-core/fuzz/artifacts -name "crash-*" | wc -l)
+            echo "crashes=$crashes" >> $GITHUB_OUTPUT
+            if [ $crashes -gt 0 ]; then
+              echo "::warning::Found $crashes crash(es) during fuzzing"
+            fi
+          else
+            echo "crashes=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload crash artifacts
+        if: steps.check_crashes.outputs.crashes != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-artifacts
+          path: crates/mockforge-core/fuzz/artifacts/
+
+      - name: Create issue on crash
+        if: steps.check_crashes.outputs.crashes != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crashes = ${{ steps.check_crashes.outputs.crashes }};
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🐛 Fuzz testing discovered ${crashes} crash(es)`,
+              body: `Automated fuzz testing has discovered ${crashes} crash(es).\n\n` +
+                    `Please review the crash artifacts and fix the underlying issues.\n\n` +
+                    `**Workflow Run:** https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['bug', 'fuzzing', 'security']
+            });

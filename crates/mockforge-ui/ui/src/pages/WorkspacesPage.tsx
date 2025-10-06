@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
 import { apiService, importApi } from '../services/api';
 import { useUpdateWorkspacesOrder } from '../hooks/useApi';
@@ -272,7 +273,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       }
     } catch (err) {
       toast.error('Failed to create request');
-      console.error('Error creating request:', err);
+      logger.error('Error creating request',err);
     }
   };
 
@@ -306,7 +307,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       setSelectedWorkspace(workspaceResponse.workspace);
     } catch (err) {
       toast.error('Failed to import data');
-      console.error('Error importing data:', err);
+      logger.error('Error importing data',err);
     }
   };
 
@@ -325,7 +326,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       setImportPreviewOpen(true);
     } catch (err) {
       toast.error('Failed to preview import');
-      console.error('Error previewing import:', err);
+      logger.error('Error previewing import',err);
     }
   };
 
@@ -334,7 +335,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const response = await importApi.getImportHistory();
       setImportHistory(response.imports || []);
     } catch (err) {
-      console.error('Failed to load import history:', err);
+      logger.error('Failed to load import history',err);
       // Don't show error toast as this is a background operation
     }
   };

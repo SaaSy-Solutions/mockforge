@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useRef, useCallback } from 'react';
 import type { AutocompleteSuggestion } from './AutocompleteContext';
 import { useAutocomplete } from './useAutocomplete';

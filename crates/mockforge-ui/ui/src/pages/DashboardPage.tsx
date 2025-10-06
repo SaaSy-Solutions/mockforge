@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';

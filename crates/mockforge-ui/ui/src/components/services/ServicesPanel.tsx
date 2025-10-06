@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useMemo, useState } from 'react';
 import { ServiceToggleCard } from './ServiceToggleCard';
 import { Button } from '../ui/button';

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface UseProgressiveLoadingOptions<T> {

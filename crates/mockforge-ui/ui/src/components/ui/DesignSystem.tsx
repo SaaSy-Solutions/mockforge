@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * MockForge Design System Components
  * Modern, sleek, and professional UI components following Apple's Human Interface Guidelines

@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 import React, { useState, useCallback } from 'react';
 import {
   Puzzle,
@@ -50,7 +51,7 @@ export function PluginsPage() {
       setReloadKey(prev => prev + 1);
 
       // Optionally show success message (you could add a toast/notification system)
-      console.log(result.message);
+      logger.info(result.message);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reload plugins');
     } finally {

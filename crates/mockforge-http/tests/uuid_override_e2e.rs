@@ -82,9 +82,16 @@ async fn test_uuid_override_templating() {
     let url = format!("http://{}/user/123", addr);
 
     let res = client.get(&url).send().await.unwrap();
-    assert_eq!(res.status(), reqwest::StatusCode::OK);
+    let status = res.status();
+    if status != reqwest::StatusCode::OK {
+        let body: serde_json::Value = res.json().await.unwrap();
+        println!("Error response: {}", serde_json::to_string_pretty(&body).unwrap());
+        assert_eq!(status, reqwest::StatusCode::OK);
+    }
 
+    let res = client.get(&url).send().await.unwrap();
     let body: serde_json::Value = res.json().await.unwrap();
+    println!("Response body: {}", serde_json::to_string_pretty(&body).unwrap());
 
     // Validate that UUIDs were generated and are valid
     let uuid_regex =
@@ -169,7 +176,7 @@ async fn test_uuid_override_modes() {
 - targets: ["operation:testReplace"]
   patch:
     - op: replace
-      path: /
+      path: ""
       value: {"id": "{{uuid}}", "type": "replaced"}
   mode: replace
 "#;
@@ -222,6 +229,7 @@ async fn test_uuid_override_modes() {
 
     let uuid_regex =
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
+    assert!(body_replace["id"].is_string(), "id should be a string");
     assert!(uuid_regex.is_match(body_replace["id"].as_str().unwrap()));
     assert_eq!(body_replace["type"], "replaced");
 
@@ -299,7 +307,7 @@ async fn test_uuid_post_templating() {
       path: /staticField
       value: "not-a-uuid"
     - op: replace
-      path: /
+      path: ""
       value: {
         "staticField": "not-a-uuid",
         "dynamicField": "{{uuid}}",
