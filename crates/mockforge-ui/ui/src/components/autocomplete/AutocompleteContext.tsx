@@ -30,7 +30,7 @@ export interface AutocompleteContextType {
   updateChainContext: (chain: ChainContext | null) => void;
 }
 
-const AutocompleteContext = createContext<AutocompleteContextType | undefined>(undefined);
+export const AutocompleteContext = createContext<AutocompleteContextType | undefined>(undefined);
 
 interface AutocompleteProviderProps {
   children: ReactNode;

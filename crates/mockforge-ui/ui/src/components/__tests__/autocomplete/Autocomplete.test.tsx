@@ -48,12 +48,12 @@ describe('AutocompleteContext', () => {
     expect(contextValue.chainContext).toBeNull();
   });
 
-  it('allows updating chain context', () => {
+  it('allows updating chain context', async () => {
     let contextValue: any;
 
     const TestComponent = () => {
       contextValue = useAutocomplete();
-      return null;
+      return <div>{contextValue.chainContext?.id || 'no-chain'}</div>;
     };
 
     render(
@@ -79,6 +79,12 @@ describe('AutocompleteContext', () => {
     };
 
     contextValue.updateChainContext(mockChainContext);
+
+    // Wait for the context to update
+    await waitFor(() => {
+      expect(screen.getByText('chain-1')).toBeInTheDocument();
+    });
+
     expect(contextValue.chainContext).toEqual(mockChainContext);
   });
 
@@ -118,12 +124,12 @@ describe('AutocompleteContext', () => {
     expect(suggestions.some((s: any) => s.category === 'jsonpath')).toBe(true);
   });
 
-  it('returns chain suggestions inside response function first argument', () => {
+  it('returns chain suggestions inside response function first argument', async () => {
     let contextValue: any;
 
     const TestComponent = () => {
       contextValue = useAutocomplete();
-      return null;
+      return <div>{contextValue.chainContext?.id || 'no-chain'}</div>;
     };
 
     render(
@@ -148,6 +154,11 @@ describe('AutocompleteContext', () => {
     };
 
     contextValue.updateChainContext(mockChainContext);
+
+    // Wait for the context to update
+    await waitFor(() => {
+      expect(screen.getByText('chain-1')).toBeInTheDocument();
+    });
 
     const suggestions = contextValue.getSuggestionsForPosition('response(', 9);
     expect(suggestions.some((s: any) => s.category === 'request')).toBe(true);
@@ -489,9 +500,13 @@ describe('AutocompleteInput', () => {
     });
 
     const suggestion = screen.getByText('rand.int');
-    fireEvent.mouseEnter(suggestion);
+    // The parent of the text is the font-mono div, we need its parent
+    const suggestionContainer = suggestion.closest('.cursor-pointer');
+    fireEvent.mouseEnter(suggestionContainer!);
 
-    // The suggestion should now be selected (highlighted)
-    expect(suggestion.closest('div')).toHaveClass('bg-blue-50');
+    // Wait for the state update to apply the highlight class
+    await waitFor(() => {
+      expect(suggestionContainer).toHaveClass('bg-blue-50');
+    });
   });
 });

@@ -230,8 +230,10 @@ describe('EncryptionSettings', () => {
 
     await waitFor(() => screen.getByText('Backup Key'));
 
-    const toggleButton = screen.getByRole('button', { name: '' }); // Eye icon button
-    fireEvent.click(toggleButton);
+    // Find the eye icon button
+    const buttons = screen.getAllByRole('button');
+    const toggleButton = buttons.find(btn => btn.querySelector('.lucide-eye') || btn.querySelector('.lucide-eye-off'));
+    fireEvent.click(toggleButton!);
 
     await waitFor(() => {
       expect(screen.getByText('ABC123-DEF456-GHI789')).toBeInTheDocument();
@@ -254,8 +256,9 @@ describe('EncryptionSettings', () => {
 
     await waitFor(() => screen.getByText('Backup Key'));
 
+    // Find the copy icon button (lucide-copy)
     const copyButtons = screen.getAllByRole('button');
-    const copyButton = copyButtons.find((btn) => btn.querySelector('svg')); // Copy icon
+    const copyButton = copyButtons.find((btn) => btn.querySelector('.lucide-copy'));
     fireEvent.click(copyButton!);
 
     expect(clipboardWriteText).toHaveBeenCalledWith('ABC123-DEF456-GHI789');
@@ -338,14 +341,18 @@ describe('EncryptionSettings', () => {
   });
 
   it('disables export when encryption not enabled', async () => {
-    render(<EncryptionSettings workspaceId="ws-1" workspaceName="Test Workspace" />);
+    const { container } = render(<EncryptionSettings workspaceId="ws-1" workspaceName="Test Workspace" />);
 
     await waitFor(() => screen.getByText('Export/Import'));
 
     fireEvent.click(screen.getByText('Export/Import'));
 
-    const exportButton = screen.getByText('Export Encrypted Workspace');
-    expect(exportButton.closest('button')).toBeDisabled();
+    // Find the button div with disabled attribute containing the text
+    const exportButtonDivs = Array.from(container.querySelectorAll('div[disabled]'));
+    const exportButton = exportButtonDivs.find(div => div.textContent?.includes('Export Encrypted Workspace'));
+
+    expect(exportButton).toBeTruthy();
+    expect(exportButton).toHaveAttribute('disabled');
   });
 
   it('displays all encryption setting tabs', async () => {

@@ -150,6 +150,7 @@ export function WorkspaceSettingsDialog({
                   <div className="space-y-2">
                     <Label htmlFor="sync-direction">Sync Direction</Label>
                     <Select
+                      id="sync-direction"
                       value={config.sync_direction}
                       onValueChange={(value: string) => setConfig(prev => ({ ...prev, sync_direction: value as SyncDirection }))}
                     >
@@ -167,6 +168,7 @@ export function WorkspaceSettingsDialog({
                   <div className="space-y-2">
                     <Label htmlFor="directory-structure">Directory Structure</Label>
                     <Select
+                      id="directory-structure"
                       value={config.directory_structure}
                       onValueChange={(value: string) => setConfig(prev => ({ ...prev, directory_structure: value as SyncDirectoryStructure }))}
                     >
