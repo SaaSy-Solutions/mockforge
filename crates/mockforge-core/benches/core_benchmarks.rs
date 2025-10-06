@@ -1,6 +1,16 @@
 //! Performance benchmarks for MockForge core functionality
 //!
 //! Run with: cargo bench --bench core_benchmarks
+//!
+//! ## Memory Benchmarks
+//!
+//! Memory profiling is included for operations that allocate significant memory:
+//! - Large OpenAPI spec parsing
+//! - Bulk data generation
+//! - Deep template rendering
+//!
+//! These benchmarks use smaller sample sizes to reduce overhead while still
+//! providing meaningful memory usage insights.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mockforge_core::templating::expand_str;
@@ -239,12 +249,202 @@ fn bench_encryption(c: &mut Criterion) {
     group.finish();
 }
 
+/// Helper function to create a large OpenAPI spec for memory benchmarking
+fn create_large_openapi_spec() -> serde_json::Value {
+    let mut paths = serde_json::Map::new();
+
+    // Create 100 paths with complex schemas to stress memory
+    for i in 0..100 {
+        let path = format!("/api/v1/resource_{}", i);
+        paths.insert(path, json!({
+            "get": {
+                "summary": format!("Get resource {}", i),
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {"type": "string"}
+                    },
+                    {
+                        "name": "filter",
+                        "in": "query",
+                        "schema": {"type": "string"}
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "integer"},
+                                        "name": {"type": "string"},
+                                        "description": {"type": "string"},
+                                        "metadata": {
+                                            "type": "object",
+                                            "properties": {
+                                                "created_at": {"type": "string", "format": "date-time"},
+                                                "updated_at": {"type": "string", "format": "date-time"},
+                                                "tags": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "summary": format!("Create resource {}", i),
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "description": {"type": "string"}
+                                },
+                                "required": ["name"]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "integer"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }));
+    }
+
+    json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Large Test API",
+            "version": "1.0.0",
+            "description": "A large API spec for memory benchmarking"
+        },
+        "paths": paths
+    })
+}
+
+/// Benchmark memory usage for large operations
+fn bench_memory_usage(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory");
+    group.sample_size(10);
+
+    // Benchmark large OpenAPI spec parsing
+    group.bench_function("large_spec_parsing", |b| {
+        b.iter_with_setup(
+            || create_large_openapi_spec(),
+            |spec| {
+                let result = create_registry_from_json(black_box(spec));
+                black_box(result)
+            }
+        );
+    });
+
+    // Benchmark deep template rendering
+    group.bench_function("deep_template_rendering", |b| {
+        b.iter_with_setup(
+            || {
+                // Create a deeply nested template
+                let mut template = String::from("{{#each items}}");
+                for i in 0..10 {
+                    template.push_str(&format!("  Level {}: {{{{level{}}}}}\n", i, i));
+                    template.push_str("  {{#each nested}}");
+                }
+                for _ in 0..10 {
+                    template.push_str("  {{/each}}");
+                }
+                template.push_str("{{/each}}");
+                template
+            },
+            |template| {
+                let result = expand_str(black_box(&template));
+                black_box(result)
+            }
+        );
+    });
+
+    // Benchmark complex validation with large data
+    group.bench_function("large_data_validation", |b| {
+        b.iter_with_setup(
+            || {
+                let schema = json!({
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "name": {"type": "string", "minLength": 1},
+                            "email": {"type": "string", "format": "email"},
+                            "metadata": {
+                                "type": "object",
+                                "properties": {
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {"type": "string"}
+                                    }
+                                }
+                            }
+                        },
+                        "required": ["id", "name", "email"]
+                    },
+                    "minItems": 1
+                });
+
+                let mut data = Vec::new();
+                for i in 0..100 {
+                    data.push(json!({
+                        "id": i,
+                        "name": format!("User {}", i),
+                        "email": format!("user{}@example.com", i),
+                        "metadata": {
+                            "tags": ["tag1", "tag2", "tag3"]
+                        }
+                    }));
+                }
+
+                (schema, json!(data))
+            },
+            |(schema, data)| {
+                let result = validate_json_schema(black_box(&data), black_box(&schema));
+                black_box(result)
+            }
+        );
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_template_rendering,
     bench_json_validation,
     bench_openapi_parsing,
     bench_data_generation,
-    bench_encryption
+    bench_encryption,
+    bench_memory_usage
 );
 criterion_main!(benches);
