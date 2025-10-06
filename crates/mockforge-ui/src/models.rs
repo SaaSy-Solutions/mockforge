@@ -990,3 +990,119 @@ pub struct ServerInfo {
     /// Admin server port
     pub admin_port: u16,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_response_success() {
+        let data = "test data".to_string();
+        let response = ApiResponse::success(data.clone());
+
+        assert!(response.success);
+        assert_eq!(response.data, Some(data));
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_api_response_error() {
+        let error_msg = "Something went wrong".to_string();
+        let response: ApiResponse<String> = ApiResponse::error(error_msg.clone());
+
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert_eq!(response.error, Some(error_msg));
+    }
+
+    #[test]
+    fn test_health_check_healthy() {
+        let health = HealthCheck::healthy();
+
+        assert_eq!(health.status, "healthy");
+        assert!(health.issues.is_empty());
+        assert!(health.services.is_empty());
+    }
+
+    #[test]
+    fn test_health_check_unhealthy() {
+        let issues = vec!["Database down".to_string(), "Cache error".to_string()];
+        let health = HealthCheck::unhealthy(issues.clone());
+
+        assert_eq!(health.status, "unhealthy");
+        assert_eq!(health.issues, issues);
+    }
+
+    #[test]
+    fn test_health_check_with_service() {
+        let health = HealthCheck::healthy()
+            .with_service("http".to_string(), "running".to_string())
+            .with_service("grpc".to_string(), "running".to_string());
+
+        assert_eq!(health.services.len(), 2);
+        assert_eq!(health.services.get("http"), Some(&"running".to_string()));
+    }
+
+    #[test]
+    fn test_log_filter_default() {
+        let filter = LogFilter::default();
+
+        assert!(filter.method.is_none());
+        assert!(filter.path_pattern.is_none());
+        assert_eq!(filter.hours_ago, Some(24));
+        assert_eq!(filter.limit, Some(100));
+    }
+
+    #[test]
+    fn test_server_status() {
+        let status = ServerStatus {
+            server_type: "HTTP".to_string(),
+            address: Some("127.0.0.1:3000".to_string()),
+            running: true,
+            start_time: Some(chrono::Utc::now()),
+            uptime_seconds: Some(3600),
+            active_connections: 10,
+            total_requests: 1000,
+        };
+
+        assert_eq!(status.server_type, "HTTP");
+        assert!(status.running);
+        assert_eq!(status.active_connections, 10);
+    }
+
+    #[test]
+    fn test_route_info() {
+        let route = RouteInfo {
+            method: Some("GET".to_string()),
+            path: "/api/users".to_string(),
+            priority: 100,
+            has_fixtures: true,
+            latency_ms: Some(50),
+            request_count: 500,
+            last_request: None,
+            error_count: 5,
+        };
+
+        assert_eq!(route.method, Some("GET".to_string()));
+        assert_eq!(route.path, "/api/users");
+        assert!(route.has_fixtures);
+    }
+
+    #[test]
+    fn test_sync_direction_conversion() {
+        let manual = mockforge_core::workspace::SyncDirection::Manual;
+        let ui_manual: SyncDirection = manual.into();
+        assert!(matches!(ui_manual, SyncDirection::Manual));
+    }
+
+    #[test]
+    fn test_environment_color() {
+        let color = EnvironmentColor {
+            hex: "#FF5733".to_string(),
+            name: Some("Orange".to_string()),
+        };
+
+        assert_eq!(color.hex, "#FF5733");
+        assert_eq!(color.name, Some("Orange".to_string()));
+    }
+}

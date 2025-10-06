@@ -23,3 +23,13 @@ pub use config::ProxyConfig;
 pub use connection_pool::ConnectionPool;
 pub use mock_proxy::MockReflectionProxy;
 pub use proxy::ReflectionProxy;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

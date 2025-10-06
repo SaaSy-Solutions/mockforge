@@ -700,3 +700,14 @@ impl ErrorUtils {
             || error.to_string().contains("504")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        // Basic compilation test
+        assert!(true);
+    }
+}

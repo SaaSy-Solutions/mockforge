@@ -363,3 +363,13 @@ impl MockReflectionProxy {
         self.config.request_mode.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

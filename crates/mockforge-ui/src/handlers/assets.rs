@@ -66,3 +66,72 @@ pub async fn serve_api_docs() -> impl IntoResponse {
     // Redirect to the comprehensive documentation in the book
     Redirect::permanent("https://docs.mockforge.dev/api/admin-ui-rest.html")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_serve_admin_html() {
+        let html = serve_admin_html().await;
+        let html_str = html.0;
+        assert!(!html_str.is_empty());
+        assert!(html_str.contains("<!DOCTYPE html>") || html_str.contains("<html"));
+    }
+
+    #[tokio::test]
+    async fn test_serve_admin_css() {
+        let (headers, css) = serve_admin_css().await;
+        assert_eq!(headers[0].0, http::header::CONTENT_TYPE);
+        assert_eq!(headers[0].1, "text/css");
+        assert!(!css.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_serve_admin_js() {
+        let (headers, js) = serve_admin_js().await;
+        assert_eq!(headers[0].0, http::header::CONTENT_TYPE);
+        assert_eq!(headers[0].1, "application/javascript");
+        assert!(!js.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_serve_icon() {
+        let response = serve_icon().await;
+        // Icon returns SVG content - we can't easily check headers in impl IntoResponse
+        // but we can verify it returns successfully
+        let _ = response;
+    }
+
+    #[tokio::test]
+    async fn test_serve_icon_32() {
+        let _ = serve_icon_32().await;
+    }
+
+    #[tokio::test]
+    async fn test_serve_icon_48() {
+        let _ = serve_icon_48().await;
+    }
+
+    #[tokio::test]
+    async fn test_serve_logo() {
+        let _ = serve_logo().await;
+    }
+
+    #[tokio::test]
+    async fn test_serve_logo_40() {
+        let _ = serve_logo_40().await;
+    }
+
+    #[tokio::test]
+    async fn test_serve_logo_80() {
+        let _ = serve_logo_80().await;
+    }
+
+    #[tokio::test]
+    async fn test_serve_api_docs() {
+        let _ = serve_api_docs().await;
+        // Redirect can't be easily tested without request context
+        // but we verify it compiles and runs
+    }
+}

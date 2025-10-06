@@ -75,3 +75,186 @@ impl Overrides {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_overrides_apply_basic() {
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["operation:test_op".to_string()],
+                mode: OverrideMode::Replace,
+                patch: vec![PatchOp::Replace {
+                    path: "/value".to_string(),
+                    value: json!("replaced"),
+                }],
+                when: None,
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"value": "original"});
+        overrides.apply("test_op", &[], "/test", &mut body);
+
+        assert_eq!(body["value"], "replaced");
+    }
+
+    #[test]
+    fn test_overrides_apply_no_match() {
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["operation:other_op".to_string()],
+                mode: OverrideMode::Replace,
+                patch: vec![PatchOp::Replace {
+                    path: "/value".to_string(),
+                    value: json!("replaced"),
+                }],
+                when: None,
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"value": "original"});
+        overrides.apply("test_op", &[], "/test", &mut body);
+
+        assert_eq!(body["value"], "original");
+    }
+
+    #[test]
+    fn test_overrides_apply_with_tag() {
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["tag:test_tag".to_string()],
+                mode: OverrideMode::Replace,
+                patch: vec![PatchOp::Replace {
+                    path: "/status".to_string(),
+                    value: json!("tagged"),
+                }],
+                when: None,
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"status": "normal"});
+        overrides.apply("any_op", &vec!["test_tag".to_string()], "/test", &mut body);
+
+        assert_eq!(body["status"], "tagged");
+    }
+
+    #[test]
+    fn test_overrides_apply_merge_mode() {
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["operation:test_op".to_string()],
+                mode: OverrideMode::Merge,
+                patch: vec![PatchOp::Add {
+                    path: "/extra".to_string(),
+                    value: json!("added"),
+                }],
+                when: None,
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"value": "original"});
+        overrides.apply("test_op", &[], "/test", &mut body);
+
+        assert_eq!(body["value"], "original");
+        assert_eq!(body["extra"], "added");
+    }
+
+    #[test]
+    fn test_overrides_apply_with_context() {
+        // Test that the with_context method is callable
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["operation:test_op".to_string()],
+                mode: OverrideMode::Replace,
+                patch: vec![PatchOp::Replace {
+                    path: "/value".to_string(),
+                    value: json!("replaced"),
+                }],
+                when: None, // No condition for simplicity
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"value": "original"});
+        let context = ConditionContext::new();
+        overrides.apply_with_context("test_op", &[], "/test", &mut body, &context);
+
+        assert_eq!(body["value"], "replaced");
+    }
+
+    #[test]
+    fn test_overrides_apply_multiple_patches() {
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["operation:test_op".to_string()],
+                mode: OverrideMode::Replace,
+                patch: vec![
+                    PatchOp::Add {
+                        path: "/field1".to_string(),
+                        value: json!("value1"),
+                    },
+                    PatchOp::Add {
+                        path: "/field2".to_string(),
+                        value: json!("value2"),
+                    },
+                ],
+                when: None,
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"existing": "value"});
+        overrides.apply("test_op", &[], "/test", &mut body);
+
+        assert_eq!(body["field1"], "value1");
+        assert_eq!(body["field2"], "value2");
+    }
+
+    #[test]
+    fn test_overrides_apply_multiple_rules() {
+        let overrides = Overrides {
+            rules: vec![
+                OverrideRule {
+                    targets: vec!["operation:test_op".to_string()],
+                    mode: OverrideMode::Replace,
+                    patch: vec![PatchOp::Add {
+                        path: "/first".to_string(),
+                        value: json!("first_rule"),
+                    }],
+                    when: None,
+                    post_templating: false,
+                },
+                OverrideRule {
+                    targets: vec!["operation:test_op".to_string()],
+                    mode: OverrideMode::Replace,
+                    patch: vec![PatchOp::Add {
+                        path: "/second".to_string(),
+                        value: json!("second_rule"),
+                    }],
+                    when: None,
+                    post_templating: false,
+                },
+            ],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"existing": "value"});
+        overrides.apply("test_op", &[], "/test", &mut body);
+
+        assert_eq!(body["first"], "first_rule");
+        assert_eq!(body["second"], "second_rule");
+    }
+}

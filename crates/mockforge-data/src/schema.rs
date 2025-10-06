@@ -645,3 +645,216 @@ pub mod templates {
             )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_field_definition_new() {
+        let field = FieldDefinition::new("test".to_string(), "string".to_string());
+
+        assert_eq!(field.name, "test");
+        assert_eq!(field.field_type, "string");
+        assert!(field.required);
+        assert!(field.default.is_none());
+    }
+
+    #[test]
+    fn test_field_definition_optional() {
+        let field = FieldDefinition::new("test".to_string(), "string".to_string()).optional();
+
+        assert!(!field.required);
+    }
+
+    #[test]
+    fn test_field_definition_with_default() {
+        let field = FieldDefinition::new("test".to_string(), "string".to_string())
+            .with_default(Value::String("default".to_string()));
+
+        assert_eq!(field.default, Some(Value::String("default".to_string())));
+    }
+
+    #[test]
+    fn test_field_definition_with_constraint() {
+        let field = FieldDefinition::new("age".to_string(), "int".to_string())
+            .with_constraint("minimum".to_string(), Value::Number(0.into()));
+
+        assert!(field.constraints.contains_key("minimum"));
+    }
+
+    #[test]
+    fn test_field_definition_with_faker_template() {
+        let field = FieldDefinition::new("email".to_string(), "string".to_string())
+            .with_faker_template("email".to_string());
+
+        assert_eq!(field.faker_template, Some("email".to_string()));
+    }
+
+    #[test]
+    fn test_field_definition_with_description() {
+        let field = FieldDefinition::new("test".to_string(), "string".to_string())
+            .with_description("Test field".to_string());
+
+        assert_eq!(field.description, Some("Test field".to_string()));
+    }
+
+    #[test]
+    fn test_schema_definition_new() {
+        let schema = SchemaDefinition::new("TestSchema".to_string());
+
+        assert_eq!(schema.name, "TestSchema");
+        assert!(schema.description.is_none());
+        assert_eq!(schema.fields.len(), 0);
+    }
+
+    #[test]
+    fn test_schema_definition_with_field() {
+        let field = FieldDefinition::new("id".to_string(), "uuid".to_string());
+        let schema = SchemaDefinition::new("Test".to_string()).with_field(field);
+
+        assert_eq!(schema.fields.len(), 1);
+        assert_eq!(schema.fields[0].name, "id");
+    }
+
+    #[test]
+    fn test_schema_definition_with_fields() {
+        let fields = vec![
+            FieldDefinition::new("id".to_string(), "uuid".to_string()),
+            FieldDefinition::new("name".to_string(), "string".to_string()),
+        ];
+        let schema = SchemaDefinition::new("Test".to_string()).with_fields(fields);
+
+        assert_eq!(schema.fields.len(), 2);
+    }
+
+    #[test]
+    fn test_schema_definition_with_description() {
+        let schema = SchemaDefinition::new("Test".to_string())
+            .with_description("Test schema".to_string());
+
+        assert_eq!(schema.description, Some("Test schema".to_string()));
+    }
+
+    #[test]
+    fn test_schema_definition_with_metadata() {
+        let schema = SchemaDefinition::new("Test".to_string())
+            .with_metadata("version".to_string(), Value::String("1.0".to_string()));
+
+        assert!(schema.metadata.contains_key("version"));
+    }
+
+    #[test]
+    fn test_schema_definition_get_field() {
+        let field = FieldDefinition::new("email".to_string(), "email".to_string());
+        let schema = SchemaDefinition::new("Test".to_string()).with_field(field);
+
+        assert!(schema.get_field("email").is_some());
+        assert!(schema.get_field("unknown").is_none());
+    }
+
+    #[test]
+    fn test_relationship_new() {
+        let rel = Relationship::new(
+            "User".to_string(),
+            RelationshipType::ManyToOne,
+            "user_id".to_string(),
+        );
+
+        assert_eq!(rel.target_schema, "User");
+        assert_eq!(rel.foreign_key, "user_id");
+        assert!(rel.required);
+    }
+
+    #[test]
+    fn test_relationship_optional() {
+        let rel = Relationship::new(
+            "User".to_string(),
+            RelationshipType::ManyToOne,
+            "user_id".to_string(),
+        )
+        .optional();
+
+        assert!(!rel.required);
+    }
+
+    #[test]
+    fn test_relationship_types() {
+        let one_to_one = RelationshipType::OneToOne;
+        let one_to_many = RelationshipType::OneToMany;
+        let many_to_one = RelationshipType::ManyToOne;
+        let many_to_many = RelationshipType::ManyToMany;
+
+        assert!(matches!(one_to_one, RelationshipType::OneToOne));
+        assert!(matches!(one_to_many, RelationshipType::OneToMany));
+        assert!(matches!(many_to_one, RelationshipType::ManyToOne));
+        assert!(matches!(many_to_many, RelationshipType::ManyToMany));
+    }
+
+    #[test]
+    fn test_extract_type_from_json_schema_string() {
+        let prop = serde_json::json!({"type": "string"});
+        let type_str = extract_type_from_json_schema(&prop);
+
+        assert_eq!(type_str, "string");
+    }
+
+    #[test]
+    fn test_extract_type_from_json_schema_number() {
+        let prop = serde_json::json!({"type": "number"});
+        let type_str = extract_type_from_json_schema(&prop);
+
+        assert_eq!(type_str, "float");
+    }
+
+    #[test]
+    fn test_extract_type_from_json_schema_integer() {
+        let prop = serde_json::json!({"type": "integer"});
+        let type_str = extract_type_from_json_schema(&prop);
+
+        assert_eq!(type_str, "int");
+    }
+
+    #[test]
+    fn test_extract_type_from_json_schema_boolean() {
+        let prop = serde_json::json!({"type": "boolean"});
+        let type_str = extract_type_from_json_schema(&prop);
+
+        assert_eq!(type_str, "boolean");
+    }
+
+    #[test]
+    fn test_extract_type_from_json_schema_default() {
+        let prop = serde_json::json!({});
+        let type_str = extract_type_from_json_schema(&prop);
+
+        assert_eq!(type_str, "string");
+    }
+
+    #[test]
+    fn test_user_schema_template() {
+        let schema = templates::user_schema();
+
+        assert_eq!(schema.name, "User");
+        assert_eq!(schema.fields.len(), 5);
+        assert!(schema.get_field("id").is_some());
+        assert!(schema.get_field("email").is_some());
+    }
+
+    #[test]
+    fn test_product_schema_template() {
+        let schema = templates::product_schema();
+
+        assert_eq!(schema.name, "Product");
+        assert!(schema.get_field("price").is_some());
+    }
+
+    #[test]
+    fn test_order_schema_template() {
+        let schema = templates::order_schema();
+
+        assert_eq!(schema.name, "Order");
+        assert_eq!(schema.relationships.len(), 1);
+        assert!(schema.relationships.contains_key("user"));
+    }
+}

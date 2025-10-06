@@ -216,3 +216,413 @@ impl Default for ResolverRegistry {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mock_resolver_creation() {
+        let resolver = MockResolver {
+            field_name: "id".to_string(),
+            field_type: "ID!".to_string(),
+            mock_data: Value::String("test-123".to_string()),
+            generator: None,
+        };
+
+        assert_eq!(resolver.field_name, "id");
+        assert_eq!(resolver.field_type, "ID!");
+        assert!(resolver.generator.is_none());
+    }
+
+    #[test]
+    fn test_mock_resolver_with_generator() {
+        let resolver = MockResolver {
+            field_name: "email".to_string(),
+            field_type: "String!".to_string(),
+            mock_data: Value::Null,
+            generator: Some(MockDataGenerator {
+                generator_type: GeneratorType::Email,
+                config: HashMap::new(),
+            }),
+        };
+
+        assert!(resolver.generator.is_some());
+    }
+
+    #[test]
+    fn test_generator_type_string() {
+        let gen_type = GeneratorType::String {
+            min_length: 5,
+            max_length: 10,
+        };
+
+        match gen_type {
+            GeneratorType::String { min_length, max_length } => {
+                assert_eq!(min_length, 5);
+                assert_eq!(max_length, 10);
+            }
+            _ => panic!("Wrong generator type"),
+        }
+    }
+
+    #[test]
+    fn test_generator_type_int() {
+        let gen_type = GeneratorType::Int { min: 1, max: 100 };
+
+        match gen_type {
+            GeneratorType::Int { min, max } => {
+                assert_eq!(min, 1);
+                assert_eq!(max, 100);
+            }
+            _ => panic!("Wrong generator type"),
+        }
+    }
+
+    #[test]
+    fn test_generator_type_float() {
+        let gen_type = GeneratorType::Float { min: 0.0, max: 1.0 };
+
+        match gen_type {
+            GeneratorType::Float { min, max } => {
+                assert_eq!(min, 0.0);
+                assert_eq!(max, 1.0);
+            }
+            _ => panic!("Wrong generator type"),
+        }
+    }
+
+    #[test]
+    fn test_generator_type_uuid() {
+        let gen_type = GeneratorType::Uuid;
+        assert!(matches!(gen_type, GeneratorType::Uuid));
+    }
+
+    #[test]
+    fn test_generator_type_email() {
+        let gen_type = GeneratorType::Email;
+        assert!(matches!(gen_type, GeneratorType::Email));
+    }
+
+    #[test]
+    fn test_generator_type_name() {
+        let gen_type = GeneratorType::Name;
+        assert!(matches!(gen_type, GeneratorType::Name));
+    }
+
+    #[test]
+    fn test_generator_type_timestamp() {
+        let gen_type = GeneratorType::Timestamp;
+        assert!(matches!(gen_type, GeneratorType::Timestamp));
+    }
+
+    #[test]
+    fn test_generator_type_from_list() {
+        let values = vec![
+            serde_json::json!("value1"),
+            serde_json::json!("value2"),
+        ];
+        let gen_type = GeneratorType::FromList { values: values.clone() };
+
+        match gen_type {
+            GeneratorType::FromList { values: v } => {
+                assert_eq!(v.len(), 2);
+            }
+            _ => panic!("Wrong generator type"),
+        }
+    }
+
+    #[test]
+    fn test_resolver_registry_new() {
+        let registry = ResolverRegistry::new();
+        assert_eq!(registry.resolvers.len(), 0);
+    }
+
+    #[test]
+    fn test_resolver_registry_default() {
+        let registry = ResolverRegistry::default();
+        assert_eq!(registry.resolvers.len(), 0);
+    }
+
+    #[test]
+    fn test_resolver_registry_register() {
+        let mut registry = ResolverRegistry::new();
+
+        let resolver = MockResolver {
+            field_name: "id".to_string(),
+            field_type: "ID!".to_string(),
+            mock_data: Value::String("test-id".to_string()),
+            generator: None,
+        };
+
+        registry.register_resolver("User", resolver);
+
+        assert!(registry.resolvers.contains_key("User"));
+        assert!(registry.resolvers.get("User").unwrap().contains_key("id"));
+    }
+
+    #[test]
+    fn test_resolver_registry_get_resolver() {
+        let mut registry = ResolverRegistry::new();
+
+        let resolver = MockResolver {
+            field_name: "email".to_string(),
+            field_type: "String!".to_string(),
+            mock_data: Value::String("test@example.com".to_string()),
+            generator: None,
+        };
+
+        registry.register_resolver("User", resolver);
+
+        let retrieved = registry.get_resolver("User", "email");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().field_name, "email");
+    }
+
+    #[test]
+    fn test_resolver_registry_get_resolver_not_found() {
+        let registry = ResolverRegistry::new();
+        let retrieved = registry.get_resolver("User", "unknown");
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_data_with_static_data() {
+        let mut registry = ResolverRegistry::new();
+
+        let resolver = MockResolver {
+            field_name: "name".to_string(),
+            field_type: "String!".to_string(),
+            mock_data: Value::String("John Doe".to_string()),
+            generator: None,
+        };
+
+        registry.register_resolver("User", resolver);
+
+        let result = registry.generate_mock_data("User", "name").await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_generate_default_mock_data_id() {
+        let result = ResolverRegistry::generate_default_mock_data("id").await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_generate_default_mock_data_name() {
+        let result = ResolverRegistry::generate_default_mock_data("name").await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_generate_default_mock_data_email() {
+        let result = ResolverRegistry::generate_default_mock_data("email").await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_generate_default_mock_data_age() {
+        let result = ResolverRegistry::generate_default_mock_data("age").await;
+        assert!(matches!(result, Value::Number(_)));
+    }
+
+    #[tokio::test]
+    async fn test_generate_default_mock_data_active() {
+        let result = ResolverRegistry::generate_default_mock_data("active").await;
+        assert!(matches!(result, Value::Boolean(_)));
+    }
+
+    #[test]
+    fn test_create_common_resolvers() {
+        let registry = ResolverRegistry::create_common_resolvers();
+
+        assert!(registry.get_resolver("User", "id").is_some());
+        assert!(registry.get_resolver("User", "name").is_some());
+        assert!(registry.get_resolver("User", "email").is_some());
+        assert!(registry.get_resolver("User", "createdAt").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_uuid() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Uuid,
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_email() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Email,
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_name() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Name,
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_timestamp() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Timestamp,
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_int() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Int { min: 1, max: 100 },
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::Number(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_float() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Float { min: 0.0, max: 10.0 },
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::Number(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_string() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::String {
+                min_length: 5,
+                max_length: 10,
+            },
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        if let Value::String(s) = result {
+            assert!(s.len() >= 5);
+            assert!(s.len() <= 10);
+        } else {
+            panic!("Expected string value");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_from_list() {
+        let values = vec![
+            serde_json::json!("value1"),
+            serde_json::json!("value2"),
+            serde_json::json!("value3"),
+        ];
+
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::FromList { values },
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_from_empty_list() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::FromList { values: vec![] },
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        assert!(matches!(result, Value::Null));
+    }
+
+    #[tokio::test]
+    async fn test_mock_data_generator_array() {
+        let generator = MockDataGenerator {
+            generator_type: GeneratorType::Array {
+                item_generator: Box::new(GeneratorType::Uuid),
+                min_items: 2,
+                max_items: 5,
+            },
+            config: HashMap::new(),
+        };
+
+        let result = generator.generate().await;
+        if let Value::List(items) = result {
+            assert!(items.len() >= 2);
+            assert!(items.len() <= 5);
+        } else {
+            panic!("Expected list value");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resolver_registry_multiple_types() {
+        let mut registry = ResolverRegistry::new();
+
+        registry.register_resolver("User", MockResolver {
+            field_name: "id".to_string(),
+            field_type: "ID!".to_string(),
+            mock_data: Value::String("user-id".to_string()),
+            generator: None,
+        });
+
+        registry.register_resolver("Post", MockResolver {
+            field_name: "id".to_string(),
+            field_type: "ID!".to_string(),
+            mock_data: Value::String("post-id".to_string()),
+            generator: None,
+        });
+
+        assert!(registry.get_resolver("User", "id").is_some());
+        assert!(registry.get_resolver("Post", "id").is_some());
+    }
+
+    #[test]
+    fn test_resolver_registry_multiple_fields_same_type() {
+        let mut registry = ResolverRegistry::new();
+
+        registry.register_resolver("User", MockResolver {
+            field_name: "id".to_string(),
+            field_type: "ID!".to_string(),
+            mock_data: Value::Null,
+            generator: None,
+        });
+
+        registry.register_resolver("User", MockResolver {
+            field_name: "name".to_string(),
+            field_type: "String!".to_string(),
+            mock_data: Value::Null,
+            generator: None,
+        });
+
+        registry.register_resolver("User", MockResolver {
+            field_name: "email".to_string(),
+            field_type: "String!".to_string(),
+            mock_data: Value::Null,
+            generator: None,
+        });
+
+        assert_eq!(registry.resolvers.get("User").unwrap().len(), 3);
+    }
+}

@@ -669,3 +669,330 @@ pub fn validate_openapi_operation_security(
     // No security requirements
     ValidationResult::success()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validation_result_success() {
+        let result = ValidationResult::success();
+        assert!(result.valid);
+        assert!(result.errors.is_empty());
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validation_result_failure() {
+        let errors = vec!["error1".to_string(), "error2".to_string()];
+        let result = ValidationResult::failure(errors.clone());
+        assert!(!result.valid);
+        assert_eq!(result.errors, errors);
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_validation_result_with_warning() {
+        let result = ValidationResult::success()
+            .with_warning("warning1".to_string())
+            .with_warning("warning2".to_string());
+        assert!(result.valid);
+        assert_eq!(result.warnings.len(), 2);
+    }
+
+    #[test]
+    fn test_validator_from_json_schema() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"}
+            }
+        });
+
+        let validator = Validator::from_json_schema(&schema);
+        assert!(validator.is_ok());
+        assert!(validator.unwrap().is_implemented());
+    }
+
+    #[test]
+    fn test_validator_from_json_schema_invalid() {
+        let schema = json!({
+            "type": "invalid_type"
+        });
+
+        // Invalid schema should fail to compile
+        let validator = Validator::from_json_schema(&schema);
+        assert!(validator.is_err());
+    }
+
+    #[test]
+    fn test_validator_validate_json_schema_success() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"}
+            }
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+        let data = json!({"name": "test"});
+
+        assert!(validator.validate(&data).is_ok());
+    }
+
+    #[test]
+    fn test_validator_validate_json_schema_failure() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"}
+            }
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+        let data = json!({"name": 123});
+
+        assert!(validator.validate(&data).is_err());
+    }
+
+    #[test]
+    fn test_validator_from_openapi() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "paths": {}
+        });
+
+        let validator = Validator::from_openapi(&spec);
+        assert!(validator.is_ok());
+    }
+
+    #[test]
+    fn test_validator_from_openapi_unsupported_version() {
+        let spec = json!({
+            "openapi": "2.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "paths": {}
+        });
+
+        let validator = Validator::from_openapi(&spec);
+        assert!(validator.is_err());
+    }
+
+    #[test]
+    fn test_validator_validate_openapi() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "paths": {}
+        });
+
+        let validator = Validator::from_openapi(&spec).unwrap();
+        let data = json!({"key": "value"});
+
+        assert!(validator.validate(&data).is_ok());
+    }
+
+    #[test]
+    fn test_validator_validate_openapi_non_object() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "paths": {}
+        });
+
+        let validator = Validator::from_openapi(&spec).unwrap();
+        let data = json!("string");
+
+        assert!(validator.validate(&data).is_err());
+    }
+
+    #[test]
+    fn test_validate_json_schema_function() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "age": {"type": "number"}
+            }
+        });
+
+        let data = json!({"age": 25});
+        let result = validate_json_schema(&data, &schema);
+        assert!(result.valid);
+
+        let data = json!({"age": "25"});
+        let result = validate_json_schema(&data, &schema);
+        assert!(!result.valid);
+    }
+
+    #[test]
+    fn test_validate_openapi_function() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "paths": {}
+        });
+
+        let data = json!({"test": "value"});
+        let result = validate_openapi(&data, &spec);
+        assert!(result.valid);
+    }
+
+    #[test]
+    fn test_validate_openapi_missing_fields() {
+        let spec = json!({
+            "openapi": "3.0.0"
+        });
+
+        let data = json!({});
+        let result = validate_openapi(&data, &spec);
+        assert!(!result.valid);
+        assert!(!result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_validate_number_constraints_multiple_of() {
+        let schema = json!({
+            "type": "number",
+            "multipleOf": 5.0
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+
+        let data = json!(10);
+        assert!(validator.validate(&data).is_ok());
+
+        let data = json!(11);
+        // JSON Schema validator may handle this differently
+        // so we just test that it doesn't panic
+        let _ = validator.validate(&data);
+    }
+
+    #[test]
+    fn test_validate_array_constraints_min_items() {
+        let schema = json!({
+            "type": "array",
+            "minItems": 2
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+
+        let data = json!([1, 2]);
+        assert!(validator.validate(&data).is_ok());
+
+        let data = json!([1]);
+        assert!(validator.validate(&data).is_err());
+    }
+
+    #[test]
+    fn test_validate_array_constraints_max_items() {
+        let schema = json!({
+            "type": "array",
+            "maxItems": 2
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+
+        let data = json!([1]);
+        assert!(validator.validate(&data).is_ok());
+
+        let data = json!([1, 2, 3]);
+        assert!(validator.validate(&data).is_err());
+    }
+
+    #[test]
+    fn test_validate_array_unique_items() {
+        let schema = json!({
+            "type": "array",
+            "uniqueItems": true
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+
+        let data = json!([1, 2, 3]);
+        assert!(validator.validate(&data).is_ok());
+
+        let data = json!([1, 2, 2]);
+        assert!(validator.validate(&data).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_required_properties() {
+        let schema = json!({
+            "type": "object",
+            "required": ["name", "age"]
+        });
+
+        let validator = Validator::from_json_schema(&schema).unwrap();
+
+        let data = json!({"name": "test", "age": 25});
+        assert!(validator.validate(&data).is_ok());
+
+        let data = json!({"name": "test"});
+        assert!(validator.validate(&data).is_err());
+    }
+
+    #[test]
+    fn test_validate_content_encoding_base64() {
+        let validator = Validator::from_json_schema(&json!({"type": "string"})).unwrap();
+
+        // Valid base64
+        let result = validator.validate_content_encoding(Some("SGVsbG8="), "base64", "test");
+        assert!(result.is_ok());
+
+        // Invalid base64
+        let result = validator.validate_content_encoding(Some("not-base64!@#"), "base64", "test");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_content_encoding_hex() {
+        let validator = Validator::from_json_schema(&json!({"type": "string"})).unwrap();
+
+        // Valid hex
+        let result = validator.validate_content_encoding(Some("48656c6c6f"), "hex", "test");
+        assert!(result.is_ok());
+
+        // Invalid hex
+        let result = validator.validate_content_encoding(Some("xyz"), "hex", "test");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_has_unique_items() {
+        let validator = Validator::from_json_schema(&json!({})).unwrap();
+
+        let arr = vec![json!(1), json!(2), json!(3)];
+        assert!(validator.has_unique_items(&arr));
+
+        let arr = vec![json!(1), json!(2), json!(1)];
+        assert!(!validator.has_unique_items(&arr));
+    }
+
+    #[test]
+    fn test_validate_protobuf() {
+        let result = validate_protobuf(&[], &[]);
+        assert!(!result.valid);
+        assert!(result.errors[0].contains("not yet fully implemented"));
+    }
+
+    #[test]
+    fn test_validate_protobuf_with_type() {
+        let result = validate_protobuf_with_type(&[], &[], "TestMessage");
+        assert!(!result.valid);
+        assert!(result.errors[0].contains("not yet fully implemented"));
+    }
+
+    #[test]
+    fn test_is_implemented() {
+        let json_validator = Validator::from_json_schema(&json!({"type": "object"})).unwrap();
+        assert!(json_validator.is_implemented());
+
+        let openapi_validator = Validator::from_openapi(&json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0.0"},
+            "paths": {}
+        })).unwrap();
+        assert!(openapi_validator.is_implemented());
+    }
+}

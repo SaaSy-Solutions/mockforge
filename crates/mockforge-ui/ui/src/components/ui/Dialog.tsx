@@ -8,7 +8,6 @@ interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
-  className?: string;
 }
 
 interface DialogContentProps {
@@ -38,7 +37,26 @@ interface DialogFooterProps {
   className?: string;
 }
 
-export function Dialog({ open, onOpenChange, children, className }: DialogProps) {
+export function Dialog({ open, onOpenChange, children }: DialogProps) {
+  return (
+    <DialogContext.Provider value={{ open, onOpenChange }}>
+      {children}
+    </DialogContext.Provider>
+  );
+}
+
+const DialogContext = React.createContext<{ open: boolean; onOpenChange: (open: boolean) => void } | null>(null);
+
+const useDialogContext = () => {
+  const context = React.useContext(DialogContext);
+  if (!context) {
+    throw new Error('Dialog components must be used within a Dialog');
+  }
+  return context;
+};
+
+export function DialogContent({ children, className }: DialogContentProps) {
+  const { open, onOpenChange } = useDialogContext();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<HTMLElement | null>(null);
 
@@ -122,20 +140,14 @@ export function Dialog({ open, onOpenChange, children, className }: DialogProps)
           className
         )}
       >
-        {children}
+        <div className="p-6">
+          {children}
+        </div>
       </div>
     </div>
   );
 
   return createPortal(dialogContent, document.body);
-}
-
-export function DialogContent({ children, className }: DialogContentProps) {
-  return (
-    <div className={cn("p-6", className)}>
-      {children}
-    </div>
-  );
 }
 
 export function DialogHeader({ children, className }: DialogHeaderProps) {
@@ -171,23 +183,41 @@ export function DialogFooter({ children, className }: DialogFooterProps) {
 }
 
 export function DialogTrigger({ children, onClick, asChild }: { children: React.ReactNode; onClick?: () => void; asChild?: boolean }) {
-  if (asChild) {
-    return <>{children}</>;
+  const { onOpenChange } = useDialogContext();
+
+  const handleClick = () => {
+    onOpenChange(true);
+    onClick?.();
+  };
+
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, {
+      ...children.props,
+      onClick: handleClick,
+    } as any);
   }
+
   return (
-    <div onClick={onClick}>
+    <div onClick={handleClick}>
       {children}
     </div>
   );
 }
 
 export function DialogClose({ onClick, className }: { onClick?: () => void; className?: string }) {
+  const { onOpenChange } = useDialogContext();
+
+  const handleClick = () => {
+    onOpenChange(false);
+    onClick?.();
+  };
+
   return (
     <Button
       variant="ghost"
       size="sm"
       className={cn("h-8 w-8 p-0 hover:bg-bg-tertiary", className)}
-      onClick={onClick}
+      onClick={handleClick}
     >
       <X className="h-4 w-4" />
     </Button>

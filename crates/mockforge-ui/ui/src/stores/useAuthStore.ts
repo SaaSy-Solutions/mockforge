@@ -4,6 +4,7 @@ import type { User, AuthState, AuthActions } from '../types';
 
 interface AuthStore extends AuthState, AuthActions {
   checkAuth: () => Promise<void>;
+  checkTokenExpiry: () => boolean;
   startTokenRefresh: () => void;
   stopTokenRefresh: () => void;
 }

@@ -185,3 +185,259 @@ impl Default for RouteRegistry {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_route_new() {
+        let route = Route::new(HttpMethod::GET, "/api/users".to_string());
+        assert_eq!(route.method, HttpMethod::GET);
+        assert_eq!(route.path, "/api/users");
+        assert_eq!(route.priority, 0);
+        assert!(route.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_route_with_priority() {
+        let route = Route::new(HttpMethod::POST, "/api/users".to_string())
+            .with_priority(10);
+        assert_eq!(route.priority, 10);
+    }
+
+    #[test]
+    fn test_route_with_metadata() {
+        let route = Route::new(HttpMethod::GET, "/api/users".to_string())
+            .with_metadata("version".to_string(), serde_json::json!("v1"))
+            .with_metadata("auth".to_string(), serde_json::json!(true));
+
+        assert_eq!(route.metadata.get("version"), Some(&serde_json::json!("v1")));
+        assert_eq!(route.metadata.get("auth"), Some(&serde_json::json!(true)));
+    }
+
+    #[test]
+    fn test_route_registry_new() {
+        let registry = RouteRegistry::new();
+        assert!(registry.http_routes.is_empty());
+        assert!(registry.ws_routes.is_empty());
+        assert!(registry.grpc_routes.is_empty());
+    }
+
+    #[test]
+    fn test_route_registry_default() {
+        let registry = RouteRegistry::default();
+        assert!(registry.http_routes.is_empty());
+    }
+
+    #[test]
+    fn test_add_http_route() {
+        let mut registry = RouteRegistry::new();
+        let route = Route::new(HttpMethod::GET, "/api/users".to_string());
+
+        assert!(registry.add_http_route(route).is_ok());
+        assert_eq!(registry.get_http_routes(&HttpMethod::GET).len(), 1);
+    }
+
+    #[test]
+    fn test_add_multiple_http_routes() {
+        let mut registry = RouteRegistry::new();
+
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/posts".to_string())).unwrap();
+        registry.add_http_route(Route::new(HttpMethod::POST, "/api/users".to_string())).unwrap();
+
+        assert_eq!(registry.get_http_routes(&HttpMethod::GET).len(), 2);
+        assert_eq!(registry.get_http_routes(&HttpMethod::POST).len(), 1);
+    }
+
+    #[test]
+    fn test_add_ws_route() {
+        let mut registry = RouteRegistry::new();
+        let route = Route::new(HttpMethod::GET, "/ws/chat".to_string());
+
+        assert!(registry.add_ws_route(route).is_ok());
+        assert_eq!(registry.get_ws_routes().len(), 1);
+    }
+
+    #[test]
+    fn test_add_grpc_route() {
+        let mut registry = RouteRegistry::new();
+        let route = Route::new(HttpMethod::POST, "GetUser".to_string());
+
+        assert!(registry.add_grpc_route("UserService".to_string(), route).is_ok());
+        assert_eq!(registry.get_grpc_routes("UserService").len(), 1);
+    }
+
+    #[test]
+    fn test_add_route_alias() {
+        let mut registry = RouteRegistry::new();
+        let route = Route::new(HttpMethod::GET, "/api/test".to_string());
+
+        assert!(registry.add_route(route).is_ok());
+        assert_eq!(registry.get_http_routes(&HttpMethod::GET).len(), 1);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut registry = RouteRegistry::new();
+
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
+        registry.add_ws_route(Route::new(HttpMethod::GET, "/ws/chat".to_string())).unwrap();
+        registry.add_grpc_route("Service".to_string(), Route::new(HttpMethod::POST, "Method".to_string())).unwrap();
+
+        assert!(!registry.get_http_routes(&HttpMethod::GET).is_empty());
+        assert!(!registry.get_ws_routes().is_empty());
+
+        registry.clear();
+
+        assert!(registry.get_http_routes(&HttpMethod::GET).is_empty());
+        assert!(registry.get_ws_routes().is_empty());
+        assert!(registry.get_grpc_routes("Service").is_empty());
+    }
+
+    #[test]
+    fn test_find_http_routes_exact_match() {
+        let mut registry = RouteRegistry::new();
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
+
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/users");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "/api/users");
+    }
+
+    #[test]
+    fn test_find_http_routes_no_match() {
+        let mut registry = RouteRegistry::new();
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
+
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/posts");
+        assert_eq!(found.len(), 0);
+    }
+
+    #[test]
+    fn test_find_http_routes_wildcard_match() {
+        let mut registry = RouteRegistry::new();
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/*/details".to_string())).unwrap();
+
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/users/details");
+        assert_eq!(found.len(), 1);
+
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/posts/details");
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn test_find_http_routes_wildcard_no_match_different_length() {
+        let mut registry = RouteRegistry::new();
+        registry.add_http_route(Route::new(HttpMethod::GET, "/api/*/details".to_string())).unwrap();
+
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/users");
+        assert_eq!(found.len(), 0);
+    }
+
+    #[test]
+    fn test_find_ws_routes() {
+        let mut registry = RouteRegistry::new();
+        registry.add_ws_route(Route::new(HttpMethod::GET, "/ws/chat".to_string())).unwrap();
+
+        let found = registry.find_ws_routes("/ws/chat");
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn test_find_ws_routes_wildcard() {
+        let mut registry = RouteRegistry::new();
+        registry.add_ws_route(Route::new(HttpMethod::GET, "/ws/*".to_string())).unwrap();
+
+        let found = registry.find_ws_routes("/ws/chat");
+        assert_eq!(found.len(), 1);
+
+        let found = registry.find_ws_routes("/ws/notifications");
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn test_find_grpc_routes() {
+        let mut registry = RouteRegistry::new();
+        registry.add_grpc_route("UserService".to_string(),
+            Route::new(HttpMethod::POST, "GetUser".to_string())).unwrap();
+
+        let found = registry.find_grpc_routes("UserService", "GetUser");
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn test_find_grpc_routes_wildcard() {
+        let mut registry = RouteRegistry::new();
+        // Wildcard pattern matching requires exact segment count
+        // For gRPC method names, we'd typically use exact matches
+        registry.add_grpc_route("UserService".to_string(),
+            Route::new(HttpMethod::POST, "GetUser".to_string())).unwrap();
+
+        let found = registry.find_grpc_routes("UserService", "GetUser");
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn test_matches_path_exact() {
+        let registry = RouteRegistry::new();
+        assert!(registry.matches_path("/api/users", "/api/users"));
+        assert!(!registry.matches_path("/api/users", "/api/posts"));
+    }
+
+    #[test]
+    fn test_matches_path_wildcard_single_segment() {
+        let registry = RouteRegistry::new();
+        assert!(registry.matches_path("/api/*", "/api/users"));
+        assert!(registry.matches_path("/api/*", "/api/posts"));
+        assert!(!registry.matches_path("/api/*", "/api"));
+        assert!(!registry.matches_path("/api/*", "/api/users/123"));
+    }
+
+    #[test]
+    fn test_matches_path_wildcard_multiple_segments() {
+        let registry = RouteRegistry::new();
+        assert!(registry.matches_path("/api/*/details", "/api/users/details"));
+        assert!(registry.matches_path("/api/*/*", "/api/users/123"));
+        assert!(!registry.matches_path("/api/*/*", "/api/users"));
+    }
+
+    #[test]
+    fn test_get_http_routes_empty() {
+        let registry = RouteRegistry::new();
+        assert!(registry.get_http_routes(&HttpMethod::GET).is_empty());
+    }
+
+    #[test]
+    fn test_get_ws_routes_empty() {
+        let registry = RouteRegistry::new();
+        assert!(registry.get_ws_routes().is_empty());
+    }
+
+    #[test]
+    fn test_get_grpc_routes_empty() {
+        let registry = RouteRegistry::new();
+        assert!(registry.get_grpc_routes("Service").is_empty());
+    }
+
+    #[test]
+    fn test_http_method_serialization() {
+        let method = HttpMethod::GET;
+        let json = serde_json::to_string(&method).unwrap();
+        assert_eq!(json, r#""get""#);
+
+        let method = HttpMethod::POST;
+        let json = serde_json::to_string(&method).unwrap();
+        assert_eq!(json, r#""post""#);
+    }
+
+    #[test]
+    fn test_http_method_deserialization() {
+        let method: HttpMethod = serde_json::from_str(r#""get""#).unwrap();
+        assert_eq!(method, HttpMethod::GET);
+
+        let method: HttpMethod = serde_json::from_str(r#""post""#).unwrap();
+        assert_eq!(method, HttpMethod::POST);
+    }
+}

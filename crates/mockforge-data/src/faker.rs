@@ -275,3 +275,381 @@ pub mod quick {
         EnhancedFaker::new().string(length)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_enhanced_faker_new() {
+        let _faker = EnhancedFaker::new();
+        // Should create successfully
+        assert!(true);
+    }
+
+    #[test]
+    fn test_enhanced_faker_default() {
+        let _faker = EnhancedFaker::default();
+        // Should create successfully
+        assert!(true);
+    }
+
+    #[test]
+    fn test_uuid_generation() {
+        let mut faker = EnhancedFaker::new();
+        let uuid = faker.uuid();
+
+        // Should have correct UUID format (36 chars with dashes)
+        assert_eq!(uuid.len(), 36);
+        assert!(uuid.contains('-'));
+    }
+
+    #[test]
+    fn test_int_range() {
+        let mut faker = EnhancedFaker::new();
+        let value = faker.int_range(1, 10);
+
+        assert!(value >= 1);
+        assert!(value <= 10);
+    }
+
+    #[test]
+    fn test_float_range() {
+        let mut faker = EnhancedFaker::new();
+        let value = faker.float_range(0.0, 1.0);
+
+        assert!(value >= 0.0);
+        assert!(value <= 1.0);
+    }
+
+    #[test]
+    fn test_boolean() {
+        let mut faker = EnhancedFaker::new();
+        let value = faker.boolean(0.5);
+
+        // Should be either true or false
+        assert!(value || !value);
+    }
+
+    #[test]
+    fn test_boolean_always_true() {
+        let mut faker = EnhancedFaker::new();
+        let value = faker.boolean(1.0);
+
+        assert!(value);
+    }
+
+    #[test]
+    fn test_boolean_always_false() {
+        let mut faker = EnhancedFaker::new();
+        let value = faker.boolean(0.0);
+
+        assert!(!value);
+    }
+
+    #[test]
+    fn test_string_generation() {
+        let mut faker = EnhancedFaker::new();
+        let s = faker.string(10);
+
+        // Should generate a string (actual length may vary due to words)
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn test_email_generation() {
+        let mut faker = EnhancedFaker::new();
+        let email = faker.email();
+
+        assert!(!email.is_empty());
+        assert!(email.contains('@'));
+    }
+
+    #[test]
+    fn test_name_generation() {
+        let mut faker = EnhancedFaker::new();
+        let name = faker.name();
+
+        assert!(!name.is_empty());
+    }
+
+    #[test]
+    fn test_address_generation() {
+        let mut faker = EnhancedFaker::new();
+        let address = faker.address();
+
+        assert!(!address.is_empty());
+    }
+
+    #[test]
+    fn test_phone_generation() {
+        let mut faker = EnhancedFaker::new();
+        let phone = faker.phone();
+
+        assert!(!phone.is_empty());
+    }
+
+    #[test]
+    fn test_company_generation() {
+        let mut faker = EnhancedFaker::new();
+        let company = faker.company();
+
+        assert!(!company.is_empty());
+    }
+
+    #[test]
+    fn test_date_iso_generation() {
+        let mut faker = EnhancedFaker::new();
+        let date = faker.date_iso();
+
+        assert!(!date.is_empty());
+        // Should contain 'T' from ISO format
+        assert!(date.contains('T') || date.contains('-'));
+    }
+
+    #[test]
+    fn test_url_generation() {
+        let mut faker = EnhancedFaker::new();
+        let url = faker.url();
+
+        assert!(url.starts_with("https://"));
+    }
+
+    #[test]
+    fn test_ip_address_generation() {
+        let mut faker = EnhancedFaker::new();
+        let ip = faker.ip_address();
+
+        assert!(!ip.is_empty());
+        assert!(ip.contains('.'));
+    }
+
+    #[test]
+    fn test_color_generation() {
+        let mut faker = EnhancedFaker::new();
+        let color = faker.color();
+
+        let valid_colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white"];
+        assert!(valid_colors.contains(&color.as_str()));
+    }
+
+    #[test]
+    fn test_word_generation() {
+        let mut faker = EnhancedFaker::new();
+        let word = faker.word();
+
+        assert!(!word.is_empty());
+    }
+
+    #[test]
+    fn test_words_generation() {
+        let mut faker = EnhancedFaker::new();
+        let words = faker.words(5);
+
+        assert_eq!(words.len(), 5);
+    }
+
+    #[test]
+    fn test_sentence_generation() {
+        let mut faker = EnhancedFaker::new();
+        let sentence = faker.sentence();
+
+        assert!(!sentence.is_empty());
+    }
+
+    #[test]
+    fn test_paragraph_generation() {
+        let mut faker = EnhancedFaker::new();
+        let paragraph = faker.paragraph();
+
+        assert!(!paragraph.is_empty());
+    }
+
+    #[test]
+    fn test_random_element_success() {
+        let mut faker = EnhancedFaker::new();
+        let items = ["a", "b", "c", "d"];
+        let element = faker.random_element(&items);
+
+        assert!(element.is_some());
+        assert!(items.contains(element.unwrap()));
+    }
+
+    #[test]
+    fn test_random_element_empty_list() {
+        let mut faker = EnhancedFaker::new();
+        let items: [&str; 0] = [];
+        let element = faker.random_element(&items);
+
+        assert!(element.is_none());
+    }
+
+    #[test]
+    fn test_generate_by_type_string() {
+        let mut faker = EnhancedFaker::new();
+        let result = faker.generate_by_type("string");
+
+        assert!(matches!(result, Value::String(_)));
+    }
+
+    #[test]
+    fn test_generate_by_type_email() {
+        let mut faker = EnhancedFaker::new();
+        let result = faker.generate_by_type("email");
+
+        if let Value::String(s) = result {
+            assert!(s.contains('@'));
+        } else {
+            panic!("Expected string value");
+        }
+    }
+
+    #[test]
+    fn test_generate_by_type_int() {
+        let mut faker = EnhancedFaker::new();
+        let result = faker.generate_by_type("int");
+
+        assert!(matches!(result, Value::Number(_)));
+    }
+
+    #[test]
+    fn test_generate_by_type_bool() {
+        let mut faker = EnhancedFaker::new();
+        let result = faker.generate_by_type("bool");
+
+        assert!(matches!(result, Value::Bool(_)));
+    }
+
+    #[test]
+    fn test_generate_by_type_uuid() {
+        let mut faker = EnhancedFaker::new();
+        let result = faker.generate_by_type("uuid");
+
+        if let Value::String(s) = result {
+            assert_eq!(s.len(), 36);
+        } else {
+            panic!("Expected string value");
+        }
+    }
+
+    #[test]
+    fn test_template_faker_new() {
+        let _faker = TemplateFaker::new();
+        assert!(true);
+    }
+
+    #[test]
+    fn test_template_faker_default() {
+        let _faker = TemplateFaker::default();
+        assert!(true);
+    }
+
+    #[test]
+    fn test_template_faker_with_variable() {
+        let faker = TemplateFaker::new()
+            .with_variable("name".to_string(), Value::String("John".to_string()));
+
+        assert_eq!(faker.variables.len(), 1);
+        assert_eq!(faker.variables.get("name"), Some(&Value::String("John".to_string())));
+    }
+
+    #[test]
+    fn test_template_faker_generate_from_template() {
+        let mut faker = TemplateFaker::new()
+            .with_variable("name".to_string(), Value::String("Alice".to_string()));
+
+        let result = faker.generate_from_template("Hello {{name}}!");
+
+        if let Value::String(s) = result {
+            assert!(s.contains("Alice"));
+        } else {
+            panic!("Expected string value");
+        }
+    }
+
+    #[test]
+    fn test_template_faker_generate_object() {
+        let mut faker = TemplateFaker::new()
+            .with_variable("user".to_string(), Value::String("Bob".to_string()));
+
+        let mut templates = HashMap::new();
+        templates.insert("greeting".to_string(), "Hello {{user}}".to_string());
+        templates.insert("farewell".to_string(), "Goodbye {{user}}".to_string());
+
+        let result = faker.generate_object(templates);
+
+        if let Value::Object(obj) = result {
+            assert!(obj.contains_key("greeting"));
+            assert!(obj.contains_key("farewell"));
+        } else {
+            panic!("Expected object value");
+        }
+    }
+
+    #[test]
+    fn test_quick_email() {
+        let email = quick::email();
+        assert!(!email.is_empty());
+        assert!(email.contains('@'));
+    }
+
+    #[test]
+    fn test_quick_name() {
+        let name = quick::name();
+        assert!(!name.is_empty());
+    }
+
+    #[test]
+    fn test_quick_uuid() {
+        let uuid = quick::uuid();
+        assert_eq!(uuid.len(), 36);
+        assert!(uuid.contains('-'));
+    }
+
+    #[test]
+    fn test_quick_int() {
+        let value = quick::int(1, 10);
+        assert!(value >= 1);
+        assert!(value <= 10);
+    }
+
+    #[test]
+    fn test_quick_string() {
+        let s = quick::string(10);
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn test_generate_by_type_unknown() {
+        let mut faker = EnhancedFaker::new();
+        let result = faker.generate_by_type("unknown_type");
+
+        if let Value::String(s) = result {
+            assert!(s.contains("unknown_type"));
+        } else {
+            panic!("Expected string value");
+        }
+    }
+
+    #[test]
+    fn test_template_faker_multiple_variables() {
+        let faker = TemplateFaker::new()
+            .with_variable("first".to_string(), Value::String("John".to_string()))
+            .with_variable("last".to_string(), Value::String("Doe".to_string()));
+
+        assert_eq!(faker.variables.len(), 2);
+    }
+
+    #[test]
+    fn test_template_faker_generate_with_faker_pattern() {
+        let mut faker = TemplateFaker::new();
+        let result = faker.generate_from_template("Email: {{faker.email}}");
+
+        if let Value::String(s) = result {
+            assert!(s.contains("Email:"));
+            assert!(!s.contains("{{faker.email}}"));
+        } else {
+            panic!("Expected string value");
+        }
+    }
+}

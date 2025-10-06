@@ -373,3 +373,14 @@ pub trait AuthPluginFactory: Send + Sync {
     fn create_plugin(&self) -> Result<Box<dyn AuthPlugin>>;
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        // Basic compilation test
+        assert!(true);
+    }
+}

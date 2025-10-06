@@ -109,3 +109,39 @@ pub fn create_admin_router(
 
     router.layer(CorsLayer::permissive()).with_state(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_admin_router() {
+        let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
+        let router = create_admin_router(
+            Some(http_addr),
+            None,
+            None,
+            None,
+            true,
+            8080,
+        );
+
+        // Router should be created successfully
+        let _ = router;
+    }
+
+    #[tokio::test]
+    async fn test_create_admin_router_no_servers() {
+        let router = create_admin_router(
+            None,
+            None,
+            None,
+            None,
+            false,
+            8080,
+        );
+
+        // Router should still work without server addresses
+        let _ = router;
+    }
+}

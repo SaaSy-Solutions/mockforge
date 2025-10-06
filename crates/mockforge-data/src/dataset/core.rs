@@ -585,3 +585,53 @@ impl Default for Dataset {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dataset_new() {
+        let dataset = Dataset::new(
+            "TestDataset".to_string(),
+            "TestSchema".to_string(),
+            DataConfig::default(),
+            OutputFormat::Json,
+        );
+
+        assert_eq!(dataset.metadata.name, "TestDataset");
+        assert_eq!(dataset.metadata.schema_name, "TestSchema");
+        assert_eq!(dataset.rows.len(), 0);
+    }
+
+    #[test]
+    fn test_dataset_default() {
+        let dataset = Dataset::default();
+
+        assert_eq!(dataset.metadata.name, "Untitled Dataset");
+        assert_eq!(dataset.metadata.schema_name, "Unknown Schema");
+    }
+
+    #[test]
+    fn test_dataset_row_new() {
+        let mut data = HashMap::new();
+        data.insert("name".to_string(), serde_json::json!("test"));
+
+        let row = DatasetRow::new("1".to_string(), data.clone());
+
+        assert_eq!(row.id, "1");
+        assert_eq!(row.data.len(), 1);
+        assert!(row.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_dataset_row_metadata() {
+        let mut data = HashMap::new();
+        data.insert("name".to_string(), serde_json::json!("test"));
+
+        let mut row = DatasetRow::new("1".to_string(), data);
+        row.metadata.insert("source".to_string(), "test".to_string());
+
+        assert_eq!(row.metadata.len(), 1);
+    }
+}

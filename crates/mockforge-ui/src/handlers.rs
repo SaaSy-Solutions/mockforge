@@ -3596,3 +3596,116 @@ pub async fn clear_import_history(State(state): State<AdminState>) -> Json<ApiRe
     history.clear();
     Json(ApiResponse::success("Import history cleared".to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_metrics_creation() {
+        use std::collections::HashMap;
+
+        let metrics = RequestMetrics {
+            total_requests: 100,
+            active_connections: 5,
+            requests_by_endpoint: HashMap::new(),
+            response_times: vec![10, 20, 30],
+            response_times_by_endpoint: HashMap::new(),
+            errors_by_endpoint: HashMap::new(),
+            last_request_by_endpoint: HashMap::new(),
+        };
+
+        assert_eq!(metrics.total_requests, 100);
+        assert_eq!(metrics.active_connections, 5);
+        assert_eq!(metrics.response_times.len(), 3);
+    }
+
+    #[test]
+    fn test_system_metrics_creation() {
+        let metrics = SystemMetrics {
+            cpu_usage_percent: 45.5,
+            memory_usage_mb: 100,
+            active_threads: 10,
+        };
+
+        assert_eq!(metrics.active_threads, 10);
+        assert!(metrics.cpu_usage_percent > 0.0);
+        assert_eq!(metrics.memory_usage_mb, 100);
+    }
+
+    #[test]
+    fn test_time_series_point() {
+        let point = TimeSeriesPoint {
+            timestamp: chrono::Utc::now(),
+            value: 42.5,
+        };
+
+        assert_eq!(point.value, 42.5);
+    }
+
+    #[test]
+    fn test_restart_status() {
+        let status = RestartStatus {
+            in_progress: true,
+            initiated_at: Some(chrono::Utc::now()),
+            reason: Some("Manual restart".to_string()),
+            success: None,
+        };
+
+        assert!(status.in_progress);
+        assert!(status.reason.is_some());
+    }
+
+    #[test]
+    fn test_configuration_state() {
+        use std::collections::HashMap;
+
+        let state = ConfigurationState {
+            latency_profile: crate::models::LatencyProfile {
+                name: "default".to_string(),
+                base_ms: 100,
+                jitter_ms: 10,
+                tag_overrides: HashMap::new(),
+            },
+            fault_config: crate::models::FaultConfig {
+                enabled: false,
+                failure_rate: 0.0,
+                status_codes: vec![],
+                active_failures: 0,
+            },
+            proxy_config: crate::models::ProxyConfig {
+                enabled: false,
+                upstream_url: None,
+                timeout_seconds: 30,
+                requests_proxied: 0,
+            },
+            validation_settings: crate::models::ValidationSettings {
+                mode: "off".to_string(),
+                aggregate_errors: false,
+                validate_responses: false,
+                overrides: HashMap::new(),
+            },
+        };
+
+        assert_eq!(state.latency_profile.name, "default");
+        assert!(!state.fault_config.enabled);
+        assert!(!state.proxy_config.enabled);
+    }
+
+    #[test]
+    fn test_admin_state_new() {
+        let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
+        let state = AdminState::new(
+            Some(http_addr),
+            None,
+            None,
+            None,
+            true,
+            8080,
+        );
+
+        assert_eq!(state.http_server_addr, Some(http_addr));
+        assert!(state.api_enabled);
+        assert_eq!(state.admin_port, 8080);
+    }
+}

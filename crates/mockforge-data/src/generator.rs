@@ -328,3 +328,72 @@ pub mod utils {
         batch_generator.generate_with_relationships().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{FieldDefinition, templates};
+
+    #[test]
+    fn test_data_generator_new() {
+        let schema = templates::user_schema();
+        let config = DataConfig::default();
+        
+        let result = DataGenerator::new(schema, config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_data_generator_with_seed() {
+        let schema = templates::user_schema();
+        let config = DataConfig {
+            rows: 10,
+            seed: Some(42),
+            ..Default::default()
+        };
+        
+        let result = DataGenerator::new(schema, config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_batch_generator_new() {
+        let schemas = vec![templates::user_schema()];
+        let config = DataConfig::default();
+        
+        let result = BatchGenerator::new(schemas, config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_batch_generator_multiple_schemas() {
+        let schemas = vec![
+            templates::user_schema(),
+            templates::product_schema(),
+        ];
+        let config = DataConfig::default();
+        
+        let result = BatchGenerator::new(schemas, config);
+        assert!(result.is_ok());
+        
+        if let Ok(batch) = result {
+            assert_eq!(batch.generators.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_data_generator_update_config() {
+        let schema = templates::user_schema();
+        let config = DataConfig::default();
+        
+        let mut generator = DataGenerator::new(schema, config).unwrap();
+        
+        let new_config = DataConfig {
+            rows: 50,
+            ..Default::default()
+        };
+        
+        let result = generator.update_config(new_config);
+        assert!(result.is_ok());
+    }
+}

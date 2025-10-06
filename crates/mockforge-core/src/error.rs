@@ -96,3 +96,97 @@ impl Error {
         Self::Generic(message.into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validation_error() {
+        let err = Error::validation("test validation");
+        assert!(err.to_string().contains("Validation error"));
+        assert!(err.to_string().contains("test validation"));
+    }
+
+    #[test]
+    fn test_routing_error() {
+        let err = Error::routing("test routing");
+        assert!(err.to_string().contains("Routing error"));
+        assert!(err.to_string().contains("test routing"));
+    }
+
+    #[test]
+    fn test_proxy_error() {
+        let err = Error::proxy("test proxy");
+        assert!(err.to_string().contains("Proxy error"));
+        assert!(err.to_string().contains("test proxy"));
+    }
+
+    #[test]
+    fn test_latency_error() {
+        let err = Error::latency("test latency");
+        assert!(err.to_string().contains("Latency simulation error"));
+        assert!(err.to_string().contains("test latency"));
+    }
+
+    #[test]
+    fn test_config_error() {
+        let err = Error::config("test config");
+        assert!(err.to_string().contains("Configuration error"));
+        assert!(err.to_string().contains("test config"));
+    }
+
+    #[test]
+    fn test_generic_error() {
+        let err = Error::generic("test generic");
+        assert!(err.to_string().contains("Generic error"));
+        assert!(err.to_string().contains("test generic"));
+    }
+
+    #[test]
+    fn test_from_string() {
+        let err: Error = "test message".to_string().into();
+        assert!(matches!(err, Error::Generic(_)));
+        assert!(err.to_string().contains("test message"));
+    }
+
+    #[test]
+    fn test_json_error_conversion() {
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid json");
+        assert!(json_err.is_err());
+        let err: Error = json_err.unwrap_err().into();
+        assert!(matches!(err, Error::Json(_)));
+    }
+
+    #[test]
+    fn test_url_parse_error_conversion() {
+        let url_err = url::Url::parse("not a url");
+        assert!(url_err.is_err());
+        let err: Error = url_err.unwrap_err().into();
+        assert!(matches!(err, Error::UrlParse(_)));
+    }
+
+    #[test]
+    fn test_regex_error_conversion() {
+        let regex_err = regex::Regex::new("[invalid(");
+        assert!(regex_err.is_err());
+        let err: Error = regex_err.unwrap_err().into();
+        assert!(matches!(err, Error::Regex(_)));
+    }
+
+    #[test]
+    fn test_error_display() {
+        let errors = vec![
+            (Error::validation("msg"), "Validation error: msg"),
+            (Error::routing("msg"), "Routing error: msg"),
+            (Error::proxy("msg"), "Proxy error: msg"),
+            (Error::latency("msg"), "Latency simulation error: msg"),
+            (Error::config("msg"), "Configuration error: msg"),
+            (Error::generic("msg"), "Generic error: msg"),
+        ];
+
+        for (err, expected) in errors {
+            assert_eq!(err.to_string(), expected);
+        }
+    }
+}

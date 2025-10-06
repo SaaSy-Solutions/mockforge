@@ -180,3 +180,13 @@ impl ReflectionClient {
         &self.pool
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

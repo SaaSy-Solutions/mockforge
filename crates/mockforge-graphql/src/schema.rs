@@ -3,7 +3,7 @@
 use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
 
 /// Simple User type for GraphQL
-#[derive(async_graphql::SimpleObject)]
+#[derive(async_graphql::SimpleObject, Clone)]
 pub struct User {
     /// Unique identifier
     pub id: String,
@@ -96,5 +96,69 @@ impl GraphQLSchema {
 impl Default for GraphQLSchema {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_creation() {
+        let user = User {
+            id: "user-1".to_string(),
+            name: "John Doe".to_string(),
+            email: "john@example.com".to_string(),
+        };
+
+        assert_eq!(user.id, "user-1");
+        assert_eq!(user.name, "John Doe");
+        assert_eq!(user.email, "john@example.com");
+    }
+
+    #[test]
+    fn test_post_creation() {
+        let user = User {
+            id: "user-1".to_string(),
+            name: "Author".to_string(),
+            email: "author@example.com".to_string(),
+        };
+
+        let post = Post {
+            id: "post-1".to_string(),
+            title: "Test Post".to_string(),
+            content: "This is a test post".to_string(),
+            author: user.clone(),
+        };
+
+        assert_eq!(post.id, "post-1");
+        assert_eq!(post.title, "Test Post");
+        assert_eq!(post.author.name, "Author");
+    }
+
+    #[test]
+    fn test_query_root_creation() {
+        let _query = QueryRoot;
+        // Should create successfully
+        assert!(true);
+    }
+
+    #[test]
+    fn test_graphql_schema_new() {
+        let schema = GraphQLSchema::new();
+        assert!(schema.schema().sdl().len() > 0);
+    }
+
+    #[test]
+    fn test_graphql_schema_default() {
+        let schema = GraphQLSchema::default();
+        assert!(schema.schema().sdl().len() > 0);
+    }
+
+    #[test]
+    fn test_graphql_schema_generate_basic() {
+        let schema = GraphQLSchema::generate_basic_schema();
+        let sdl = schema.schema().sdl();
+        assert!(sdl.contains("Query"));
     }
 }

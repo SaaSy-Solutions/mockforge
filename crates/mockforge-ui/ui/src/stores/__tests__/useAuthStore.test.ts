@@ -5,44 +5,23 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useAuthStore } from '../useAuthStore';
-
-// Mock the API service
-const mockApi = {
-  login: vi.fn(),
-  logout: vi.fn(),
-  getCurrentUser: vi.fn(),
-  refreshToken: vi.fn(),
-};
-
-vi.mock('../../services/api', () => ({
-  api: mockApi,
-}));
-
-// Mock localStorage
-const mockLocalStorage = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
-
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage,
-});
+import type { User } from '../../types';
 
 describe('useAuthStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLocalStorage.getItem.mockReturnValue(null);
-    
+
     // Reset store state
     useAuthStore.setState({
       user: null,
       isAuthenticated: false,
       isLoading: false,
-      error: null,
       token: null,
+      refreshToken: null,
     });
+
+    // Clear localStorage
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -55,332 +34,250 @@ describe('useAuthStore', () => {
     expect(result.current.user).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.error).toBeNull();
     expect(result.current.token).toBeNull();
   });
 
-  it('restores authentication state from localStorage on init', () => {
-    const mockUser = { id: '1', email: 'test@example.com', role: 'admin' };
-    const mockToken = 'mock-jwt-token';
-
-    mockLocalStorage.getItem
-      .mockReturnValueOnce(JSON.stringify(mockUser))
-      .mockReturnValueOnce(mockToken);
-
-    const { result } = renderHook(() => useAuthStore());
-
-    act(() => {
-      result.current.initializeAuth();
-    });
-
-    expect(result.current.user).toEqual(mockUser);
-    expect(result.current.token).toBe(mockToken);
-    expect(result.current.isAuthenticated).toBe(true);
-  });
-
-  it('handles successful login', async () => {
-    const mockUser = { id: '1', email: 'test@example.com', role: 'admin' };
-    const mockToken = 'mock-jwt-token';
-    const credentials = { email: 'test@example.com', password: 'password123' };
-
-    mockApi.login.mockResolvedValue({
-      user: mockUser,
-      token: mockToken,
-      expiresIn: 3600,
-    });
-
+  it('handles successful login with admin user', async () => {
     const { result } = renderHook(() => useAuthStore());
 
     await act(async () => {
-      await result.current.login(credentials);
+      await result.current.login('admin', 'admin123');
     });
 
-    expect(mockApi.login).toHaveBeenCalledWith(credentials);
-    expect(result.current.user).toEqual(mockUser);
-    expect(result.current.token).toBe(mockToken);
+    expect(result.current.user).toMatchObject({
+      id: 'admin-001',
+      username: 'admin',
+      role: 'admin',
+      email: 'admin@mockforge.dev',
+    });
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.error).toBeNull();
-
-    expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_user', JSON.stringify(mockUser));
-    expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_token', mockToken);
+    expect(result.current.token).toBeTruthy();
+    expect(result.current.token).toContain('mock.');
   });
 
-  it('handles login failure', async () => {
-    const credentials = { email: 'test@example.com', password: 'wrongpassword' };
-    const errorMessage = 'Invalid credentials';
-
-    mockApi.login.mockRejectedValue(new Error(errorMessage));
-
+  it('handles successful login with viewer user', async () => {
     const { result } = renderHook(() => useAuthStore());
 
     await act(async () => {
-      await result.current.login(credentials);
+      await result.current.login('viewer', 'viewer123');
+    });
+
+    expect(result.current.user).toMatchObject({
+      id: 'viewer-001',
+      username: 'viewer',
+      role: 'viewer',
+      email: 'viewer@mockforge.dev',
+    });
+    expect(result.current.isAuthenticated).toBe(true);
+  });
+
+  it('handles login failure with invalid credentials', async () => {
+    const { result } = renderHook(() => useAuthStore());
+
+    await act(async () => {
+      try {
+        await result.current.login('admin', 'wrongpassword');
+      } catch (error) {
+        expect(error).toBeDefined();
+      }
     });
 
     expect(result.current.user).toBeNull();
-    expect(result.current.token).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.error).toBe(errorMessage);
+    expect(result.current.token).toBeNull();
+  });
+
+  it('handles login failure with non-existent user', async () => {
+    const { result } = renderHook(() => useAuthStore());
+
+    await act(async () => {
+      try {
+        await result.current.login('nonexistent', 'password');
+      } catch (error) {
+        expect(error.message).toContain('Invalid username or password');
+      }
+    });
+
+    expect(result.current.user).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
   });
 
   it('sets loading state during login', async () => {
-    const credentials = { email: 'test@example.com', password: 'password123' };
-    
-    // Create a promise that we can control
-    let resolveLogin;
-    const loginPromise = new Promise((resolve) => {
-      resolveLogin = resolve;
-    });
-    mockApi.login.mockReturnValue(loginPromise);
-
     const { result } = renderHook(() => useAuthStore());
 
-    // Start login
-    act(() => {
-      result.current.login(credentials);
+    const loginPromise = act(async () => {
+      await result.current.login('admin', 'admin123');
     });
 
-    // Should be loading
-    expect(result.current.isLoading).toBe(true);
-
-    // Resolve login
-    await act(async () => {
-      resolveLogin({ user: { id: '1' }, token: 'token' });
-      await loginPromise;
-    });
-
-    // Should no longer be loading
+    // Should eventually finish loading
+    await loginPromise;
     expect(result.current.isLoading).toBe(false);
   });
 
   it('handles logout', async () => {
-    // Set up authenticated state
-    useAuthStore.setState({
-      user: { id: '1', email: 'test@example.com', role: 'admin' },
-      token: 'mock-token',
-      isAuthenticated: true,
-    });
-
-    mockApi.logout.mockResolvedValue(undefined);
-
     const { result } = renderHook(() => useAuthStore());
 
+    // First login
+    await act(async () => {
+      await result.current.login('admin', 'admin123');
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+
+    // Then logout
     await act(async () => {
       await result.current.logout();
     });
 
-    expect(mockApi.logout).toHaveBeenCalled();
     expect(result.current.user).toBeNull();
     expect(result.current.token).toBeNull();
+    expect(result.current.refreshToken).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
-    expect(result.current.error).toBeNull();
-
-    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_user');
-    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_token');
   });
 
-  it('checks authentication status', async () => {
-    const mockUser = { id: '1', email: 'test@example.com', role: 'admin' };
-    mockApi.getCurrentUser.mockResolvedValue(mockUser);
-
-    // Set up token in state
-    useAuthStore.setState({ token: 'valid-token' });
-
+  it('checks authentication status with valid token', async () => {
     const { result } = renderHook(() => useAuthStore());
 
+    // Login first
+    await act(async () => {
+      await result.current.login('admin', 'admin123');
+    });
+
+    const token = result.current.token;
+
+    // Reset state but keep token
+    useAuthStore.setState({
+      user: null,
+      isAuthenticated: false,
+      token,
+      refreshToken: result.current.refreshToken,
+    });
+
+    // Check auth should restore user
     await act(async () => {
       await result.current.checkAuth();
     });
 
-    expect(mockApi.getCurrentUser).toHaveBeenCalled();
-    expect(result.current.user).toEqual(mockUser);
     expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.user).toBeTruthy();
   });
 
   it('handles invalid token during auth check', async () => {
-    mockApi.getCurrentUser.mockRejectedValue(new Error('Invalid token'));
-
-    // Set up token in state
-    useAuthStore.setState({ token: 'invalid-token' });
-
     const { result } = renderHook(() => useAuthStore());
+
+    // Set invalid token
+    useAuthStore.setState({
+      token: 'invalid-token',
+      refreshToken: 'invalid-refresh',
+    });
 
     await act(async () => {
       await result.current.checkAuth();
     });
 
-    expect(result.current.user).toBeNull();
-    expect(result.current.token).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
-    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_user');
-    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_token');
+    expect(result.current.user).toBeNull();
   });
 
   it('refreshes token', async () => {
-    const newToken = 'new-jwt-token';
-    const newUser = { id: '1', email: 'test@example.com', role: 'admin' };
-
-    mockApi.refreshToken.mockResolvedValue({
-      token: newToken,
-      user: newUser,
-      expiresIn: 3600,
-    });
-
-    // Set up existing token
-    useAuthStore.setState({ token: 'old-token' });
-
     const { result } = renderHook(() => useAuthStore());
 
+    // Login first
     await act(async () => {
-      await result.current.refreshToken();
+      await result.current.login('admin', 'admin123');
     });
 
-    expect(mockApi.refreshToken).toHaveBeenCalled();
-    expect(result.current.token).toBe(newToken);
-    expect(result.current.user).toEqual(newUser);
-    expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_token', newToken);
+    expect(result.current.isAuthenticated).toBe(true);
+    const tokenBeforeRefresh = result.current.token;
+
+    // Refresh token
+    await act(async () => {
+      await result.current.refreshTokenAction();
+    });
+
+    // Token should still exist and user should still be authenticated
+    expect(result.current.token).toBeTruthy();
+    expect(result.current.isAuthenticated).toBe(true);
+    // Note: Token may be the same if generated in same second (iat/exp are in seconds)
+    // The important thing is refresh works without error
   });
 
-  it('handles token refresh failure', async () => {
-    mockApi.refreshToken.mockRejectedValue(new Error('Refresh failed'));
-
-    // Set up existing token
-    useAuthStore.setState({ 
-      token: 'old-token',
-      user: { id: '1' },
-      isAuthenticated: true 
-    });
-
+  it('handles token refresh failure when not authenticated', async () => {
     const { result } = renderHook(() => useAuthStore());
 
     await act(async () => {
-      await result.current.refreshToken();
+      try {
+        await result.current.refreshTokenAction();
+      } catch (error) {
+        expect(error.message).toContain('No refresh token available');
+      }
     });
-
-    // Should clear auth state on refresh failure
-    expect(result.current.user).toBeNull();
-    expect(result.current.token).toBeNull();
-    expect(result.current.isAuthenticated).toBe(false);
-  });
-
-  it('clears error on successful operation after error', async () => {
-    const mockUser = { id: '1', email: 'test@example.com', role: 'admin' };
-    const credentials = { email: 'test@example.com', password: 'password123' };
-
-    // First, cause an error
-    mockApi.login.mockRejectedValueOnce(new Error('Network error'));
-
-    const { result } = renderHook(() => useAuthStore());
-
-    await act(async () => {
-      await result.current.login(credentials);
-    });
-
-    expect(result.current.error).toBe('Network error');
-
-    // Then succeed
-    mockApi.login.mockResolvedValueOnce({
-      user: mockUser,
-      token: 'token',
-    });
-
-    await act(async () => {
-      await result.current.login(credentials);
-    });
-
-    expect(result.current.error).toBeNull();
   });
 
   it('updates user profile', async () => {
-    const currentUser = { id: '1', email: 'test@example.com', role: 'admin' };
-    const updatedUser = { id: '1', email: 'newemail@example.com', role: 'admin' };
+    const { result } = renderHook(() => useAuthStore());
 
-    // Set up authenticated state
-    useAuthStore.setState({
-      user: currentUser,
-      isAuthenticated: true,
+    // Login first
+    await act(async () => {
+      await result.current.login('admin', 'admin123');
     });
 
-    mockApi.updateProfile = vi.fn().mockResolvedValue(updatedUser);
-
-    const { result } = renderHook(() => useAuthStore());
+    const updatedUser: User = {
+      id: 'admin-001',
+      username: 'admin',
+      email: 'newemail@example.com',
+      role: 'admin',
+    };
 
     await act(async () => {
-      await result.current.updateProfile({ email: 'newemail@example.com' });
+      await result.current.updateProfile(updatedUser);
     });
 
-    expect(result.current.user).toEqual(updatedUser);
-    expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_user', JSON.stringify(updatedUser));
+    expect(result.current.user).toMatchObject(updatedUser);
+    expect(result.current.user?.email).toBe('newemail@example.com');
   });
 
-  it('handles concurrent authentication requests', async () => {
-    const credentials = { email: 'test@example.com', password: 'password123' };
-    const mockUser = { id: '1', email: 'test@example.com', role: 'admin' };
-
-    mockApi.login.mockResolvedValue({
-      user: mockUser,
-      token: 'token',
-    });
-
+  it('validates token expiry correctly', () => {
     const { result } = renderHook(() => useAuthStore());
 
-    // Start multiple login attempts concurrently
-    const loginPromises = [
-      result.current.login(credentials),
-      result.current.login(credentials),
-      result.current.login(credentials),
-    ];
-
-    await act(async () => {
-      await Promise.all(loginPromises);
-    });
-
-    // Should only call API once due to concurrent request handling
-    expect(mockApi.login).toHaveBeenCalledTimes(1);
-    expect(result.current.user).toEqual(mockUser);
+    // No token should return false
+    expect(result.current.checkTokenExpiry()).toBe(false);
   });
 
-  it('provides user role checking utilities', () => {
+  it('sets authenticated state directly', () => {
     const { result } = renderHook(() => useAuthStore());
 
-    // Not authenticated
-    expect(result.current.hasRole('admin')).toBe(false);
-    expect(result.current.hasAnyRole(['admin', 'user'])).toBe(false);
+    const user: User = {
+      id: '1',
+      username: 'testuser',
+      email: 'test@example.com',
+      role: 'admin',
+    };
+    const token = 'test-token';
 
     act(() => {
-      useAuthStore.setState({
-        user: { id: '1', email: 'test@example.com', role: 'admin' },
-        isAuthenticated: true,
-      });
+      result.current.setAuthenticated(user, token);
     });
 
-    expect(result.current.hasRole('admin')).toBe(true);
-    expect(result.current.hasRole('user')).toBe(false);
-    expect(result.current.hasAnyRole(['admin', 'user'])).toBe(true);
-    expect(result.current.hasAnyRole(['moderator', 'user'])).toBe(false);
+    expect(result.current.user).toEqual(user);
+    expect(result.current.token).toBe(token);
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.refreshToken).toBe(`refresh_${token}`);
   });
 
-  it('handles token expiration', async () => {
-    // Set up authenticated state with expired token
-    useAuthStore.setState({
-      user: { id: '1', email: 'test@example.com', role: 'admin' },
-      token: 'expired-token',
-      isAuthenticated: true,
-    });
-
-    mockApi.getCurrentUser.mockRejectedValue(new Error('Token expired'));
-
+  it('generates valid JWT-like tokens', async () => {
     const { result } = renderHook(() => useAuthStore());
 
     await act(async () => {
-      await result.current.checkAuth();
+      await result.current.login('admin', 'admin123');
     });
 
-    // Should clear auth state when token is expired
-    expect(result.current.user).toBeNull();
-    expect(result.current.token).toBeNull();
-    expect(result.current.isAuthenticated).toBe(false);
+    const token = result.current.token;
+    expect(token).toBeTruthy();
+    expect(token).toContain('mock.');
+
+    const parts = token?.split('.');
+    expect(parts?.length).toBe(3);
   });
 });

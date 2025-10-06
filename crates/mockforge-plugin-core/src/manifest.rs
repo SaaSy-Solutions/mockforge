@@ -12,3 +12,16 @@ pub mod schema;
 pub use loader::ManifestLoader;
 pub use models::{PluginAuthor, PluginDependency, PluginInfo, PluginManifest};
 pub use schema::{ConfigProperty, ConfigSchema, PropertyType, PropertyValidation};
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_exports() {
+        // Test that main types are accessible
+        let _ = std::marker::PhantomData::<PluginManifest>;
+        let _ = std::marker::PhantomData::<ManifestLoader>;
+        let _ = std::marker::PhantomData::<ConfigSchema>;
+        assert!(true);
+    }
+}

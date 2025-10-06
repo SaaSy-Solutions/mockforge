@@ -192,3 +192,223 @@ fn calculate_response_size(res: &Response) -> u64 {
 
     size
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{Request, Response, StatusCode};
+    use serde_json::json;
+
+    #[test]
+    fn test_operation_meta_creation() {
+        let meta = OperationMeta {
+            id: "getUserById".to_string(),
+            tags: vec!["users".to_string(), "public".to_string()],
+            path: "/users/{id}".to_string(),
+        };
+
+        assert_eq!(meta.id, "getUserById");
+        assert_eq!(meta.tags.len(), 2);
+        assert_eq!(meta.path, "/users/{id}");
+    }
+
+    #[test]
+    fn test_shared_creation() {
+        let shared = Shared {
+            profiles: LatencyProfiles::default(),
+            overrides: Overrides::default(),
+            failure_injector: None,
+            traffic_shaper: None,
+            overrides_enabled: false,
+            traffic_shaping_enabled: false,
+        };
+
+        assert!(!shared.overrides_enabled);
+        assert!(!shared.traffic_shaping_enabled);
+        assert!(shared.failure_injector.is_none());
+        assert!(shared.traffic_shaper.is_none());
+    }
+
+    #[test]
+    fn test_shared_with_failure_injector() {
+        let failure_injector = FailureInjector::new(None, true);
+        let shared = Shared {
+            profiles: LatencyProfiles::default(),
+            overrides: Overrides::default(),
+            failure_injector: Some(failure_injector),
+            traffic_shaper: None,
+            overrides_enabled: false,
+            traffic_shaping_enabled: false,
+        };
+
+        assert!(shared.failure_injector.is_some());
+    }
+
+    #[test]
+    fn test_apply_overrides_disabled() {
+        let shared = Shared {
+            profiles: LatencyProfiles::default(),
+            overrides: Overrides::default(),
+            failure_injector: None,
+            traffic_shaper: None,
+            overrides_enabled: false,
+            traffic_shaping_enabled: false,
+        };
+
+        let op = OperationMeta {
+            id: "getUser".to_string(),
+            tags: vec![],
+            path: "/users".to_string(),
+        };
+
+        let mut body = json!({"name": "John"});
+        let original = body.clone();
+
+        apply_overrides(&shared, Some(&op), &mut body);
+
+        // Should not modify body when overrides are disabled
+        assert_eq!(body, original);
+    }
+
+    #[test]
+    fn test_apply_overrides_enabled_no_rules() {
+        let shared = Shared {
+            profiles: LatencyProfiles::default(),
+            overrides: Overrides::default(),
+            failure_injector: None,
+            traffic_shaper: None,
+            overrides_enabled: true,
+            traffic_shaping_enabled: false,
+        };
+
+        let op = OperationMeta {
+            id: "getUser".to_string(),
+            tags: vec![],
+            path: "/users".to_string(),
+        };
+
+        let mut body = json!({"name": "John"});
+        let original = body.clone();
+
+        apply_overrides(&shared, Some(&op), &mut body);
+
+        // Should not modify body when there are no override rules
+        assert_eq!(body, original);
+    }
+
+    #[test]
+    fn test_apply_overrides_with_none_operation() {
+        let shared = Shared {
+            profiles: LatencyProfiles::default(),
+            overrides: Overrides::default(),
+            failure_injector: None,
+            traffic_shaper: None,
+            overrides_enabled: true,
+            traffic_shaping_enabled: false,
+        };
+
+        let mut body = json!({"name": "John"});
+        let original = body.clone();
+
+        apply_overrides(&shared, None, &mut body);
+
+        // Should not modify body when operation is None
+        assert_eq!(body, original);
+    }
+
+    #[test]
+    fn test_calculate_request_size_basic() {
+        let req = Request::builder()
+            .uri("/test")
+            .header("content-type", "application/json")
+            .body(())
+            .unwrap();
+
+        let size = calculate_request_size(&req);
+
+        // Should be > 0 (includes headers + URI + body estimate)
+        assert!(size > 0);
+        // Should include at least the URI and header sizes
+        assert!(size >= "/test".len() as u64 + "content-type".len() as u64);
+    }
+
+    #[test]
+    fn test_calculate_request_size_with_multiple_headers() {
+        let req = Request::builder()
+            .uri("/api/users")
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer token123")
+            .header("user-agent", "test-client")
+            .body(())
+            .unwrap();
+
+        let size = calculate_request_size(&req);
+
+        // Should account for all headers
+        assert!(size > 100); // Reasonable size with multiple headers
+    }
+
+    #[test]
+    fn test_calculate_response_size_basic() {
+        let res = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let size = calculate_response_size(&res);
+
+        // Should be > 0 (includes status line + headers + body estimate)
+        assert!(size > 0);
+        // Should include at least the status line estimate (50) and header sizes
+        assert!(size >= 50);
+    }
+
+    #[test]
+    fn test_calculate_response_size_with_multiple_headers() {
+        let res = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/json")
+            .header("cache-control", "no-cache")
+            .header("x-request-id", "123-456-789")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let size = calculate_response_size(&res);
+
+        // Should account for all headers
+        assert!(size > 100);
+    }
+
+    #[test]
+    fn test_shared_clone() {
+        let shared = Shared {
+            profiles: LatencyProfiles::default(),
+            overrides: Overrides::default(),
+            failure_injector: None,
+            traffic_shaper: None,
+            overrides_enabled: true,
+            traffic_shaping_enabled: true,
+        };
+
+        let cloned = shared.clone();
+
+        assert_eq!(shared.overrides_enabled, cloned.overrides_enabled);
+        assert_eq!(shared.traffic_shaping_enabled, cloned.traffic_shaping_enabled);
+    }
+
+    #[test]
+    fn test_operation_meta_clone() {
+        let meta = OperationMeta {
+            id: "testOp".to_string(),
+            tags: vec!["tag1".to_string()],
+            path: "/test".to_string(),
+        };
+
+        let cloned = meta.clone();
+
+        assert_eq!(meta.id, cloned.id);
+        assert_eq!(meta.tags, cloned.tags);
+        assert_eq!(meta.path, cloned.path);
+    }
+}

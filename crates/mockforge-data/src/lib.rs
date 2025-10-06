@@ -130,3 +130,120 @@ pub async fn generate_from_openapi(
     };
     generate_data(schema, config).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_data_config_default() {
+        let config = DataConfig::default();
+        assert_eq!(config.rows, 0); // Default for usize is 0
+        assert_eq!(config.seed, None);
+        assert!(!config.rag_enabled);
+        assert_eq!(config.rag_context_length, 0); // Default for usize is 0
+        assert!(matches!(config.format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn test_data_config_custom() {
+        let config = DataConfig {
+            rows: 50,
+            seed: Some(42),
+            rag_enabled: true,
+            rag_context_length: 2000,
+            format: OutputFormat::Csv,
+        };
+
+        assert_eq!(config.rows, 50);
+        assert_eq!(config.seed, Some(42));
+        assert!(config.rag_enabled);
+        assert_eq!(config.rag_context_length, 2000);
+        assert!(matches!(config.format, OutputFormat::Csv));
+    }
+
+    #[test]
+    fn test_output_format_variants() {
+        let json = OutputFormat::Json;
+        let jsonlines = OutputFormat::JsonLines;
+        let yaml = OutputFormat::Yaml;
+        let csv = OutputFormat::Csv;
+
+        assert!(matches!(json, OutputFormat::Json));
+        assert!(matches!(jsonlines, OutputFormat::JsonLines));
+        assert!(matches!(yaml, OutputFormat::Yaml));
+        assert!(matches!(csv, OutputFormat::Csv));
+    }
+
+    #[test]
+    fn test_generation_result_new() {
+        let data = vec![json!({"id": 1, "name": "test"})];
+        let result = GenerationResult::new(data.clone(), 100);
+
+        assert_eq!(result.count, 1);
+        assert_eq!(result.data.len(), 1);
+        assert_eq!(result.generation_time_ms, 100);
+        assert_eq!(result.warnings.len(), 0);
+    }
+
+    #[test]
+    fn test_generation_result_with_warning() {
+        let data = vec![json!({"id": 1})];
+        let result = GenerationResult::new(data, 50)
+            .with_warning("Test warning".to_string());
+
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.warnings[0], "Test warning");
+    }
+
+    #[test]
+    fn test_generation_result_to_json_string() {
+        let data = vec![json!({"id": 1, "name": "test"})];
+        let result = GenerationResult::new(data, 10);
+
+        let json_string = result.to_json_string();
+        assert!(json_string.is_ok());
+        let json_str = json_string.unwrap();
+        assert!(json_str.contains("\"id\""));
+        assert!(json_str.contains("\"name\""));
+    }
+
+    #[test]
+    fn test_generation_result_to_jsonl_string() {
+        let data = vec![
+            json!({"id": 1}),
+            json!({"id": 2}),
+        ];
+        let result = GenerationResult::new(data, 10);
+
+        let jsonl_string = result.to_jsonl_string();
+        assert!(jsonl_string.is_ok());
+        let jsonl_str = jsonl_string.unwrap();
+        assert!(jsonl_str.contains("{\"id\":1}"));
+        assert!(jsonl_str.contains("{\"id\":2}"));
+        assert!(jsonl_str.contains("\n"));
+    }
+
+    #[test]
+    fn test_generation_result_multiple_warnings() {
+        let data = vec![json!({"id": 1})];
+        let result = GenerationResult::new(data, 10)
+            .with_warning("Warning 1".to_string())
+            .with_warning("Warning 2".to_string());
+
+        assert_eq!(result.warnings.len(), 2);
+        assert_eq!(result.warnings[0], "Warning 1");
+        assert_eq!(result.warnings[1], "Warning 2");
+    }
+
+    #[test]
+    fn test_default_rows() {
+        assert_eq!(default_rows(), 100);
+    }
+
+    #[test]
+    fn test_default_rag_context_length() {
+        assert_eq!(default_rag_context_length(), 1000);
+    }
+}

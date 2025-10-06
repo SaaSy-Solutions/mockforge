@@ -27,3 +27,14 @@ pub trait TokenResolver: Send + Sync {
         Ok(())
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_trait_definition() {
+        // Test that the trait exists and can be referenced
+        let _ = std::marker::PhantomData::<&dyn TokenResolver>;
+        assert!(true);
+    }
+}

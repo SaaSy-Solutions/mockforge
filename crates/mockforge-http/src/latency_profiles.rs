@@ -67,3 +67,136 @@ impl LatencyProfiles {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_profile_creation() {
+        let profile = Profile {
+            fixed_ms: Some(100),
+            jitter_ms: Some(20),
+            fail_p: Some(0.1),
+            fail_status: Some(503),
+        };
+
+        assert_eq!(profile.fixed_ms, Some(100));
+        assert_eq!(profile.jitter_ms, Some(20));
+        assert_eq!(profile.fail_p, Some(0.1));
+        assert_eq!(profile.fail_status, Some(503));
+    }
+
+    #[test]
+    fn test_latency_profiles_default() {
+        let profiles = LatencyProfiles::default();
+        assert!(profiles.by_operation.is_empty());
+        assert!(profiles.by_tag.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_maybe_fault_no_profile() {
+        let profiles = LatencyProfiles::default();
+        let result = profiles.maybe_fault("test_op", &[]).await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_maybe_fault_with_operation_profile_no_failure() {
+        let mut profiles = LatencyProfiles::default();
+        profiles.by_operation.insert("test_op".to_string(), Profile {
+            fixed_ms: Some(1),
+            jitter_ms: Some(1),
+            fail_p: Some(0.0),
+            fail_status: Some(500),
+        });
+
+        let result = profiles.maybe_fault("test_op", &[]).await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_maybe_fault_with_tag_profile() {
+        let mut profiles = LatencyProfiles::default();
+        profiles.by_tag.insert("slow".to_string(), Profile {
+            fixed_ms: Some(1),
+            jitter_ms: None,
+            fail_p: Some(0.0),
+            fail_status: None,
+        });
+
+        let tags = vec!["slow".to_string()];
+        let result = profiles.maybe_fault("unknown_op", &tags).await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_maybe_fault_guaranteed_failure() {
+        let mut profiles = LatencyProfiles::default();
+        profiles.by_operation.insert("failing_op".to_string(), Profile {
+            fixed_ms: Some(0),
+            jitter_ms: None,
+            fail_p: Some(1.0),
+            fail_status: Some(503),
+        });
+
+        let result = profiles.maybe_fault("failing_op", &[]).await;
+        assert!(result.is_some());
+        let (status, _message) = result.unwrap();
+        assert_eq!(status, 503);
+    }
+
+    #[tokio::test]
+    async fn test_maybe_fault_operation_priority_over_tag() {
+        let mut profiles = LatencyProfiles::default();
+
+        profiles.by_operation.insert("test_op".to_string(), Profile {
+            fixed_ms: Some(1),
+            jitter_ms: None,
+            fail_p: Some(0.0),
+            fail_status: Some(500),
+        });
+
+        profiles.by_tag.insert("test_tag".to_string(), Profile {
+            fixed_ms: Some(100),
+            jitter_ms: None,
+            fail_p: Some(1.0),
+            fail_status: Some(503),
+        });
+
+        let tags = vec!["test_tag".to_string()];
+        let result = profiles.maybe_fault("test_op", &tags).await;
+
+        // Operation profile should take priority, so no failure
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_profile_deserialization() {
+        let yaml = r#"
+        fixed_ms: 100
+        jitter_ms: 20
+        fail_p: 0.1
+        fail_status: 503
+        "#;
+
+        let profile: Profile = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(profile.fixed_ms, Some(100));
+        assert_eq!(profile.jitter_ms, Some(20));
+        assert_eq!(profile.fail_p, Some(0.1));
+        assert_eq!(profile.fail_status, Some(503));
+    }
+
+    #[test]
+    fn test_profile_partial_deserialization() {
+        let yaml = r#"
+        fixed_ms: 50
+        "#;
+
+        let profile: Profile = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(profile.fixed_ms, Some(50));
+        assert!(profile.jitter_ms.is_none());
+        assert!(profile.fail_p.is_none());
+        assert!(profile.fail_status.is_none());
+    }
+}

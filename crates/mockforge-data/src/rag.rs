@@ -960,3 +960,38 @@ pub mod rag_utils {
         Ok(engine)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_llm_provider_variants() {
+        let openai = LlmProvider::OpenAI;
+        let anthropic = LlmProvider::Anthropic;
+        let compatible = LlmProvider::OpenAICompatible;
+        let ollama = LlmProvider::Ollama;
+
+        assert!(matches!(openai, LlmProvider::OpenAI));
+        assert!(matches!(anthropic, LlmProvider::Anthropic));
+        assert!(matches!(compatible, LlmProvider::OpenAICompatible));
+        assert!(matches!(ollama, LlmProvider::Ollama));
+    }
+
+    #[test]
+    fn test_embedding_provider_variants() {
+        let openai = EmbeddingProvider::OpenAI;
+        let compatible = EmbeddingProvider::OpenAICompatible;
+
+        assert!(matches!(openai, EmbeddingProvider::OpenAI));
+        assert!(matches!(compatible, EmbeddingProvider::OpenAICompatible));
+    }
+
+    #[test]
+    fn test_rag_config_default() {
+        let config = RagConfig::default();
+
+        assert!(config.max_tokens > 0);
+        assert!(config.temperature >= 0.0 && config.temperature <= 1.0);
+        assert!(config.context_window > 0);
+    }
+}

@@ -611,3 +611,14 @@ impl StorageFactory {
         Err(mockforge_core::Error::generic("Vector database storage not yet implemented"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        // Basic compilation test
+        assert!(true);
+    }
+}

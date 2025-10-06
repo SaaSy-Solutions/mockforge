@@ -326,3 +326,365 @@ pub fn to_enhanced_422_json(errors: Vec<ValidationError>) -> Value {
         "timestamp": chrono::Utc::now().to_rfc3339()
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validation_error_new() {
+        let error = ValidationError::new(
+            "/user/name".to_string(),
+            "string".to_string(),
+            "number".to_string(),
+            "type_mismatch",
+        );
+
+        assert_eq!(error.path, "/user/name");
+        assert_eq!(error.expected, "string");
+        assert_eq!(error.found, "number");
+        assert_eq!(error.error_type, "type_mismatch");
+        assert!(error.message.is_none());
+        assert!(error.schema_info.is_none());
+    }
+
+    #[test]
+    fn test_validation_error_with_message() {
+        let error = ValidationError::new(
+            "/user/age".to_string(),
+            "integer".to_string(),
+            "string".to_string(),
+            "type_mismatch",
+        )
+        .with_message("Expected integer, got string".to_string());
+
+        assert_eq!(error.message, Some("Expected integer, got string".to_string()));
+    }
+
+    #[test]
+    fn test_validation_error_with_schema_info() {
+        let schema_info = SchemaInfo {
+            data_type: "string".to_string(),
+            required: Some(true),
+            format: Some("email".to_string()),
+            minimum: None,
+            maximum: None,
+            min_length: Some(5),
+            max_length: Some(100),
+            pattern: None,
+            enum_values: None,
+            additional_properties: None,
+        };
+
+        let error = ValidationError::new(
+            "/user/email".to_string(),
+            "string".to_string(),
+            "missing".to_string(),
+            "missing_required",
+        )
+        .with_schema_info(schema_info.clone());
+
+        assert!(error.schema_info.is_some());
+        let info = error.schema_info.unwrap();
+        assert_eq!(info.data_type, "string");
+        assert_eq!(info.required, Some(true));
+        assert_eq!(info.format, Some("email".to_string()));
+    }
+
+    #[test]
+    fn test_field_error_from_validation_error() {
+        let validation_error = ValidationError::new(
+            "/user/id".to_string(),
+            "integer".to_string(),
+            "string".to_string(),
+            "type_mismatch",
+        )
+        .with_message("Type mismatch".to_string());
+
+        let field_error: FieldError = validation_error.into();
+
+        assert_eq!(field_error.path, "/user/id");
+        assert_eq!(field_error.expected, "integer");
+        assert_eq!(field_error.found, "string");
+        assert_eq!(field_error.message, Some("Type mismatch".to_string()));
+    }
+
+    #[test]
+    fn test_type_of_null() {
+        let value = json!(null);
+        assert_eq!(type_of(&value), "null");
+    }
+
+    #[test]
+    fn test_type_of_bool() {
+        let value = json!(true);
+        assert_eq!(type_of(&value), "bool");
+    }
+
+    #[test]
+    fn test_type_of_integer() {
+        let value = json!(42);
+        assert_eq!(type_of(&value), "integer");
+    }
+
+    #[test]
+    fn test_type_of_number() {
+        let value = json!(42.5);
+        assert_eq!(type_of(&value), "number");
+    }
+
+    #[test]
+    fn test_type_of_string() {
+        let value = json!("hello");
+        assert_eq!(type_of(&value), "string");
+    }
+
+    #[test]
+    fn test_type_of_array() {
+        let value = json!([1, 2, 3]);
+        assert_eq!(type_of(&value), "array");
+    }
+
+    #[test]
+    fn test_type_of_object() {
+        let value = json!({"key": "value"});
+        assert_eq!(type_of(&value), "object");
+    }
+
+    #[test]
+    fn test_diff_matching_objects() {
+        let expected = json!({"name": "John", "age": 30});
+        let actual = json!({"name": "John", "age": 30});
+
+        let errors = diff(&expected, &actual);
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_diff_missing_field() {
+        let expected = json!({"name": "John", "age": 30});
+        let actual = json!({"name": "John"});
+
+        let errors = diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "/age");
+        assert_eq!(errors[0].expected, "integer");
+        assert_eq!(errors[0].found, "missing");
+    }
+
+    #[test]
+    fn test_diff_type_mismatch() {
+        let expected = json!({"name": "John", "age": 30});
+        let actual = json!({"name": "John", "age": "thirty"});
+
+        let errors = diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "/age");
+        assert_eq!(errors[0].expected, "integer");
+        assert_eq!(errors[0].found, "string");
+    }
+
+    #[test]
+    fn test_diff_nested_objects() {
+        let expected = json!({
+            "user": {
+                "name": "John",
+                "address": {
+                    "city": "NYC"
+                }
+            }
+        });
+        let actual = json!({
+            "user": {
+                "name": "John",
+                "address": {
+                    "city": 123
+                }
+            }
+        });
+
+        let errors = diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "/user/address/city");
+        assert_eq!(errors[0].expected, "string");
+        assert_eq!(errors[0].found, "integer");
+    }
+
+    #[test]
+    fn test_diff_arrays() {
+        let expected = json!([{"id": 1}]);
+        let actual = json!([{"id": 1}, {"id": 2}]);
+
+        let errors = diff(&expected, &actual);
+        assert_eq!(errors.len(), 0); // Both items match the expected structure
+    }
+
+    #[test]
+    fn test_diff_array_type_mismatch() {
+        let expected = json!([{"id": 1}]);
+        let actual = json!([{"id": "one"}]);
+
+        let errors = diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "/0/id");
+        assert_eq!(errors[0].expected, "integer");
+        assert_eq!(errors[0].found, "string");
+    }
+
+    #[test]
+    fn test_to_422_json() {
+        let errors = vec![
+            FieldError {
+                path: "/name".to_string(),
+                expected: "string".to_string(),
+                found: "number".to_string(),
+                message: None,
+            },
+            FieldError {
+                path: "/email".to_string(),
+                expected: "string".to_string(),
+                found: "missing".to_string(),
+                message: Some("required".to_string()),
+            },
+        ];
+
+        let result = to_422_json(errors);
+        assert_eq!(result["error"], "Schema validation failed");
+        assert_eq!(result["details"].as_array().unwrap().len(), 2);
+        assert_eq!(result["details"][0]["path"], "/name");
+        assert_eq!(result["details"][1]["path"], "/email");
+    }
+
+    #[test]
+    fn test_validation_diff_matching_objects() {
+        let expected = json!({"name": "John", "age": 30});
+        let actual = json!({"name": "John", "age": 30});
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn test_validation_diff_missing_required_field() {
+        let expected = json!({"name": "John", "age": 30});
+        let actual = json!({"name": "John"});
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].error_type, "missing_required");
+        assert!(errors[0].message.as_ref().unwrap().contains("Missing required field"));
+        assert!(errors[0].schema_info.is_some());
+    }
+
+    #[test]
+    fn test_validation_diff_additional_property() {
+        let expected = json!({"name": "John"});
+        let actual = json!({"name": "John", "age": 30});
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].error_type, "additional_property");
+        assert!(errors[0].message.as_ref().unwrap().contains("Unexpected additional field"));
+    }
+
+    #[test]
+    fn test_validation_diff_type_mismatch() {
+        let expected = json!({"age": 30});
+        let actual = json!({"age": "thirty"});
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].error_type, "type_mismatch");
+        assert_eq!(errors[0].expected, "integer");
+        assert_eq!(errors[0].found, "string");
+        assert!(errors[0].schema_info.is_some());
+    }
+
+    #[test]
+    fn test_validation_diff_array_items() {
+        let expected = json!([{"id": 1}]);
+        let actual = json!([{"id": "one"}]);
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "/0/id");
+        assert_eq!(errors[0].error_type, "type_mismatch");
+    }
+
+    #[test]
+    fn test_validation_diff_empty_array_with_items() {
+        let expected = json!([]);
+        let actual = json!([1, 2, 3]);
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].error_type, "unexpected_items");
+        assert!(errors[0].message.as_ref().unwrap().contains("Expected empty array"));
+    }
+
+    #[test]
+    fn test_to_enhanced_422_json() {
+        let errors = vec![
+            ValidationError::new(
+                "/name".to_string(),
+                "string".to_string(),
+                "number".to_string(),
+                "type_mismatch",
+            )
+            .with_message("Type mismatch: expected string, found number".to_string()),
+        ];
+
+        let result = to_enhanced_422_json(errors);
+        assert_eq!(result["error"], "Schema validation failed");
+        assert!(result["message"].as_str().unwrap().contains("doesn't match expected schema"));
+        assert_eq!(result["validation_errors"].as_array().unwrap().len(), 1);
+        assert!(result["help"]["tips"].is_array());
+        assert!(result["timestamp"].is_string());
+    }
+
+    #[test]
+    fn test_validation_diff_nested_objects() {
+        let expected = json!({
+            "user": {
+                "profile": {
+                    "name": "John",
+                    "age": 30
+                }
+            }
+        });
+        let actual = json!({
+            "user": {
+                "profile": {
+                    "name": "John"
+                }
+            }
+        });
+
+        let errors = validation_diff(&expected, &actual);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].path.contains("/user/profile"));
+        assert_eq!(errors[0].error_type, "missing_required");
+    }
+
+    #[test]
+    fn test_validation_diff_multiple_errors() {
+        let expected = json!({
+            "name": "John",
+            "age": 30,
+            "email": "john@example.com"
+        });
+        let actual = json!({
+            "name": 123,
+            "extra": "field"
+        });
+
+        let errors = validation_diff(&expected, &actual);
+        // Should have: type mismatch for name, missing age, missing email, additional property 'extra'
+        assert!(errors.len() >= 3);
+
+        let error_types: Vec<_> = errors.iter().map(|e| e.error_type.as_str()).collect();
+        assert!(error_types.contains(&"type_mismatch"));
+        assert!(error_types.contains(&"missing_required"));
+        assert!(error_types.contains(&"additional_property"));
+    }
+}

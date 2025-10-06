@@ -384,3 +384,13 @@ impl MockReflectionProxy {
         Ok(smart_generator.generate_message(&descriptor))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

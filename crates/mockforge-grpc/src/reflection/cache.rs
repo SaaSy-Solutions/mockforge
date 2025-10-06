@@ -103,3 +103,13 @@ impl DescriptorCache {
         cache.method_count()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

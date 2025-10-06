@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { LoginForm } from './LoginForm';
 
@@ -8,14 +8,19 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
-  const { isAuthenticated, user, isLoading } = useAuthStore();
+  const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore();
+
+  // Check authentication on mount
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" data-testid="loading-spinner"></div>
           <div className="text-muted-foreground">Checking authentication...</div>
         </div>
       </div>

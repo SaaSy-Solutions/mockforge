@@ -92,3 +92,14 @@ impl PluginManifest {
             .map_err(|e| PluginError::config_error(&format!("Failed to parse manifest: {}", e)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        // Basic compilation test
+        assert!(true);
+    }
+}

@@ -52,3 +52,27 @@ pub fn get_admin_css() -> &'static str {
 pub fn get_admin_js() -> &'static str {
     include_str!("../ui/dist/assets/index.js")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_admin_html() {
+        let html = get_admin_html();
+        assert!(!html.is_empty());
+        assert!(html.contains("<!DOCTYPE html>") || html.contains("<html"));
+    }
+
+    #[test]
+    fn test_get_admin_css() {
+        let css = get_admin_css();
+        assert!(!css.is_empty());
+    }
+
+    #[test]
+    fn test_get_admin_js() {
+        let js = get_admin_js();
+        assert!(!js.is_empty());
+    }
+}

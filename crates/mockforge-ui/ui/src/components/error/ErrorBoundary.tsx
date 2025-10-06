@@ -2,10 +2,16 @@ import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '../ui/DesignSystem';
 import { StatusIcon, ActionIcon } from '../ui/IconSystem';
+import { reportError } from '../../services/errorReporting';
+
+interface FallbackProps {
+  error: Error;
+  resetError: () => void;
+}
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode;
+  fallback?: ReactNode | ((props: FallbackProps) => ReactNode);
 }
 
 interface State {
@@ -31,8 +37,13 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     });
 
-    // In a production app, you might want to send this to an error reporting service
-    // logErrorToService(error, errorInfo);
+    // Report error to error reporting service
+    try {
+      reportError(error, errorInfo);
+    } catch (e) {
+      // Error reporting failed - log but don't crash
+      console.error('Failed to report error:', e);
+    }
   }
 
   handleRetry = () => {
@@ -46,11 +57,18 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
+        // Support both ReactNode and function fallbacks
+        if (typeof this.props.fallback === 'function') {
+          return this.props.fallback({
+            error: this.state.error!,
+            resetError: this.handleRetry,
+          });
+        }
         return this.props.fallback;
       }
 
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="min-h-screen bg-background flex items-center justify-center p-4" data-testid="error-boundary-fallback">
           <div className="max-w-lg w-full bg-card border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl p-8 spring-in">
             <div className="text-center">
               <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-6 inline-flex">

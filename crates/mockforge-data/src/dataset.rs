@@ -587,3 +587,69 @@ pub mod utils {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dataset_validation_result_creation() {
+        let result = DatasetValidationResult {
+            valid: true,
+            errors: vec![],
+            warnings: vec![],
+            total_rows_validated: 100,
+        };
+
+        assert!(result.valid);
+        assert_eq!(result.total_rows_validated, 100);
+    }
+
+    #[test]
+    fn test_dataset_validation_result_with_errors() {
+        let result = DatasetValidationResult {
+            valid: false,
+            errors: vec!["Error 1".to_string(), "Error 2".to_string()],
+            warnings: vec![],
+            total_rows_validated: 50,
+        };
+
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 2);
+    }
+
+    #[test]
+    fn test_dataset_validation_result_with_warnings() {
+        let result = DatasetValidationResult {
+            valid: true,
+            errors: vec![],
+            warnings: vec!["Warning 1".to_string()],
+            total_rows_validated: 75,
+        };
+
+        assert!(result.valid);
+        assert_eq!(result.warnings.len(), 1);
+    }
+
+    #[test]
+    fn test_dataset_metadata_creation() {
+        let config = DataConfig::default();
+        let metadata = DatasetMetadata {
+            name: "TestDataset".to_string(),
+            description: Some("Test description".to_string()),
+            schema_name: "TestSchema".to_string(),
+            row_count: 100,
+            config,
+            created_at: chrono::Utc::now(),
+            generation_time_ms: 1000,
+            format: OutputFormat::Json,
+            file_size_bytes: Some(1024),
+            tags: HashMap::new(),
+        };
+
+        assert_eq!(metadata.name, "TestDataset");
+        assert_eq!(metadata.row_count, 100);
+        assert!(metadata.description.is_some());
+        assert_eq!(metadata.generation_time_ms, 1000);
+    }
+}

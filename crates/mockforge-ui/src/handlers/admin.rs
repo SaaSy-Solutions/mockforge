@@ -242,3 +242,35 @@ pub async fn get_config(State(state): State<super::AdminState>) -> Json<ApiRespo
     let config = state.get_config().await;
     Json(ApiResponse::success(serde_json::to_value(config).unwrap_or_else(|_| json!({}))))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_state() -> super::AdminState {
+        super::AdminState::new(
+            None,
+            None,
+            None,
+            None,
+            false,
+            8080,
+        )
+    }
+
+    #[tokio::test]
+    async fn test_get_restart_status() {
+        let state = create_test_state();
+        let response = get_restart_status(axum::extract::State(state)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_config() {
+        let state = create_test_state();
+        let response = get_config(axum::extract::State(state)).await;
+
+        assert!(response.0.success);
+    }
+}

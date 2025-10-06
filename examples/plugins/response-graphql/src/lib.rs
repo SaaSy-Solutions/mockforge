@@ -461,6 +461,7 @@ pub extern "C" fn destroy_response_plugin(plugin: *mut GraphQLResponsePlugin) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use http::{HeaderMap, HeaderValue, Method};
 
     #[test]
     fn test_graphql_query_parsing() {

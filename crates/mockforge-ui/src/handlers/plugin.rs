@@ -265,3 +265,112 @@ pub async fn reload_plugin(
         Json(ApiResponse::error(format!("Plugin not found: {}", payload.plugin_id)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_plugin_info_creation() {
+        let info = PluginInfo {
+            id: "test".to_string(),
+            name: "Test Plugin".to_string(),
+            version: "1.0.0".to_string(),
+            types: vec!["resolver".to_string()],
+            status: "ready".to_string(),
+            healthy: true,
+            description: "Test description".to_string(),
+            author: "Test Author".to_string(),
+        };
+
+        assert_eq!(info.id, "test");
+        assert_eq!(info.name, "Test Plugin");
+        assert_eq!(info.version, "1.0.0");
+        assert!(info.healthy);
+        assert_eq!(info.author, "Test Author");
+    }
+
+    #[test]
+    fn test_plugin_stats_creation() {
+        let stats = PluginStats {
+            total_plugins: 10,
+            discovered: 10,
+            loaded: 8,
+            failed: 2,
+            skipped: 0,
+            success_rate: 80.0,
+        };
+
+        assert_eq!(stats.total_plugins, 10);
+        assert_eq!(stats.discovered, 10);
+        assert_eq!(stats.loaded, 8);
+        assert_eq!(stats.failed, 2);
+        assert_eq!(stats.success_rate, 80.0);
+    }
+
+    #[test]
+    fn test_plugin_health_info_creation() {
+        let health = PluginHealthInfo {
+            id: "plugin-1".to_string(),
+            healthy: true,
+            message: "All good".to_string(),
+            last_check: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        assert_eq!(health.id, "plugin-1");
+        assert!(health.healthy);
+        assert_eq!(health.message, "All good");
+    }
+
+    #[test]
+    fn test_plugin_status_data_creation() {
+        let stats = PluginStats {
+            total_plugins: 5,
+            discovered: 5,
+            loaded: 5,
+            failed: 0,
+            skipped: 0,
+            success_rate: 100.0,
+        };
+
+        let status_data = PluginStatusData {
+            stats,
+            health: vec![],
+            last_updated: Some("2024-01-01T00:00:00Z".to_string()),
+        };
+
+        assert_eq!(status_data.stats.total_plugins, 5);
+        assert!(status_data.health.is_empty());
+    }
+
+    #[test]
+    fn test_reload_plugin_request() {
+        let req = ReloadPluginRequest {
+            plugin_id: "test-plugin".to_string(),
+        };
+
+        assert_eq!(req.plugin_id, "test-plugin");
+    }
+
+    #[test]
+    fn test_plugin_list_query_default() {
+        let query = PluginListQuery {
+            plugin_type: None,
+            status: None,
+        };
+
+        assert!(query.plugin_type.is_none());
+        assert!(query.status.is_none());
+    }
+
+    #[test]
+    fn test_plugin_list_query_with_filters() {
+        let query = PluginListQuery {
+            plugin_type: Some("resolver".to_string()),
+            status: Some("ready".to_string()),
+        };
+
+        assert_eq!(query.plugin_type, Some("resolver".to_string()));
+        assert_eq!(query.status, Some("ready".to_string()));
+    }
+}

@@ -265,3 +265,378 @@ fn apply_merge_patch(doc: &mut Value, op: &PatchOp) {
 }
 
 // templating moved to mockforge-core::templating
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::TempDir;
+    use tokio::fs;
+
+    #[test]
+    fn test_override_mode_default() {
+        let mode = default_mode();
+        assert_eq!(mode, OverrideMode::Replace);
+    }
+
+    #[test]
+    fn test_post_templating_default() {
+        assert!(!default_post_templating());
+    }
+
+    #[test]
+    fn test_patch_op_serialization() {
+        let add_op = PatchOp::Add {
+            path: "/name".to_string(),
+            value: json!("John"),
+        };
+
+        let serialized = serde_json::to_string(&add_op).unwrap();
+        assert!(serialized.contains("\"op\":\"add\""));
+        assert!(serialized.contains("\"path\":\"/name\""));
+    }
+
+    #[tokio::test]
+    async fn test_overrides_default() {
+        let overrides = Overrides::default();
+        assert_eq!(overrides.rules.len(), 0);
+        assert_eq!(overrides.regex_cache.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_load_from_globs_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+
+        let result = Overrides::load_from_globs(&[&pattern]).await;
+        assert!(result.is_ok());
+        let overrides = result.unwrap();
+        assert_eq!(overrides.rules.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_load_from_globs_with_yaml_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("overrides.yaml");
+
+        let yaml_content = r#"
+- targets:
+    - "operation:getUser"
+  patch:
+    - op: replace
+      path: "/name"
+      value: "Jane Doe"
+"#;
+
+        fs::write(&yaml_path, yaml_content).await.unwrap();
+
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+        let result = Overrides::load_from_globs(&[&pattern]).await;
+
+        assert!(result.is_ok());
+        let overrides = result.unwrap();
+        assert_eq!(overrides.rules.len(), 1);
+        assert_eq!(overrides.rules[0].targets[0], "operation:getUser");
+    }
+
+    #[tokio::test]
+    async fn test_load_from_globs_with_regex_pattern() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("overrides.yaml");
+
+        let yaml_content = r#"
+- targets:
+    - "regex:get.*"
+  patch:
+    - op: add
+      path: "/timestamp"
+      value: "2024-01-01"
+"#;
+
+        fs::write(&yaml_path, yaml_content).await.unwrap();
+
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+        let result = Overrides::load_from_globs(&[&pattern]).await;
+
+        assert!(result.is_ok());
+        let overrides = result.unwrap();
+        assert_eq!(overrides.rules.len(), 1);
+        // Regex should be cached
+        assert!(overrides.regex_cache.contains_key("get.*"));
+    }
+
+    #[test]
+    fn test_matches_target_operation() {
+        let targets = vec!["operation:getUser".to_string()];
+        let regex_cache = HashMap::new();
+
+        assert!(matches_target(&targets, "getUser", &[], "/users", &regex_cache));
+        assert!(!matches_target(&targets, "createUser", &[], "/users", &regex_cache));
+    }
+
+    #[test]
+    fn test_matches_target_tag() {
+        let targets = vec!["tag:admin".to_string()];
+        let regex_cache = HashMap::new();
+        let tags = vec!["admin".to_string(), "users".to_string()];
+
+        assert!(matches_target(&targets, "getUser", &tags, "/users", &regex_cache));
+
+        let tags_no_match = vec!["users".to_string()];
+        assert!(!matches_target(&targets, "getUser", &tags_no_match, "/users", &regex_cache));
+    }
+
+    #[test]
+    fn test_matches_target_regex() {
+        let targets = vec!["regex:get.*".to_string()];
+        let mut regex_cache = HashMap::new();
+        regex_cache.insert("get.*".to_string(), Regex::new("get.*").unwrap());
+
+        assert!(matches_target(&targets, "getUser", &[], "/users", &regex_cache));
+        assert!(matches_target(&targets, "getUserById", &[], "/users", &regex_cache));
+        assert!(!matches_target(&targets, "createUser", &[], "/users", &regex_cache));
+    }
+
+    #[test]
+    fn test_matches_target_path() {
+        let targets = vec!["path:/users/.*".to_string()];
+        let mut regex_cache = HashMap::new();
+        regex_cache.insert("/users/.*".to_string(), Regex::new("/users/.*").unwrap());
+
+        assert!(matches_target(&targets, "getUser", &[], "/users/123", &regex_cache));
+        assert!(!matches_target(&targets, "getUser", &[], "/posts/456", &regex_cache));
+    }
+
+    #[test]
+    fn test_apply_patch_add() {
+        let mut doc = json!({"name": "John"});
+        let op = PatchOp::Add {
+            path: "/age".to_string(),
+            value: json!(30),
+        };
+
+        apply_patch(&mut doc, &op);
+        assert_eq!(doc["age"], 30);
+    }
+
+    #[test]
+    fn test_apply_patch_replace() {
+        let mut doc = json!({"name": "John", "age": 25});
+        let op = PatchOp::Replace {
+            path: "/age".to_string(),
+            value: json!(30),
+        };
+
+        apply_patch(&mut doc, &op);
+        assert_eq!(doc["age"], 30);
+    }
+
+    #[test]
+    fn test_apply_patch_remove() {
+        let mut doc = json!({"name": "John", "age": 30});
+        let op = PatchOp::Remove {
+            path: "/age".to_string(),
+        };
+
+        apply_patch(&mut doc, &op);
+        assert!(doc.get("age").is_none());
+    }
+
+    #[test]
+    fn test_apply_merge_patch_add_object() {
+        let mut doc = json!({"user": {"name": "John"}});
+        let op = PatchOp::Add {
+            path: "/user".to_string(),
+            value: json!({"age": 30}),
+        };
+
+        apply_merge_patch(&mut doc, &op);
+
+        assert_eq!(doc["user"]["name"], "John");
+        assert_eq!(doc["user"]["age"], 30);
+    }
+
+    #[test]
+    fn test_apply_merge_patch_add_array() {
+        let mut doc = json!({"items": [1, 2]});
+        let op = PatchOp::Add {
+            path: "/items".to_string(),
+            value: json!([3, 4]),
+        };
+
+        apply_merge_patch(&mut doc, &op);
+
+        assert_eq!(doc["items"], json!([1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn test_apply_merge_patch_replace_array() {
+        let mut doc = json!({"items": [1, 2]});
+        let op = PatchOp::Replace {
+            path: "/items".to_string(),
+            value: json!([3, 4]),
+        };
+
+        apply_merge_patch(&mut doc, &op);
+
+        assert_eq!(doc["items"], json!([3, 4]));
+    }
+
+    #[test]
+    fn test_apply_merge_patch_remove() {
+        let mut doc = json!({"name": "John", "age": 30});
+        let op = PatchOp::Remove {
+            path: "/age".to_string(),
+        };
+
+        apply_merge_patch(&mut doc, &op);
+        assert!(doc.get("age").is_none());
+    }
+
+    #[test]
+    fn test_overrides_apply_no_match() {
+        let overrides = Overrides::default();
+        let mut body = json!({"name": "John"});
+        let original = body.clone();
+
+        overrides.apply("getUser", &[], "/users", &mut body);
+
+        assert_eq!(body, original);
+    }
+
+    #[tokio::test]
+    async fn test_overrides_apply_with_operation_match() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("overrides.yaml");
+
+        let yaml_content = r#"
+- targets:
+    - "operation:getUser"
+  patch:
+    - op: replace
+      path: "/name"
+      value: "Jane Doe"
+"#;
+
+        fs::write(&yaml_path, yaml_content).await.unwrap();
+
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+        let overrides = Overrides::load_from_globs(&[&pattern]).await.unwrap();
+
+        let mut body = json!({"name": "John"});
+        overrides.apply("getUser", &[], "/users", &mut body);
+
+        assert_eq!(body["name"], "Jane Doe");
+    }
+
+    #[tokio::test]
+    async fn test_overrides_apply_with_tag_match() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("overrides.yaml");
+
+        let yaml_content = r#"
+- targets:
+    - "tag:admin"
+  patch:
+    - op: add
+      path: "/role"
+      value: "administrator"
+"#;
+
+        fs::write(&yaml_path, yaml_content).await.unwrap();
+
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+        let overrides = Overrides::load_from_globs(&[&pattern]).await.unwrap();
+
+        let mut body = json!({"name": "John"});
+        let tags = vec!["admin".to_string()];
+        overrides.apply("getUser", &tags, "/users", &mut body);
+
+        assert_eq!(body["role"], "administrator");
+    }
+
+    #[tokio::test]
+    async fn test_overrides_with_merge_mode() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("overrides.yaml");
+
+        let yaml_content = r#"
+- targets:
+    - "operation:getUser"
+  mode: merge
+  patch:
+    - op: add
+      path: "/user"
+      value:
+        age: 30
+"#;
+
+        fs::write(&yaml_path, yaml_content).await.unwrap();
+
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+        let overrides = Overrides::load_from_globs(&[&pattern]).await.unwrap();
+
+        let mut body = json!({"user": {"name": "John"}});
+        overrides.apply("getUser", &[], "/users", &mut body);
+
+        assert_eq!(body["user"]["name"], "John");
+        assert_eq!(body["user"]["age"], 30);
+    }
+
+    #[tokio::test]
+    async fn test_load_from_globs_multiple_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path1 = temp_dir.path().join("override1.yaml");
+        let yaml_path2 = temp_dir.path().join("override2.yaml");
+
+        let yaml_content1 = r#"
+- targets:
+    - "operation:getUser"
+  patch:
+    - op: add
+      path: "/field1"
+      value: "value1"
+"#;
+
+        let yaml_content2 = r#"
+- targets:
+    - "operation:createUser"
+  patch:
+    - op: add
+      path: "/field2"
+      value: "value2"
+"#;
+
+        fs::write(&yaml_path1, yaml_content1).await.unwrap();
+        fs::write(&yaml_path2, yaml_content2).await.unwrap();
+
+        let pattern = format!("{}/**/*.yaml", temp_dir.path().display());
+        let result = Overrides::load_from_globs(&[&pattern]).await;
+
+        assert!(result.is_ok());
+        let overrides = result.unwrap();
+        assert_eq!(overrides.rules.len(), 2);
+    }
+
+    #[test]
+    fn test_override_rule_deserialize() {
+        let yaml = r#"
+targets:
+  - "operation:getUser"
+patch:
+  - op: replace
+    path: "/name"
+    value: "Jane"
+when: "env == 'test'"
+mode: merge
+post_templating: true
+"#;
+
+        let rule: OverrideRule = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(rule.targets.len(), 1);
+        assert_eq!(rule.patch.len(), 1);
+        assert_eq!(rule.when, Some("env == 'test'".to_string()));
+        assert_eq!(rule.mode, OverrideMode::Merge);
+        assert!(rule.post_templating);
+    }
+}

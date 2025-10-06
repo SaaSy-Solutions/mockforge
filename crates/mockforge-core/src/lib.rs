@@ -125,3 +125,53 @@ impl Default for Config {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert!(config.latency_enabled);
+        assert!(!config.failures_enabled);
+        assert!(config.overrides_enabled);
+        assert!(!config.traffic_shaping_enabled);
+        assert!(config.failure_config.is_none());
+        assert!(config.proxy.is_none());
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = Config::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("latency_enabled"));
+        assert!(json.contains("failures_enabled"));
+    }
+
+    #[test]
+    fn test_config_deserialization() {
+        // Use default config and modify
+        let mut config = Config::default();
+        config.latency_enabled = false;
+        config.failures_enabled = true;
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: Config = serde_json::from_str(&json).unwrap();
+
+        assert!(!deserialized.latency_enabled);
+        assert!(deserialized.failures_enabled);
+        assert!(deserialized.overrides_enabled);
+    }
+
+    #[test]
+    fn test_config_with_custom_values() {
+        let mut config = Config::default();
+        config.latency_enabled = false;
+        config.failures_enabled = true;
+
+        assert!(!config.latency_enabled);
+        assert!(config.failures_enabled);
+    }
+}

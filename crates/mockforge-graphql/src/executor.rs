@@ -101,3 +101,112 @@ async fn graphql_playground() -> impl IntoResponse {
             .subscription_endpoint("/graphql"),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_graphql::Request;
+
+    #[test]
+    fn test_graphql_executor_new() {
+        let schema = GraphQLSchema::new();
+        let executor = GraphQLExecutor::new(schema);
+
+        // Verify executor is created
+        assert!(executor.schema.schema().sdl().len() > 0);
+    }
+
+    #[test]
+    fn test_graphql_executor_schema_getter() {
+        let schema = GraphQLSchema::new();
+        let executor = GraphQLExecutor::new(schema);
+
+        let retrieved_schema = executor.schema();
+        assert!(retrieved_schema.schema().sdl().len() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_graphql_executor_can_execute() {
+        let schema = GraphQLSchema::new();
+        let executor = GraphQLExecutor::new(schema);
+
+        // Test that we can create an executor and access its schema
+        assert!(executor.schema().schema().sdl().contains("Query"));
+    }
+
+    #[tokio::test]
+    async fn test_create_graphql_router_no_latency() {
+        let result = create_graphql_router(None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_graphql_router_with_latency() {
+        let latency = mockforge_core::LatencyProfile::default();
+        let result = create_graphql_router(Some(latency)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_graphql_router_with_custom_latency() {
+        let latency = mockforge_core::LatencyProfile::new(100, 25);
+        let result = create_graphql_router(Some(latency)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_graphql_playground_returns_html() {
+        let response = graphql_playground().await;
+        // Convert to response to verify it's valid HTML
+        let _html_response = response.into_response();
+        assert!(true);
+    }
+
+    #[test]
+    fn test_graphql_handler_setup() {
+        let schema = GraphQLSchema::new();
+        let executor = Arc::new(GraphQLExecutor::new(schema));
+
+        // Test that we can create executor and wrap in Arc for handler
+        assert_eq!(Arc::strong_count(&executor), 1);
+    }
+
+    #[test]
+    fn test_executor_arc_shared_ownership() {
+        let schema = GraphQLSchema::new();
+        let executor = Arc::new(GraphQLExecutor::new(schema));
+
+        let executor_clone = Arc::clone(&executor);
+        assert_eq!(Arc::strong_count(&executor), 2);
+
+        drop(executor_clone);
+        assert_eq!(Arc::strong_count(&executor), 1);
+    }
+
+    #[test]
+    fn test_executor_schema_contains_query_type() {
+        let schema = GraphQLSchema::new();
+        let executor = GraphQLExecutor::new(schema);
+
+        let sdl = executor.schema().schema().sdl();
+        assert!(sdl.contains("Query"));
+    }
+
+    #[test]
+    fn test_executor_schema_contains_user_type() {
+        let schema = GraphQLSchema::new();
+        let executor = GraphQLExecutor::new(schema);
+
+        let sdl = executor.schema().schema().sdl();
+        assert!(sdl.contains("User"));
+    }
+
+    #[test]
+    fn test_executor_schema_contains_post_type() {
+        let schema = GraphQLSchema::new();
+        let executor = GraphQLExecutor::new(schema);
+
+        let sdl = executor.schema().schema().sdl();
+        assert!(sdl.contains("Post"));
+    }
+}

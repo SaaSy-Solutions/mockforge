@@ -41,3 +41,32 @@ pub async fn start_with_config(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dynamic::start_dynamic_server(port, config, latency_profile).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dynamic_grpc_config_default() {
+        let _config = DynamicGrpcConfig::default();
+        // Config should be created successfully
+        assert!(true);
+    }
+
+    #[test]
+    fn test_latency_profile_creation() {
+        let profile = LatencyProfile::default();
+        assert_eq!(profile.base_ms, 50);
+        assert_eq!(profile.jitter_ms, 20);
+        assert_eq!(profile.min_ms, 0);
+    }
+
+    #[test]
+    fn test_latency_profile_custom() {
+        let profile = LatencyProfile::new(100, 25);
+
+        assert_eq!(profile.base_ms, 100);
+        assert_eq!(profile.jitter_ms, 25);
+        assert_eq!(profile.min_ms, 0);
+    }
+}

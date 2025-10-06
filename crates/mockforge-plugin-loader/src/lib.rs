@@ -358,3 +358,67 @@ impl PluginDiscovery {
         self.errors.first().map(|s| s.as_str())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_plugin_loader_error_types() {
+        let load_error = PluginLoaderError::LoadError {
+            message: "test error".to_string(),
+        };
+        assert!(matches!(load_error, PluginLoaderError::LoadError { .. }));
+
+        let validation_error = PluginLoaderError::ValidationError {
+            message: "validation failed".to_string(),
+        };
+        assert!(matches!(validation_error, PluginLoaderError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn test_plugin_discovery_success() {
+        let plugin_id = PluginId("test-plugin".to_string());
+        let manifest = PluginManifest::new(PluginInfo::new(
+            plugin_id.clone(),
+            PluginVersion::new(1, 0, 0),
+            "Test Plugin",
+            "A test plugin",
+            PluginAuthor::new("test-author"),
+        ));
+
+        let result = PluginDiscovery::success(
+            plugin_id,
+            manifest,
+            "/path/to/plugin".to_string(),
+        );
+
+        assert!(result.is_success());
+        assert!(result.first_error().is_none());
+    }
+
+    #[test]
+    fn test_plugin_discovery_failure() {
+        let plugin_id = PluginId("failing-plugin".to_string());
+        let errors = vec!["Error 1".to_string(), "Error 2".to_string()];
+
+        let result = PluginDiscovery::failure(
+            plugin_id,
+            "/path/to/plugin".to_string(),
+            errors.clone(),
+        );
+
+        assert!(!result.is_success());
+        assert_eq!(result.first_error(), Some("Error 1"));
+        assert_eq!(result.errors.len(), 2);
+    }
+
+    #[test]
+    fn test_module_exports() {
+        // Verify main types are accessible
+        let _ = std::marker::PhantomData::<PluginLoader>;
+        let _ = std::marker::PhantomData::<PluginRegistry>;
+        let _ = std::marker::PhantomData::<PluginValidator>;
+        assert!(true);
+    }
+}

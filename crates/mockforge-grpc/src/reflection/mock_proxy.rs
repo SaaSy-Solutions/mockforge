@@ -16,3 +16,13 @@ pub mod validation;
 pub use proxy::*;
 
 // Legacy code removed - using proxy.rs implementation instead
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

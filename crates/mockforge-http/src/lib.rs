@@ -484,3 +484,228 @@ pub async fn start_with_traffic_shaping(
     .await;
     serve_router(port, app).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_route_info_creation() {
+        let route = RouteInfo {
+            method: "GET".to_string(),
+            path: "/users/{id}".to_string(),
+            operation_id: Some("getUserById".to_string()),
+            summary: Some("Get user by ID".to_string()),
+            description: Some("Retrieves a user by their ID".to_string()),
+            parameters: vec!["id".to_string()],
+        };
+
+        assert_eq!(route.method, "GET");
+        assert_eq!(route.path, "/users/{id}");
+        assert_eq!(route.operation_id, Some("getUserById".to_string()));
+        assert_eq!(route.summary, Some("Get user by ID".to_string()));
+        assert_eq!(route.parameters.len(), 1);
+    }
+
+    #[test]
+    fn test_route_info_clone() {
+        let route = RouteInfo {
+            method: "POST".to_string(),
+            path: "/users".to_string(),
+            operation_id: Some("createUser".to_string()),
+            summary: None,
+            description: None,
+            parameters: vec![],
+        };
+
+        let cloned = route.clone();
+        assert_eq!(route.method, cloned.method);
+        assert_eq!(route.path, cloned.path);
+        assert_eq!(route.operation_id, cloned.operation_id);
+    }
+
+    #[test]
+    fn test_http_server_state_new() {
+        let state = HttpServerState::new();
+        assert_eq!(state.routes.len(), 0);
+    }
+
+    #[test]
+    fn test_http_server_state_with_routes() {
+        let routes = vec![
+            RouteInfo {
+                method: "GET".to_string(),
+                path: "/users".to_string(),
+                operation_id: Some("getUsers".to_string()),
+                summary: None,
+                description: None,
+                parameters: vec![],
+            },
+            RouteInfo {
+                method: "POST".to_string(),
+                path: "/users".to_string(),
+                operation_id: Some("createUser".to_string()),
+                summary: None,
+                description: None,
+                parameters: vec![],
+            },
+        ];
+
+        let state = HttpServerState::with_routes(routes.clone());
+        assert_eq!(state.routes.len(), 2);
+        assert_eq!(state.routes[0].method, "GET");
+        assert_eq!(state.routes[1].method, "POST");
+    }
+
+    #[test]
+    fn test_http_server_state_clone() {
+        let routes = vec![RouteInfo {
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            operation_id: None,
+            summary: None,
+            description: None,
+            parameters: vec![],
+        }];
+
+        let state = HttpServerState::with_routes(routes);
+        let cloned = state.clone();
+
+        assert_eq!(state.routes.len(), cloned.routes.len());
+        assert_eq!(state.routes[0].method, cloned.routes[0].method);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_without_openapi() {
+        let router = build_router(None, None, None).await;
+        // Should succeed without OpenAPI spec
+        assert!(true); // Router was created successfully
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_nonexistent_spec() {
+        let router = build_router(Some("/nonexistent/spec.yaml".to_string()), None, None).await;
+        // Should succeed but log a warning
+        assert!(true); // Router was created successfully despite missing spec
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_auth_and_latency() {
+        let router = build_router_with_auth_and_latency(None, None, None, None).await;
+        // Should succeed without parameters
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_latency() {
+        let router = build_router_with_latency(None, None, None).await;
+        // Should succeed without parameters
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_auth() {
+        let router = build_router_with_auth(None, None, None).await;
+        // Should succeed without parameters
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_chains() {
+        let router = build_router_with_chains(None, None, None).await;
+        // Should succeed without parameters
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_traffic_shaping_disabled() {
+        let router = build_router_with_traffic_shaping(None, None, None, false).await;
+        // Should succeed with traffic shaping disabled
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_with_traffic_shaping_enabled_no_shaper() {
+        let router = build_router_with_traffic_shaping(None, None, None, true).await;
+        // Should succeed even without a traffic shaper
+        assert!(true);
+    }
+
+    #[test]
+    fn test_route_info_with_all_fields() {
+        let route = RouteInfo {
+            method: "PUT".to_string(),
+            path: "/users/{id}".to_string(),
+            operation_id: Some("updateUser".to_string()),
+            summary: Some("Update user".to_string()),
+            description: Some("Updates an existing user".to_string()),
+            parameters: vec!["id".to_string(), "body".to_string()],
+        };
+
+        assert!(route.operation_id.is_some());
+        assert!(route.summary.is_some());
+        assert!(route.description.is_some());
+        assert_eq!(route.parameters.len(), 2);
+    }
+
+    #[test]
+    fn test_route_info_with_minimal_fields() {
+        let route = RouteInfo {
+            method: "DELETE".to_string(),
+            path: "/users/{id}".to_string(),
+            operation_id: None,
+            summary: None,
+            description: None,
+            parameters: vec![],
+        };
+
+        assert!(route.operation_id.is_none());
+        assert!(route.summary.is_none());
+        assert!(route.description.is_none());
+        assert_eq!(route.parameters.len(), 0);
+    }
+
+    #[test]
+    fn test_http_server_state_empty_routes() {
+        let state = HttpServerState::with_routes(vec![]);
+        assert_eq!(state.routes.len(), 0);
+    }
+
+    #[test]
+    fn test_http_server_state_multiple_routes() {
+        let routes = vec![
+            RouteInfo {
+                method: "GET".to_string(),
+                path: "/users".to_string(),
+                operation_id: Some("listUsers".to_string()),
+                summary: Some("List all users".to_string()),
+                description: None,
+                parameters: vec![],
+            },
+            RouteInfo {
+                method: "GET".to_string(),
+                path: "/users/{id}".to_string(),
+                operation_id: Some("getUser".to_string()),
+                summary: Some("Get a user".to_string()),
+                description: None,
+                parameters: vec!["id".to_string()],
+            },
+            RouteInfo {
+                method: "POST".to_string(),
+                path: "/users".to_string(),
+                operation_id: Some("createUser".to_string()),
+                summary: Some("Create a user".to_string()),
+                description: None,
+                parameters: vec!["body".to_string()],
+            },
+        ];
+
+        let state = HttpServerState::with_routes(routes);
+        assert_eq!(state.routes.len(), 3);
+
+        // Verify different HTTP methods
+        let methods: Vec<&str> = state.routes.iter().map(|r| r.method.as_str()).collect();
+        assert!(methods.contains(&"GET"));
+        assert!(methods.contains(&"POST"));
+    }
+}

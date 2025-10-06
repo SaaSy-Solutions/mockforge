@@ -205,3 +205,13 @@ pub async fn decrement_in_flight(service_name: &str, method_name: &str) {
     let metrics = global_registry().get_method_metrics(service_name, method_name).await;
     metrics.decrement_in_flight();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}

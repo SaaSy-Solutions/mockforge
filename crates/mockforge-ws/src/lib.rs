@@ -78,3 +78,57 @@ async fn handle_socket(mut socket: WebSocket) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_router_creation() {
+        let _router = router();
+        // Router should be created successfully
+        assert!(true);
+    }
+
+    #[test]
+    fn test_router_with_latency_creation() {
+        let latency_profile = LatencyProfile::default();
+        let latency_injector = LatencyInjector::new(latency_profile, Default::default());
+        let _router = router_with_latency(latency_injector);
+        // Router should be created successfully
+        assert!(true);
+    }
+
+    #[test]
+    fn test_router_with_proxy_creation() {
+        let config = mockforge_core::WsProxyConfig {
+            upstream_url: "ws://localhost:8080".to_string(),
+            ..Default::default()
+        };
+        let proxy_handler = WsProxyHandler::new(config);
+        let _router = router_with_proxy(proxy_handler);
+        // Router should be created successfully
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_start_with_latency_config_none() {
+        // Test that we can create the router without latency
+        let result = std::panic::catch_unwind(|| {
+            let _router = router();
+        });
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_start_with_latency_config_some() {
+        // Test that we can create the router with latency
+        let latency_profile = LatencyProfile::default();
+        let latency_injector = LatencyInjector::new(latency_profile, Default::default());
+
+        let result = std::panic::catch_unwind(|| {
+            let _router = router_with_latency(latency_injector);
+        });
+        assert!(result.is_ok());
+    }
+}

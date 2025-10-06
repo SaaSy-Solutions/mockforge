@@ -29,3 +29,28 @@ pub async fn create_router(
 ) -> Result<axum::Router, Box<dyn std::error::Error + Send + Sync>> {
     create_graphql_router(latency_profile).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_router_without_latency() {
+        let result = create_router(None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_router_with_latency() {
+        let latency_profile = LatencyProfile::default();
+        let result = create_router(Some(latency_profile)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_router_with_custom_latency() {
+        let latency_profile = LatencyProfile::with_normal_distribution(50, 10.0);
+        let result = create_router(Some(latency_profile)).await;
+        assert!(result.is_ok());
+    }
+}

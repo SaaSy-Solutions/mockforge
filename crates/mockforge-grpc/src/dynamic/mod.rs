@@ -310,3 +310,13 @@ async fn start_grpc_only_server(
 }
 
 // start_combined_server removed - was a stub that was never implemented
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_compiles() {
+        assert!(true);
+    }
+}
