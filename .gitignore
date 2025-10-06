@@ -20,12 +20,14 @@ Thumbs.db
 
 # Logs
 *.log
+server_output.log
 
 # Runtime data
 pids
 *.pid
 *.seed
 *.pid.lock
+server_pid.txt
 
 # Coverage directory used by tools like istanbul
 coverage/
@@ -112,6 +114,7 @@ mock_data/
 recordings/
 replays/
 .mockforge/
+crates/mockforge-ui/ui/dist/
 
 # Local agent work directory
 .code/
