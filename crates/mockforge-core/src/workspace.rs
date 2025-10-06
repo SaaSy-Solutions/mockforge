@@ -477,6 +477,7 @@ impl Workspace {
     pub fn enable_sync(&mut self, target_directory: String) -> Result<()> {
         self.config.sync.enabled = true;
         self.config.sync.target_directory = Some(target_directory);
+        self.config.sync.realtime_monitoring = true; // Enable realtime monitoring by default
         self.updated_at = Utc::now();
         Ok(())
     }
@@ -628,9 +629,11 @@ fn sanitize_filename(name: &str) -> String {
         .map(|c| match c {
             '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
             c if c.is_control() => '_',
+            c if c.is_whitespace() => '-',
             c => c,
         })
-        .collect()
+        .collect::<String>()
+        .to_lowercase()
 }
 
 impl Folder {

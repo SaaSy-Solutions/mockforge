@@ -18,6 +18,11 @@ pub use models::{OverrideMode, OverrideRule, Overrides, PatchOp};
 pub use patcher::*;
 
 impl Overrides {
+    /// Get the loaded override rules
+    pub fn rules(&self) -> &[OverrideRule] {
+        &self.rules
+    }
+
     pub fn apply(&self, operation_id: &str, tags: &[String], path: &str, body: &mut Value) {
         self.apply_with_context(operation_id, tags, path, body, &ConditionContext::new())
     }

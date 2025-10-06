@@ -9,12 +9,58 @@ use crate::encryption::init_key_store;
 use crate::request_chaining::ChainTemplatingContext;
 use crate::Config;
 use chrono::{Duration as ChronoDuration, Utc};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use rand::{rng, Rng};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+// Pre-compiled regex patterns for templating
+static RANDINT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\{\{\s*(?:randInt|rand\.int)\s+(-?\d+)\s+(-?\d+)\s*\}\}")
+        .expect("RANDINT_RE regex pattern is valid")
+});
+
+static NOW_OFFSET_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\{\{\s*now\s*([+-])\s*(\d+)\s*([smhd])\s*\}\}")
+        .expect("NOW_OFFSET_RE regex pattern is valid")
+});
+
+static ENV_TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\{\{\s*([^{}\s]+)\s*\}\}")
+        .expect("ENV_TOKEN_RE regex pattern is valid")
+});
+
+static CHAIN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\{\{\s*chain\.([^}]+)\s*\}\}")
+        .expect("CHAIN_TOKEN_RE regex pattern is valid")
+});
+
+static RESPONSE_FN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"response\s*\(\s*['"]([^'"]*)['"]\s*,\s*['"]([^'"]*)['"]\s*\)"#)
+        .expect("RESPONSE_FN_RE regex pattern is valid")
+});
+
+static ENCRYPT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"\{\{\s*encrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#)
+        .expect("ENCRYPT_RE regex pattern is valid")
+});
+
+static SECURE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"\{\{\s*secure\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#)
+        .expect("SECURE_RE regex pattern is valid")
+});
+
+static DECRYPT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"\{\{\s*decrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#)
+        .expect("DECRYPT_RE regex pattern is valid")
+});
+
+static FS_READFILE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"\{\{\s*fs\.readFile\s*(?:\(?\s*(?:'([^']*)'|"([^"]*)")\s*\)?)?\s*\}\}"#)
+        .expect("FS_READFILE_RE regex pattern is valid")
+});
 
 /// Template engine for processing template strings with various token types
 #[derive(Debug, Clone)]
@@ -182,8 +228,10 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
     }
 
     // Environment variables (check before chain context to allow env vars in chain expressions)
-    if out.contains("{{") && context.env_context.is_some() {
-        out = replace_env_tokens(&out, context.env_context.as_ref().unwrap());
+    if out.contains("{{") {
+        if let Some(env_ctx) = context.env_context.as_ref() {
+            out = replace_env_tokens(&out, env_ctx);
+        }
     }
 
     // Chain context variables
@@ -260,16 +308,15 @@ pub fn register_faker_provider(provider: Arc<dyn FakerProvider + Send + Sync>) {
 
 fn replace_randint_ranges(input: &str) -> String {
     // Supports {{randInt a b}} and {{rand.int a b}}
-    let re = Regex::new(r"\{\{\s*(?:randInt|rand\.int)\s+(-?\d+)\s+(-?\d+)\s*\}\}").unwrap();
     let mut s = input.to_string();
     loop {
-        let mat = re.captures(&s);
+        let mat = RANDINT_RE.captures(&s);
         if let Some(caps) = mat {
-            let a: i64 = caps.get(1).unwrap().as_str().parse().unwrap_or(0);
-            let b: i64 = caps.get(2).unwrap().as_str().parse().unwrap_or(100);
+            let a: i64 = caps.get(1).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
+            let b: i64 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(100)).unwrap_or(100);
             let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
             let n: i64 = rng().random_range(lo..=hi);
-            s = re.replace(&s, n.to_string()).to_string();
+            s = RANDINT_RE.replace(&s, n.to_string()).to_string();
         } else {
             break;
         }
@@ -279,10 +326,9 @@ fn replace_randint_ranges(input: &str) -> String {
 
 fn replace_now_offset(input: &str) -> String {
     // {{ now+1d }}, {{now-2h}}, {{now+30m}}, {{now-10s}}
-    let re = Regex::new(r"\{\{\s*now\s*([+-])\s*(\d+)\s*([smhd])\s*\}\}").unwrap();
-    re.replace_all(input, |caps: &regex::Captures| {
-        let sign = caps.get(1).unwrap().as_str();
-        let amount: i64 = caps.get(2).unwrap().as_str().parse().unwrap_or(0);
+    NOW_OFFSET_RE.replace_all(input, |caps: &regex::Captures| {
+        let sign = caps.get(1).map(|m| m.as_str()).unwrap_or("+");
+        let amount: i64 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
         let unit = caps.get(3).map(|m| m.as_str()).unwrap_or("d");
         let dur = match unit {
             "s" => ChronoDuration::seconds(amount),
@@ -302,10 +348,8 @@ fn replace_now_offset(input: &str) -> String {
 
 /// Replace environment variable tokens in a template string
 fn replace_env_tokens(input: &str, env_context: &EnvironmentTemplatingContext) -> String {
-    let re = Regex::new(r"\{\{\s*([^{}\s]+)\s*\}\}").unwrap();
-
-    re.replace_all(input, |caps: &regex::Captures| {
-        let var_name = caps.get(1).unwrap().as_str();
+    ENV_TOKEN_RE.replace_all(input, |caps: &regex::Captures| {
+        let var_name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
 
         // Skip built-in tokens (uuid, now, rand.*, faker.*, chain.*, encrypt.*, decrypt.*, secure.*)
         if matches!(var_name, "uuid" | "now")
@@ -316,7 +360,7 @@ fn replace_env_tokens(input: &str, env_context: &EnvironmentTemplatingContext) -
             || var_name.starts_with("decrypt")
             || var_name.starts_with("secure")
         {
-            return caps.get(0).unwrap().as_str().to_string();
+            return caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default();
         }
 
         // Look up the variable in environment context
@@ -330,11 +374,9 @@ fn replace_env_tokens(input: &str, env_context: &EnvironmentTemplatingContext) -
 
 /// Replace chain context tokens in a template string
 fn replace_chain_tokens(input: &str, chain_context: Option<&ChainTemplatingContext>) -> String {
-    let re = Regex::new(r"\{\{\s*chain\.([^}]+)\s*\}\}").unwrap();
-
     if let Some(context) = chain_context {
-        re.replace_all(input, |caps: &regex::Captures| {
-            let path = caps.get(1).unwrap().as_str();
+        CHAIN_TOKEN_RE.replace_all(input, |caps: &regex::Captures| {
+            let path = caps.get(1).map(|m| m.as_str()).unwrap_or("");
 
             match context.extract_value(path) {
                 Some(Value::String(s)) => s,
@@ -357,13 +399,11 @@ fn replace_response_function(
     chain_context: Option<&ChainTemplatingContext>,
 ) -> String {
     // Match response('request_id', 'jsonpath') - handle both single and double quotes
-    let re = Regex::new(r#"response\s*\(\s*['"]([^'"]*)['"]\s*,\s*['"]([^'"]*)['"]\s*\)"#).unwrap();
-
     if let Some(context) = chain_context {
-        let result = re
+        let result = RESPONSE_FN_RE
             .replace_all(input, |caps: &regex::Captures| {
-                let request_id = caps.get(1).unwrap().as_str();
-                let json_path = caps.get(2).unwrap().as_str();
+                let request_id = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                let json_path = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
                 // Build the full path like "request_id.json_path"
                 let full_path = if json_path.is_empty() {
@@ -399,15 +439,8 @@ fn replace_encryption_tokens(input: &str) -> String {
 
     let mut out = input.to_string();
 
-    // Handle {{encrypt "text"}} or {{encrypt key_id "text"}}
-    let encrypt_re =
-        Regex::new(r#"\{\{\s*encrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
-
-    // Handle {{secure "text"}} or {{secure key_id "text"}}
-    let secure_re = Regex::new(r#"\{\{\s*secure\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
-
     // Process encrypt tokens
-    out = encrypt_re
+    out = ENCRYPT_RE
         .replace_all(&out, |caps: &regex::Captures| {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
@@ -438,7 +471,7 @@ fn replace_encryption_tokens(input: &str) -> String {
         .to_string();
 
     // Process secure tokens (ChaCha20-Poly1305)
-    out = secure_re
+    out = SECURE_RE
         .replace_all(&out, |caps: &regex::Captures| {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
@@ -471,12 +504,8 @@ fn replace_encryption_tokens(input: &str) -> String {
         })
         .to_string();
 
-    // Handle {{decrypt "ciphertext"}} or {{decrypt key_id "ciphertext"}}
-    let decrypt_re =
-        Regex::new(r#"\{\{\s*decrypt\s+(?:([^\s}]+)\s+)?\s*"([^"]+)"\s*\}\}"#).unwrap();
-
     // Process decrypt tokens
-    out = decrypt_re
+    out = DECRYPT_RE
         .replace_all(&out, |caps: &regex::Captures| {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let ciphertext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
@@ -512,10 +541,7 @@ fn replace_encryption_tokens(input: &str) -> String {
 /// Replace file system tokens in a template string
 fn replace_fs_tokens(input: &str) -> String {
     // Handle {{fs.readFile "path/to/file"}} or {{fs.readFile('path/to/file')}}
-    let re = Regex::new(r#"\{\{\s*fs\.readFile\s*(?:\(?\s*(?:'([^']*)'|"([^"]*)")\s*\)?)?\s*\}\}"#)
-        .unwrap();
-
-    re.replace_all(input, |caps: &regex::Captures| {
+    FS_READFILE_RE.replace_all(input, |caps: &regex::Captures| {
         let file_path = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
 
         if file_path.is_empty() {

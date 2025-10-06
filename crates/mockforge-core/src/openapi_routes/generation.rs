@@ -79,8 +79,8 @@ pub fn extract_path_parameters(path_template: &str) -> Vec<String> {
 
 /// Convert OpenAPI path parameters to Axum path format
 pub fn convert_path_to_axum_format(path: &str) -> String {
-    // Simple conversion - replace {param} with :param
-    path.replace('{', ":").replace('}', "")
+    // Axum v0.7+ uses {param} format, same as OpenAPI
+    path.to_string()
 }
 
 /// Validate that path parameters match between template and actual path

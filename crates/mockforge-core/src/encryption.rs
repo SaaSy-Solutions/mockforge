@@ -192,7 +192,10 @@ impl EncryptionKey {
             .hash_password(password.as_bytes(), &salt_string)
             .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?;
 
-        let key_bytes = hash.hash.unwrap().as_bytes().to_vec();
+        let key_bytes = hash.hash
+            .ok_or_else(|| EncryptionError::KeyDerivation("Failed to derive key hash".to_string()))?
+            .as_bytes()
+            .to_vec();
         Self::new(algorithm, key_bytes)
     }
 
@@ -563,9 +566,11 @@ impl MasterKeyManager {
                 EncryptionError::InvalidKey("HOME environment variable not set".to_string())
             })?;
             let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
-            std::fs::read_to_string(&key_path).map_err(|_| {
+            let key_str = std::fs::read_to_string(&key_path).map_err(|_| {
                 EncryptionError::InvalidKey("Master key not found in keychain".to_string())
-            })
+            })?;
+            // Trim whitespace/newlines that might have been added during storage
+            Ok(key_str.trim().to_string())
         }
 
         #[cfg(target_os = "linux")]
@@ -574,9 +579,11 @@ impl MasterKeyManager {
                 EncryptionError::InvalidKey("HOME environment variable not set".to_string())
             })?;
             let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
-            std::fs::read_to_string(&key_path).map_err(|_| {
+            let key_str = std::fs::read_to_string(&key_path).map_err(|_| {
                 EncryptionError::InvalidKey("Master key not found in keychain".to_string())
-            })
+            })?;
+            // Trim whitespace/newlines that might have been added during storage
+            Ok(key_str.trim().to_string())
         }
 
         #[cfg(target_os = "windows")]
@@ -588,9 +595,11 @@ impl MasterKeyManager {
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             // Fallback for other platforms
-            std::env::var("MOCKFORGE_MASTER_KEY").map_err(|_| {
+            let key_str = std::env::var("MOCKFORGE_MASTER_KEY").map_err(|_| {
                 EncryptionError::InvalidKey("Master key not found in keychain".to_string())
-            })
+            })?;
+            // Trim whitespace/newlines that might have been added
+            Ok(key_str.trim().to_string())
         }
     }
 

@@ -1,8 +1,6 @@
 use mockforge_core::sync_watcher::SyncWatcher;
 use mockforge_core::workspace::{SyncConfig, SyncDirection, SyncDirectoryStructure, Workspace};
-use mockforge_core::workspace_persistence::WorkspacePersistence;
 use std::fs;
-use std::sync::Arc;
 use tempfile::TempDir;
 
 #[cfg(test)]

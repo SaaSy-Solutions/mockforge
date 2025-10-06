@@ -228,6 +228,11 @@ impl RequestProcessor {
             return true;
         }
 
+        // Handle special case for root wildcard
+        if pattern == "*" {
+            return true;
+        }
+
         // Handle wildcard patterns
         if pattern.contains('*') {
             return self.matches_path_pattern(pattern, url);
@@ -813,13 +818,13 @@ impl RequestProcessor {
         let mut hasher = DefaultHasher::new();
         request_id.hash(&mut hasher);
         context.workspace_id.hash(&mut hasher);
-        
+
         // Hash environment variables
         for (key, value) in &context.environment_variables {
             key.hash(&mut hasher);
             value.hash(&mut hasher);
         }
-        
+
         // Hash global headers
         for (key, value) in &context.global_headers {
             key.hash(&mut hasher);

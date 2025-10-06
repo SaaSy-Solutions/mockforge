@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 description = "Shared logic for MockForge - routing, validation, latency, proxy"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+documentation = "https://docs.rs/mockforge-core"
+keywords = ["mock", "api", "testing", "http", "grpc"]
+categories = ["development-tools::testing", "web-programming"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 serde = { workspace = true }
@@ -55,6 +63,12 @@ rquickjs = { version = "0.9", features = ["macro", "classes"] }
 tempfile = "3.10"
 tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
+criterion = { workspace = true }
+mockforge-data = { path = "../mockforge-data" }
+
+[[bench]]
+name = "core_benchmarks"
+harness = false
 
 # Windows Credential Manager (Windows-only)
 [target.'cfg(windows)'.dependencies]

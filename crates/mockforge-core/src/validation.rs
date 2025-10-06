@@ -15,6 +15,8 @@ use serde_json::{json, Value};
 pub enum Validator {
     /// JSON Schema validator
     JsonSchema(JSONSchema),
+    /// OpenAPI 3.1 schema validator with original schema for extensions
+    OpenApi31Schema(JSONSchema, Value),
     /// OpenAPI schema validator
     OpenApi(Box<OpenApiSpec>),
     /// Protobuf validator with descriptor pool
@@ -30,6 +32,16 @@ impl Validator {
             .map_err(|e| Error::validation(format!("Failed to compile JSON schema: {}", e)))?;
 
         Ok(Self::JsonSchema(compiled))
+    }
+
+    /// Create a validator that supports OpenAPI 3.1 features from a schema
+    pub fn from_openapi31_schema(schema: &Value) -> Result<Self> {
+        let compiled = jsonschema::options()
+            .with_draft(Draft::Draft7)
+            .build(schema)
+            .map_err(|e| Error::validation(format!("Failed to compile OpenAPI 3.1 schema: {}", e)))?;
+
+        Ok(Self::OpenApi31Schema(compiled, schema.clone()))
     }
 
     /// Create an OpenAPI validator
@@ -76,6 +88,20 @@ impl Validator {
                     Err(Error::validation(format!("Validation failed: {}", errors.join(", "))))
                 }
             }
+            Self::OpenApi31Schema(schema, original_schema) => {
+                // First validate with standard JSON Schema
+                let mut errors = Vec::new();
+                for error in schema.iter_errors(data) {
+                    errors.push(error.to_string());
+                }
+
+                if !errors.is_empty() {
+                    return Err(Error::validation(format!("Validation failed: {}", errors.join(", "))));
+                }
+
+                // Then validate OpenAPI 3.1 extensions
+                self.validate_openapi31_schema(data, original_schema)
+            }
             Self::OpenApi(_spec) => {
                 // Use the stored spec for advanced validation
                 if data.is_object() {
@@ -99,6 +125,7 @@ impl Validator {
     pub fn is_implemented(&self) -> bool {
         match self {
             Self::JsonSchema(_) => true,
+            Self::OpenApi31Schema(_, _) => true,
             Self::OpenApi(_) => true, // Now implemented with schema validation
             Self::Protobuf(_) => true, // Now implemented with descriptor-based validation
         }
@@ -109,6 +136,10 @@ impl Validator {
         match self {
             Self::JsonSchema(_) => {
                 // For OpenAPI 3.1, we need enhanced validation beyond JSON Schema Draft 7
+                self.validate_openapi31_schema(data, openapi_schema)
+            }
+            Self::OpenApi31Schema(_, _) => {
+                // For OpenAPI 3.1 schemas, use the enhanced validation
                 self.validate_openapi31_schema(data, openapi_schema)
             }
             Self::OpenApi(_spec) => {
@@ -476,11 +507,10 @@ pub fn validate_json_schema(data: &Value, schema: &Value) -> ValidationResult {
 /// Validate OpenAPI spec compliance
 pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
     // Basic validation - check if the spec has required OpenAPI fields
-    if !spec.is_object() {
-        return ValidationResult::failure(vec!["OpenAPI spec must be an object".to_string()]);
-    }
-
-    let spec_obj = spec.as_object().unwrap();
+    let spec_obj = match spec.as_object() {
+        Some(obj) => obj,
+        None => return ValidationResult::failure(vec!["OpenAPI spec must be an object".to_string()]),
+    };
 
     // Check required fields
     let mut errors = Vec::new();
@@ -515,7 +545,11 @@ pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
     // Now perform actual schema validation if possible
     if serde_json::from_value::<openapiv3::OpenAPI>(spec.clone()).is_ok() {
         let _spec_wrapper = OpenApiSpec::from_json(spec.clone())
-            .unwrap_or_else(|_| OpenApiSpec::from_json(json!({})).unwrap());
+            .unwrap_or_else(|_| {
+                // Fallback to empty spec on error - this should never happen with valid JSON
+                OpenApiSpec::from_json(json!({}))
+                    .expect("Empty JSON object should always create valid OpenApiSpec")
+            });
 
         // Try to validate the data against the spec
         // For now, we'll do a basic check to see if the data structure is reasonable

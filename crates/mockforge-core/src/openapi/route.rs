@@ -79,7 +79,8 @@ impl OpenApiRoute {
 
     /// Convert OpenAPI path to Axum-compatible path format
     pub fn axum_path(&self) -> String {
-        self.path.replace("{", ":").replace("}", "")
+        // Axum v0.7+ uses {param} format, same as OpenAPI
+        self.path.clone()
     }
 
     /// Add metadata to the route
@@ -92,16 +93,25 @@ impl OpenApiRoute {
     pub fn mock_response_with_status(&self) -> (u16, serde_json::Value) {
         use crate::openapi::response::ResponseGenerator;
 
+        // Find the first available status code from the OpenAPI spec
+        let status_code = self.find_first_available_status_code();
+
         // Try to generate a response based on the OpenAPI schema
-        match ResponseGenerator::generate_response(
+        // Check if token expansion should be enabled
+        let expand_tokens = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+
+        match ResponseGenerator::generate_response_with_expansion(
             &self.spec,
             &self.operation,
-            200,
+            status_code,
             Some("application/json"),
+            expand_tokens,
         ) {
             Ok(response_body) => {
-                tracing::debug!("ResponseGenerator succeeded for {} {}: {:?}", self.method, self.path, response_body);
-                (200, response_body)
+                tracing::debug!("ResponseGenerator succeeded for {} {} with status {}: {:?}", self.method, self.path, status_code, response_body);
+                (status_code, response_body)
             },
             Err(e) => {
                 tracing::debug!("ResponseGenerator failed for {} {}: {}, using fallback", self.method, self.path, e);
@@ -109,11 +119,41 @@ impl OpenApiRoute {
                 let response_body = serde_json::json!({
                     "message": format!("Mock response for {} {}", self.method, self.path),
                     "operation_id": self.operation.operation_id,
-                    "status": 200
+                    "status": status_code
                 });
-                (200, response_body)
+                (status_code, response_body)
             }
         }
+    }
+
+    /// Find the first available status code from the OpenAPI operation responses
+    fn find_first_available_status_code(&self) -> u16 {
+        // Look for the first available status code in the responses
+        for (status, _) in &self.operation.responses.responses {
+            match status {
+                openapiv3::StatusCode::Code(code) => {
+                    return *code;
+                },
+                openapiv3::StatusCode::Range(range) => {
+                    // For ranges, use the appropriate status code
+                    match range {
+                        2 => return 200, // 2XX range
+                        3 => return 300, // 3XX range
+                        4 => return 400, // 4XX range
+                        5 => return 500, // 5XX range
+                        _ => continue,   // Skip unknown ranges
+                    }
+                }
+            }
+        }
+
+        // If no specific status codes found, check for default
+        if self.operation.responses.default.is_some() {
+            return 200; // Default to 200 for default responses
+        }
+
+        // Fallback to 200 if nothing else is available
+        200
     }
 }
 

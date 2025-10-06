@@ -151,7 +151,7 @@ impl OpenApiRouteRegistry {
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
-        
+
         let all_paths_ops = spec.all_paths_and_operations();
         tracing::debug!("Generating routes from OpenAPI spec with {} paths", all_paths_ops.len());
 
@@ -194,8 +194,7 @@ impl OpenApiRouteRegistry {
             let method = route.method.clone();
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
-            let (_selected_status, mock_response) = route.mock_response_with_status();
-            tracing::debug!("Generated mock response for {} {}: {:?}", method, path_template, mock_response);
+            let route_clone = route.clone();
 
             // Handler: validate path/query/header/cookie/body, then return mock
             let handler = move |AxumPath(path_params): AxumPath<
@@ -205,6 +204,9 @@ impl OpenApiRouteRegistry {
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
                 tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
+
+                // Generate mock response for this request
+                let (selected_status, mock_response) = route_clone.mock_response_with_status();
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = serde_json::Map::new();
@@ -309,19 +311,24 @@ impl OpenApiRouteRegistry {
                     record_validation_error(&payload);
                     let status = axum::http::StatusCode::from_u16(status_code)
                         .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+
+                    // Serialize payload with fallback for serialization errors
+                    let body_bytes = serde_json::to_vec(&payload)
+                        .unwrap_or_else(|_| br#"{"error":"Serialization failed"}"#.to_vec());
+
                     return axum::http::Response::builder()
                         .status(status)
                         .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(axum::body::Body::from(serde_json::to_vec(&payload).unwrap()))
-                        .unwrap();
+                        .body(axum::body::Body::from(body_bytes))
+                        .expect("Response builder should create valid response with valid headers and body");
                 }
 
                 // Expand tokens in the response if enabled (options or env)
                 let mut final_response = mock_response.clone();
-                let expand = validator.options.response_template_expand
-                    || std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-                        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                        .unwrap_or(false);
+                let env_expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                let expand = validator.options.response_template_expand || env_expand;
                 if expand {
                     final_response = core_expand_tokens(&final_response);
                 }
@@ -358,8 +365,11 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Return the mock response
-                Json(final_response).into_response()
+                // Return the mock response with the correct status code
+                let mut response = Json(final_response).into_response();
+                *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
+                    .unwrap_or(axum::http::StatusCode::OK);
+                response
             };
 
             // Register the handler based on HTTP method
@@ -548,9 +558,13 @@ impl OpenApiRouteRegistry {
                     );
                 }
 
-                // Expand templating tokens in response if enabled
+                // Expand templating tokens in response if enabled (options or env)
                 let mut response = mock_response.clone();
-                if validator.options.response_template_expand {
+                let env_expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                let expand = validator.options.response_template_expand || env_expand;
+                if expand {
                     response = core_expand_tokens(&response);
                 }
 
@@ -708,7 +722,7 @@ impl OpenApiRouteRegistry {
                                 .and_then(|rb_ref| rb_ref.as_item())
                         }
                     };
-                    
+
                     if let Some(rb) = request_body {
                         if let Some(content) = rb.content.get("application/json") {
                             if let Some(schema_ref) = &content.schema {
@@ -923,7 +937,8 @@ impl OpenApiRouteRegistry {
     /// Convert OpenAPI path to Axum-compatible path
     /// This is a utility function for converting path parameters from {param} to :param format
     pub fn convert_path_to_axum(openapi_path: &str) -> String {
-        openapi_path.replace("{", ":").replace("}", "")
+        // Axum v0.7+ uses {param} format, same as OpenAPI
+        openapi_path.to_string()
     }
 
 }
@@ -935,21 +950,25 @@ static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> =
 
 /// Record last validation error for Admin UI inspection
 pub fn record_validation_error(v: &serde_json::Value) {
-    let mut q = LAST_ERRORS.lock().unwrap();
-    if q.len() >= 20 {
-        q.pop_front();
+    if let Ok(mut q) = LAST_ERRORS.lock() {
+        if q.len() >= 20 {
+            q.pop_front();
+        }
+        q.push_back(v.clone());
     }
-    q.push_back(v.clone());
+    // If mutex is poisoned, we silently fail - validation errors are informational only
 }
 
 /// Get most recent validation error
 pub fn get_last_validation_error() -> Option<serde_json::Value> {
-    LAST_ERRORS.lock().unwrap().back().cloned()
+    LAST_ERRORS.lock().ok()?.back().cloned()
 }
 
 /// Get recent validation errors (most recent last)
 pub fn get_validation_errors() -> Vec<serde_json::Value> {
-    LAST_ERRORS.lock().unwrap().iter().cloned().collect()
+    LAST_ERRORS.lock()
+        .map(|q| q.iter().cloned().collect())
+        .unwrap_or_default()
 }
 
 /// Coerce a parameter `value` into the expected JSON type per `schema` where reasonable.
@@ -966,7 +985,7 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                     // Split comma-separated string into array
                     let parts: Vec<&str> = s.split(',').map(|s| s.trim()).collect();
                     let mut array_values = Vec::new();
-                    
+
                     for part in parts {
                         // Coerce each part based on array item type
                         if let Some(items_schema) = &array_type.items {
@@ -986,21 +1005,44 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                     return Value::Array(array_values);
                 }
             }
-            
-            // Try to parse as number first
-            if let Ok(n) = s.parse::<f64>() {
-                if let Some(num) = serde_json::Number::from_f64(n) {
-                    return Value::Number(num);
+
+            // Only coerce if the schema expects a different type
+            match &schema.schema_kind {
+                openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
+                    // Schema expects string, keep as string
+                    value.clone()
+                }
+                openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => {
+                    // Schema expects number, try to parse
+                    if let Ok(n) = s.parse::<f64>() {
+                        if let Some(num) = serde_json::Number::from_f64(n) {
+                            return Value::Number(num);
+                        }
+                    }
+                    value.clone()
+                }
+                openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => {
+                    // Schema expects integer, try to parse
+                    if let Ok(n) = s.parse::<i64>() {
+                        if let Some(num) = serde_json::Number::from_f64(n as f64) {
+                            return Value::Number(num);
+                        }
+                    }
+                    value.clone()
+                }
+                openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => {
+                    // Schema expects boolean, try to parse
+                    match s.to_lowercase().as_str() {
+                        "true" | "1" | "yes" | "on" => Value::Bool(true),
+                        "false" | "0" | "no" | "off" => Value::Bool(false),
+                        _ => value.clone(),
+                    }
+                }
+                _ => {
+                    // Unknown schema type, keep as string
+                    value.clone()
                 }
             }
-            // Try to parse as boolean
-            match s.to_lowercase().as_str() {
-                "true" | "1" | "yes" | "on" => return Value::Bool(true),
-                "false" | "0" | "no" | "off" => return Value::Bool(false),
-                _ => {}
-            }
-            // Keep as string
-            value.clone()
         }
         _ => value.clone(),
     }
@@ -1019,12 +1061,12 @@ fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str
                     Some("form") | None => ",", // Default to form style (comma-separated)
                     _ => ",", // Fallback to comma
                 };
-                
+
                 if s.contains(delimiter) {
                     // Split delimited string into array
                     let parts: Vec<&str> = s.split(delimiter).map(|s| s.trim()).collect();
                     let mut array_values = Vec::new();
-                    
+
                     for part in parts {
                         // Coerce each part based on array item type
                         if let Some(items_schema) = &array_type.items {
@@ -1044,7 +1086,7 @@ fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str
                     return Value::Array(array_values);
                 }
             }
-            
+
             // Try to parse as number first
             if let Ok(n) = s.parse::<f64>() {
                 if let Some(num) = serde_json::Number::from_f64(n) {
@@ -1524,7 +1566,7 @@ mod tests {
 
         // Test path parameter conversion
         let user_by_id_route = registry.get_route("/users/{id}", "GET").unwrap();
-        assert_eq!(user_by_id_route.axum_path(), "/users/:id");
+        assert_eq!(user_by_id_route.axum_path(), "/users/{id}");
     }
 
     #[tokio::test]
@@ -1910,10 +1952,10 @@ mod tests {
     #[test]
     fn test_path_conversion() {
         assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users"), "/users");
-        assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users/{id}"), "/users/:id");
+        assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users/{id}"), "/users/{id}");
         assert_eq!(
             OpenApiRouteRegistry::convert_path_to_axum("/users/{id}/posts/{postId}"),
-            "/users/:id/posts/:postId"
+            "/users/{id}/posts/{postId}"
         );
     }
 }

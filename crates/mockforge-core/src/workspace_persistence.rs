@@ -8,10 +8,23 @@ use crate::encryption::{utils, AutoEncryptionProcessor, WorkspaceKeyManager};
 use crate::workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceRegistry};
 use crate::{Error, Result};
 use chrono::{DateTime, Utc};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+
+// Pre-compiled regex patterns for sensitive data detection
+static CREDIT_CARD_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b")
+        .expect("CREDIT_CARD_PATTERN regex is valid")
+});
+
+static SSN_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b")
+        .expect("SSN_PATTERN regex is valid")
+});
 
 /// Workspace persistence manager
 #[derive(Debug)]
@@ -1593,15 +1606,12 @@ impl WorkspacePersistence {
     /// Check if value contains sensitive patterns
     fn contains_sensitive_patterns(&self, value: &str) -> bool {
         // Credit card pattern
-        if regex::Regex::new(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b")
-            .unwrap()
-            .is_match(value)
-        {
+        if CREDIT_CARD_PATTERN.is_match(value) {
             return true;
         }
 
         // SSN pattern
-        if regex::Regex::new(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b").unwrap().is_match(value) {
+        if SSN_PATTERN.is_match(value) {
             return true;
         }
 

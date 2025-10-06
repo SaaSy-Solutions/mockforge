@@ -22,6 +22,17 @@ impl ResponseGenerator {
         status_code: u16,
         content_type: Option<&str>,
     ) -> Result<Value> {
+        Self::generate_response_with_expansion(spec, operation, status_code, content_type, true)
+    }
+
+    /// Generate a mock response for an operation and status code with token expansion control
+    pub fn generate_response_with_expansion(
+        spec: &OpenApiSpec,
+        operation: &Operation,
+        status_code: u16,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+    ) -> Result<Value> {
         // Find the response for the status code
         let response = Self::find_response_for_status(&operation.responses, status_code);
 
@@ -29,12 +40,12 @@ impl ResponseGenerator {
             Some(response_ref) => {
                 match response_ref {
                     ReferenceOr::Item(response) => {
-                        Self::generate_from_response(spec, response, content_type)
+                        Self::generate_from_response(spec, response, content_type, expand_tokens)
                     }
                     ReferenceOr::Reference { reference } => {
                         // Resolve the reference
                         if let Some(resolved_response) = spec.get_response(reference) {
-                            Self::generate_from_response(spec, resolved_response, content_type)
+                            Self::generate_from_response(spec, resolved_response, content_type, expand_tokens)
                         } else {
                             // Reference not found, return empty object
                             Ok(Value::Object(serde_json::Map::new()))
@@ -72,11 +83,12 @@ impl ResponseGenerator {
         spec: &OpenApiSpec,
         response: &Response,
         content_type: Option<&str>,
+        expand_tokens: bool,
     ) -> Result<Value> {
         // If content_type is specified, look for that media type
         if let Some(content_type) = content_type {
             if let Some(media_type) = response.content.get(content_type) {
-                return Self::generate_from_media_type(spec, media_type);
+                return Self::generate_from_media_type(spec, media_type, expand_tokens);
             }
         }
 
@@ -85,13 +97,13 @@ impl ResponseGenerator {
 
         for content_type in &preferred_types {
             if let Some(media_type) = response.content.get(*content_type) {
-                return Self::generate_from_media_type(spec, media_type);
+                return Self::generate_from_media_type(spec, media_type, expand_tokens);
             }
         }
 
         // If no suitable content type found, return the first available
         if let Some((_, media_type)) = response.content.iter().next() {
-            return Self::generate_from_media_type(spec, media_type);
+            return Self::generate_from_media_type(spec, media_type, expand_tokens);
         }
 
         // No content found, return empty object
@@ -102,13 +114,18 @@ impl ResponseGenerator {
     fn generate_from_media_type(
         spec: &OpenApiSpec,
         media_type: &openapiv3::MediaType,
+        expand_tokens: bool,
     ) -> Result<Value> {
         // First, check if there's an explicit example
         if let Some(example) = &media_type.example {
             tracing::debug!("Using explicit example from media type: {:?}", example);
-            // Expand templates in the example
-            let expanded_example = Self::expand_templates(example);
-            return Ok(expanded_example);
+            // Expand templates in the example if enabled
+            if expand_tokens {
+                let expanded_example = Self::expand_templates(example);
+                return Ok(expanded_example);
+            } else {
+                return Ok(example.clone());
+            }
         }
 
         // Then check examples map
@@ -118,7 +135,11 @@ impl ResponseGenerator {
                     ReferenceOr::Item(example) => {
                         if let Some(value) = &example.value {
                             tracing::debug!("Using example from examples map: {:?}", value);
-                            return Ok(value.clone());
+                            if expand_tokens {
+                                return Ok(Self::expand_templates(value));
+                            } else {
+                                return Ok(value.clone());
+                            }
                         }
                     }
                     ReferenceOr::Reference { reference } => {
@@ -126,7 +147,11 @@ impl ResponseGenerator {
                         if let Some(example) = spec.get_example(reference) {
                             if let Some(value) = &example.value {
                                 tracing::debug!("Using resolved example reference: {:?}", value);
-                                return Ok(value.clone());
+                                if expand_tokens {
+                                    return Ok(Self::expand_templates(value));
+                                } else {
+                                    return Ok(value.clone());
+                                }
                             }
                         } else {
                             tracing::warn!("Example reference '{}' not found", reference);

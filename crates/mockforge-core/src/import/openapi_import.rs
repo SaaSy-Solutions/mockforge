@@ -5,9 +5,17 @@
 
 use crate::openapi::OpenApiSpec;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
+
+// Pre-compiled regex for path parameter conversion
+static PATH_PARAM_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\{([^}]+)\}")
+        .expect("PATH_PARAM_RE regex is valid")
+});
 
 /// Import result for OpenAPI specs
 #[derive(Debug)]
@@ -220,9 +228,7 @@ fn extract_request_body_example(request_body_ref: &openapiv3::ReferenceOr<openap
 
 /// Convert OpenAPI path parameters {param} to Express-style :param
 fn convert_path_parameters(path: &str) -> String {
-    use regex::Regex;
-    let re = Regex::new(r"\{([^}]+)\}").unwrap();
-    re.replace_all(path, ":$1").to_string()
+    PATH_PARAM_RE.replace_all(path, ":$1").to_string()
 }
 
 #[cfg(test)]
