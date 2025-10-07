@@ -42,6 +42,19 @@ test-coverage: ## Run tests with coverage report
 test-watch: ## Run tests in watch mode
 	cargo watch -x "test --workspace"
 
+# Benchmarking
+bench: ## Run all performance benchmarks
+	cargo bench
+
+bench-core: ## Run core benchmarks only
+	cargo bench --bench core_benchmarks
+
+bench-baseline: ## Save current benchmarks as baseline
+	cargo bench -- --save-baseline main
+
+bench-compare: ## Compare current benchmarks against baseline
+	cargo bench -- --baseline main
+
 test-mutants: ## Run mutation testing on all crates
 	cargo mutants --all
 
