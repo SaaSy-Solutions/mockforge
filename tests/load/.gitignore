@@ -1,0 +1,5 @@
+# Ignore all results
+results/
+
+# Keep the directory structure
+!results/.gitkeep

@@ -90,6 +90,46 @@ Benchmark results are saved in `target/criterion/` with HTML reports.
 - **Data Generation**: Tests faker data generation speed
 - **Encryption**: Tests workspace encryption/decryption performance
 
+## Load Testing
+
+Load testing infrastructure is available in `tests/load/` for testing MockForge under realistic load conditions.
+
+### Quick Start
+
+```bash
+# Run all load tests
+./tests/load/run_all_load_tests.sh
+
+# Run specific test
+./tests/load/run_http_load.sh
+./tests/load/run_websocket_load.sh
+./tests/load/run_grpc_load.sh
+
+# Quick mode (shorter duration)
+QUICK_MODE=true ./tests/load/run_all_load_tests.sh
+```
+
+### Load Test Types
+
+- **HTTP Load Tests**: k6 and wrk-based HTTP/REST API testing
+- **WebSocket Load Tests**: k6-based WebSocket connection and message testing
+- **gRPC Load Tests**: k6-based gRPC unary and streaming RPC testing
+
+### Prerequisites
+
+Install load testing tools:
+
+```bash
+# k6 (required)
+brew install k6  # macOS
+# See tests/load/README.md for other platforms
+
+# wrk (optional, for HTTP)
+brew install wrk  # macOS
+```
+
+For detailed documentation, configuration, and best practices, see [`tests/load/README.md`](load/README.md).
+
 ## Test Organization
 
 ### Test Fixtures
