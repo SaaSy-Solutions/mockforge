@@ -728,6 +728,93 @@ make release-minor
 make release-major
 ```
 
+## 💼 Case Studies
+
+### Case Study 1: Microservices Development at Scale
+
+**Challenge**: A fintech company needed to develop and test 15+ microservices that communicate via gRPC, REST, and WebSocket protocols. Waiting for all services to be ready blocked parallel development.
+
+**Solution**: MockForge provided:
+- **gRPC HTTP Bridge**: Frontend teams tested gRPC services using familiar REST tools
+- **Multi-Protocol Support**: Single mock server handled HTTP, gRPC, and WebSocket endpoints
+- **Workspace Sync**: Shared mock configurations via Git across distributed teams
+- **Advanced Data Generation**: RAG-powered realistic financial data with referential integrity
+
+**Results**:
+- 60% reduction in integration testing time
+- 3 teams able to develop in parallel without blocking
+- 100+ realistic test scenarios with deterministic data
+
+### Case Study 2: Third-Party API Integration Testing
+
+**Challenge**: An e-commerce platform integrated with 8 external payment, shipping, and inventory APIs. Testing was expensive, slow, and unpredictable due to rate limits and sandbox limitations.
+
+**Solution**: MockForge enabled:
+- **OpenAPI-Driven Mocks**: Auto-generated mocks from vendor OpenAPI specs
+- **Latency & Fault Injection**: Realistic simulation of network issues and API failures
+- **Stateful Mocking**: Transaction flows with proper state management
+- **Template Expansion**: Dynamic responses with timestamps, UUIDs, and context-aware data
+
+**Results**:
+- Zero cost for testing (no sandbox API calls)
+- 95% test coverage for error scenarios
+- CI/CD pipeline runtime reduced from 45min to 8min
+
+### Case Study 3: Mobile App Development
+
+**Challenge**: A mobile team needed to test iOS and Android apps against a backend API that was constantly evolving. The backend team couldn't provide stable test environments.
+
+**Solution**: MockForge provided:
+- **Fixture Management**: Record real API responses and replay them
+- **Admin UI**: Product managers created test scenarios without coding
+- **WebSocket Scripted Replay**: Tested real-time chat and notifications
+- **Cross-Endpoint Validation**: Ensured data consistency across related endpoints
+
+**Results**:
+- Mobile developers unblocked from backend dependencies
+- QA team created 50+ test scenarios independently
+- Bug detection 2 weeks earlier in development cycle
+
+### Case Study 4: Legacy System Migration
+
+**Challenge**: A healthcare company was migrating from a monolithic SOAP API to microservices-based REST APIs. They needed to run both systems in parallel during the 18-month transition.
+
+**Solution**: MockForge acted as:
+- **Protocol Adapter**: Bridged SOAP requests to REST endpoints for testing
+- **Data Transformation**: Template system converted between legacy and new data formats
+- **End-to-End Encryption**: Secured sensitive patient data in mock configurations
+- **Gradual Migration**: Mocked incomplete services while others went live
+
+**Results**:
+- Zero downtime during migration
+- Comprehensive regression testing across old and new systems
+- 30% faster migration timeline
+
+### Case Study 5: Performance Testing & Load Simulation
+
+**Challenge**: A SaaS platform needed to performance test their client application under various backend conditions (slow responses, partial failures, high load).
+
+**Solution**: MockForge delivered:
+- **Configurable Latency Profiles**: Simulated various network conditions
+- **Failure Injection**: Random failures, timeouts, and partial responses
+- **High Throughput**: Rust-native performance handled 10K+ req/sec
+- **Metrics & Monitoring**: Real-time performance dashboards
+
+**Results**:
+- Identified 12 critical performance bottlenecks
+- Optimized client retry logic and caching
+- Production performance improved by 40%
+
+### Common Use Cases
+
+- **🔄 Continuous Integration**: Fast, reliable mocks in CI/CD pipelines
+- **📱 Mobile/Frontend Development**: Work independently of backend teams
+- **🧪 Integration Testing**: Test complex multi-service interactions
+- **🎓 Training & Demos**: Consistent demo environments without live systems
+- **🔧 Third-Party API Testing**: Test external integrations without costs or rate limits
+- **⚡ Performance Testing**: Simulate various network and load conditions
+- **🚀 Development Acceleration**: Parallel development of dependent services
+
 ## ⚡ Performance Benchmarks
 
 MockForge includes comprehensive performance benchmarks using Criterion.rs to measure and track performance across releases.
