@@ -11,7 +11,7 @@ mod admin_handlers_tests {
         use mockforge_core::init_global_logger;
         use std::sync::Arc;
 
-        let logger = Arc::new(init_global_logger(1000).clone());
+        let _logger = Arc::new(init_global_logger(1000).clone());
         AdminState::new(
             Some("127.0.0.1:3000".parse().unwrap()),
             Some("127.0.0.1:3001".parse().unwrap()),
@@ -36,7 +36,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_record_request() {
         let state = create_test_state();
 
@@ -123,7 +122,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_log_filtering() {
         let state = create_test_state();
 
@@ -186,7 +184,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_clear_logs() {
         let state = create_test_state();
 
@@ -220,7 +217,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_request_log_creation() {
         let state = create_test_state();
 
@@ -244,7 +240,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_log_rotation() {
         let state = create_test_state();
 
@@ -261,7 +256,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_response_time_tracking() {
         let state = create_test_state();
 
@@ -277,7 +271,6 @@ mod admin_handlers_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Test hangs - needs investigation of background task lifecycle"]
     async fn test_endpoint_metrics_tracking() {
         let state = create_test_state();
 

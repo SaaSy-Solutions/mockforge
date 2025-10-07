@@ -413,13 +413,19 @@ impl AdminState {
         // Update last request timestamp for this endpoint
         metrics.last_request_by_endpoint.insert(endpoint, chrono::Utc::now());
 
+        // Capture total_requests before releasing the lock
+        let total_requests = metrics.total_requests;
+
+        // Release metrics lock before acquiring other locks
+        drop(metrics);
+
         // Update time series data for request count and response time
-        self.update_time_series_on_request(response_time_ms).await;
+        self.update_time_series_on_request(response_time_ms, total_requests).await;
 
         // Record the log
         let mut logs = self.logs.write().await;
         let log_entry = RequestLog {
-            id: format!("req_{}", metrics.total_requests),
+            id: format!("req_{}", total_requests),
             timestamp: Utc::now(),
             method: method.to_string(),
             path: path.to_string(),
@@ -574,15 +580,14 @@ impl AdminState {
     }
 
     /// Update time series data when a request is recorded
-    async fn update_time_series_on_request(&self, response_time_ms: u64) {
+    async fn update_time_series_on_request(&self, response_time_ms: u64, total_requests: u64) {
         let now = chrono::Utc::now();
         let mut time_series = self.time_series.write().await;
 
         // Add request count data point
-        let metrics = self.metrics.read().await;
         time_series.request_count.push(TimeSeriesPoint {
             timestamp: now,
-            value: metrics.total_requests as f64,
+            value: total_requests as f64,
         });
 
         // Add response time data point
