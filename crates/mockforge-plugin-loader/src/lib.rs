@@ -23,14 +23,20 @@ use mockforge_plugin_core::{
     PluginAuthor, PluginId, PluginInfo, PluginInstance, PluginManifest, PluginVersion,
 };
 
+pub mod git;
+pub mod installer;
 pub mod loader;
 pub mod registry;
+pub mod remote;
 pub mod sandbox;
 pub mod validator;
 
 /// Re-export commonly used types
+pub use git::*;
+pub use installer::*;
 pub use loader::*;
 pub use registry::*;
+pub use remote::*;
 pub use sandbox::*;
 pub use validator::*;
 

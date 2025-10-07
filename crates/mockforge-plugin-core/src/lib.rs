@@ -4,6 +4,9 @@
 //! for extensible functionality like custom token resolvers.
 
 // Public modules
+pub mod auth;
+pub mod datasource;
+pub mod error;
 pub mod manifest;
 pub mod response;
 pub mod runtime;
@@ -15,7 +18,11 @@ pub mod async_trait;
 pub use async_trait::TokenResolver;
 
 // Re-export types
+pub use auth::*;
+pub use datasource::*;
+pub use error::*;
 pub use response::*;
+pub use template::*;
 pub use types::*;
 
 // Re-export common types for backwards compatibility

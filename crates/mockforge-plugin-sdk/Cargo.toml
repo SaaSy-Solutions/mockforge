@@ -1,0 +1,61 @@
+[package]
+name = "mockforge-plugin-sdk"
+version = "0.1.0"
+edition = "2021"
+authors = ["MockForge Contributors"]
+license = "MIT OR Apache-2.0"
+description = "Official SDK for developing MockForge plugins with helper macros and testing utilities"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://docs.mockforge.dev"
+documentation = "https://docs.rs/mockforge-plugin-sdk"
+readme = "README.md"
+keywords = ["mockforge", "plugin", "sdk", "wasm", "api"]
+categories = ["development-tools", "api-bindings", "wasm"]
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# Re-export core plugin functionality
+mockforge-plugin-core = { path = "../mockforge-plugin-core" }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["macros"] }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# WebAssembly
+wit-bindgen = "0.34"
+
+# Async traits
+async-trait = "0.1"
+
+# Utility libraries
+uuid = { workspace = true, features = ["v4"] }
+chrono = { workspace = true }
+regex = { workspace = true }
+base64 = { workspace = true }
+axum = { workspace = true }
+
+# Proc macros
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+# Testing utilities
+mockall = { version = "0.13", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tempfile = "3.0"
+
+[features]
+default = ["testing"]
+testing = ["mockall"]

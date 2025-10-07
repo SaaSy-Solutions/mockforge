@@ -9,6 +9,8 @@ members = [
     "crates/mockforge-data",
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-loader",
+    "crates/mockforge-plugin-sdk",
+    "crates/mockforge-plugin-cli",
     "crates/mockforge-ui",
     "examples/plugins/response-graphql",
     "test_openapi_demo"

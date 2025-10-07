@@ -85,6 +85,10 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
   - **Data Source Connectors**: CSV, database, and external API integrations
   - **Template Extensions**: Custom template functions and filters
   - **Security Sandbox**: Isolated plugin execution with resource limits
+  - **🆕 Remote Loading**: Install plugins from URLs, Git repos, or local files with version pinning
+    - `mockforge plugin install https://github.com/user/plugin#v1.0.0`
+    - Support for ZIP, tar.gz archives, and direct WASM files
+    - Checksum verification and automatic caching
 - **End-to-End Encryption**: Enterprise-grade security features:
   - **Multi-Algorithm Support**: AES-256-GCM and ChaCha20-Poly1305 encryption
   - **Key Management**: Hierarchical key system with secure storage

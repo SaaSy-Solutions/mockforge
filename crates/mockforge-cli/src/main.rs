@@ -9,6 +9,8 @@ use mockforge_ui;
 use mockforge_ws;
 use std::path::PathBuf;
 
+mod plugin_commands;
+
 #[derive(Parser)]
 #[command(name = "mockforge")]
 #[command(about = "MockForge - Comprehensive API Mocking Framework")]
@@ -139,6 +141,12 @@ enum Commands {
     TestAi {
         #[command(subcommand)]
         ai_command: AiTestCommands,
+    },
+
+    /// Plugin management
+    Plugin {
+        #[command(subcommand)]
+        plugin_command: plugin_commands::PluginCommands,
     },
 }
 
@@ -342,6 +350,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::TestAi { ai_command } => {
             handle_test_ai(ai_command).await?;
+        }
+
+        Commands::Plugin { plugin_command } => {
+            plugin_commands::handle_plugin_command(plugin_command).await?;
         }
     }
 
