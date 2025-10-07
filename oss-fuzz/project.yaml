@@ -1,0 +1,16 @@
+homepage: "https://github.com/rclanan/mockforge"
+language: rust
+primary_contact: "rclanan@example.com"
+main_repo: "https://github.com/rclanan/mockforge"
+file_github_issue: true
+sanitizers:
+  - address
+  - memory
+  - undefined
+architectures:
+  - x86_64
+fuzzing_engines:
+  - libfuzzer
+  - afl
+coverage_extra_args: "-Zinstrument-coverage"
+experimental: true
