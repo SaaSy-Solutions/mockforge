@@ -1,0 +1,64 @@
+name: Integration Tests with MockForge
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build MockForge Docker image
+        run: docker build -t mockforge:latest .
+
+      - name: Start mock services
+        run: docker-compose -f docker-compose.microservices.yml up -d
+
+      - name: Wait for mock services
+        run: |
+          for port in 3001 3002 3003 3004; do
+            timeout 60 bash -c "until curl -f http://localhost:$port/health; do sleep 2; done"
+            echo "✓ Service on port $port is ready"
+          done
+
+      - name: Run integration tests
+        run: |
+          # Example: Run your integration test suite
+          npm install
+          npm test
+
+      - name: Check mock service logs
+        if: failure()
+        run: docker-compose -f docker-compose.microservices.yml logs
+
+      - name: Stop mock services
+        if: always()
+        run: docker-compose -f docker-compose.microservices.yml down
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results/
+            coverage/

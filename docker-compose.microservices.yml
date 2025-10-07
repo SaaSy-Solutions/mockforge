@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # Authentication Service Mock
+  mock-auth:
+    image: mockforge:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mockforge-auth
+    ports:
+      - "3001:3001"
+    environment:
+      - RUST_LOG=info
+      - MOCKFORGE_PORT=3001
+      - MOCKFORGE_OPENAPI_SPEC=/specs/auth.yaml
+    volumes:
+      - ./specs:/specs:ro
+      - ./configs:/configs:ro
+      - ./logs:/logs
+    networks:
+      - mockforge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: mockforge-cli serve --http-port 3001 --spec /specs/auth.yaml
+
+  # Users Service Mock
+  mock-users:
+    image: mockforge:latest
+    container_name: mockforge-users
+    ports:
+      - "3002:3002"
+    environment:
+      - RUST_LOG=info
+      - MOCKFORGE_PORT=3002
+      - MOCKFORGE_OPENAPI_SPEC=/specs/users.yaml
+    volumes:
+      - ./specs:/specs:ro
+      - ./configs:/configs:ro
+      - ./logs:/logs
+    networks:
+      - mockforge-network
+    depends_on:
+      mock-auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: mockforge-cli serve --http-port 3002 --spec /specs/users.yaml
+
+  # Orders Service Mock
+  mock-orders:
+    image: mockforge:latest
+    container_name: mockforge-orders
+    ports:
+      - "3003:3003"
+    environment:
+      - RUST_LOG=info
+      - MOCKFORGE_PORT=3003
+      - MOCKFORGE_OPENAPI_SPEC=/specs/orders.yaml
+    volumes:
+      - ./specs:/specs:ro
+      - ./configs:/configs:ro
+      - ./logs:/logs
+    networks:
+      - mockforge-network
+    depends_on:
+      mock-auth:
+        condition: service_healthy
+      mock-users:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: mockforge-cli serve --http-port 3003 --spec /specs/orders.yaml
+
+  # Payments Service Mock
+  mock-payments:
+    image: mockforge:latest
+    container_name: mockforge-payments
+    ports:
+      - "3004:3004"
+    environment:
+      - RUST_LOG=info
+      - MOCKFORGE_PORT=3004
+      - MOCKFORGE_OPENAPI_SPEC=/specs/payments.yaml
+    volumes:
+      - ./specs:/specs:ro
+      - ./configs:/configs:ro
+      - ./logs:/logs
+    networks:
+      - mockforge-network
+    depends_on:
+      mock-auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: mockforge-cli serve --http-port 3004 --spec /specs/payments.yaml
+
+networks:
+  mockforge-network:
+    driver: bridge
+    name: mockforge-network

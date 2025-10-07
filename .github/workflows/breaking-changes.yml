@@ -1,0 +1,90 @@
+name: Breaking Changes Detection
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'specs/**'
+      - 'openapi.yaml'
+
+jobs:
+  detect-breaking-changes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          path: pr-branch
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install MockForge
+        working-directory: pr-branch
+        run: cargo install --path crates/mockforge-cli
+
+      - name: Compare API specs
+        id: compare
+        working-directory: pr-branch
+        run: |
+          mockforge-cli compare \
+            --old ../main-branch/specs/api.yaml \
+            --new specs/api.yaml \
+            --output breaking-changes.md \
+            --format markdown
+
+      - name: Check for breaking changes
+        id: check-breaking
+        run: |
+          if grep -q "Breaking Changes" pr-branch/breaking-changes.md; then
+            echo "has_breaking_changes=true" >> $GITHUB_OUTPUT
+            echo "❌ Breaking changes detected!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "has_breaking_changes=false" >> $GITHUB_OUTPUT
+            echo "✅ No breaking changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload breaking changes report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: breaking-changes-report
+          path: pr-branch/breaking-changes.md
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('pr-branch/breaking-changes.md', 'utf8');
+
+            let emoji = '✅';
+            let title = 'No Breaking Changes';
+
+            if ('${{ steps.check-breaking.outputs.has_breaking_changes }}' === 'true') {
+              emoji = '⚠️';
+              title = 'Breaking Changes Detected';
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${emoji} ## ${title}\n\n${report}\n\n---\n*This check helps prevent accidental breaking changes to your API contract.*`
+            });
+
+      - name: Fail if breaking changes detected
+        if: steps.check-breaking.outputs.has_breaking_changes == 'true'
+        run: |
+          echo "::error::Breaking changes detected in API contract"
+          exit 1

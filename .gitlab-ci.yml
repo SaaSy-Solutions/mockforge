@@ -1,0 +1,135 @@
+# GitLab CI/CD Pipeline for MockForge Integration Testing
+
+stages:
+  - build
+  - validate
+  - test
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  MOCKFORGE_IMAGE: "mockforge:${CI_COMMIT_SHORT_SHA}"
+
+# Build MockForge Docker image
+build:mockforge:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t ${MOCKFORGE_IMAGE} .
+    - docker save ${MOCKFORGE_IMAGE} > mockforge-image.tar
+  artifacts:
+    paths:
+      - mockforge-image.tar
+    expire_in: 1 day
+
+# Validate API contracts
+validate:contracts:
+  stage: validate
+  image: rust:latest
+  before_script:
+    - cargo install --path crates/mockforge-cli
+  script:
+    - mockforge-cli validate --spec specs/api.yaml --endpoint ${API_URL} --strict
+    - mockforge-cli validate --spec specs/auth.yaml --endpoint ${AUTH_URL} --strict
+  artifacts:
+    reports:
+      junit: validation-report.xml
+    paths:
+      - validation-report.md
+  only:
+    - merge_requests
+    - main
+
+# Detect breaking changes
+validate:breaking-changes:
+  stage: validate
+  image: rust:latest
+  before_script:
+    - cargo install --path crates/mockforge-cli
+  script:
+    - git fetch origin main
+    - |
+      mockforge-cli compare \
+        --old <(git show origin/main:specs/api.yaml) \
+        --new specs/api.yaml \
+        --output breaking-changes.md
+    - |
+      if grep -q "Breaking Changes" breaking-changes.md; then
+        echo "Breaking changes detected!"
+        cat breaking-changes.md
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - breaking-changes.md
+  only:
+    - merge_requests
+
+# Run integration tests with mock services
+test:integration:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker load < mockforge-image.tar
+    - docker-compose -f docker-compose.microservices.yml up -d
+    - |
+      for port in 3001 3002 3003 3004; do
+        timeout 60 sh -c "until curl -f http://localhost:$port/health; do sleep 2; done"
+      done
+  script:
+    - npm install
+    - npm test
+  after_script:
+    - docker-compose -f docker-compose.microservices.yml logs
+    - docker-compose -f docker-compose.microservices.yml down
+  artifacts:
+    when: always
+    reports:
+      junit: test-results/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - test-results/
+      - coverage/
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+
+# Deploy mocks to staging
+deploy:staging:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker load < mockforge-image.tar
+    - docker tag ${MOCKFORGE_IMAGE} ${CI_REGISTRY_IMAGE}:staging
+    - docker push ${CI_REGISTRY_IMAGE}:staging
+    # Deploy to Kubernetes or your platform
+    - kubectl set image deployment/mockforge mockforge=${CI_REGISTRY_IMAGE}:staging
+  environment:
+    name: staging
+    url: https://mocks-staging.example.com
+  only:
+    - main
+
+# Deploy mocks to production
+deploy:production:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker load < mockforge-image.tar
+    - docker tag ${MOCKFORGE_IMAGE} ${CI_REGISTRY_IMAGE}:production
+    - docker push ${CI_REGISTRY_IMAGE}:production
+    - kubectl set image deployment/mockforge mockforge=${CI_REGISTRY_IMAGE}:production
+  environment:
+    name: production
+    url: https://mocks.example.com
+  when: manual
+  only:
+    - tags

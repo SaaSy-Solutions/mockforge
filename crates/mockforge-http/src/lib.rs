@@ -2,6 +2,8 @@ pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
 pub mod latency_profiles;
+pub mod management;
+pub mod management_ws;
 pub mod op_middleware;
 pub mod replay_listing;
 pub mod request_logging;
@@ -9,6 +11,12 @@ pub mod sse;
 
 // Re-export AI handler utilities
 pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
+
+// Re-export management API utilities
+pub use management::{management_router, ManagementState, MockConfig, ServerConfig, ServerStats};
+
+// Re-export management WebSocket utilities
+pub use management_ws::{ws_management_router, WsManagementState, MockEvent};
 
 use axum::middleware::from_fn_with_state;
 use axum::{Router, extract::State, response::Json};
@@ -84,6 +92,9 @@ pub async fn build_router(
     // Set up the basic router
     let mut app = Router::new();
     let mut state = HttpServerState::new();
+
+    // Clone spec_path for later use
+    let spec_path_for_mgmt = spec_path.clone();
 
     // If an OpenAPI spec is provided, integrate it
     if let Some(spec_path) = spec_path {
@@ -180,6 +191,14 @@ pub async fn build_router(
 
     // Merge the routes router with the main app
     app = app.merge(routes_router);
+
+    // Add management API endpoints
+    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    app = app.nest("/__mockforge/api", management_router(management_state));
+
+    // Add management WebSocket endpoint
+    let ws_state = WsManagementState::new();
+    app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));

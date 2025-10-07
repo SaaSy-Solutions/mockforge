@@ -4,8 +4,11 @@
 
 pub mod cache;
 pub mod chain_execution;
+pub mod collection_export;
 pub mod conditions;
 pub mod config;
+pub mod contract_validation;
+pub mod docker_compose;
 pub mod encryption;
 pub mod error;
 pub mod failure_injection;

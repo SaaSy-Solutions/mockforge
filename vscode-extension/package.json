@@ -1,0 +1,169 @@
+{
+  "name": "mockforge-vscode",
+  "displayName": "MockForge",
+  "description": "Visual Studio Code extension for MockForge - Control and visualize your API mocks directly from VS Code",
+  "version": "0.1.0",
+  "publisher": "saasy-solutions",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "mock",
+    "api",
+    "testing",
+    "mockforge"
+  ],
+  "activationEvents": [
+    "onView:mockforge-explorer"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mockforge",
+          "title": "MockForge",
+          "icon": "media/mockforge-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "mockforge": [
+        {
+          "id": "mockforge-explorer",
+          "name": "Mocks Explorer"
+        },
+        {
+          "id": "mockforge-server",
+          "name": "Server Control"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "mockforge.refreshMocks",
+        "title": "Refresh Mocks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mockforge.createMock",
+        "title": "Create Mock",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mockforge.editMock",
+        "title": "Edit Mock"
+      },
+      {
+        "command": "mockforge.deleteMock",
+        "title": "Delete Mock",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mockforge.toggleMock",
+        "title": "Enable/Disable Mock"
+      },
+      {
+        "command": "mockforge.exportMocks",
+        "title": "Export Mocks"
+      },
+      {
+        "command": "mockforge.importMocks",
+        "title": "Import Mocks"
+      },
+      {
+        "command": "mockforge.startServer",
+        "title": "Start MockForge Server"
+      },
+      {
+        "command": "mockforge.stopServer",
+        "title": "Stop MockForge Server"
+      },
+      {
+        "command": "mockforge.restartServer",
+        "title": "Restart MockForge Server"
+      },
+      {
+        "command": "mockforge.viewStats",
+        "title": "View Server Statistics"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "mockforge.refreshMocks",
+          "when": "view == mockforge-explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "mockforge.createMock",
+          "when": "view == mockforge-explorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mockforge.editMock",
+          "when": "view == mockforge-explorer && viewItem == mock"
+        },
+        {
+          "command": "mockforge.toggleMock",
+          "when": "view == mockforge-explorer && viewItem == mock"
+        },
+        {
+          "command": "mockforge.deleteMock",
+          "when": "view == mockforge-explorer && viewItem == mock"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MockForge",
+      "properties": {
+        "mockforge.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "MockForge server URL"
+        },
+        "mockforge.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically connect to MockForge server on startup"
+        },
+        "mockforge.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications for mock changes"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "ws": "^8.16.0"
+  }
+}
