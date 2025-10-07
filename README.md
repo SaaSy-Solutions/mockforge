@@ -11,6 +11,41 @@
 
 MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.
 
+## 🔄 Why MockForge?
+
+| Feature | MockForge | WireMock | MockServer | Mockoon |
+|---------|-----------|----------|------------|---------|
+| **Language** | Rust | Java | Java/JavaScript | JavaScript |
+| **Performance** | ⚡ High (native Rust) | Medium | Medium | Medium |
+| **HTTP/REST** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **gRPC Native** | ✅ Full + HTTP Bridge | ❌ No | ❌ No | ⚠️ Limited |
+| **WebSocket** | ✅ Scripted Replay + JSONPath | ❌ No | ⚠️ Basic | ❌ No |
+| **GraphQL** | ✅ Yes | ⚠️ Via HTTP | ⚠️ Via HTTP | ✅ Yes |
+| **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
+| **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
+| **Plugin System** | ✅ WASM-based | ⚠️ Java extensions | ⚠️ JavaScript | ❌ No |
+| **E2E Encryption** | ✅ Built-in (AES-256/ChaCha20) | ❌ No | ⚠️ TLS only | ⚠️ TLS only |
+| **Workspace Sync** | ✅ Git integration + file watching | ❌ No | ❌ No | ⚠️ Cloud sync (Pro) |
+| **Cross-Endpoint Validation** | ✅ Referential integrity checks | ❌ No | ❌ No | ❌ No |
+| **OpenAPI Support** | ✅ Full + Auto-generation | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Template Expansion** | ✅ Advanced (faker, time, UUIDs) | ⚠️ Basic | ⚠️ Basic | ✅ Handlebars |
+| **Deployment** | Binary, Docker, Cargo | JAR, Docker, Maven | JAR/NPM, Docker | Desktop, NPM, Docker |
+| **Stateful Mocking** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Request Matching** | ✅ JSONPath, Regex, Schema | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Latency Simulation** | ✅ Configurable profiles | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Fault Injection** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **CLI Tool** | ✅ Full-featured | ✅ Yes | ✅ Yes | ✅ Yes |
+| **License** | MIT/Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
+
+### Key Differentiators
+
+- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, and GraphQL in a single binary
+- **🧬 Advanced Data Generation**: RAG-powered synthetic data with relationship awareness and smart field inference
+- **🔌 Modern Plugin System**: Extend functionality with sandboxed WASM plugins for custom generators, auth, and data sources
+- **🔒 Enterprise Security**: Built-in end-to-end encryption for sensitive configuration data
+- **🌉 gRPC HTTP Bridge**: Automatically expose gRPC services as REST APIs with OpenAPI docs
+- **📊 Production-Ready**: Comprehensive testing (unit, integration, mutation), security audits, and automated releases
+
 ## ✨ Features
 
 - **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, and WebSocket connections
