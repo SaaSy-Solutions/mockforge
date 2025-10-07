@@ -42,6 +42,21 @@ test-coverage: ## Run tests with coverage report
 test-watch: ## Run tests in watch mode
 	cargo watch -x "test --workspace"
 
+test-mutants: ## Run mutation testing on all crates
+	cargo mutants --all
+
+test-mutants-check: ## Check if tests pass before running mutation testing
+	cargo mutants --all --check
+
+test-mutants-diff: ## Run mutation testing only on uncommitted changes
+	cargo mutants --all --in-diff HEAD
+
+test-mutants-report: ## Generate mutation testing report
+	cargo mutants --all --output mutants-report.json
+
+test-mutants-core: ## Run mutation testing on core crate only
+	cargo mutants -p mockforge-core
+
 # Code quality
 fmt: ## Format code
 	cargo fmt --all

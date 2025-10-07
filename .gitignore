@@ -112,6 +112,11 @@ wheels/
 htmlcov/
 .tox/
 
+# Mutation testing
+mutants.out/
+mutants-report.json
+.mutants.out.old/
+
 # MockForge specific
 *.pcap
 *.har

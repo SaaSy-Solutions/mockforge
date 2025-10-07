@@ -1,0 +1,78 @@
+# Mutation testing configuration for MockForge
+# See: https://mutants.rs/config.html
+
+# Timeout multiplier for test runs (default is 5x the baseline)
+timeout_multiplier = 5.0
+
+# Minimum test timeout in seconds
+minimum_test_timeout = 30
+
+# Run tests in release mode for faster execution
+build_timeout_multiplier = 2.0
+
+# Configure test command to use nextest for faster test execution
+test_tool = "nextest"
+
+# Exclude patterns that are less likely to need mutation testing
+# or that would generate too many low-value mutants
+exclude_globs = [
+    # Examples and demos
+    "examples/**",
+    "test_openapi_demo/**",
+
+    # UI-related code (less critical for mutation testing)
+    "crates/mockforge-ui/**",
+
+    # Build scripts and generated code
+    "**/build.rs",
+    "**/tests/**",
+    "**/benches/**",
+]
+
+# Skip functions that are typically trivial or where mutations don't add value
+skip_calls_to = [
+    # Standard library constructors and common methods
+    "::new",
+    "::default",
+    "::clone",
+    "::from",
+    "::into",
+    "::as_ref",
+    "::as_mut",
+
+    # Logging and tracing (mutations here don't typically reveal bugs)
+    "tracing::info",
+    "tracing::warn",
+    "tracing::error",
+    "tracing::debug",
+    "tracing::trace",
+    "log::info",
+    "log::warn",
+    "log::error",
+    "log::debug",
+    "log::trace",
+
+    # Assertion and panic functions (already well-tested)
+    "panic",
+    "assert",
+    "assert_eq",
+    "assert_ne",
+    "debug_assert",
+    "debug_assert_eq",
+    "debug_assert_ne",
+]
+
+# Configure output
+# Show mutants that were caught by tests
+show_times = true
+
+# Generate JSON output for CI integration
+json = true
+
+# Additional options for better performance
+[options]
+# Run mutants in parallel using all available cores
+# jobs = 0  # 0 means use all available cores
+
+# Continue testing even if some mutants are not caught
+# error_exit = false
