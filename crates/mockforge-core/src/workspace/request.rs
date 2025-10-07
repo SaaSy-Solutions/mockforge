@@ -884,6 +884,8 @@ impl RequestProcessor {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             history: Vec::new(),
+            intelligent: None,
+            drift: None,
         }
     }
 

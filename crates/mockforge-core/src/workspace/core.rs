@@ -150,6 +150,12 @@ pub struct MockResponse {
     pub updated_at: DateTime<Utc>,
     /// Associated history entries
     pub history: Vec<ResponseHistoryEntry>,
+    /// AI-powered intelligent mock generation config
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intelligent: Option<serde_json::Value>,
+    /// Data drift simulation config
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drift: Option<serde_json::Value>,
 }
 
 /// History entry for response usage
@@ -458,6 +464,8 @@ impl MockResponse {
             created_at: now,
             updated_at: now,
             history: Vec::new(),
+            intelligent: None,
+            drift: None,
         }
     }
 

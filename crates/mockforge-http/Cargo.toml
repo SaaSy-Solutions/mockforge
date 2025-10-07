@@ -39,15 +39,12 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
+mockforge-data = { path = "../mockforge-data" }
 
 [features]
 default = []
 # Enable richer faker-backed tokens in templating via mockforge-data
-data-faker = ["dep:mockforge-data"]
-
-[dependencies.mockforge-data]
-optional = true
-path = "../mockforge-data"
+data-faker = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -3,16 +3,24 @@
 //! Synthetic data generation engine with faker primitives and RAG (Retrieval-Augmented Generation).
 
 pub mod dataset;
+pub mod drift;
 pub mod faker;
 pub mod generator;
+pub mod intelligent_mock;
 pub mod provider;
 pub mod rag;
+pub mod replay_augmentation;
 pub mod schema;
 
 pub use dataset::{Dataset, DatasetValidationResult};
+pub use drift::{DataDriftConfig, DataDriftEngine, DriftStrategy};
 pub use fake::Faker;
 pub use generator::DataGenerator;
+pub use intelligent_mock::{IntelligentMockConfig, IntelligentMockGenerator, ResponseMode};
 pub use rag::{EmbeddingProvider, LlmProvider, RagConfig, RagEngine, SearchResult};
+pub use replay_augmentation::{
+    EventStrategy, GeneratedEvent, ReplayAugmentationConfig, ReplayAugmentationEngine, ReplayMode,
+};
 pub use schema::{FieldDefinition, SchemaDefinition};
 
 /// Data generation configuration

@@ -1,0 +1,152 @@
+# Intelligent Customer API Example
+#
+# This example demonstrates AI-driven mock generation for a customer API.
+# The AI generates realistic, context-aware customer data based on natural language prompts.
+#
+# Usage:
+#   export OPENAI_API_KEY=sk-...
+#   mockforge serve --config examples/ai/intelligent-customer-api.yaml
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+# Global RAG configuration
+rag:
+  provider: openai
+  api_key: ${OPENAI_API_KEY}
+  model: gpt-3.5-turbo
+  max_tokens: 2048
+  temperature: 0.7
+  caching: true
+  cache_ttl_secs: 3600
+
+endpoints:
+  # Get all customers with intelligent generation
+  - path: /customers
+    method: GET
+    response:
+      mode: intelligent
+      prompt: |
+        Generate realistic customer data for a retail SaaS platform.
+        Include diverse demographics from different industries (tech, finance, healthcare, retail).
+        Customers should have:
+        - Realistic company names and contact information
+        - Varied subscription tiers (bronze, silver, gold, platinum)
+        - Account values reflecting their tier
+        - Recent signup dates
+        - Realistic email addresses using company domains
+      schema:
+        type: array
+        items:
+          type: object
+          properties:
+            id:
+              type: string
+              description: Unique customer identifier
+            company_name:
+              type: string
+              description: Company name
+            contact_name:
+              type: string
+              description: Primary contact person
+            email:
+              type: string
+              format: email
+            phone:
+              type: string
+            industry:
+              type: string
+              enum: [tech, finance, healthcare, retail, manufacturing]
+            tier:
+              type: string
+              enum: [bronze, silver, gold, platinum]
+            account_value:
+              type: number
+              minimum: 1000
+              maximum: 1000000
+            signup_date:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [active, trial, churned]
+      count: 10
+      temperature: 0.8
+      cache_enabled: false
+
+  # Get single customer with hybrid mode
+  - path: /customers/:id
+    method: GET
+    response:
+      mode: hybrid
+      prompt: |
+        Enhance this customer with realistic usage metrics,
+        billing history, and support tickets.
+      body:
+        id: "{{params.id}}"
+        company_name: "Acme Corp"
+        tier: "gold"
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          company_name: { type: string }
+          tier: { type: string }
+          metrics:
+            type: object
+            properties:
+              monthly_active_users: { type: number }
+              api_calls_last_month: { type: number }
+              storage_gb: { type: number }
+          billing:
+            type: object
+            properties:
+              current_mrr: { type: number }
+              payment_method: { type: string }
+              next_invoice_date: { type: string }
+
+  # Create customer with intelligent validation
+  - path: /customers
+    method: POST
+    response:
+      mode: intelligent
+      prompt: |
+        Generate a new customer record based on the request data.
+        Add generated fields like ID, signup date, and initial metrics.
+        Set tier to bronze for new customers.
+      context: "New customer onboarding"
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          company_name: { type: string }
+          tier: { type: string, default: bronze }
+          signup_date: { type: string }
+          onboarding_status: { type: string, enum: [pending, in_progress, completed] }
+      status: 201
+
+  # Search customers with context-aware results
+  - path: /customers/search
+    method: GET
+    response:
+      mode: intelligent
+      prompt: |
+        Based on the search query, generate relevant customer results.
+        If searching by industry, return customers from that industry.
+        If searching by tier, return customers of that tier.
+        Make results contextually relevant to the query.
+      context: "Query: {{query.q}}, Filters: {{query}}"
+      schema:
+        type: object
+        properties:
+          total: { type: number }
+          results:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string }
+                company_name: { type: string }
+                relevance_score: { type: number }
+      count: 5

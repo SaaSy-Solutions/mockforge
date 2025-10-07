@@ -23,6 +23,9 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **GraphQL** | ✅ Yes | ⚠️ Via HTTP | ⚠️ Via HTTP | ✅ Yes |
 | **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
 | **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
+| **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |
+| **Data Drift** | ✅ Evolving mock data | ❌ No | ❌ No | ❌ No |
+| **AI Event Streams** | ✅ Narrative-driven WebSocket | ❌ No | ❌ No | ❌ No |
 | **Plugin System** | ✅ WASM-based | ⚠️ Java extensions | ⚠️ JavaScript | ❌ No |
 | **E2E Encryption** | ✅ Built-in (AES-256/ChaCha20) | ❌ No | ⚠️ TLS only | ⚠️ TLS only |
 | **Workspace Sync** | ✅ Git integration + file watching | ❌ No | ❌ No | ⚠️ Cloud sync (Pro) |
@@ -40,6 +43,9 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 ### Key Differentiators
 
 - **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, and GraphQL in a single binary
+- **🧠 AI-Driven Mocking**: Industry-first LLM-powered mock generation from natural language prompts
+- **📊 Data Drift Simulation**: Unique realistic data evolution across requests (order status progression, stock depletion, price changes)
+- **🌊 AI Event Streams**: Generate narrative-driven WebSocket events for real-time testing scenarios
 - **🧬 Advanced Data Generation**: RAG-powered synthetic data with relationship awareness and smart field inference
 - **🔌 Modern Plugin System**: Extend functionality with sandboxed WASM plugins for custom generators, auth, and data sources
 - **🔒 Enterprise Security**: Built-in end-to-end encryption for sensitive configuration data
@@ -49,6 +55,24 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 ## ✨ Features
 
 - **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, and WebSocket connections
+- **🧠 AI-Powered Mocking** *(Industry First)*: Revolutionary artificial intelligence features:
+  - **Intelligent Mock Generation**: Generate realistic responses from natural language prompts
+    - Natural language → realistic JSON data
+    - Schema-aware generation with validation
+    - Multi-provider support: OpenAI, Anthropic, Ollama (free local), or OpenAI-compatible APIs
+    - Built-in caching for performance optimization
+  - **Data Drift Simulation**: Evolving mock data across requests
+    - Order statuses progress naturally (pending → processing → shipped → delivered)
+    - Stock quantities deplete with purchases
+    - Prices fluctuate realistically over time
+    - State machine transitions with custom probabilities
+  - **AI Event Streams**: LLM-powered WebSocket event generation
+    - Generate realistic event streams from narrative descriptions
+    - Progressive scenario evolution for contextual continuity
+    - Time-based, count-based, or conditional event strategies
+    - Perfect for testing real-time features
+  - **Free Local Development**: Use Ollama for $0 cost during development
+  - **Cost-Effective Production**: ~$0.01 per 1,000 requests with OpenAI GPT-3.5
 - **Advanced Data Synthesis**: Intelligent mock data generation with:
   - **Smart Field Inference**: Automatic data type detection from field names
   - **Deterministic Seeding**: Reproducible test fixtures for stable testing
@@ -188,6 +212,83 @@ cargo run -p mockforge-cli -- sync start --directory ./workspace-sync
 # Quick development setup with environment variables
 MOCKFORGE_ADMIN_ENABLED=true MOCKFORGE_HTTP_PORT=3000 cargo run -p mockforge-cli -- serve
 ```
+
+### 🧠 AI Features Quick Start
+
+MockForge supports AI-powered mock generation for intelligent, evolving data. Perfect for realistic testing!
+
+#### Using Free Local AI (Ollama)
+
+```bash
+# Install Ollama (one-time setup)
+curl https://ollama.ai/install.sh | sh
+ollama pull llama2
+
+# Start MockForge with AI enabled
+cargo run -p mockforge-cli -- serve \
+  --ai-enabled \
+  --rag-provider ollama \
+  --rag-model llama2 \
+  --config examples/ai/intelligent-customer-api.yaml
+```
+
+#### Using OpenAI (Paid)
+
+```bash
+# Start with OpenAI
+export MOCKFORGE_RAG_API_KEY=sk-your-api-key
+cargo run -p mockforge-cli -- serve \
+  --ai-enabled \
+  --rag-provider openai \
+  --rag-model gpt-3.5-turbo \
+  --config examples/ai/intelligent-customer-api.yaml
+```
+
+#### Test AI Features
+
+```bash
+# Test intelligent mock generation
+cargo run -p mockforge-cli -- test-ai intelligent-mock \
+  --prompt "Generate realistic customer data for a SaaS platform" \
+  --rag-provider ollama
+
+# Test data drift simulation
+cargo run -p mockforge-cli -- test-ai drift \
+  --initial-data examples/order.json \
+  --iterations 10
+
+# Test AI event stream generation
+cargo run -p mockforge-cli -- test-ai event-stream \
+  --narrative "Simulate 5 minutes of live stock market data" \
+  --event-count 20 \
+  --rag-provider ollama
+```
+
+#### Configuration Example
+
+```yaml
+responses:
+  - name: "AI Customer Response"
+    status_code: 200
+    intelligent:
+      mode: intelligent
+      prompt: "Generate realistic customer data for a retail SaaS API"
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          name: { type: string }
+          email: { type: string }
+    drift:
+      enabled: true
+      request_based: true
+      rules:
+        - field: tier
+          strategy: state_machine
+          states: [bronze, silver, gold, platinum]
+```
+
+**📖 Learn More**: See [`docs/AI_DRIVEN_MOCKING.md`](./docs/AI_DRIVEN_MOCKING.md) for complete AI features documentation.
 
 ## HTTP
 

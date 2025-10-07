@@ -892,6 +892,11 @@ impl RagEngine {
     pub fn has_schema(&self, name: &str) -> bool {
         self.schema_kb.contains_key(name)
     }
+
+    /// Generate text using LLM (for intelligent mock generation)
+    pub async fn generate_text(&self, prompt: &str) -> Result<String> {
+        self.call_llm(prompt).await
+    }
 }
 
 impl Default for RagEngine {

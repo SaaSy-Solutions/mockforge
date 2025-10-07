@@ -1,0 +1,218 @@
+# Order Drift Simulation Example
+#
+# This example demonstrates data drift simulation for an order tracking system.
+# Orders naturally progress through statuses, quantities deplete, and prices fluctuate.
+#
+# Usage:
+#   mockforge serve --config examples/ai/order-drift-simulation.yaml
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+endpoints:
+  # Order with status progression and drift
+  - path: /orders/:id
+    method: GET
+    response:
+      body:
+        id: "{{params.id}}"
+        customer_id: "cust_{{random_number 1000 9999}}"
+        status: "pending"
+        items:
+          - product_id: "prod_001"
+            name: "Laptop"
+            quantity: 100
+            unit_price: 999.99
+          - product_id: "prod_002"
+            name: "Mouse"
+            quantity: 50
+            unit_price: 29.99
+        subtotal: 101499.00
+        tax: 8119.92
+        total: 109618.92
+        created_at: "{{iso_timestamp}}"
+        updated_at: "{{iso_timestamp}}"
+
+      # Drift configuration
+      drift:
+        enabled: true
+        request_based: true  # Apply drift on each request
+        interval: 1         # Every request
+        rules:
+          # Order status progression using state machine
+          - field: status
+            strategy: state_machine
+            states:
+              - pending
+              - payment_confirmed
+              - processing
+              - picking
+              - packing
+              - shipped
+              - in_transit
+              - delivered
+              - cancelled
+            transitions:
+              pending:
+                - [payment_confirmed, 0.8]
+                - [cancelled, 0.2]
+              payment_confirmed:
+                - [processing, 1.0]
+              processing:
+                - [picking, 0.9]
+                - [cancelled, 0.1]
+              picking:
+                - [packing, 1.0]
+              packing:
+                - [shipped, 1.0]
+              shipped:
+                - [in_transit, 1.0]
+              in_transit:
+                - [delivered, 0.8]
+                - [in_transit, 0.2]  # Stay in transit
+              delivered: []
+              cancelled: []
+
+          # Laptop quantity depletion
+          - field: items[0].quantity
+            strategy: linear
+            rate: -2.0  # Decrease by 2 per request
+            min_value: 0
+            max_value: 100
+
+          # Mouse quantity depletion (faster)
+          - field: items[1].quantity
+            strategy: linear
+            rate: -3.0
+            min_value: 0
+            max_value: 50
+
+          # Price fluctuation for laptop
+          - field: items[0].unit_price
+            strategy: random_walk
+            rate: 10.0  # +/- $10 random walk
+            min_value: 950.0
+            max_value: 1050.0
+
+  # Multiple orders with different initial states
+  - path: /orders
+    method: GET
+    response:
+      body:
+        orders:
+          - id: "order_001"
+            status: "pending"
+            total: 1500.00
+          - id: "order_002"
+            status: "processing"
+            total: 2300.50
+          - id: "order_003"
+            status: "shipped"
+            total: 890.00
+      drift:
+        enabled: true
+        request_based: true
+        interval: 2  # Apply drift every 2 requests
+        rules:
+          - field: orders[0].status
+            strategy: state_machine
+            states: [pending, processing, shipped, delivered]
+            transitions:
+              pending: [[processing, 1.0]]
+              processing: [[shipped, 1.0]]
+              shipped: [[delivered, 1.0]]
+
+          - field: orders[1].status
+            strategy: state_machine
+            states: [pending, processing, shipped, delivered]
+            transitions:
+              processing: [[shipped, 1.0]]
+              shipped: [[delivered, 1.0]]
+
+  # Inventory with time-based drift
+  - path: /inventory/:sku
+    method: GET
+    response:
+      body:
+        sku: "{{params.sku}}"
+        name: "Product {{params.sku}}"
+        quantity: 1000
+        reserved: 50
+        available: 950
+        reorder_point: 100
+        price: 99.99
+        last_updated: "{{iso_timestamp}}"
+      drift:
+        enabled: true
+        time_based: true
+        interval: 10  # Apply drift every 10 seconds
+        rules:
+          # Gradual stock depletion
+          - field: quantity
+            strategy: linear
+            rate: -5.0
+            min_value: 0
+            max_value: 1000
+
+          # Random reservations
+          - field: reserved
+            strategy: random_walk
+            rate: 3.0
+            min_value: 0
+            max_value: 100
+
+          # Price fluctuation
+          - field: price
+            strategy: random_walk
+            rate: 1.0
+            min_value: 85.0
+            max_value: 115.0
+
+  # Stock ticker with continuous drift
+  - path: /stocks/:symbol
+    method: GET
+    response:
+      body:
+        symbol: "{{params.symbol}}"
+        price: 150.00
+        volume: 1000000
+        bid: 149.95
+        ask: 150.05
+        change: 0.0
+        change_percent: 0.0
+        timestamp: "{{iso_timestamp}}"
+      drift:
+        enabled: true
+        time_based: true
+        interval: 1  # Update every second
+        seed: 42  # Reproducible randomness
+        rules:
+          # Price random walk
+          - field: price
+            strategy: random_walk
+            rate: 0.25
+            min_value: 100.0
+            max_value: 200.0
+
+          # Volume fluctuation
+          - field: volume
+            strategy: random_walk
+            rate: 50000.0
+            min_value: 500000
+            max_value: 5000000
+
+# Pre-defined drift scenarios
+# Use these as templates or import them in your config:
+#
+# Order Status Drift:
+#   mockforge_data::drift::scenarios::order_status_drift()
+#
+# Stock Depletion:
+#   mockforge_data::drift::scenarios::stock_depletion_drift()
+#
+# Price Fluctuation:
+#   mockforge_data::drift::scenarios::price_fluctuation_drift()
+#
+# Activity Score:
+#   mockforge_data::drift::scenarios::activity_score_drift()

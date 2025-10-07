@@ -65,6 +65,22 @@ enum Commands {
         /// Traffic shaping burst size (bytes)
         #[arg(long, default_value = "10000")]
         burst_size: u64,
+
+        /// Enable AI-powered features
+        #[arg(long)]
+        ai_enabled: bool,
+
+        /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
+        #[arg(long)]
+        rag_provider: Option<String>,
+
+        /// AI/RAG model name
+        #[arg(long)]
+        rag_model: Option<String>,
+
+        /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
+        #[arg(long, env = "MOCKFORGE_RAG_API_KEY")]
+        rag_api_key: Option<String>,
     },
 
     /// Generate synthetic data
@@ -117,6 +133,72 @@ enum Commands {
     Config {
         #[command(subcommand)]
         config_command: ConfigCommands,
+    },
+
+    /// Test AI-powered features
+    TestAi {
+        #[command(subcommand)]
+        ai_command: AiTestCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum AiTestCommands {
+    /// Test intelligent mock generation
+    IntelligentMock {
+        /// Natural language prompt for generation
+        #[arg(short, long)]
+        prompt: String,
+
+        /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
+        #[arg(long)]
+        rag_provider: Option<String>,
+
+        /// AI/RAG model name
+        #[arg(long)]
+        rag_model: Option<String>,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Test data drift simulation
+    Drift {
+        /// Initial data file (JSON)
+        #[arg(short, long)]
+        initial_data: PathBuf,
+
+        /// Number of drift iterations to simulate
+        #[arg(short, long, default_value = "5")]
+        iterations: usize,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Test AI event stream generation
+    EventStream {
+        /// Narrative description for event generation
+        #[arg(short, long)]
+        narrative: String,
+
+        /// Number of events to generate
+        #[arg(short = 'c', long, default_value = "10")]
+        event_count: usize,
+
+        /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
+        #[arg(long)]
+        rag_provider: Option<String>,
+
+        /// AI/RAG model name
+        #[arg(long)]
+        rag_model: Option<String>,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 
@@ -213,6 +295,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             traffic_shaping,
             bandwidth_limit,
             burst_size,
+            ai_enabled,
+            rag_provider,
+            rag_model,
+            rag_api_key,
         } => {
             handle_serve(
                 config,
@@ -226,6 +312,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 traffic_shaping,
                 bandwidth_limit,
                 burst_size,
+                ai_enabled,
+                rag_provider,
+                rag_model,
+                rag_api_key,
             )
             .await?;
         }
@@ -250,6 +340,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
         }
+        Commands::TestAi { ai_command } => {
+            handle_test_ai(ai_command).await?;
+        }
     }
 
     Ok(())
@@ -267,6 +360,10 @@ async fn handle_serve(
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
+    ai_enabled: bool,
+    rag_provider: Option<String>,
+    rag_model: Option<String>,
+    rag_api_key: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🚀 Starting MockForge servers...");
     println!("📡 HTTP server on port {}", http_port);
@@ -274,6 +371,26 @@ async fn handle_serve(
     println!("⚡ gRPC server on port {}", grpc_port);
     if admin {
         println!("🎛️ Admin UI on port {}", admin_port);
+    }
+    if ai_enabled {
+        println!("🧠 AI features enabled");
+        if let Some(provider) = &rag_provider {
+            println!("🤖 AI Provider: {}", provider);
+        }
+        if let Some(model) = &rag_model {
+            println!("🧠 AI Model: {}", model);
+        }
+    }
+
+    // Set AI environment variables if provided
+    if let Some(api_key) = rag_api_key {
+        std::env::set_var("MOCKFORGE_RAG_API_KEY", api_key);
+    }
+    if let Some(provider) = rag_provider {
+        std::env::set_var("MOCKFORGE_RAG_PROVIDER", provider);
+    }
+    if let Some(model) = rag_model {
+        std::env::set_var("MOCKFORGE_RAG_MODEL", model);
     }
 
     // Initialize key store at startup
@@ -1011,4 +1128,146 @@ fn discover_config_file() -> Result<PathBuf, Box<dyn std::error::Error + Send + 
     }
 
     Err("No configuration file found. Expected one of: mockforge.yaml, mockforge.yml, .mockforge.yaml, .mockforge.yml".into())
+}
+
+/// Handle AI testing commands
+async fn handle_test_ai(
+    ai_command: AiTestCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match ai_command {
+        AiTestCommands::IntelligentMock {
+            prompt,
+            rag_provider,
+            rag_model,
+            output,
+        } => {
+            println!("🧠 Testing Intelligent Mock Generation");
+            println!("📝 Prompt: {}", prompt);
+
+            // Load RAG configuration
+            let rag_config = load_rag_config(rag_provider, rag_model, None, None, None);
+
+            // Create intelligent mock generator
+            use mockforge_data::{IntelligentMockConfig, IntelligentMockGenerator, ResponseMode};
+
+            let config = IntelligentMockConfig::new(ResponseMode::Intelligent)
+                .with_prompt(prompt)
+                .with_rag_config(rag_config);
+
+            let mut generator = IntelligentMockGenerator::new(config)?;
+
+            // Generate mock data
+            println!("🎯 Generating mock data...");
+            let result = generator.generate().await?;
+
+            // Output result
+            let output_str = serde_json::to_string_pretty(&result)?;
+            if let Some(path) = output {
+                tokio::fs::write(&path, &output_str).await?;
+                println!("💾 Output written to: {}", path.display());
+            } else {
+                println!("\n📄 Generated Mock Data:");
+                println!("{}", output_str);
+            }
+
+            println!("✅ Intelligent mock generation completed successfully!");
+        }
+
+        AiTestCommands::Drift {
+            initial_data,
+            iterations,
+            output,
+        } => {
+            println!("📊 Testing Data Drift Simulation");
+            println!("📁 Initial data: {}", initial_data.display());
+            println!("🔄 Iterations: {}", iterations);
+
+            // Read initial data
+            let data_content = tokio::fs::read_to_string(&initial_data).await?;
+            let mut current_data: serde_json::Value = serde_json::from_str(&data_content)?;
+
+            // Create a simple drift configuration
+            use mockforge_data::{DataDriftConfig, DriftRule, DriftStrategy};
+
+            let rule = DriftRule::new("value".to_string(), DriftStrategy::Linear)
+                .with_rate(1.0);
+            let drift_config = DataDriftConfig::new().with_rule(rule);
+
+            let engine = mockforge_data::DataDriftEngine::new(drift_config)?;
+
+            // Simulate drift iterations
+            println!("\n🎯 Simulating drift:");
+            let mut results = vec![current_data.clone()];
+
+            for i in 1..=iterations {
+                current_data = engine.apply_drift(current_data).await?;
+                results.push(current_data.clone());
+                println!("   Iteration {}: {:?}", i, current_data);
+            }
+
+            // Output results
+            let output_str = serde_json::to_string_pretty(&results)?;
+            if let Some(path) = output {
+                tokio::fs::write(&path, &output_str).await?;
+                println!("\n💾 Output written to: {}", path.display());
+            } else {
+                println!("\n📄 Final Drifted Data:");
+                println!("{}", serde_json::to_string_pretty(&current_data)?);
+            }
+
+            println!("✅ Data drift simulation completed successfully!");
+        }
+
+        AiTestCommands::EventStream {
+            narrative,
+            event_count,
+            rag_provider,
+            rag_model,
+            output,
+        } => {
+            println!("🌊 Testing AI Event Stream Generation");
+            println!("📖 Narrative: {}", narrative);
+            println!("🔢 Event count: {}", event_count);
+
+            // Load RAG configuration
+            let rag_config = load_rag_config(rag_provider, rag_model, None, None, None);
+
+            // Create replay augmentation config
+            use mockforge_data::{EventStrategy, ReplayAugmentationConfig, ReplayMode};
+
+            let config = ReplayAugmentationConfig::new(
+                ReplayMode::Generated,
+                EventStrategy::CountBased,
+            )
+            .with_narrative(narrative)
+            .with_event_count(event_count)
+            .with_rag_config(rag_config);
+
+            let mut engine = mockforge_data::ReplayAugmentationEngine::new(config)?;
+
+            // Generate event stream
+            println!("🎯 Generating event stream...");
+            let events = engine.generate_stream().await?;
+
+            // Output results
+            let output_str = serde_json::to_string_pretty(&events)?;
+            if let Some(path) = output {
+                tokio::fs::write(&path, &output_str).await?;
+                println!("💾 Output written to: {}", path.display());
+            } else {
+                println!("\n📄 Generated Events:");
+                for (i, event) in events.iter().enumerate() {
+                    println!("\nEvent {}:", i + 1);
+                    println!("  Type: {}", event.event_type);
+                    println!("  Timestamp: {}", event.timestamp);
+                    println!("  Data: {}", serde_json::to_string_pretty(&event.data)?);
+                }
+            }
+
+            println!("\n✅ Event stream generation completed successfully!");
+            println!("   Generated {} events", events.len());
+        }
+    }
+
+    Ok(())
 }

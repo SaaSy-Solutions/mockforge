@@ -1,3 +1,4 @@
+pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
 pub mod latency_profiles;
@@ -5,6 +6,9 @@ pub mod op_middleware;
 pub mod replay_listing;
 pub mod request_logging;
 pub mod sse;
+
+// Re-export AI handler utilities
+pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
 
 use axum::middleware::from_fn_with_state;
 use axum::{Router, extract::State, response::Json};

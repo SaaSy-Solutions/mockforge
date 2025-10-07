@@ -339,24 +339,76 @@ impl Default for DataConfig {
 pub struct RagConfig {
     /// Enable RAG by default
     pub enabled: bool,
+    /// LLM provider (openai, anthropic, ollama, openai_compatible)
+    #[serde(default)]
+    pub provider: String,
     /// API endpoint for LLM
     pub api_endpoint: Option<String>,
     /// API key for LLM
     pub api_key: Option<String>,
     /// Model name
     pub model: Option<String>,
+    /// Maximum tokens for generation
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+    /// Temperature for generation (0.0 to 2.0)
+    #[serde(default = "default_temperature")]
+    pub temperature: f64,
     /// Context window size
     pub context_window: usize,
+    /// Enable caching
+    #[serde(default = "default_true")]
+    pub caching: bool,
+    /// Cache TTL in seconds
+    #[serde(default = "default_cache_ttl")]
+    pub cache_ttl_secs: u64,
+    /// Request timeout in seconds
+    #[serde(default = "default_timeout")]
+    pub timeout_secs: u64,
+    /// Maximum retries for failed requests
+    #[serde(default = "default_max_retries")]
+    pub max_retries: usize,
+}
+
+fn default_max_tokens() -> usize {
+    1024
+}
+
+fn default_temperature() -> f64 {
+    0.7
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_cache_ttl() -> u64 {
+    3600
+}
+
+fn default_timeout() -> u64 {
+    30
+}
+
+fn default_max_retries() -> usize {
+    3
 }
 
 impl Default for RagConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            provider: "openai".to_string(),
             api_endpoint: None,
             api_key: None,
-            model: None,
+            model: Some("gpt-3.5-turbo".to_string()),
+            max_tokens: default_max_tokens(),
+            temperature: default_temperature(),
             context_window: 4000,
+            caching: default_true(),
+            cache_ttl_secs: default_cache_ttl(),
+            timeout_secs: default_timeout(),
+            max_retries: default_max_retries(),
         }
     }
 }

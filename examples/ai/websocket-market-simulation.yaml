@@ -1,0 +1,309 @@
+# WebSocket Market Data Simulation Example
+#
+# This example demonstrates LLM-powered replay augmentation for WebSocket connections.
+# It generates realistic market data streams based on narrative descriptions.
+#
+# Usage:
+#   export OPENAI_API_KEY=sk-...
+#   mockforge serve --config examples/ai/websocket-market-simulation.yaml
+#
+# Test:
+#   wscat -c ws://localhost:8080/market-data
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+# Global RAG configuration
+rag:
+  provider: openai
+  api_key: ${OPENAI_API_KEY}
+  model: gpt-4
+  temperature: 0.8
+  max_tokens: 1024
+
+websocket:
+  # Live market data stream with AI generation
+  - path: /market-data
+    replay:
+      mode: generated
+      narrative: |
+        Simulate realistic stock market data for major tech companies:
+        AAPL, GOOGL, MSFT, AMZN, and TSLA.
+
+        Market scenario:
+        - Start at market open (9:30 AM ET)
+        - Show natural price discovery and volatility
+        - Include realistic bid/ask spreads
+        - Vary volume based on price movements
+        - Occasional news-driven spikes
+        - Mid-day consolidation
+        - End-of-day positioning
+
+        Make price movements correlated (tech sector moves together).
+        Include realistic timestamps and ensure progressive evolution.
+
+      event_type: market_tick
+
+      event_schema:
+        type: object
+        properties:
+          symbol:
+            type: string
+            enum: [AAPL, GOOGL, MSFT, AMZN, TSLA]
+          price:
+            type: number
+            minimum: 0
+            description: Current price
+          volume:
+            type: number
+            minimum: 0
+            description: Volume for this tick
+          bid:
+            type: number
+            description: Best bid price
+          ask:
+            type: number
+            description: Best ask price
+          last_trade_size:
+            type: number
+            description: Size of last trade
+          timestamp:
+            type: string
+            format: date-time
+          market_status:
+            type: string
+            enum: [pre_market, open, trading, closing, after_hours]
+        required: [symbol, price, volume, bid, ask, timestamp]
+
+      strategy: time_based
+      duration_secs: 300     # 5 minutes of market data
+      event_rate: 5.0        # 5 ticks per second
+      progressive_evolution: true  # Each event builds on previous
+
+  # Chat room simulation
+  - path: /chat/:room_id
+    replay:
+      mode: generated
+      narrative: |
+        Simulate a Slack-like team chat in a software development channel.
+
+        Participants (4-5 people):
+        - Alice (Senior Dev): Technical, code-focused
+        - Bob (Product Manager): Feature-focused, asks questions
+        - Charlie (Designer): UX/UI focused
+        - Dana (DevOps): Infrastructure and deployment concerns
+        - Eve (Junior Dev): Learning, asks for help
+
+        Conversation topic: Planning and implementing a new feature
+
+        Include:
+        - Natural message pacing (not everyone responds immediately)
+        - Thread replies and reactions
+        - Code snippets and technical discussion
+        - Emoji reactions (:thumbsup:, :thinking:, etc.)
+        - Links and references
+        - Some off-topic banter
+        - Realistic message lengths
+
+      event_type: chat_message
+
+      event_schema:
+        type: object
+        properties:
+          user_id:
+            type: string
+          username:
+            type: string
+            enum: [Alice, Bob, Charlie, Dana, Eve]
+          message:
+            type: string
+            description: Message content
+          timestamp:
+            type: string
+            format: date-time
+          thread_id:
+            type: string
+            description: ID if replying to thread
+          reactions:
+            type: array
+            items:
+              type: object
+              properties:
+                emoji: { type: string }
+                count: { type: number }
+          attachments:
+            type: array
+            items:
+              type: object
+              properties:
+                type: { type: string, enum: [image, code, link] }
+                url: { type: string }
+
+      strategy: count_based
+      event_count: 50
+      event_rate: 0.5  # One message every 2 seconds
+      progressive_evolution: true
+
+  # IoT sensor data stream
+  - path: /sensors/:sensor_id
+    replay:
+      mode: generated
+      narrative: |
+        Simulate IoT sensor data from a smart building management system.
+
+        Sensor types:
+        - Temperature sensors (HVAC control)
+        - Humidity sensors
+        - Occupancy sensors (people counting)
+        - Air quality sensors (CO2, VOC)
+        - Energy meters
+
+        Scenario: A typical workday
+        - Early morning: Low occupancy, optimal temperature
+        - Morning rush: Increasing occupancy, temperature rises
+        - Lunch time: Mixed occupancy
+        - Afternoon: Peak usage
+        - Evening: Decreasing occupancy, temperature normalizes
+
+        Show realistic correlations:
+        - Temperature rises with occupancy
+        - Humidity changes with HVAC activity
+        - CO2 levels track occupancy
+        - Energy usage correlates with HVAC load
+
+      event_type: sensor_reading
+
+      event_schema:
+        type: object
+        properties:
+          sensor_id:
+            type: string
+          sensor_type:
+            type: string
+            enum: [temperature, humidity, occupancy, air_quality, energy]
+          value:
+            type: number
+          unit:
+            type: string
+          location:
+            type: object
+            properties:
+              floor: { type: number }
+              room: { type: string }
+          timestamp:
+            type: string
+            format: date-time
+          status:
+            type: string
+            enum: [normal, warning, critical]
+
+      strategy: time_based
+      duration_secs: 600     # 10 minutes compressed workday
+      event_rate: 2.0
+      progressive_evolution: true
+
+  # Real-time notifications
+  - path: /notifications
+    replay:
+      mode: generated
+      narrative: |
+        Simulate real-time system notifications for a SaaS platform.
+
+        Notification types:
+        - New user signups
+        - Order confirmations
+        - Payment processing
+        - System alerts
+        - Usage milestones
+        - Security events
+
+        Mix of:
+        - High priority (security, payment failures)
+        - Normal priority (orders, signups)
+        - Low priority (usage stats, tips)
+
+        Include realistic timing patterns:
+        - Business hours: More user activity
+        - Nights: System maintenance, automated tasks
+        - Bursts during campaigns or issues
+
+      event_type: notification
+
+      event_schema:
+        type: object
+        properties:
+          id:
+            type: string
+          type:
+            type: string
+            enum: [signup, order, payment, alert, milestone, security]
+          priority:
+            type: string
+            enum: [low, normal, high, critical]
+          title:
+            type: string
+          message:
+            type: string
+          user_id:
+            type: string
+          timestamp:
+            type: string
+            format: date-time
+          metadata:
+            type: object
+          action_required:
+            type: boolean
+
+      strategy: time_based
+      duration_secs: 180
+      event_rate: 1.0
+      progressive_evolution: true
+
+  # Order tracking updates (augmented mode)
+  - path: /orders/:id/updates
+    replay:
+      mode: augmented
+      narrative: |
+        Enhance basic order tracking events with realistic details:
+        - Specific carrier information
+        - GPS coordinates for tracking
+        - Estimated delivery windows
+        - Realistic delays and updates
+        - Customer communication
+
+      # Base events to augment
+      events_file: base-order-events.json
+
+      event_type: order_update
+      strategy: count_based
+      event_count: 20
+      event_rate: 2.0
+
+# HTTP endpoints for testing
+endpoints:
+  - path: /health
+    method: GET
+    response:
+      body:
+        status: ok
+        websockets: [market-data, chat, sensors, notifications, orders]
+
+  - path: /market-data/snapshot
+    method: GET
+    response:
+      mode: intelligent
+      prompt: "Generate current market snapshot for tech stocks"
+      schema:
+        type: object
+        properties:
+          timestamp: { type: string }
+          market_status: { type: string }
+          stocks:
+            type: array
+            items:
+              type: object
+              properties:
+                symbol: { type: string }
+                price: { type: number }
+                change: { type: number }

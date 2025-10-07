@@ -1,3 +1,5 @@
+pub mod ai_event_generator;
+
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::{response::IntoResponse, routing::get, Router};
@@ -8,6 +10,9 @@ use tokio::time::{sleep, Duration};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use tracing::*;
+
+// Re-export AI event generator utilities
+pub use ai_event_generator::{AiEventGenerator, WebSocketAiConfig};
 
 /// Build the WebSocket router (exposed for tests and embedding)
 pub fn router() -> Router {
