@@ -1,7 +1,28 @@
 import { logger } from '@/utils/logger';
-import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import React, { useMemo } from 'react';
+import { Pie, Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import type { FailureMetrics } from '../../types';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 interface FailureCounterProps {
   metrics: FailureMetrics[];
@@ -11,33 +32,6 @@ interface FailureCounterProps {
 
 export function FailureCounter({ metrics, selectedService, onServiceChange }: FailureCounterProps) {
   const selectedMetric = selectedService ? metrics.find(m => m.service === selectedService) : metrics[0];
-
-  const getSuccessFailureData = () => {
-    if (!selectedMetric) return [];
-    
-    return [
-      {
-        name: 'Success',
-        value: selectedMetric.success_count,
-        color: '#10b981',
-      },
-      {
-        name: 'Failure',
-        value: selectedMetric.failure_count,
-        color: '#ef4444',
-      },
-    ];
-  };
-
-  const getStatusCodeData = () => {
-    if (!selectedMetric) return [];
-    
-    return Object.entries(selectedMetric.status_codes || {}).map(([code, count]) => ({
-      status_code: code,
-      count,
-      color: getStatusCodeColor(parseInt(code)),
-    }));
-  };
 
   const getStatusCodeColor = (code: number) => {
     if (code >= 200 && code < 300) return '#10b981'; // green
@@ -51,23 +45,105 @@ export function FailureCounter({ metrics, selectedService, onServiceChange }: Fa
     return `${(rate * 100).toFixed(2)}%`;
   };
 
-  const successFailureData = getSuccessFailureData();
-  const statusCodeData = getStatusCodeData();
+  // Pie chart data for success/failure
+  const pieChartData = useMemo(() => {
+    if (!selectedMetric) return { labels: [], datasets: [] };
 
-  const renderCustomTooltip = (data: { active?: boolean; payload?: Array<{ payload: { name: string; value: number } }> }) => {
-    if (data.active && data.payload && data.payload[0]) {
-      const payload = data.payload[0].payload;
-      return (
-        <div className="bg-white p-3 border border-gray-200 rounded shadow">
-          <p className="font-medium">{payload.name}</p>
-          <p className="text-sm text-gray-600">
-            {payload.value} requests ({((payload.value / (selectedMetric?.total_requests || 1)) * 100).toFixed(1)}%)
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+    return {
+      labels: ['Success', 'Failure'],
+      datasets: [
+        {
+          data: [selectedMetric.success_count, selectedMetric.failure_count],
+          backgroundColor: ['#10b981', '#ef4444'],
+          borderColor: ['#10b981', '#ef4444'],
+          borderWidth: 1,
+        },
+      ],
+    };
+  }, [selectedMetric]);
+
+  const pieChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const value = context.parsed;
+            const total = selectedMetric?.total_requests || 1;
+            const percentage = ((value / total) * 100).toFixed(1);
+            return `${context.label}: ${value} requests (${percentage}%)`;
+          },
+        },
+      },
+    },
+  }), [selectedMetric]);
+
+  // Bar chart data for status codes
+  const barChartData = useMemo(() => {
+    if (!selectedMetric) return { labels: [], datasets: [] };
+
+    const statusCodeEntries = Object.entries(selectedMetric.status_codes || {});
+    const codes = statusCodeEntries.map(([code]) => code);
+    const counts = statusCodeEntries.map(([, count]) => count);
+    const colors = statusCodeEntries.map(([code]) => getStatusCodeColor(parseInt(code)));
+
+    return {
+      labels: codes,
+      datasets: [
+        {
+          label: 'Requests',
+          data: counts,
+          backgroundColor: colors,
+          borderColor: colors,
+          borderWidth: 1,
+        },
+      ],
+    };
+  }, [selectedMetric]);
+
+  const barChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => `${context.parsed.y} requests`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.05)',
+        },
+        ticks: {
+          font: {
+            size: 12,
+          },
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.05)',
+        },
+        ticks: {
+          font: {
+            size: 12,
+          },
+        },
+      },
+    },
+  }), []);
 
   return (
     <div className="space-y-6">
@@ -117,27 +193,10 @@ export function FailureCounter({ metrics, selectedService, onServiceChange }: Fa
         {/* Success/Failure Pie Chart */}
         <div className="rounded-lg border bg-card p-6">
           <h4 className="font-semibold mb-4">Success vs Failure</h4>
-          
-          {successFailureData.length > 0 && selectedMetric ? (
+
+          {selectedMetric ? (
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={successFailureData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {successFailureData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={renderCustomTooltip} />
-                </PieChart>
-              </ResponsiveContainer>
+              <Pie data={pieChartData} options={pieChartOptions} />
             </div>
           ) : (
             <div className="flex items-center justify-center h-64 text-center">
@@ -165,30 +224,10 @@ export function FailureCounter({ metrics, selectedService, onServiceChange }: Fa
         {/* Status Code Distribution */}
         <div className="rounded-lg border bg-card p-6">
           <h4 className="font-semibold mb-4">Status Code Distribution</h4>
-          
-          {statusCodeData.length > 0 ? (
+
+          {selectedMetric && Object.keys(selectedMetric.status_codes || {}).length > 0 ? (
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusCodeData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis dataKey="status_code" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip 
-                    formatter={(value: number) => [`${value} requests`, 'Count']}
-                    labelStyle={{ color: '#000' }}
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                    }}
-                  />
-                  <Bar dataKey="count" name="count">
-                    {statusCodeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <Bar data={barChartData} options={barChartOptions} />
             </div>
           ) : (
             <div className="flex items-center justify-center h-64 text-center">

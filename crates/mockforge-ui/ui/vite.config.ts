@@ -1,9 +1,25 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
+import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    visualizer({
+      filename: './dist/stats.html',
+      open: false,
+      gzipSize: true,
+      brotliSize: true,
+      template: 'treemap', // or 'sunburst', 'network'
+    }),
+  ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     proxy: {
       '/__mockforge': {
@@ -43,12 +59,8 @@ export default defineConfig({
             }
             return 'query-vendor';
           }
-          // Monaco Editor (large library)
-          if (id.includes('node_modules/monaco-editor') || id.includes('node_modules/@monaco-editor')) {
-            return 'editor-vendor';
-          }
-          // Charts library
-          if (id.includes('node_modules/recharts')) {
+          // Chart.js library
+          if (id.includes('node_modules/chart.js') || id.includes('node_modules/react-chartjs-2')) {
             return 'chart-vendor';
           }
           // Zustand state management

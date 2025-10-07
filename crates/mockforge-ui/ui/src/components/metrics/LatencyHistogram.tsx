@@ -1,7 +1,26 @@
 import { logger } from '@/utils/logger';
-import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import React, { useMemo } from 'react';
+import { Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import type { LatencyMetrics } from '../../types';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 interface LatencyHistogramProps {
   metrics: LatencyMetrics[];
@@ -22,16 +41,60 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
     return '#dc2626'; // dark red
   };
 
-  const formatTooltip = (value: number, name: string) => {
-    if (name === 'count') {
-      return [`${value} requests`, 'Count'];
-    }
-    return [value, name];
-  };
+  const chartData = useMemo(() => ({
+    labels: histogramData.map(d => d.range || ''),
+    datasets: [
+      {
+        label: 'Request Count',
+        data: histogramData.map(d => d.count || 0),
+        backgroundColor: histogramData.map(d => getBarColor(d.range || '')),
+        borderColor: histogramData.map(d => getBarColor(d.range || '')),
+        borderWidth: 1,
+      },
+    ],
+  }), [histogramData]);
 
-  const formatPercentage = (percentage: number) => {
-    return `${percentage.toFixed(1)}%`;
-  };
+  const chartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => `${context.parsed.y} requests`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.05)',
+        },
+        ticks: {
+          font: {
+            size: 12,
+          },
+          maxRotation: 45,
+          minRotation: 45,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.05)',
+        },
+        ticks: {
+          font: {
+            size: 12,
+          },
+        },
+      },
+    },
+  }), []);
 
   return (
     <div className="rounded-lg border bg-card p-6">
@@ -72,43 +135,7 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
 
       <div className="h-80">
         {histogramData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis
-                dataKey="range"
-                angle={-45}
-                textAnchor="end"
-                height={80}
-                fontSize={12}
-              />
-              <YAxis
-                yAxisId="count"
-                orientation="left"
-                fontSize={12}
-              />
-              <YAxis
-                yAxisId="percentage"
-                orientation="right"
-                fontSize={12}
-                tickFormatter={formatPercentage}
-              />
-              <Tooltip
-                formatter={formatTooltip}
-                labelStyle={{ color: '#000' }}
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                }}
-              />
-              <Bar yAxisId="count" dataKey="count" name="count">
-                {histogramData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={getBarColor(entry.range || '')} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <Bar data={chartData} options={chartOptions} />
         ) : (
           <div className="flex items-center justify-center h-full text-center">
             <div className="space-y-2">

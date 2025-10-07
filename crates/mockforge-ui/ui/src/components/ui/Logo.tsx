@@ -5,6 +5,7 @@ interface LogoProps {
   variant?: 'full' | 'icon';
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
+  loading?: 'lazy' | 'eager';
 }
 
 const sizeClasses = {
@@ -14,22 +15,26 @@ const sizeClasses = {
   xl: 'h-12 w-auto'
 };
 
-export function Logo({ variant = 'full', size = 'md', className = '' }: LogoProps) {
+export function Logo({ variant = 'full', size = 'md', className = '', loading = 'eager' }: LogoProps) {
   const [imageError, setImageError] = useState(false);
 
   // Select appropriate asset based on variant and size for optimal display
   const getLogoSrc = () => {
     if (variant === 'icon') {
       switch (size) {
-        case 'md': return '/mockforge-icon-32.png'; // 32px for md size
-        case 'xl': return '/mockforge-icon-48.png'; // 48px for xl size
-        default: return '/mockforge-icon.png'; // fallback for other sizes
+        case 'sm': return '/mockforge-icon-32.png'; // 32px for sm size (optimized)
+        case 'md': return '/mockforge-icon-32.png'; // 32px for md size (optimized)
+        case 'lg': return '/mockforge-icon-48.png'; // 48px for lg size (optimized)
+        case 'xl': return '/mockforge-icon-48.png'; // 48px for xl size (optimized)
+        default: return '/mockforge-icon-48.png'; // fallback to optimized 48px
       }
     } else {
       switch (size) {
-        case 'lg': return '/mockforge-logo-40.png'; // 40px height for lg size
-        case 'xl': return '/mockforge-logo-80.png'; // 80px height for xl size
-        default: return '/mockforge-logo.png'; // fallback for other sizes
+        case 'sm': return '/mockforge-logo-40.png'; // 40px for sm size (optimized)
+        case 'md': return '/mockforge-logo-40.png'; // 40px for md size (optimized)
+        case 'lg': return '/mockforge-logo-40.png'; // 40px height for lg size (optimized)
+        case 'xl': return '/mockforge-logo-80.png'; // 80px height for xl size (optimized)
+        default: return '/mockforge-logo-80.png'; // fallback to optimized 80px
       }
     }
   };
@@ -52,6 +57,7 @@ export function Logo({ variant = 'full', size = 'md', className = '' }: LogoProp
       src={logoSrc}
       alt={altText}
       className={`${sizeClasses[size]} ${className}`}
+      loading={loading}
       onError={() => setImageError(true)}
     />
   );
