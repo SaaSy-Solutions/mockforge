@@ -4,6 +4,9 @@
 [![Documentation](https://docs.rs/mockforge/badge.svg)](https://docs.rs/mockforge)
 [![Book](https://img.shields.io/badge/book-read%20online-blue.svg)](https://docs.mockforge.dev/)
 [![CI](https://github.com/SaaSy-Solutions/mockforge/workflows/CI/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
+[![Tests](https://github.com/SaaSy-Solutions/mockforge/workflows/Tests/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
+[![Coverage](https://codecov.io/gh/SaaSy-Solutions/mockforge/branch/main/graph/badge.svg)](https://codecov.io/gh/SaaSy-Solutions/mockforge)
+[![Benchmarks](https://img.shields.io/badge/benchmarks-criterion-blue)](https://github.com/SaaSy-Solutions/mockforge/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
 MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.
