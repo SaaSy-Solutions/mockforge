@@ -1,0 +1,36 @@
+{
+  "regression_threshold": 5.0,
+  "improvement_threshold": 5.0,
+  "baseline_storage": ".github/benchmarks/baseline.json",
+  "alerts": {
+    "enabled": true,
+    "on_regression": true,
+    "on_improvement": false
+  },
+  "benchmarks": {
+    "template_rendering/simple": {
+      "max_mean_ns": 50000,
+      "description": "Simple template rendering"
+    },
+    "template_rendering/complex": {
+      "max_mean_ns": 200000,
+      "description": "Complex template rendering"
+    },
+    "json_validation/simple": {
+      "max_mean_ns": 100000,
+      "description": "Simple JSON schema validation"
+    },
+    "json_validation/complex": {
+      "max_mean_ns": 500000,
+      "description": "Complex JSON schema validation"
+    },
+    "openapi_parsing/small_spec": {
+      "max_mean_ns": 1000000,
+      "description": "Small OpenAPI spec parsing"
+    },
+    "openapi_parsing/medium_spec_10_paths": {
+      "max_mean_ns": 5000000,
+      "description": "Medium OpenAPI spec parsing (10 paths)"
+    }
+  }
+}

@@ -117,6 +117,10 @@ mutants.out/
 mutants-report.json
 .mutants.out.old/
 
+# Performance monitoring
+benchmark-report.md
+performance-dashboard.html
+
 # MockForge specific
 *.pcap
 *.har

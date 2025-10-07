@@ -14,15 +14,21 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  REGRESSION_THRESHOLD: 5.0
 
 jobs:
   benchmark:
     name: Run Benchmarks
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for baseline comparison
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -45,17 +51,64 @@ jobs:
           path: target
           key: ${{ runner.os }}-target-bench-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Fetch baseline from main branch
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Fetching baseline from main branch..."
+          git fetch origin main:main || true
+          git show main:.github/benchmarks/baseline.json > .github/benchmarks/baseline.json.tmp 2>/dev/null || echo "{}" > .github/benchmarks/baseline.json.tmp
+          mv .github/benchmarks/baseline.json.tmp .github/benchmarks/baseline.json
+
       - name: Run benchmarks
         run: |
           cd crates/mockforge-core
-          cargo bench --bench core_benchmarks -- --save-baseline pr-${{ github.event.number || 'main' }}
+          cargo bench --bench core_benchmarks -- --save-baseline current
+
+      - name: Make comparison script executable
+        run: chmod +x .github/scripts/compare-benchmarks.js
+
+      - name: Compare benchmarks against baseline
+        if: github.event_name == 'pull_request'
+        id: compare
+        continue-on-error: true
+        run: |
+          node .github/scripts/compare-benchmarks.js compare
+          echo "comparison_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Save new baseline (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "Saving new baseline from main branch..."
+          node .github/scripts/compare-benchmarks.js save-baseline
+
+      - name: Commit baseline updates (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/benchmarks/baseline.json
+          git diff --staged --quiet || git commit -m "chore: update benchmark baseline [skip ci]"
+          git push
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
-          path: target/criterion/
+          name: benchmark-results-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'main' }}
+          path: |
+            target/criterion/
+            benchmark-report.md
           retention-days: 30
+
+      - name: Generate performance dashboard
+        run: |
+          node .github/scripts/generate-dashboard.js
+
+      - name: Upload dashboard
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-dashboard
+          path: performance-dashboard.html
+          retention-days: 90
 
       - name: Comment PR with benchmark results
         if: github.event_name == 'pull_request'
@@ -63,19 +116,56 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
 
-            let comment = '## 📊 Benchmark Results\n\n';
-            comment += 'Benchmarks have been run. ';
-            comment += 'Download the artifacts to see detailed results.\n\n';
-            comment += '### Quick Summary\n';
-            comment += '- ✅ Benchmarks completed successfully\n';
-            comment += '- 📁 Results available in artifacts\n';
-            comment += '- 🔍 Review the HTML reports for detailed analysis\n';
+            // Read the benchmark report
+            let report = '';
+            try {
+              report = fs.readFileSync('benchmark-report.md', 'utf8');
+            } catch (err) {
+              report = '## 📊 Benchmark Results\n\n';
+              report += '⚠️ Could not load detailed benchmark comparison.\n';
+              report += 'Download the artifacts to see results.\n';
+            }
 
-            github.rest.issues.createComment({
+            // Add links to artifacts and dashboard
+            report += '\n---\n\n';
+            report += '### Additional Resources\n\n';
+            report += '- 📁 [Download detailed results](../../actions/runs/${{ github.run_id }})\n';
+            report += '- 📊 [View performance dashboard](../../actions/runs/${{ github.run_id }})\n';
+            report += '- 🔍 [Review HTML reports](../../actions/runs/${{ github.run_id }})\n';
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
+              repo: context.repo.repo
             });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('📊 Performance Benchmark Report')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            }
+
+      - name: Check for performance regression
+        if: github.event_name == 'pull_request' && steps.compare.outputs.comparison_status == '1'
+        run: |
+          echo "::error::Performance regression detected! Review the benchmark report for details."
+          exit 1
