@@ -243,14 +243,60 @@ When `--include-meta` is used, a `.mockforge-meta.json` file is created:
 5. **Version Control**: Commit exported files to track configuration changes
 6. **Exclude Sensitive Data**: Use exclude patterns for test/development workspaces
 
+## Cross-Platform Usage
+
+MockForge workspace sync works seamlessly across Windows, Linux, and macOS. See [Cross-Platform Guide](docs/CROSS_PLATFORM_GUIDE.md) for detailed information.
+
+### Windows Users
+
+```powershell
+# Use forward slashes (recommended) or backslashes
+mockforge workspace sync --target-dir C:/workspace-sync
+mockforge workspace sync --target-dir "C:\Program Files\MockForge\sync"
+
+# For paths with spaces, use quotes
+mockforge workspace sync --target-dir "C:/My Documents/API Configs"
+
+# Drive letters and UNC paths are supported
+mockforge workspace sync --target-dir D:/sync
+mockforge workspace sync --target-dir \\server\share\mockforge
+```
+
+**Note**: If you encounter path length issues (>260 characters), enable long path support in Windows or use shorter paths.
+
+### Linux/macOS Users
+
+```bash
+# Use forward slashes
+mockforge workspace sync --target-dir ~/workspace-sync
+mockforge workspace sync --target-dir /var/mockforge/sync
+
+# Ensure proper permissions
+chmod 755 ~/workspace-sync
+```
+
 ## Troubleshooting
 
 ### Common Issues
 
 **Permission Denied**: Ensure write access to the target directory
+- Linux/macOS: Check permissions with `ls -la` and adjust with `chmod`
+- Windows: Run as Administrator or check folder permissions
+
 **Path Not Found**: The target directory will be created automatically
+- Ensure parent directories exist and are accessible
+
 **Invalid Workspace IDs**: Use `mockforge workspace list` to see available workspaces
+
 **Regex Errors**: Test your exclude patterns with a regex tester
+
+**Git Commands Fail**: Ensure Git is installed and in your PATH
+- Linux: `sudo apt-get install git` or `sudo yum install git`
+- macOS: `brew install git`
+- Windows: Download from https://git-scm.com/download/win
+
+**Path Too Long (Windows)**: Enable long path support or use shorter paths
+- See [Cross-Platform Guide](docs/CROSS_PLATFORM_GUIDE.md) for instructions
 
 ### Recovery
 

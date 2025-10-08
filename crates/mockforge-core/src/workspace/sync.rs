@@ -464,10 +464,13 @@ impl WorkspaceSyncManager {
     ) -> Result<(), String> {
         use std::process::Command;
 
+        // Convert path to string using to_string_lossy for cross-platform compatibility
+        let repo_path_str = repo_path.to_string_lossy();
+
         if repo_path.exists() {
             // Repository exists, pull latest changes
             let output = Command::new("git")
-                .args(["-C", &repo_path.to_string_lossy(), "pull", "origin", branch])
+                .args(["-C", repo_path_str.as_ref(), "pull", "origin", branch])
                 .output()
                 .map_err(|e| format!("Failed to pull repository: {}", e))?;
 
@@ -490,7 +493,7 @@ impl WorkspaceSyncManager {
                     "--branch",
                     branch,
                     &clone_url,
-                    &repo_path.to_string_lossy(),
+                    repo_path_str.as_ref(),
                 ])
                 .output()
                 .map_err(|e| format!("Failed to clone repository: {}", e))?;
@@ -513,7 +516,10 @@ impl WorkspaceSyncManager {
     ) -> Result<(), String> {
         use std::process::Command;
 
+        // Use to_string_lossy for safe cross-platform path conversion
         let repo_path_str = repo_path.to_string_lossy();
+
+        // Calculate relative path for git commands (works across platforms)
         let file_path_str = workspace_file
             .strip_prefix(repo_path)
             .unwrap_or(workspace_file)
@@ -521,7 +527,7 @@ impl WorkspaceSyncManager {
 
         // Add file
         let output = Command::new("git")
-            .args(["-C", &repo_path_str, "add", &file_path_str])
+            .args(["-C", repo_path_str.as_ref(), "add", file_path_str.as_ref()])
             .output()
             .map_err(|e| format!("Failed to add file to git: {}", e))?;
 
@@ -532,7 +538,7 @@ impl WorkspaceSyncManager {
 
         // Check if there are changes to commit
         let status_output = Command::new("git")
-            .args(["-C", &repo_path_str, "status", "--porcelain"])
+            .args(["-C", repo_path_str.as_ref(), "status", "--porcelain"])
             .output()
             .map_err(|e| format!("Failed to check git status: {}", e))?;
 
@@ -543,7 +549,7 @@ impl WorkspaceSyncManager {
 
         // Commit changes
         let output = Command::new("git")
-            .args(["-C", &repo_path_str, "commit", "-m", "Update workspace"])
+            .args(["-C", repo_path_str.as_ref(), "commit", "-m", "Update workspace"])
             .output()
             .map_err(|e| format!("Failed to commit changes: {}", e))?;
 
@@ -554,7 +560,7 @@ impl WorkspaceSyncManager {
 
         // Push changes
         let output = Command::new("git")
-            .args(["-C", &repo_path_str, "push", "origin", "HEAD"])
+            .args(["-C", repo_path_str.as_ref(), "push", "origin", "HEAD"])
             .output()
             .map_err(|e| format!("Failed to push changes: {}", e))?;
 
