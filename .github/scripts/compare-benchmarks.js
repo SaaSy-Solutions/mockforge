@@ -34,11 +34,11 @@ function parseCriterionResults(criterionPath) {
 
             if (entry.isDirectory()) {
                 walkDir(fullPath, prefix ? `${prefix}/${entry.name}` : entry.name);
-            } else if (entry.name === 'benchmark.json') {
-                // Read and parse benchmark.json
+            } else if (entry.name === 'estimates.json') {
+                // Read and parse estimates.json (actual timing data)
                 try {
                     const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-                    const benchName = prefix.replace(/\/(new|base)$/, '');
+                    const benchName = prefix.replace(/\/(new|base|current|main)$/, '');
 
                     if (!results[benchName]) {
                         results[benchName] = {};

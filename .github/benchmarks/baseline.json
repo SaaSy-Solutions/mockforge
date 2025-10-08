@@ -1,26 +1,242 @@
 {
-  "data_generation/generate_single_record/current": {},
-  "data_generation/generate_single_record": {},
-  "encryption/placeholder/current": {},
-  "encryption/placeholder": {},
-  "json_validation/complex/current": {},
-  "json_validation/complex": {},
-  "json_validation/simple/current": {},
-  "json_validation/simple": {},
-  "memory/deep_template_rendering/current": {},
-  "memory/deep_template_rendering": {},
-  "memory/large_data_validation/current": {},
-  "memory/large_data_validation": {},
-  "memory/large_spec_parsing/current": {},
-  "memory/large_spec_parsing": {},
-  "openapi_parsing/medium_spec_10_paths/current": {},
-  "openapi_parsing/medium_spec_10_paths": {},
-  "openapi_parsing/small_spec/current": {},
-  "openapi_parsing/small_spec": {},
-  "template_rendering/arrays/current": {},
-  "template_rendering/arrays": {},
-  "template_rendering/complex/current": {},
-  "template_rendering/complex": {},
-  "template_rendering/simple/current": {},
-  "template_rendering/simple": {}
+  "data_generation/generate_single_record": {
+    "base": {
+      "mean": 0.6736519937303684,
+      "stddev": 0.07336727507450812,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 0.5337130275271764,
+      "stddev": 0.05470231993942531,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 0.6736519937303684,
+      "stddev": 0.07336727507450812,
+      "unit": "ns"
+    }
+  },
+  "data_generation/generate_single_record/change": {
+    "change": {
+      "mean": 0.026062634056390088,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "encryption/placeholder": {
+    "base": {
+      "mean": 1.387720005334994,
+      "stddev": 0.15245728696600644,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 1.094343223950961,
+      "stddev": 0.13320258054376768,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 1.387720005334994,
+      "stddev": 0.15245728696600644,
+      "unit": "ns"
+    }
+  },
+  "encryption/placeholder/change": {
+    "change": {
+      "mean": 0.0021147101457337225,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "json_validation/complex": {
+    "base": {
+      "mean": 10455.902746199556,
+      "stddev": 1329.5812421616067,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 9548.846604171187,
+      "stddev": 956.2645111301439,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 10455.902746199556,
+      "stddev": 1329.5812421616067,
+      "unit": "ns"
+    }
+  },
+  "json_validation/complex/change": {
+    "change": {
+      "mean": -0.02343183703963614,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "json_validation/simple": {
+    "base": {
+      "mean": 4088.778394066903,
+      "stddev": 606.9355750711551,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 3551.376117880172,
+      "stddev": 314.32861244453363,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 4088.778394066903,
+      "stddev": 606.9355750711551,
+      "unit": "ns"
+    }
+  },
+  "json_validation/simple/change": {
+    "change": {
+      "mean": 0.0027469332402452196,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "memory/deep_template_rendering": {
+    "base": {
+      "mean": 3282.7615042065468,
+      "stddev": 174.8877245872483,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 3282.7615042065468,
+      "stddev": 174.8877245872483,
+      "unit": "ns"
+    }
+  },
+  "memory/large_spec_parsing": {
+    "base": {
+      "mean": 18163427.225168653,
+      "stddev": 2345385.232823054,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 18163427.225168653,
+      "stddev": 2345385.232823054,
+      "unit": "ns"
+    }
+  },
+  "openapi_parsing/medium_spec_10_paths": {
+    "base": {
+      "mean": 212692.9880012163,
+      "stddev": 27833.89639655776,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 173990.6775246743,
+      "stddev": 19971.577073177497,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 212692.9880012163,
+      "stddev": 27833.89639655776,
+      "unit": "ns"
+    }
+  },
+  "openapi_parsing/medium_spec_10_paths/change": {
+    "change": {
+      "mean": 0.07532420562960618,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "openapi_parsing/small_spec": {
+    "base": {
+      "mean": 27591.039585619732,
+      "stddev": 2161.2702782380757,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 21973.887356584062,
+      "stddev": 1673.6939363086392,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 27591.039585619732,
+      "stddev": 2161.2702782380757,
+      "unit": "ns"
+    }
+  },
+  "openapi_parsing/small_spec/change": {
+    "change": {
+      "mean": 0.039451713460311844,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "template_rendering/arrays": {
+    "base": {
+      "mean": 1206.6781561817074,
+      "stddev": 131.93088433623925,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 1040.7221574488683,
+      "stddev": 89.48829954622883,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 1206.6781561817074,
+      "stddev": 131.93088433623925,
+      "unit": "ns"
+    }
+  },
+  "template_rendering/arrays/change": {
+    "change": {
+      "mean": -0.012520969388122527,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "template_rendering/complex": {
+    "base": {
+      "mean": 1621.878473823985,
+      "stddev": 409.3979695900784,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 1233.089161256975,
+      "stddev": 136.33111319402136,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 1621.878473823985,
+      "stddev": 409.3979695900784,
+      "unit": "ns"
+    }
+  },
+  "template_rendering/complex/change": {
+    "change": {
+      "mean": -0.033158127071026056,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  },
+  "template_rendering/simple": {
+    "base": {
+      "mean": 1639.2257334044361,
+      "stddev": 775.8159790550359,
+      "unit": "ns"
+    },
+    "main": {
+      "mean": 1065.090056643764,
+      "stddev": 106.11456918815462,
+      "unit": "ns"
+    },
+    "new": {
+      "mean": 1639.2257334044361,
+      "stddev": 775.8159790550359,
+      "unit": "ns"
+    }
+  },
+  "template_rendering/simple/change": {
+    "change": {
+      "mean": -0.0805067931516884,
+      "stddev": 0,
+      "unit": "ns"
+    }
+  }
 }

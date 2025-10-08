@@ -1,0 +1,178 @@
+   Compiling ring v0.17.14
+   Compiling rustls v0.23.32
+   Compiling rustls-webpki v0.103.7
+   Compiling jsonwebtoken v9.3.1
+   Compiling tokio-rustls v0.26.4
+   Compiling hyper-rustls v0.27.7
+   Compiling reqwest v0.12.23
+   Compiling jsonschema v0.33.0
+   Compiling mockforge-core v0.1.0 (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-core)
+warning: unused import: `std::collections::HashMap`
+ --> crates/mockforge-core/src/contract_validation.rs:7:5
+  |
+7 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Algorithm`
+ --> crates/mockforge-core/src/protocol_abstraction/auth.rs:6:68
+  |
+6 | use jsonwebtoken::{decode, decode_header, DecodingKey, Validation, Algorithm};
+  |                                                                    ^^^^^^^^^
+
+warning: unused variable: `idx`
+   --> crates/mockforge-core/src/docker_compose.rs:116:14
+    |
+116 |         for (idx, service_spec) in services.iter().enumerate() {
+    |              ^^^ help: if this is intentional, prefix it with an underscore: `_idx`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/mockforge-core/src/docker_compose.rs:130:17
+    |
+130 |             let mut volumes = vec![
+    |                 ----^^^^^^^
+    |                 |
+    |                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `request`
+  --> crates/mockforge-core/src/protocol_abstraction/matcher.rs:11:27
+   |
+11 |     fn match_score(&self, request: &ProtocolRequest) -> f64 {
+   |                           ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+
+warning: field `log_bodies` is never read
+  --> crates/mockforge-core/src/protocol_abstraction/middleware.rs:12:5
+   |
+ 8 | pub struct LoggingMiddleware {
+   |            ----------------- field in this struct
+...
+12 |     log_bodies: bool,
+   |     ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+   Compiling mockforge-data v0.1.0 (/home/rclanan/dev/projects/work/mockforge/crates/mockforge-data)
+warning: field `current_time` is never read
+   --> crates/mockforge-data/src/replay_augmentation.rs:169:5
+    |
+167 | struct ScenarioState {
+    |        ------------- field in this struct
+168 |     /// Current timestamp in scenario
+169 |     current_time: std::time::Instant,
+    |     ^^^^^^^^^^^^
+    |
+    = note: `ScenarioState` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `mockforge-data` (lib) generated 1 warning
+warning: `mockforge-core` (lib) generated 6 warnings (run `cargo fix --lib -p mockforge-core` to apply 3 suggestions)
+    Finished `bench` profile [optimized] target(s) in 2m 45s
+     Running benches/core_benchmarks.rs (/home/rclanan/dev/projects/work/mockforge/target/release/deps/core_benchmarks-42aabff1b56b5808)
+Gnuplot not found, using plotters backend
+Benchmarking template_rendering/simple
+Benchmarking template_rendering/simple: Warming up for 3.0000 s
+Benchmarking template_rendering/simple: Collecting 100 samples in estimated 5.0012 s (3.7M iterations)
+Benchmarking template_rendering/simple: Analyzing
+template_rendering/simple
+                        time:   [1.4909 µs 1.6956 µs 1.9499 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) high mild
+  6 (6.00%) high severe
+Benchmarking template_rendering/complex
+Benchmarking template_rendering/complex: Warming up for 3.0000 s
+Benchmarking template_rendering/complex: Collecting 100 samples in estimated 5.0066 s (3.2M iterations)
+Benchmarking template_rendering/complex: Analyzing
+template_rendering/complex
+                        time:   [1.5002 µs 1.5668 µs 1.6541 µs]
+Found 20 outliers among 100 measurements (20.00%)
+  2 (2.00%) low mild
+  10 (10.00%) high mild
+  8 (8.00%) high severe
+Benchmarking template_rendering/arrays
+Benchmarking template_rendering/arrays: Warming up for 3.0000 s
+Benchmarking template_rendering/arrays: Collecting 100 samples in estimated 5.0022 s (4.0M iterations)
+Benchmarking template_rendering/arrays: Analyzing
+template_rendering/arrays
+                        time:   [1.1735 µs 1.2008 µs 1.2289 µs]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking json_validation/simple
+Benchmarking json_validation/simple: Warming up for 3.0000 s
+Benchmarking json_validation/simple: Collecting 100 samples in estimated 5.0078 s (1.3M iterations)
+Benchmarking json_validation/simple: Analyzing
+json_validation/simple  time:   [3.8695 µs 3.9681 µs 4.0736 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+Benchmarking json_validation/complex
+Benchmarking json_validation/complex: Warming up for 3.0000 s
+Benchmarking json_validation/complex: Collecting 100 samples in estimated 5.0194 s (460k iterations)
+Benchmarking json_validation/complex: Analyzing
+json_validation/complex time:   [9.9445 µs 10.184 µs 10.434 µs]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking openapi_parsing/small_spec
+Benchmarking openapi_parsing/small_spec: Warming up for 3.0000 s
+Benchmarking openapi_parsing/small_spec: Collecting 100 samples in estimated 5.0583 s (197k iterations)
+Benchmarking openapi_parsing/small_spec: Analyzing
+openapi_parsing/small_spec
+                        time:   [27.164 µs 27.918 µs 28.835 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  1 (1.00%) low severe
+  8 (8.00%) low mild
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+Benchmarking openapi_parsing/medium_spec_10_paths
+Benchmarking openapi_parsing/medium_spec_10_paths: Warming up for 3.0000 s
+Benchmarking openapi_parsing/medium_spec_10_paths: Collecting 100 samples in estimated 5.0024 s (25k iterations)
+Benchmarking openapi_parsing/medium_spec_10_paths: Analyzing
+openapi_parsing/medium_spec_10_paths
+                        time:   [215.15 µs 222.86 µs 231.84 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking data_generation/generate_single_record
+Benchmarking data_generation/generate_single_record: Warming up for 3.0000 s
+Benchmarking data_generation/generate_single_record: Collecting 100 samples in estimated 5.0000 s (6.5B iterations)
+Benchmarking data_generation/generate_single_record: Analyzing
+data_generation/generate_single_record
+                        time:   [649.78 ps 666.45 ps 681.64 ps]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+
+Benchmarking encryption/placeholder
+Benchmarking encryption/placeholder: Warming up for 3.0000 s
+Benchmarking encryption/placeholder: Collecting 100 samples in estimated 5.0000 s (3.7B iterations)
+Benchmarking encryption/placeholder: Analyzing
+encryption/placeholder  time:   [1.4249 ns 1.4526 ns 1.4857 ns]
+Found 14 outliers among 100 measurements (14.00%)
+  5 (5.00%) low severe
+  8 (8.00%) low mild
+  1 (1.00%) high severe
+
+Benchmarking memory/large_spec_parsing
+Benchmarking memory/large_spec_parsing: Warming up for 3.0000 s
+Benchmarking memory/large_spec_parsing: Collecting 10 samples in estimated 5.8782 s (220 iterations)
+Benchmarking memory/large_spec_parsing: Analyzing
+memory/large_spec_parsing
+                        time:   [16.675 ms 17.591 ms 18.805 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking memory/deep_template_rendering
+Benchmarking memory/deep_template_rendering: Warming up for 3.0000 s
+Benchmarking memory/deep_template_rendering: Collecting 10 samples in estimated 5.0002 s (1.2M iterations)
+Benchmarking memory/deep_template_rendering: Analyzing
+memory/deep_template_rendering
+                        time:   [3.1664 µs 3.2470 µs 3.4093 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking memory/large_data_validation
+Benchmarking memory/large_data_validation: Warming up for 3.0000 s
+Benchmarking memory/large_data_validation: Collecting 10 samples in estimated 5.0091 s (13k iterations)
