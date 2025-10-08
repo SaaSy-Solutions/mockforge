@@ -1,6 +1,7 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use mockforge_core::encryption::init_key_store;
+use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
 use mockforge_data;
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_grpc;
@@ -607,6 +608,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             admin_port,
             metrics,
             metrics_port,
+            tracing,
+            tracing_service_name,
+            tracing_environment,
+            jaeger_endpoint,
+            tracing_sampling_rate,
+            recorder,
+            recorder_db,
+            recorder_no_api,
+            recorder_api_port,
+            recorder_max_requests,
+            recorder_retention_days,
+            chaos,
+            chaos_scenario,
+            chaos_latency_ms,
+            chaos_latency_range,
+            chaos_latency_probability,
+            chaos_http_errors,
+            chaos_http_error_probability,
+            chaos_rate_limit,
+            chaos_bandwidth_limit,
+            chaos_packet_loss,
+            chaos_grpc: _,
+            chaos_grpc_status_codes: _,
+            chaos_grpc_stream_interruption_probability: _,
+            chaos_websocket: _,
+            chaos_websocket_close_codes: _,
+            chaos_websocket_message_drop_probability: _,
+            chaos_websocket_message_corruption_probability: _,
+            chaos_graphql: _,
+            chaos_graphql_error_codes: _,
+            chaos_graphql_partial_data_probability: _,
+            chaos_graphql_resolver_latency: _,
+            circuit_breaker: _,
+            circuit_breaker_failure_threshold: _,
+            circuit_breaker_success_threshold: _,
+            circuit_breaker_timeout_ms: _,
+            circuit_breaker_failure_rate: _,
+            bulkhead: _,
+            bulkhead_max_concurrent: _,
+            bulkhead_max_queue: _,
+            bulkhead_queue_timeout_ms: _,
             spec,
             ws_replay_file,
             traffic_shaping,
@@ -626,6 +668,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 admin_port,
                 metrics,
                 metrics_port,
+                tracing,
+                tracing_service_name,
+                tracing_environment,
+                jaeger_endpoint,
+                tracing_sampling_rate,
+                recorder,
+                recorder_db,
+                recorder_no_api,
+                recorder_api_port,
+                recorder_max_requests,
+                recorder_retention_days,
+                chaos,
+                chaos_scenario,
+                chaos_latency_ms,
+                chaos_latency_range,
+                chaos_latency_probability,
+                chaos_http_errors,
+                chaos_http_error_probability,
+                chaos_rate_limit,
+                chaos_bandwidth_limit,
+                chaos_packet_loss,
                 spec,
                 ws_replay_file,
                 traffic_shaping,
@@ -721,8 +784,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-async fn handle_serve(
-    _config: Option<PathBuf>,
+/// Build ServerConfig from CLI arguments, config file, and environment variables
+/// Precedence: CLI args > Config file > Environment variables > Defaults
+async fn build_server_config_from_cli(
+    config_path: Option<PathBuf>,
     http_port: u16,
     ws_port: u16,
     grpc_port: u16,
@@ -730,8 +795,239 @@ async fn handle_serve(
     admin_port: u16,
     metrics: bool,
     metrics_port: u16,
+    tracing: bool,
+    tracing_service_name: String,
+    tracing_environment: String,
+    jaeger_endpoint: String,
+    tracing_sampling_rate: f64,
+    recorder: bool,
+    recorder_db: String,
+    recorder_no_api: bool,
+    recorder_api_port: Option<u16>,
+    recorder_max_requests: i64,
+    recorder_retention_days: i64,
+    chaos: bool,
+    chaos_scenario: Option<String>,
+    chaos_latency_ms: Option<u64>,
+    chaos_latency_range: Option<String>,
+    chaos_latency_probability: f64,
+    chaos_http_errors: Option<String>,
+    chaos_http_error_probability: f64,
+    chaos_rate_limit: Option<u32>,
+    chaos_bandwidth_limit: Option<u64>,
+    chaos_packet_loss: Option<f64>,
     spec: Option<PathBuf>,
-    _ws_replay_file: Option<PathBuf>,
+    ws_replay_file: Option<PathBuf>,
+    traffic_shaping: bool,
+    bandwidth_limit: u64,
+    burst_size: u64,
+    ai_enabled: bool,
+    rag_provider: Option<String>,
+    rag_model: Option<String>,
+    rag_api_key: Option<String>,
+) -> ServerConfig {
+    // Step 1: Load config from file if provided, otherwise use defaults
+    let mut config = if let Some(path) = config_path {
+        println!("📄 Loading configuration from: {}", path.display());
+        load_config_with_fallback(path).await
+    } else {
+        ServerConfig::default()
+    };
+
+    // Step 2: Apply environment variable overrides
+    config = apply_env_overrides(config);
+
+    // Step 3: Apply CLI argument overrides (CLI takes highest precedence)
+
+    // HTTP configuration
+    config.http.port = http_port;
+    if let Some(spec_path) = spec {
+        config.http.openapi_spec = Some(spec_path.to_string_lossy().to_string());
+    }
+
+    // WebSocket configuration
+    config.websocket.port = ws_port;
+    if let Some(replay_path) = ws_replay_file {
+        config.websocket.replay_file = Some(replay_path.to_string_lossy().to_string());
+    }
+
+    // gRPC configuration
+    config.grpc.port = grpc_port;
+
+    // Admin configuration
+    config.admin.enabled = admin;
+    config.admin.port = admin_port;
+
+    // Prometheus metrics configuration
+    config.observability.prometheus.enabled = metrics;
+    config.observability.prometheus.port = metrics_port;
+
+    // OpenTelemetry tracing configuration
+    if tracing {
+        config.observability.opentelemetry = Some(mockforge_core::OpenTelemetryConfig {
+            enabled: true,
+            service_name: tracing_service_name,
+            environment: tracing_environment,
+            jaeger_endpoint,
+            otlp_endpoint: None,
+            protocol: "grpc".to_string(),
+            sampling_rate: tracing_sampling_rate,
+        });
+    }
+
+    // API Flight Recorder configuration
+    if recorder {
+        config.observability.recorder = Some(mockforge_core::RecorderConfig {
+            enabled: true,
+            database_path: recorder_db,
+            api_enabled: !recorder_no_api,
+            api_port: recorder_api_port,
+            max_requests: recorder_max_requests,
+            retention_days: recorder_retention_days,
+            record_http: true,
+            record_grpc: true,
+            record_websocket: true,
+            record_graphql: true,
+        });
+    }
+
+    // Chaos engineering configuration
+    if chaos {
+        let mut chaos_config = mockforge_core::ChaosEngConfig {
+            enabled: true,
+            scenario: chaos_scenario,
+            latency: None,
+            fault_injection: None,
+            rate_limit: None,
+            traffic_shaping: None,
+        };
+
+        // Configure latency injection
+        if chaos_latency_ms.is_some() || chaos_latency_range.is_some() {
+            let random_delay_range_ms = chaos_latency_range.and_then(|range| {
+                let parts: Vec<&str> = range.split('-').collect();
+                if parts.len() == 2 {
+                    let min = parts[0].parse::<u64>().ok()?;
+                    let max = parts[1].parse::<u64>().ok()?;
+                    Some((min, max))
+                } else {
+                    None
+                }
+            });
+
+            chaos_config.latency = Some(mockforge_core::LatencyInjectionConfig {
+                enabled: true,
+                fixed_delay_ms: chaos_latency_ms,
+                random_delay_range_ms,
+                jitter_percent: 0.0,
+                probability: chaos_latency_probability,
+            });
+        }
+
+        // Configure fault injection
+        if chaos_http_errors.is_some() {
+            let http_errors = chaos_http_errors
+                .map(|errors| {
+                    errors
+                        .split(',')
+                        .filter_map(|s| s.trim().parse::<u16>().ok())
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            chaos_config.fault_injection = Some(mockforge_core::FaultConfig {
+                enabled: true,
+                http_errors,
+                http_error_probability: chaos_http_error_probability,
+                connection_errors: false,
+                connection_error_probability: 0.0,
+                timeout_errors: false,
+                timeout_ms: 30000,
+                timeout_probability: 0.0,
+            });
+        }
+
+        // Configure rate limiting
+        if let Some(rps) = chaos_rate_limit {
+            chaos_config.rate_limit = Some(mockforge_core::RateLimitingConfig {
+                enabled: true,
+                requests_per_second: rps,
+                burst_size: rps * 2,
+                per_ip: false,
+                per_endpoint: false,
+            });
+        }
+
+        // Configure traffic shaping
+        if chaos_bandwidth_limit.is_some() || chaos_packet_loss.is_some() {
+            chaos_config.traffic_shaping = Some(mockforge_core::NetworkShapingConfig {
+                enabled: true,
+                bandwidth_limit_bps: chaos_bandwidth_limit.unwrap_or(1_000_000),
+                packet_loss_percent: chaos_packet_loss.unwrap_or(0.0),
+                max_connections: 100,
+            });
+        }
+
+        config.observability.chaos = Some(chaos_config);
+    }
+
+    // Traffic shaping configuration (core feature)
+    if traffic_shaping {
+        config.core.traffic_shaping_enabled = true;
+        config.core.traffic_shaping.bandwidth.enabled = true;
+        config.core.traffic_shaping.bandwidth.max_bytes_per_sec = bandwidth_limit;
+        config.core.traffic_shaping.bandwidth.burst_capacity_bytes = burst_size;
+    }
+
+    // AI/RAG configuration
+    if ai_enabled {
+        config.data.rag.enabled = true;
+        if let Some(provider) = rag_provider {
+            config.data.rag.provider = provider;
+        }
+        if let Some(model) = rag_model {
+            config.data.rag.model = Some(model);
+        }
+        if let Some(api_key) = rag_api_key {
+            config.data.rag.api_key = Some(api_key);
+        }
+    }
+
+    config
+}
+
+async fn handle_serve(
+    config_path: Option<PathBuf>,
+    http_port: u16,
+    ws_port: u16,
+    grpc_port: u16,
+    admin: bool,
+    admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
+    tracing: bool,
+    tracing_service_name: String,
+    tracing_environment: String,
+    jaeger_endpoint: String,
+    tracing_sampling_rate: f64,
+    recorder: bool,
+    recorder_db: String,
+    recorder_no_api: bool,
+    recorder_api_port: Option<u16>,
+    recorder_max_requests: i64,
+    recorder_retention_days: i64,
+    chaos: bool,
+    chaos_scenario: Option<String>,
+    chaos_latency_ms: Option<u64>,
+    chaos_latency_range: Option<String>,
+    chaos_latency_probability: f64,
+    chaos_http_errors: Option<String>,
+    chaos_http_error_probability: f64,
+    chaos_rate_limit: Option<u32>,
+    chaos_bandwidth_limit: Option<u64>,
+    chaos_packet_loss: Option<f64>,
+    spec: Option<PathBuf>,
+    ws_replay_file: Option<PathBuf>,
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
@@ -740,34 +1036,107 @@ async fn handle_serve(
     rag_model: Option<String>,
     rag_api_key: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Build comprehensive server configuration
+    let config = build_server_config_from_cli(
+        config_path,
+        http_port,
+        ws_port,
+        grpc_port,
+        admin,
+        admin_port,
+        metrics,
+        metrics_port,
+        tracing,
+        tracing_service_name,
+        tracing_environment,
+        jaeger_endpoint,
+        tracing_sampling_rate,
+        recorder,
+        recorder_db,
+        recorder_no_api,
+        recorder_api_port,
+        recorder_max_requests,
+        recorder_retention_days,
+        chaos,
+        chaos_scenario,
+        chaos_latency_ms,
+        chaos_latency_range,
+        chaos_latency_probability,
+        chaos_http_errors,
+        chaos_http_error_probability,
+        chaos_rate_limit,
+        chaos_bandwidth_limit,
+        chaos_packet_loss,
+        spec.clone(),
+        ws_replay_file,
+        traffic_shaping,
+        bandwidth_limit,
+        burst_size,
+        ai_enabled,
+        rag_provider.clone(),
+        rag_model.clone(),
+        rag_api_key.clone(),
+    )
+    .await;
+
     println!("🚀 Starting MockForge servers...");
-    println!("📡 HTTP server on port {}", http_port);
-    println!("🔌 WebSocket server on port {}", ws_port);
-    println!("⚡ gRPC server on port {}", grpc_port);
-    if admin {
-        println!("🎛️ Admin UI on port {}", admin_port);
+    println!("📡 HTTP server on port {}", config.http.port);
+    println!("🔌 WebSocket server on port {}", config.websocket.port);
+    println!("⚡ gRPC server on port {}", config.grpc.port);
+
+    if config.admin.enabled {
+        println!("🎛️ Admin UI on port {}", config.admin.port);
     }
-    if metrics {
-        println!("📊 Metrics endpoint on port {}", metrics_port);
+
+    if config.observability.prometheus.enabled {
+        println!("📊 Metrics endpoint on port {}", config.observability.prometheus.port);
     }
-    if ai_enabled {
-        println!("🧠 AI features enabled");
-        if let Some(provider) = &rag_provider {
-            println!("🤖 AI Provider: {}", provider);
-        }
-        if let Some(model) = &rag_model {
-            println!("🧠 AI Model: {}", model);
+
+    if let Some(ref tracing_config) = config.observability.opentelemetry {
+        if tracing_config.enabled {
+            println!("🔍 OpenTelemetry tracing enabled");
+            println!("   Service: {}", tracing_config.service_name);
+            println!("   Environment: {}", tracing_config.environment);
+            println!("   Jaeger endpoint: {}", tracing_config.jaeger_endpoint);
         }
     }
 
-    // Set AI environment variables if provided
-    if let Some(api_key) = rag_api_key {
+    if let Some(ref recorder_config) = config.observability.recorder {
+        if recorder_config.enabled {
+            println!("📹 API Flight Recorder enabled");
+            println!("   Database: {}", recorder_config.database_path);
+            println!("   Max requests: {}", recorder_config.max_requests);
+        }
+    }
+
+    if let Some(ref chaos_config) = config.observability.chaos {
+        if chaos_config.enabled {
+            println!("🌀 Chaos engineering enabled");
+            if let Some(ref scenario) = chaos_config.scenario {
+                println!("   Scenario: {}", scenario);
+            }
+        }
+    }
+
+    if config.data.rag.enabled {
+        println!("🧠 AI features enabled");
+        println!("   Provider: {}", config.data.rag.provider);
+        if let Some(ref model) = config.data.rag.model {
+            println!("   Model: {}", model);
+        }
+    }
+
+    if config.core.traffic_shaping_enabled {
+        println!("🚦 Traffic shaping enabled");
+        println!("   Bandwidth limit: {} bytes/sec", config.core.traffic_shaping.bandwidth.max_bytes_per_sec);
+    }
+
+    // Set AI environment variables if configured
+    if let Some(ref api_key) = config.data.rag.api_key {
         std::env::set_var("MOCKFORGE_RAG_API_KEY", api_key);
     }
-    if let Some(provider) = rag_provider {
-        std::env::set_var("MOCKFORGE_RAG_PROVIDER", provider);
-    }
-    if let Some(model) = rag_model {
+    std::env::set_var("MOCKFORGE_RAG_PROVIDER", &config.data.rag.provider);
+    if let Some(ref model) = config.data.rag.model {
         std::env::set_var("MOCKFORGE_RAG_MODEL", model);
     }
 
@@ -775,17 +1144,11 @@ async fn handle_serve(
     init_key_store();
 
     // Build HTTP router with OpenAPI spec, chain support, and traffic shaping if enabled
-    let http_app = if traffic_shaping {
-        use mockforge_core::{
-            BandwidthConfig, BurstLossConfig, TrafficShaper, TrafficShapingConfig,
-        };
-        let config = TrafficShapingConfig {
-            bandwidth: BandwidthConfig::new(bandwidth_limit, burst_size),
-            burst_loss: BurstLossConfig::default(), // Disable burst loss for now
-        };
-        let traffic_shaper = Some(TrafficShaper::new(config));
+    let http_app = if config.core.traffic_shaping_enabled {
+        use mockforge_core::{TrafficShaper};
+        let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
         mockforge_http::build_router_with_traffic_shaping(
-            spec.as_ref().map(|p| p.to_string_lossy().to_string()),
+            config.http.openapi_spec.clone(),
             None,
             traffic_shaper,
             true,
@@ -794,7 +1157,7 @@ async fn handle_serve(
     } else {
         // Use chain-enabled router for standard operation
         mockforge_http::build_router_with_chains(
-            spec.as_ref().map(|p| p.to_string_lossy().to_string()),
+            config.http.openapi_spec.clone(),
             None,
             None, // Use default chain config
         )
@@ -803,12 +1166,12 @@ async fn handle_serve(
 
     println!(
         "✅ HTTP server configured with health check at http://localhost:{}/health",
-        http_port
+        config.http.port
     );
-    println!("✅ WebSocket server configured at ws://localhost:{}/ws", ws_port);
-    println!("✅ gRPC server configured at localhost:{}", grpc_port);
-    if admin {
-        println!("✅ Admin UI configured at http://localhost:{}", admin_port);
+    println!("✅ WebSocket server configured at ws://localhost:{}/ws", config.websocket.port);
+    println!("✅ gRPC server configured at localhost:{}", config.grpc.port);
+    if config.admin.enabled {
+        println!("✅ Admin UI configured at http://localhost:{}", config.admin.port);
     }
 
     println!("💡 Press Ctrl+C to stop");
@@ -818,6 +1181,7 @@ async fn handle_serve(
     let shutdown_token = CancellationToken::new();
 
     // Start HTTP server
+    let http_port = config.http.port;
     let http_shutdown = shutdown_token.clone();
     let http_handle = tokio::spawn(async move {
         println!("📡 HTTP server listening on http://localhost:{}", http_port);
@@ -832,6 +1196,7 @@ async fn handle_serve(
     });
 
     // Start WebSocket server
+    let ws_port = config.websocket.port;
     let ws_shutdown = shutdown_token.clone();
     let ws_handle = tokio::spawn(async move {
         println!("🔌 WebSocket server listening on ws://localhost:{}", ws_port);
@@ -846,6 +1211,7 @@ async fn handle_serve(
     });
 
     // Start gRPC server
+    let grpc_port = config.grpc.port;
     let grpc_shutdown = shutdown_token.clone();
     let grpc_handle = tokio::spawn(async move {
         println!("⚡ gRPC server listening on localhost:{}", grpc_port);
@@ -860,7 +1226,11 @@ async fn handle_serve(
     });
 
     // Start Admin UI server (if enabled)
-    let admin_handle = if admin {
+    let admin_handle = if config.admin.enabled {
+        let admin_port = config.admin.port;
+        let http_port = config.http.port;
+        let ws_port = config.websocket.port;
+        let grpc_port = config.grpc.port;
         let admin_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://localhost:{}", admin_port);
@@ -886,10 +1256,11 @@ async fn handle_serve(
     };
 
     // Start Prometheus metrics server (if enabled)
-    let metrics_handle = if metrics {
+    let metrics_handle = if config.observability.prometheus.enabled {
         use mockforge_observability::{get_global_registry, prometheus::prometheus_router};
         use std::sync::Arc;
 
+        let metrics_port = config.observability.prometheus.port;
         let metrics_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
             let registry = Arc::new(get_global_registry().clone());
@@ -1424,19 +1795,61 @@ async fn handle_init(
         println!("⚠️  Configuration file already exists: {}", config_path.display());
     } else {
         let config_content = r#"# MockForge Configuration
+# Full configuration reference: https://docs.mockforge.dev/config
+
+# HTTP Server
 http:
   port: 3000
-  endpoints: []
+  host: "0.0.0.0"
+  openapi_spec: "./examples/openapi.json"
+  cors_enabled: true
+  request_validation: "enforce"
 
+# WebSocket Server
 websocket:
   port: 3001
+  host: "0.0.0.0"
 
+# gRPC Server
 grpc:
   port: 50051
+  host: "0.0.0.0"
 
+# Admin UI
 admin:
   enabled: true
   port: 9080
+  host: "127.0.0.1"
+  api_enabled: true
+
+# Core Features
+core:
+  latency_enabled: true
+  failures_enabled: false
+  overrides_enabled: true
+  traffic_shaping_enabled: false
+
+# Observability
+observability:
+  prometheus:
+    enabled: true
+    port: 9090
+  opentelemetry: null
+  recorder: null
+  chaos: null
+
+# Data Generation
+data:
+  default_rows: 100
+  default_format: "json"
+  rag:
+    enabled: false
+    provider: "openai"
+
+# Logging
+logging:
+  level: "info"
+  json_format: false
 "#;
         fs::write(&config_path, config_content)?;
         println!("✅ Created mockforge.yaml");
@@ -1542,7 +1955,8 @@ admin:
     if !no_examples {
         println!("  3. Review examples/openapi.json for API specifications");
     }
-    println!("  4. Run: mockforge serve");
+    println!("  4. Run: mockforge serve --config mockforge.yaml");
+    println!("\nNote: CLI arguments override config file settings");
 
     Ok(())
 }

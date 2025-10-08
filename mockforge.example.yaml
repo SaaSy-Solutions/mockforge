@@ -1,0 +1,165 @@
+# MockForge Example Configuration
+# This demonstrates how to configure MockForge servers via YAML file
+# Configuration precedence: Environment Variables > CLI Args > Config File > Defaults
+
+# HTTP Server Configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+  # Path to OpenAPI spec file (optional)
+  openapi_spec: "./examples/openapi.json"
+  cors_enabled: true
+  request_timeout_secs: 30
+  # Validation modes: off, warn, enforce
+  request_validation: "enforce"
+  aggregate_validation_errors: true
+  validate_responses: false
+  response_template_expand: false
+
+# WebSocket Server Configuration
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+  # Optional replay file for WebSocket messages
+  replay_file: null
+  connection_timeout_secs: 300
+
+# gRPC Server Configuration
+grpc:
+  port: 50051
+  host: "0.0.0.0"
+  proto_dir: null
+  tls: null
+
+# Admin UI Configuration
+admin:
+  enabled: true
+  port: 9080
+  host: "127.0.0.1"
+  auth_required: false
+  username: null
+  password: null
+  # Optional: mount admin UI under HTTP server at this path
+  mount_path: null
+  api_enabled: true
+
+# Request Chaining Configuration
+chaining:
+  enabled: false
+  max_chain_length: 20
+  global_timeout_secs: 300
+  enable_parallel_execution: false
+
+# Core MockForge Features
+core:
+  latency_enabled: true
+  failures_enabled: false
+  overrides_enabled: true
+  traffic_shaping_enabled: false
+  failure_config: null
+  proxy: null
+  default_latency:
+    mode: "fixed"
+    delay_ms: 0
+  traffic_shaping:
+    bandwidth:
+      enabled: false
+      max_bytes_per_sec: 1000000
+      burst_capacity_bytes: 10000
+    burst_loss:
+      enabled: false
+      burst_probability: 0.1
+      burst_duration_ms: 5000
+      loss_rate_during_burst: 0.5
+      recovery_time_ms: 2000
+
+# Logging Configuration
+logging:
+  level: "info"
+  json_format: false
+  file_path: null
+  max_file_size_mb: 10
+  max_files: 5
+
+# Data Generation Configuration
+data:
+  default_rows: 100
+  default_format: "json"
+  locale: "en"
+  templates: {}
+  rag:
+    enabled: false
+    provider: "openai"
+    api_endpoint: null
+    api_key: null
+    model: "gpt-3.5-turbo"
+    max_tokens: 1024
+    temperature: 0.7
+    context_window: 4000
+    caching: true
+    cache_ttl_secs: 3600
+    timeout_secs: 30
+    max_retries: 3
+
+# Observability Configuration
+observability:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9090
+    host: "0.0.0.0"
+    path: "/metrics"
+
+  # OpenTelemetry distributed tracing
+  opentelemetry:
+    enabled: false
+    service_name: "mockforge"
+    environment: "development"
+    jaeger_endpoint: "http://localhost:14268/api/traces"
+    otlp_endpoint: "http://localhost:4317"
+    protocol: "grpc"
+    sampling_rate: 1.0
+
+  # API Flight Recorder
+  recorder:
+    enabled: false
+    database_path: "./mockforge-recordings.db"
+    api_enabled: true
+    api_port: null
+    max_requests: 10000
+    retention_days: 7
+    record_http: true
+    record_grpc: true
+    record_websocket: true
+    record_graphql: true
+
+  # Chaos Engineering
+  chaos:
+    enabled: false
+    scenario: null
+    latency:
+      enabled: false
+      fixed_delay_ms: 100
+      random_delay_range_ms: null
+      jitter_percent: 0.0
+      probability: 1.0
+    fault_injection:
+      enabled: false
+      http_errors: [500, 503]
+      http_error_probability: 0.1
+      connection_errors: false
+      connection_error_probability: 0.0
+      timeout_errors: false
+      timeout_ms: 30000
+      timeout_probability: 0.0
+    rate_limit:
+      enabled: false
+      requests_per_second: 100
+      burst_size: 200
+      per_ip: false
+      per_endpoint: false
+    traffic_shaping:
+      enabled: false
+      bandwidth_limit_bps: 1000000
+      packet_loss_percent: 0.0
+      max_connections: 100
