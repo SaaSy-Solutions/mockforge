@@ -108,6 +108,8 @@ pub struct ServerConfig {
     pub logging: LoggingConfig,
     /// Data generation configuration
     pub data: DataConfig,
+    /// Observability configuration (metrics, tracing)
+    pub observability: ObservabilityConfig,
 }
 
 // Default is derived for ServerConfig
@@ -411,6 +413,201 @@ impl Default for RagConfig {
             max_retries: default_max_retries(),
         }
     }
+}
+
+/// Observability configuration for metrics and distributed tracing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservabilityConfig {
+    /// Prometheus metrics configuration
+    pub prometheus: PrometheusConfig,
+    /// OpenTelemetry distributed tracing configuration
+    pub opentelemetry: Option<OpenTelemetryConfig>,
+    /// API Flight Recorder configuration
+    pub recorder: Option<RecorderConfig>,
+    /// Chaos engineering configuration
+    pub chaos: Option<ChaosEngConfig>,
+}
+
+impl Default for ObservabilityConfig {
+    fn default() -> Self {
+        Self {
+            prometheus: PrometheusConfig::default(),
+            opentelemetry: None,
+            recorder: None,
+            chaos: None,
+        }
+    }
+}
+
+/// Prometheus metrics configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusConfig {
+    /// Enable Prometheus metrics endpoint
+    pub enabled: bool,
+    /// Port for metrics endpoint
+    pub port: u16,
+    /// Host for metrics endpoint
+    pub host: String,
+    /// Path for metrics endpoint
+    pub path: String,
+}
+
+impl Default for PrometheusConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            port: 9090,
+            host: "0.0.0.0".to_string(),
+            path: "/metrics".to_string(),
+        }
+    }
+}
+
+/// OpenTelemetry distributed tracing configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenTelemetryConfig {
+    /// Enable OpenTelemetry tracing
+    pub enabled: bool,
+    /// Service name for traces
+    pub service_name: String,
+    /// Deployment environment (development, staging, production)
+    pub environment: String,
+    /// Jaeger endpoint for trace export
+    pub jaeger_endpoint: String,
+    /// OTLP endpoint (alternative to Jaeger)
+    pub otlp_endpoint: Option<String>,
+    /// Protocol: grpc or http
+    pub protocol: String,
+    /// Sampling rate (0.0 to 1.0)
+    pub sampling_rate: f64,
+}
+
+impl Default for OpenTelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            service_name: "mockforge".to_string(),
+            environment: "development".to_string(),
+            jaeger_endpoint: "http://localhost:14268/api/traces".to_string(),
+            otlp_endpoint: Some("http://localhost:4317".to_string()),
+            protocol: "grpc".to_string(),
+            sampling_rate: 1.0,
+        }
+    }
+}
+
+/// API Flight Recorder configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecorderConfig {
+    /// Enable recording
+    pub enabled: bool,
+    /// Database file path
+    pub database_path: String,
+    /// Enable management API
+    pub api_enabled: bool,
+    /// Management API port (if different from main port)
+    pub api_port: Option<u16>,
+    /// Maximum number of requests to store (0 for unlimited)
+    pub max_requests: i64,
+    /// Auto-delete requests older than N days (0 to disable)
+    pub retention_days: i64,
+    /// Record HTTP requests
+    pub record_http: bool,
+    /// Record gRPC requests
+    pub record_grpc: bool,
+    /// Record WebSocket messages
+    pub record_websocket: bool,
+    /// Record GraphQL requests
+    pub record_graphql: bool,
+}
+
+impl Default for RecorderConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            database_path: "./mockforge-recordings.db".to_string(),
+            api_enabled: true,
+            api_port: None,
+            max_requests: 10000,
+            retention_days: 7,
+            record_http: true,
+            record_grpc: true,
+            record_websocket: true,
+            record_graphql: true,
+        }
+    }
+}
+
+/// Chaos engineering configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChaosEngConfig {
+    /// Enable chaos engineering
+    pub enabled: bool,
+    /// Latency injection configuration
+    pub latency: Option<LatencyInjectionConfig>,
+    /// Fault injection configuration
+    pub fault_injection: Option<FaultConfig>,
+    /// Rate limiting configuration
+    pub rate_limit: Option<RateLimitingConfig>,
+    /// Traffic shaping configuration
+    pub traffic_shaping: Option<NetworkShapingConfig>,
+    /// Predefined scenario to use
+    pub scenario: Option<String>,
+}
+
+impl Default for ChaosEngConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            latency: None,
+            fault_injection: None,
+            rate_limit: None,
+            traffic_shaping: None,
+            scenario: None,
+        }
+    }
+}
+
+/// Latency injection configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyInjectionConfig {
+    pub enabled: bool,
+    pub fixed_delay_ms: Option<u64>,
+    pub random_delay_range_ms: Option<(u64, u64)>,
+    pub jitter_percent: f64,
+    pub probability: f64,
+}
+
+/// Fault injection configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaultConfig {
+    pub enabled: bool,
+    pub http_errors: Vec<u16>,
+    pub http_error_probability: f64,
+    pub connection_errors: bool,
+    pub connection_error_probability: f64,
+    pub timeout_errors: bool,
+    pub timeout_ms: u64,
+    pub timeout_probability: f64,
+}
+
+/// Rate limiting configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitingConfig {
+    pub enabled: bool,
+    pub requests_per_second: u32,
+    pub burst_size: u32,
+    pub per_ip: bool,
+    pub per_endpoint: bool,
+}
+
+/// Network shaping configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkShapingConfig {
+    pub enabled: bool,
+    pub bandwidth_limit_bps: u64,
+    pub packet_loss_percent: f64,
+    pub max_connections: u32,
 }
 
 /// Load configuration from file

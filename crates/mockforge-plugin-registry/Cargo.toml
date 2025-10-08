@@ -1,0 +1,38 @@
+[package]
+name = "mockforge-plugin-registry"
+version = "0.1.0"
+edition = "2021"
+authors = ["MockForge Contributors"]
+description = "Plugin registry for MockForge"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mockforge/mockforge"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error handling
+thiserror = "1.0"
+
+# File system
+dirs = "5.0"
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Semver parsing
+semver = "1.0"
+
+[dev-dependencies]
+tempfile = "3.0"

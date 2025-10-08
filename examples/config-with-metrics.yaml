@@ -1,0 +1,67 @@
+# MockForge Configuration Example with Observability
+# This example shows how to configure Prometheus metrics and other observability features
+
+# HTTP Server Configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+  cors_enabled: true
+  request_timeout_secs: 30
+  request_validation: "enforce"
+  openapi_spec: "./examples/petstore.yaml"  # Optional: path to your OpenAPI spec
+
+# WebSocket Server Configuration
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+  connection_timeout_secs: 300
+
+# gRPC Server Configuration
+grpc:
+  port: 50051
+  host: "0.0.0.0"
+  enable_reflection: true
+
+# Admin UI Configuration
+admin:
+  enabled: true
+  port: 9080
+  host: "0.0.0.0"
+
+# Observability Configuration
+observability:
+  # Prometheus Metrics
+  prometheus:
+    enabled: true
+    port: 9090
+    host: "0.0.0.0"
+    path: "/metrics"
+
+  # OpenTelemetry (coming in Phase 2)
+  # opentelemetry:
+  #   enabled: false
+  #   endpoint: "http://localhost:4317"
+  #   protocol: "grpc"
+  #   sampling_rate: 1.0
+
+# Logging Configuration
+logging:
+  level: "info"
+  format: "pretty"  # or "json"
+
+# Core Configuration
+core:
+  workspace_dir: "./workspace"
+  plugin_dir: "./plugins"
+
+# Data Generation Configuration
+data:
+  enabled: true
+  default_rows: 100
+  default_format: "json"
+  locale: "en"
+
+# Request Chaining Configuration
+chaining:
+  enabled: false
+  max_chain_length: 10

@@ -1,0 +1,43 @@
+# Prometheus Configuration for MockForge
+# This file configures Prometheus to scrape metrics from MockForge
+
+global:
+  scrape_interval: 15s      # How often to scrape targets
+  evaluation_interval: 15s  # How often to evaluate rules
+  external_labels:
+    cluster: 'mockforge-dev'
+    environment: 'development'
+
+# Scrape configurations
+scrape_configs:
+  # MockForge metrics endpoint
+  - job_name: 'mockforge'
+    static_configs:
+      - targets: ['host.docker.internal:9090']  # Use host.docker.internal in Docker
+        labels:
+          service: 'mockforge'
+          instance: 'local'
+
+    # Scrape configuration
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    metrics_path: '/metrics'
+
+    # Optional: Add authentication if needed
+    # basic_auth:
+    #   username: 'admin'
+    #   password: 'secret'
+
+    # Optional: Add custom labels
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 'host.docker.internal:9090'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9091']  # Prometheus's own metrics

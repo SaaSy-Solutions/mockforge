@@ -1,0 +1,36 @@
+# MockForge Configuration with OpenTelemetry Distributed Tracing
+#
+# This configuration enables both Prometheus metrics and OpenTelemetry distributed tracing.
+
+observability:
+  # Prometheus metrics configuration
+  prometheus:
+    enabled: true
+    port: 9090
+    host: "0.0.0.0"
+    path: "/metrics"
+
+  # OpenTelemetry distributed tracing configuration
+  opentelemetry:
+    enabled: true
+    service_name: "mockforge"
+    environment: "development"
+    jaeger_endpoint: "http://localhost:14268/api/traces"
+    otlp_endpoint: "http://localhost:4317"
+    protocol: "grpc"
+    sampling_rate: 1.0  # Sample all traces (1.0 = 100%)
+
+# Server configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "pretty"
+
+# Data generation configuration
+data:
+  locale: "en"
+  seed: null  # Random seed for reproducibility (null = random)

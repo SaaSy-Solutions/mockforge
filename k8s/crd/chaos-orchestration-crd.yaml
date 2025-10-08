@@ -1,0 +1,275 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: chaosorchestrations.mockforge.io
+spec:
+  group: mockforge.io
+  names:
+    kind: ChaosOrchestration
+    listKind: ChaosOrchestrationList
+    plural: chaosorchestrations
+    singular: chaosorchestration
+    shortNames:
+      - co
+      - chaos
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Name of the orchestration
+                description:
+                  type: string
+                  description: Description of what this orchestration tests
+                schedule:
+                  type: string
+                  description: Cron schedule for automatic execution (optional)
+                  pattern: '^(\S+\s+){4}\S+$'
+                steps:
+                  type: array
+                  description: Steps to execute in the orchestration
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      scenario:
+                        type: string
+                        enum:
+                          - network_degradation
+                          - service_instability
+                          - cascading_failure
+                          - peak_traffic
+                          - slow_backend
+                          - resource_exhaustion
+                      duration_seconds:
+                        type: integer
+                        minimum: 1
+                      delay_before_seconds:
+                        type: integer
+                        minimum: 0
+                        default: 0
+                      continue_on_failure:
+                        type: boolean
+                        default: false
+                      parameters:
+                        type: object
+                        additionalProperties:
+                          x-kubernetes-preserve-unknown-fields: true
+                    required:
+                      - name
+                      - scenario
+                variables:
+                  type: object
+                  description: Global variables for the orchestration
+                  additionalProperties:
+                    x-kubernetes-preserve-unknown-fields: true
+                hooks:
+                  type: array
+                  description: Hooks for lifecycle events
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        enum:
+                          - pre_orchestration
+                          - post_orchestration
+                          - pre_step
+                          - post_step
+                      actions:
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                assertions:
+                  type: array
+                  description: Assertions to validate during execution
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      expected_value:
+                        x-kubernetes-preserve-unknown-fields: true
+                      operator:
+                        type: string
+                enableReporting:
+                  type: boolean
+                  default: true
+                  description: Enable execution reporting
+                targetServices:
+                  type: array
+                  description: Kubernetes services to target
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      selector:
+                        type: object
+                        additionalProperties:
+                          type: string
+              required:
+                - name
+                - steps
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    - Pending
+                    - Running
+                    - Completed
+                    - Failed
+                    - Paused
+                currentIteration:
+                  type: integer
+                currentStep:
+                  type: integer
+                totalSteps:
+                  type: integer
+                progress:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                failedSteps:
+                  type: array
+                  items:
+                    type: string
+                lastScheduledTime:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                    required:
+                      - type
+                      - status
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Progress
+          type: string
+          jsonPath: .status.progress
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: chaosscenarios.mockforge.io
+spec:
+  group: mockforge.io
+  names:
+    kind: ChaosScenario
+    listKind: ChaosScenarioList
+    plural: chaosscenarios
+    singular: chaosscenario
+    shortNames:
+      - cs
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum:
+                    - network
+                    - resource
+                    - failure
+                    - latency
+                config:
+                  type: object
+                  properties:
+                    latency_ms:
+                      type: integer
+                    error_rate:
+                      type: number
+                    packet_loss:
+                      type: number
+                    cpu_load:
+                      type: number
+                    memory_pressure:
+                      type: boolean
+                duration_seconds:
+                  type: integer
+                  minimum: 1
+              required:
+                - name
+                - type
+            status:
+              type: object
+              properties:
+                active:
+                  type: boolean
+                appliedAt:
+                  type: string
+                  format: date-time
+                affectedPods:
+                  type: array
+                  items:
+                    type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.type
+        - name: Active
+          type: boolean
+          jsonPath: .status.active
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

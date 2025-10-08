@@ -1,0 +1,125 @@
+name: cascading_failure_simulation
+description: Simulate cascading failure across multiple system components
+steps:
+  # Step 1: Normal operations
+  - name: baseline
+    scenario:
+      name: normal_operations
+      config:
+        enabled: false
+    duration_seconds: 30
+    delay_before_seconds: 0
+    continue_on_failure: false
+
+  # Step 2: Network starts degrading
+  - name: network_degradation
+    scenario:
+      name: network_degradation
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 200
+          jitter_percent: 20.0
+        traffic_shaping:
+          enabled: true
+          packet_loss_percent: 2.0
+    duration_seconds: 45
+    delay_before_seconds: 5
+    continue_on_failure: true
+
+  # Step 3: Errors start appearing
+  - name: service_instability
+    scenario:
+      name: service_instability
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 300
+        fault_injection:
+          enabled: true
+          http_errors: [500, 503]
+          http_error_probability: 0.15
+    duration_seconds: 45
+    delay_before_seconds: 10
+    continue_on_failure: true
+
+  # Step 4: Circuit breakers start opening
+  - name: circuit_breaker_activation
+    scenario:
+      name: protection_mechanisms
+      config:
+        enabled: true
+        circuit_breaker:
+          enabled: true
+          failure_threshold: 3
+          timeout_ms: 30000
+        fault_injection:
+          enabled: true
+          http_error_probability: 0.3
+    duration_seconds: 30
+    delay_before_seconds: 5
+    continue_on_failure: true
+
+  # Step 5: Full cascading failure
+  - name: full_cascade
+    scenario:
+      name: cascading_failure
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          random_delay_range_ms: [500, 2000]
+          jitter_percent: 30.0
+        fault_injection:
+          enabled: true
+          http_errors: [500, 502, 503, 504]
+          http_error_probability: 0.4
+        rate_limit:
+          enabled: true
+          requests_per_second: 50
+          burst_size: 5
+        circuit_breaker:
+          enabled: true
+          failure_threshold: 3
+    duration_seconds: 60
+    delay_before_seconds: 10
+    continue_on_failure: true
+
+  # Step 6: Partial recovery
+  - name: recovery_begins
+    scenario:
+      name: recovery_phase
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 200
+        fault_injection:
+          enabled: true
+          http_error_probability: 0.1
+    duration_seconds: 60
+    delay_before_seconds: 20
+    continue_on_failure: true
+
+  # Step 7: Full recovery
+  - name: full_recovery
+    scenario:
+      name: back_to_normal
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 50
+    duration_seconds: 30
+    delay_before_seconds: 10
+    continue_on_failure: true
+
+parallel: false
+loop_orchestration: false
+max_iterations: 1
+tags:
+  - cascading-failure
+  - resilience-test
+  - comprehensive

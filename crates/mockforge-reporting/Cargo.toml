@@ -1,0 +1,43 @@
+[package]
+name = "mockforge-reporting"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# PDF generation
+printpdf = "0.7"
+
+# Email
+lettre = { version = "0.11", features = ["smtp-transport", "builder"] }
+
+# Charting
+plotters = { version = "0.3", features = ["all_elements", "bitmap_backend"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Image processing
+image = "0.24"
+
+# HTML templating
+tera = "1.19"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# MockForge dependencies
+mockforge-chaos = { path = "../mockforge-chaos" }
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.8"

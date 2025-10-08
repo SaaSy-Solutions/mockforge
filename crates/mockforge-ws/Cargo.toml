@@ -17,6 +17,9 @@ chrono = { workspace = true }
 fastrand = "2.0"
 mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data" }
+mockforge-observability = { path = "../mockforge-observability" }
+mockforge-tracing = { path = "../mockforge-tracing" }
+opentelemetry = "0.21"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

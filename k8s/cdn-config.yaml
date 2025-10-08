@@ -1,0 +1,271 @@
+---
+# ConfigMap for CDN configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdn-config
+  namespace: mockforge
+data:
+  # CloudFront distribution configuration (AWS)
+  cloudfront-config.json: |
+    {
+      "CallerReference": "mockforge-cdn-2025",
+      "Comment": "MockForge CDN Distribution",
+      "Enabled": true,
+      "Origins": {
+        "Quantity": 1,
+        "Items": [
+          {
+            "Id": "mockforge-origin",
+            "DomainName": "mockforge.example.com",
+            "CustomOriginConfig": {
+              "HTTPPort": 80,
+              "HTTPSPort": 443,
+              "OriginProtocolPolicy": "https-only",
+              "OriginSslProtocols": {
+                "Quantity": 1,
+                "Items": ["TLSv1.2"]
+              }
+            }
+          }
+        ]
+      },
+      "DefaultCacheBehavior": {
+        "TargetOriginId": "mockforge-origin",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+          "Quantity": 7,
+          "Items": ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+          "CachedMethods": {
+            "Quantity": 2,
+            "Items": ["GET", "HEAD"]
+          }
+        },
+        "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "Compress": true,
+        "MinTTL": 0,
+        "DefaultTTL": 86400,
+        "MaxTTL": 31536000
+      },
+      "CacheBehaviors": {
+        "Quantity": 2,
+        "Items": [
+          {
+            "PathPattern": "/static/*",
+            "TargetOriginId": "mockforge-origin",
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "MinTTL": 31536000,
+            "DefaultTTL": 31536000,
+            "MaxTTL": 31536000,
+            "Compress": true
+          },
+          {
+            "PathPattern": "/api/*",
+            "TargetOriginId": "mockforge-origin",
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "MinTTL": 0,
+            "DefaultTTL": 0,
+            "MaxTTL": 0,
+            "Compress": false
+          }
+        ]
+      }
+    }
+
+  # Cloudflare configuration
+  cloudflare-config.yaml: |
+    zones:
+      - zone: example.com
+        settings:
+          # Caching
+          browser_cache_ttl: 14400  # 4 hours
+          cache_level: aggressive
+
+          # Security
+          security_level: medium
+          ssl: strict
+          always_use_https: true
+          min_tls_version: "1.2"
+
+          # Performance
+          minify:
+            css: true
+            html: true
+            js: true
+
+          rocket_loader: true
+          http2: true
+          http3: true
+
+          # DDoS Protection
+          challenge_ttl: 1800
+
+        page_rules:
+          - targets:
+              - "mockforge.example.com/static/*"
+            actions:
+              cache_level: cache_everything
+              edge_cache_ttl: 31536000  # 1 year
+              browser_cache_ttl: 31536000
+
+          - targets:
+              - "mockforge.example.com/api/*"
+            actions:
+              cache_level: bypass
+              disable_performance: true
+
+  # Fastly VCL configuration
+  fastly-config.vcl: |
+    sub vcl_recv {
+      # Set backend
+      set req.backend = F_mockforge_origin;
+
+      # Cache static assets
+      if (req.url ~ "^/static/") {
+        unset req.http.Cookie;
+        return(lookup);
+      }
+
+      # Don't cache API requests
+      if (req.url ~ "^/api/") {
+        return(pass);
+      }
+
+      # Don't cache admin UI
+      if (req.url ~ "^/admin/") {
+        return(pass);
+      }
+    }
+
+    sub vcl_backend_response {
+      # Cache static assets for 1 year
+      if (bereq.url ~ "^/static/") {
+        set beresp.ttl = 365d;
+        set beresp.http.Cache-Control = "public, max-age=31536000, immutable";
+      }
+
+      # Enable gzip compression
+      if (beresp.http.content-type ~ "(text|application)") {
+        set beresp.do_gzip = true;
+      }
+
+      # Add custom headers
+      set beresp.http.X-Served-By = "Fastly";
+      set beresp.http.X-Cache = "HIT";
+    }
+
+    sub vcl_deliver {
+      # Add cache status header
+      if (obj.hits > 0) {
+        set resp.http.X-Cache = "HIT";
+        set resp.http.X-Cache-Hits = obj.hits;
+      } else {
+        set resp.http.X-Cache = "MISS";
+      }
+    }
+
+  # NGINX CDN configuration (for self-hosted CDN)
+  nginx-cdn.conf: |
+    proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=mockforge_cache:10m max_size=1g inactive=60m use_temp_path=off;
+
+    upstream mockforge_backend {
+        least_conn;
+        server mockforge-1.example.com:443 max_fails=3 fail_timeout=30s;
+        server mockforge-2.example.com:443 max_fails=3 fail_timeout=30s;
+        server mockforge-3.example.com:443 max_fails=3 fail_timeout=30s;
+    }
+
+    server {
+        listen 80;
+        listen 443 ssl http2;
+        server_name cdn.mockforge.example.com;
+
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+        # Static assets - cache aggressively
+        location /static/ {
+            proxy_pass https://mockforge_backend;
+            proxy_cache mockforge_cache;
+            proxy_cache_valid 200 365d;
+            proxy_cache_valid 404 1m;
+            proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+            proxy_cache_lock on;
+
+            add_header X-Cache-Status $upstream_cache_status;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+
+            expires 1y;
+            access_log off;
+        }
+
+        # API requests - no cache
+        location /api/ {
+            proxy_pass https://mockforge_backend;
+            proxy_cache off;
+            proxy_buffering off;
+
+            add_header X-Cache-Status "BYPASS";
+        }
+
+        # Default - short cache
+        location / {
+            proxy_pass https://mockforge_backend;
+            proxy_cache mockforge_cache;
+            proxy_cache_valid 200 5m;
+            proxy_cache_valid 404 1m;
+
+            add_header X-Cache-Status $upstream_cache_status;
+        }
+
+        # Health check
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+    }
+
+---
+# Ingress configuration with CDN headers
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mockforge-cdn
+  namespace: mockforge
+  annotations:
+    # NGINX ingress annotations for caching
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "8k"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+
+    # Cache control annotations
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # Add cache control headers for static assets
+      location ~* ^/static/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        expires 1y;
+      }
+
+      # No cache for API
+      location ~* ^/api/ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        expires -1;
+      }
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: mockforge.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mockforge
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - mockforge.example.com
+      secretName: mockforge-tls

@@ -1,0 +1,17 @@
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mockforge
+  labels:
+    app: mockforge
+    release: prometheus  # Must match Prometheus Operator label selector
+spec:
+  selector:
+    matchLabels:
+      app: mockforge
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http

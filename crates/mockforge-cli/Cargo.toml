@@ -24,8 +24,9 @@ mockforge-http = { path = "../mockforge-http" }
 mockforge-ws = { path = "../mockforge-ws" }
 mockforge-grpc = { path = "../mockforge-grpc" }
 mockforge-graphql = { path = "../mockforge-graphql" }
- mockforge-data = { path = "../mockforge-data" }
- mockforge-ui = { path = "../mockforge-ui" }
+mockforge-data = { path = "../mockforge-data" }
+mockforge-ui = { path = "../mockforge-ui" }
+mockforge-observability = { path = "../mockforge-observability" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

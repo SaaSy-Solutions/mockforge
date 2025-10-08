@@ -1,0 +1,74 @@
+name: multi_protocol_chaos
+description: Simultaneous chaos across HTTP, gRPC, WebSocket, and GraphQL
+steps:
+  # HTTP Chaos
+  - name: http_chaos
+    scenario:
+      name: http_stress
+      config:
+        enabled: true
+        fault_injection:
+          enabled: true
+          http_errors: [500, 502, 503]
+          http_error_probability: 0.2
+        latency:
+          enabled: true
+          random_delay_range_ms: [100, 500]
+    duration_seconds: 120
+    delay_before_seconds: 0
+    continue_on_failure: true
+
+  # gRPC Chaos
+  - name: grpc_chaos
+    scenario:
+      name: grpc_stress
+      config:
+        enabled: true
+        # gRPC-specific chaos would go here
+        latency:
+          enabled: true
+          fixed_delay_ms: 200
+    duration_seconds: 120
+    delay_before_seconds: 0
+    continue_on_failure: true
+
+  # WebSocket Chaos
+  - name: websocket_chaos
+    scenario:
+      name: websocket_stress
+      config:
+        enabled: true
+        # WebSocket-specific chaos
+        fault_injection:
+          enabled: true
+          connection_errors: true
+          connection_error_probability: 0.1
+    duration_seconds: 120
+    delay_before_seconds: 0
+    continue_on_failure: true
+
+  # GraphQL Chaos
+  - name: graphql_chaos
+    scenario:
+      name: graphql_stress
+      config:
+        enabled: true
+        # GraphQL-specific chaos
+        fault_injection:
+          enabled: true
+          partial_responses: true
+          partial_response_probability: 0.15
+    duration_seconds: 120
+    delay_before_seconds: 0
+    continue_on_failure: true
+
+parallel: true  # All protocols experience chaos simultaneously
+loop_orchestration: false
+max_iterations: 1
+tags:
+  - multi-protocol
+  - comprehensive
+  - http
+  - grpc
+  - websocket
+  - graphql

@@ -40,6 +40,9 @@ oauth2 = { workspace = true }
 ring = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data" }
+mockforge-observability = { path = "../mockforge-observability" }
+mockforge-tracing = { path = "../mockforge-tracing" }
+opentelemetry = "0.21"
 
 [features]
 default = []

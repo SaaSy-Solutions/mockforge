@@ -1,9 +1,11 @@
 pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
+pub mod http_tracing_middleware;
 pub mod latency_profiles;
 pub mod management;
 pub mod management_ws;
+pub mod metrics_middleware;
 pub mod op_middleware;
 pub mod replay_listing;
 pub mod request_logging;
@@ -17,6 +19,12 @@ pub use management::{management_router, ManagementState, MockConfig, ServerConfi
 
 // Re-export management WebSocket utilities
 pub use management_ws::{ws_management_router, WsManagementState, MockEvent};
+
+// Re-export metrics middleware
+pub use metrics_middleware::collect_http_metrics;
+
+// Re-export tracing middleware
+pub use http_tracing_middleware::http_tracing_middleware;
 
 use axum::middleware::from_fn_with_state;
 use axum::{Router, extract::State, response::Json};

@@ -1,0 +1,304 @@
+---
+# ArgoCD Application for MockForge
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mockforge
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/YOUR_ORG/mockforge.git
+    targetRevision: main
+    path: helm/mockforge
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: image.tag
+          value: latest
+        - name: replicaCount
+          value: "3"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mockforge
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health assessment for custom resources
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+  # Notification configuration
+  info:
+    - name: 'Slack Notifications'
+      value: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+
+---
+# ArgoCD AppProject for MockForge
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mockforge
+  namespace: argocd
+spec:
+  description: MockForge Project
+
+  # Source repositories
+  sourceRepos:
+    - 'https://github.com/YOUR_ORG/mockforge.git'
+
+  # Destination clusters
+  destinations:
+    - namespace: mockforge
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster-scoped resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+
+  # Allowed namespace-scoped resources
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  # Denied resources (for safety)
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+
+  # Roles for this project
+  roles:
+    - name: admin
+      description: Admin privileges for MockForge
+      policies:
+        - p, proj:mockforge:admin, applications, *, mockforge/*, allow
+      groups:
+        - mockforge-admins
+
+    - name: developer
+      description: Developer access
+      policies:
+        - p, proj:mockforge:developer, applications, get, mockforge/*, allow
+        - p, proj:mockforge:developer, applications, sync, mockforge/*, allow
+      groups:
+        - mockforge-developers
+
+---
+# ArgoCD Application for monitoring stack
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mockforge-monitoring
+  namespace: argocd
+spec:
+  project: mockforge
+
+  source:
+    repoURL: https://github.com/YOUR_ORG/mockforge.git
+    targetRevision: main
+    path: deploy/monitoring
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# ArgoCD Notifications ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  # Slack service
+  service.slack: |
+    token: $slack-token
+
+  # Email service
+  service.email.gmail: |
+    username: $email-username
+    password: $email-password
+    host: smtp.gmail.com
+    port: 587
+    from: $email-username
+
+  # Notification templates
+  template.app-deployed: |
+    message: |
+      Application {{.app.metadata.name}} is now running new version.
+      {{if eq .serviceType "slack"}}:white_check_mark:{{end}} Application {{.app.metadata.name}} deployed successfully!
+    slack:
+      attachments: |
+        [{
+          "title": "{{ .app.metadata.name}}",
+          "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+          "color": "good",
+          "fields": [
+          {
+            "title": "Sync Status",
+            "value": "{{.app.status.sync.status}}",
+            "short": true
+          },
+          {
+            "title": "Repository",
+            "value": "{{.app.spec.source.repoURL}}",
+            "short": true
+          },
+          {
+            "title": "Revision",
+            "value": "{{.app.status.sync.revision}}",
+            "short": true
+          }
+          {{range $index, $c := .app.status.conditions}}
+          {{if not $index}},{{end}}
+          {{if $index}},{{end}}
+          {
+            "title": "{{$c.type}}",
+            "value": "{{$c.message}}",
+            "short": true
+          }
+          {{end}}
+          ]
+        }]
+
+  template.app-health-degraded: |
+    message: |
+      {{if eq .serviceType "slack"}}:exclamation:{{end}} Application {{.app.metadata.name}} has degraded.
+    slack:
+      attachments: |
+        [{
+          "title": "{{ .app.metadata.name}}",
+          "title_link": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+          "color": "danger",
+          "fields": [
+          {
+            "title": "Health Status",
+            "value": "{{.app.status.health.status}}",
+            "short": true
+          },
+          {
+            "title": "Repository",
+            "value": "{{.app.spec.source.repoURL}}",
+            "short": true
+          }
+          {{range $index, $c := .app.status.conditions}}
+          {{if not $index}},{{end}}
+          {{if $index}},{{end}}
+          {
+            "title": "{{$c.type}}",
+            "value": "{{$c.message}}",
+            "short": true
+          }
+          {{end}}
+          ]
+        }]
+
+  template.app-sync-failed: |
+    message: |
+      {{if eq .serviceType "slack"}}:x:{{end}} Application {{.app.metadata.name}} sync failed.
+    slack:
+      attachments: |
+        [{
+          "title": "{{ .app.metadata.name}}",
+          "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+          "color": "danger",
+          "fields": [
+          {
+            "title": "Sync Status",
+            "value": "{{.app.status.sync.status}}",
+            "short": true
+          },
+          {
+            "title": "Repository",
+            "value": "{{.app.spec.source.repoURL}}",
+            "short": true
+          }
+          {{range $index, $c := .app.status.conditions}}
+          {{if not $index}},{{end}}
+          {{if $index}},{{end}}
+          {
+            "title": "{{$c.type}}",
+            "value": "{{$c.message}}",
+            "short": true
+          }
+          {{end}}
+          ]
+        }]
+
+  # Triggers
+  trigger.on-deployed: |
+    - when: app.status.operationState.phase in ['Succeeded']
+      send: [app-deployed]
+
+  trigger.on-health-degraded: |
+    - when: app.status.health.status == 'Degraded'
+      send: [app-health-degraded]
+
+  trigger.on-sync-failed: |
+    - when: app.status.operationState.phase in ['Error', 'Failed']
+      send: [app-sync-failed]
+
+  # Subscriptions
+  subscriptions: |
+    - recipients:
+      - slack:mockforge-deployments
+      triggers:
+      - on-deployed
+      - on-health-degraded
+      - on-sync-failed
+
+---
+# ArgoCD Image Updater
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mockforge
+  namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: mockforge=ghcr.io/YOUR_ORG/mockforge
+    argocd-image-updater.argoproj.io/mockforge.update-strategy: semver
+    argocd-image-updater.argoproj.io/mockforge.allow-tags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+$
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
+spec:
+  # ... (rest of the application spec)

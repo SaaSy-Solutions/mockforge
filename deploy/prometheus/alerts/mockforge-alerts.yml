@@ -1,0 +1,164 @@
+groups:
+  - name: mockforge_availability
+    interval: 30s
+    rules:
+      - alert: MockForgeDown
+        expr: up{job="mockforge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "MockForge instance is down"
+          description: "MockForge instance {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://docs.example.com/runbooks/mockforge-down"
+
+      - alert: MockForgeInstancesLow
+        expr: count(up{job="mockforge"} == 1) < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "Low number of MockForge instances"
+          description: "Only {{ $value }} MockForge instance(s) are running. Expected at least 2 for high availability."
+
+  - name: mockforge_performance
+    interval: 30s
+    rules:
+      - alert: MockForgeHighLatency
+        expr: histogram_quantile(0.95, sum(rate(mockforge_http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "MockForge high request latency"
+          description: "95th percentile request latency is {{ $value }}s, exceeding 500ms threshold."
+          runbook_url: "https://docs.example.com/runbooks/high-latency"
+
+      - alert: MockForgeCriticalLatency
+        expr: histogram_quantile(0.95, sum(rate(mockforge_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 2m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "MockForge critical request latency"
+          description: "95th percentile request latency is {{ $value }}s, exceeding 1s critical threshold."
+
+      - alert: MockForgeHighErrorRate
+        expr: sum(rate(mockforge_http_requests_total{status=~"5.."}[5m])) / sum(rate(mockforge_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "MockForge high error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}, exceeding 5% threshold."
+          runbook_url: "https://docs.example.com/runbooks/high-error-rate"
+
+      - alert: MockForgeHighMemoryUsage
+        expr: process_resident_memory_bytes{job="mockforge"} / 1024 / 1024 > 400
+        for: 10m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "MockForge high memory usage"
+          description: "Instance {{ $labels.instance }} is using {{ $value }}MB of memory, exceeding 400MB threshold."
+
+      - alert: MockForgeHighCPUUsage
+        expr: rate(process_cpu_seconds_total{job="mockforge"}[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "MockForge high CPU usage"
+          description: "Instance {{ $labels.instance }} CPU usage is {{ $value }}%, exceeding 80% threshold."
+
+  - name: mockforge_slo
+    interval: 1m
+    rules:
+      - alert: MockForgeSLOAvailabilityBreach
+        expr: |
+          (
+            sum(rate(mockforge_http_requests_total{status=~"2.."}[30m]))
+            /
+            sum(rate(mockforge_http_requests_total[30m]))
+          ) < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          component: mockforge
+          slo: availability
+        annotations:
+          summary: "MockForge SLO availability breach"
+          description: "Availability SLO is {{ $value | humanizePercentage }}, below 99.9% target."
+          runbook_url: "https://docs.example.com/runbooks/slo-breach"
+
+      - alert: MockForgeSLOLatencyBreach
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mockforge_http_request_duration_seconds_bucket[30m])) by (le)
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+          slo: latency
+        annotations:
+          summary: "MockForge SLO latency breach"
+          description: "p95 latency is {{ $value }}s, exceeding 200ms SLO target."
+
+  - name: mockforge_chaos
+    interval: 30s
+    rules:
+      - alert: MockForgeChaosScenarioFailed
+        expr: mockforge_chaos_scenario_status{status="failed"} == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: mockforge-chaos
+        annotations:
+          summary: "MockForge chaos scenario failed"
+          description: "Chaos scenario {{ $labels.scenario }} has failed on instance {{ $labels.instance }}."
+
+      - alert: MockForgeCircuitBreakerOpen
+        expr: mockforge_circuit_breaker_state{state="open"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "MockForge circuit breaker is open"
+          description: "Circuit breaker for {{ $labels.service }} is open, indicating potential issues."
+
+  - name: mockforge_resources
+    interval: 30s
+    rules:
+      - alert: MockForgePVCAlmostFull
+        expr: |
+          (
+            kubelet_volume_stats_used_bytes{persistentvolumeclaim="mockforge-recorder-pvc"}
+            /
+            kubelet_volume_stats_capacity_bytes{persistentvolumeclaim="mockforge-recorder-pvc"}
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "MockForge PVC almost full"
+          description: "Recorder PVC is {{ $value | humanizePercentage }} full, exceeding 85% threshold."
+
+      - alert: MockForgeConnectionPoolExhaustion
+        expr: mockforge_connection_pool_active / mockforge_connection_pool_max > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "MockForge connection pool near exhaustion"
+          description: "Connection pool utilization is {{ $value | humanizePercentage }}."

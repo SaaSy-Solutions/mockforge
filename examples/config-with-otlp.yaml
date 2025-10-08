@@ -1,0 +1,153 @@
+# MockForge Configuration with OTLP Exporter
+#
+# This configuration demonstrates using the OpenTelemetry Protocol (OTLP)
+# exporter for sending traces to an OpenTelemetry Collector or any
+# OTLP-compatible backend.
+
+server:
+  host: "0.0.0.0"
+  port: 3000
+  workers: 4
+
+# OpenTelemetry Configuration with OTLP
+observability:
+  opentelemetry:
+    # Enable distributed tracing
+    enabled: true
+
+    # Service identification
+    service_name: "mockforge"
+    service_version: "1.0.0"
+    environment: "production"
+
+    # Exporter type: otlp or jaeger
+    exporter_type: otlp
+
+    # OTLP exporter settings
+    otlp:
+      # OpenTelemetry Collector endpoint (gRPC)
+      endpoint: "http://localhost:4317"
+
+      # Protocol: grpc (default) or http
+      protocol: grpc
+
+      # Optional authentication headers
+      headers:
+        # Example: API key for cloud providers
+        # authorization: "Bearer your-token-here"
+        # x-api-key: "your-api-key"
+
+      # Export timeout (seconds)
+      timeout: 10
+
+      # Enable compression (reduces bandwidth)
+      compression: gzip
+
+    # Sampling configuration
+    sampling_rate: 1.0  # 1.0 = 100%, 0.1 = 10%, 0.01 = 1%
+
+    # Resource attributes (added to all traces)
+    resource_attributes:
+      deployment.environment: production
+      service.namespace: mockforge
+      service.instance.id: mockforge-01
+      host.name: mockforge-server-1
+
+# HTTP Protocol
+http:
+  enabled: true
+  routes:
+    - path: "/api/users"
+      method: GET
+      response:
+        status: 200
+        body: '{"users": []}'
+        headers:
+          content-type: "application/json"
+
+    - path: "/api/users/:id"
+      method: GET
+      response:
+        status: 200
+        body: '{"id": "{{path.id}}", "name": "John Doe"}'
+        headers:
+          content-type: "application/json"
+
+# gRPC Protocol
+grpc:
+  enabled: true
+  port: 50051
+  services:
+    - name: "user.UserService"
+      methods:
+        - name: "GetUser"
+          response:
+            id: "123"
+            name: "John Doe"
+
+# WebSocket Protocol
+websocket:
+  enabled: true
+  paths:
+    - path: "/ws"
+      on_message:
+        type: echo
+
+# GraphQL Protocol
+graphql:
+  enabled: true
+  path: "/graphql"
+  schema: |
+    type Query {
+      hello: String
+      user(id: ID!): User
+    }
+
+    type User {
+      id: ID!
+      name: String!
+      email: String!
+    }
+
+  resolvers:
+    Query:
+      hello:
+        response: "Hello, World!"
+      user:
+        response:
+          id: "{{args.id}}"
+          name: "John Doe"
+          email: "john@example.com"
+
+# Chaos Engineering (with observability)
+chaos:
+  enabled: false
+  scenarios:
+    - name: "latency-spike"
+      probability: 0.1
+      latency:
+        fixed: 500ms
+
+# Recording (with database persistence)
+recorder:
+  enabled: true
+  database:
+    path: "./recordings.db"
+    retention_days: 30
+  filters:
+    include_paths:
+      - "/api/*"
+    exclude_paths:
+      - "/health"
+
+# Authentication
+auth:
+  require_auth: false
+  jwt:
+    secret: "your-secret-key"
+    issuer: "mockforge"
+    audience: "api"
+  api_key:
+    header_name: "X-API-Key"
+    keys:
+      - "development-key-123"

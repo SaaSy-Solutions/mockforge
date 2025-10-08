@@ -1,0 +1,208 @@
+# Default values for mockforge
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 3
+
+image:
+  repository: mockforge/mockforge
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  http:
+    port: 3000
+  websocket:
+    port: 3001
+  grpc:
+    port: 50051
+  admin:
+    port: 9080
+  metrics:
+    port: 9090
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: mockforge.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend: http
+  tls: []
+  #  - secretName: mockforge-tls
+  #    hosts:
+  #      - mockforge.example.com
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - mockforge
+        topologyKey: kubernetes.io/hostname
+
+# MockForge configuration
+config:
+  http:
+    enabled: true
+    port: 3000
+    host: "0.0.0.0"
+
+  websocket:
+    enabled: true
+    port: 3001
+    host: "0.0.0.0"
+
+  grpc:
+    enabled: true
+    port: 50051
+    host: "0.0.0.0"
+    reflection: true
+
+  graphql:
+    enabled: false
+
+  admin:
+    enabled: true
+    port: 9080
+    host: "0.0.0.0"
+    api_enabled: true
+
+  observability:
+    metrics:
+      enabled: true
+      port: 9090
+      host: "0.0.0.0"
+
+    tracing:
+      enabled: true
+      otlp_endpoint: ""  # Set to your OTLP collector
+      service_name: "mockforge"
+
+    recorder:
+      enabled: true
+      database_path: "/app/data/mockforge.db"
+      max_events: 100000
+
+    chaos:
+      enabled: true
+      scenario: null
+
+  latency:
+    base_ms: 50
+    jitter_percent: 10
+
+  failures:
+    enabled: false
+    rate: 0.0
+
+# Fixtures (example data)
+fixtures: {}
+  # users.json: |
+  #   [{"id": 1, "name": "Alice"}]
+
+# Persistent storage for recorder
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+# Prometheus ServiceMonitor (requires Prometheus Operator)
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: admin
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: admin
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health/startup
+    port: admin
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+# Environment variables
+env: []
+  # - name: RUST_LOG
+  #   value: "debug"
+
+# Extra volumes and volume mounts
+extraVolumes: []
+extraVolumeMounts: []

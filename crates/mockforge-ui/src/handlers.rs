@@ -43,6 +43,7 @@ use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
 pub mod admin;
 pub mod assets;
 pub mod chains;
+pub mod health;
 pub mod plugin;
 
 // Re-export commonly used types

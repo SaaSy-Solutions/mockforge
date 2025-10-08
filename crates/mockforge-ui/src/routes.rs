@@ -101,7 +101,12 @@ pub fn create_admin_router(
         .route("/__mockforge/chains/{id}", delete(proxy_chain_delete))
         .route("/__mockforge/chains/{id}/execute", post(proxy_chain_execute))
         .route("/__mockforge/chains/{id}/validate", post(proxy_chain_validate))
-        .route("/__mockforge/chains/{id}/history", get(proxy_chain_history));
+        .route("/__mockforge/chains/{id}/history", get(proxy_chain_history))
+        // Health check endpoints for Kubernetes probes
+        .route("/health/live", get(health::liveness_probe))
+        .route("/health/ready", get(health::readiness_probe))
+        .route("/health/startup", get(health::startup_probe))
+        .route("/health", get(health::deep_health_check));
 
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes

@@ -1,9 +1,11 @@
 pub mod ai_event_generator;
+pub mod ws_tracing;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::{response::IntoResponse, routing::get, Router};
 use mockforge_core::{latency::LatencyInjector, LatencyProfile, WsProxyHandler};
+use mockforge_observability::get_global_registry;
 use serde_json::Value;
 use tokio::fs;
 use tokio::time::{sleep, Duration};
@@ -13,6 +15,12 @@ use tracing::*;
 
 // Re-export AI event generator utilities
 pub use ai_event_generator::{AiEventGenerator, WebSocketAiConfig};
+
+// Re-export tracing utilities
+pub use ws_tracing::{
+    create_ws_connection_span, create_ws_message_span,
+    record_ws_connection_success, record_ws_error, record_ws_message_success,
+};
 
 /// Build the WebSocket router (exposed for tests and embedding)
 pub fn router() -> Router {
@@ -90,6 +98,11 @@ async fn ws_handler_with_proxy_path(
 }
 
 async fn handle_socket(mut socket: WebSocket) {
+    // Track WebSocket connection
+    let registry = get_global_registry();
+    registry.ws_connections_active.inc();
+    debug!("WebSocket connection established, tracking metrics");
+
     // Check if replay mode is enabled
     if let Ok(replay_file) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
         info!("WebSocket replay mode enabled with file: {}", replay_file);
@@ -98,17 +111,26 @@ async fn handle_socket(mut socket: WebSocket) {
         // Normal echo mode
         while let Some(msg) = socket.recv().await {
             if let Ok(Message::Text(text)) = msg {
+                registry.record_ws_message_received();
+
                 // Echo the message back with "echo: " prefix
                 let response = format!("echo: {}", text);
                 if socket.send(Message::Text(response.into())).await.is_err() {
                     break;
                 }
+                registry.record_ws_message_sent();
             }
         }
     }
+
+    // Connection closed
+    registry.ws_connections_active.dec();
+    debug!("WebSocket connection closed");
 }
 
 async fn handle_socket_with_replay(mut socket: WebSocket, replay_file: &str) {
+    let registry = get_global_registry();
+
     // Read the replay file
     let content = match fs::read_to_string(replay_file).await {
         Ok(content) => content,

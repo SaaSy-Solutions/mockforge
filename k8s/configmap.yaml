@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mockforge-config
+  labels:
+    app: mockforge
+data:
+  config.yaml: |
+    http:
+      enabled: true
+      port: 3000
+      host: "0.0.0.0"
+
+    websocket:
+      enabled: true
+      port: 3001
+      host: "0.0.0.0"
+
+    grpc:
+      enabled: true
+      port: 50051
+      host: "0.0.0.0"
+      reflection: true
+
+    graphql:
+      enabled: false
+
+    admin:
+      enabled: true
+      port: 9080
+      host: "0.0.0.0"
+      api_enabled: true
+
+    observability:
+      metrics:
+        enabled: true
+        port: 9090
+        host: "0.0.0.0"
+
+      tracing:
+        enabled: true
+        otlp_endpoint: "http://jaeger-collector:4317"
+        service_name: "mockforge"
+
+      recorder:
+        enabled: true
+        database_path: "/app/data/mockforge.db"
+        max_events: 100000
+
+      chaos:
+        enabled: true
+        scenario: null
+
+    latency:
+      base_ms: 50
+      jitter_percent: 10
+      per_route: {}
+
+    failures:
+      enabled: false
+      rate: 0.0
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mockforge-fixtures
+  labels:
+    app: mockforge
+data:
+  users.json: |
+    [
+      {
+        "id": 1,
+        "name": "Alice",
+        "email": "alice@example.com"
+      },
+      {
+        "id": 2,
+        "name": "Bob",
+        "email": "bob@example.com"
+      }
+    ]

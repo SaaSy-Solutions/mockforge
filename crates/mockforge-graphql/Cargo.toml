@@ -21,6 +21,9 @@ once_cell = { workspace = true }
 
 # MockForge core
 mockforge-core = { path = "../mockforge-core" }
+mockforge-observability = { path = "../mockforge-observability" }
+mockforge-tracing = { path = "../mockforge-tracing" }
+opentelemetry = "0.21"
 
 # Optional data generation support
 mockforge-data = { path = "../mockforge-data", optional = true }

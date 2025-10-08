@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mockforge
+  labels:
+    app: mockforge
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mockforge
+  template:
+    metadata:
+      labels:
+        app: mockforge
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: mockforge
+      containers:
+      - name: mockforge
+        image: mockforge/mockforge:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        - name: websocket
+          containerPort: 3001
+          protocol: TCP
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        - name: admin
+          containerPort: 9080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: MOCKFORGE_HTTP_PORT
+          value: "3000"
+        - name: MOCKFORGE_WS_PORT
+          value: "3001"
+        - name: MOCKFORGE_GRPC_PORT
+          value: "50051"
+        - name: MOCKFORGE_ADMIN_PORT
+          value: "9080"
+        - name: MOCKFORGE_METRICS_PORT
+          value: "9090"
+        - name: MOCKFORGE_ADMIN_ENABLED
+          value: "true"
+        - name: MOCKFORGE_METRICS_ENABLED
+          value: "true"
+        - name: MOCKFORGE_TRACING_ENABLED
+          value: "true"
+        - name: MOCKFORGE_CHAOS_ENABLED
+          value: "true"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: admin
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: admin
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: admin
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: fixtures
+          mountPath: /app/fixtures
+          readOnly: true
+        - name: cache
+          mountPath: /app/cache
+        - name: recorder-db
+          mountPath: /app/data
+      volumes:
+      - name: config
+        configMap:
+          name: mockforge-config
+      - name: fixtures
+        configMap:
+          name: mockforge-fixtures
+      - name: cache
+        emptyDir: {}
+      - name: recorder-db
+        persistentVolumeClaim:
+          claimName: mockforge-recorder-pvc
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - mockforge
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000

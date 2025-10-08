@@ -9,6 +9,7 @@ pub mod config;
 pub mod connection_pool;
 pub mod descriptor;
 pub mod error_handling;
+pub mod grpc_tracing;
 pub mod integration_tests;
 pub mod metrics;
 pub mod mock_proxy;
@@ -21,6 +22,10 @@ pub mod validation_framework;
 pub use client::ReflectionClient;
 pub use config::ProxyConfig;
 pub use connection_pool::ConnectionPool;
+pub use grpc_tracing::{
+    create_grpc_span, record_grpc_error, record_grpc_success,
+    extract_grpc_trace_context, inject_grpc_trace_context,
+};
 pub use mock_proxy::MockReflectionProxy;
 pub use proxy::ReflectionProxy;
 

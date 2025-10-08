@@ -1,0 +1,401 @@
+# Advanced MockForge Configuration
+# Demonstrates ML anomaly detection, Chaos Mesh integration,
+# multi-tenancy, and custom plugins
+
+# ML-Based Anomaly Detection Configuration
+anomaly_detection:
+  enabled: true
+  config:
+    std_dev_threshold: 3.0
+    min_baseline_samples: 30
+    moving_average_window: 10
+    enable_seasonal: true
+    seasonal_period: 24  # hourly data, 24-hour cycle
+    sensitivity: 0.7     # 0.0 - 1.0, higher = more sensitive
+
+  # Metrics to monitor
+  monitored_metrics:
+    - name: response_time_ms
+      baseline_samples: 100
+      alert_on_anomaly: true
+      severity_threshold: high
+
+    - name: error_rate
+      baseline_samples: 50
+      alert_on_anomaly: true
+      severity_threshold: medium
+
+    - name: request_throughput
+      baseline_samples: 100
+      alert_on_anomaly: false
+      severity_threshold: high
+
+  # Collective anomaly detection
+  collective_detection:
+    enabled: true
+    metric_groups:
+      - name: api_health
+        metrics:
+          - response_time_ms
+          - error_rate
+          - request_throughput
+        min_affected_metrics: 2
+
+# Chaos Mesh Integration
+chaos_mesh:
+  enabled: true
+  api_url: https://kubernetes.default.svc
+  namespace: chaos-testing
+
+  # Default experiment settings
+  defaults:
+    mode: one  # one, all, fixed, fixed-percent, random-max-percent
+    duration: 5m
+
+  # Pre-configured experiments
+  experiments:
+    - name: pod-kill-test
+      type: PodChaos
+      action: pod-kill
+      selector:
+        namespaces:
+          - production
+        label_selectors:
+          app: api-gateway
+          tier: backend
+      mode: one
+      duration: 30s
+      schedule: "*/5 * * * *"  # Every 5 minutes
+
+    - name: network-latency-test
+      type: NetworkChaos
+      action: delay
+      selector:
+        namespaces:
+          - production
+        label_selectors:
+          app: database
+      delay:
+        latency: 100ms
+        jitter: 10ms
+        correlation: "50"
+      duration: 3m
+
+    - name: cpu-stress-test
+      type: StressChaos
+      selector:
+        namespaces:
+          - staging
+        label_selectors:
+          app: worker-service
+      stressors:
+        cpu_workers: 4
+        cpu_load: 80
+      duration: 10m
+
+    - name: packet-loss-test
+      type: NetworkChaos
+      action: loss
+      selector:
+        namespaces:
+          - production
+        label_selectors:
+          app: api-gateway
+      loss:
+        loss: "5"  # 5% packet loss
+        correlation: "25"
+      duration: 2m
+
+# Multi-Tenancy Configuration
+multi_tenancy:
+  enabled: true
+
+  # Define tenant plans
+  plans:
+    free:
+      quotas:
+        max_scenarios: 5
+        max_concurrent_executions: 1
+        max_orchestrations: 3
+        max_templates: 5
+        max_requests_per_minute: 50
+        max_storage_mb: 50
+        max_users: 1
+        max_experiment_duration_secs: 600  # 10 minutes
+
+      permissions:
+        can_create_scenarios: true
+        can_execute_scenarios: true
+        can_view_observability: false
+        can_manage_resilience: false
+        can_use_advanced_features: false
+        can_integrate_external: false
+        can_use_ml_features: false
+        can_manage_users: false
+
+    starter:
+      quotas:
+        max_scenarios: 20
+        max_concurrent_executions: 5
+        max_orchestrations: 10
+        max_templates: 20
+        max_requests_per_minute: 200
+        max_storage_mb: 500
+        max_users: 5
+        max_experiment_duration_secs: 3600  # 1 hour
+
+      permissions:
+        can_create_scenarios: true
+        can_execute_scenarios: true
+        can_view_observability: true
+        can_manage_resilience: true
+        can_use_advanced_features: false
+        can_integrate_external: false
+        can_use_ml_features: false
+        can_manage_users: true
+
+    professional:
+      quotas:
+        max_scenarios: 100
+        max_concurrent_executions: 20
+        max_orchestrations: 50
+        max_templates: 100
+        max_requests_per_minute: 1000
+        max_storage_mb: 5000
+        max_users: 25
+        max_experiment_duration_secs: 14400  # 4 hours
+
+      permissions:
+        can_create_scenarios: true
+        can_execute_scenarios: true
+        can_view_observability: true
+        can_manage_resilience: true
+        can_use_advanced_features: true
+        can_integrate_external: true
+        can_use_ml_features: true
+        can_manage_users: true
+
+    enterprise:
+      quotas:
+        max_scenarios: -1  # Unlimited
+        max_concurrent_executions: 100
+        max_orchestrations: -1  # Unlimited
+        max_templates: -1  # Unlimited
+        max_requests_per_minute: 10000
+        max_storage_mb: 50000
+        max_users: -1  # Unlimited
+        max_experiment_duration_secs: 86400  # 24 hours
+
+      permissions:
+        can_create_scenarios: true
+        can_execute_scenarios: true
+        can_view_observability: true
+        can_manage_resilience: true
+        can_use_advanced_features: true
+        can_integrate_external: true
+        can_use_ml_features: true
+        can_manage_users: true
+        custom_permissions:
+          - advanced_analytics
+          - priority_support
+          - custom_integrations
+
+  # Default tenants
+  tenants:
+    - name: demo-tenant
+      plan: professional
+      enabled: true
+      metadata:
+        organization: Demo Corp
+        contact: admin@democorp.com
+        environment: production
+
+# Custom Plugins Configuration
+plugins:
+  enabled: true
+
+  # Plugin registry settings
+  registry:
+    auto_discover: true
+    plugin_dirs:
+      - /etc/mockforge/plugins
+      - ~/.mockforge/plugins
+
+  # Built-in plugins
+  builtin:
+    - id: custom-fault-injector
+      enabled: true
+      config:
+        fault_probability: 0.1
+        default_timeout_ms: 5000
+
+    - id: metrics-collector
+      enabled: true
+      config:
+        export_interval_secs: 60
+        buffer_size: 1000
+
+  # Custom plugins
+  custom:
+    - id: database-fault-injector
+      enabled: true
+      path: /etc/mockforge/plugins/database_fault.so
+      config:
+        connection_timeout_ms: 5000
+        query_timeout_ms: 30000
+        fault_types:
+          - connection_timeout
+          - query_error
+          - slow_query
+          - deadlock
+
+    - id: prometheus-exporter
+      enabled: true
+      path: /etc/mockforge/plugins/prometheus.so
+      config:
+        export_port: 9090
+        metrics_path: /metrics
+        include_labels:
+          - tenant_id
+          - scenario_id
+          - experiment_type
+
+    - id: slack-notifier
+      enabled: true
+      path: /etc/mockforge/plugins/slack.so
+      config:
+        webhook_url: ${SLACK_WEBHOOK_URL}
+        channel: "#chaos-engineering"
+        notify_on:
+          - experiment_start
+          - experiment_end
+          - anomaly_detected
+          - quota_exceeded
+
+  # Plugin hooks
+  hooks:
+    - type: logging
+      enabled: true
+      config:
+        log_level: info
+        include_context: true
+
+    - type: metrics
+      enabled: true
+      config:
+        track_execution_time: true
+        track_success_rate: true
+
+    - type: rate_limiting
+      enabled: true
+      config:
+        max_executions_per_minute: 100
+        burst_size: 20
+
+# Advanced Orchestration with All Features
+orchestration:
+  name: advanced-chaos-scenario
+  description: Comprehensive chaos test with ML detection and multi-tenancy
+
+  # Tenant context
+  tenant_id: demo-tenant
+
+  # Enable features
+  features:
+    anomaly_detection: true
+    chaos_mesh_integration: true
+    plugin_execution: true
+
+  steps:
+    # Step 1: Baseline measurement
+    - name: collect_baseline
+      type: custom
+      plugin: metrics-collector
+      config:
+        duration: 5m
+        metrics:
+          - response_time_ms
+          - error_rate
+          - request_throughput
+
+    # Step 2: Chaos Mesh pod kill
+    - name: pod_chaos
+      type: chaos_mesh
+      experiment: pod-kill-test
+      wait_for_completion: true
+
+    # Step 3: Monitor for anomalies
+    - name: detect_anomalies
+      type: ml_detection
+      metrics:
+        - response_time_ms
+        - error_rate
+      alert_threshold: high
+
+    # Step 4: Custom fault injection
+    - name: database_fault
+      type: plugin
+      plugin: database-fault-injector
+      config:
+        fault_type: slow_query
+        latency_ms: 1000
+        duration: 2m
+
+    # Step 5: Network chaos
+    - name: network_latency
+      type: chaos_mesh
+      experiment: network-latency-test
+
+    # Step 6: Final analysis
+    - name: analyze_results
+      type: custom
+      plugin: prometheus-exporter
+      config:
+        export_metrics: true
+        generate_report: true
+
+  # Assertions
+  assertions:
+    - metric: response_time_ms
+      operator: less_than
+      value: 1000
+      severity: high
+
+    - metric: error_rate
+      operator: less_than
+      value: 0.05
+      severity: critical
+
+    - metric: anomaly_count
+      operator: equals
+      value: 0
+      severity: medium
+
+  # Cleanup
+  cleanup:
+    - delete_chaos_mesh_experiments: true
+    - export_metrics: true
+    - send_notifications: true
+
+# Integration with Observability
+observability:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+
+  opentelemetry:
+    enabled: true
+    endpoint: http://otel-collector:4317
+
+  alerts:
+    - name: anomaly_detected
+      condition: anomaly.severity >= high
+      channels:
+        - slack
+        - email
+
+    - name: quota_exceeded
+      condition: tenant.usage >= tenant.quota * 0.9
+      channels:
+        - email

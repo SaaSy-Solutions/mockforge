@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'mockforge'
+    replica: '1'
+
+scrape_configs:
+  - job_name: 'mockforge'
+    static_configs:
+      - targets: ['mockforge:9090']
+        labels:
+          service: 'mockforge'
+          environment: 'development'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,282 @@
+# Example Plugin Manifest for MockForge Registry
+# This demonstrates all available fields and features
+
+# Basic Information
+name: auth-jwt-advanced
+version: 2.1.0
+description: |
+  Advanced JWT authentication plugin with multi-provider support,
+  token refresh, and customizable claims validation.
+
+# Author Information
+author:
+  name: John Doe
+  email: john.doe@example.com
+  url: https://github.com/johndoe
+
+# Classification
+category: auth  # auth, template, response, datasource, middleware, testing, observability, other
+language: rust  # rust, python, javascript, typescript, go, ruby
+
+# Discovery & SEO
+tags:
+  - jwt
+  - authentication
+  - oauth2
+  - security
+  - multi-tenant
+  - async
+
+# Legal
+license: MIT
+repository: https://github.com/mockforge-plugins/auth-jwt-advanced
+homepage: https://jwt-plugin.mockforge.dev
+
+# Documentation
+documentation: https://jwt-plugin.mockforge.dev/docs
+changelog: CHANGELOG.md
+readme: README.md
+
+# Dependencies
+dependencies:
+  # Registry dependencies (semantic versioning)
+  token-validator:
+    version: "^1.5.0"
+    features: ["async", "hmac"]
+    optional: false
+
+  # Optional dependencies
+  rate-limiter:
+    version: "~0.3.0"
+    optional: true
+
+  # Git dependencies
+  custom-crypto:
+    git: https://github.com/example/custom-crypto.git
+    rev: "abc123"
+    optional: false
+
+  # Path dependencies (for local development)
+  shared-utils:
+    path: "../shared-utils"
+    optional: true
+
+# Runtime Requirements
+runtime:
+  min_mockforge_version: "0.1.0"
+  rust_version: "1.75.0"
+
+  # For multi-language plugins
+  python_version: ">=3.8"      # If language: python
+  node_version: ">=18.0"       # If language: javascript/typescript
+  go_version: ">=1.21"         # If language: go
+
+# Features
+features:
+  default: ["hmac", "async"]
+
+  # Feature definitions
+  hmac:
+    description: "HMAC-based JWT signing"
+
+  rsa:
+    description: "RSA public/private key JWT signing"
+    dependencies:
+      - "openssl"
+
+  async:
+    description: "Async runtime support"
+    dependencies:
+      - "tokio"
+
+  redis-cache:
+    description: "Redis-backed token cache"
+    dependencies:
+      - "rate-limiter"
+
+# Configuration Schema
+config_schema:
+  type: object
+  properties:
+    secret_key:
+      type: string
+      description: "JWT signing secret key"
+      required: true
+      sensitive: true
+
+    algorithm:
+      type: string
+      description: "Signing algorithm"
+      enum: ["HS256", "HS384", "HS512", "RS256"]
+      default: "HS256"
+
+    token_ttl:
+      type: integer
+      description: "Token time-to-live in seconds"
+      default: 3600
+      minimum: 60
+      maximum: 86400
+
+    refresh_enabled:
+      type: boolean
+      description: "Enable refresh token support"
+      default: false
+
+    claims_validation:
+      type: object
+      description: "Custom claims to validate"
+      properties:
+        issuer:
+          type: string
+        audience:
+          type: array
+          items:
+            type: string
+
+# Build Configuration
+build:
+  # For Rust plugins
+  cargo:
+    profile: release
+    features: ["hmac", "async"]
+    target: "wasm32-wasi"  # or native
+
+  # For Python plugins
+  python:
+    requirements: requirements.txt
+    setup: setup.py
+
+  # For JavaScript plugins
+  npm:
+    build_script: "build"
+    entry: "dist/index.js"
+
+# Testing
+testing:
+  test_command: "cargo test"
+  coverage_threshold: 80
+  integration_tests: true
+
+# Security
+security:
+  # Permissions required by plugin
+  permissions:
+    - network:http
+    - filesystem:read
+    - env:read
+
+  # Security policy
+  vulnerability_disclosure: SECURITY.md
+
+  # Allowed network access
+  network_access:
+    - "*.auth0.com"
+    - "api.example.com"
+
+# Performance
+performance:
+  memory_limit: 100MB
+  cpu_limit: 0.5  # cores
+  startup_time: 5s
+
+# Metadata for registry
+registry:
+  keywords:
+    - jwt
+    - authentication
+    - security
+
+  # Display in marketplace
+  featured: false
+  verified: false
+
+  # Support information
+  support:
+    email: support@example.com
+    url: https://github.com/mockforge-plugins/auth-jwt-advanced/issues
+    discord: https://discord.gg/example
+
+  # Funding
+  funding:
+    - type: github
+      url: https://github.com/sponsors/johndoe
+    - type: patreon
+      url: https://patreon.com/johndoe
+
+# Hot Reload Configuration
+hot_reload:
+  enabled: true
+  watch_files:
+    - "src/**/*.rs"
+    - "Cargo.toml"
+  exclude:
+    - "target/**"
+    - "**/*.tmp"
+
+# Examples
+examples:
+  - name: basic
+    description: "Basic JWT authentication"
+    file: examples/basic.rs
+
+  - name: multi-provider
+    description: "Multiple JWT providers"
+    file: examples/multi_provider.rs
+
+  - name: refresh-tokens
+    description: "Token refresh flow"
+    file: examples/refresh.rs
+
+# Badges (displayed in UI)
+badges:
+  - name: build
+    url: https://github.com/mockforge-plugins/auth-jwt-advanced/workflows/CI/badge.svg
+
+  - name: coverage
+    url: https://codecov.io/gh/mockforge-plugins/auth-jwt-advanced/branch/main/graph/badge.svg
+
+  - name: crates.io
+    url: https://img.shields.io/crates/v/mockforge-plugin-jwt.svg
+
+# Internationalization
+i18n:
+  supported_locales:
+    - en-US
+    - es-ES
+    - fr-FR
+    - de-DE
+  default_locale: en-US
+
+# Plugin Lifecycle Hooks
+hooks:
+  pre_install: scripts/pre_install.sh
+  post_install: scripts/post_install.sh
+  pre_uninstall: scripts/pre_uninstall.sh
+  post_uninstall: scripts/post_uninstall.sh
+
+# Compatibility
+compatibility:
+  os:
+    - linux
+    - macos
+    - windows
+
+  arch:
+    - x86_64
+    - aarch64
+
+  # Incompatible with certain plugins
+  conflicts_with:
+    - auth-basic  # Cannot use both auth plugins
+
+# Analytics (opt-in)
+analytics:
+  telemetry_enabled: true
+  usage_tracking: false
+
+# Deprecation (for old versions)
+deprecation:
+  deprecated: false
+  reason: null
+  alternative: null
+  end_of_life: null

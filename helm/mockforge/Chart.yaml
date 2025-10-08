@@ -1,0 +1,19 @@
+apiVersion: v2
+name: mockforge
+description: A Helm chart for MockForge - Advanced API mocking and chaos engineering platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - mockforge
+  - api
+  - mocking
+  - chaos-engineering
+  - testing
+home: https://mockforge.dev
+sources:
+  - https://github.com/mockforge/mockforge
+maintainers:
+  - name: MockForge Team
+    email: team@mockforge.dev
+icon: https://mockforge.dev/logo.png

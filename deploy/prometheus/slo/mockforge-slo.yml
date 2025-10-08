@@ -1,0 +1,176 @@
+# MockForge Service Level Objectives (SLOs)
+# These define the target reliability levels for the service
+
+groups:
+  - name: mockforge_slo_definitions
+    interval: 1m
+    rules:
+      # SLI: Availability - Ratio of successful requests
+      - record: sli:mockforge:availability:ratio_rate5m
+        expr: |
+          sum(rate(mockforge_http_requests_total{status=~"2.."}[5m]))
+          /
+          sum(rate(mockforge_http_requests_total[5m]))
+
+      - record: sli:mockforge:availability:ratio_rate30m
+        expr: |
+          sum(rate(mockforge_http_requests_total{status=~"2.."}[30m]))
+          /
+          sum(rate(mockforge_http_requests_total[30m]))
+
+      - record: sli:mockforge:availability:ratio_rate1h
+        expr: |
+          sum(rate(mockforge_http_requests_total{status=~"2.."}[1h]))
+          /
+          sum(rate(mockforge_http_requests_total[1h]))
+
+      # SLI: Latency - p50, p95, p99 request duration
+      - record: sli:mockforge:latency:p50
+        expr: |
+          histogram_quantile(0.50,
+            sum(rate(mockforge_http_request_duration_seconds_bucket[5m])) by (le)
+          )
+
+      - record: sli:mockforge:latency:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mockforge_http_request_duration_seconds_bucket[5m])) by (le)
+          )
+
+      - record: sli:mockforge:latency:p99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(mockforge_http_request_duration_seconds_bucket[5m])) by (le)
+          )
+
+      # SLI: Error rate
+      - record: sli:mockforge:errors:ratio_rate5m
+        expr: |
+          sum(rate(mockforge_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(mockforge_http_requests_total[5m]))
+
+      # SLO: Availability Target = 99.9% (3 nines)
+      # Error budget: 0.1% of requests can fail
+      - record: slo:mockforge:availability:target
+        expr: 0.999
+
+      - record: slo:mockforge:availability:error_budget
+        expr: 1 - 0.999  # 0.001 = 0.1%
+
+      # SLO: Latency Target = 95% of requests < 200ms
+      - record: slo:mockforge:latency:target_seconds
+        expr: 0.2  # 200ms
+
+      - record: slo:mockforge:latency:target_percentile
+        expr: 0.95
+
+      # Error budget remaining (30 day window)
+      - record: slo:mockforge:availability:error_budget_remaining
+        expr: |
+          (
+            1 - (
+              sum(rate(mockforge_http_requests_total{status=~"2.."}[30d]))
+              /
+              sum(rate(mockforge_http_requests_total[30d]))
+            )
+          ) / (1 - 0.999)
+
+      # SLO burn rate alerts (multi-window multi-burn-rate)
+      # Fast burn: 2% error budget consumed in 1 hour
+      - record: slo:mockforge:availability:burn_rate_1h
+        expr: |
+          (
+            1 - (
+              sum(rate(mockforge_http_requests_total{status=~"2.."}[1h]))
+              /
+              sum(rate(mockforge_http_requests_total[1h]))
+            )
+          ) / (1 - 0.999)
+
+      # Medium burn: 5% error budget consumed in 6 hours
+      - record: slo:mockforge:availability:burn_rate_6h
+        expr: |
+          (
+            1 - (
+              sum(rate(mockforge_http_requests_total{status=~"2.."}[6h]))
+              /
+              sum(rate(mockforge_http_requests_total[6h]))
+            )
+          ) / (1 - 0.999)
+
+      # Slow burn: 10% error budget consumed in 3 days
+      - record: slo:mockforge:availability:burn_rate_3d
+        expr: |
+          (
+            1 - (
+              sum(rate(mockforge_http_requests_total{status=~"2.."}[3d]))
+              /
+              sum(rate(mockforge_http_requests_total[3d]))
+            )
+          ) / (1 - 0.999)
+
+  - name: mockforge_slo_alerts
+    interval: 1m
+    rules:
+      # Critical: Fast burn rate (page immediately)
+      - alert: MockForgeSLOFastBurn
+        expr: |
+          slo:mockforge:availability:burn_rate_1h > 14.4
+          and
+          slo:mockforge:availability:burn_rate_5m > 14.4
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+          burn_rate: fast
+        annotations:
+          summary: "MockForge SLO fast burn rate detected"
+          description: "Consuming error budget at 14.4x rate. At this rate, entire monthly budget will be exhausted in 2 hours."
+          impact: "Service availability SLO (99.9%) will be breached within 2 hours if not resolved."
+          runbook_url: "https://docs.example.com/runbooks/slo-fast-burn"
+
+      # Warning: Medium burn rate
+      - alert: MockForgeSLOMediumBurn
+        expr: |
+          slo:mockforge:availability:burn_rate_6h > 6
+          and
+          slo:mockforge:availability:burn_rate_30m > 6
+        for: 15m
+        labels:
+          severity: warning
+          slo: availability
+          burn_rate: medium
+        annotations:
+          summary: "MockForge SLO medium burn rate detected"
+          description: "Consuming error budget at 6x rate. At this rate, entire monthly budget will be exhausted in 5 days."
+          runbook_url: "https://docs.example.com/runbooks/slo-medium-burn"
+
+      # Info: Slow burn rate
+      - alert: MockForgeSLOSlowBurn
+        expr: |
+          slo:mockforge:availability:burn_rate_3d > 1
+          and
+          slo:mockforge:availability:burn_rate_6h > 1
+        for: 1h
+        labels:
+          severity: info
+          slo: availability
+          burn_rate: slow
+        annotations:
+          summary: "MockForge SLO slow burn rate detected"
+          description: "Consuming error budget at normal rate. Monitor for trends."
+          runbook_url: "https://docs.example.com/runbooks/slo-slow-burn"
+
+      # Error budget exhausted
+      - alert: MockForgeSLOErrorBudgetExhausted
+        expr: slo:mockforge:availability:error_budget_remaining <= 0
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "MockForge SLO error budget exhausted"
+          description: "Monthly error budget has been exhausted. Incident response required."
+          impact: "No remaining error budget for the current 30-day window."
+          runbook_url: "https://docs.example.com/runbooks/slo-budget-exhausted"

@@ -1,0 +1,171 @@
+{
+  "title": "MockForge - Orchestration Monitoring",
+  "tags": ["mockforge", "orchestration"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Orchestrations",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "count(mockforge_orchestration_status{is_running=\"true\"})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Orchestration Progress",
+      "type": "gauge",
+      "gridPos": {
+        "h": 4,
+        "w": 18,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "mockforge_orchestration_progress",
+          "refId": "A",
+          "legendFormat": "{{orchestration_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Step Execution Status",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "mockforge_orchestration_current_step",
+          "refId": "A",
+          "legendFormat": "{{orchestration_name}} - Step {{current_step}}/{{total_steps}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Failed Steps",
+      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "mockforge_orchestration_failed_steps",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Orchestration Iterations",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "mockforge_orchestration_current_iteration",
+          "refId": "A",
+          "legendFormat": "{{orchestration_name}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Parallel vs Sequential Execution",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum by (parallel) (mockforge_orchestration_total)",
+          "refId": "A",
+          "legendFormat": "{{parallel}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Orchestration Duration",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mockforge_orchestration_duration_seconds_bucket[5m])) by (le, orchestration_name))",
+          "refId": "A",
+          "legendFormat": "{{orchestration_name}} - p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(mockforge_orchestration_duration_seconds_bucket[5m])) by (le, orchestration_name))",
+          "refId": "B",
+          "legendFormat": "{{orchestration_name}} - p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Step Execution Times",
+      "type": "heatmap",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(mockforge_step_duration_seconds_bucket[5m])) by (le)",
+          "refId": "A",
+          "format": "heatmap"
+        }
+      ]
+    }
+  ]
+}

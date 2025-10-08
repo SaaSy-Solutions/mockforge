@@ -1,5 +1,6 @@
 //! Metrics collection for the reflection proxy
 
+use mockforge_observability::get_global_registry;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -44,6 +45,18 @@ impl MethodMetrics {
     /// Record a failed request
     pub fn record_error(&self) {
         self.error_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record to Prometheus metrics
+    pub fn record_to_prometheus(&self, method: &str, success: bool, duration_ms: u64) {
+        let registry = get_global_registry();
+        let status = if success { "ok" } else { "error" };
+        let duration_seconds = duration_ms as f64 / 1000.0;
+        registry.record_grpc_request(method, status, duration_seconds);
+
+        if !success {
+            registry.record_error("grpc", "grpc_error");
+        }
     }
 
     /// Increment in-flight requests
@@ -186,12 +199,20 @@ pub fn global_registry() -> &'static MetricsRegistry {
 pub async fn record_success(service_name: &str, method_name: &str, duration_ms: u64) {
     let metrics = global_registry().get_method_metrics(service_name, method_name).await;
     metrics.record_success(duration_ms);
+
+    // Also record to Prometheus
+    let method_full = format!("{}::{}", service_name, method_name);
+    metrics.record_to_prometheus(&method_full, true, duration_ms);
 }
 
 /// Record a failed request
 pub async fn record_error(service_name: &str, method_name: &str) {
     let metrics = global_registry().get_method_metrics(service_name, method_name).await;
     metrics.record_error();
+
+    // Also record to Prometheus
+    let method_full = format!("{}::{}", service_name, method_name);
+    metrics.record_to_prometheus(&method_full, false, 0);
 }
 
 /// Increment in-flight requests

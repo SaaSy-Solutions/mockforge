@@ -5,10 +5,18 @@
 use mockforge_core::LatencyProfile;
 
 pub mod executor;
+pub mod graphql_tracing;
 pub mod schema;
 
 pub use executor::{create_graphql_router, start_graphql_server, GraphQLExecutor};
 pub use schema::GraphQLSchema;
+
+// Re-export tracing utilities
+pub use graphql_tracing::{
+    create_graphql_span, create_resolver_span,
+    record_graphql_error, record_graphql_success,
+    record_resolver_error, record_resolver_success,
+};
 
 /// Start GraphQL server with default configuration
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

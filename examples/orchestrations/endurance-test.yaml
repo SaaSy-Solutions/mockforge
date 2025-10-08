@@ -1,0 +1,40 @@
+name: endurance_test
+description: 24-hour endurance test with periodic chaos injection
+steps:
+  # Each iteration is 1 hour
+  - name: normal_operations_with_occasional_chaos
+    scenario:
+      name: realistic_operations
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 50
+          jitter_percent: 10.0
+        fault_injection:
+          enabled: true
+          http_errors: [500, 503]
+          http_error_probability: 0.02  # 2% error rate
+        rate_limit:
+          enabled: true
+          requests_per_second: 100
+          burst_size: 10
+        circuit_breaker:
+          enabled: true
+          failure_threshold: 5
+        bulkhead:
+          enabled: true
+          max_concurrent_requests: 100
+          max_queue_size: 20
+    duration_seconds: 3600  # 1 hour
+    delay_before_seconds: 0
+    continue_on_failure: true
+
+parallel: false
+loop_orchestration: true
+max_iterations: 24  # Run for 24 hours
+tags:
+  - endurance
+  - stability
+  - long-running
+  - production-simulation

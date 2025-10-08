@@ -1,0 +1,60 @@
+[package]
+name = "mockforge-chaos"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = "0.1"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+
+# HTTP/web framework
+axum = { workspace = true }
+http = "1.0"
+http-body-util = "0.1"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utilities
+rand = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+once_cell = "1.19"
+
+# Metrics
+prometheus = { version = "0.13", features = ["process"] }
+
+# Rate limiting
+governor = "0.6"
+nonzero_ext = "0.3"
+
+# HTTP client for health checks
+reqwest = { version = "0.11", features = ["json"] }
+
+# Cryptography
+sha2 = "0.10"
+
+# State persistence
+bincode = "1.3"
+
+# Distributed state (Redis)
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
+
+# WebSocket support
+tokio-tungstenite = "0.21"
+
+[features]
+default = []
+distributed = ["redis"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }

@@ -1,0 +1,45 @@
+[package]
+name = "mockforge-recorder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono", "json"] }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# HTTP types
+http = "1.0"
+http-body-util = "0.1"
+axum = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+base64 = { workspace = true }
+
+# HAR export
+har = "0.7"
+
+# Diffing
+similar = { version = "2.3", features = ["inline"] }
+serde_path_to_error = "0.1"
+
+# HTTP client for LLM calls
+reqwest = { version = "0.11", features = ["json"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"

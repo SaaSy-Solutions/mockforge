@@ -48,6 +48,178 @@ enum Commands {
         #[arg(long, default_value = "9080")]
         admin_port: u16,
 
+        /// Enable Prometheus metrics endpoint
+        #[arg(long)]
+        metrics: bool,
+
+        /// Metrics server port
+        #[arg(long, default_value = "9090")]
+        metrics_port: u16,
+
+        /// Enable OpenTelemetry distributed tracing
+        #[arg(long)]
+        tracing: bool,
+
+        /// Service name for traces
+        #[arg(long, default_value = "mockforge")]
+        tracing_service_name: String,
+
+        /// Tracing environment (development, staging, production)
+        #[arg(long, default_value = "development")]
+        tracing_environment: String,
+
+        /// Jaeger endpoint for trace export
+        #[arg(long, default_value = "http://localhost:14268/api/traces")]
+        jaeger_endpoint: String,
+
+        /// Tracing sampling rate (0.0 to 1.0)
+        #[arg(long, default_value = "1.0")]
+        tracing_sampling_rate: f64,
+
+        /// Enable API Flight Recorder
+        #[arg(long)]
+        recorder: bool,
+
+        /// Recorder database file path
+        #[arg(long, default_value = "./mockforge-recordings.db")]
+        recorder_db: String,
+
+        /// Disable recorder management API
+        #[arg(long)]
+        recorder_no_api: bool,
+
+        /// Recorder management API port (defaults to main port)
+        #[arg(long)]
+        recorder_api_port: Option<u16>,
+
+        /// Maximum number of recorded requests (0 for unlimited)
+        #[arg(long, default_value = "10000")]
+        recorder_max_requests: i64,
+
+        /// Auto-delete recordings older than N days (0 to disable)
+        #[arg(long, default_value = "7")]
+        recorder_retention_days: i64,
+
+        /// Enable chaos engineering
+        #[arg(long)]
+        chaos: bool,
+
+        /// Chaos scenario (network_degradation, service_instability, cascading_failure, peak_traffic, slow_backend)
+        #[arg(long)]
+        chaos_scenario: Option<String>,
+
+        /// Chaos latency: fixed delay in milliseconds
+        #[arg(long)]
+        chaos_latency_ms: Option<u64>,
+
+        /// Chaos latency: random delay range (min-max) in milliseconds
+        #[arg(long)]
+        chaos_latency_range: Option<String>,
+
+        /// Chaos latency probability (0.0-1.0)
+        #[arg(long, default_value = "1.0")]
+        chaos_latency_probability: f64,
+
+        /// Chaos fault injection: HTTP error codes (comma-separated)
+        #[arg(long)]
+        chaos_http_errors: Option<String>,
+
+        /// Chaos fault injection: HTTP error probability (0.0-1.0)
+        #[arg(long, default_value = "0.1")]
+        chaos_http_error_probability: f64,
+
+        /// Chaos rate limit: requests per second
+        #[arg(long)]
+        chaos_rate_limit: Option<u32>,
+
+        /// Chaos traffic shaping: bandwidth limit (bytes/sec)
+        #[arg(long)]
+        chaos_bandwidth_limit: Option<u64>,
+
+        /// Chaos traffic shaping: packet loss percentage (0-100)
+        #[arg(long)]
+        chaos_packet_loss: Option<f64>,
+
+        /// Enable gRPC-specific chaos engineering
+        #[arg(long)]
+        chaos_grpc: bool,
+
+        /// gRPC chaos: status codes to inject (comma-separated)
+        #[arg(long)]
+        chaos_grpc_status_codes: Option<String>,
+
+        /// gRPC chaos: stream interruption probability (0.0-1.0)
+        #[arg(long, default_value = "0.1")]
+        chaos_grpc_stream_interruption_probability: f64,
+
+        /// Enable WebSocket-specific chaos engineering
+        #[arg(long)]
+        chaos_websocket: bool,
+
+        /// WebSocket chaos: close codes to inject (comma-separated)
+        #[arg(long)]
+        chaos_websocket_close_codes: Option<String>,
+
+        /// WebSocket chaos: message drop probability (0.0-1.0)
+        #[arg(long, default_value = "0.05")]
+        chaos_websocket_message_drop_probability: f64,
+
+        /// WebSocket chaos: message corruption probability (0.0-1.0)
+        #[arg(long, default_value = "0.05")]
+        chaos_websocket_message_corruption_probability: f64,
+
+        /// Enable GraphQL-specific chaos engineering
+        #[arg(long)]
+        chaos_graphql: bool,
+
+        /// GraphQL chaos: error codes to inject (comma-separated)
+        #[arg(long)]
+        chaos_graphql_error_codes: Option<String>,
+
+        /// GraphQL chaos: partial data probability (0.0-1.0)
+        #[arg(long, default_value = "0.1")]
+        chaos_graphql_partial_data_probability: f64,
+
+        /// GraphQL chaos: enable resolver-level latency injection
+        #[arg(long)]
+        chaos_graphql_resolver_latency: bool,
+
+        /// Enable circuit breaker pattern
+        #[arg(long)]
+        circuit_breaker: bool,
+
+        /// Circuit breaker: failure threshold
+        #[arg(long, default_value = "5")]
+        circuit_breaker_failure_threshold: u64,
+
+        /// Circuit breaker: success threshold
+        #[arg(long, default_value = "2")]
+        circuit_breaker_success_threshold: u64,
+
+        /// Circuit breaker: timeout in milliseconds
+        #[arg(long, default_value = "60000")]
+        circuit_breaker_timeout_ms: u64,
+
+        /// Circuit breaker: failure rate threshold percentage (0-100)
+        #[arg(long, default_value = "50.0")]
+        circuit_breaker_failure_rate: f64,
+
+        /// Enable bulkhead pattern
+        #[arg(long)]
+        bulkhead: bool,
+
+        /// Bulkhead: maximum concurrent requests
+        #[arg(long, default_value = "100")]
+        bulkhead_max_concurrent: u32,
+
+        /// Bulkhead: maximum queue size
+        #[arg(long, default_value = "10")]
+        bulkhead_max_queue: u32,
+
+        /// Bulkhead: queue timeout in milliseconds
+        #[arg(long, default_value = "5000")]
+        bulkhead_queue_timeout_ms: u64,
+
         /// OpenAPI spec file for HTTP server
         #[arg(short, long)]
         spec: Option<PathBuf>,
@@ -147,6 +319,141 @@ enum Commands {
     Plugin {
         #[command(subcommand)]
         plugin_command: plugin_commands::PluginCommands,
+    },
+
+    /// Chaos experiment orchestration
+    Orchestrate {
+        #[command(subcommand)]
+        orchestrate_command: OrchestrateCommands,
+    },
+
+    /// Generate tests from recorded API interactions
+    GenerateTests {
+        /// Recorder database file path
+        #[arg(short, long, default_value = "./mockforge-recordings.db")]
+        database: PathBuf,
+
+        /// Test format (rust_reqwest, http_file, curl, postman, k6, python_pytest, javascript_jest, go_test)
+        #[arg(short, long, default_value = "rust_reqwest")]
+        format: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Filter by protocol (http, grpc, websocket, graphql)
+        #[arg(long)]
+        protocol: Option<String>,
+
+        /// Filter by HTTP method (GET, POST, etc.)
+        #[arg(long)]
+        method: Option<String>,
+
+        /// Filter by path pattern (supports wildcards)
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Filter by status code
+        #[arg(long)]
+        status_code: Option<u16>,
+
+        /// Limit number of tests to generate
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+
+        /// Test suite name
+        #[arg(long, default_value = "generated_tests")]
+        suite_name: String,
+
+        /// Base URL for generated tests
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+
+        /// Use AI to generate intelligent test descriptions
+        #[arg(long)]
+        ai_descriptions: bool,
+
+        /// LLM provider for AI descriptions (openai, ollama)
+        #[arg(long, default_value = "ollama")]
+        llm_provider: String,
+
+        /// LLM model for AI descriptions
+        #[arg(long, default_value = "llama2")]
+        llm_model: String,
+
+        /// LLM API endpoint
+        #[arg(long)]
+        llm_endpoint: Option<String>,
+
+        /// LLM API key (for OpenAI, Anthropic)
+        #[arg(long, env = "MOCKFORGE_LLM_API_KEY")]
+        llm_api_key: Option<String>,
+
+        /// Include body validation assertions
+        #[arg(long, default_value = "true")]
+        validate_body: bool,
+
+        /// Include status code validation assertions
+        #[arg(long, default_value = "true")]
+        validate_status: bool,
+
+        /// Include header validation assertions
+        #[arg(long)]
+        validate_headers: bool,
+
+        /// Include timing validation assertions
+        #[arg(long)]
+        validate_timing: bool,
+
+        /// Maximum duration threshold in ms for timing validation
+        #[arg(long)]
+        max_duration_ms: Option<u64>,
+    },
+}
+
+#[derive(Subcommand)]
+enum OrchestrateCommands {
+    /// Start a chaos orchestration from file
+    Start {
+        /// Orchestration file (JSON or YAML)
+        #[arg(short, long)]
+        file: PathBuf,
+
+        /// Base URL for API requests
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+
+    /// Get orchestration status
+    Status {
+        /// Base URL for API requests
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+
+    /// Stop running orchestration
+    Stop {
+        /// Base URL for API requests
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+
+    /// Validate an orchestration file
+    Validate {
+        /// Orchestration file (JSON or YAML)
+        #[arg(short, long)]
+        file: PathBuf,
+    },
+
+    /// Export an orchestration template
+    Template {
+        /// Output file path
+        #[arg(short, long)]
+        output: PathBuf,
+
+        /// Format (json or yaml)
+        #[arg(long, default_value = "yaml")]
+        format: String,
     },
 }
 
@@ -298,6 +605,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             grpc_port,
             admin,
             admin_port,
+            metrics,
+            metrics_port,
             spec,
             ws_replay_file,
             traffic_shaping,
@@ -315,6 +624,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 grpc_port,
                 admin,
                 admin_port,
+                metrics,
+                metrics_port,
                 spec,
                 ws_replay_file,
                 traffic_shaping,
@@ -355,6 +666,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Plugin { plugin_command } => {
             plugin_commands::handle_plugin_command(plugin_command).await?;
         }
+
+        Commands::Orchestrate { orchestrate_command } => {
+            handle_orchestrate(orchestrate_command).await?;
+        }
+
+        Commands::GenerateTests {
+            database,
+            format,
+            output,
+            protocol,
+            method,
+            path,
+            status_code,
+            limit,
+            suite_name,
+            base_url,
+            ai_descriptions,
+            llm_provider,
+            llm_model,
+            llm_endpoint,
+            llm_api_key,
+            validate_body,
+            validate_status,
+            validate_headers,
+            validate_timing,
+            max_duration_ms,
+        } => {
+            handle_generate_tests(
+                database,
+                format,
+                output,
+                protocol,
+                method,
+                path,
+                status_code,
+                limit,
+                suite_name,
+                base_url,
+                ai_descriptions,
+                llm_provider,
+                llm_model,
+                llm_endpoint,
+                llm_api_key,
+                validate_body,
+                validate_status,
+                validate_headers,
+                validate_timing,
+                max_duration_ms,
+            ).await?;
+        }
     }
 
     Ok(())
@@ -367,6 +728,8 @@ async fn handle_serve(
     grpc_port: u16,
     admin: bool,
     admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
     spec: Option<PathBuf>,
     _ws_replay_file: Option<PathBuf>,
     traffic_shaping: bool,
@@ -383,6 +746,9 @@ async fn handle_serve(
     println!("⚡ gRPC server on port {}", grpc_port);
     if admin {
         println!("🎛️ Admin UI on port {}", admin_port);
+    }
+    if metrics {
+        println!("📊 Metrics endpoint on port {}", metrics_port);
     }
     if ai_enabled {
         println!("🧠 AI features enabled");
@@ -487,6 +853,33 @@ async fn handle_serve(
             .await
             {
                 eprintln!("❌ Admin UI server error: {}", e);
+            }
+        }))
+    } else {
+        None
+    };
+
+    // Start Prometheus metrics server (if enabled)
+    let metrics_handle = if metrics {
+        use mockforge_observability::{get_global_registry, prometheus::prometheus_router};
+        use std::sync::Arc;
+
+        Some(tokio::spawn(async move {
+            let registry = Arc::new(get_global_registry().clone());
+            let app = prometheus_router(registry);
+            let addr = format!("0.0.0.0:{}", metrics_port);
+
+            println!("📊 Metrics endpoint available at http://localhost:{}/metrics", metrics_port);
+
+            match tokio::net::TcpListener::bind(&addr).await {
+                Ok(listener) => {
+                    if let Err(e) = axum::serve(listener, app).await {
+                        eprintln!("❌ Metrics server error: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to bind metrics server: {}", e);
+                }
             }
         }))
     } else {
@@ -1278,6 +1671,364 @@ async fn handle_test_ai(
 
             println!("\n✅ Event stream generation completed successfully!");
             println!("   Generated {} events", events.len());
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_generate_tests(
+    database: PathBuf,
+    format: String,
+    output: Option<PathBuf>,
+    protocol: Option<String>,
+    method: Option<String>,
+    path: Option<String>,
+    status_code: Option<u16>,
+    limit: usize,
+    suite_name: String,
+    base_url: String,
+    ai_descriptions: bool,
+    llm_provider: String,
+    llm_model: String,
+    llm_endpoint: Option<String>,
+    llm_api_key: Option<String>,
+    validate_body: bool,
+    validate_status: bool,
+    validate_headers: bool,
+    validate_timing: bool,
+    max_duration_ms: Option<u64>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_recorder::{
+        TestGenerator, TestGenerationConfig, TestFormat, QueryFilter, RecorderDatabase, Protocol,
+        LlmConfig,
+    };
+
+    println!("🧪 Generating tests from recorded API interactions");
+    println!("📁 Database: {}", database.display());
+    println!("📝 Format: {}", format);
+    println!("🎯 Suite name: {}", suite_name);
+
+    // Open database
+    let db = RecorderDatabase::new(database.to_str().unwrap()).await?;
+    println!("✅ Database opened successfully");
+
+    // Parse test format
+    let test_format = match format.as_str() {
+        "rust_reqwest" => TestFormat::RustReqwest,
+        "http_file" => TestFormat::HttpFile,
+        "curl" => TestFormat::Curl,
+        "postman" => TestFormat::Postman,
+        "k6" => TestFormat::K6,
+        "python_pytest" => TestFormat::PythonPytest,
+        "javascript_jest" => TestFormat::JavaScriptJest,
+        "go_test" => TestFormat::GoTest,
+        _ => {
+            eprintln!("❌ Invalid format: {}. Supported formats: rust_reqwest, http_file, curl, postman, k6, python_pytest, javascript_jest, go_test", format);
+            return Err("Invalid format".into());
+        }
+    };
+
+    // Parse protocol filter
+    let protocol_filter = protocol.as_ref().and_then(|p| {
+        match p.to_lowercase().as_str() {
+            "http" => Some(Protocol::Http),
+            "grpc" => Some(Protocol::Grpc),
+            "websocket" => Some(Protocol::WebSocket),
+            "graphql" => Some(Protocol::GraphQL),
+            _ => None,
+        }
+    });
+
+    // Create LLM config if AI descriptions enabled
+    let llm_config = if ai_descriptions {
+        let endpoint = llm_endpoint.unwrap_or_else(|| {
+            if llm_provider == "ollama" {
+                "http://localhost:11434/api/generate".to_string()
+            } else {
+                "https://api.openai.com/v1/chat/completions".to_string()
+            }
+        });
+
+        Some(LlmConfig {
+            provider: llm_provider.clone(),
+            api_endpoint: endpoint,
+            api_key: llm_api_key,
+            model: llm_model.clone(),
+            temperature: 0.3,
+        })
+    } else {
+        None
+    };
+
+    // Create test generation config
+    let config = TestGenerationConfig {
+        format: test_format,
+        include_assertions: true,
+        validate_body,
+        validate_status,
+        validate_headers,
+        validate_timing,
+        max_duration_ms,
+        suite_name: suite_name.clone(),
+        base_url: Some(base_url.clone()),
+        ai_descriptions,
+        llm_config,
+        group_by_endpoint: true,
+        include_setup_teardown: true,
+    };
+
+    // Create query filter
+    let filter = QueryFilter {
+        protocol: protocol_filter,
+        method: method.clone(),
+        path: path.clone(),
+        status_code: status_code.map(|c| c as i32),
+        min_duration_ms: None,
+        max_duration_ms: None,
+        trace_id: None,
+        limit: Some(limit as i64),
+        offset: Some(0),
+    };
+
+    println!("🔍 Searching for recordings...");
+    if let Some(p) = &protocol {
+        println!("   Protocol: {}", p);
+    }
+    if let Some(m) = &method {
+        println!("   Method: {}", m);
+    }
+    if let Some(p) = &path {
+        println!("   Path: {}", p);
+    }
+    if let Some(s) = status_code {
+        println!("   Status code: {}", s);
+    }
+    println!("   Limit: {}", limit);
+
+    // Generate tests
+    let generator = TestGenerator::new(db, config);
+    println!("\n🎨 Generating tests...");
+
+    if ai_descriptions {
+        println!("🤖 Using {} ({}) for AI descriptions", llm_provider, llm_model);
+    }
+
+    let result = generator.generate_from_filter(filter).await?;
+
+    println!("\n✅ Test generation completed successfully!");
+    println!("   Generated {} tests", result.metadata.test_count);
+    println!("   Covering {} endpoints", result.metadata.endpoint_count);
+    println!("   Protocols: {:?}", result.metadata.protocols);
+
+    // Output test file
+    if let Some(output_path) = output {
+        tokio::fs::write(&output_path, &result.test_file).await?;
+        println!("\n💾 Tests written to: {}", output_path.display());
+    } else {
+        println!("\n📄 Generated Test File:");
+        println!("{}", "=".repeat(60));
+        println!("{}", result.test_file);
+        println!("{}", "=".repeat(60));
+    }
+
+    // Print summary of generated tests
+    println!("\n📊 Test Summary:");
+    for (i, test) in result.tests.iter().enumerate() {
+        println!("   {}. {} - {} {}", i + 1, test.name, test.method, test.endpoint);
+        if ai_descriptions && !test.description.is_empty() && test.description != format!("Test {} {}", test.method, test.endpoint) {
+            println!("      Description: {}", test.description);
+        }
+    }
+
+    println!("\n🎉 Done! You can now run the generated tests.");
+
+    Ok(())
+}
+
+async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn std::error::Error>> {
+    match command {
+        OrchestrateCommands::Start { file, base_url } => {
+            println!("🚀 Starting chaos orchestration from: {}", file.display());
+
+            // Read orchestration file
+            let content = std::fs::read_to_string(&file)?;
+            let format = if file.extension().and_then(|s| s.to_str()) == Some("json") {
+                "json"
+            } else {
+                "yaml"
+            };
+
+            // Send to API
+            let client = reqwest::Client::new();
+            let url = format!("{}/api/chaos/orchestration/import", base_url);
+
+            let response = client
+                .post(&url)
+                .json(&serde_json::json!({
+                    "content": content,
+                    "format": format
+                }))
+                .send()
+                .await?;
+
+            if response.status().is_success() {
+                let result: serde_json::Value = response.json().await?;
+                println!("✅ {}", result["message"].as_str().unwrap_or("Orchestration imported"));
+
+                // Now start it
+                let start_url = format!("{}/api/chaos/orchestration/start", base_url);
+                // Note: This is a simplified version - would need to parse and send proper request
+                println!("   Use the API to start the orchestration");
+            } else {
+                eprintln!("❌ Failed to import orchestration: {}", response.status());
+            }
+        }
+
+        OrchestrateCommands::Status { base_url } => {
+            println!("📊 Checking orchestration status...");
+
+            let client = reqwest::Client::new();
+            let url = format!("{}/api/chaos/orchestration/status", base_url);
+
+            let response = client.get(&url).send().await?;
+
+            if response.status().is_success() {
+                let status: serde_json::Value = response.json().await?;
+
+                if status["is_running"].as_bool().unwrap_or(false) {
+                    println!("✅ Orchestration is running");
+                    println!("   Name: {}", status["name"].as_str().unwrap_or("Unknown"));
+                    println!("   Progress: {:.1}%", status["progress"].as_f64().unwrap_or(0.0) * 100.0);
+                } else {
+                    println!("⏸️  No orchestration currently running");
+                }
+            } else {
+                eprintln!("❌ Failed to get status: {}", response.status());
+            }
+        }
+
+        OrchestrateCommands::Stop { base_url } => {
+            println!("🛑 Stopping orchestration...");
+
+            let client = reqwest::Client::new();
+            let url = format!("{}/api/chaos/orchestration/stop", base_url);
+
+            let response = client.post(&url).send().await?;
+
+            if response.status().is_success() {
+                let result: serde_json::Value = response.json().await?;
+                println!("✅ {}", result["message"].as_str().unwrap_or("Orchestration stopped"));
+            } else {
+                eprintln!("❌ Failed to stop orchestration: {}", response.status());
+            }
+        }
+
+        OrchestrateCommands::Validate { file } => {
+            println!("🔍 Validating orchestration file: {}", file.display());
+
+            // Read and parse file
+            let content = std::fs::read_to_string(&file)?;
+
+            let result = if file.extension().and_then(|s| s.to_str()) == Some("json") {
+                serde_json::from_str::<serde_json::Value>(&content)
+                    .map(|_| ())
+                    .map_err(|e| format!("Invalid JSON: {}", e))
+            } else {
+                serde_yaml::from_str::<serde_yaml::Value>(&content)
+                    .map(|_| ())
+                    .map_err(|e| format!("Invalid YAML: {}", e))
+            };
+
+            match result {
+                Ok(_) => println!("✅ Orchestration file is valid"),
+                Err(e) => eprintln!("❌ {}", e),
+            }
+        }
+
+        OrchestrateCommands::Template { output, format } => {
+            println!("📝 Generating orchestration template...");
+
+            let template = if format == "json" {
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "name": "example_orchestration",
+                    "description": "Example chaos orchestration",
+                    "steps": [
+                        {
+                            "name": "warmup",
+                            "scenario": {
+                                "name": "network_degradation",
+                                "config": {
+                                    "enabled": true,
+                                    "latency": {
+                                        "enabled": true,
+                                        "fixed_delay_ms": 100
+                                    }
+                                }
+                            },
+                            "duration_seconds": 60,
+                            "delay_before_seconds": 0,
+                            "continue_on_failure": false
+                        },
+                        {
+                            "name": "peak_load",
+                            "scenario": {
+                                "name": "peak_traffic",
+                                "config": {
+                                    "enabled": true,
+                                    "rate_limit": {
+                                        "enabled": true,
+                                        "requests_per_second": 100
+                                    }
+                                }
+                            },
+                            "duration_seconds": 120,
+                            "delay_before_seconds": 10,
+                            "continue_on_failure": true
+                        }
+                    ],
+                    "parallel": false,
+                    "loop_orchestration": false,
+                    "max_iterations": 1,
+                    "tags": ["example", "test"]
+                }))?
+            } else {
+                "name: example_orchestration
+description: Example chaos orchestration
+steps:
+  - name: warmup
+    scenario:
+      name: network_degradation
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 100
+    duration_seconds: 60
+    delay_before_seconds: 0
+    continue_on_failure: false
+  - name: peak_load
+    scenario:
+      name: peak_traffic
+      config:
+        enabled: true
+        rate_limit:
+          enabled: true
+          requests_per_second: 100
+    duration_seconds: 120
+    delay_before_seconds: 10
+    continue_on_failure: true
+parallel: false
+loop_orchestration: false
+max_iterations: 1
+tags:
+  - example
+  - test
+".to_string()
+            };
+
+            std::fs::write(&output, template)?;
+            println!("✅ Template saved to: {}", output.display());
         }
     }
 

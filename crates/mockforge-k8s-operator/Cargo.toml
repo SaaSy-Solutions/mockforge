@@ -1,0 +1,37 @@
+[package]
+name = "mockforge-k8s-operator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Kubernetes client
+kube = { version = "0.87", features = ["runtime", "derive", "client"] }
+k8s-openapi = { version = "0.20", features = ["v1_28"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# MockForge dependencies
+mockforge-chaos = { path = "../mockforge-chaos" }
+
+# Metrics
+prometheus = "0.13"
+
+[dev-dependencies]

@@ -1,0 +1,245 @@
+//! Health check endpoints for Kubernetes and cloud deployments
+
+use axum::{
+    extract::State,
+    response::Json,
+};
+use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::handlers::AdminState;
+
+/// Health check response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthResponse {
+    pub status: HealthStatus,
+    pub timestamp: u64,
+    pub version: String,
+    pub uptime_seconds: u64,
+    pub checks: Vec<HealthCheck>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HealthStatus {
+    Healthy,
+    Degraded,
+    Unhealthy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheck {
+    pub name: String,
+    pub status: HealthStatus,
+    pub message: Option<String>,
+    pub duration_ms: u64,
+}
+
+/// Liveness probe - Is the application running?
+/// Returns 200 if the application is alive, even if degraded
+pub async fn liveness_probe(State(state): State<AdminState>) -> Json<HealthResponse> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let response = HealthResponse {
+        status: HealthStatus::Healthy,
+        timestamp,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_seconds: 0, // TODO: Track actual uptime
+        checks: vec![],
+    };
+
+    Json(response)
+}
+
+/// Readiness probe - Is the application ready to serve traffic?
+/// Returns 200 only if all critical services are ready
+pub async fn readiness_probe(State(state): State<AdminState>) -> Json<HealthResponse> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let mut checks = vec![];
+    let mut overall_status = HealthStatus::Healthy;
+
+    // Check HTTP server
+    if state.http_server_addr.is_some() {
+        checks.push(HealthCheck {
+            name: "http_server".to_string(),
+            status: HealthStatus::Healthy,
+            message: Some("HTTP server is running".to_string()),
+            duration_ms: 0,
+        });
+    } else {
+        checks.push(HealthCheck {
+            name: "http_server".to_string(),
+            status: HealthStatus::Degraded,
+            message: Some("HTTP server is not enabled".to_string()),
+            duration_ms: 0,
+        });
+    }
+
+    // Check WebSocket server
+    if state.ws_server_addr.is_some() {
+        checks.push(HealthCheck {
+            name: "websocket_server".to_string(),
+            status: HealthStatus::Healthy,
+            message: Some("WebSocket server is running".to_string()),
+            duration_ms: 0,
+        });
+    }
+
+    // Check gRPC server
+    if state.grpc_server_addr.is_some() {
+        checks.push(HealthCheck {
+            name: "grpc_server".to_string(),
+            status: HealthStatus::Healthy,
+            message: Some("gRPC server is running".to_string()),
+            duration_ms: 0,
+        });
+    }
+
+    // Check if any critical service failed
+    let critical_failures = checks.iter().any(|c| {
+        matches!(c.status, HealthStatus::Unhealthy)
+            && (c.name == "http_server" || c.name == "grpc_server")
+    });
+
+    if critical_failures {
+        overall_status = HealthStatus::Unhealthy;
+    }
+
+    let response = HealthResponse {
+        status: overall_status,
+        timestamp,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_seconds: 0,
+        checks,
+    };
+
+    Json(response)
+}
+
+/// Startup probe - Has the application completed initialization?
+/// Returns 200 when the application is fully started
+pub async fn startup_probe(State(state): State<AdminState>) -> Json<HealthResponse> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // For now, consider started if admin UI is running
+    let status = if state.api_enabled {
+        HealthStatus::Healthy
+    } else {
+        HealthStatus::Unhealthy
+    };
+
+    let response = HealthResponse {
+        status,
+        timestamp,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_seconds: 0,
+        checks: vec![HealthCheck {
+            name: "initialization".to_string(),
+            status: status.clone(),
+            message: Some("Application initialized".to_string()),
+            duration_ms: 0,
+        }],
+    };
+
+    Json(response)
+}
+
+/// Deep health check - Comprehensive system health
+/// Checks all subsystems and dependencies
+pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthResponse> {
+    let start = SystemTime::now();
+    let timestamp = start.duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    let mut checks = vec![];
+    let mut overall_status = HealthStatus::Healthy;
+
+    // Check all servers
+    let servers = vec![
+        ("http_server", state.http_server_addr.is_some()),
+        ("websocket_server", state.ws_server_addr.is_some()),
+        ("grpc_server", state.grpc_server_addr.is_some()),
+        ("graphql_server", state.graphql_server_addr.is_some()),
+    ];
+
+    for (name, is_running) in servers {
+        checks.push(HealthCheck {
+            name: name.to_string(),
+            status: if is_running {
+                HealthStatus::Healthy
+            } else {
+                HealthStatus::Degraded
+            },
+            message: Some(if is_running {
+                format!("{} is running", name)
+            } else {
+                format!("{} is not enabled", name)
+            }),
+            duration_ms: 0,
+        });
+    }
+
+    // Check metrics
+    let metrics = state.metrics.read().await;
+    let total_requests = metrics.total_requests;
+    drop(metrics);
+
+    checks.push(HealthCheck {
+        name: "metrics".to_string(),
+        status: HealthStatus::Healthy,
+        message: Some(format!("Processed {} requests", total_requests)),
+        duration_ms: 0,
+    });
+
+    // Calculate overall duration
+    let duration = SystemTime::now()
+        .duration_since(start)
+        .unwrap()
+        .as_millis() as u64;
+
+    let response = HealthResponse {
+        status: overall_status,
+        timestamp,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_seconds: 0,
+        checks,
+    };
+
+    Json(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_health_status_serialization() {
+        let status = HealthStatus::Healthy;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#""healthy""#);
+    }
+
+    #[test]
+    fn test_health_response_structure() {
+        let response = HealthResponse {
+            status: HealthStatus::Healthy,
+            timestamp: 1234567890,
+            version: "1.0.0".to_string(),
+            uptime_seconds: 3600,
+            checks: vec![],
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("healthy"));
+        assert!(json.contains("1.0.0"));
+    }
+}

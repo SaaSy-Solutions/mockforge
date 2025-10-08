@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  mockforge:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: mockforge
+    ports:
+      - "3000:3000"    # HTTP
+      - "3001:3001"    # WebSocket
+      - "50051:50051"  # gRPC
+      - "9080:9080"    # Admin UI
+      - "9090:9090"    # Metrics
+    environment:
+      - RUST_LOG=info
+      - MOCKFORGE_HTTP_PORT=3000
+      - MOCKFORGE_WS_PORT=3001
+      - MOCKFORGE_GRPC_PORT=50051
+      - MOCKFORGE_ADMIN_PORT=9080
+      - MOCKFORGE_METRICS_PORT=9090
+      - MOCKFORGE_ADMIN_ENABLED=true
+      - MOCKFORGE_METRICS_ENABLED=true
+      - MOCKFORGE_TRACING_ENABLED=true
+      - MOCKFORGE_JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - MOCKFORGE_RECORDER_ENABLED=true
+      - MOCKFORGE_RECORDER_DB=/app/data/mockforge.db
+    volumes:
+      - ../config.example.yaml:/app/config.yaml:ro
+      - ../fixtures:/app/fixtures:ro
+      - mockforge-data:/app/data
+      - mockforge-cache:/app/cache
+    networks:
+      - mockforge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: mockforge-jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - mockforge-network
+    restart: unless-stopped
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mockforge-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - mockforge-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mockforge-grafana
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - mockforge-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  mockforge-data:
+  mockforge-cache:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  mockforge-network:
+    driver: bridge

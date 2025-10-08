@@ -1,0 +1,104 @@
+name: progressive_load_test
+description: Progressive load testing to find system breaking points
+steps:
+  # Phase 1: Warmup
+  - name: warmup
+    scenario:
+      name: baseline
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 10
+    duration_seconds: 30
+    delay_before_seconds: 0
+    continue_on_failure: false
+
+  # Phase 2: Normal Load
+  - name: normal_load
+    scenario:
+      name: normal_traffic
+      config:
+        enabled: true
+        rate_limit:
+          enabled: true
+          requests_per_second: 100
+          burst_size: 10
+        latency:
+          enabled: true
+          fixed_delay_ms: 50
+    duration_seconds: 120
+    delay_before_seconds: 10
+    continue_on_failure: false
+
+  # Phase 3: Increased Load
+  - name: increased_load
+    scenario:
+      name: higher_traffic
+      config:
+        enabled: true
+        rate_limit:
+          enabled: true
+          requests_per_second: 300
+          burst_size: 20
+        latency:
+          enabled: true
+          fixed_delay_ms: 100
+    duration_seconds: 120
+    delay_before_seconds: 10
+    continue_on_failure: true
+
+  # Phase 4: Peak Load
+  - name: peak_load
+    scenario:
+      name: peak_traffic
+      config:
+        enabled: true
+        rate_limit:
+          enabled: true
+          requests_per_second: 500
+          burst_size: 30
+        latency:
+          enabled: true
+          random_delay_range_ms: [100, 300]
+    duration_seconds: 120
+    delay_before_seconds: 10
+    continue_on_failure: true
+
+  # Phase 5: Stress + Chaos
+  - name: chaos_under_load
+    scenario:
+      name: cascading_failure
+      config:
+        enabled: true
+        rate_limit:
+          enabled: true
+          requests_per_second: 300
+        fault_injection:
+          enabled: true
+          http_errors: [500, 503]
+          http_error_probability: 0.2
+    duration_seconds: 60
+    delay_before_seconds: 10
+    continue_on_failure: true
+
+  # Phase 6: Recovery
+  - name: recovery_phase
+    scenario:
+      name: recovery
+      config:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 50
+    duration_seconds: 60
+    delay_before_seconds: 20
+    continue_on_failure: true
+
+parallel: false
+loop_orchestration: false
+max_iterations: 1
+tags:
+  - load-test
+  - progressive
+  - performance

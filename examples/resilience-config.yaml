@@ -1,0 +1,190 @@
+# MockForge Advanced Resilience Configuration Example
+# This demonstrates all resilience pattern features
+
+# Circuit Breaker Configuration
+circuit_breaker:
+  # Enable circuit breaker
+  enabled: true
+
+  # Open circuit after 5 consecutive failures
+  failure_threshold: 5
+
+  # Close circuit after 2 consecutive successes in half-open state
+  success_threshold: 2
+
+  # Try transitioning to half-open after 60 seconds
+  timeout_ms: 60000
+
+  # Allow up to 3 requests in half-open state
+  half_open_max_requests: 3
+
+  # Open circuit if failure rate exceeds 50%
+  failure_rate_threshold: 50.0
+
+  # Need at least 10 requests before calculating failure rate
+  min_requests_for_rate: 10
+
+  # Calculate failure rate over a 10-second rolling window
+  rolling_window_ms: 10000
+
+# Bulkhead Configuration
+bulkhead:
+  # Enable bulkhead pattern
+  enabled: true
+
+  # Maximum 100 concurrent requests
+  max_concurrent_requests: 100
+
+  # Queue up to 10 additional requests when at capacity
+  max_queue_size: 10
+
+  # Requests in queue timeout after 5 seconds
+  queue_timeout_ms: 5000
+
+# Per-Endpoint Circuit Breaker Overrides
+# These override the default circuit breaker config for specific endpoints
+endpoint_circuit_breakers:
+  # Critical payment endpoint - more conservative
+  "/api/payments":
+    failure_threshold: 3
+    timeout_ms: 30000
+    failure_rate_threshold: 30.0
+
+  # User service - more lenient
+  "/api/users":
+    failure_threshold: 10
+    timeout_ms: 120000
+    failure_rate_threshold: 70.0
+
+  # Health checks - very lenient
+  "/health":
+    failure_threshold: 20
+    timeout_ms: 300000
+
+# Per-Service Bulkhead Configuration
+# Different services get different resource allocations
+service_bulkheads:
+  # Payment service - limited concurrency for safety
+  "payment-service":
+    max_concurrent_requests: 20
+    max_queue_size: 5
+    queue_timeout_ms: 3000
+
+  # User service - higher concurrency
+  "user-service":
+    max_concurrent_requests: 100
+    max_queue_size: 20
+    queue_timeout_ms: 5000
+
+  # Analytics service - very high concurrency, no queue
+  "analytics-service":
+    max_concurrent_requests: 500
+    max_queue_size: 0
+    queue_timeout_ms: 1000
+
+# Retry Configuration
+retry:
+  # Maximum 3 retry attempts
+  max_attempts: 3
+
+  # Start with 100ms backoff
+  initial_backoff_ms: 100
+
+  # Cap backoff at 30 seconds
+  max_backoff_ms: 30000
+
+  # Double the backoff each retry
+  backoff_multiplier: 2.0
+
+  # Add 10% jitter to prevent thundering herd
+  jitter_factor: 0.1
+
+# Dynamic Threshold Adjustment
+dynamic_thresholds:
+  # Enable adaptive thresholds
+  enabled: true
+
+  # Window size for calculating error rates (60 seconds)
+  window_size_ms: 60000
+
+  # Minimum allowed threshold
+  min_threshold: 2
+
+  # Maximum allowed threshold
+  max_threshold: 20
+
+  # Target error rate (10%)
+  target_error_rate: 0.1
+
+# Health Check Integration
+health_checks:
+  # Enable health check integration
+  enabled: true
+
+  # Endpoints to monitor
+  monitors:
+    - endpoint: "/api/users"
+      health_url: "http://user-service:8080/health"
+      interval_ms: 30000
+
+    - endpoint: "/api/payments"
+      health_url: "http://payment-service:8080/health"
+      interval_ms: 15000
+
+    - endpoint: "/api/orders"
+      health_url: "http://order-service:8080/health"
+      interval_ms: 30000
+
+# Fallback Configurations
+fallbacks:
+  # Default fallback for all endpoints
+  default:
+    type: "json"
+    response:
+      error: "Service temporarily unavailable"
+      status: "circuit_open"
+      message: "Please try again later"
+
+  # Specific fallbacks per endpoint
+  endpoints:
+    "/api/users":
+      type: "json"
+      response:
+        error: "User service unavailable"
+        data: []
+        cached: true
+
+    "/api/products":
+      type: "json"
+      response:
+        error: "Product service unavailable"
+        products: []
+        message: "Showing cached results"
+
+# Prometheus Metrics
+metrics:
+  # Enable metrics export
+  enabled: true
+
+  # Metrics endpoint
+  path: "/metrics"
+
+  # Export circuit breaker metrics
+  circuit_breaker_metrics: true
+
+  # Export bulkhead metrics
+  bulkhead_metrics: true
+
+# Dashboard Configuration
+dashboard:
+  # Enable dashboard
+  enabled: true
+
+  # Dashboard path
+  path: "/resilience"
+
+  # Auto-refresh interval (milliseconds)
+  refresh_interval_ms: 3000
+
+  # Show detailed statistics
+  show_details: true

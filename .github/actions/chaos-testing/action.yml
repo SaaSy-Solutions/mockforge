@@ -1,0 +1,166 @@
+name: 'MockForge Chaos Testing'
+description: 'Run chaos engineering tests using MockForge'
+branding:
+  icon: 'zap'
+  color: 'orange'
+
+inputs:
+  orchestration-file:
+    description: 'Path to the orchestration YAML file'
+    required: true
+  fail-on-errors:
+    description: 'Fail the build if chaos tests encounter errors'
+    required: false
+    default: 'true'
+  mockforge-version:
+    description: 'MockForge version to use'
+    required: false
+    default: 'latest'
+  timeout:
+    description: 'Timeout in minutes'
+    required: false
+    default: '30'
+  generate-report:
+    description: 'Generate and upload test report'
+    required: false
+    default: 'true'
+  target-url:
+    description: 'Target service URL for chaos testing'
+    required: false
+    default: 'http://localhost:8080'
+
+outputs:
+  success:
+    description: 'Whether the chaos test succeeded'
+    value: ${{ steps.chaos-test.outputs.success }}
+  report-path:
+    description: 'Path to the generated report'
+    value: ${{ steps.chaos-test.outputs.report_path }}
+  duration:
+    description: 'Test duration in seconds'
+    value: ${{ steps.chaos-test.outputs.duration }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up MockForge
+      shell: bash
+      run: |
+        echo "Installing MockForge ${{ inputs.mockforge-version }}"
+        if [ "${{ inputs.mockforge-version }}" = "latest" ]; then
+          cargo install mockforge-cli || echo "Using existing installation"
+        else
+          cargo install mockforge-cli --version ${{ inputs.mockforge-version }}
+        fi
+
+    - name: Validate orchestration file
+      shell: bash
+      run: |
+        if [ ! -f "${{ inputs.orchestration-file }}" ]; then
+          echo "Error: Orchestration file not found: ${{ inputs.orchestration-file }}"
+          exit 1
+        fi
+        echo "Validating orchestration file..."
+        mockforge validate "${{ inputs.orchestration-file }}"
+
+    - name: Run chaos orchestration
+      id: chaos-test
+      shell: bash
+      timeout-minutes: ${{ fromJSON(inputs.timeout) }}
+      run: |
+        echo "Starting chaos orchestration..."
+        START_TIME=$(date +%s)
+
+        # Run orchestration
+        if mockforge run "${{ inputs.orchestration-file }}" \
+          --target-url "${{ inputs.target-url }}" \
+          --report-output report.json \
+          --junit-output junit.xml; then
+          SUCCESS=true
+          echo "Chaos test completed successfully"
+        else
+          SUCCESS=false
+          echo "Chaos test failed"
+        fi
+
+        END_TIME=$(date +%s)
+        DURATION=$((END_TIME - START_TIME))
+
+        echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+        echo "report_path=report.json" >> $GITHUB_OUTPUT
+        echo "duration=$DURATION" >> $GITHUB_OUTPUT
+
+        if [ "${{ inputs.fail-on-errors }}" = "true" ] && [ "$SUCCESS" = "false" ]; then
+          exit 1
+        fi
+
+    - name: Generate HTML report
+      if: inputs.generate-report == 'true'
+      shell: bash
+      run: |
+        if [ -f "report.json" ]; then
+          echo "Generating HTML report..."
+          mockforge report generate \
+            --input report.json \
+            --output report.html \
+            --format html
+        fi
+
+    - name: Upload test results
+      if: always() && inputs.generate-report == 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: chaos-test-results
+        path: |
+          report.json
+          report.html
+          junit.xml
+        retention-days: 30
+
+    - name: Publish test results
+      if: always()
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        files: junit.xml
+        check_name: 'Chaos Test Results'
+
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request' && inputs.generate-report == 'true'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+
+          if (!fs.existsSync('report.json')) {
+            return;
+          }
+
+          const report = JSON.parse(fs.readFileSync('report.json', 'utf8'));
+
+          const comment = `## 🌩️ Chaos Test Results
+
+          **Status:** ${report.success ? '✅ Passed' : '❌ Failed'}
+          **Duration:** ${report.duration}s
+          **Orchestration:** \`${{ inputs.orchestration-file }}\`
+
+          ### Summary
+          - **Steps:** ${report.total_steps}
+          - **Succeeded:** ${report.succeeded_steps}
+          - **Failed:** ${report.failed_steps}
+          - **Progress:** ${Math.round(report.progress * 100)}%
+
+          ${report.failed_steps > 0 ? `### Failed Steps\n${report.failures.map(f => `- ${f.step}: ${f.error}`).join('\n')}` : ''}
+
+          <details>
+          <summary>View full report</summary>
+
+          [Download full report](../actions/runs/${{ github.run_id }})
+          </details>
+          `;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

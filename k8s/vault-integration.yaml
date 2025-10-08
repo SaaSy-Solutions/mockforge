@@ -1,0 +1,259 @@
+---
+# ServiceAccount for Vault authentication
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mockforge-vault
+  namespace: mockforge
+  labels:
+    app: mockforge
+
+---
+# ConfigMap with Vault agent configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-agent-config
+  namespace: mockforge
+data:
+  vault-agent-config.hcl: |
+    exit_after_auth = false
+    pid_file = "/home/vault/pidfile"
+
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role = "mockforge"
+        }
+      }
+
+      sink "file" {
+        config = {
+          path = "/vault/secrets/.vault-token"
+        }
+      }
+    }
+
+    template {
+      source      = "/vault/configs/api-keys.tmpl"
+      destination = "/vault/secrets/api-keys"
+    }
+
+    template {
+      source      = "/vault/configs/database.tmpl"
+      destination = "/vault/secrets/database"
+    }
+
+    template {
+      source      = "/vault/configs/tls-cert.tmpl"
+      destination = "/vault/secrets/tls.crt"
+    }
+
+    template {
+      source      = "/vault/configs/tls-key.tmpl"
+      destination = "/vault/secrets/tls.key"
+    }
+
+  api-keys.tmpl: |
+    {{- with secret "secret/data/mockforge/api-keys" }}
+    SLACK_WEBHOOK_URL={{ .Data.data.slack_webhook_url }}
+    PAGERDUTY_SERVICE_KEY={{ .Data.data.pagerduty_service_key }}
+    SMTP_USERNAME={{ .Data.data.smtp_username }}
+    SMTP_PASSWORD={{ .Data.data.smtp_password }}
+    {{- end }}
+
+  database.tmpl: |
+    {{- with secret "database/creds/mockforge" }}
+    DB_USERNAME={{ .Data.username }}
+    DB_PASSWORD={{ .Data.password }}
+    {{- end }}
+
+  tls-cert.tmpl: |
+    {{- with secret "pki/issue/mockforge" "common_name=mockforge.example.com" }}
+    {{ .Data.certificate }}
+    {{- end }}
+
+  tls-key.tmpl: |
+    {{- with secret "pki/issue/mockforge" "common_name=mockforge.example.com" }}
+    {{ .Data.private_key }}
+    {{- end }}
+
+---
+# Secret annotations for Vault Agent Injector (alternative to sidecar)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mockforge-vault-secrets
+  namespace: mockforge
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "mockforge"
+    vault.hashicorp.com/agent-inject-secret-api-keys: "secret/data/mockforge/api-keys"
+    vault.hashicorp.com/agent-inject-template-api-keys: |
+      {{- with secret "secret/data/mockforge/api-keys" -}}
+      export SLACK_WEBHOOK_URL="{{ .Data.data.slack_webhook_url }}"
+      export PAGERDUTY_SERVICE_KEY="{{ .Data.data.pagerduty_service_key }}"
+      export SMTP_USERNAME="{{ .Data.data.smtp_username }}"
+      export SMTP_PASSWORD="{{ .Data.data.smtp_password }}"
+      {{- end }}
+type: Opaque
+
+---
+# Deployment with Vault sidecar injection
+# This is an example patch that can be applied to the main deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mockforge-with-vault
+  namespace: mockforge
+  labels:
+    app: mockforge
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mockforge
+  template:
+    metadata:
+      labels:
+        app: mockforge
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "mockforge"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/mockforge/config"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "secret/data/mockforge/config" -}}
+          {
+            "slack_webhook": "{{ .Data.data.slack_webhook_url }}",
+            "pagerduty_key": "{{ .Data.data.pagerduty_service_key }}",
+            "api_keys": {{ .Data.data.api_keys | toJSON }}
+          }
+          {{- end }}
+        vault.hashicorp.com/agent-limits-cpu: "100m"
+        vault.hashicorp.com/agent-limits-mem: "128Mi"
+        vault.hashicorp.com/agent-requests-cpu: "50m"
+        vault.hashicorp.com/agent-requests-mem: "64Mi"
+        vault.hashicorp.com/agent-pre-populate-only: "false"
+    spec:
+      serviceAccountName: mockforge-vault
+      containers:
+        - name: mockforge
+          image: mockforge/mockforge:latest
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+          env:
+            - name: VAULT_SECRETS_PATH
+              value: "/vault/secrets"
+      volumes:
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+
+---
+# External Secrets Operator integration (alternative to Vault Agent)
+# Requires External Secrets Operator to be installed
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: vault-backend
+  namespace: mockforge
+spec:
+  provider:
+    vault:
+      server: "https://vault.vault.svc.cluster.local:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "mockforge"
+          serviceAccountRef:
+            name: "mockforge-vault"
+
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: mockforge-secrets
+  namespace: mockforge
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: mockforge-vault-secrets
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        SLACK_WEBHOOK_URL: "{{ .slack_webhook_url }}"
+        PAGERDUTY_SERVICE_KEY: "{{ .pagerduty_service_key }}"
+        SMTP_USERNAME: "{{ .smtp_username }}"
+        SMTP_PASSWORD: "{{ .smtp_password }}"
+  dataFrom:
+    - extract:
+        key: mockforge/api-keys
+
+---
+# Vault Policy (to be created in Vault)
+# This is documentation for the required Vault policy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policy-mockforge
+  namespace: mockforge
+data:
+  mockforge-policy.hcl: |
+    # Allow reading secrets
+    path "secret/data/mockforge/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Allow reading database credentials
+    path "database/creds/mockforge" {
+      capabilities = ["read"]
+    }
+
+    # Allow issuing certificates
+    path "pki/issue/mockforge" {
+      capabilities = ["create", "update"]
+    }
+
+    # Allow token renewal
+    path "auth/token/renew-self" {
+      capabilities = ["update"]
+    }
+
+    # Allow token revocation
+    path "auth/token/revoke-self" {
+      capabilities = ["update"]
+    }
+
+  vault-auth-setup.sh: |
+    #!/bin/bash
+    # Script to setup Vault authentication for MockForge
+    # Run this in Vault after deployment
+
+    # Enable Kubernetes auth
+    vault auth enable kubernetes
+
+    # Configure Kubernetes auth
+    vault write auth/kubernetes/config \
+      kubernetes_host="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+    # Create policy
+    vault policy write mockforge /vault/config/mockforge-policy.hcl
+
+    # Create role
+    vault write auth/kubernetes/role/mockforge \
+      bound_service_account_names=mockforge-vault \
+      bound_service_account_namespaces=mockforge \
+      policies=mockforge \
+      ttl=24h
+
+    echo "Vault authentication setup complete for MockForge"

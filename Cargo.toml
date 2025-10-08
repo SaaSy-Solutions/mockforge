@@ -11,7 +11,13 @@ members = [
     "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-sdk",
     "crates/mockforge-plugin-cli",
+    "crates/mockforge-plugin-registry",
     "crates/mockforge-ui",
+    "crates/mockforge-observability",
+    "crates/mockforge-tracing",
+    "crates/mockforge-recorder",
+    "crates/mockforge-reporting",
+    "crates/mockforge-chaos",
     "examples/plugins/response-graphql",
     "test_openapi_demo"
 ]

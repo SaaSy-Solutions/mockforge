@@ -8,7 +8,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use mockforge_observability::get_global_registry;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::net::TcpListener;
 
 use crate::GraphQLSchema;
@@ -90,7 +92,29 @@ async fn graphql_handler(
     State(executor): State<Arc<GraphQLExecutor>>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
-    executor.execute(req).await
+    let start = Instant::now();
+    let registry = get_global_registry();
+
+    // Track in-flight requests
+    registry.increment_in_flight("graphql");
+
+    // Execute the request
+    let response = executor.execute(req).await;
+
+    // Track completion
+    registry.decrement_in_flight("graphql");
+
+    let duration = start.elapsed().as_secs_f64();
+    let status = if response.0.is_ok() { 200 } else { 400 };
+
+    // Record metrics
+    registry.record_graphql_request("query", status, duration);
+
+    if !response.0.is_ok() {
+        registry.record_error("graphql", "graphql_error");
+    }
+
+    response
 }
 
 /// GraphQL Playground handler

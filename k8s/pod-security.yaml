@@ -1,0 +1,182 @@
+---
+# Pod Security Standards for MockForge namespace
+# Using the restricted security standard for maximum security
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mockforge
+  labels:
+    name: mockforge
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# SecurityContext configuration for deployment
+# This is referenced by the deployment manifest
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mockforge-security-context
+  namespace: mockforge
+data:
+  podSecurityContext: |
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: "OnRootMismatch"
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext: |
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+---
+# Service Account with minimal permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mockforge
+  namespace: mockforge
+  labels:
+    app: mockforge
+automountServiceAccountToken: true
+
+---
+# Role for MockForge (minimal required permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mockforge
+  namespace: mockforge
+rules:
+  # Allow reading ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+    resourceNames: ["mockforge-config", "mockforge-fixtures"]
+
+  # Allow reading Secrets (for Vault integration)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+
+  # Allow creating/updating own lease (for leader election if needed)
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+
+---
+# RoleBinding for MockForge ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mockforge
+  namespace: mockforge
+subjects:
+  - kind: ServiceAccount
+    name: mockforge
+    namespace: mockforge
+roleRef:
+  kind: Role
+  name: mockforge
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ClusterRole for reading CRDs (if using Chaos Orchestration CRDs)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mockforge-crd-reader
+rules:
+  - apiGroups: ["mockforge.io"]
+    resources: ["chaosorchestrations"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for CRD access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mockforge-crd-reader
+subjects:
+  - kind: ServiceAccount
+    name: mockforge
+    namespace: mockforge
+roleRef:
+  kind: ClusterRole
+  name: mockforge-crd-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# PodDisruptionBudget to ensure availability during voluntary disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mockforge-pdb
+  namespace: mockforge
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: mockforge
+
+---
+# ResourceQuota to limit resource consumption
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mockforge-quota
+  namespace: mockforge
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    persistentvolumeclaims: "5"
+    services.loadbalancers: "1"
+
+---
+# LimitRange to set default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mockforge-limit-range
+  namespace: mockforge
+spec:
+  limits:
+    - max:
+        cpu: "2"
+        memory: 4Gi
+      min:
+        cpu: 100m
+        memory: 128Mi
+      default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 250m
+        memory: 256Mi
+      type: Container
+
+    - max:
+        cpu: "4"
+        memory: 8Gi
+      min:
+        cpu: 500m
+        memory: 512Mi
+      type: Pod

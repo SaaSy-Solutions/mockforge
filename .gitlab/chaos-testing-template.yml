@@ -1,0 +1,105 @@
+# GitLab CI Template for MockForge Chaos Testing
+# Include this in your .gitlab-ci.yml:
+# include:
+#   - project: 'your-org/mockforge'
+#     file: '/.gitlab/chaos-testing-template.yml'
+
+.chaos_test_base:
+  image: rust:latest
+  variables:
+    MOCKFORGE_VERSION: "latest"
+    ORCHESTRATION_FILE: "chaos/orchestration.yaml"
+    FAIL_ON_ERRORS: "true"
+    GENERATE_REPORT: "true"
+  before_script:
+    - echo "Installing MockForge ${MOCKFORGE_VERSION}"
+    - cargo install mockforge-cli || echo "Using existing installation"
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+    paths:
+      - report.json
+      - report.html
+      - junit.xml
+    expire_in: 30 days
+
+chaos:validate:
+  extends: .chaos_test_base
+  stage: test
+  script:
+    - echo "Validating orchestration file..."
+    - mockforge validate "${ORCHESTRATION_FILE}"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+chaos:test:
+  extends: .chaos_test_base
+  stage: test
+  script:
+    - echo "Starting chaos orchestration..."
+    - |
+      if mockforge run "${ORCHESTRATION_FILE}" \
+        --target-url "${TARGET_URL:-http://localhost:8080}" \
+        --report-output report.json \
+        --junit-output junit.xml; then
+        echo "Chaos test completed successfully"
+        export TEST_SUCCESS=true
+      else
+        echo "Chaos test failed"
+        export TEST_SUCCESS=false
+      fi
+    - |
+      if [ "${GENERATE_REPORT}" = "true" ]; then
+        echo "Generating HTML report..."
+        mockforge report generate \
+          --input report.json \
+          --output report.html \
+          --format html
+      fi
+    - |
+      if [ "${FAIL_ON_ERRORS}" = "true" ] && [ "${TEST_SUCCESS}" = "false" ]; then
+        exit 1
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+chaos:report:
+  extends: .chaos_test_base
+  stage: deploy
+  dependencies:
+    - chaos:test
+  script:
+    - echo "Publishing chaos test report..."
+    - |
+      if [ -f "report.html" ]; then
+        mkdir -p public/chaos-reports/${CI_COMMIT_SHORT_SHA}
+        cp report.html public/chaos-reports/${CI_COMMIT_SHORT_SHA}/index.html
+        cp report.json public/chaos-reports/${CI_COMMIT_SHORT_SHA}/report.json
+        echo "Report available at: ${CI_PAGES_URL}/chaos-reports/${CI_COMMIT_SHORT_SHA}/"
+      fi
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# Example usage in your .gitlab-ci.yml:
+#
+# include:
+#   - local: '/.gitlab/chaos-testing-template.yml'
+#
+# chaos:network:
+#   extends: chaos:test
+#   variables:
+#     ORCHESTRATION_FILE: "chaos/network-degradation.yaml"
+#     TARGET_URL: "https://staging.example.com"
+#
+# chaos:load:
+#   extends: chaos:test
+#   variables:
+#     ORCHESTRATION_FILE: "chaos/load-test.yaml"
+#     TARGET_URL: "https://staging.example.com"

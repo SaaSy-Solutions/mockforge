@@ -1,0 +1,90 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mockforge
+  labels:
+    app: mockforge
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "mockforge"
+    # CORS support
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - mockforge.example.com
+    secretName: mockforge-tls
+  rules:
+  - host: mockforge.example.com
+    http:
+      paths:
+      # HTTP API
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: mockforge
+            port:
+              name: http
+      # WebSocket
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: mockforge
+            port:
+              name: websocket
+      # Admin UI
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: mockforge
+            port:
+              name: admin
+      # Metrics (internal only, typically)
+      - path: /metrics
+        pathType: Prefix
+        backend:
+          service:
+            name: mockforge-metrics
+            port:
+              name: metrics
+
+---
+# gRPC Ingress (separate, if using gRPC ingress controller)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mockforge-grpc
+  labels:
+    app: mockforge
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - grpc.mockforge.example.com
+    secretName: mockforge-grpc-tls
+  rules:
+  - host: grpc.mockforge.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mockforge
+            port:
+              name: grpc
