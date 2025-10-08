@@ -448,6 +448,128 @@ grep "WARN" mockforge.log
    docker run -p 3001:3000 -p 3002:3001 mockforge
    ```
 
+### Port Already in Use
+
+**Symptoms**: Container fails to start with "address already in use" error
+
+**Solutions**:
+
+```bash
+# Check what's using the ports
+netstat -tlnp | grep :3000
+# Or on macOS:
+lsof -i :3000
+
+# Use different ports
+docker run -p 3001:3000 -p 3002:3001 mockforge
+
+# Or in docker-compose.yml
+services:
+  mockforge:
+    ports:
+      - "3001:3000"  # Map host 3001 to container 3000
+      - "3002:3001"  # Map host 3002 to container 3001
+```
+
+### Permission Issues
+
+**Symptoms**: Container can't read/write mounted volumes
+
+**Solutions**:
+
+```bash
+# Fix volume permissions (Linux)
+sudo chown -R 1000:1000 fixtures/
+sudo chown -R 1000:1000 logs/
+
+# Or run container as your user
+docker run --user $(id -u):$(id -g) \
+  -v $(pwd)/fixtures:/app/fixtures \
+  mockforge
+
+# macOS typically doesn't need permission fixes
+```
+
+### Build Issues
+
+**Symptoms**: Docker build fails or takes too long
+
+**Solutions**:
+
+```bash
+# Clear Docker cache
+docker system prune -a
+
+# Rebuild without cache
+docker build --no-cache -t mockforge .
+
+# Check disk space
+df -h
+
+# Remove unused images
+docker image prune -a
+```
+
+### Container Performance Issues
+
+**Symptoms**: Slow response times in Docker
+
+**Solutions**:
+
+1. **Increase resources** (Docker Desktop):
+   - Settings → Resources → Memory: Increase to 4GB+
+   - Settings → Resources → CPUs: Increase to 2+
+
+2. **Reduce logging verbosity**:
+   ```bash
+   docker run -e RUST_LOG=info mockforge
+   # Instead of RUST_LOG=debug
+   ```
+
+3. **Use Docker volumes instead of bind mounts** for better performance:
+   ```yaml
+   volumes:
+     - mockforge-data:/app/data  # Named volume (faster)
+     # Instead of:
+     # - ./data:/app/data       # Bind mount (slower on macOS/Windows)
+   ```
+
+### Networking Issues
+
+**Symptoms**: Can't connect to MockForge from other containers
+
+**Solutions**:
+
+```bash
+# Use Docker network
+docker network create mockforge-net
+
+docker run --network mockforge-net --name mockforge \
+  -p 3000:3000 mockforge
+
+# Other containers on same network can access via:
+# http://mockforge:3000
+```
+
+In `docker-compose.yml`:
+
+```yaml
+services:
+  mockforge:
+    networks:
+      - app-network
+
+  frontend:
+    environment:
+      API_URL: http://mockforge:3000
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+```
+
 ## Getting Help
 
 ### Log Analysis

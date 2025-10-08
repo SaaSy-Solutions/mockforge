@@ -6,11 +6,13 @@ A modern React-based administrative interface for MockForge that provides compre
 
 ## Features
 
-### 🔐 Authentication & Authorization
-- JWT-based authentication with role-based access control
-- Admin and Viewer roles with appropriate permissions
-- Session persistence and automatic token refresh
-- Demo accounts for quick testing
+### 🔐 Authentication & Authorization _(Planned for v1.1)_
+> **Status**: The frontend UI components for authentication are implemented, but backend JWT authentication and role-based access control are planned for v1.1. The Admin UI is currently accessible without authentication in v1.0.
+
+- JWT-based authentication with role-based access control _(Backend pending)_
+- Admin and Viewer roles with appropriate permissions _(Backend pending)_
+- Session persistence and automatic token refresh _(Frontend ready)_
+- Demo accounts for quick testing _(Frontend ready)_
 
 ### 🎛️ Service Management
 - Visual enable/disable toggles for services and individual routes
@@ -39,11 +41,7 @@ A modern React-based administrative interface for MockForge that provides compre
 
 ## Quick Start
 
-### Authentication
-```
-Admin: admin / admin123 (full access)
-Viewer: viewer / viewer123 (read-only)
-```
+> **Note**: Authentication is not required in v1.0. The Admin UI is accessible directly without login.
 
 ### Service Management
 1. Navigate to **Services** tab
@@ -72,23 +70,23 @@ Viewer: viewer / viewer123 (read-only)
 - **Tailwind CSS** styling
 - **Zustand** state management
 - **Recharts** data visualization
-- **WebSocket** real-time updates
+- **Server-Sent Events (SSE)** for real-time log streaming
 
 ### Backend Integration
 - RESTful API endpoints for all operations
-- WebSocket streams for live data
-- JWT authentication middleware
+- Server-Sent Events (SSE) for real-time log streaming
+- JWT authentication middleware _(Planned for v1.1)_
 - File system operations through API abstraction
 
 ### Key Components
 
-#### Authentication System
+#### Authentication System _(Frontend UI only in v1.0)_
 ```typescript
-// Login with role-based access
+// Frontend auth components (backend integration pending)
 const { login, user, isAuthenticated } = useAuthStore();
-await login('admin', 'admin123');
+// Note: Currently bypasses authentication in v1.0
 
-// Role-based component access
+// Role-based component access (UI ready, backend pending)
 <RoleGuard allowedRoles={['admin']}>
   <ServiceManagement />
 </RoleGuard>
@@ -119,11 +117,11 @@ setFilter({ method: 'GET', status_code: 404 });
 
 ## API Endpoints
 
-### Authentication
+### Authentication _(Planned for v1.1)_
 ```http
-POST /api/v2/auth/login      # User authentication
-POST /api/v2/auth/refresh    # Token refresh
-POST /api/v2/auth/logout     # Session termination
+POST /api/v2/auth/login      # User authentication (not yet implemented)
+POST /api/v2/auth/refresh    # Token refresh (not yet implemented)
+POST /api/v2/auth/logout     # Session termination (not yet implemented)
 ```
 
 ### Service Management
@@ -143,11 +141,12 @@ GET    /api/v2/fixtures/{id}/diff # Get diff
 
 ### Monitoring
 ```http
-GET /api/v2/logs                  # Get logs
-WS  /api/v2/logs/stream          # Live log stream
-GET /api/v2/metrics/latency      # Latency data
-GET /api/v2/metrics/failures     # Error analysis
+GET /__mockforge/logs                   # Get logs
+GET /__mockforge/logs/sse              # Live log stream (SSE)
+GET /__mockforge/metrics               # Metrics data
 ```
+
+> **Note**: The actual endpoints use `__mockforge` namespace. API v2 endpoints are planned for future versions.
 
 ## Development
 

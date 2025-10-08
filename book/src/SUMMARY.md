@@ -5,8 +5,16 @@
 ## Getting Started
 
 - [Installation](getting-started/installation.md)
+- [Your First Mock API in 5 Minutes](getting-started/five-minute-api.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Basic Concepts](getting-started/concepts.md)
+
+## Tutorials
+
+- [Overview](tutorials/README.md)
+- [Mock a REST API from OpenAPI](tutorials/mock-openapi-spec.md)
+- [Admin UI Walkthrough](tutorials/admin-ui-walkthrough.md)
+- [Add a Custom Plugin](tutorials/add-custom-plugin.md)
 
 ## User Guide
 
@@ -63,6 +71,7 @@
 ## Reference
 
 - [Configuration Schema](reference/config-schema.md)
+- [Configuration Validation](reference/config-validation.md)
 - [Supported Formats](reference/formats.md)
 - [Templating Reference](reference/templating.md)
 - [Request Chaining](reference/chaining.md)

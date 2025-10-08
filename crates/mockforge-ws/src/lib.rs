@@ -1,3 +1,153 @@
+//! # MockForge WebSocket
+//!
+//! WebSocket mocking library for MockForge with replay, proxy, and AI-powered event generation.
+//!
+//! This crate provides comprehensive WebSocket mocking capabilities, including:
+//!
+//! - **Replay Mode**: Script and replay WebSocket message sequences
+//! - **Interactive Mode**: Dynamic responses based on client messages
+//! - **AI Event Streams**: Generate narrative-driven event sequences
+//! - **Proxy Mode**: Forward messages to real WebSocket backends
+//! - **JSONPath Matching**: Sophisticated message matching with JSONPath queries
+//!
+//! ## Overview
+//!
+//! MockForge WebSocket supports multiple operational modes:
+//!
+//! ### 1. Replay Mode
+//! Play back pre-recorded WebSocket interactions from JSONL files with template expansion.
+//!
+//! ### 2. Proxy Mode
+//! Forward WebSocket messages to upstream servers with optional message transformation.
+//!
+//! ### 3. AI Event Generation
+//! Generate realistic event streams using LLMs based on narrative descriptions.
+//!
+//! ## Quick Start
+//!
+//! ### Basic WebSocket Server
+//!
+//! ```rust,no_run
+//! use mockforge_ws::router;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create WebSocket router
+//!     let app = router();
+//!
+//!     // Start server
+//!     let addr = "0.0.0.0:3001".parse()?;
+//!     let listener = tokio::net::TcpListener::bind(addr).await?;
+//!     axum::serve(listener, app).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ### With Latency Simulation
+//!
+//! ```rust,no_run
+//! use mockforge_ws::router_with_latency;
+//! use mockforge_core::{LatencyProfile, latency::LatencyInjector};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let latency = LatencyProfile::slow(); // 300-800ms
+//! let injector = LatencyInjector::new(latency, None);
+//! let app = router_with_latency(injector);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### With Proxy Support
+//!
+//! ```rust,no_run
+//! use mockforge_ws::router_with_proxy;
+//! use mockforge_core::{WsProxyHandler, WsProxyConfig};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let proxy_config = WsProxyConfig {
+//!     upstream_url: "wss://api.example.com/ws".to_string(),
+//!     ..Default::default()
+//! };
+//! let proxy = WsProxyHandler::new(proxy_config);
+//! let app = router_with_proxy(proxy);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### AI Event Generation
+//!
+//! Generate realistic event streams from narrative descriptions:
+//!
+//! ```rust,no_run
+//! use mockforge_ws::{AiEventGenerator, WebSocketAiConfig};
+//! use mockforge_data::RagConfig;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let ai_config = WebSocketAiConfig {
+//!     enabled: true,
+//!     narrative: "Simulate 5 minutes of live stock market trading".to_string(),
+//!     event_count: 20,
+//!     rag_config: RagConfig {
+//!         provider: "openai".to_string(),
+//!         model: "gpt-3.5-turbo".to_string(),
+//!         ..Default::default()
+//!     },
+//! };
+//!
+//! let generator = AiEventGenerator::new(ai_config);
+//! let events = generator.generate_events().await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Replay File Format
+//!
+//! WebSocket replay files use JSON Lines (JSONL) format:
+//!
+//! ```json
+//! {"ts":0,"dir":"out","text":"HELLO {{uuid}}","waitFor":"^CLIENT_READY$"}
+//! {"ts":10,"dir":"out","text":"{\"type\":\"welcome\",\"sessionId\":\"{{uuid}}\"}"}
+//! {"ts":20,"dir":"out","text":"{\"data\":{{randInt 1 100}}}","waitFor":"^ACK$"}
+//! ```
+//!
+//! Fields:
+//! - `ts`: Timestamp in milliseconds
+//! - `dir`: Direction ("in" = received, "out" = sent)
+//! - `text`: Message content (supports template expansion)
+//! - `waitFor`: Optional regex/JSONPath pattern to wait for
+//!
+//! ## JSONPath Message Matching
+//!
+//! Match messages using JSONPath queries:
+//!
+//! ```json
+//! {"waitFor": "$.type", "text": "Type received"}
+//! {"waitFor": "$.user.id", "text": "User authenticated"}
+//! {"waitFor": "$.order.status", "text": "Order updated"}
+//! ```
+//!
+//! ## Key Modules
+//!
+//! - [`ai_event_generator`]: AI-powered event stream generation
+//! - [`ws_tracing`]: Distributed tracing integration
+//!
+//! ## Examples
+//!
+//! See the [examples directory](https://github.com/SaaSy-Solutions/mockforge/tree/main/examples)
+//! for complete working examples.
+//!
+//! ## Related Crates
+//!
+//! - [`mockforge-core`](https://docs.rs/mockforge-core): Core mocking functionality
+//! - [`mockforge-data`](https://docs.rs/mockforge-data): Synthetic data generation
+//!
+//! ## Documentation
+//!
+//! - [MockForge Book](https://docs.mockforge.dev/)
+//! - [WebSocket Mocking Guide](https://docs.mockforge.dev/user-guide/websocket-mocking.html)
+//! - [API Reference](https://docs.rs/mockforge-ws)
+
 pub mod ai_event_generator;
 pub mod ws_tracing;
 

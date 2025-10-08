@@ -2,6 +2,33 @@
 
 MockForge supports comprehensive configuration through YAML files. This schema reference documents all available configuration options, their types, defaults, and usage examples.
 
+## Complete Configuration Template
+
+For a **fully annotated configuration template** with all options documented inline, see:
+
+**[config.template.yaml](https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml)**
+
+This template includes:
+- Every configuration field with inline documentation
+- Default values and valid ranges
+- Example configurations for common scenarios
+- Comments explaining each option's purpose
+
+## Quick Start
+
+```bash
+# Initialize a new configuration
+mockforge init my-project
+
+# Validate your configuration
+mockforge config validate
+
+# Start with validated config
+mockforge serve --config mockforge.yaml
+```
+
+See the [Configuration Validation Guide](config-validation.md) for validation best practices.
+
 ## File Format
 
 Configuration files use YAML format with the following structure:

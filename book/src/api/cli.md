@@ -107,6 +107,129 @@ mockforge-cli serve \
   --admin-standalone
 ```
 
+### `init` - Initialize New Project
+
+Create a new MockForge project with a template configuration file.
+
+```bash
+mockforge-cli init [OPTIONS] <NAME>
+```
+
+#### Arguments
+
+- `<NAME>`: Project name or directory path
+  - Use `.` to initialize in the current directory
+  - Use a project name to create a new directory
+
+#### Options
+
+- `--no-examples`: Skip creating example files (only create `mockforge.yaml`)
+
+#### Examples
+
+```bash
+# Create a new project in a new directory
+mockforge-cli init my-mock-api
+
+# Initialize in the current directory
+mockforge-cli init .
+
+# Initialize without examples
+mockforge-cli init my-project --no-examples
+```
+
+#### What Gets Created
+
+1. **mockforge.yaml**: Main configuration file with:
+   - HTTP, WebSocket, gRPC server configurations
+   - Admin UI settings
+   - Core features (latency, failures, overrides)
+   - Observability configuration
+   - Data generation settings
+   - Logging configuration
+
+2. **examples/** directory (unless `--no-examples`):
+   - `openapi.json`: Sample OpenAPI specification
+   - Example data files
+
+#### See Also
+
+- [Configuration Files Guide](../configuration/files.md)
+- [Complete Config Template](https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml)
+
+---
+
+### `config` - Configuration Management
+
+Validate and manage MockForge configuration files.
+
+```bash
+mockforge-cli config <SUBCOMMAND>
+```
+
+#### Subcommands
+
+##### `validate` - Validate Configuration File
+
+Validate a MockForge configuration file for syntax and structure errors.
+
+```bash
+mockforge-cli config validate [OPTIONS]
+```
+
+**Options:**
+- `--config <PATH>`: Path to config file to validate
+  - If omitted, auto-discovers `mockforge.yaml` or `mockforge.yml` in current and parent directories
+
+**What Gets Validated:**
+- YAML syntax and structure
+- File existence
+- HTTP endpoints count
+- Request chains count
+- Missing sections (warnings)
+
+**Examples:**
+
+```bash
+# Validate config in current directory
+mockforge-cli config validate
+
+# Validate specific config file
+mockforge-cli config validate --config my-config.yaml
+
+# Validate before starting server
+mockforge-cli config validate && mockforge-cli serve
+```
+
+**Output Example:**
+```
+🔍 Validating MockForge configuration...
+📄 Checking configuration file: mockforge.yaml
+✅ Configuration is valid
+
+📊 Summary:
+   Found 5 HTTP endpoints
+   Found 2 chains
+
+⚠️  Warnings:
+   - No WebSocket configuration found
+```
+
+**Common Issues:**
+- **Invalid YAML syntax**: Fix indentation, quotes, or structure
+- **File not found**: Check path or run `mockforge init`
+- **Missing sections**: Add HTTP, admin, or other required sections
+
+**Note**: Current validation is basic (syntax, structure, counts). For comprehensive field validation, see the [Configuration Validation Guide](../reference/config-validation.md).
+
+#### See Also
+
+- [Configuration Validation Guide](../reference/config-validation.md)
+- [Configuration Schema Reference](../reference/config-schema.md)
+- [Troubleshooting Guide](../reference/troubleshooting.md)
+
+---
+
 ### `data` - Generate Synthetic Data
 
 Generate synthetic test data using various templates and schemas.

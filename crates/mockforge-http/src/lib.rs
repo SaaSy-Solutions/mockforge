@@ -1,3 +1,158 @@
+//! # MockForge HTTP
+//!
+//! HTTP/REST API mocking library for MockForge.
+//!
+//! This crate provides HTTP-specific functionality for creating mock REST APIs,
+//! including OpenAPI integration, request validation, AI-powered response generation,
+//! and management endpoints.
+//!
+//! ## Overview
+//!
+//! MockForge HTTP enables you to:
+//!
+//! - **Serve OpenAPI specs**: Automatically generate mock endpoints from OpenAPI/Swagger
+//! - **Validate requests**: Enforce schema validation with configurable modes
+//! - **AI-powered responses**: Generate intelligent responses using LLMs
+//! - **Management API**: Real-time monitoring, configuration, and control
+//! - **Request logging**: Comprehensive HTTP request/response logging
+//! - **Metrics collection**: Track performance and usage statistics
+//! - **Server-Sent Events**: Stream logs and metrics to clients
+//!
+//! ## Quick Start
+//!
+//! ### Basic HTTP Server from OpenAPI
+//!
+//! ```rust,no_run
+//! use mockforge_http::build_router;
+//! use mockforge_core::{ValidationOptions, FailureConfig};
+//! use axum::Router;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Build router from OpenAPI specification
+//!     let router = build_router(
+//!         Some("./api-spec.json".to_string()),
+//!         Some(ValidationOptions::enforce()),
+//!         None,
+//!     ).await;
+//!
+//!     // Start the server
+//!     let addr = "0.0.0.0:3000".parse()?;
+//!     let listener = tokio::net::TcpListener::bind(addr).await?;
+//!     axum::serve(listener, router).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ### With Management API
+//!
+//! Enable real-time monitoring and configuration:
+//!
+//! ```rust,no_run
+//! use mockforge_http::{management_router, ManagementState, ServerStats};
+//! use std::sync::Arc;
+//! use tokio::sync::RwLock;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create management state
+//! let stats = Arc::new(RwLock::new(ServerStats::default()));
+//! let state = ManagementState::new(stats);
+//!
+//! // Build management router
+//! let mgmt_router = management_router(state);
+//!
+//! // Mount under your main router
+//! let app = axum::Router::new()
+//!     .nest("/__mockforge", mgmt_router);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### AI-Powered Responses
+//!
+//! Generate intelligent responses based on request context:
+//!
+//! ```rust,no_run
+//! use mockforge_http::{AiResponseConfig, process_response_with_ai};
+//! use mockforge_data::RagConfig;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let ai_config = AiResponseConfig {
+//!     enabled: true,
+//!     rag_config: RagConfig {
+//!         provider: "openai".to_string(),
+//!         model: "gpt-3.5-turbo".to_string(),
+//!         api_key: Some("sk-...".to_string()),
+//!         ..Default::default()
+//!     },
+//!     prompt: "Generate realistic user data".to_string(),
+//!     schema: None,
+//! };
+//!
+//! // AI will generate contextual response
+//! let response = process_response_with_ai(&ai_config, /* request_data */).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Key Features
+//!
+//! ### OpenAPI Integration
+//! - Automatic endpoint generation from specs
+//! - Request/response validation
+//! - Schema-based mock data generation
+//!
+//! ### Management & Monitoring
+//! - [`management`]: REST API for server control and monitoring
+//! - [`management_ws`]: WebSocket API for real-time updates
+//! - [`sse`]: Server-Sent Events for log streaming
+//! - [`request_logging`]: Comprehensive request/response logging
+//! - [`metrics_middleware`]: Performance metrics collection
+//!
+//! ### Advanced Features
+//! - [`ai_handler`]: AI-powered response generation
+//! - [`auth`]: Authentication and authorization
+//! - [`chain_handlers`]: Multi-step request workflows
+//! - [`latency_profiles`]: Configurable latency simulation
+//! - [`replay_listing`]: Fixture management
+//!
+//! ## Middleware
+//!
+//! MockForge HTTP includes several middleware layers:
+//!
+//! - **Request Tracing**: [`http_tracing_middleware`] - Distributed tracing integration
+//! - **Metrics Collection**: [`metrics_middleware`] - Prometheus-compatible metrics
+//! - **Operation Metadata**: [`op_middleware`] - OpenAPI operation tracking
+//!
+//! ## Management API Endpoints
+//!
+//! When using the management router, these endpoints are available:
+//!
+//! - `GET /health` - Health check
+//! - `GET /stats` - Server statistics
+//! - `GET /logs` - Request logs (SSE stream)
+//! - `GET /metrics` - Performance metrics
+//! - `GET /fixtures` - List available fixtures
+//! - `POST /config/*` - Update configuration
+//!
+//! ## Examples
+//!
+//! See the [examples directory](https://github.com/SaaSy-Solutions/mockforge/tree/main/examples)
+//! for complete working examples.
+//!
+//! ## Related Crates
+//!
+//! - [`mockforge-core`](https://docs.rs/mockforge-core): Core mocking functionality
+//! - [`mockforge-data`](https://docs.rs/mockforge-data): Synthetic data generation
+//! - [`mockforge-plugin-core`](https://docs.rs/mockforge-plugin-core): Plugin development
+//!
+//! ## Documentation
+//!
+//! - [MockForge Book](https://docs.mockforge.dev/)
+//! - [HTTP Mocking Guide](https://docs.mockforge.dev/user-guide/http-mocking.html)
+//! - [API Reference](https://docs.rs/mockforge-http)
+
 pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;

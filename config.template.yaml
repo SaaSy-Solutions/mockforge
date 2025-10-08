@@ -1,0 +1,440 @@
+# MockForge Complete Configuration Template
+# This file documents ALL available configuration options
+# Reference: https://docs.mockforge.dev/reference/config-schema.html
+
+# =============================================================================
+# HTTP Server Configuration
+# =============================================================================
+http:
+  # Basic Settings
+  port: 3000                              # HTTP server port (default: 3000)
+  host: "0.0.0.0"                        # Bind address (0.0.0.0 = all interfaces)
+
+  # OpenAPI Integration
+  openapi_spec: "./examples/openapi.json" # Path to OpenAPI/Swagger spec (local file or URL)
+
+  # CORS Configuration
+  cors_enabled: true                      # Enable Cross-Origin Resource Sharing
+  cors_allow_origins: ["*"]              # Allowed origins (["*"] = all origins)
+  cors_allow_methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+  cors_allow_headers: ["Content-Type", "Authorization"]
+  cors_max_age: 3600                     # Preflight cache duration in seconds
+
+  # Request Validation
+  request_validation: "enforce"           # Validation mode: "off" | "warn" | "enforce"
+  aggregate_validation_errors: true       # Combine multiple validation errors in response
+  validate_responses: false               # Validate outgoing responses (warn-only)
+  validation_status_code: 400            # Status code for validation failures (400 or 422)
+  skip_admin_validation: true            # Skip validation for admin endpoints
+
+  # Validation Overrides (per-endpoint)
+  validation_overrides:
+    "POST /users/{id}": "warn"           # Override validation level for specific routes
+    "GET /internal/health": "off"        # Disable validation for health checks
+
+  # Response Processing
+  response_template_expand: true          # Enable template variables ({{uuid}}, {{now}}, etc.)
+  fake_tokens_enabled: true              # Enable faker functions ({{faker.email}}, etc.)
+
+  # Timeouts
+  request_timeout_secs: 30               # Request timeout in seconds
+
+  # Custom Routes (override OpenAPI spec)
+  routes:
+    - path: /custom/endpoint
+      method: GET
+      response:
+        status: 200
+        headers:
+          Content-Type: application/json
+        body: |
+          {
+            "id": "{{uuid}}",
+            "timestamp": "{{now}}",
+            "message": "Custom response"
+          }
+
+# =============================================================================
+# WebSocket Server Configuration
+# =============================================================================
+websocket:
+  # Basic Settings
+  port: 3001                              # WebSocket server port (default: 3001)
+  host: "0.0.0.0"                        # Bind address
+
+  # Replay Configuration
+  replay_file: "./examples/ws-demo.jsonl" # Path to WebSocket replay file (JSONL format)
+
+  # Connection Management
+  max_connections: 1000                   # Maximum concurrent connections
+  connection_timeout_secs: 300           # Connection timeout in seconds
+  message_timeout_ms: 30000              # Message timeout in milliseconds
+  heartbeat_interval_ms: 30000           # Heartbeat interval for long-lived connections
+
+  # Protocol Options
+  enable_compression: true                # Enable per-message compression
+  max_message_size_bytes: 16777216       # Maximum message size (16MB default)
+
+# =============================================================================
+# gRPC Server Configuration
+# =============================================================================
+grpc:
+  # Basic Settings
+  port: 50051                             # gRPC server port (default: 50051)
+  host: "0.0.0.0"                        # Bind address
+
+  # Protocol Buffers
+  proto_dir: "./proto"                   # Directory containing .proto files
+  enable_reflection: true                # Enable gRPC reflection for service discovery
+
+  # Dynamic Configuration
+  dynamic:
+    enabled: true                         # Enable dynamic gRPC service loading
+    proto_dir: "./proto"
+    enable_reflection: true
+
+    # HTTP Bridge (expose gRPC services as REST APIs)
+    http_bridge:
+      enabled: true                       # Enable HTTP bridge
+      base_path: "/api"                  # Base path for REST endpoints
+      enable_cors: true                  # Enable CORS for bridge endpoints
+      timeout_seconds: 30                # Request timeout
+      generate_openapi: true             # Auto-generate OpenAPI docs
+
+  # Performance Tuning
+  max_message_size_bytes: 4194304        # Maximum message size (4MB default)
+  concurrency_limit: 32                  # Max concurrent requests per connection
+
+  # Service Filtering
+  excluded_services:                      # Services to exclude from registration
+    - "grpc.reflection.v1alpha.ServerReflection"
+
+  # TLS Configuration (optional)
+  tls: null
+  # tls:
+  #   cert_path: "./certs/server.crt"
+  #   key_path: "./certs/server.key"
+  #   ca_path: "./certs/ca.crt"          # For mutual TLS
+
+# =============================================================================
+# GraphQL Configuration
+# =============================================================================
+graphql:
+  enabled: false                          # Enable GraphQL support
+  port: 4000                             # GraphQL server port
+  schema_path: "./schema.graphql"        # Path to GraphQL schema
+  playground_enabled: true               # Enable GraphQL Playground UI
+
+# =============================================================================
+# Admin UI Configuration
+# =============================================================================
+admin:
+  # Basic Settings
+  enabled: true                           # Enable admin UI
+  port: 9080                             # Admin UI port (standalone mode)
+  host: "127.0.0.1"                      # Bind address (localhost only for security)
+
+  # Embedding Options
+  mount_path: null                       # Mount under HTTP server (e.g., "/admin")
+                                         # null = standalone mode
+
+  # API Control
+  api_enabled: true                      # Enable admin API endpoints
+
+  # Authentication (v1.1+)
+  # auth:
+  #   enabled: true
+  #   jwt_secret: "your-secret-key"
+  #   oauth2:
+  #     provider: "github"
+  #     client_id: "..."
+  #     client_secret: "..."
+
+# =============================================================================
+# Core Features (Chaos Engineering, Proxy, etc.)
+# =============================================================================
+core:
+  # Latency Injection
+  latency_enabled: true                   # Enable latency simulation
+  default_latency:
+    base_ms: 50                          # Base latency in milliseconds
+    jitter_ms: 20                        # Random jitter
+    distribution: "fixed"                # "fixed" | "normal" | "pareto"
+    # For normal distribution:
+    # std_dev_ms: 10.0
+    # For pareto distribution:
+    # pareto_shape: 2.0
+  min_ms: 10                             # Minimum latency
+  max_ms: 5000                           # Maximum latency
+
+  # Latency Profiles (per-operation or per-tag)
+  tag_overrides:
+    auth: 100                            # 100ms latency for auth operations
+    payments: 200                        # 200ms for payment operations
+    search: 50                           # 50ms for search operations
+
+  # Failure Injection
+  failures_enabled: false                 # Enable random failure injection
+  failure_config:
+    global_error_rate: 0.05              # 5% global error rate
+    default_status_codes: [500, 502, 503, 504]
+
+    # Per-tag failure configuration
+    tag_configs:
+      auth:
+        error_rate: 0.1                  # 10% error rate for auth
+        status_codes: [401, 403]
+        error_message: "Authentication failed"
+      payments:
+        error_rate: 0.02                 # 2% error rate for payments
+        status_codes: [402, 503]
+        error_message: "Payment processing failed"
+
+    # Tag filtering
+    include_tags: []                     # Empty = all tags included
+    exclude_tags: ["health", "metrics"]  # Exclude health checks
+
+  # Proxy Configuration (hybrid mode)
+  proxy:
+    enabled: false                        # Enable proxy mode
+    upstream_url: "https://api.example.com"
+    timeout_seconds: 30
+    fallback_mode: "forward_unknown"     # Forward unknown requests to upstream
+    cache_responses: false
+
+  # Request/Response Overrides
+  overrides_enabled: true                 # Enable dynamic overrides
+
+  # Traffic Shaping
+  traffic_shaping_enabled: false
+  traffic_shaping:
+    bandwidth_limit_bps: 1000000         # Bandwidth limit (1 Mbps)
+    packet_loss_percent: 0.0             # Packet loss percentage
+    max_connections: 100
+
+# =============================================================================
+# Observability Configuration
+# =============================================================================
+observability:
+  # Prometheus Metrics
+  prometheus:
+    enabled: true                         # Enable Prometheus metrics
+    port: 9090                           # Metrics endpoint port
+    path: "/metrics"                     # Metrics endpoint path
+
+  # OpenTelemetry (optional)
+  opentelemetry: null
+  # opentelemetry:
+  #   enabled: true
+  #   endpoint: "http://localhost:4317"
+  #   service_name: "mockforge"
+  #   trace_ratio: 0.1                   # Sample 10% of requests
+
+  # Request Recorder (save requests to database)
+  recorder: null
+  # recorder:
+  #   enabled: true
+  #   database_url: "sqlite://requests.db"
+  #   max_body_size_bytes: 10485760      # 10MB max body size
+
+  # Chaos Engineering (advanced)
+  chaos: null
+  # chaos:
+  #   latency:
+  #     enabled: true
+  #     fixed_delay_ms: 100
+  #     random_delay_range_ms: [50, 200]
+  #     jitter_percent: 10.0
+  #     probability: 0.5                 # 50% of requests
+  #   fault_injection:
+  #     enabled: true
+  #     http_errors: [500, 502, 503]
+  #     http_error_probability: 0.1
+  #     connection_errors: true
+  #     timeout_errors: true
+
+# =============================================================================
+# Data Generation Configuration
+# =============================================================================
+data:
+  # Default Settings
+  default_rows: 100                       # Default number of rows to generate
+  default_format: "json"                 # Default output format: "json" | "csv" | "jsonl"
+  locale: "en"                           # Locale for faker data
+
+  # RAG (Retrieval-Augmented Generation) - AI-powered data generation
+  rag:
+    enabled: false                        # Enable RAG-powered generation
+    provider: "openai"                   # "openai" | "anthropic" | "ollama" | "openai-compatible"
+    model: "gpt-3.5-turbo"               # Model name
+    api_endpoint: null                   # Custom API endpoint (for openai-compatible)
+    api_key: null                        # API key (or use MOCKFORGE_RAG_API_KEY env var)
+    context_window: 4000                 # Context window size
+    cache_enabled: true                  # Cache LLM responses
+    cache_ttl_seconds: 3600              # Cache TTL
+
+  # Custom Templates
+  templates:
+    custom_user:
+      name: "{{faker.name}}"
+      email: "{{faker.email}}"
+      department: "{{faker.word}}"
+      employee_id: "EMP-{{randInt 1000 9999}}"
+
+# =============================================================================
+# Plugin System Configuration
+# =============================================================================
+plugins:
+  # Security Settings
+  security:
+    max_memory_mb: 50                    # Max memory per plugin
+    max_execution_ms: 1000               # Max execution time
+    allow_network: false                 # Allow plugins to make network requests
+    allow_file_access: false             # Allow plugins to access file system
+
+  # Installed Plugins
+  plugins:
+    - name: auth-jwt                     # Plugin name
+      enabled: true
+      config:
+        secret: "my-jwt-secret"
+        algorithm: "HS256"
+        expiry: 3600
+      permissions:
+        network: false
+        file_read: false
+
+    - name: template-crypto
+      enabled: true
+      config:
+        default_algorithm: "aes-256-gcm"
+      permissions:
+        network: false
+        file_read: false
+
+# =============================================================================
+# Security & Encryption Configuration
+# =============================================================================
+security:
+  # End-to-End Encryption
+  encryption:
+    enabled: false                        # Enable E2E encryption
+    algorithm: "aes-256-gcm"             # "aes-256-gcm" | "chacha20-poly1305"
+    key_file: "./keys/master.key"       # Path to encryption key
+    auto_encrypt: true                   # Automatically encrypt sensitive fields
+
+  # Workspace Sync Encryption
+  sync:
+    encrypt_on_push: true                # Encrypt before pushing to Git
+    decrypt_on_pull: true                # Decrypt after pulling from Git
+
+# =============================================================================
+# Workspace Synchronization Configuration
+# =============================================================================
+sync:
+  enabled: false                          # Enable workspace sync
+  directory: "./workspace-sync"          # Sync directory
+  git:
+    enabled: true                         # Enable Git integration
+    auto_commit: true                    # Auto-commit changes
+    auto_push: false                     # Auto-push to remote
+    branch: "main"                       # Git branch
+  watch:
+    enabled: true                         # Watch for file changes
+    debounce_ms: 1000                    # Debounce file changes
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+logging:
+  # Basic Settings
+  level: "info"                           # Log level: "error" | "warn" | "info" | "debug" | "trace"
+  json_format: false                     # Use JSON format for logs
+
+  # File Logging
+  file_path: null                        # Log to file (null = stdout only)
+  # file_path: "/var/log/mockforge.log"
+  max_file_size_mb: 10                   # Rotate when file reaches this size
+  max_files: 5                           # Keep this many rotated files
+
+  # Advanced Options
+  include_timestamps: true               # Include timestamps in logs
+  include_thread_ids: false              # Include thread IDs
+  include_file_locations: false          # Include file:line locations
+
+  # Filter by Module
+  filters:
+    "mockforge_http": "debug"            # Debug HTTP module
+    "mockforge_grpc": "info"             # Info for gRPC
+    "tower_http": "warn"                 # Warn for tower_http
+
+# =============================================================================
+# Advanced Features
+# =============================================================================
+
+# Request Chaining - Chain multiple mock requests together
+chains:
+  - name: "user_creation_flow"
+    steps:
+      - request:
+          method: POST
+          path: /users
+          body:
+            name: "{{faker.name}}"
+            email: "{{faker.email}}"
+        extract:
+          user_id: "$.id"
+
+      - request:
+          method: POST
+          path: /users/{{user_id}}/profile
+          body:
+            bio: "{{faker.sentence}}"
+
+      - request:
+          method: GET
+          path: /users/{{user_id}}
+        validate:
+          status: 200
+          body:
+            - path: "$.email"
+              exists: true
+
+# Fixtures - Predefined test scenarios
+fixtures:
+  - name: "happy_path_user_creation"
+    requests:
+      - method: POST
+        path: /users
+        body:
+          name: "Test User"
+          email: "test@example.com"
+        expected_status: 201
+
+  - name: "validation_error"
+    requests:
+      - method: POST
+        path: /users
+        body:
+          name: ""  # Invalid: empty name
+        expected_status: 400
+
+# State Management
+state:
+  enabled: false                          # Enable stateful mocking
+  storage: "memory"                      # "memory" | "redis" | "file"
+  # redis:
+  #   url: "redis://localhost:6379"
+  # file:
+  #   path: "./state.json"
+
+# =============================================================================
+# Environment-Specific Configurations
+# =============================================================================
+# You can override any setting using environment variables:
+# MOCKFORGE_HTTP_PORT=8080
+# MOCKFORGE_ADMIN_ENABLED=true
+# MOCKFORGE_LOGGING_LEVEL=debug
+# MOCKFORGE_RAG_API_KEY=sk-...
+# MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+# =============================================================================

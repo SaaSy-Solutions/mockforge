@@ -40,6 +40,15 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **CLI Tool** | ✅ Full-featured | ✅ Yes | ✅ Yes | ✅ Yes |
 | **License** | MIT/Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
 
+### v1.0 Feature Status
+
+All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
+
+- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures)
+- ⚠️ **Planned for v1.1**: Admin UI role-based authentication (frontend UI components are built, backend JWT/OAuth integration pending)
+
+All commands, options, and features documented in each protocol section (HTTP, gRPC, WebSocket, GraphQL, Plugins, Data Generation) have been verified to work as described.
+
 ### Key Differentiators
 
 - **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, and GraphQL in a single binary
@@ -101,9 +110,9 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 - **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
 - **Cross-Endpoint Validation**: Ensure referential integrity across different endpoints
 - **Admin UI v2**: Modern React-based interface with:
-  - **Role-Based Authentication**: Admin and viewer access control
-  - **Real-time Monitoring**: Live logs, metrics, and performance tracking
-  - **Visual Configuration**: Drag-and-drop fixture management
+  - **Role-Based Authentication**: _(Planned for v1.1)_ Admin and viewer access control (frontend UI components ready, backend authentication to be implemented)
+  - **Real-time Monitoring**: Live logs via Server-Sent Events (SSE), metrics, and performance tracking
+  - **Visual Configuration**: Drag-and-drop fixture management with tree view
   - **Advanced Search**: Full-text search across services and logs
 - **Configuration Management**: Flexible configuration via YAML/JSON files with environment variable overrides
 - **Built-in Data Templates**: Pre-configured schemas for common data types (users, products, orders)
@@ -116,13 +125,18 @@ For comprehensive documentation, tutorials, and guides:
 **[📚 Read the MockForge Book](https://docs.mockforge.dev/)**
 
 The documentation covers:
+- **[Your First Mock API in 5 Minutes](https://docs.mockforge.dev/getting-started/five-minute-api.html)** - Fastest path to productivity
 - Getting started guide and installation
 - Detailed configuration options
-- API reference for all protocols (HTTP, gRPC, WebSocket)  
+- API reference for all protocols (HTTP, gRPC, WebSocket)
 - Advanced features and examples
 - Contributing guidelines
 
 ## 🚀 Quick Start
+
+**New to MockForge?** Follow our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
+
+**Need help?** Check the **[FAQ](https://docs.mockforge.dev/reference/faq.html)** or **[Troubleshooting Guide](https://docs.mockforge.dev/reference/troubleshooting.html)**.
 
 ### Installation
 
@@ -621,12 +635,14 @@ MockForge ships a built-in Admin UI that can run as either:
 
 The Admin UI provides:
 
-- **📊 Modern dashboard** with real-time server status
+- **📊 Modern dashboard** with real-time server status and live logs (via SSE)
 - **⚙️ Configuration management** for latency, faults, and proxy settings
-- **📝 Request logging** with filtering and monitoring
+- **📝 Request logging** with filtering and real-time monitoring
 - **📈 Metrics visualization** with performance insights
-- **🎯 Fixture management** with record/replay capabilities
+- **🎯 Fixture management** with drag-and-drop tree view for organizing fixtures
 - **🎨 Professional UI** with tabbed interface and responsive design
+
+> **Note**: Role-based authentication (Admin/Viewer access control) is planned for v1.1. The frontend UI components are ready, but backend JWT/OAuth authentication is not yet implemented in v1.0. The Admin UI is currently accessible without authentication.
 
 ### Embedded Admin Mode
 
@@ -707,12 +723,17 @@ Admin API endpoints are namespaced under `__mockforge`:
 MockForge supports flexible configuration through YAML or JSON files:
 
 ```bash
+# Initialize a new configuration
+mockforge init my-project
+
+# Validate your configuration
+mockforge config validate
+
 # Use a configuration file
 cargo run -p mockforge-cli -- serve --config my-config.yaml
-
-# Configuration file example
-cp config.example.yaml my-config.yaml
 ```
+
+**[📋 Complete Configuration Template](config.template.yaml)** - Fully documented template with all available options
 
 ### Environment Variables
 
@@ -999,6 +1020,44 @@ View the latest benchmark results in our [GitHub Actions](https://github.com/Saa
 - [Contributing](CONTRIBUTING.md) - How to contribute
 - [Changelog](CHANGELOG.md) - Release notes
 - [Benchmarks](https://github.com/SaaSy-Solutions/mockforge/tree/main/benches) - Performance benchmarks
+
+## 💬 Getting Help & Support
+
+### Quick Links
+
+- **[📖 FAQ (Frequently Asked Questions)](https://docs.mockforge.dev/reference/faq.html)** - Quick answers to common questions
+- **[🔧 Troubleshooting Guide](https://docs.mockforge.dev/reference/troubleshooting.html)** - Solutions for common issues
+- **[🚀 5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** - Fastest way to get started
+- **[📋 Configuration Reference](https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml)** - Complete config template with all options
+
+### Common Issues
+
+| Issue | Quick Fix |
+|-------|-----------|
+| **Server won't start** | `lsof -i :3000` → `mockforge serve --http-port 3001` |
+| **Template variables not working** | `mockforge serve --response-template-expand` |
+| **Validation too strict** | `mockforge serve --validation warn` |
+| **Admin UI not loading** | `mockforge serve --admin --admin-port 9080` |
+| **Docker port conflicts** | `docker run -p 3001:3000 mockforge` |
+| **Docker permission issues** | `sudo chown -R 1000:1000 fixtures/` (Linux) |
+
+See the [complete troubleshooting guide](https://docs.mockforge.dev/reference/troubleshooting.html) for detailed solutions.
+
+### Community & Support
+
+- **[GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues)** - Report bugs or request features
+- **[GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)** - Ask questions and share ideas
+- **[Contributing Guide](CONTRIBUTING.md)** - Contribute to MockForge development
+
+### Need Help?
+
+When reporting issues, please include:
+1. MockForge version (`mockforge --version`)
+2. Operating system
+3. Configuration file (if applicable)
+4. Steps to reproduce
+5. Expected vs actual behavior
+6. Error logs (`RUST_LOG=debug mockforge serve`)
 
 ## 📄 License
 
