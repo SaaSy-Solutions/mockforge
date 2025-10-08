@@ -11,7 +11,7 @@ http:
   host: "0.0.0.0"                        # Bind address (0.0.0.0 = all interfaces)
 
   # OpenAPI Integration
-  openapi_spec: "./examples/openapi.json" # Path to OpenAPI/Swagger spec (local file or URL)
+  openapi_spec: "./examples/openapi.json" # OpenAPI spec file for HTTP server (local file or URL)
 
   # CORS Configuration
   cors_enabled: true                      # Enable Cross-Origin Resource Sharing

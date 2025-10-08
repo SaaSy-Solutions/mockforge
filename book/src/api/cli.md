@@ -32,7 +32,7 @@ mockforge-cli serve [OPTIONS]
 - `--grpc-port <PORT>`: gRPC server port (default: 50051)
 
 **API Specification:**
-- `--spec <PATH>`: Path to OpenAPI specification file (JSON or YAML format)
+- `--spec <PATH>`: OpenAPI spec file for HTTP server (JSON or YAML format)
 
 **Configuration:**
 - `-c, --config <PATH>`: Path to configuration file

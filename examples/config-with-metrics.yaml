@@ -8,7 +8,7 @@ http:
   cors_enabled: true
   request_timeout_secs: 30
   request_validation: "enforce"
-  openapi_spec: "./examples/petstore.yaml"  # Optional: path to your OpenAPI spec
+  openapi_spec: "./examples/petstore.yaml"  # OpenAPI spec file for HTTP server (optional)
 
 # WebSocket Server Configuration
 websocket:

@@ -5,7 +5,7 @@
 http:
   port: 3000
   host: "127.0.0.1"
-  openapi_spec: "examples/openapi-demo.json"  # Path to OpenAPI spec file
+  openapi_spec: "examples/openapi-demo.json"  # OpenAPI spec file for HTTP server
   cors_enabled: true
   request_timeout_secs: 30
   # Lenient validation in development

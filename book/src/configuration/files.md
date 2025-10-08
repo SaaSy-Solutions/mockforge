@@ -123,7 +123,7 @@ http:
 
 ```yaml
 http:
-  openapi_spec: "path/to/spec.json"  # Path to OpenAPI specification
+  openapi_spec: "path/to/spec.json"  # OpenAPI spec file for HTTP server
   # Alternative: use URL
   openapi_spec: "https://example.com/api-spec.yaml"
 ```

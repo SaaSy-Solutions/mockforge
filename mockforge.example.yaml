@@ -6,7 +6,7 @@
 http:
   port: 3000
   host: "0.0.0.0"
-  # Path to OpenAPI spec file (optional)
+  # OpenAPI spec file for HTTP server (optional)
   openapi_spec: "./examples/openapi.json"
   cors_enabled: true
   request_timeout_secs: 30

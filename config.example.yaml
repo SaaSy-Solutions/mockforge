@@ -5,7 +5,7 @@
 http:
   port: 3000
   host: "0.0.0.0"
-  openapi_spec: null  # Path to OpenAPI spec file
+  openapi_spec: null  # OpenAPI spec file for HTTP server
   cors_enabled: true
   request_timeout_secs: 30
   # Validation controls

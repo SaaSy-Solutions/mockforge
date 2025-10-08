@@ -121,7 +121,7 @@ pub struct HttpConfig {
     pub port: u16,
     /// Host address
     pub host: String,
-    /// OpenAPI spec path
+    /// Path to OpenAPI spec file for HTTP server
     pub openapi_spec: Option<String>,
     /// Enable CORS
     pub cors_enabled: bool,
