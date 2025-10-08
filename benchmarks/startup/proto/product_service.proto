@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package benchmark.product;
+
+// Product service for startup benchmarking
+service ProductService {
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
+  rpc UpdateProduct(UpdateProductRequest) returns (UpdateProductResponse);
+  rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse);
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse);
+  rpc GetProductInventory(GetProductInventoryRequest) returns (GetProductInventoryResponse);
+  rpc UpdateProductInventory(UpdateProductInventoryRequest) returns (UpdateProductInventoryResponse);
+  rpc GetProductPricing(GetProductPricingRequest) returns (GetProductPricingResponse);
+  rpc UpdateProductPricing(UpdateProductPricingRequest) returns (UpdateProductPricingResponse);
+
+  // Streaming
+  rpc StreamProducts(StreamProductsRequest) returns (stream Product);
+  rpc WatchInventory(WatchInventoryRequest) returns (stream InventoryUpdate);
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  double price = 4;
+  string sku = 5;
+  int32 quantity = 6;
+  string category = 7;
+  int64 created_at = 8;
+  int64 updated_at = 9;
+}
+
+message GetProductRequest {
+  string id = 1;
+}
+
+message GetProductResponse {
+  Product product = 1;
+}
+
+message CreateProductRequest {
+  string name = 1;
+  string description = 2;
+  double price = 3;
+  string sku = 4;
+  int32 quantity = 5;
+  string category = 6;
+}
+
+message CreateProductResponse {
+  Product product = 1;
+}
+
+message UpdateProductRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  double price = 4;
+  int32 quantity = 5;
+}
+
+message UpdateProductResponse {
+  Product product = 1;
+}
+
+message DeleteProductRequest {
+  string id = 1;
+}
+
+message DeleteProductResponse {
+  bool success = 1;
+}
+
+message ListProductsRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string category = 3;
+}
+
+message ListProductsResponse {
+  repeated Product products = 1;
+  int32 total = 2;
+}
+
+message SearchProductsRequest {
+  string query = 1;
+  string category = 2;
+}
+
+message SearchProductsResponse {
+  repeated Product products = 1;
+}
+
+message GetProductInventoryRequest {
+  string product_id = 1;
+}
+
+message GetProductInventoryResponse {
+  string product_id = 1;
+  int32 quantity = 2;
+  string location = 3;
+}
+
+message UpdateProductInventoryRequest {
+  string product_id = 1;
+  int32 quantity_delta = 2;
+}
+
+message UpdateProductInventoryResponse {
+  int32 new_quantity = 1;
+}
+
+message GetProductPricingRequest {
+  string product_id = 1;
+}
+
+message GetProductPricingResponse {
+  string product_id = 1;
+  double base_price = 2;
+  double discount_price = 3;
+  string currency = 4;
+}
+
+message UpdateProductPricingRequest {
+  string product_id = 1;
+  double new_price = 2;
+}
+
+message UpdateProductPricingResponse {
+  double old_price = 1;
+  double new_price = 2;
+}
+
+message StreamProductsRequest {
+  string category = 1;
+}
+
+message WatchInventoryRequest {
+  repeated string product_ids = 1;
+}
+
+message InventoryUpdate {
+  string product_id = 1;
+  int32 old_quantity = 2;
+  int32 new_quantity = 3;
+  string location = 4;
+}

@@ -252,6 +252,10 @@ pub async fn build_router(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
 ) -> Router {
+    use std::time::Instant;
+
+    let startup_start = Instant::now();
+
     // Set up the basic router
     let mut app = Router::new();
     let mut state = HttpServerState::new();
@@ -262,10 +266,17 @@ pub async fn build_router(
     // If an OpenAPI spec is provided, integrate it
     if let Some(spec_path) = spec_path {
         tracing::debug!("Processing OpenAPI spec path: {}", spec_path);
+
+        // Measure OpenAPI spec loading
+        let spec_load_start = Instant::now();
         match OpenApiSpec::from_file(&spec_path).await {
             Ok(openapi) => {
-                info!("Successfully loaded OpenAPI spec from {}", spec_path);
+                let spec_load_duration = spec_load_start.elapsed();
+                info!("Successfully loaded OpenAPI spec from {} (took {:?})", spec_path, spec_load_duration);
+
+                // Measure route registry creation
                 tracing::debug!("Creating OpenAPI route registry...");
+                let registry_start = Instant::now();
                 let registry = if let Some(opts) = options {
                     tracing::debug!("Using custom validation options");
                     OpenApiRouteRegistry::new_with_options(openapi, opts)
@@ -273,8 +284,11 @@ pub async fn build_router(
                     tracing::debug!("Using environment-based options");
                     OpenApiRouteRegistry::new_with_env(openapi)
                 };
+                let registry_duration = registry_start.elapsed();
+                info!("Created OpenAPI route registry with {} routes (took {:?})", registry.routes().len(), registry_duration);
 
-                // Extract route information for introspection
+                // Measure route extraction
+                let extract_start = Instant::now();
                 let route_info: Vec<RouteInfo> = registry.routes().iter().map(|route| {
                     RouteInfo {
                         method: route.method.clone(),
@@ -286,15 +300,17 @@ pub async fn build_router(
                     }
                 }).collect();
                 state.routes = route_info;
+                let extract_duration = extract_start.elapsed();
+                debug!("Extracted route information (took {:?})", extract_duration);
 
-                tracing::debug!("Building router from registry with {} routes", registry.routes().len());
-
-                // Load overrides if environment variable is set
+                // Measure overrides loading
                 let overrides = if std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB").is_ok() {
                     tracing::debug!("Loading overrides from environment variable");
+                    let overrides_start = Instant::now();
                     match mockforge_core::Overrides::load_from_globs(&[]).await {
                         Ok(overrides) => {
-                            tracing::debug!("Loaded {} override rules", overrides.rules().len());
+                            let overrides_duration = overrides_start.elapsed();
+                            info!("Loaded {} override rules (took {:?})", overrides.rules().len(), overrides_duration);
                             Some(overrides)
                         }
                         Err(e) => {
@@ -306,6 +322,8 @@ pub async fn build_router(
                     None
                 };
 
+                // Measure router building
+                let router_build_start = Instant::now();
                 let overrides_enabled = overrides.is_some();
                 let openapi_router = if let Some(failure_config) = &failure_config {
                     tracing::debug!("Building router with failure injection and overrides");
@@ -325,6 +343,8 @@ pub async fn build_router(
                         overrides_enabled,
                     )
                 };
+                let router_build_duration = router_build_start.elapsed();
+                debug!("Built OpenAPI router (took {:?})", router_build_duration);
 
                 tracing::debug!("Merging OpenAPI router with main router");
                 app = app.merge(openapi_router);
@@ -365,6 +385,9 @@ pub async fn build_router(
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    let total_startup_duration = startup_start.elapsed();
+    info!("HTTP router startup completed (total time: {:?})", total_startup_duration);
 
     app
 }

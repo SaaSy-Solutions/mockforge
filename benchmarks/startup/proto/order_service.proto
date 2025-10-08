@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package benchmark.order;
+
+// Order service for startup benchmarking
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  rpc UpdateOrder(UpdateOrderRequest) returns (UpdateOrderResponse);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc GetOrderStatus(GetOrderStatusRequest) returns (GetOrderStatusResponse);
+  rpc UpdateOrderStatus(UpdateOrderStatusRequest) returns (UpdateOrderStatusResponse);
+  rpc ProcessPayment(ProcessPaymentRequest) returns (ProcessPaymentResponse);
+  rpc RefundOrder(RefundOrderRequest) returns (RefundOrderResponse);
+  rpc GetOrderHistory(GetOrderHistoryRequest) returns (GetOrderHistoryResponse);
+
+  // Streaming
+  rpc StreamOrders(StreamOrdersRequest) returns (stream Order);
+  rpc TrackOrder(TrackOrderRequest) returns (stream OrderUpdate);
+}
+
+message Order {
+  string id = 1;
+  string user_id = 2;
+  repeated OrderItem items = 3;
+  double total_amount = 4;
+  string status = 5;
+  string payment_status = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message OrderItem {
+  string product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  double unit_price = 4;
+  double total_price = 5;
+}
+
+message CreateOrderRequest {
+  string user_id = 1;
+  repeated OrderItem items = 2;
+}
+
+message CreateOrderResponse {
+  Order order = 1;
+}
+
+message GetOrderRequest {
+  string id = 1;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message UpdateOrderRequest {
+  string id = 1;
+  repeated OrderItem items = 2;
+}
+
+message UpdateOrderResponse {
+  Order order = 1;
+}
+
+message CancelOrderRequest {
+  string id = 1;
+  string reason = 2;
+}
+
+message CancelOrderResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListOrdersRequest {
+  string user_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  int32 total = 2;
+}
+
+message GetOrderStatusRequest {
+  string id = 1;
+}
+
+message GetOrderStatusResponse {
+  string id = 1;
+  string status = 2;
+  string payment_status = 3;
+}
+
+message UpdateOrderStatusRequest {
+  string id = 1;
+  string status = 2;
+}
+
+message UpdateOrderStatusResponse {
+  Order order = 1;
+}
+
+message ProcessPaymentRequest {
+  string order_id = 1;
+  string payment_method = 2;
+  double amount = 3;
+}
+
+message ProcessPaymentResponse {
+  string transaction_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message RefundOrderRequest {
+  string order_id = 1;
+  double amount = 2;
+  string reason = 3;
+}
+
+message RefundOrderResponse {
+  string refund_id = 1;
+  bool success = 2;
+}
+
+message GetOrderHistoryRequest {
+  string order_id = 1;
+}
+
+message GetOrderHistoryResponse {
+  repeated OrderEvent events = 1;
+}
+
+message OrderEvent {
+  string event_type = 1;
+  string description = 2;
+  int64 timestamp = 3;
+}
+
+message StreamOrdersRequest {
+  string user_id = 1;
+  string status = 2;
+}
+
+message TrackOrderRequest {
+  string order_id = 1;
+}
+
+message OrderUpdate {
+  string order_id = 1;
+  string field = 2;
+  string old_value = 3;
+  string new_value = 4;
+  int64 timestamp = 5;
+}

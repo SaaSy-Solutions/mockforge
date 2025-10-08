@@ -106,21 +106,31 @@ impl ServiceRegistry {
 pub async fn discover_services(
     config: &DynamicGrpcConfig,
 ) -> Result<ServiceRegistry, Box<dyn std::error::Error + Send + Sync>> {
+    use std::time::Instant;
+
+    let discovery_start = Instant::now();
     info!("Discovering gRPC services from proto directory: {}", config.proto_dir);
 
     // Parse proto files
+    let parse_start = Instant::now();
     let mut parser = ProtoParser::new();
     parser.parse_directory(&config.proto_dir).await?;
+    let parse_duration = parse_start.elapsed();
+    info!("Proto file parsing completed (took {:?})", parse_duration);
 
     // Create registry with the descriptor pool from the parser
+    let registry_start = Instant::now();
     let mut registry = ServiceRegistry::new();
     // Extract services from parser and move descriptor pool
     let services = parser.services().clone();
     let descriptor_pool = parser.into_pool();
 
     registry.set_descriptor_pool(descriptor_pool);
+    let registry_duration = registry_start.elapsed();
+    debug!("Registry creation completed (took {:?})", registry_duration);
 
     // Create dynamic services from parsed proto definitions
+    let service_reg_start = Instant::now();
     for (service_name, proto_service) in services {
         // Skip excluded services
         if config.excluded_services.contains(&service_name) {
@@ -132,10 +142,13 @@ pub async fn discover_services(
         let dynamic_service = DynamicGrpcService::new(proto_service.clone(), None);
         registry.register(service_name.clone(), dynamic_service);
 
-        info!("Registered service: {}", service_name);
+        debug!("Registered service: {}", service_name);
     }
+    let service_reg_duration = service_reg_start.elapsed();
+    info!("Service registration completed for {} services (took {:?})", registry.service_names().len(), service_reg_duration);
 
-    info!("Successfully registered {} services", registry.service_names().len());
+    let total_discovery_duration = discovery_start.elapsed();
+    info!("Service discovery completed (total time: {:?})", total_discovery_duration);
     Ok(registry)
 }
 
@@ -145,6 +158,10 @@ pub async fn start_dynamic_server(
     config: DynamicGrpcConfig,
     latency_profile: Option<mockforge_core::LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::time::Instant;
+
+    let startup_start = Instant::now();
+
     #[cfg(feature = "data-faker")]
     mockforge_data::provider::register_core_faker_provider();
 
@@ -167,7 +184,13 @@ pub async fn start_dynamic_server(
     let proxy_config = ProxyConfig::default();
 
     // Create mock reflection proxy
+    let reflection_start = Instant::now();
     let mock_proxy = MockReflectionProxy::new(proxy_config, registry_arc.clone()).await?;
+    let reflection_duration = reflection_start.elapsed();
+    info!("gRPC reflection proxy created (took {:?})", reflection_duration);
+
+    let total_startup_duration = startup_start.elapsed();
+    info!("gRPC server startup completed (total time: {:?})", total_startup_duration);
 
     // Start HTTP server (bridge) if enabled
     // For now, just start the gRPC server directly
