@@ -1543,13 +1543,16 @@ mod tests {
             timestamp: chrono::Utc::now(),
             method: "GET".to_string(),
             path: "/api/users/123".to_string(),
+            query_params: None,
             headers: "{}".to_string(),
             body: None,
+            body_encoding: "utf-8".to_string(),
             status_code: Some(200),
             duration_ms: Some(50),
             client_ip: None,
             trace_id: None,
             span_id: None,
+            tags: None,
         };
 
         let name = generator.generate_test_name(&request);
@@ -1577,13 +1580,16 @@ mod tests {
             timestamp: chrono::Utc::now(),
             method: "GET".to_string(),
             path: "/api/users".to_string(),
+            query_params: None,
             headers: r#"{"content-type":"application/json"}"#.to_string(),
             body: None,
+            body_encoding: "utf-8".to_string(),
             status_code: Some(200),
             duration_ms: Some(45),
             client_ip: Some("127.0.0.1".to_string()),
             trace_id: None,
             span_id: None,
+            tags: None,
         };
 
         let response = RecordedResponse {
@@ -1591,8 +1597,8 @@ mod tests {
             status_code: 200,
             headers: r#"{"content-type":"application/json"}"#.to_string(),
             body: Some(r#"{"users":[]}"#.to_string()),
-            body_encoding: Some("utf-8".to_string()),
-            size_bytes: Some(12),
+            body_encoding: "utf-8".to_string(),
+            size_bytes: 12,
             timestamp: chrono::Utc::now(),
         };
 
@@ -1616,13 +1622,16 @@ mod tests {
             timestamp: chrono::Utc::now(),
             method: "POST".to_string(),
             path: "/api/users".to_string(),
+            query_params: None,
             headers: r#"{"content-type":"application/json"}"#.to_string(),
             body: Some(r#"{"name":"John"}"#.to_string()),
+            body_encoding: "utf-8".to_string(),
             status_code: Some(201),
             duration_ms: Some(80),
             client_ip: None,
             trace_id: None,
             span_id: None,
+            tags: None,
         };
 
         let response = RecordedResponse {
@@ -1630,8 +1639,8 @@ mod tests {
             status_code: 201,
             headers: r#"{}"#.to_string(),
             body: None,
-            body_encoding: None,
-            size_bytes: Some(0),
+            body_encoding: "utf-8".to_string(),
+            size_bytes: 0,
             timestamp: chrono::Utc::now(),
         };
 
@@ -1655,13 +1664,16 @@ mod tests {
             timestamp: chrono::Utc::now(),
             method: "DELETE".to_string(),
             path: "/api/users/123".to_string(),
+            query_params: None,
             headers: r#"{}"#.to_string(),
             body: None,
+            body_encoding: "utf-8".to_string(),
             status_code: Some(204),
             duration_ms: Some(30),
             client_ip: None,
             trace_id: None,
             span_id: None,
+            tags: None,
         };
 
         let response = RecordedResponse {
@@ -1669,8 +1681,8 @@ mod tests {
             status_code: 204,
             headers: r#"{}"#.to_string(),
             body: None,
-            body_encoding: None,
-            size_bytes: Some(0),
+            body_encoding: "utf-8".to_string(),
+            size_bytes: 0,
             timestamp: chrono::Utc::now(),
         };
 
