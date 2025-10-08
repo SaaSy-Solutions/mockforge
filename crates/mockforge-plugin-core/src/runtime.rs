@@ -10,7 +10,7 @@ use crate::{
 };
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::p2::WasiCtxBuilder;
@@ -19,8 +19,8 @@ use wasmtime_wasi::{DirPerms, FilePerms};
 
 /// WebAssembly runtime for plugin execution
 pub struct PluginRuntime {
-    /// WebAssembly engine
-    engine: Engine,
+    /// WebAssembly engine (lazy-initialized only when plugins are loaded)
+    engine: OnceLock<Engine>,
     /// Active plugin instances
     plugins: RwLock<HashMap<PluginId, Arc<RwLock<PluginInstance>>>>,
     /// Runtime configuration
@@ -29,13 +29,22 @@ pub struct PluginRuntime {
 
 impl PluginRuntime {
     /// Create a new plugin runtime
+    ///
+    /// Note: The WebAssembly engine is lazy-initialized on first plugin load
+    /// to avoid unnecessary memory allocation when no plugins are used.
     pub fn new(config: RuntimeConfig) -> Result<Self> {
-        let engine = Engine::default();
-
         Ok(Self {
-            engine,
+            engine: OnceLock::new(),
             plugins: RwLock::new(HashMap::new()),
             config,
+        })
+    }
+
+    /// Get or initialize the WebAssembly engine
+    fn get_engine(&self) -> &Engine {
+        self.engine.get_or_init(|| {
+            // Lazy initialization: only create engine when first plugin is loaded
+            Engine::default()
         })
     }
 
@@ -60,7 +69,9 @@ impl PluginRuntime {
         self.validate_manifest_security(&manifest)?;
 
         // Load WASM module with additional validation
-        let module = Module::from_file(&self.engine, wasm_path)
+        // This will lazy-initialize the engine if it hasn't been created yet
+        let engine = self.get_engine();
+        let module = Module::from_file(engine, wasm_path)
             .map_err(|e| PluginError::wasm(format!("Failed to load WASM module: {}", e)))?;
 
         // Security: Validate module against declared capabilities

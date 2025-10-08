@@ -282,6 +282,9 @@ pub struct Config {
     pub default_latency: LatencyProfile,
     /// Traffic shaping configuration
     pub traffic_shaping: TrafficShapingConfig,
+    /// Maximum number of request logs to keep in memory (default: 1000)
+    /// Helps prevent unbounded memory growth from request logging
+    pub max_request_logs: usize,
 }
 
 /// Default configuration
@@ -296,6 +299,7 @@ impl Default for Config {
             proxy: None,
             default_latency: LatencyProfile::default(),
             traffic_shaping: TrafficShapingConfig::default(),
+            max_request_logs: 1000, // Default: keep last 1000 requests
         }
     }
 }
