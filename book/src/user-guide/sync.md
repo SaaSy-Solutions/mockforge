@@ -1,189 +1,382 @@
 # Directory Synchronization
 
-MockForge supports bidirectional synchronization between workspaces and external directories, allowing you to keep your mock API definitions in sync with your version control system or shared directories.
+MockForge's sync daemon enables automatic synchronization between workspace files and MockForge's internal storage, allowing you to work with your mock API definitions as files and keep them in version control.
 
 ## Overview
 
-Directory sync enables automatic synchronization of workspace changes with a specified directory on the filesystem. This is useful for:
+The sync daemon monitors a directory for `.yaml` and `.yml` files and automatically imports them into MockForge workspaces. This enables:
 
-- Version controlling your mock definitions
-- Sharing workspaces across team members
-- Maintaining consistency between development environments
-- Automated deployment pipelines
+- **File-based workflows**: Edit workspace files with your favorite text editor
+- **Version control**: Keep workspace definitions in Git
+- **Team collaboration**: Share workspaces via Git repositories
+- **Automated workflows**: CI/CD integration and automated deployment
+- **Real-time feedback**: See exactly what's being synced as it happens
 
-## Sync Modes
+## How It Works
 
-### Bidirectional Sync
-Changes in either the workspace or the directory are automatically synchronized. This is the default and recommended mode for most use cases.
+The sync daemon provides bidirectional synchronization:
 
-### One-Way Sync (Workspace → Directory)
-Changes in the workspace are automatically synced to the directory, but directory changes are ignored. Useful for read-only directories or when you want to maintain control from the UI.
+1. **Monitors Directory**: Watches for file changes in the specified workspace directory
+2. **Detects Changes**: Identifies created, modified, and deleted `.yaml`/`.yml` files
+3. **Imports Automatically**: Parses and imports valid MockRequest files into workspaces
+4. **Provides Feedback**: Shows clear, real-time output of all sync operations
 
-### Manual Sync
-Synchronization only occurs when manually triggered. No automatic monitoring or syncing.
+### What Gets Synced
 
-## Setting Up Sync
+- **File Types**: Only `.yaml` and `.yml` files
+- **File Format**: Files must be valid MockRequest YAML
+- **Subdirectories**: Monitors all subdirectories recursively
+- **Exclusions**: Skips hidden files (starting with `.`)
 
-### During Workspace Creation
+## Getting Started
 
-When creating a new workspace, you can enable sync immediately:
+### Starting the Sync Daemon
 
-1. Click "Create Workspace"
-2. Fill in the workspace name and description
-3. Check "Enable directory sync"
-4. Enter the absolute path to the sync directory
-5. Click "Create Workspace"
-
-### For Existing Workspaces
-
-To enable sync on an existing workspace:
-
-1. Open the workspace
-2. Click the "Settings" button in the workspace header
-3. Configure the sync parameters:
-   - **Target Directory**: Absolute path to sync with
-   - **Sync Direction**: Choose bidirectional, one-way, or manual
-   - **Real-time Monitoring**: Enable for automatic sync on file changes
-   - **Directory Structure**: Choose how files are organized
-   - **Filename Pattern**: Customize the naming pattern for synced files
-
-### Opening from Directory
-
-If you already have a directory with workspace files, you can open it directly:
-
-1. Click "Open from Directory"
-2. Enter the absolute path to the directory
-3. MockForge will create a workspace and enable bidirectional sync
-
-## Directory Structure Options
-
-### Flat Structure
-All workspaces are stored as individual YAML files in the root directory:
-```
-sync-directory/
-├── workspace-1.yaml
-├── workspace-2.yaml
-└── workspace-3.yaml
-```
-
-### Nested Structure
-Workspaces are organized in subdirectories:
-```
-sync-directory/
-├── workspace-1/
-│   ├── workspace.yaml
-│   └── requests/
-│       ├── endpoint-1.yaml
-│       └── endpoint-2.yaml
-└── workspace-2/
-    ├── workspace.yaml
-    └── requests/
-        └── endpoint-3.yaml
-```
-
-## Environment Filtering
-
-By default, MockForge excludes sensitive environments from sync to prevent accidental exposure of secrets:
-
-- Environments marked as "not shared" are excluded
-- Variables containing sensitive keywords (password, secret, key, token) are filtered out
-- Only explicitly shared environments are included in synced files
-
-## Sync Status and Controls
-
-The sync status is displayed in the workspace header:
-
-- **🟢 Synced**: Everything is up to date
-- **🟡 Syncing**: Changes are being processed
-- **🔴 Error**: Sync failed, check logs for details
-- **⚪ Disabled**: Sync is disabled
-
-Click the status indicator to:
-- Manually trigger a sync
-- View sync history
-- Configure sync settings
-- Disable sync temporarily
-
-## Conflict Resolution
-
-When bidirectional sync detects conflicting changes:
-
-1. A confirmation dialog appears
-2. You can choose to:
-   - Apply workspace changes (overwrite directory)
-   - Apply directory changes (overwrite workspace)
-   - Merge changes manually
-   - Skip this conflict
-
-## CLI Integration
-
-Use the CLI for headless sync operations:
+Use the CLI to start the sync daemon:
 
 ```bash
-# Start background sync daemon
-mockforge sync start --directory /path/to/workspace
+# Basic usage
+mockforge sync --workspace-dir ./my-workspace
 
-# Trigger manual sync
-mockforge sync trigger --workspace-id <id>
+# Short form
+mockforge sync -w ./my-workspace
 
-# Check sync status
-mockforge sync status --workspace-id <id>
+# With custom configuration
+mockforge sync --workspace-dir ./workspace --config sync-config.yaml
+```
 
-# Stop sync
-mockforge sync stop --workspace-id <id>
+### What You'll See
+
+When you start the sync daemon:
+
+```
+🔄 Starting MockForge Sync Daemon...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Workspace directory: ./my-workspace
+
+ℹ️  What the sync daemon does:
+   • Monitors the workspace directory for .yaml/.yml file changes
+   • Automatically imports new or modified request files
+   • Syncs changes bidirectionally between files and workspace
+   • Skips hidden files (starting with .)
+
+🔍 Monitoring for file changes...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Sync daemon started successfully!
+💡 Press Ctrl+C to stop
+```
+
+### Real-time Feedback
+
+As files change, you'll see detailed output:
+
+```
+🔄 Detected 1 file change in workspace 'default'
+  ➕ Created: new-endpoint.yaml
+     ✅ Successfully imported
+
+🔄 Detected 2 file changes in workspace 'default'
+  📝 Modified: user-api.yaml
+     ✅ Successfully updated
+  🗑️  Deleted: old-endpoint.yaml
+     ℹ️  Auto-deletion from workspace is disabled
+```
+
+## Directory Organization
+
+You can organize your workspace files however you like. The sync daemon monitors all subdirectories recursively:
+
+```
+my-workspace/
+├── api-v1/
+│   ├── users.yaml
+│   ├── products.yaml
+│   └── orders.yaml
+├── api-v2/
+│   ├── users.yaml
+│   └── graphql.yaml
+├── internal/
+│   └── admin.yaml
+└── shared/
+    └── auth.yaml
+```
+
+All `.yaml` and `.yml` files will be monitored and imported automatically.
+
+## File Format
+
+Each file should contain a valid MockRequest in YAML format:
+
+```yaml
+id: "get-users"
+name: "Get Users"
+method: "GET"
+path: "/api/users"
+headers:
+  Content-Type: "application/json"
+response_status: 200
+response_body: |
+  [
+    {"id": 1, "name": "Alice"},
+    {"id": 2, "name": "Bob"}
+  ]
+```
+
+## Usage Examples
+
+### Git Integration
+
+Keep your workspaces in version control:
+
+```bash
+# 1. Create a Git repository for your workspaces
+mkdir api-mocks
+cd api-mocks
+git init
+
+# 2. Start the sync daemon
+mockforge sync --workspace-dir .
+
+# 3. Create or edit workspace files
+vim user-endpoints.yaml
+
+# 4. Commit and push changes
+git add .
+git commit -m "Add user endpoints"
+git push origin main
+
+# 5. Team members can pull changes
+# The sync daemon will automatically import updates
+```
+
+### Development Workflow
+
+Use the sync daemon during active development:
+
+```bash
+# Terminal 1: Start sync daemon
+mockforge sync --workspace-dir ./workspaces
+
+# Terminal 2: Edit files
+vim ./workspaces/new-feature.yaml
+
+# Changes are automatically imported
+# You'll see real-time feedback in Terminal 1
+```
+
+### CI/CD Integration
+
+Automate workspace deployment:
+
+```bash
+#!/bin/bash
+# deploy-mocks.sh
+
+# Pull latest workspace definitions from Git
+git pull origin main
+
+# Start sync daemon in background
+mockforge sync --workspace-dir ./workspaces &
+SYNC_PID=$!
+
+# Wait for initial sync
+sleep 5
+
+# Start MockForge server
+mockforge serve --config mockforge.yaml
+
+# Cleanup on exit
+trap "kill $SYNC_PID" EXIT
 ```
 
 ## Best Practices
 
-### Version Control
-- Always sync to a Git repository
-- Use `.gitignore` to exclude sensitive files
-- Commit sync changes regularly
+### 1. Use Version Control
 
-### Team Collaboration
-- Use shared directories for team workspaces
-- Establish naming conventions for environments
-- Document sync configurations in your team wiki
+Keep workspace files in Git for team collaboration:
 
-### Performance
-- Enable real-time monitoring only when needed
-- Use manual sync for large directories
-- Monitor disk I/O for performance impact
+```bash
+# Create a .gitignore to exclude temporary files
+echo ".DS_Store" >> .gitignore
+echo "*.swp" >> .gitignore
+echo "*.tmp" >> .gitignore
 
-### Security
-- Never sync to directories containing secrets
-- Use environment filtering to exclude sensitive data
-- Regularly audit synced files for exposed credentials
+# Commit workspace definitions
+git add *.yaml
+git commit -m "Add workspace definitions"
+```
+
+### 2. Organize Files Logically
+
+Structure your workspace files for clarity:
+
+```
+workspaces/
+├── production/         # Production endpoints
+│   ├── users-api.yaml
+│   └── orders-api.yaml
+├── staging/           # Staging endpoints
+│   └── beta-features.yaml
+└── development/       # Development/experimental
+    └── new-feature.yaml
+```
+
+### 3. Use Descriptive Filenames
+
+Name files based on what they contain:
+
+```
+✅ Good:
+   - user-authentication.yaml
+   - product-catalog-api.yaml
+   - payment-processing.yaml
+
+❌ Bad:
+   - endpoint1.yaml
+   - test.yaml
+   - temp.yaml
+```
+
+### 4. Keep Sync Daemon Running
+
+Run the sync daemon continuously during development:
+
+```bash
+# Use a terminal multiplexer like tmux
+tmux new -s mockforge-sync
+mockforge sync --workspace-dir ./workspaces
+
+# Detach with Ctrl+B then D
+# Reattach with: tmux attach -t mockforge-sync
+```
+
+### 5. Monitor Sync Output
+
+Pay attention to the sync daemon's output:
+
+- ✅ **Green checkmarks**: Files imported successfully
+- ⚠️ **Warning icons**: Import failed, check file format
+- 🔄 **Change notifications**: Shows what's being synced
+- ❌ **Error messages**: Indicate issues that need fixing
+
+### 6. Handle Errors Promptly
+
+When you see errors, fix them immediately:
+
+```
+❌ Detected error:
+  📝 Modified: broken-endpoint.yaml
+     ⚠️  Failed to import: File is not a recognized format
+
+Action: Check the file syntax and fix YAML formatting
+```
 
 ## Troubleshooting
 
-### Common Issues
+### Files Not Being Imported
 
-**Sync fails with permission errors**
-- Ensure MockForge has read/write access to the target directory
-- Check file permissions and ownership
-
-**Changes not syncing automatically**
-- Verify real-time monitoring is enabled
-- Check that the directory is accessible
-- Restart the sync service
-
-**Conflicting changes detected**
-- Review the conflict resolution dialog
-- Consider using one-way sync if conflicts are frequent
-- Communicate with team members about concurrent changes
-
-**Large directories cause performance issues**
-- Switch to manual sync mode
-- Use selective syncing with filename patterns
-- Consider breaking large workspaces into smaller ones
-
-### Logs and Debugging
-
-Enable debug logging to troubleshoot sync issues:
-
+**Check file extension:**
 ```bash
-RUST_LOG=mockforge_core::sync_watcher=debug mockforge
+# Only .yaml and .yml files are monitored
+ls -la workspaces/
+# Ensure files end with .yaml or .yml
 ```
 
-Check the application logs for detailed sync operation information.
+**Verify file format:**
+```bash
+# Files must be valid MockRequest YAML
+cat workspaces/my-file.yaml
+# Check for proper YAML syntax and required fields
+```
+
+**Check for hidden files:**
+```bash
+# Hidden files (starting with .) are ignored
+# Rename: .hidden.yaml → visible.yaml
+mv .hidden.yaml visible.yaml
+```
+
+### Permission Errors
+
+```bash
+# Ensure MockForge can read the directory
+chmod 755 workspaces/
+chmod 644 workspaces/*.yaml
+
+# Check ownership
+ls -la workspaces/
+```
+
+### Changes Not Detected
+
+**Verify sync daemon is running:**
+```bash
+# Check if the process is still active
+ps aux | grep "mockforge sync"
+```
+
+**Check filesystem notifications:**
+```bash
+# Some network filesystems don't support notifications
+# Try editing locally instead of over NFS/SMB
+```
+
+**Restart sync daemon:**
+```bash
+# Stop with Ctrl+C, then restart
+mockforge sync --workspace-dir ./workspaces
+```
+
+### YAML Syntax Errors
+
+When files fail to import due to syntax errors:
+
+```bash
+# Use a YAML validator
+yamllint workspaces/problematic-file.yaml
+
+# Common issues:
+# - Incorrect indentation
+# - Missing quotes around special characters
+# - Invalid escape sequences
+```
+
+### Debug Logging
+
+Enable detailed logging to see what's happening:
+
+```bash
+# Enable debug logs for sync watcher
+RUST_LOG=mockforge_core::sync_watcher=debug mockforge sync --workspace-dir ./workspaces
+
+# Enable trace-level logs for maximum detail
+RUST_LOG=mockforge_core::sync_watcher=trace mockforge sync --workspace-dir ./workspaces
+
+# Log to a file
+RUST_LOG=mockforge_core::sync_watcher=debug mockforge sync --workspace-dir ./workspaces 2>&1 | tee sync.log
+```
+
+### Getting Help
+
+If you're still having issues:
+
+1. Check the sync daemon output for error messages
+2. Enable debug logging to see detailed information
+3. Verify file format matches MockRequest YAML structure
+4. Check file permissions and ownership
+5. Try with a minimal test file to isolate the issue
+
+Example minimal test file:
+
+```yaml
+# test-endpoint.yaml
+id: "test"
+name: "Test Endpoint"
+method: "GET"
+path: "/test"
+response_status: 200
+response_body: '{"status": "ok"}'
+```
+
+Save this file in your workspace directory and verify it gets imported successfully.

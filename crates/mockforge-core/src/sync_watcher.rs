@@ -137,6 +137,10 @@ impl SyncWatcher {
                 "Started monitoring workspace {} in directory {}",
                 workspace_id_for_processing, directory_str
             );
+            println!(
+                "📂 Monitoring workspace '{}' in directory: {}",
+                workspace_id_for_processing, directory_str
+            );
 
             while *is_running.lock().await {
                 match timeout(Duration::from_millis(100), rx.recv()).await {
@@ -150,6 +154,7 @@ impl SyncWatcher {
                         .await
                         {
                             error!("Failed to process sync event: {}", e);
+                            eprintln!("❌ Sync error: {}", e);
                         }
                     }
                     Ok(None) => break,  // Channel closed
@@ -159,6 +164,10 @@ impl SyncWatcher {
 
             info!(
                 "Stopped monitoring workspace {} in directory {}",
+                workspace_id_for_processing, directory_str
+            );
+            println!(
+                "⏹️  Stopped monitoring workspace '{}' in directory: {}",
                 workspace_id_for_processing, directory_str
             );
         });
@@ -269,9 +278,19 @@ impl SyncWatcher {
         {
             info!("Processing {} file changes for workspace {}", changes.len(), workspace_id);
 
+            if !changes.is_empty() {
+                println!(
+                    "🔄 Detected {} file change{} in workspace '{}'",
+                    changes.len(),
+                    if changes.len() == 1 { "" } else { "s" },
+                    workspace_id
+                );
+            }
+
             for change in changes {
                 match change.kind {
-                    ChangeKind::Created | ChangeKind::Modified => {
+                    ChangeKind::Created => {
+                        println!("  ➕ Created: {}", change.path.display());
                         if let Some(content) = change.content {
                             if let Err(e) = Self::import_yaml_content(
                                 persistence,
@@ -282,10 +301,33 @@ impl SyncWatcher {
                             .await
                             {
                                 warn!("Failed to import file {}: {}", change.path.display(), e);
+                                eprintln!("     ⚠️  Failed to import: {}", e);
+                            } else {
+                                println!("     ✅ Successfully imported");
+                            }
+                        }
+                    }
+                    ChangeKind::Modified => {
+                        println!("  📝 Modified: {}", change.path.display());
+                        if let Some(content) = change.content {
+                            if let Err(e) = Self::import_yaml_content(
+                                persistence,
+                                &workspace_id,
+                                &change.path,
+                                &content,
+                            )
+                            .await
+                            {
+                                warn!("Failed to import file {}: {}", change.path.display(), e);
+                                eprintln!("     ⚠️  Failed to import: {}", e);
+                            } else {
+                                println!("     ✅ Successfully updated");
                             }
                         }
                     }
                     ChangeKind::Deleted => {
+                        println!("  🗑️  Deleted: {}", change.path.display());
+                        println!("     ℹ️  Auto-deletion from workspace is disabled");
                         debug!("File deleted: {}", change.path.display());
                         // For now, we don't auto-delete from workspace on file deletion
                         // This could be configurable in the future
@@ -324,6 +366,7 @@ impl SyncWatcher {
                 "Detected workspace export for {}, skipping full import to avoid conflicts",
                 workspace_id
             );
+            debug!("Skipping workspace export to avoid conflicts");
             return Ok(());
         }
 
@@ -338,12 +381,15 @@ impl SyncWatcher {
             persistence.save_workspace(&workspace).await?;
 
             info!(
-                "Successfully imported request {} into workspace {}",
+                "Successfully imported request from {} into workspace {}",
                 path.display(),
                 workspace_id
             );
         } else {
             debug!("Content in {} is not a recognized format, skipping", path.display());
+            return Err(Error::generic(format!(
+                "File is not a recognized format (expected MockRequest YAML)"
+            )));
         }
 
         Ok(())

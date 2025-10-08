@@ -286,13 +286,30 @@ enum Commands {
         config: Option<PathBuf>,
     },
 
-    /// Start sync daemon for background directory synchronization
+    /// Start sync daemon for bidirectional workspace synchronization
+    ///
+    /// The sync daemon monitors a directory for .yaml/.yml file changes and automatically
+    /// imports them into MockForge workspaces. Perfect for version control integration,
+    /// team collaboration via Git, and file-based development workflows.
+    ///
+    /// Examples:
+    ///   mockforge sync --workspace-dir ./workspaces
+    ///   mockforge sync -w /path/to/git/repo/workspaces
+    ///
+    /// What you'll see:
+    ///   • Real-time notifications when files are created, modified, or deleted
+    ///   • Import success/failure status for each file
+    ///   • Clear error messages if files can't be imported
+    ///   • Informative startup message explaining what's monitored
+    ///
+    /// The daemon will continue running until you press Ctrl+C.
+    #[command(verbatim_doc_comment)]
     Sync {
-        /// Workspace directory to monitor
+        /// Workspace directory to monitor for file changes
         #[arg(short, long)]
         workspace_dir: PathBuf,
 
-        /// Configuration file path
+        /// Configuration file path (optional)
         #[arg(short, long)]
         config: Option<PathBuf>,
     },
@@ -1676,8 +1693,19 @@ async fn handle_sync(
     workspace_dir: PathBuf,
     _config: Option<PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("🔄 Starting MockForge Sync Daemon...");
-    println!("📁 Monitoring workspace directory: {}", workspace_dir.display());
+    println!("\n🔄 Starting MockForge Sync Daemon...");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("📁 Workspace directory: {}", workspace_dir.display());
+    println!();
+    println!("ℹ️  What the sync daemon does:");
+    println!("   • Monitors the workspace directory for .yaml/.yml file changes");
+    println!("   • Automatically imports new or modified request files");
+    println!("   • Syncs changes bidirectionally between files and workspace");
+    println!("   • Skips hidden files (starting with .)");
+    println!();
+    println!("🔍 Monitoring for file changes...");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!();
 
     // Create sync service
     let sync_service = mockforge_core::SyncService::new(&workspace_dir);
@@ -1686,16 +1714,15 @@ async fn handle_sync(
     sync_service.start().await?;
 
     println!("✅ Sync daemon started successfully!");
-    println!("🔍 Monitoring for workspace sync changes...");
-    println!("💡 Press Ctrl+C to stop");
+    println!("💡 Press Ctrl+C to stop\n");
 
     // Keep running until shutdown signal
     tokio::signal::ctrl_c().await?;
-    println!("🛑 Received shutdown signal");
+    println!("\n🛑 Received shutdown signal");
 
     // Stop the sync service
     sync_service.stop().await?;
-    println!("👋 Sync daemon stopped");
+    println!("👋 Sync daemon stopped\n");
 
     Ok(())
 }

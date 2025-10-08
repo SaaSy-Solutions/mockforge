@@ -343,108 +343,197 @@ mockforge-cli admin
 mockforge-cli admin --port 9090
 ```
 
-### `sync` - Workspace Synchronization
+### `sync` - Workspace Synchronization Daemon
 
-Manage bidirectional synchronization between workspaces and external directories for version control and team collaboration.
+Start a background daemon that monitors a workspace directory for file changes and automatically syncs them to MockForge workspaces.
 
 ```bash
-mockforge-cli sync <SUBCOMMAND>
+mockforge-cli sync [OPTIONS]
 ```
 
-#### Subcommands
+#### Options
 
-##### `start` - Start Sync Daemon
+**Required:**
+- `--workspace-dir <PATH>` or `-w <PATH>`: Workspace directory to monitor for changes
 
-Start a background synchronization daemon for continuous monitoring and syncing.
+**Optional:**
+- `--config <PATH>` or `-c <PATH>`: Configuration file path for sync settings
+
+#### How It Works
+
+The sync daemon provides bidirectional synchronization between workspace files and MockForge's internal workspace storage:
+
+1. **File Monitoring**: Watches for `.yaml` and `.yml` files in the workspace directory
+2. **Automatic Import**: When files are created or modified, they're automatically imported into the workspace
+3. **Real-time Updates**: Changes are detected and processed immediately
+4. **Visual Feedback**: Clear console output shows what's happening in real-time
+
+**File Requirements:**
+- Only `.yaml` and `.yml` files are monitored
+- Hidden files (starting with `.`) are ignored
+- Files must be valid MockRequest YAML format
+
+**What You'll See:**
+- File creation notifications with import status
+- File modification notifications with update status
+- File deletion notifications (files are not auto-deleted from workspace)
+- Error messages if imports fail
+- Real-time feedback for all sync operations
+
+#### Examples
+
+**Basic Usage:**
 
 ```bash
-mockforge-cli sync start [OPTIONS]
+# Start sync daemon for a workspace directory
+mockforge-cli sync --workspace-dir ./my-workspace
+
+# Use short form
+mockforge-cli sync -w ./my-workspace
+
+# With custom config
+mockforge-cli sync --workspace-dir /path/to/workspace --config sync-config.yaml
 ```
 
-**Options:**
-- `--directory <PATH>`: Target directory to sync with (required)
-- `--workspace-id <ID>`: Specific workspace ID to sync
-- `--mode <MODE>`: Sync mode (bidirectional, one-way, manual) (default: bidirectional)
-- `--watch`: Enable real-time file system watching (default: true)
-- `--structure <TYPE>`: Directory structure (flat, nested) (default: nested)
-
-**Examples:**
+**Git Integration:**
 
 ```bash
-# Start bidirectional sync with Git repository
-mockforge-cli sync start --directory /path/to/git/repo
+# Monitor a Git repository directory
+mockforge-cli sync --workspace-dir /path/to/git/repo/workspaces
 
-# Start one-way sync (workspace -> directory)
-mockforge-cli sync start --directory ./sync --mode one-way
-
-# Sync specific workspace with custom structure
-mockforge-cli sync start --workspace-id my-workspace --directory ./workspaces --structure flat
+# Changes you make in Git will automatically sync to MockForge
+# Perfect for team collaboration via Git
 ```
 
-##### `trigger` - Manual Sync
-
-Trigger a one-time synchronization operation.
+**Development Workflow:**
 
 ```bash
-mockforge-cli sync trigger [OPTIONS]
+# 1. Start the sync daemon in one terminal
+mockforge-cli sync --workspace-dir ./workspaces
+
+# 2. In another terminal, edit workspace files
+vim ./workspaces/my-request.yaml
+
+# 3. Save the file - it will automatically import to MockForge
+# You'll see output like:
+#   🔄 Detected 1 file change in workspace 'default'
+#     📝 Modified: my-request.yaml
+#        ✅ Successfully updated
 ```
 
-**Options:**
-- `--workspace-id <ID>`: Workspace ID to sync (required)
-- `--direction <DIR>`: Sync direction (to-directory, from-directory, bidirectional) (default: bidirectional)
+#### Example Output
 
-**Examples:**
+When you start the sync daemon, you'll see:
 
-```bash
-# Trigger bidirectional sync for workspace
-mockforge-cli sync trigger --workspace-id my-workspace
+```
+🔄 Starting MockForge Sync Daemon...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Workspace directory: ./my-workspace
 
-# Force sync from directory to workspace
-mockforge-cli sync trigger --workspace-id my-workspace --direction from-directory
+ℹ️  What the sync daemon does:
+   • Monitors the workspace directory for .yaml/.yml file changes
+   • Automatically imports new or modified request files
+   • Syncs changes bidirectionally between files and workspace
+   • Skips hidden files (starting with .)
+
+🔍 Monitoring for file changes...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Sync daemon started successfully!
+💡 Press Ctrl+C to stop
+
+📂 Monitoring workspace 'default' in directory: ./my-workspace
 ```
 
-##### `status` - Check Sync Status
+When files change, you'll see:
 
-Check the current synchronization status for workspaces.
+```
+🔄 Detected 1 file change in workspace 'default'
+  ➕ Created: new-endpoint.yaml
+     ✅ Successfully imported
 
-```bash
-mockforge-cli sync status [OPTIONS]
+🔄 Detected 2 file changes in workspace 'default'
+  📝 Modified: user-api.yaml
+     ✅ Successfully updated
+  🗑️  Deleted: old-endpoint.yaml
+     ℹ️  Auto-deletion from workspace is disabled
 ```
 
-**Options:**
-- `--workspace-id <ID>`: Specific workspace ID to check
-- `--all`: Show status for all workspaces
+If errors occur:
 
-**Examples:**
-
-```bash
-# Check status of specific workspace
-mockforge-cli sync status --workspace-id my-workspace
-
-# Check status of all synced workspaces
-mockforge-cli sync status --all
+```
+🔄 Detected 1 file change in workspace 'default'
+  📝 Modified: invalid-file.yaml
+     ⚠️  Failed to import: File is not a recognized format (expected MockRequest YAML)
 ```
 
-##### `stop` - Stop Sync
+#### Stopping the Daemon
 
-Stop synchronization for a workspace or all workspaces.
+Press `Ctrl+C` to gracefully stop the sync daemon:
 
-```bash
-mockforge-cli sync stop [OPTIONS]
+```
+^C
+🛑 Received shutdown signal
+⏹️  Stopped monitoring workspace 'default' in directory: ./my-workspace
+👋 Sync daemon stopped
 ```
 
-**Options:**
-- `--workspace-id <ID>`: Specific workspace ID to stop syncing
-- `--all`: Stop all active sync operations
+#### Best Practices
 
-**Examples:**
-
+**Version Control:**
 ```bash
-# Stop sync for specific workspace
-mockforge-cli sync stop --workspace-id my-workspace
+# Use sync with Git for team collaboration
+cd /path/to/git/repo
+mockforge-cli sync --workspace-dir ./workspaces
 
-# Stop all active sync operations
-mockforge-cli sync stop --all
+# Team members can push/pull changes
+# The sync daemon will automatically import updates
+```
+
+**Development Workflow:**
+```bash
+# Keep sync daemon running during development
+# Edit files in your favorite editor
+# Changes automatically sync to MockForge
+# Perfect for file-based workflows
+```
+
+**Directory Organization:**
+```bash
+# Organize workspace files in subdirectories
+workspaces/
+├── api-v1/
+│   ├── users.yaml
+│   └── products.yaml
+├── api-v2/
+│   └── users.yaml
+└── internal/
+    └── admin.yaml
+
+# All .yaml files will be monitored
+mockforge-cli sync --workspace-dir ./workspaces
+```
+
+#### Troubleshooting
+
+**Files not importing:**
+- Ensure files have `.yaml` or `.yml` extension
+- Check that files are valid MockRequest YAML format
+- Look for error messages in the console output
+- Verify files are not hidden (don't start with `.`)
+
+**Permission errors:**
+- Ensure MockForge has read access to the workspace directory
+- Check file permissions: `ls -la workspace-dir/`
+
+**Changes not detected:**
+- The sync daemon uses filesystem notifications
+- Some network filesystems may not support change notifications
+- Try editing the file locally rather than over a network mount
+
+**Enable debug logging:**
+```bash
+RUST_LOG=mockforge_core::sync_watcher=debug mockforge-cli sync --workspace-dir ./workspace
 ```
 
 ## Configuration File Format
