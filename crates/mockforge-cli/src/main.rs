@@ -17,6 +17,10 @@ mod plugin_commands;
 #[command(about = "MockForge - Comprehensive API Mocking Framework")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
+    /// Set log level (error, warn, info, debug, trace)
+    #[arg(short = 'v', long, global = true, env = "MOCKFORGE_LOG_LEVEL", default_value = "info")]
+    log_level: String,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -656,8 +660,16 @@ enum DataCommands {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
+    // Initialize tracing with configurable log level
+    let log_level = cli.log_level.parse::<tracing::Level>()
+        .unwrap_or_else(|_| {
+            eprintln!("Invalid log level '{}', defaulting to info", cli.log_level);
+            tracing::Level::INFO
+        });
+
+    tracing_subscriber::fmt()
+        .with_max_level(log_level)
+        .init();
 
     match cli.command {
         Commands::Serve {
