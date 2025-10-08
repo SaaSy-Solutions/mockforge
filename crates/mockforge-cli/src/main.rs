@@ -263,6 +263,10 @@ enum Commands {
         /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
         #[arg(long, env = "MOCKFORGE_RAG_API_KEY", help_heading = "AI Features")]
         rag_api_key: Option<String>,
+
+        /// Validate configuration and check port availability without starting servers
+        #[arg(long, help_heading = "Validation")]
+        dry_run: bool,
     },
 
     /// Generate synthetic data
@@ -698,6 +702,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             rag_provider,
             rag_model,
             rag_api_key,
+            dry_run,
         } => {
             handle_serve(
                 config,
@@ -738,6 +743,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 rag_provider,
                 rag_model,
                 rag_api_key,
+                dry_run,
             )
             .await?;
         }
@@ -1036,6 +1042,89 @@ async fn build_server_config_from_cli(
     config
 }
 
+/// Validate server configuration before starting
+async fn validate_serve_config(
+    config_path: &Option<PathBuf>,
+    spec_path: &Option<PathBuf>,
+    ports: &[(u16, &str)],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::fs;
+    use std::net::TcpListener;
+
+    // Validate config file if provided
+    if let Some(config) = config_path {
+        if !config.exists() {
+            return Err(format!(
+                "Configuration file not found: {}\n\n\
+                 Hint: Check that the path is correct and the file exists.",
+                config.display()
+            ).into());
+        }
+
+        // Try to read the file to ensure it's accessible
+        if let Err(e) = fs::read_to_string(config) {
+            return Err(format!(
+                "Cannot read configuration file: {}\n\n\
+                 Error: {}\n\
+                 Hint: Check file permissions and ensure the file is readable.",
+                config.display(),
+                e
+            ).into());
+        }
+    }
+
+    // Validate spec file if provided
+    if let Some(spec) = spec_path {
+        if !spec.exists() {
+            return Err(format!(
+                "OpenAPI spec file not found: {}\n\n\
+                 Hint: Check that the path is correct and the file exists.",
+                spec.display()
+            ).into());
+        }
+
+        // Try to read the file to ensure it's accessible
+        if let Err(e) = fs::read_to_string(spec) {
+            return Err(format!(
+                "Cannot read OpenAPI spec file: {}\n\n\
+                 Error: {}\n\
+                 Hint: Check file permissions and ensure the file is readable.",
+                spec.display(),
+                e
+            ).into());
+        }
+    }
+
+    // Check port availability
+    let mut unavailable_ports = Vec::new();
+    for (port, name) in ports {
+        // Try to bind to the port to check if it's available
+        match TcpListener::bind(("127.0.0.1", *port)) {
+            Ok(_) => {
+                // Port is available
+            }
+            Err(e) => {
+                unavailable_ports.push((*port, *name, e));
+            }
+        }
+    }
+
+    if !unavailable_ports.is_empty() {
+        let mut error_msg = String::from("One or more ports are already in use:\n\n");
+        for (port, name, err) in &unavailable_ports {
+            error_msg.push_str(&format!("  • {} port {}: {}\n", name, port, err));
+        }
+        error_msg.push_str("\nPossible solutions:\n");
+        error_msg.push_str("  1. Stop the process using these ports\n");
+        error_msg.push_str("  2. Use different ports with flags like --http-port, --ws-port, etc.\n");
+        error_msg.push_str("  3. Find the process using the port with: lsof -i :<port> or netstat -tulpn | grep <port>\n");
+
+        return Err(error_msg.into());
+    }
+
+    Ok(())
+}
+
 async fn handle_serve(
     config_path: Option<PathBuf>,
     http_port: u16,
@@ -1075,7 +1164,38 @@ async fn handle_serve(
     rag_provider: Option<String>,
     rag_model: Option<String>,
     rag_api_key: Option<String>,
+    dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Perform early validation
+    let mut ports_to_check = vec![
+        (http_port, "HTTP"),
+        (ws_port, "WebSocket"),
+        (grpc_port, "gRPC"),
+    ];
+
+    if admin {
+        ports_to_check.push((admin_port, "Admin UI"));
+    }
+
+    if metrics {
+        ports_to_check.push((metrics_port, "Metrics"));
+    }
+
+    validate_serve_config(&config_path, &spec, &ports_to_check).await?;
+
+    if dry_run {
+        println!("✅ Configuration validation passed!");
+        println!("✅ All required ports are available");
+        if config_path.is_some() {
+            println!("✅ Configuration file is valid");
+        }
+        if spec.is_some() {
+            println!("✅ OpenAPI spec file is valid");
+        }
+        println!("\n🎉 Dry run successful - no issues found!");
+        return Ok(());
+    }
+
     // Build comprehensive server configuration
     let config = build_server_config_from_cli(
         config_path,
@@ -1312,7 +1432,11 @@ async fn handle_serve(
             let listener = match tokio::net::TcpListener::bind(&addr).await {
                 Ok(listener) => listener,
                 Err(e) => {
-                    return Err(format!("Failed to bind metrics server: {}", e));
+                    return Err(format!(
+                        "Failed to bind metrics server to port {}: {}\n\
+                         Hint: The port may already be in use. Try using a different port with --metrics-port or check if another process is using this port with: lsof -i :{} or netstat -tulpn | grep {}",
+                        metrics_port, e, metrics_port, metrics_port
+                    ));
                 }
             };
 

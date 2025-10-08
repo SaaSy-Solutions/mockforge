@@ -215,7 +215,16 @@ pub async fn start_with_latency(
 
     let addr: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
     info!("WebSocket server listening on {}", addr);
-    axum::serve(tokio::net::TcpListener::bind(addr).await?, router).await?;
+
+    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+        format!(
+            "Failed to bind WebSocket server to port {}: {}\n\
+             Hint: The port may already be in use. Try using a different port with --ws-port or check if another process is using this port with: lsof -i :{} or netstat -tulpn | grep {}",
+            port, e, port, port
+        )
+    })?;
+
+    axum::serve(listener, router).await?;
     Ok(())
 }
 

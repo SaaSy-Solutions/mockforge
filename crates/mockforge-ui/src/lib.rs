@@ -32,7 +32,14 @@ pub async fn start_admin_server(
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+        format!(
+            "Failed to bind Admin UI server to port {}: {}\n\
+             Hint: The port may already be in use. Try using a different port with --admin-port or check if another process is using this port with: lsof -i :{} or netstat -tulpn | grep {}",
+            addr.port(), e, addr.port(), addr.port()
+        )
+    })?;
+
     axum::serve(listener, app).await?;
 
     Ok(())

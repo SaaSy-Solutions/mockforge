@@ -492,8 +492,16 @@ pub async fn serve_router(
     let addr = mockforge_core::wildcard_socket_addr(port);
     info!("HTTP listening on {}", addr);
 
+    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+        format!(
+            "Failed to bind HTTP server to port {}: {}\n\
+             Hint: The port may already be in use. Try using a different port with --http-port or check if another process is using this port with: lsof -i :{} or netstat -tulpn | grep {}",
+            port, e, port, port
+        )
+    })?;
+
     axum::serve(
-        tokio::net::TcpListener::bind(addr).await?,
+        listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
