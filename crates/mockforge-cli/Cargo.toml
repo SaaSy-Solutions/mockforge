@@ -17,6 +17,7 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive", "std"] }
 clap_complete = "4"
 tokio = { workspace = true, features = ["signal"] }
+tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 mockforge-core = { path = "../mockforge-core" }
@@ -27,6 +28,7 @@ mockforge-graphql = { path = "../mockforge-graphql" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-ui = { path = "../mockforge-ui" }
 mockforge-observability = { path = "../mockforge-observability" }
+mockforge-recorder = { path = "../mockforge-recorder" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
@@ -35,6 +37,7 @@ regex = "1.10"
 base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
+reqwest = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = "2.0"

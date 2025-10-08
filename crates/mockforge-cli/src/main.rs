@@ -813,46 +813,72 @@ async fn handle_serve(
 
     println!("💡 Press Ctrl+C to stop");
 
+    // Create a cancellation token for graceful shutdown
+    use tokio_util::sync::CancellationToken;
+    let shutdown_token = CancellationToken::new();
+
     // Start HTTP server
+    let http_shutdown = shutdown_token.clone();
     let http_handle = tokio::spawn(async move {
         println!("📡 HTTP server listening on http://localhost:{}", http_port);
-        if let Err(e) = mockforge_http::serve_router(http_port, http_app).await {
-            eprintln!("❌ HTTP server error: {}", e);
+        tokio::select! {
+            result = mockforge_http::serve_router(http_port, http_app) => {
+                result.map_err(|e| format!("HTTP server error: {}", e))
+            }
+            _ = http_shutdown.cancelled() => {
+                Ok(())
+            }
         }
     });
 
     // Start WebSocket server
+    let ws_shutdown = shutdown_token.clone();
     let ws_handle = tokio::spawn(async move {
         println!("🔌 WebSocket server listening on ws://localhost:{}", ws_port);
-        if let Err(e) = mockforge_ws::start_with_latency(ws_port, None).await {
-            eprintln!("❌ WebSocket server error: {}", e);
+        tokio::select! {
+            result = mockforge_ws::start_with_latency(ws_port, None) => {
+                result.map_err(|e| format!("WebSocket server error: {}", e))
+            }
+            _ = ws_shutdown.cancelled() => {
+                Ok(())
+            }
         }
     });
 
     // Start gRPC server
+    let grpc_shutdown = shutdown_token.clone();
     let grpc_handle = tokio::spawn(async move {
         println!("⚡ gRPC server listening on localhost:{}", grpc_port);
-        if let Err(e) = mockforge_grpc::start(grpc_port).await {
-            eprintln!("❌ gRPC server error: {}", e);
+        tokio::select! {
+            result = mockforge_grpc::start(grpc_port) => {
+                result.map_err(|e| format!("gRPC server error: {}", e))
+            }
+            _ = grpc_shutdown.cancelled() => {
+                Ok(())
+            }
         }
     });
 
     // Start Admin UI server (if enabled)
     let admin_handle = if admin {
+        let admin_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://localhost:{}", admin_port);
             let addr = format!("127.0.0.1:{}", admin_port).parse().unwrap();
-            if let Err(e) = mockforge_ui::start_admin_server(
-                addr,
-                Some(format!("127.0.0.1:{}", http_port).parse().unwrap()),
-                Some(format!("127.0.0.1:{}", ws_port).parse().unwrap()),
-                Some(format!("127.0.0.1:{}", grpc_port).parse().unwrap()),
-                None,
-                true,
-            )
-            .await
-            {
-                eprintln!("❌ Admin UI server error: {}", e);
+            tokio::select! {
+                result = mockforge_ui::start_admin_server(
+                    addr,
+                    Some(format!("127.0.0.1:{}", http_port).parse().unwrap()),
+                    Some(format!("127.0.0.1:{}", ws_port).parse().unwrap()),
+                    Some(format!("127.0.0.1:{}", grpc_port).parse().unwrap()),
+                    None,
+                    true,
+                ) => {
+                    result.map_err(|e| format!("Admin UI server error: {}", e))
+                }
+                _ = admin_shutdown.cancelled() => {
+                    Ok(())
+                }
             }
         }))
     } else {
@@ -864,6 +890,7 @@ async fn handle_serve(
         use mockforge_observability::{get_global_registry, prometheus::prometheus_router};
         use std::sync::Arc;
 
+        let metrics_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
             let registry = Arc::new(get_global_registry().clone());
             let app = prometheus_router(registry);
@@ -871,14 +898,19 @@ async fn handle_serve(
 
             println!("📊 Metrics endpoint available at http://localhost:{}/metrics", metrics_port);
 
-            match tokio::net::TcpListener::bind(&addr).await {
-                Ok(listener) => {
-                    if let Err(e) = axum::serve(listener, app).await {
-                        eprintln!("❌ Metrics server error: {}", e);
-                    }
-                }
+            let listener = match tokio::net::TcpListener::bind(&addr).await {
+                Ok(listener) => listener,
                 Err(e) => {
-                    eprintln!("❌ Failed to bind metrics server: {}", e);
+                    return Err(format!("Failed to bind metrics server: {}", e));
+                }
+            };
+
+            tokio::select! {
+                result = axum::serve(listener, app) => {
+                    result.map_err(|e| format!("Metrics server error: {}", e))
+                }
+                _ = metrics_shutdown.cancelled() => {
+                    Ok(())
                 }
             }
         }))
@@ -886,34 +918,126 @@ async fn handle_serve(
         None
     };
 
-    // Wait for all servers or shutdown signal
-    tokio::select! {
-        _ = http_handle => {
-            println!("📡 HTTP server stopped");
+    // Wait for all servers or shutdown signal, handling errors properly
+    let result = tokio::select! {
+        result = http_handle => {
+            match result {
+                Ok(Ok(())) => {
+                    println!("📡 HTTP server stopped gracefully");
+                    None
+                }
+                Ok(Err(e)) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Err(e) => {
+                    let error = format!("HTTP server task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+            }
         }
-        _ = ws_handle => {
-            println!("🔌 WebSocket server stopped");
+        result = ws_handle => {
+            match result {
+                Ok(Ok(())) => {
+                    println!("🔌 WebSocket server stopped gracefully");
+                    None
+                }
+                Ok(Err(e)) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Err(e) => {
+                    let error = format!("WebSocket server task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+            }
         }
-        _ = grpc_handle => {
-            println!("⚡ gRPC server stopped");
+        result = grpc_handle => {
+            match result {
+                Ok(Ok(())) => {
+                    println!("⚡ gRPC server stopped gracefully");
+                    None
+                }
+                Ok(Err(e)) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Err(e) => {
+                    let error = format!("gRPC server task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+            }
         }
-        _ = async {
+        result = async {
             if let Some(handle) = admin_handle {
-                handle.await.unwrap();
+                Some(handle.await)
             } else {
-                std::future::pending::<()>().await;
+                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
             }
         } => {
-            println!("🎛️ Admin UI stopped");
+            match result {
+                Some(Ok(Ok(()))) => {
+                    println!("🎛️ Admin UI stopped gracefully");
+                    None
+                }
+                Some(Ok(Err(e))) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Some(Err(e)) => {
+                    let error = format!("Admin UI task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+                None => None
+            }
+        }
+        result = async {
+            if let Some(handle) = metrics_handle {
+                Some(handle.await)
+            } else {
+                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
+            }
+        } => {
+            match result {
+                Some(Ok(Ok(()))) => {
+                    println!("📊 Metrics server stopped gracefully");
+                    None
+                }
+                Some(Ok(Err(e))) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Some(Err(e)) => {
+                    let error = format!("Metrics server task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+                None => None
+            }
         }
         _ = tokio::signal::ctrl_c() => {
             println!("🛑 Received shutdown signal");
+            None
         }
+    };
+
+    // Trigger shutdown for all remaining tasks
+    println!("👋 Shutting down remaining servers...");
+    shutdown_token.cancel();
+
+    // Give tasks a moment to shut down gracefully
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Return error if any server failed
+    if let Some(error) = result {
+        Err(error.into())
+    } else {
+        Ok(())
     }
-
-    println!("👋 Shutting down servers...");
-
-    Ok(())
 }
 
 async fn handle_data(
