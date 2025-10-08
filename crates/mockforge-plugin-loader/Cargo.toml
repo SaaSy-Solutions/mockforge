@@ -40,7 +40,7 @@ wasmtime-wasi = "34.0"
 wasmparser = "0.226"
 
 # Plugin communication
-wit-bindgen = "0.34"
+wit-bindgen = "0.46"
 
 # Async traits
 async-trait = "0.1"

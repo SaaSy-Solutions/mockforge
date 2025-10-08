@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 mockforge-plugin-core = { path = "../../../crates/mockforge-plugin-core" }
 
 # WebAssembly bindings
-wit-bindgen = "0.34"
+wit-bindgen = "0.46"
 
 # Serialization
 serde.workspace = true
