@@ -225,14 +225,19 @@ impl ConfigProperty {
 /// Property type enumeration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PropertyType {
+    /// String type for text values
     #[serde(rename = "string")]
     String,
+    /// Number type for numeric values (integers and floats)
     #[serde(rename = "number")]
     Number,
+    /// Boolean type for true/false values
     #[serde(rename = "boolean")]
     Boolean,
+    /// Array type for ordered collections
     #[serde(rename = "array")]
     Array,
+    /// Object type for key-value maps
     #[serde(rename = "object")]
     Object,
 }

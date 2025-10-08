@@ -1,7 +1,15 @@
 [package]
 name = "mockforge-ws"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "WebSocket protocol support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords = ["websocket", "ws", "api", "mock", "testing"]
+categories = ["development-tools::testing", "web-programming::websocket"]
 
 [dependencies]
 axum = { workspace = true }

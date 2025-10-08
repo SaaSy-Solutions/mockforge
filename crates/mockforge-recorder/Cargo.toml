@@ -1,7 +1,14 @@
 [package]
 name = "mockforge-recorder"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Recording and replay functionality for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+publish = false  # Internal component, integrated into CLI
 
 [dependencies]
 # Database

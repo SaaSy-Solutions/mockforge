@@ -1,7 +1,15 @@
 [package]
 name = "mockforge-grpc"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "gRPC protocol support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords = ["grpc", "protobuf", "api", "mock", "testing"]
+categories = ["development-tools::testing", "web-programming"]
 
 [dependencies]
 tokio = { workspace = true }

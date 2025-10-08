@@ -1,7 +1,15 @@
 [package]
 name = "mockforge-graphql"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "GraphQL protocol support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords = ["graphql", "api", "mock", "testing", "schema"]
+categories = ["development-tools::testing", "web-programming"]
 
 [dependencies]
 # GraphQL implementation - simplified for basic functionality

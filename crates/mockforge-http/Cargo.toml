@@ -1,7 +1,15 @@
 [package]
 name = "mockforge-http"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "HTTP/REST protocol support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords = ["http", "rest", "api", "mock", "testing"]
+categories = ["development-tools::testing", "web-programming::http-server"]
 
 [dependencies]
 axum = { workspace = true }

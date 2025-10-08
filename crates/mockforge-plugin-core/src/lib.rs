@@ -1,7 +1,85 @@
 //! # MockForge Plugin Core
 //!
-//! Core traits and types for MockForge plugins, providing the foundation
-//! for extensible functionality like custom token resolvers.
+//! Core traits, types, and runtime interfaces for the MockForge plugin system.
+//!
+//! This crate provides the foundational abstractions for building MockForge plugins,
+//! including custom authentication handlers, data sources, response generators, and
+//! template token resolvers.
+//!
+//! ## Overview
+//!
+//! MockForge uses a WebAssembly-based plugin system that allows developers to extend
+//! its functionality without modifying the core application. Plugins are sandboxed for
+//! security and can be loaded/unloaded at runtime.
+//!
+//! ## Plugin Types
+//!
+//! The plugin system supports several categories of plugins:
+//!
+//! - **Authentication Plugins**: Custom authentication and authorization logic
+//! - **Data Source Plugins**: Connect to external data sources for realistic test data
+//! - **Response Plugins**: Generate custom responses based on request data
+//! - **Template Plugins**: Custom token resolvers for the template system
+//!
+//! ## Quick Start
+//!
+//! To create a plugin, implement one or more of the plugin traits:
+//!
+//! ```rust,ignore
+//! use mockforge_plugin_core::{TokenResolver, ResolutionContext, PluginError};
+//!
+//! pub struct MyPlugin;
+//!
+//! #[async_trait::async_trait]
+//! impl TokenResolver for MyPlugin {
+//!     async fn can_resolve(&self, token: &str) -> bool {
+//!         token.starts_with("my_")
+//!     }
+//!
+//!     async fn resolve_token(
+//!         &self,
+//!         token: &str,
+//!         context: &ResolutionContext,
+//!     ) -> Result<String, PluginError> {
+//!         // Custom resolution logic
+//!         Ok(format!("resolved: {}", token))
+//!     }
+//!
+//!     async fn get_metadata(&self) -> PluginMetadata {
+//!         PluginMetadata::new("My custom plugin")
+//!             .with_capability("token_resolver")
+//!             .with_prefix("my_")
+//!     }
+//! }
+//! ```
+//!
+//! ## Key Types
+//!
+//! - [`PluginId`]: Unique identifier for plugins
+//! - [`PluginVersion`]: Semantic version information
+//! - [`PluginManifest`]: Plugin metadata and dependencies
+//! - [`PluginError`]: Common error types
+//! - [`ResolutionContext`]: Context for token resolution
+//!
+//! ## Features
+//!
+//! - Type-safe plugin interfaces
+//! - Comprehensive error handling
+//! - Built-in validation and health checks
+//! - Async/await support
+//! - Security sandboxing via WebAssembly
+//!
+//! ## For Plugin Developers
+//!
+//! For a more convenient development experience, consider using the
+//! [`mockforge-plugin-sdk`](https://docs.rs/mockforge-plugin-sdk) crate, which provides
+//! helper macros, testing utilities, and additional conveniences.
+//!
+//! ## Documentation
+//!
+//! - [Plugin Development Guide](https://docs.mockforge.dev/plugins)
+//! - [API Reference](https://docs.rs/mockforge-plugin-core)
+//! - [Example Plugins](https://github.com/SaaSy-Solutions/mockforge/tree/main/examples/plugins)
 
 // Public modules
 pub mod auth;

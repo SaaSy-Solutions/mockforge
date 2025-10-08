@@ -9,11 +9,14 @@ use semver;
 /// Plugin author information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginAuthor {
+    /// Author's name
     pub name: String,
+    /// Author's email address (optional)
     pub email: Option<String>,
 }
 
 impl PluginAuthor {
+    /// Creates a new plugin author with just a name
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -21,6 +24,7 @@ impl PluginAuthor {
         }
     }
 
+    /// Creates a new plugin author with name and email
     pub fn with_email(name: &str, email: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -32,14 +36,20 @@ impl PluginAuthor {
 /// Plugin information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginInfo {
+    /// Unique identifier for the plugin
     pub id: PluginId,
+    /// Semantic version of the plugin
     pub version: PluginVersion,
+    /// Human-readable name of the plugin
     pub name: String,
+    /// Brief description of the plugin's functionality
     pub description: String,
+    /// Plugin author information
     pub author: PluginAuthor,
 }
 
 impl PluginInfo {
+    /// Creates new plugin information
     pub fn new(
         id: PluginId,
         version: PluginVersion,
@@ -60,12 +70,16 @@ impl PluginInfo {
 /// Plugin manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginManifest {
+    /// Plugin metadata and information
     pub info: PluginInfo,
+    /// List of capabilities provided by this plugin
     pub capabilities: Vec<String>,
+    /// Map of plugin dependencies with their required versions
     pub dependencies: HashMap<PluginId, PluginVersion>,
 }
 
 impl PluginManifest {
+    /// Creates a new plugin manifest with the given info
     pub fn new(info: PluginInfo) -> Self {
         Self {
             info,
@@ -74,11 +88,13 @@ impl PluginManifest {
         }
     }
 
+    /// Adds a capability to this plugin (builder pattern)
     pub fn with_capability(mut self, capability: &str) -> Self {
         self.capabilities.push(capability.to_string());
         self
     }
 
+    /// Adds a dependency to this plugin (builder pattern)
     pub fn with_dependency(mut self, plugin_id: PluginId, version: PluginVersion) -> Self {
         self.dependencies.insert(plugin_id, version);
         self
@@ -125,13 +141,18 @@ impl PluginManifest {
 /// Plugin metadata container
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginMetadata {
+    /// List of capabilities provided by this plugin
     pub capabilities: Vec<String>,
+    /// List of URL/path prefixes this plugin supports
     pub supported_prefixes: Vec<String>,
+    /// Human-readable description of the plugin
     pub description: String,
+    /// Plugin version string
     pub version: String,
 }
 
 impl PluginMetadata {
+    /// Creates new plugin metadata with a description
     pub fn new(description: &str) -> Self {
         Self {
             capabilities: Vec::new(),
@@ -141,11 +162,13 @@ impl PluginMetadata {
         }
     }
 
+    /// Adds a capability to this plugin metadata (builder pattern)
     pub fn with_capability(mut self, capability: &str) -> Self {
         self.capabilities.push(capability.to_string());
         self
     }
 
+    /// Adds a supported prefix to this plugin metadata (builder pattern)
     pub fn with_prefix(mut self, prefix: &str) -> Self {
         self.supported_prefixes.push(prefix.to_string());
         self
@@ -179,10 +202,15 @@ use std::fmt;
 /// Plugin version following semantic versioning
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginVersion {
+    /// Major version number (breaking changes)
     pub major: u32,
+    /// Minor version number (backwards-compatible additions)
     pub minor: u32,
+    /// Patch version number (backwards-compatible bug fixes)
     pub patch: u32,
+    /// Pre-release identifier (e.g., "alpha", "beta.1")
     pub pre_release: Option<String>,
+    /// Build metadata
     pub build: Option<String>,
 }
 
@@ -602,6 +630,7 @@ pub struct PluginMetrics {
 }
 
 impl Default for PluginMetrics {
+    /// Creates a new PluginMetrics with all values initialized to zero
     fn default() -> Self {
         Self {
             total_executions: 0,
@@ -629,6 +658,7 @@ pub struct ResolutionContext {
 }
 
 impl ResolutionContext {
+    /// Creates a new resolution context with current environment variables
     pub fn new() -> Self {
         Self {
             metadata: HashMap::new(),
@@ -638,11 +668,13 @@ impl ResolutionContext {
         }
     }
 
+    /// Adds request metadata to the context (builder pattern)
     pub fn with_request(mut self, request: RequestMetadata) -> Self {
         self.request_context = Some(request);
         self
     }
 
+    /// Adds a metadata key-value pair to the context (builder pattern)
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
@@ -658,13 +690,18 @@ impl Default for ResolutionContext {
 /// Request metadata for token resolution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestMetadata {
+    /// HTTP method (GET, POST, etc.)
     pub method: String,
+    /// Request path
     pub path: String,
+    /// HTTP headers
     pub headers: HashMap<String, String>,
+    /// URL query parameters
     pub query_params: HashMap<String, String>,
 }
 
 impl RequestMetadata {
+    /// Creates new request metadata with method and path
     pub fn new(method: &str, path: &str) -> Self {
         Self {
             method: method.to_string(),
@@ -674,11 +711,13 @@ impl RequestMetadata {
         }
     }
 
+    /// Adds a header to the request metadata (builder pattern)
     pub fn with_header(mut self, key: &str, value: &str) -> Self {
         self.headers.insert(key.to_string(), value.to_string());
         self
     }
 
+    /// Adds a query parameter to the request metadata (builder pattern)
     pub fn with_query_param(mut self, key: &str, value: &str) -> Self {
         self.query_params.insert(key.to_string(), value.to_string());
         self
@@ -688,71 +727,115 @@ impl RequestMetadata {
 /// Core plugin error types
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
+    /// Token resolution failed with a specific error message
     #[error("Token resolution failed: {message}")]
-    ResolutionFailed { message: String },
+    ResolutionFailed {
+        /// Detailed error message
+        message: String
+    },
 
+    /// Invalid token format was encountered
     #[error("Invalid token format: {token}")]
-    InvalidToken { token: String },
+    InvalidToken {
+        /// The invalid token string
+        token: String
+    },
 
+    /// Plugin configuration is invalid or missing
     #[error("Plugin configuration error: {message}")]
-    ConfigurationError { message: String },
+    ConfigurationError {
+        /// Configuration error details
+        message: String
+    },
 
+    /// Plugin execution exceeded the timeout limit
     #[error("Plugin execution timeout")]
     Timeout,
 
+    /// Plugin attempted an action it doesn't have permission for
     #[error("Plugin permission denied: {action}")]
-    PermissionDenied { action: String },
+    PermissionDenied {
+        /// The action that was denied
+        action: String
+    },
 
+    /// A required plugin dependency is missing
     #[error("Plugin dependency missing: {dependency}")]
-    DependencyMissing { dependency: String },
+    DependencyMissing {
+        /// The missing dependency identifier
+        dependency: String
+    },
 
+    /// Internal plugin error
     #[error("Plugin internal error: {message}")]
-    InternalError { message: String },
+    InternalError {
+        /// Internal error details
+        message: String
+    },
 
+    /// Plugin execution failed
     #[error("Plugin execution error: {message}")]
-    ExecutionError { message: String },
+    ExecutionError {
+        /// Execution error details
+        message: String
+    },
 
+    /// Security policy violation
     #[error("Security violation: {violation}")]
-    SecurityViolation { violation: String },
+    SecurityViolation {
+        /// Details of the security violation
+        violation: String
+    },
 
+    /// WASM module loading or initialization error
     #[error("WASM module error: {message}")]
-    WasmError { message: String },
+    WasmError {
+        /// WASM error details
+        message: String
+    },
 
+    /// WASM runtime error
     #[error("WASM runtime error: {0}")]
     WasmRuntimeError(#[from] wasmtime::Error),
 }
 
 impl PluginError {
+    /// Creates a new resolution failed error
     pub fn resolution_failed(message: &str) -> Self {
         Self::ResolutionFailed {
             message: message.to_string(),
         }
     }
 
+    /// Creates a new invalid token error
     pub fn invalid_token(token: &str) -> Self {
         Self::InvalidToken {
             token: token.to_string(),
         }
     }
 
+    /// Creates a new configuration error
     pub fn config_error(message: &str) -> Self {
         Self::ConfigurationError {
             message: message.to_string(),
         }
     }
 
+    /// Creates a new execution error
     pub fn execution<S: Into<String>>(message: S) -> Self {
         Self::ExecutionError {
             message: message.into(),
         }
     }
 
+    /// Creates a new security violation error
     pub fn security<S: Into<String>>(violation: S) -> Self {
         Self::SecurityViolation {
             violation: violation.into(),
         }
     }
 
+    /// Creates a new WASM error
     pub fn wasm<S: Into<String>>(message: S) -> Self {
         Self::WasmError {
             message: message.into(),
@@ -763,13 +846,18 @@ impl PluginError {
 /// Base plugin instance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginInstance {
+    /// Unique identifier for this plugin instance
     pub id: PluginId,
+    /// Plugin manifest with metadata
     pub manifest: PluginManifest,
+    /// Current state of the plugin
     pub state: PluginState,
+    /// Health status of the plugin
     pub health: PluginHealth,
 }
 
 impl PluginInstance {
+    /// Creates a new plugin instance
     pub fn new(id: PluginId, manifest: PluginManifest) -> Self {
         Self {
             id,
@@ -779,6 +867,7 @@ impl PluginInstance {
         }
     }
 
+    /// Updates the plugin state and health status
     pub fn set_state(&mut self, state: PluginState) {
         let is_error = matches!(state, PluginState::Error);
         self.state = state;
@@ -788,6 +877,7 @@ impl PluginInstance {
         }
     }
 
+    /// Checks if the plugin is currently healthy
     pub fn is_healthy(&self) -> bool {
         self.health.healthy
     }
