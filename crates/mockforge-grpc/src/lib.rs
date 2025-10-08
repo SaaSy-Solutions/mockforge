@@ -7,6 +7,7 @@ use mockforge_core::LatencyProfile;
 
 pub mod dynamic;
 pub mod reflection;
+pub mod registry;
 
 // Include generated proto code
 pub mod generated {
@@ -18,6 +19,7 @@ pub use dynamic::proto_parser::ProtoService;
 pub use dynamic::service_generator::MockResponse;
 pub use dynamic::{DynamicGrpcConfig, ServiceRegistry};
 pub use reflection::{MockReflectionProxy, ProxyConfig, ReflectionProxy};
+pub use registry::GrpcProtoRegistry;
 
 /// Start gRPC server with default configuration
 pub async fn start(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

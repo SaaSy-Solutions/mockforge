@@ -19,6 +19,7 @@ pub mod openapi_routes;
 pub mod overrides;
 pub mod performance;
 pub mod priority_handler;
+pub mod protocol_abstraction;
 pub mod proxy;
 pub mod record_replay;
 pub mod request_chaining;
@@ -57,6 +58,11 @@ pub use openapi_routes::{
 pub use overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
 pub use priority_handler::{
     MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
+};
+pub use protocol_abstraction::{
+    MiddlewareChain, Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse,
+    RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
+    ValidationError as ProtocolValidationError, ValidationResult as ProtocolValidationResult,
 };
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};
 pub use record_replay::{

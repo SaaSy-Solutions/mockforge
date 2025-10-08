@@ -6,9 +6,11 @@ use mockforge_core::LatencyProfile;
 
 pub mod executor;
 pub mod graphql_tracing;
+pub mod registry;
 pub mod schema;
 
 pub use executor::{create_graphql_router, start_graphql_server, GraphQLExecutor};
+pub use registry::GraphQLSchemaRegistry;
 pub use schema::GraphQLSchema;
 
 // Re-export tracing utilities
