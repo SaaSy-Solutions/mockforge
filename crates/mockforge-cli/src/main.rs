@@ -24,237 +24,244 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Start mock servers (HTTP, WebSocket, gRPC)
+    ///
+    /// Examples:
+    ///   mockforge serve --config mockforge.yaml
+    ///   mockforge serve --http-port 8080 --admin --metrics
+    ///   mockforge serve --chaos --chaos-scenario network_degradation --chaos-latency-ms 200
+    ///   mockforge serve --traffic-shaping --bandwidth-limit 500000 --burst-size 50000
+    #[command(verbatim_doc_comment)]
     Serve {
         /// Configuration file path
         #[arg(short, long)]
         config: Option<PathBuf>,
 
         /// HTTP server port
-        #[arg(long, default_value = "3000")]
+        #[arg(long, default_value = "3000", help_heading = "Server Ports")]
         http_port: u16,
 
         /// WebSocket server port
-        #[arg(long, default_value = "3001")]
+        #[arg(long, default_value = "3001", help_heading = "Server Ports")]
         ws_port: u16,
 
         /// gRPC server port
-        #[arg(long, default_value = "50051")]
+        #[arg(long, default_value = "50051", help_heading = "Server Ports")]
         grpc_port: u16,
 
         /// Enable admin UI
-        #[arg(long)]
+        #[arg(long, help_heading = "Admin & UI")]
         admin: bool,
 
         /// Admin UI port (when running standalone)
-        #[arg(long, default_value = "9080")]
+        #[arg(long, default_value = "9080", help_heading = "Admin & UI")]
         admin_port: u16,
 
         /// Enable Prometheus metrics endpoint
-        #[arg(long)]
+        #[arg(long, help_heading = "Observability & Metrics")]
         metrics: bool,
 
         /// Metrics server port
-        #[arg(long, default_value = "9090")]
+        #[arg(long, default_value = "9090", help_heading = "Observability & Metrics")]
         metrics_port: u16,
 
         /// Enable OpenTelemetry distributed tracing
-        #[arg(long)]
+        #[arg(long, help_heading = "Tracing")]
         tracing: bool,
 
         /// Service name for traces
-        #[arg(long, default_value = "mockforge")]
+        #[arg(long, default_value = "mockforge", help_heading = "Tracing")]
         tracing_service_name: String,
 
         /// Tracing environment (development, staging, production)
-        #[arg(long, default_value = "development")]
+        #[arg(long, default_value = "development", help_heading = "Tracing")]
         tracing_environment: String,
 
         /// Jaeger endpoint for trace export
-        #[arg(long, default_value = "http://localhost:14268/api/traces")]
+        #[arg(long, default_value = "http://localhost:14268/api/traces", help_heading = "Tracing")]
         jaeger_endpoint: String,
 
         /// Tracing sampling rate (0.0 to 1.0)
-        #[arg(long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0", help_heading = "Tracing", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         tracing_sampling_rate: f64,
 
         /// Enable API Flight Recorder
-        #[arg(long)]
+        #[arg(long, help_heading = "API Flight Recorder")]
         recorder: bool,
 
         /// Recorder database file path
-        #[arg(long, default_value = "./mockforge-recordings.db")]
+        #[arg(long, default_value = "./mockforge-recordings.db", help_heading = "API Flight Recorder")]
         recorder_db: String,
 
         /// Disable recorder management API
-        #[arg(long)]
+        #[arg(long, help_heading = "API Flight Recorder")]
         recorder_no_api: bool,
 
         /// Recorder management API port (defaults to main port)
-        #[arg(long)]
+        #[arg(long, help_heading = "API Flight Recorder")]
         recorder_api_port: Option<u16>,
 
         /// Maximum number of recorded requests (0 for unlimited)
-        #[arg(long, default_value = "10000")]
+        #[arg(long, default_value = "10000", help_heading = "API Flight Recorder")]
         recorder_max_requests: i64,
 
         /// Auto-delete recordings older than N days (0 to disable)
-        #[arg(long, default_value = "7")]
+        #[arg(long, default_value = "7", help_heading = "API Flight Recorder")]
         recorder_retention_days: i64,
 
-        /// Enable chaos engineering
-        #[arg(long)]
+        /// Enable chaos engineering (fault injection and reliability testing)
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos: bool,
 
-        /// Chaos scenario (network_degradation, service_instability, cascading_failure, peak_traffic, slow_backend)
-        #[arg(long)]
+        /// Predefined chaos scenario: network_degradation, service_instability, cascading_failure, peak_traffic, slow_backend
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_scenario: Option<String>,
 
         /// Chaos latency: fixed delay in milliseconds
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_latency_ms: Option<u64>,
 
         /// Chaos latency: random delay range (min-max) in milliseconds
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_latency_range: Option<String>,
 
         /// Chaos latency probability (0.0-1.0)
-        #[arg(long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0", help_heading = "Chaos Engineering", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         chaos_latency_probability: f64,
 
         /// Chaos fault injection: HTTP error codes (comma-separated)
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_http_errors: Option<String>,
 
         /// Chaos fault injection: HTTP error probability (0.0-1.0)
-        #[arg(long, default_value = "0.1")]
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         chaos_http_error_probability: f64,
 
         /// Chaos rate limit: requests per second
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_rate_limit: Option<u32>,
 
-        /// Chaos traffic shaping: bandwidth limit (bytes/sec)
-        #[arg(long)]
+        /// Chaos: bandwidth limit in bytes/sec (e.g., 10000 = 10KB/s for slow network simulation)
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_bandwidth_limit: Option<u64>,
 
-        /// Chaos traffic shaping: packet loss percentage (0-100)
-        #[arg(long)]
+        /// Chaos: packet loss percentage 0-100 (e.g., 5.0 = 5% packet loss)
+        #[arg(long, help_heading = "Chaos Engineering", value_parser = clap::value_parser!(f64).range(0.0..=100.0))]
         chaos_packet_loss: Option<f64>,
 
         /// Enable gRPC-specific chaos engineering
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - gRPC")]
         chaos_grpc: bool,
 
         /// gRPC chaos: status codes to inject (comma-separated)
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - gRPC")]
         chaos_grpc_status_codes: Option<String>,
 
         /// gRPC chaos: stream interruption probability (0.0-1.0)
-        #[arg(long, default_value = "0.1")]
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - gRPC", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         chaos_grpc_stream_interruption_probability: f64,
 
         /// Enable WebSocket-specific chaos engineering
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
         chaos_websocket: bool,
 
         /// WebSocket chaos: close codes to inject (comma-separated)
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
         chaos_websocket_close_codes: Option<String>,
 
         /// WebSocket chaos: message drop probability (0.0-1.0)
-        #[arg(long, default_value = "0.05")]
+        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         chaos_websocket_message_drop_probability: f64,
 
         /// WebSocket chaos: message corruption probability (0.0-1.0)
-        #[arg(long, default_value = "0.05")]
+        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         chaos_websocket_message_corruption_probability: f64,
 
         /// Enable GraphQL-specific chaos engineering
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
         chaos_graphql: bool,
 
         /// GraphQL chaos: error codes to inject (comma-separated)
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
         chaos_graphql_error_codes: Option<String>,
 
         /// GraphQL chaos: partial data probability (0.0-1.0)
-        #[arg(long, default_value = "0.1")]
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - GraphQL", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
         chaos_graphql_partial_data_probability: f64,
 
         /// GraphQL chaos: enable resolver-level latency injection
-        #[arg(long)]
+        #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
         chaos_graphql_resolver_latency: bool,
 
         /// Enable circuit breaker pattern
-        #[arg(long)]
+        #[arg(long, help_heading = "Resilience Patterns")]
         circuit_breaker: bool,
 
         /// Circuit breaker: failure threshold
-        #[arg(long, default_value = "5")]
+        #[arg(long, default_value = "5", help_heading = "Resilience Patterns")]
         circuit_breaker_failure_threshold: u64,
 
         /// Circuit breaker: success threshold
-        #[arg(long, default_value = "2")]
+        #[arg(long, default_value = "2", help_heading = "Resilience Patterns")]
         circuit_breaker_success_threshold: u64,
 
         /// Circuit breaker: timeout in milliseconds
-        #[arg(long, default_value = "60000")]
+        #[arg(long, default_value = "60000", help_heading = "Resilience Patterns")]
         circuit_breaker_timeout_ms: u64,
 
         /// Circuit breaker: failure rate threshold percentage (0-100)
-        #[arg(long, default_value = "50.0")]
+        #[arg(long, default_value = "50.0", help_heading = "Resilience Patterns", value_parser = clap::value_parser!(f64).range(0.0..=100.0))]
         circuit_breaker_failure_rate: f64,
 
         /// Enable bulkhead pattern
-        #[arg(long)]
+        #[arg(long, help_heading = "Resilience Patterns")]
         bulkhead: bool,
 
         /// Bulkhead: maximum concurrent requests
-        #[arg(long, default_value = "100")]
+        #[arg(long, default_value = "100", help_heading = "Resilience Patterns")]
         bulkhead_max_concurrent: u32,
 
         /// Bulkhead: maximum queue size
-        #[arg(long, default_value = "10")]
+        #[arg(long, default_value = "10", help_heading = "Resilience Patterns")]
         bulkhead_max_queue: u32,
 
         /// Bulkhead: queue timeout in milliseconds
-        #[arg(long, default_value = "5000")]
+        #[arg(long, default_value = "5000", help_heading = "Resilience Patterns")]
         bulkhead_queue_timeout_ms: u64,
 
         /// OpenAPI spec file for HTTP server
-        #[arg(short, long)]
+        #[arg(short, long, help_heading = "Server Configuration")]
         spec: Option<PathBuf>,
 
         /// WebSocket replay file
-        #[arg(long)]
+        #[arg(long, help_heading = "Server Configuration")]
         ws_replay_file: Option<PathBuf>,
 
-        /// Enable traffic shaping
-        #[arg(long)]
+        /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
+        #[arg(long, help_heading = "Traffic Shaping")]
         traffic_shaping: bool,
 
-        /// Traffic shaping bandwidth limit (bytes per second)
-        #[arg(long, default_value = "1000000")]
+        /// Maximum bandwidth in bytes per second (e.g., 1000000 = 1MB/s)
+        #[arg(long, default_value = "1000000", help_heading = "Traffic Shaping")]
         bandwidth_limit: u64,
 
-        /// Traffic shaping burst size (bytes)
-        #[arg(long, default_value = "10000")]
+        /// Maximum burst size in bytes (allows temporary bursts above bandwidth limit)
+        #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
         burst_size: u64,
 
         /// Enable AI-powered features
-        #[arg(long)]
+        #[arg(long, help_heading = "AI Features")]
         ai_enabled: bool,
 
         /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
-        #[arg(long)]
+        #[arg(long, help_heading = "AI Features")]
         rag_provider: Option<String>,
 
         /// AI/RAG model name
-        #[arg(long)]
+        #[arg(long, help_heading = "AI Features")]
         rag_model: Option<String>,
 
         /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
-        #[arg(long, env = "MOCKFORGE_RAG_API_KEY")]
+        #[arg(long, env = "MOCKFORGE_RAG_API_KEY", help_heading = "AI Features")]
         rag_api_key: Option<String>,
     },
 
@@ -329,6 +336,13 @@ enum Commands {
     },
 
     /// Generate tests from recorded API interactions
+    ///
+    /// Examples:
+    ///   mockforge generate-tests --format rust_reqwest --output tests.rs
+    ///   mockforge generate-tests --format k6 --protocol http --method GET --limit 20
+    ///   mockforge generate-tests --format python_pytest --ai-descriptions --llm-provider openai
+    ///   mockforge generate-tests --format postman --path "/api/users/*" --status-code 200
+    #[command(verbatim_doc_comment)]
     GenerateTests {
         /// Recorder database file path
         #[arg(short, long, default_value = "./mockforge-recordings.db")]
@@ -415,6 +429,10 @@ enum Commands {
 #[derive(Subcommand)]
 enum OrchestrateCommands {
     /// Start a chaos orchestration from file
+    ///
+    /// Example:
+    ///   mockforge orchestrate start --file orchestration.yaml --base-url http://localhost:3000
+    #[command(verbatim_doc_comment)]
     Start {
         /// Orchestration file (JSON or YAML)
         #[arg(short, long)]
@@ -447,6 +465,10 @@ enum OrchestrateCommands {
     },
 
     /// Export an orchestration template
+    ///
+    /// Example:
+    ///   mockforge orchestrate template --output my_orchestration.yaml --format yaml
+    #[command(verbatim_doc_comment)]
     Template {
         /// Output file path
         #[arg(short, long)]
@@ -461,6 +483,10 @@ enum OrchestrateCommands {
 #[derive(Subcommand)]
 enum AiTestCommands {
     /// Test intelligent mock generation
+    ///
+    /// Example:
+    ///   mockforge test-ai intelligent-mock --prompt "Generate a REST API for a blog" --output mock.json
+    #[command(verbatim_doc_comment)]
     IntelligentMock {
         /// Natural language prompt for generation
         #[arg(short, long)]
@@ -495,6 +521,10 @@ enum AiTestCommands {
     },
 
     /// Test AI event stream generation
+    ///
+    /// Example:
+    ///   mockforge test-ai event-stream --narrative "User login flow" --event-count 10 --output events.json
+    #[command(verbatim_doc_comment)]
     EventStream {
         /// Narrative description for event generation
         #[arg(short, long)]
@@ -531,6 +561,12 @@ enum ConfigCommands {
 #[derive(Subcommand)]
 enum DataCommands {
     /// Generate data from built-in templates
+    ///
+    /// Examples:
+    ///   mockforge data template user --rows 100 --format json
+    ///   mockforge data template product --rows 50 --output products.csv --format csv
+    ///   mockforge data template order --rows 20 --rag --rag-provider openai --output orders.json
+    #[command(verbatim_doc_comment)]
     Template {
         /// Template name (user, product, order)
         template: String,
@@ -573,6 +609,10 @@ enum DataCommands {
     },
 
     /// Generate data from JSON schema
+    ///
+    /// Example:
+    ///   mockforge data schema my_schema.json --rows 100 --format jsonl --output data.jsonl
+    #[command(verbatim_doc_comment)]
     Schema {
         /// JSON schema file path
         schema: PathBuf,
