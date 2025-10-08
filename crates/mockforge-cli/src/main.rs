@@ -2033,52 +2033,212 @@ async fn handle_config_validate(
         return Err(format!("Configuration file not found: {}", config_file.display()).into());
     }
 
-    // Read and parse YAML
+    // Read and parse YAML/JSON
     let config_content = tokio::fs::read_to_string(&config_file).await?;
-    let config: serde_json::Value = serde_yaml::from_str(&config_content)
-        .map_err(|e| format!("Invalid YAML syntax: {}", e))?;
+    let is_yaml = config_file
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|ext| ext == "yaml" || ext == "yml")
+        .unwrap_or(true);
 
-    // Basic validation
-    let mut endpoints_count = 0;
-    let mut chains_count = 0;
-    let mut warnings = Vec::new();
+    // First, try to parse with ServerConfig for full schema validation
+    let config_result = if is_yaml {
+        serde_yaml::from_str::<mockforge_core::ServerConfig>(&config_content)
+            .map_err(|e| format_yaml_error(&config_content, e))
+    } else {
+        serde_json::from_str::<mockforge_core::ServerConfig>(&config_content)
+            .map_err(|e| format_json_error(&config_content, e))
+    };
 
-    // Validate HTTP section
-    if let Some(http) = config.get("http") {
-        if let Some(endpoints) = http.get("endpoints") {
-            if let Some(arr) = endpoints.as_array() {
-                endpoints_count = arr.len();
+    match config_result {
+        Ok(config) => {
+            // Successfully parsed - now validate content
+            let mut endpoints_count = 0;
+            let mut chains_count = 0;
+            let mut warnings = Vec::new();
+            let mut errors = Vec::new();
+
+            // Validate HTTP section
+            if let Some(ref endpoints) = config.http.endpoints {
+                endpoints_count = endpoints.len();
+
+                // Validate each endpoint
+                for (idx, endpoint) in endpoints.iter().enumerate() {
+                    if endpoint.path.is_empty() {
+                        errors.push(format!("HTTP endpoint #{} has empty path", idx + 1));
+                    }
+                    if endpoint.methods.is_empty() {
+                        warnings.push(format!(
+                            "HTTP endpoint #{} ('{}') has no methods defined",
+                            idx + 1,
+                            endpoint.path
+                        ));
+                    }
+                    if endpoint.response.is_none() {
+                        warnings.push(format!(
+                            "HTTP endpoint #{} ('{}') has no response defined",
+                            idx + 1,
+                            endpoint.path
+                        ));
+                    }
+                }
+            } else {
+                warnings.push("No HTTP endpoints configured. Add 'http.endpoints' to define mock endpoints.");
+            }
+
+            // Validate chains section
+            if let Some(ref chains) = config.chaining {
+                if let Some(ref chain_defs) = chains.chains {
+                    chains_count = chain_defs.len();
+
+                    for (idx, chain) in chain_defs.iter().enumerate() {
+                        if chain.name.is_empty() {
+                            errors.push(format!("Chain #{} has empty name", idx + 1));
+                        }
+                        if chain.links.is_empty() {
+                            warnings.push(format!(
+                                "Chain #{} ('{}') has no links defined",
+                                idx + 1,
+                                chain.name
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Check for admin section
+            if config.admin.is_none() {
+                warnings.push("No admin UI configuration found. Consider adding 'admin.enabled: true' to enable the admin interface.");
+            }
+
+            // Check for TLS configuration issues
+            if let Some(ref tls) = config.tls {
+                if tls.enabled {
+                    if tls.cert_path.is_none() || tls.key_path.is_none() {
+                        errors.push("TLS is enabled but cert_path or key_path is missing".to_string());
+                    }
+                }
+            }
+
+            // Print results
+            if !errors.is_empty() {
+                println!("❌ Configuration has errors:");
+                for error in &errors {
+                    println!("   ✗ {}", error);
+                }
+                return Err("Configuration validation failed".into());
+            }
+
+            println!("✅ Configuration is valid");
+            println!("\n📊 Summary:");
+            println!("   HTTP endpoints: {}", endpoints_count);
+            println!("   Request chains: {}", chains_count);
+            println!("   HTTP server: {}:{}", config.http.host, config.http.port);
+            if let Some(ref admin) = config.admin {
+                if admin.enabled {
+                    println!("   Admin UI: http://{}:{}", admin.host, admin.port);
+                }
+            }
+
+            if !warnings.is_empty() {
+                println!("\n⚠️  Warnings:");
+                for warning in warnings {
+                    println!("   - {}", warning);
+                }
+            }
+
+            Ok(())
+        }
+        Err(error_msg) => {
+            println!("❌ Configuration validation failed:\n");
+            println!("{}", error_msg);
+            Err("Invalid configuration".into())
+        }
+    }
+}
+
+/// Format YAML parsing errors with line numbers
+fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
+    let mut message = String::from("Invalid YAML syntax:\n");
+
+    if let Some(location) = error.location() {
+        let line = location.line();
+        let column = location.column();
+
+        message.push_str(&format!("  at line {}, column {}\n\n", line, column));
+
+        // Show the problematic line with context
+        let lines: Vec<&str> = content.lines().collect();
+        let start = line.saturating_sub(2);
+        let end = (line + 1).min(lines.len());
+
+        for (idx, line_content) in lines[start..end].iter().enumerate() {
+            let line_num = start + idx + 1;
+            if line_num == line {
+                message.push_str(&format!("  > {} | {}\n", line_num, line_content));
+                message.push_str(&format!("  {}^\n", " ".repeat(column + 5 + line_num.to_string().len())));
+            } else {
+                message.push_str(&format!("    {} | {}\n", line_num, line_content));
             }
         }
+
+        message.push_str(&format!("\n  Error: {}\n", error));
     } else {
-        warnings.push("No HTTP configuration found");
+        message.push_str(&format!("  {}\n", error));
     }
 
-    // Validate chains section
-    if let Some(chains) = config.get("chains") {
-        if let Some(arr) = chains.as_array() {
-            chains_count = arr.len();
+    // Add helpful suggestions based on common errors
+    let error_str = error.to_string();
+    if error_str.contains("duplicate key") {
+        message.push_str("\n💡 Tip: You have a duplicate key in your YAML. Each key must be unique within its section.\n");
+    } else if error_str.contains("invalid type") {
+        message.push_str("\n💡 Tip: Check that your values match the expected types (strings, numbers, booleans, arrays, objects).\n");
+    } else if error_str.contains("missing field") {
+        message.push_str("\n💡 Tip: A required field is missing. Check the documentation for required configuration fields.\n");
+    } else if error_str.contains("unknown field") {
+        message.push_str("\n💡 Tip: You may have a typo in a field name. Check the spelling against the documentation.\n");
+    }
+
+    message
+}
+
+/// Format JSON parsing errors with line numbers
+fn format_json_error(content: &str, error: serde_json::Error) -> String {
+    let mut message = String::from("Invalid JSON syntax:\n");
+
+    let line = error.line();
+    let column = error.column();
+
+    message.push_str(&format!("  at line {}, column {}\n\n", line, column));
+
+    // Show the problematic line with context
+    let lines: Vec<&str> = content.lines().collect();
+    let start = line.saturating_sub(2);
+    let end = (line + 1).min(lines.len());
+
+    for (idx, line_content) in lines[start..end].iter().enumerate() {
+        let line_num = start + idx + 1;
+        if line_num == line {
+            message.push_str(&format!("  > {} | {}\n", line_num, line_content));
+            message.push_str(&format!("  {}^\n", " ".repeat(column + 5 + line_num.to_string().len())));
+        } else {
+            message.push_str(&format!("    {} | {}\n", line_num, line_content));
         }
     }
 
-    // Check for admin section
-    if config.get("admin").is_none() {
-        warnings.push("No admin UI configuration found");
+    message.push_str(&format!("\n  Error: {}\n", error));
+
+    // Add helpful suggestions
+    let error_str = error.to_string();
+    if error_str.contains("trailing comma") {
+        message.push_str("\n💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n");
+    } else if error_str.contains("expected") {
+        message.push_str("\n💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n");
+    } else if error_str.contains("duplicate field") {
+        message.push_str("\n💡 Tip: You have a duplicate key. Each key must be unique within its object.\n");
     }
 
-    println!("✅ Configuration is valid");
-    println!("\n📊 Summary:");
-    println!("   Found {} HTTP endpoints", endpoints_count);
-    println!("   Found {} chains", chains_count);
-
-    if !warnings.is_empty() {
-        println!("\n⚠️  Warnings:");
-        for warning in warnings {
-            println!("   - {}", warning);
-        }
-    }
-
-    Ok(())
+    message
 }
 
 /// Discover configuration file in current directory and parents
@@ -2424,7 +2584,7 @@ async fn handle_generate_tests(
     Ok(())
 }
 
-async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
         OrchestrateCommands::Start { file, base_url } => {
             println!("🚀 Starting chaos orchestration from: {}", file.display());
@@ -2505,22 +2665,137 @@ async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn 
         OrchestrateCommands::Validate { file } => {
             println!("🔍 Validating orchestration file: {}", file.display());
 
+            // Check if file exists
+            if !file.exists() {
+                eprintln!("❌ File not found: {}", file.display());
+                return Err("File not found".into());
+            }
+
             // Read and parse file
             let content = std::fs::read_to_string(&file)?;
+            let is_json = file.extension().and_then(|s| s.to_str()) == Some("json");
 
-            let result = if file.extension().and_then(|s| s.to_str()) == Some("json") {
+            let parse_result: Result<serde_json::Value, String> = if is_json {
                 serde_json::from_str::<serde_json::Value>(&content)
-                    .map(|_| ())
-                    .map_err(|e| format!("Invalid JSON: {}", e))
+                    .map_err(|e| format_json_error(&content, e))
             } else {
+                // Parse as YAML, then convert to JSON Value for uniform handling
                 serde_yaml::from_str::<serde_yaml::Value>(&content)
-                    .map(|_| ())
-                    .map_err(|e| format!("Invalid YAML: {}", e))
+                    .map_err(|e| format_yaml_error(&content, e))
+                    .and_then(|yaml_val| {
+                        serde_json::to_value(yaml_val)
+                            .map_err(|e| format!("Failed to convert YAML to JSON: {}", e))
+                    })
             };
 
-            match result {
-                Ok(_) => println!("✅ Orchestration file is valid"),
-                Err(e) => eprintln!("❌ {}", e),
+            match parse_result {
+                Ok(value) => {
+                    // Validate structure
+                    let mut errors = Vec::new();
+                    let mut warnings = Vec::new();
+
+                    // Check for required fields
+                    if value.get("name").is_none() {
+                        errors.push("Missing required field 'name'".to_string());
+                    } else if !value["name"].is_string() {
+                        errors.push("Field 'name' must be a string".to_string());
+                    }
+
+                    // Validate steps array
+                    match value.get("steps") {
+                        None => {
+                            errors.push("Missing required field 'steps'".to_string());
+                        }
+                        Some(steps) => {
+                            if let Some(steps_arr) = steps.as_array() {
+                                if steps_arr.is_empty() {
+                                    warnings.push("Steps array is empty - orchestration won't do anything".to_string());
+                                }
+
+                                // Validate each step
+                                for (idx, step) in steps_arr.iter().enumerate() {
+                                    let step_num = idx + 1;
+
+                                    if !step.is_object() {
+                                        errors.push(format!("Step #{} is not an object", step_num));
+                                        continue;
+                                    }
+
+                                    // Check step name
+                                    if step.get("name").is_none() {
+                                        errors.push(format!("Step #{} is missing 'name' field", step_num));
+                                    }
+
+                                    // Check scenario
+                                    match step.get("scenario") {
+                                        None => {
+                                            errors.push(format!("Step #{} is missing 'scenario' field", step_num));
+                                        }
+                                        Some(scenario) => {
+                                            if scenario.get("name").is_none() {
+                                                errors.push(format!("Step #{} scenario is missing 'name' field", step_num));
+                                            }
+                                            if scenario.get("config").is_none() {
+                                                errors.push(format!("Step #{} scenario is missing 'config' field", step_num));
+                                            }
+                                        }
+                                    }
+
+                                    // Check duration
+                                    if step.get("duration_seconds").is_none() {
+                                        warnings.push(format!("Step #{} is missing 'duration_seconds' - using default", step_num));
+                                    } else if !step["duration_seconds"].is_number() {
+                                        errors.push(format!("Step #{} 'duration_seconds' must be a number", step_num));
+                                    }
+
+                                    // Check delay
+                                    if let Some(delay) = step.get("delay_before_seconds") {
+                                        if !delay.is_number() {
+                                            errors.push(format!("Step #{} 'delay_before_seconds' must be a number", step_num));
+                                        }
+                                    }
+                                }
+                            } else {
+                                errors.push("Field 'steps' must be an array".to_string());
+                            }
+                        }
+                    }
+
+                    // Print results
+                    if !errors.is_empty() {
+                        println!("❌ Orchestration file has errors:");
+                        for error in &errors {
+                            println!("   ✗ {}", error);
+                        }
+                        return Err("Validation failed".into());
+                    }
+
+                    println!("✅ Orchestration file is valid");
+
+                    // Show summary
+                    if let Some(name) = value.get("name").and_then(|v| v.as_str()) {
+                        println!("\n📊 Summary:");
+                        println!("   Name: {}", name);
+                        if let Some(desc) = value.get("description").and_then(|v| v.as_str()) {
+                            println!("   Description: {}", desc);
+                        }
+                        if let Some(steps) = value.get("steps").and_then(|v| v.as_array()) {
+                            println!("   Steps: {}", steps.len());
+                        }
+                    }
+
+                    if !warnings.is_empty() {
+                        println!("\n⚠️  Warnings:");
+                        for warning in warnings {
+                            println!("   - {}", warning);
+                        }
+                    }
+                }
+                Err(error_msg) => {
+                    println!("❌ Orchestration file validation failed:\n");
+                    println!("{}", error_msg);
+                    return Err("Invalid orchestration file".into());
+                }
             }
         }
 
