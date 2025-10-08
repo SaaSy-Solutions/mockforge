@@ -174,7 +174,9 @@ impl VersionControlRepository {
             .join("contents")
             .join(format!("{}.json", content_hash));
 
-        fs::create_dir_all(content_file.parent().unwrap()).map_err(|e| e.to_string())?;
+        let parent = content_file.parent()
+            .ok_or_else(|| "Invalid content file path".to_string())?;
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         let content_str = serde_json::to_string_pretty(content).map_err(|e| e.to_string())?;
         let mut file = fs::File::create(content_file).map_err(|e| e.to_string())?;
         file.write_all(content_str.as_bytes()).map_err(|e| e.to_string())?;
@@ -196,7 +198,10 @@ impl VersionControlRepository {
             return Err(format!("Branch '{}' already exists", name));
         }
 
-        let head_commit_id = from_commit.unwrap_or_else(|| self.get_current_head().unwrap());
+        let head_commit_id = match from_commit {
+            Some(commit_id) => commit_id,
+            None => self.get_current_head()?,
+        };
 
         let branch = Branch {
             name: name.clone(),

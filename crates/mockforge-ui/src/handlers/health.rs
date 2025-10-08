@@ -158,7 +158,7 @@ pub async fn startup_probe(State(state): State<AdminState>) -> Json<HealthRespon
 /// Checks all subsystems and dependencies
 pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthResponse> {
     let start = SystemTime::now();
-    let timestamp = start.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let timestamp = start.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
     let mut checks = vec![];
     let mut overall_status = HealthStatus::Healthy;

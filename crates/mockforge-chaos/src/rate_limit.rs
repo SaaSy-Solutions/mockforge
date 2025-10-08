@@ -9,7 +9,8 @@ use governor::{
 use nonzero_ext::nonzero;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tracing::debug;
 
 /// Rate limiter for controlling request throughput

@@ -3844,6 +3844,7 @@ dependencies = [
  "http-body-util",
  "nonzero_ext",
  "once_cell",
+ "parking_lot",
  "prometheus",
  "rand 0.9.2",
  "redis",

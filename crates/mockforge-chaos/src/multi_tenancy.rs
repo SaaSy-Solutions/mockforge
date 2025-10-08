@@ -5,7 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use thiserror::Error;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;

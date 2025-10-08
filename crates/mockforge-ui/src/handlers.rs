@@ -2144,33 +2144,53 @@ pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> 
     let fixture_id = match params.get("id") {
         Some(id) => id,
         None => {
-            return axum::response::Response::builder()
+            return match axum::response::Response::builder()
                 .status(http::StatusCode::BAD_REQUEST)
                 .header(http::header::CONTENT_TYPE, "application/json")
                 .body(r#"{"error": "Missing fixture ID parameter"}"#.to_string())
-                .unwrap();
+            {
+                Ok(response) => response,
+                Err(e) => {
+                    tracing::error!("Failed to build error response: {}", e);
+                    (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
+                }
+            };
         }
     };
 
     // Find and read the fixture file
     match download_fixture_by_id(fixture_id).await {
-        Ok((content, file_name)) => axum::response::Response::builder()
-            .status(http::StatusCode::OK)
-            .header(http::header::CONTENT_TYPE, "application/json")
-            .header(
-                http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", file_name),
-            )
-            .body(content)
-            .unwrap(),
+        Ok((content, file_name)) => {
+            match axum::response::Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .header(
+                    http::header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", file_name),
+                )
+                .body(content)
+            {
+                Ok(response) => response,
+                Err(e) => {
+                    tracing::error!("Failed to build success response: {}", e);
+                    (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
+                }
+            }
+        }
         Err(e) => {
             tracing::error!("Failed to download fixture {}: {}", fixture_id, e);
             let error_response = format!(r#"{{"error": "Failed to download fixture: {}"}}"#, e);
-            axum::response::Response::builder()
+            match axum::response::Response::builder()
                 .status(http::StatusCode::NOT_FOUND)
                 .header(http::header::CONTENT_TYPE, "application/json")
                 .body(error_response)
-                .unwrap()
+            {
+                Ok(response) => response,
+                Err(e) => {
+                    tracing::error!("Failed to build error response: {}", e);
+                    (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
+                }
+            }
         }
     }
 }

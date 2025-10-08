@@ -4,7 +4,8 @@ use crate::config::{ChaosConfig, FaultInjectionConfig, LatencyConfig};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tracing::{debug, info};
 
 /// A chaos engineering scenario
