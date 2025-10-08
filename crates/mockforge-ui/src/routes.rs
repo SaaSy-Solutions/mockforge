@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use tower_http::cors::CorsLayer;
+use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use crate::handlers::AdminState;
 use crate::handlers::*;
@@ -104,6 +104,18 @@ pub fn create_admin_router(
         .route("/__mockforge/chains/{id}/execute", post(proxy_chain_execute))
         .route("/__mockforge/chains/{id}/validate", post(proxy_chain_validate))
         .route("/__mockforge/chains/{id}/history", get(proxy_chain_history))
+        // Validation configuration routes
+        .route("/__mockforge/validation", get(get_validation))
+        .route("/__mockforge/validation", post(update_validation))
+        // Environment variables routes
+        .route("/__mockforge/env", get(get_env_vars))
+        .route("/__mockforge/env", post(update_env_var))
+        // File management routes
+        .route("/__mockforge/files/content", post(get_file_content))
+        .route("/__mockforge/files/save", post(save_file_content))
+        // Smoke test routes
+        .route("/__mockforge/smoke", get(get_smoke_tests))
+        .route("/__mockforge/smoke/run", get(run_smoke_tests_endpoint))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))
@@ -114,7 +126,10 @@ pub fn create_admin_router(
     // IMPORTANT: This must be AFTER all API routes
     router = router.route("/{*path}", get(serve_admin_html));
 
-    router.layer(CorsLayer::permissive()).with_state(state)
+    router
+        .layer(CompressionLayer::new())
+        .layer(CorsLayer::permissive())
+        .with_state(state)
 }
 
 #[cfg(test)]

@@ -39,9 +39,18 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        entryFileNames: `assets/[name].[hash].js`,
+        entryFileNames: (chunkInfo) => {
+          // Don't hash the main index file for easier embedding
+          return chunkInfo.name === 'index' ? 'assets/index.js' : 'assets/[name].[hash].js';
+        },
         chunkFileNames: `assets/[name].[hash].js`,
-        assetFileNames: `assets/[name].[hash].[ext]`,
+        assetFileNames: (assetInfo) => {
+          // Don't hash the main CSS file for easier embedding
+          if (assetInfo.name === 'index.css') {
+            return 'assets/index.css';
+          }
+          return 'assets/[name].[hash].[ext]';
+        },
         manualChunks: (id) => {
           // Core React libraries
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
