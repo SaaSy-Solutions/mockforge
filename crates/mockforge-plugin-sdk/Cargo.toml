@@ -12,6 +12,10 @@ readme = "README.md"
 keywords = ["mockforge", "plugin", "sdk", "wasm", "api"]
 categories = ["development-tools", "api-bindings", "wasm"]
 
+# Enforce documentation for public library APIs
+[lints.rust]
+missing_docs = "deny"
+
 [lib]
 crate-type = ["lib"]
 

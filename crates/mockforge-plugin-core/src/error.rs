@@ -8,55 +8,95 @@ pub type Result<T> = std::result::Result<T, PluginError>;
 pub enum PluginError {
     /// Plugin loading or validation failed
     #[error("Plugin loading error: {message}")]
-    LoadError { message: String },
+    LoadError {
+        /// Error message describing what went wrong
+        message: String
+    },
 
     /// Plugin execution failed
     #[error("Plugin execution error: {message}")]
-    ExecutionError { message: String },
+    ExecutionError {
+        /// Error message describing the execution failure
+        message: String
+    },
 
     /// Plugin violated security constraints
     #[error("Security violation: {violation}")]
-    SecurityViolation { violation: String },
+    SecurityViolation {
+        /// Description of the security violation
+        violation: String
+    },
 
     /// Plugin exceeded resource limits
     #[error("Resource limit exceeded: {resource} limit={limit}, used={used}")]
     ResourceLimitExceeded {
+        /// The resource that exceeded its limit
         resource: String,
+        /// The configured limit
         limit: String,
+        /// The amount used
         used: String,
     },
 
     /// Plugin configuration is invalid
     #[error("Invalid plugin configuration: {field} - {message}")]
-    InvalidConfiguration { field: String, message: String },
+    InvalidConfiguration {
+        /// The configuration field that is invalid
+        field: String,
+        /// Error message describing the configuration issue
+        message: String
+    },
 
     /// Plugin is incompatible with current system
     #[error("Plugin compatibility error: {reason}")]
-    CompatibilityError { reason: String },
+    CompatibilityError {
+        /// Reason for the compatibility error
+        reason: String
+    },
 
     /// Plugin communication failed
     #[error("Plugin communication error: {message}")]
-    CommunicationError { message: String },
+    CommunicationError {
+        /// Error message describing the communication failure
+        message: String
+    },
 
     /// Plugin timed out
     #[error("Plugin execution timeout: {timeout_ms}ms exceeded")]
-    TimeoutError { timeout_ms: u64 },
+    TimeoutError {
+        /// Timeout duration in milliseconds
+        timeout_ms: u64
+    },
 
     /// WebAssembly runtime error
     #[error("WebAssembly runtime error: {message}")]
-    WasmError { message: String },
+    WasmError {
+        /// Error message from the WASM runtime
+        message: String
+    },
 
     /// Plugin manifest is invalid
     #[error("Invalid plugin manifest: {message}")]
-    InvalidManifest { message: String },
+    InvalidManifest {
+        /// Error message describing the manifest issue
+        message: String
+    },
 
     /// Plugin dependency not found or incompatible
     #[error("Plugin dependency error: {dependency} - {message}")]
-    DependencyError { dependency: String, message: String },
+    DependencyError {
+        /// The dependency that caused the error
+        dependency: String,
+        /// Error message describing the dependency issue
+        message: String
+    },
 
     /// Generic plugin system error
     #[error("Plugin system error: {message}")]
-    SystemError { message: String },
+    SystemError {
+        /// Error message describing the system error
+        message: String
+    },
 }
 
 impl PluginError {
