@@ -26,4 +26,4 @@ async-trait = "0.1"
 
 # For vector operations and similarity calculations
 ndarray = "0.15"
-ndarray-stats = "0.5"
+ndarray-stats = "0.6"
