@@ -621,8 +621,10 @@ fn add_global_functions_static<'js>(
     let http_obj = Object::new(ctx.clone())?;
 
     let http_get_func = Function::new(ctx.clone(), |url: String| -> String {
-        // Note: This is a blocking call in an async context
-        // In practice, you might want to handle this differently
+        // WARNING: This blocks a thread from the blocking thread pool.
+        // The JavaScript engine (rquickjs) is already running in spawn_blocking,
+        // so we use block_in_place here. For production, consider limiting
+        // HTTP calls in scripts or using a different scripting approach.
         tokio::task::block_in_place(|| {
             reqwest::blocking::get(&url)
                 .and_then(|resp| resp.text())
@@ -632,6 +634,10 @@ fn add_global_functions_static<'js>(
     http_obj.set("get", http_get_func)?;
 
     let http_post_func = Function::new(ctx.clone(), |url: String, body: String| -> String {
+        // WARNING: This blocks a thread from the blocking thread pool.
+        // The JavaScript engine (rquickjs) is already running in spawn_blocking,
+        // so we use block_in_place here. For production, consider limiting
+        // HTTP calls in scripts or using a different scripting approach.
         tokio::task::block_in_place(|| {
             reqwest::blocking::Client::new()
                 .post(&url)

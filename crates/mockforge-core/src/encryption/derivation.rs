@@ -59,7 +59,9 @@ impl KeyDerivationManager {
         }
     }
 
-    /// Derive a master key from a password
+    /// Derive a master key from a password (synchronous version)
+    ///
+    /// Note: This is CPU-intensive. Use `derive_master_key_async` when calling from async context.
     pub fn derive_master_key(&self, password: &str) -> EncryptionResult<EncryptionKey> {
         self.derive_key(
             password.as_bytes(),
@@ -71,6 +73,28 @@ impl KeyDerivationManager {
             "master_key_salt",
             EncryptionAlgorithm::Aes256Gcm,
         )
+    }
+
+    /// Derive a master key from a password (async version using spawn_blocking)
+    ///
+    /// This method offloads the CPU-intensive Argon2 computation to a blocking thread pool.
+    pub async fn derive_master_key_async(&self, password: String) -> EncryptionResult<EncryptionKey> {
+        let params = self.default_argon2_params.clone();
+        tokio::task::spawn_blocking(move || {
+            let manager = Self::new();
+            manager.derive_key(
+                password.as_bytes(),
+                KeyDerivationMethod::Argon2 {
+                    memory_kib: params.memory_kib,
+                    iterations: params.iterations,
+                    parallelism: params.parallelism,
+                },
+                "master_key_salt",
+                EncryptionAlgorithm::Aes256Gcm,
+            )
+        })
+        .await
+        .map_err(|e| EncryptionError::key_derivation_failed(format!("Task join error: {}", e)))?
     }
 
     /// Derive a workspace key from workspace ID and master key
@@ -181,7 +205,9 @@ impl KeyDerivationManager {
         EncryptionKey::new(derived_key, algorithm)
     }
 
-    /// Verify a password against a derived key
+    /// Verify a password against a derived key (synchronous version)
+    ///
+    /// Note: This is CPU-intensive. Use `verify_password_async` when calling from async context.
     pub fn verify_password(
         &self,
         password: &str,
@@ -190,6 +216,24 @@ impl KeyDerivationManager {
         let derived_key = self.derive_master_key(password)?;
 
         Ok(derived_key.as_bytes() == expected_key.as_bytes())
+    }
+
+    /// Verify a password against a derived key (async version using spawn_blocking)
+    ///
+    /// This method offloads the CPU-intensive Argon2 computation to a blocking thread pool.
+    pub async fn verify_password_async(
+        &self,
+        password: String,
+        expected_key: EncryptionKey,
+    ) -> EncryptionResult<bool> {
+        let params = self.default_argon2_params.clone();
+        tokio::task::spawn_blocking(move || {
+            let manager = KeyDerivationManager { default_argon2_params: params };
+            let derived_key = manager.derive_master_key(&password)?;
+            Ok(derived_key.as_bytes() == expected_key.as_bytes())
+        })
+        .await
+        .map_err(|e| EncryptionError::key_derivation_failed(format!("Task join error: {}", e)))?
     }
 
     /// Generate a secure random salt

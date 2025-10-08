@@ -1340,7 +1340,7 @@ async fn perform_server_restart(_state: &AdminState) -> Result<()> {
     tracing::info!("Initiating restart for process PID: {}", current_pid);
 
     // Try to find the parent process (MockForge CLI)
-    let parent_pid = get_parent_process_id(current_pid)?;
+    let parent_pid = get_parent_process_id(current_pid).await?;
     tracing::info!("Found parent process PID: {}", parent_pid);
 
     // Method 1: Try to restart via parent process signal
@@ -1360,17 +1360,26 @@ async fn perform_server_restart(_state: &AdminState) -> Result<()> {
 }
 
 /// Get parent process ID
-fn get_parent_process_id(pid: u32) -> Result<u32> {
+async fn get_parent_process_id(pid: u32) -> Result<u32> {
     // Try to read from /proc/pid/stat on Linux
     #[cfg(target_os = "linux")]
     {
+        // Read /proc filesystem using spawn_blocking
         let stat_path = format!("/proc/{}/stat", pid);
-        if let Ok(content) = std::fs::read_to_string(&stat_path) {
+        if let Ok(ppid) = tokio::task::spawn_blocking(move || -> Result<u32> {
+            let content = std::fs::read_to_string(&stat_path)
+                .map_err(|e| Error::generic(format!("Failed to read {}: {}", stat_path, e)))?;
+
             let fields: Vec<&str> = content.split_whitespace().collect();
             if fields.len() > 3 {
-                if let Ok(ppid) = fields[3].parse::<u32>() {
-                    return Ok(ppid);
-                }
+                fields[3].parse::<u32>()
+                    .map_err(|e| Error::generic(format!("Failed to parse PPID: {}", e)))
+            } else {
+                Err(Error::generic("Insufficient fields in /proc/pid/stat".to_string()))
+            }
+        }).await {
+            if let Ok(ppid) = ppid {
+                return Ok(ppid);
             }
         }
     }
@@ -1563,7 +1572,7 @@ pub fn count_fixtures() -> Result<usize> {
     Ok(total_count)
 }
 
-/// Helper function to count JSON files in a directory recursively
+/// Helper function to count JSON files in a directory recursively (blocking version)
 fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
     let mut count = 0;
 
@@ -1584,6 +1593,13 @@ fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
     }
 
     Ok(count)
+}
+
+/// Helper function to count JSON files in a directory recursively (async version)
+async fn count_fixtures_in_directory_async(dir_path: std::path::PathBuf) -> Result<usize> {
+    tokio::task::spawn_blocking(move || count_fixtures_in_directory(&dir_path))
+        .await
+        .map_err(|e| Error::generic(format!("Task join error: {}", e)))?
 }
 
 /// Check if a specific route has fixtures
@@ -1817,7 +1833,7 @@ fn parse_fixture_file_sync(file_path: &std::path::Path, protocol: &str) -> Resul
 
     let saved_at = chrono::DateTime::from(modified_time);
 
-    // Read and parse the fixture file
+    // Read and parse the fixture file (blocking - called from spawn_blocking context)
     let content = std::fs::read_to_string(file_path)
         .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
 
@@ -2026,20 +2042,26 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
     // Search for the fixture file by ID across all protocols
     let file_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
 
-    // Delete the file
-    if file_path.exists() {
-        std::fs::remove_file(&file_path).map_err(|e| {
-            Error::generic(format!("Failed to delete fixture file {}: {}", file_path.display(), e))
-        })?;
-        tracing::info!("Deleted fixture file: {}", file_path.display());
+    // Delete the file using spawn_blocking
+    let file_path_clone = file_path.clone();
+    let delete_result = tokio::task::spawn_blocking(move || {
+        if file_path_clone.exists() {
+            std::fs::remove_file(&file_path_clone).map_err(|e| {
+                Error::generic(format!("Failed to delete fixture file {}: {}", file_path_clone.display(), e))
+            })
+        } else {
+            Err(Error::generic(format!("Fixture file not found: {}", file_path_clone.display())))
+        }
+    })
+    .await
+    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
 
-        // Also try to remove empty parent directories
-        cleanup_empty_directories(&file_path).await;
+    tracing::info!("Deleted fixture file: {}", file_path.display());
 
-        Ok(())
-    } else {
-        Err(Error::generic(format!("Fixture file not found: {}", file_path.display())))
-    }
+    // Also try to remove empty parent directories
+    cleanup_empty_directories(&file_path).await;
+
+    Ok(delete_result)
 }
 
 /// Find a fixture file by its ID across all protocols
@@ -2102,40 +2124,45 @@ fn search_fixture_in_directory(
 
 /// Clean up empty directories after file deletion
 async fn cleanup_empty_directories(file_path: &std::path::Path) {
-    if let Some(parent) = file_path.parent() {
-        // Try to remove empty directories up to the protocol level
-        let mut current = parent;
-        let fixtures_dir =
-            std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
-        let fixtures_path = std::path::Path::new(&fixtures_dir);
+    let file_path = file_path.to_path_buf();
 
-        while current != fixtures_path && current.parent().is_some() {
-            if let Ok(entries) = std::fs::read_dir(current) {
-                if entries.count() == 0 {
-                    if let Err(e) = std::fs::remove_dir(current) {
-                        tracing::debug!(
-                            "Failed to remove empty directory {}: {}",
-                            current.display(),
-                            e
-                        );
-                        break;
+    // Use spawn_blocking for directory operations
+    let _ = tokio::task::spawn_blocking(move || {
+        if let Some(parent) = file_path.parent() {
+            // Try to remove empty directories up to the protocol level
+            let mut current = parent;
+            let fixtures_dir =
+                std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
+            let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+            while current != fixtures_path && current.parent().is_some() {
+                if let Ok(entries) = std::fs::read_dir(current) {
+                    if entries.count() == 0 {
+                        if let Err(e) = std::fs::remove_dir(current) {
+                            tracing::debug!(
+                                "Failed to remove empty directory {}: {}",
+                                current.display(),
+                                e
+                            );
+                            break;
+                        } else {
+                            tracing::debug!("Removed empty directory: {}", current.display());
+                        }
                     } else {
-                        tracing::debug!("Removed empty directory: {}", current.display());
+                        break;
                     }
                 } else {
                     break;
                 }
-            } else {
-                break;
-            }
 
-            if let Some(next_parent) = current.parent() {
-                current = next_parent;
-            } else {
-                break;
+                if let Some(next_parent) = current.parent() {
+                    current = next_parent;
+                } else {
+                    break;
+                }
             }
         }
-    }
+    }).await;
 }
 
 /// Download a fixture file
@@ -2189,16 +2216,22 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
 
     let file_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
 
-    // Read the file content
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
+    // Read the file content using spawn_blocking
+    let file_path_clone = file_path.clone();
+    let (content, file_name) = tokio::task::spawn_blocking(move || {
+        let content = std::fs::read_to_string(&file_path_clone)
+            .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
 
-    // Get the filename for the download
-    let file_name = file_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("fixture.json")
-        .to_string();
+        let file_name = file_path_clone
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("fixture.json")
+            .to_string();
+
+        Ok::<_, Error>((content, file_name))
+    })
+    .await
+    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
 
     tracing::info!("Downloaded fixture file: {} ({} bytes)", file_path.display(), content.len());
     Ok((content, file_name))
@@ -2261,10 +2294,16 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
         )));
     }
 
-    // Rename the file
-    std::fs::rename(&old_path, &new_path).map_err(|e| {
-        Error::generic(format!("Failed to rename fixture file: {}", e))
-    })?;
+    // Rename the file using spawn_blocking
+    let old_path_clone = old_path.clone();
+    let new_path_clone = new_path.clone();
+    tokio::task::spawn_blocking(move || {
+        std::fs::rename(&old_path_clone, &new_path_clone).map_err(|e| {
+            Error::generic(format!("Failed to rename fixture file: {}", e))
+        })
+    })
+    .await
+    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
 
     tracing::info!("Renamed fixture file: {} -> {}", old_path.display(), new_path.display());
 
@@ -2343,17 +2382,24 @@ async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> 
         )));
     }
 
-    // Create parent directories if they don't exist
-    if let Some(parent) = new_full_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            Error::generic(format!("Failed to create target directory: {}", e))
-        })?;
-    }
+    // Create parent directories and move file using spawn_blocking
+    let old_path_clone = old_path.clone();
+    let new_full_path_clone = new_full_path.clone();
+    tokio::task::spawn_blocking(move || {
+        // Create parent directories if they don't exist
+        if let Some(parent) = new_full_path_clone.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::generic(format!("Failed to create target directory: {}", e))
+            })?;
+        }
 
-    // Move the file
-    std::fs::rename(&old_path, &new_full_path).map_err(|e| {
-        Error::generic(format!("Failed to move fixture file: {}", e))
-    })?;
+        // Move the file
+        std::fs::rename(&old_path_clone, &new_full_path_clone).map_err(|e| {
+            Error::generic(format!("Failed to move fixture file: {}", e))
+        })
+    })
+    .await
+    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
 
     tracing::info!("Moved fixture file: {} -> {}", old_path.display(), new_full_path.display());
 
@@ -2529,31 +2575,41 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
     // Validate the file content for security
     validate_file_content(content)?;
 
-    // Convert to PathBuf
-    let path = std::path::Path::new(file_path);
+    // Convert to PathBuf and clone data for spawn_blocking
+    let path = std::path::PathBuf::from(file_path);
+    let content = content.to_string();
 
-    // Create parent directories if they don't exist
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            Error::generic(format!("Failed to create directory {}: {}", parent.display(), e))
+    // Perform file operations using spawn_blocking
+    let path_clone = path.clone();
+    let content_clone = content.clone();
+    tokio::task::spawn_blocking(move || {
+        // Create parent directories if they don't exist
+        if let Some(parent) = path_clone.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::generic(format!("Failed to create directory {}: {}", parent.display(), e))
+            })?;
+        }
+
+        // Write the content to the file
+        std::fs::write(&path_clone, &content_clone)
+            .map_err(|e| Error::generic(format!("Failed to write file {}: {}", path_clone.display(), e)))?;
+
+        // Verify the file was written correctly
+        let written_content = std::fs::read_to_string(&path_clone).map_err(|e| {
+            Error::generic(format!("Failed to verify written file {}: {}", path_clone.display(), e))
         })?;
-    }
 
-    // Write the content to the file
-    std::fs::write(path, content)
-        .map_err(|e| Error::generic(format!("Failed to write file {}: {}", path.display(), e)))?;
+        if written_content != content_clone {
+            return Err(Error::generic(format!(
+                "File content verification failed for {}",
+                path_clone.display()
+            )));
+        }
 
-    // Verify the file was written correctly
-    let written_content = std::fs::read_to_string(path).map_err(|e| {
-        Error::generic(format!("Failed to verify written file {}: {}", path.display(), e))
-    })?;
-
-    if written_content != content {
-        return Err(Error::generic(format!(
-            "File content verification failed for {}",
-            path.display()
-        )));
-    }
+        Ok::<_, Error>(())
+    })
+    .await
+    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
 
     tracing::info!("File saved successfully: {} ({} bytes)", path.display(), content.len());
     Ok(())
