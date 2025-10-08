@@ -139,7 +139,7 @@ pub async fn startup_probe(State(state): State<AdminState>) -> Json<HealthRespon
     };
 
     let response = HealthResponse {
-        status,
+        status: status.clone(),
         timestamp,
         version: env!("CARGO_PKG_VERSION").to_string(),
         uptime_seconds: 0,

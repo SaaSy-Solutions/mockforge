@@ -70,6 +70,8 @@ pub fn create_admin_router(
         .route("/__mockforge/fixtures/{id}", delete(delete_fixture))
         .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
         .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
+        .route("/__mockforge/fixtures/{id}/rename", post(rename_fixture))
+        .route("/__mockforge/fixtures/{id}/move", post(move_fixture))
         .route("/__mockforge/import/insomnia", post(import_insomnia))
         // Plugin management routes
         .route("/__mockforge/plugins", get(get_plugins))

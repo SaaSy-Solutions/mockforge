@@ -2144,53 +2144,34 @@ pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> 
     let fixture_id = match params.get("id") {
         Some(id) => id,
         None => {
-            return match axum::response::Response::builder()
-                .status(http::StatusCode::BAD_REQUEST)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .body(r#"{"error": "Missing fixture ID parameter"}"#.to_string())
-            {
-                Ok(response) => response,
-                Err(e) => {
-                    tracing::error!("Failed to build error response: {}", e);
-                    (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
-                }
-            };
+            return (
+                http::StatusCode::BAD_REQUEST,
+                [(http::header::CONTENT_TYPE, "application/json")],
+                r#"{"error": "Missing fixture ID parameter"}"#
+            ).into_response();
         }
     };
 
     // Find and read the fixture file
     match download_fixture_by_id(fixture_id).await {
         Ok((content, file_name)) => {
-            match axum::response::Response::builder()
-                .status(http::StatusCode::OK)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .header(
-                    http::header::CONTENT_DISPOSITION,
-                    format!("attachment; filename=\"{}\"", file_name),
-                )
-                .body(content)
-            {
-                Ok(response) => response,
-                Err(e) => {
-                    tracing::error!("Failed to build success response: {}", e);
-                    (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
-                }
-            }
+            (
+                http::StatusCode::OK,
+                [
+                    (http::header::CONTENT_TYPE, "application/json".to_string()),
+                    (http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", file_name)),
+                ],
+                content
+            ).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to download fixture {}: {}", fixture_id, e);
             let error_response = format!(r#"{{"error": "Failed to download fixture: {}"}}"#, e);
-            match axum::response::Response::builder()
-                .status(http::StatusCode::NOT_FOUND)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .body(error_response)
-            {
-                Ok(response) => response,
-                Err(e) => {
-                    tracing::error!("Failed to build error response: {}", e);
-                    (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
-                }
-            }
+            (
+                http::StatusCode::NOT_FOUND,
+                [(http::header::CONTENT_TYPE, "application/json".to_string())],
+                error_response
+            ).into_response()
         }
     }
 }
@@ -2221,6 +2202,170 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
 
     tracing::info!("Downloaded fixture file: {} ({} bytes)", file_path.display(), content.len());
     Ok((content, file_name))
+}
+
+/// Rename a fixture
+pub async fn rename_fixture(
+    axum::extract::Path(fixture_id): axum::extract::Path<String>,
+    Json(payload): Json<FixtureRenameRequest>,
+) -> Json<ApiResponse<String>> {
+    match rename_fixture_by_id(&fixture_id, &payload.new_name).await {
+        Ok(new_path) => {
+            tracing::info!("Successfully renamed fixture: {} -> {}", fixture_id, payload.new_name);
+            Json(ApiResponse::success(format!("Fixture renamed successfully to: {}", new_path)))
+        }
+        Err(e) => {
+            tracing::error!("Failed to rename fixture {}: {}", fixture_id, e);
+            Json(ApiResponse::error(format!("Failed to rename fixture: {}", e)))
+        }
+    }
+}
+
+/// Rename a fixture by ID
+async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String> {
+    // Validate new name
+    if new_name.is_empty() {
+        return Err(Error::generic("New name cannot be empty".to_string()));
+    }
+
+    // Ensure new name ends with .json
+    let new_name = if new_name.ends_with(".json") {
+        new_name.to_string()
+    } else {
+        format!("{}.json", new_name)
+    };
+
+    // Find the fixture file
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+    if !fixtures_path.exists() {
+        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+    }
+
+    let old_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
+
+    // Get the parent directory and construct new path
+    let parent = old_path.parent().ok_or_else(|| {
+        Error::generic("Could not determine parent directory".to_string())
+    })?;
+
+    let new_path = parent.join(&new_name);
+
+    // Check if target already exists
+    if new_path.exists() {
+        return Err(Error::generic(format!(
+            "A fixture with name '{}' already exists in the same directory",
+            new_name
+        )));
+    }
+
+    // Rename the file
+    std::fs::rename(&old_path, &new_path).map_err(|e| {
+        Error::generic(format!("Failed to rename fixture file: {}", e))
+    })?;
+
+    tracing::info!("Renamed fixture file: {} -> {}", old_path.display(), new_path.display());
+
+    // Return relative path for display
+    Ok(new_path
+        .strip_prefix(fixtures_path)
+        .unwrap_or(&new_path)
+        .to_string_lossy()
+        .to_string())
+}
+
+/// Move a fixture to a new path
+pub async fn move_fixture(
+    axum::extract::Path(fixture_id): axum::extract::Path<String>,
+    Json(payload): Json<FixtureMoveRequest>,
+) -> Json<ApiResponse<String>> {
+    match move_fixture_by_id(&fixture_id, &payload.new_path).await {
+        Ok(new_location) => {
+            tracing::info!("Successfully moved fixture: {} -> {}", fixture_id, payload.new_path);
+            Json(ApiResponse::success(format!("Fixture moved successfully to: {}", new_location)))
+        }
+        Err(e) => {
+            tracing::error!("Failed to move fixture {}: {}", fixture_id, e);
+            Json(ApiResponse::error(format!("Failed to move fixture: {}", e)))
+        }
+    }
+}
+
+/// Move a fixture by ID to a new path
+async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> {
+    // Validate new path
+    if new_path.is_empty() {
+        return Err(Error::generic("New path cannot be empty".to_string()));
+    }
+
+    // Find the fixture file
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
+    let fixtures_path = std::path::Path::new(&fixtures_dir);
+
+    if !fixtures_path.exists() {
+        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+    }
+
+    let old_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
+
+    // Construct the new path - can be either relative to fixtures_dir or absolute within it
+    let new_full_path = if new_path.starts_with('/') {
+        // Absolute path within fixtures directory
+        fixtures_path.join(new_path.trim_start_matches('/'))
+    } else {
+        // Relative path from fixtures directory
+        fixtures_path.join(new_path)
+    };
+
+    // Ensure target ends with .json if it doesn't already
+    let new_full_path = if new_full_path.extension().and_then(|s| s.to_str()) == Some("json") {
+        new_full_path
+    } else {
+        // If the path is a directory or doesn't have .json extension, append the original filename
+        if new_full_path.is_dir() || !new_path.contains('.') {
+            let file_name = old_path.file_name().ok_or_else(|| {
+                Error::generic("Could not determine original file name".to_string())
+            })?;
+            new_full_path.join(file_name)
+        } else {
+            new_full_path.with_extension("json")
+        }
+    };
+
+    // Check if target already exists
+    if new_full_path.exists() {
+        return Err(Error::generic(format!(
+            "A fixture already exists at path: {}",
+            new_full_path.display()
+        )));
+    }
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = new_full_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            Error::generic(format!("Failed to create target directory: {}", e))
+        })?;
+    }
+
+    // Move the file
+    std::fs::rename(&old_path, &new_full_path).map_err(|e| {
+        Error::generic(format!("Failed to move fixture file: {}", e))
+    })?;
+
+    tracing::info!("Moved fixture file: {} -> {}", old_path.display(), new_full_path.display());
+
+    // Clean up empty directories from the old location
+    cleanup_empty_directories(&old_path).await;
+
+    // Return relative path for display
+    Ok(new_full_path
+        .strip_prefix(fixtures_path)
+        .unwrap_or(&new_full_path)
+        .to_string_lossy()
+        .to_string())
 }
 
 /// Get current validation settings
@@ -2500,6 +2645,18 @@ pub struct FixtureBulkDeleteResult {
     pub deleted_count: usize,
     pub total_requested: usize,
     pub errors: Vec<String>,
+}
+
+/// Fixture rename request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureRenameRequest {
+    pub new_name: String,
+}
+
+/// Fixture move request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureMoveRequest {
+    pub new_path: String,
 }
 
 /// File content request

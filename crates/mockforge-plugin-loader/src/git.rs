@@ -414,8 +414,8 @@ impl GitPluginLoader {
     fn init_submodules(&self, repo: &Repository) -> LoaderResult<()> {
         repo.submodules()
             .map_err(|e| PluginLoaderError::load(format!("Failed to get submodules: {}", e)))?
-            .iter()
-            .try_for_each(|mut submodule| {
+            .iter_mut()
+            .try_for_each(|submodule| {
                 submodule
                     .update(true, None)
                     .map_err(|e| PluginLoaderError::load(format!("Failed to update submodule: {}", e)))
