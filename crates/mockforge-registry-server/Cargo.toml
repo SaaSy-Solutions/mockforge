@@ -1,0 +1,60 @@
+[package]
+name = "mockforge-registry-server"
+version = "0.1.0"
+edition = "2021"
+authors = ["MockForge Contributors"]
+description = "Plugin registry server for MockForge"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1.35", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "compression"] }
+
+# Database
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "migrate"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Authentication
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+
+# Storage
+aws-sdk-s3 = "1.10"
+aws-config = "1.1"
+
+# Utilities
+anyhow = "1.0"
+thiserror = "1.0"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rust_decimal = "1.33"
+
+# Config
+config = "0.14"
+dotenvy = "0.15"
+
+# Security
+ring = "0.17"
+hex = "0.4"
+base64 = "0.21"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Rate limiting
+governor = "0.6"
+
+# Internal dependencies
+mockforge-plugin-registry = { path = "../mockforge-plugin-registry" }
+
+[dev-dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio-test = "0.4"

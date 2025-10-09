@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    container_name: mockforge-registry-db
+    environment:
+      POSTGRES_DB: mockforge_registry
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: mockforge-registry-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # MinIO client - create bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: mockforge-registry-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/mockforge-plugins --ignore-existing;
+      mc anonymous set download myminio/mockforge-plugins;
+      echo 'MinIO bucket created successfully';
+      "
+
+  # Registry server (optional - can run locally with cargo)
+  registry:
+    build:
+      context: ../..
+      dockerfile: crates/mockforge-registry-server/Dockerfile
+    container_name: mockforge-registry-server
+    environment:
+      DATABASE_URL: postgres://postgres:password@db:5432/mockforge_registry
+      JWT_SECRET: dev-secret-change-in-production
+      S3_BUCKET: mockforge-plugins
+      S3_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      PORT: 8080
+      RUST_LOG: info,mockforge_registry_server=debug
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    # Uncomment to enable
+    # profiles:
+    #   - full
+
+volumes:
+  postgres_data:
+  minio_data:
