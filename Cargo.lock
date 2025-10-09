@@ -3637,6 +3637,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mail-parser"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93c3b9e5d8b17faf573330bbc43b37d6e918c0a3bf8a88e7d0a220ebc84af9fc"
+dependencies = [
+ "encoding_rs",
+]
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3855,6 +3864,7 @@ dependencies = [
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
  "mockforge-recorder",
+ "mockforge-smtp",
  "mockforge-ui",
  "mockforge-ws",
  "predicates",
@@ -4271,6 +4281,27 @@ dependencies = [
  "tera",
  "thiserror 1.0.69",
  "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "mockforge-smtp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "criterion",
+ "mail-parser",
+ "mockforge-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml 0.9.34+deprecated",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 

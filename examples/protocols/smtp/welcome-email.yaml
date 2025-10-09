@@ -1,0 +1,101 @@
+# SMTP Fixture Example: Welcome Email
+#
+# This fixture simulates an email server that accepts messages
+# and optionally sends auto-replies.
+
+fixture:
+  name: "Welcome Email Handler"
+  description: "Accepts registration emails and sends welcome responses"
+  protocol: smtp
+
+# Matching criteria
+match:
+  # Match by recipient email pattern
+  recipient_pattern: "^user-.*@example\\.com$"
+
+  # Alternative: match by subject
+  # subject_pattern: ".*Registration.*"
+
+  # Match by sender
+  # sender: "noreply@app.example.com"
+
+# Response configuration
+response:
+  # SMTP response code (250 = success, 550 = reject)
+  status_code: 250
+  message: "Message accepted for delivery"
+
+  # Simulate processing delay
+  delay_ms: 100
+
+  # Auto-reply configuration (optional)
+  auto_reply:
+    enabled: true
+    from: "support@example.com"
+    to: "{{metadata.from}}"  # Reply to original sender
+    subject: "Welcome to Our Service!"
+
+    # Email body with template support
+    body: |
+      Dear Customer,
+
+      Thank you for registering with our service!
+
+      Your account has been created successfully.
+
+      Registration Details:
+      - Email: {{metadata.to}}
+      - Time: {{now}}
+      - Confirmation Code: {{uuid}}
+
+      Best regards,
+      The Team
+
+    # Optional HTML version
+    html_body: |
+      <html>
+      <body>
+        <h1>Welcome!</h1>
+        <p>Thank you for registering with our service!</p>
+        <p>Confirmation Code: <strong>{{uuid}}</strong></p>
+      </body>
+      </html>
+
+    # Email headers
+    headers:
+      X-Auto-Reply: "true"
+      X-MockForge-Fixture: "welcome-email"
+
+# Storage configuration
+storage:
+  # Save received emails to mailbox
+  save_to_mailbox: true
+
+  # Export to file
+  export_to_file:
+    enabled: true
+    path: "./received-emails/{{now | date '%Y-%m-%d'}}/{{uuid}}.eml"
+
+# Behavior simulation
+behavior:
+  # Simulate occasional failures
+  failure_rate: 0.0  # 0% failure rate
+
+  # Simulate delivery delays
+  latency:
+    min_ms: 50
+    max_ms: 200
+
+# Validation (optional)
+validation:
+  # Reject emails without proper headers
+  require_headers:
+    - "From"
+    - "To"
+    - "Subject"
+
+  # Reject oversized emails
+  max_size_bytes: 10485760  # 10MB
+
+  # Reject emails with attachments
+  reject_attachments: false

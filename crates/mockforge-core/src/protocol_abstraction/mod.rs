@@ -28,6 +28,8 @@ pub enum Protocol {
     Grpc,
     /// WebSocket protocol
     WebSocket,
+    /// SMTP/Email protocol
+    Smtp,
 }
 
 impl fmt::Display for Protocol {
@@ -37,6 +39,7 @@ impl fmt::Display for Protocol {
             Protocol::GraphQL => write!(f, "GraphQL"),
             Protocol::Grpc => write!(f, "gRPC"),
             Protocol::WebSocket => write!(f, "WebSocket"),
+            Protocol::Smtp => write!(f, "SMTP"),
         }
     }
 }
@@ -82,6 +85,8 @@ pub enum ResponseStatus {
     GraphQLStatus(bool),
     /// WebSocket status
     WebSocketStatus(bool),
+    /// SMTP status code (2xx = success, 4xx/5xx = error)
+    SmtpStatus(u16),
 }
 
 impl ResponseStatus {
@@ -92,6 +97,7 @@ impl ResponseStatus {
             ResponseStatus::GrpcStatus(code) => *code == 0, // gRPC OK = 0
             ResponseStatus::GraphQLStatus(success) => *success,
             ResponseStatus::WebSocketStatus(success) => *success,
+            ResponseStatus::SmtpStatus(code) => (200..300).contains(code), // 2xx codes are success
         }
     }
 
@@ -100,6 +106,7 @@ impl ResponseStatus {
         match self {
             ResponseStatus::HttpStatus(code) => Some(*code as i32),
             ResponseStatus::GrpcStatus(code) => Some(*code),
+            ResponseStatus::SmtpStatus(code) => Some(*code as i32),
             ResponseStatus::GraphQLStatus(_) | ResponseStatus::WebSocketStatus(_) => None,
         }
     }

@@ -459,6 +459,7 @@ impl ChainExecutionEngine {
         let templating_context = crate::templating::TemplatingContext {
             chain_context: Some(context.clone()),
             env_context: None,
+            virtual_clock: None,
         };
         crate::templating::expand_str_with_context(template, &templating_context)
     }

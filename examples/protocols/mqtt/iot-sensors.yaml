@@ -1,0 +1,166 @@
+# MQTT Fixture Example: IoT Sensor Simulation
+#
+# This fixture simulates IoT temperature and humidity sensors
+# publishing data to MQTT topics.
+
+fixture:
+  name: "IoT Sensor Network"
+  description: "Simulates temperature and humidity sensors"
+  protocol: mqtt
+
+# MQTT Topics Configuration
+topics:
+  # Temperature sensors
+  - name: "Temperature Sensors"
+    pattern: "sensors/temperature/+"  # Wildcard for any room
+    qos: 1  # QoS level (0, 1, or 2)
+    retained: true  # Last message is retained
+
+    # Message payload (uses template engine)
+    message:
+      payload:
+        sensor_id: "temp-{{pathParam 1}}"  # Extract room from topic
+        temperature: "{{faker.float 18.0 26.0 | round 1}}"
+        unit: "celsius"
+        battery: "{{faker.int 20 100}}"
+        timestamp: "{{now}}"
+        location:
+          room: "{{pathParam 1}}"
+          floor: "{{faker.int 1 5}}"
+
+      # Message format
+      format: json  # json, xml, or raw
+
+    # Publishing behavior
+    behavior:
+      # Auto-publish messages
+      auto_publish:
+        enabled: true
+        interval_ms: 5000  # Publish every 5 seconds
+        count: 0  # 0 = infinite
+
+      # Simulate sensor drift over time
+      drift:
+        enabled: true
+        field: "temperature"
+        rate: 0.1  # Change by ±0.1°C per message
+        bounds: [15.0, 30.0]  # Keep within bounds
+
+  # Humidity sensors
+  - name: "Humidity Sensors"
+    pattern: "sensors/humidity/#"  # Multi-level wildcard
+    qos: 1
+    retained: true
+
+    message:
+      payload:
+        sensor_id: "humid-{{uuid}}"
+        humidity: "{{faker.float 30.0 70.0 | round 1}}"
+        unit: "percent"
+        timestamp: "{{now}}"
+
+      # Add custom MQTT properties (MQTT 5.0)
+      properties:
+        content_type: "application/json"
+        correlation_data: "{{uuid}}"
+        user_properties:
+          sensor_type: "DHT22"
+          firmware_version: "1.2.3"
+
+    behavior:
+      auto_publish:
+        enabled: true
+        interval_ms: 10000  # Every 10 seconds
+
+  # Alert/alarm topic
+  - name: "Temperature Alerts"
+    pattern: "alerts/temperature/critical"
+    qos: 2  # Exactly once delivery
+    retained: false
+
+    message:
+      payload:
+        alert_id: "{{uuid}}"
+        severity: "CRITICAL"
+        message: "Temperature exceeded threshold"
+        temperature: "{{faker.float 30.0 40.0}}"
+        location: "{{faker.randomChoice ['Server Room', 'Storage', 'Lab']}}"
+        timestamp: "{{now}}"
+
+    # Conditional publishing
+    behavior:
+      auto_publish:
+        enabled: true
+        interval_ms: 60000  # Check every minute
+        probability: 0.1  # 10% chance of alert
+
+# Subscription scenarios
+subscriptions:
+  # Auto-subscribe to topics for testing
+  - topic: "sensors/#"
+    qos: 1
+    callback: "log_all_sensors"  # Built-in callback to log
+
+  - topic: "alerts/+/critical"
+    qos: 2
+    callback: "log_critical_alerts"
+
+# Last Will and Testament (LWT)
+last_will:
+  topic: "sensors/status/disconnected"
+  qos: 1
+  retained: true
+  payload:
+    status: "offline"
+    reason: "connection_lost"
+    timestamp: "{{now}}"
+
+# MQTT 5.0 Features
+mqtt5:
+  enabled: true
+
+  # Session expiry
+  session_expiry_interval: 3600  # 1 hour
+
+  # Message expiry
+  message_expiry_interval: 300  # 5 minutes
+
+  # Request-Response pattern
+  response_topic: "sensors/responses/{{clientId}}"
+
+# Behavior simulation
+simulation:
+  # Simulate network issues
+  network:
+    packet_loss_rate: 0.01  # 1% packet loss
+    disconnect_probability: 0.001  # 0.1% chance of disconnect
+    reconnect_delay_ms: 5000
+
+  # Simulate sensor failures
+  sensor_failures:
+    enabled: true
+    failure_rate: 0.005  # 0.5% chance of sensor failure
+    failure_duration_ms: 30000  # 30 seconds
+
+# Data patterns
+patterns:
+  # Simulate daily temperature cycle
+  - name: "Daily Temperature Cycle"
+    enabled: true
+    topics: ["sensors/temperature/+"]
+    type: "sinusoidal"
+    config:
+      base_value: 22.0  # Average temperature
+      amplitude: 4.0    # ±4°C variation
+      period_ms: 86400000  # 24 hours
+      phase_shift: 0
+
+  # Simulate occupancy-based humidity
+  - name: "Occupancy Humidity"
+    enabled: true
+    topics: ["sensors/humidity/+"]
+    type: "stepped"
+    config:
+      low_value: 35.0   # When unoccupied
+      high_value: 55.0  # When occupied
+      transition_ms: 1800000  # 30 minutes

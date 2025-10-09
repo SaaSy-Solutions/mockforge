@@ -9,7 +9,7 @@ use super::cache::{ResponseCache, generate_cache_key};
 use super::config::BehaviorModelConfig;
 use super::context::StatefulAiContext;
 use super::llm_client::LlmClient;
-use super::rules::{ConsistencyRule, EvaluationContext};
+use super::rules::EvaluationContext;
 use super::types::{BehaviorRules, LlmGenerationRequest};
 use crate::Result;
 

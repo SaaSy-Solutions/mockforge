@@ -1,0 +1,308 @@
+# Kafka Fixture Example: Order Event Stream
+#
+# This fixture simulates an e-commerce order processing system
+# with multiple topics and event types.
+
+fixture:
+  name: "E-commerce Order Events"
+  description: "Simulates order lifecycle events in Kafka"
+  protocol: kafka
+
+# Kafka cluster configuration
+cluster:
+  bootstrap_servers: "localhost:9092"
+  cluster_id: "mockforge-cluster"
+
+# Topic definitions
+topics:
+  # Orders topic
+  - name: "orders.created"
+    partitions: 3
+    replication_factor: 1
+
+    # Partition strategy
+    partitioning:
+      strategy: "key_hash"  # key_hash, round_robin, or custom
+
+    # Topic configuration
+    config:
+      retention_ms: 604800000  # 7 days
+      segment_ms: 86400000     # 1 day
+      compression_type: "gzip"
+      max_message_bytes: 1048576  # 1MB
+
+    # Message fixtures
+    messages:
+      - key_template: "order-{{uuid}}"
+
+        value:
+          event_type: "order.created"
+          order_id: "{{uuid}}"
+          customer_id: "customer-{{faker.int 1000 9999}}"
+          items:
+            - product_id: "{{faker.uuid}}"
+              name: "{{faker.productName}}"
+              quantity: "{{faker.int 1 5}}"
+              price: "{{faker.float 10.0 500.0 | round 2}}"
+          total: "{{faker.float 50.0 2000.0 | round 2}}"
+          currency: "USD"
+          status: "pending"
+          created_at: "{{now}}"
+
+        # Kafka headers
+        headers:
+          event_version: "1.0"
+          source_service: "order-service"
+          correlation_id: "{{uuid}}"
+
+        # Auto-produce configuration
+        auto_produce:
+          enabled: true
+          rate_per_second: 10  # 10 orders per second
+          duration_seconds: 0  # 0 = infinite
+          partition: null  # null = auto, or specify partition number
+
+  # Order status updates
+  - name: "orders.status-updated"
+    partitions: 3
+    replication_factor: 1
+
+    messages:
+      # Status progression: pending → processing → shipped → delivered
+      - key_template: "{{context.order_id}}"  # Same key as original order
+
+        value:
+          event_type: "order.status_updated"
+          order_id: "{{context.order_id}}"
+          previous_status: "{{context.previous_status}}"
+          new_status: "{{context.new_status}}"
+          updated_at: "{{now}}"
+          updated_by: "system"
+
+        headers:
+          event_version: "1.0"
+          source_service: "order-service"
+
+        # Produce based on state machine
+        auto_produce:
+          enabled: true
+          trigger: "state_machine"
+          state_machine:
+            initial_state: "pending"
+            states:
+              - name: "pending"
+                next_states: ["processing"]
+                probability: [1.0]
+                delay_ms: [2000, 5000]  # 2-5 seconds
+
+              - name: "processing"
+                next_states: ["shipped", "cancelled"]
+                probability: [0.95, 0.05]  # 95% shipped, 5% cancelled
+                delay_ms: [10000, 30000]  # 10-30 seconds
+
+              - name: "shipped"
+                next_states: ["delivered"]
+                probability: [1.0]
+                delay_ms: [86400000, 259200000]  # 1-3 days
+
+              - name: "delivered"
+                next_states: []  # Terminal state
+
+              - name: "cancelled"
+                next_states: []  # Terminal state
+
+  # Payment events
+  - name: "payments.processed"
+    partitions: 3
+    replication_factor: 1
+
+    messages:
+      - key_template: "payment-{{uuid}}"
+
+        value:
+          event_type: "payment.processed"
+          payment_id: "{{uuid}}"
+          order_id: "{{context.order_id}}"
+          amount: "{{context.order_total}}"
+          currency: "USD"
+          payment_method: "{{faker.randomChoice ['credit_card', 'debit_card', 'paypal', 'stripe']}}"
+          status: "{{faker.randomChoice ['success', 'failed'] | withProbability [0.98, 0.02]}}"
+          processed_at: "{{now}}"
+
+        headers:
+          event_version: "1.0"
+          source_service: "payment-service"
+          idempotency_key: "{{uuid}}"
+
+  # Inventory updates
+  - name: "inventory.updated"
+    partitions: 5
+    replication_factor: 1
+
+    messages:
+      - key_template: "product-{{context.product_id}}"
+
+        value:
+          event_type: "inventory.updated"
+          product_id: "{{context.product_id}}"
+          quantity_change: -1  # Decrement for each order
+          new_quantity: "{{faker.int 0 1000}}"
+          warehouse_id: "{{faker.randomChoice ['WH-001', 'WH-002', 'WH-003']}}"
+          updated_at: "{{now}}"
+
+# Consumer Groups
+consumer_groups:
+  # Order processing service
+  - group_id: "order-processor"
+    topics: ["orders.created"]
+    auto_offset_reset: "earliest"  # earliest or latest
+    enable_auto_commit: true
+
+    # Simulate consumer lag
+    simulation:
+      lag_messages: 100  # Start with 100 messages lag
+      processing_rate_ms: [100, 500]  # Process each message in 100-500ms
+      commit_interval_ms: 5000
+
+  # Analytics service
+  - group_id: "analytics-service"
+    topics: ["orders.created", "orders.status-updated", "payments.processed"]
+    auto_offset_reset: "latest"
+
+    simulation:
+      lag_messages: 0
+      processing_rate_ms: [50, 150]
+
+  # Email notification service
+  - group_id: "notification-service"
+    topics: ["orders.status-updated"]
+    auto_offset_reset: "latest"
+
+    simulation:
+      # Simulate slow consumer
+      lag_messages: 500
+      processing_rate_ms: [1000, 3000]  # 1-3 seconds per message
+
+# Data relationships
+relationships:
+  # Link orders to status updates
+  - from_topic: "orders.created"
+    to_topic: "orders.status-updated"
+    relationship: "one_to_many"
+    key_mapping:
+      order_id: "order_id"
+
+  # Link orders to payments
+  - from_topic: "orders.created"
+    to_topic: "payments.processed"
+    relationship: "one_to_one"
+    key_mapping:
+      order_id: "order_id"
+
+# Scenario-based testing
+scenarios:
+  # Normal order flow
+  - name: "Successful Order"
+    enabled: true
+    probability: 0.85  # 85% of orders
+
+    sequence:
+      - topic: "orders.created"
+        message: "order_created_template"
+
+      - topic: "payments.processed"
+        message: "payment_success_template"
+        delay_ms: [1000, 3000]
+
+      - topic: "orders.status-updated"
+        message: "status_processing_template"
+        delay_ms: [2000, 5000]
+
+      - topic: "inventory.updated"
+        message: "inventory_decrement_template"
+        delay_ms: [500, 1000]
+
+      - topic: "orders.status-updated"
+        message: "status_shipped_template"
+        delay_ms: [86400000, 172800000]  # 1-2 days
+
+  # Failed payment scenario
+  - name: "Failed Payment"
+    enabled: true
+    probability: 0.05  # 5% of orders
+
+    sequence:
+      - topic: "orders.created"
+        message: "order_created_template"
+
+      - topic: "payments.processed"
+        message: "payment_failed_template"
+        delay_ms: [1000, 3000]
+
+      - topic: "orders.status-updated"
+        message: "status_cancelled_template"
+        delay_ms: [5000, 10000]
+
+  # High-value order (triggers fraud check)
+  - name: "High Value Order"
+    enabled: true
+    probability: 0.10  # 10% of orders
+
+    condition:
+      field: "total"
+      operator: ">"
+      value: 1000.0
+
+    sequence:
+      - topic: "orders.created"
+        message: "order_created_template"
+
+      - topic: "fraud.check-requested"
+        message: "fraud_check_template"
+        delay_ms: [500, 1000]
+
+      - topic: "fraud.check-completed"
+        message: "fraud_check_result_template"
+        delay_ms: [5000, 15000]
+
+      - topic: "payments.processed"
+        message: "payment_success_template"
+        delay_ms: [2000, 5000]
+
+# Failure simulation
+failure_simulation:
+  # Simulate broker failures
+  broker_failures:
+    enabled: true
+    failure_rate: 0.001  # 0.1% chance
+    duration_ms: [5000, 30000]  # 5-30 seconds
+    affected_partitions: "random"  # or specific partition numbers
+
+  # Simulate network partitions
+  network_partitions:
+    enabled: true
+    partition_rate: 0.0005  # 0.05% chance
+    duration_ms: [10000, 60000]  # 10-60 seconds
+
+  # Simulate slow brokers
+  slow_broker:
+    enabled: true
+    probability: 0.01  # 1% chance
+    latency_increase_ms: [1000, 5000]
+
+# Monitoring and metrics
+monitoring:
+  # Export metrics
+  prometheus:
+    enabled: true
+    port: 9090
+    metrics:
+      - kafka_messages_produced_total
+      - kafka_messages_consumed_total
+      - kafka_consumer_lag
+      - kafka_topic_partition_count
+
+  # Export trace data
+  jaeger:
+    enabled: true
+    endpoint: "http://localhost:14268/api/traces"

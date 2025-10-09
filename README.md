@@ -63,7 +63,7 @@ All commands, options, and features documented in each protocol section (HTTP, g
 
 ## ✨ Features
 
-- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, and WebSocket connections
+- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, and SMTP email testing
 - **🧠 AI-Powered Mocking** *(Industry First)*: Revolutionary artificial intelligence features:
   - **Intelligent Mock Generation**: Generate realistic responses from natural language prompts
     - Natural language → realistic JSON data
@@ -311,6 +311,61 @@ responses:
 ## HTTP
 
 curl <http://localhost:3000/ping>
+
+## SMTP Email Testing
+
+MockForge includes a fully functional SMTP server for testing email workflows:
+
+```bash
+# Start SMTP server
+mockforge serve --smtp --smtp-port 1025
+
+# Send test email with Python
+python3 << EOF
+import smtplib
+from email.message import EmailMessage
+
+msg = EmailMessage()
+msg['Subject'] = 'Test Email'
+msg['From'] = 'sender@example.com'
+msg['To'] = 'recipient@example.com'
+msg.set_content('This is a test email.')
+
+with smtplib.SMTP('localhost', 1025) as server:
+    server.send_message(msg)
+    print("Email sent successfully!")
+EOF
+
+# Or use command-line tools
+swaks --to recipient@example.com \
+      --from sender@example.com \
+      --server localhost:1025 \
+      --body "Test email"
+```
+
+### SMTP Features
+
+- ✅ RFC 5321 compliant (HELO, EHLO, MAIL, RCPT, DATA, QUIT, RSET, NOOP, HELP)
+- ✅ Fixture-based email matching (regex patterns for recipients, senders, subjects)
+- ✅ In-memory mailbox with size limits
+- ✅ Auto-reply configuration with templates
+- ✅ Template expansion support (faker functions, UUIDs, timestamps)
+- ✅ Storage options (in-memory, file export)
+- ✅ Configurable behavior (delays, failure rates)
+
+### SMTP Configuration Example
+
+```yaml
+smtp:
+  enabled: true
+  port: 1025
+  hostname: "mockforge-smtp"
+  fixtures_dir: "./fixtures/smtp"
+  enable_mailbox: true
+  max_mailbox_messages: 1000
+```
+
+See [SMTP documentation](book/src/protocols/smtp/) for complete guide.
 
 ## WebSocket (Scripted Replay)
 

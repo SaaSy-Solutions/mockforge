@@ -56,6 +56,10 @@ enum Commands {
         #[arg(long, default_value = "50051", help_heading = "Server Ports")]
         grpc_port: u16,
 
+        /// SMTP server port
+        #[arg(long, default_value = "1025", help_heading = "Server Ports")]
+        smtp_port: u16,
+
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
         admin: bool,
@@ -845,6 +849,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             http_port,
             ws_port,
             grpc_port,
+            smtp_port,
             admin,
             admin_port,
             metrics,
@@ -924,6 +929,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 http_port,
                 ws_port,
                 grpc_port,
+                smtp_port,
                 admin,
                 admin_port,
                 metrics,
@@ -1424,6 +1430,7 @@ async fn handle_serve(
     http_port: u16,
     ws_port: u16,
     grpc_port: u16,
+    smtp_port: u16,
     admin: bool,
     admin_port: u16,
     metrics: bool,
@@ -1725,6 +1732,47 @@ async fn handle_serve(
         }
     });
 
+    // Start SMTP server (if enabled)
+    let smtp_handle = if config.smtp.enabled {
+        let smtp_config = config.smtp.clone();
+        let smtp_shutdown = shutdown_token.clone();
+
+        Some(tokio::spawn(async move {
+            use mockforge_smtp::{SmtpServer, SmtpSpecRegistry};
+            use std::sync::Arc;
+
+            println!("📧 SMTP server listening on {}:{}", smtp_config.host, smtp_config.port);
+
+            // Create registry and load fixtures
+            let mut registry = SmtpSpecRegistry::with_mailbox_size(smtp_config.max_mailbox_messages);
+
+            if let Some(fixtures_dir) = &smtp_config.fixtures_dir {
+                if fixtures_dir.exists() {
+                    if let Err(e) = registry.load_fixtures(fixtures_dir) {
+                        eprintln!("⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}", fixtures_dir, e);
+                    } else {
+                        println!("   Loaded SMTP fixtures from {:?}", fixtures_dir);
+                    }
+                } else {
+                    println!("   No SMTP fixtures directory found at {:?}", fixtures_dir);
+                }
+            }
+
+            let server = SmtpServer::new(smtp_config, Arc::new(registry));
+
+            tokio::select! {
+                result = server.start() => {
+                    result.map_err(|e| format!("SMTP server error: {}", e))
+                }
+                _ = smtp_shutdown.cancelled() => {
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {
         let admin_port = config.admin.port;
@@ -1874,6 +1922,30 @@ async fn handle_serve(
                 }
                 Some(Err(e)) => {
                     let error = format!("Metrics server task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+                None => None
+            }
+        }
+        result = async {
+            if let Some(handle) = smtp_handle {
+                Some(handle.await)
+            } else {
+                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
+            }
+        } => {
+            match result {
+                Some(Ok(Ok(()))) => {
+                    println!("📧 SMTP server stopped gracefully");
+                    None
+                }
+                Some(Ok(Err(e))) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Some(Err(e)) => {
+                    let error = format!("SMTP server task panicked: {}", e);
                     eprintln!("❌ {}", error);
                     Some(error)
                 }

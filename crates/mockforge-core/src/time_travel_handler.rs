@@ -6,11 +6,11 @@
 use crate::time_travel::{ResponseScheduler, ScheduledResponse, VirtualClock};
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderValue, Response, StatusCode},
+    http::{HeaderValue, Response, StatusCode},
     response::IntoResponse,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 
 /// Handler that checks for and returns scheduled responses
 pub struct TimeTravelHandler {
@@ -156,14 +156,11 @@ impl IntoResponse for ScheduledResponseWrapper {
 }
 
 /// Middleware layer for checking scheduled responses
-pub async fn time_travel_middleware<B>(
+pub async fn time_travel_middleware(
     handler: Arc<TimeTravelHandler>,
-    request: axum::http::Request<B>,
-    next: axum::middleware::Next<B>,
-) -> impl IntoResponse
-where
-    B: Send + 'static,
-{
+    request: axum::http::Request<Body>,
+    next: axum::middleware::Next,
+) -> impl IntoResponse {
     // Check if there's a scheduled response
     if let Some(scheduled) = handler.check_for_scheduled_response() {
         info!("Returning scheduled response: {}", scheduled.inner().id);

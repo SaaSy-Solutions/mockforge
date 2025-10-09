@@ -98,6 +98,8 @@ pub struct ServerConfig {
     pub websocket: WebSocketConfig,
     /// gRPC server configuration
     pub grpc: GrpcConfig,
+    /// SMTP server configuration
+    pub smtp: SmtpConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
     /// Request chaining configuration
@@ -220,6 +222,45 @@ pub struct TlsConfig {
     pub cert_path: String,
     /// Private key file path
     pub key_path: String,
+}
+
+/// SMTP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmtpConfig {
+    /// Enable SMTP server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Server hostname for SMTP greeting
+    pub hostname: String,
+    /// Directory containing fixture files
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Connection timeout in seconds
+    pub timeout_secs: u64,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Enable mailbox storage
+    pub enable_mailbox: bool,
+    /// Maximum mailbox size
+    pub max_mailbox_messages: usize,
+}
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 1025,
+            host: "0.0.0.0".to_string(),
+            hostname: "mockforge-smtp".to_string(),
+            fixtures_dir: Some(std::path::PathBuf::from("./fixtures/smtp")),
+            timeout_secs: 300,
+            max_connections: 10,
+            enable_mailbox: true,
+            max_mailbox_messages: 1000,
+        }
+    }
 }
 
 /// Admin UI configuration
@@ -678,6 +719,25 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         if let Ok(port_num) = port.parse() {
             config.grpc.port = port_num;
         }
+    }
+
+    // SMTP server overrides
+    if let Ok(port) = std::env::var("MOCKFORGE_SMTP_PORT") {
+        if let Ok(port_num) = port.parse() {
+            config.smtp.port = port_num;
+        }
+    }
+
+    if let Ok(host) = std::env::var("MOCKFORGE_SMTP_HOST") {
+        config.smtp.host = host;
+    }
+
+    if let Ok(enabled) = std::env::var("MOCKFORGE_SMTP_ENABLED") {
+        config.smtp.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
+    }
+
+    if let Ok(hostname) = std::env::var("MOCKFORGE_SMTP_HOSTNAME") {
+        config.smtp.hostname = hostname;
     }
 
     // Admin UI overrides

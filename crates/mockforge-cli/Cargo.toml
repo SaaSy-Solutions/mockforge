@@ -27,6 +27,7 @@ mockforge-http = { path = "../mockforge-http" }
 mockforge-ws = { path = "../mockforge-ws" }
 mockforge-grpc = { path = "../mockforge-grpc" }
 mockforge-graphql = { path = "../mockforge-graphql" }
+mockforge-smtp = { path = "../mockforge-smtp" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-ui = { path = "../mockforge-ui" }
 mockforge-observability = { path = "../mockforge-observability" }

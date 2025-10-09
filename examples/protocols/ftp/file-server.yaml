@@ -1,0 +1,314 @@
+# FTP Fixture Example: Virtual File Server
+#
+# This fixture simulates an FTP server with virtual files
+# for testing file transfer scenarios.
+
+fixture:
+  name: "FTP File Server"
+  description: "Virtual FTP server with generated files"
+  protocol: ftp
+
+# FTP Server configuration
+server:
+  port: 2121
+  passive_ports: "50000-50100"  # Passive mode port range
+  max_connections: 10
+  timeout_seconds: 300
+
+  # Authentication
+  authentication:
+    mode: "basic"  # basic, anonymous, or plugin
+    allow_anonymous: true
+    users:
+      - username: "testuser"
+        password: "testpass"
+        home_directory: "/home/testuser"
+        permissions: "rwx"
+
+      - username: "readonly"
+        password: "readonly"
+        home_directory: "/public"
+        permissions: "r"
+
+# Virtual file system
+virtual_filesystem:
+  root: "/mockforge-ftp"
+
+  # Directory structure
+  directories:
+    - path: "/uploads"
+      permissions: "777"
+      owner: "mockforge"
+      group: "users"
+
+    - path: "/downloads"
+      permissions: "755"
+      owner: "mockforge"
+      group: "users"
+
+    - path: "/public"
+      permissions: "755"
+      owner: "mockforge"
+      group: "users"
+
+  # Virtual files
+  files:
+    # Static file
+    - path: "/downloads/readme.txt"
+      permissions: "644"
+      owner: "mockforge"
+      group: "users"
+      content:
+        type: "static"
+        data: |
+          Welcome to MockForge FTP Server
+          ================================
+
+          This is a virtual FTP server for testing file transfers.
+
+          Supported commands:
+          - LIST, RETR, STOR, DELE, MKD, RMD, PWD, CWD
+
+          For more information, visit https://mockforge.dev
+
+      metadata:
+        modified_time: "{{now}}"
+        size: "auto"  # Auto-calculate from content
+
+    # Template-based CSV file
+    - path: "/downloads/users.csv"
+      permissions: "644"
+      content:
+        type: "template"
+        template: |
+          id,name,email,created_at
+          {{#each (range 1 1001)}}
+          {{this}},{{faker.name}},{{faker.email}},{{faker.date}}
+          {{/each}}
+
+      metadata:
+        modified_time: "{{now-7d}}"
+
+    # Generated binary file
+    - path: "/downloads/test-data.bin"
+      permissions: "644"
+      content:
+        type: "generated"
+        size: 104857600  # 100MB
+        pattern: "random"  # random, zeros, sequential, or custom
+
+    # Large CSV for testing
+    - path: "/downloads/large-dataset.csv"
+      permissions: "644"
+      content:
+        type: "template"
+        template: |
+          id,timestamp,value,category
+          {{#each (range 1 100001)}}
+          {{this}},{{faker.timestamp}},{{faker.float 0.0 100.0}},{{faker.randomChoice ['A', 'B', 'C', 'D']}}
+          {{/each}}
+
+    # JSON data file
+    - path: "/downloads/products.json"
+      permissions: "644"
+      content:
+        type: "template"
+        template: |
+          {
+            "products": [
+              {{#each (range 1 101)}}
+              {
+                "id": "{{this}}",
+                "name": "{{faker.productName}}",
+                "price": {{faker.float 10.0 1000.0 | round 2}},
+                "category": "{{faker.randomChoice ['Electronics', 'Clothing', 'Books', 'Home']}}",
+                "in_stock": {{faker.boolean}},
+                "created_at": "{{faker.date}}"
+              }{{#unless @last}},{{/unless}}
+              {{/each}}
+            ]
+          }
+
+    # XML data file
+    - path: "/downloads/orders.xml"
+      permissions: "644"
+      content:
+        type: "template"
+        template: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <orders>
+            {{#each (range 1 51)}}
+            <order id="{{this}}">
+              <customer>{{faker.name}}</customer>
+              <email>{{faker.email}}</email>
+              <total>{{faker.float 50.0 500.0 | round 2}}</total>
+              <status>{{faker.randomChoice ['pending', 'processing', 'shipped', 'delivered']}}</status>
+              <created_at>{{faker.timestamp}}</created_at>
+            </order>
+            {{/each}}
+          </orders>
+
+    # Image file (placeholder)
+    - path: "/downloads/placeholder.png"
+      permissions: "644"
+      content:
+        type: "binary"
+        source: "builtin://placeholder-image"
+        options:
+          width: 800
+          height: 600
+          format: "png"
+          text: "MockForge Test Image"
+
+# Upload handling
+upload_handling:
+  # Allow uploads to specific directories
+  allowed_directories:
+    - "/uploads"
+    - "/home/testuser/uploads"
+
+  # File validation
+  validation:
+    max_file_size: 104857600  # 100MB
+    allowed_extensions: [".txt", ".csv", ".json", ".xml", ".pdf", ".zip"]
+    deny_executable: true
+
+  # Storage options
+  storage:
+    # In-memory (default)
+    mode: "memory"
+    max_total_size: 1073741824  # 1GB
+
+    # Or persist to disk
+    # mode: "disk"
+    # path: "./ftp-uploads"
+
+  # Auto-process uploaded files
+  processing:
+    # Scan for viruses (mock)
+    virus_scan:
+      enabled: true
+      scan_delay_ms: [1000, 3000]
+      clean_probability: 0.99  # 99% files are clean
+
+    # Validate file format
+    format_validation:
+      enabled: true
+      validators:
+        - extension: ".csv"
+          validator: "csv"
+        - extension: ".json"
+          validator: "json"
+        - extension: ".xml"
+          validator: "xml"
+
+# Dynamic file generation
+dynamic_files:
+  # Generate files on-demand
+  - pattern: "/logs/app-{date}.log"
+    generator: "log_file"
+    config:
+      date_format: "%Y-%m-%d"
+      lines_per_file: 10000
+      log_template: "{{timestamp}} [{{level}}] {{message}}"
+
+  - pattern: "/reports/sales-{year}-{month}.csv"
+    generator: "sales_report"
+    config:
+      rows_per_day: 100
+      columns: ["date", "product", "quantity", "revenue"]
+
+# FTP command responses
+command_responses:
+  # Customize responses for specific commands
+  SYST:
+    response: "215 UNIX Type: L8"
+
+  FEAT:
+    features:
+      - "SIZE"
+      - "MDTM"
+      - "UTF8"
+      - "PASV"
+      - "EPSV"
+
+  HELP:
+    message: |
+      214-The following commands are recognized:
+      USER PASS QUIT CWD PWD MKD RMD DELE
+      LIST NLST RETR STOR APPE RNFR RNTO
+      SYST TYPE NOOP PASV PORT SIZE MDTM
+      214 End
+
+# Behavior simulation
+behavior:
+  # Simulate slow transfers
+  bandwidth_limit:
+    enabled: true
+    download_kbps: 1024  # 1MB/s
+    upload_kbps: 512     # 512KB/s
+
+  # Simulate connection issues
+  connection_failures:
+    enabled: true
+    failure_rate: 0.01  # 1% chance
+    types: ["timeout", "connection_reset", "refused"]
+
+  # Simulate quota limits
+  quota:
+    enabled: true
+    per_user_limit_bytes: 104857600  # 100MB per user
+    total_limit_bytes: 1073741824    # 1GB total
+
+# Monitoring
+monitoring:
+  # Log all FTP commands
+  command_logging:
+    enabled: true
+    log_file: "./ftp-commands.log"
+
+  # Track file transfers
+  transfer_logging:
+    enabled: true
+    log_file: "./ftp-transfers.log"
+    include_details: true  # Log file sizes, durations, etc.
+
+# Testing scenarios
+scenarios:
+  # File download test
+  - name: "Download Test Files"
+    description: "Download multiple files sequentially"
+    steps:
+      - command: "USER testuser"
+      - command: "PASS testpass"
+      - command: "CWD /downloads"
+      - command: "RETR readme.txt"
+      - command: "RETR users.csv"
+      - command: "QUIT"
+
+  # File upload test
+  - name: "Upload and Verify"
+    description: "Upload file and verify it exists"
+    steps:
+      - command: "USER testuser"
+      - command: "PASS testpass"
+      - command: "CWD /uploads"
+      - command: "STOR test-upload.txt"
+        data: "This is a test upload"
+      - command: "LIST"
+        expected_contains: "test-upload.txt"
+      - command: "QUIT"
+
+  # Directory operations
+  - name: "Directory Management"
+    description: "Create, navigate, and delete directories"
+    steps:
+      - command: "USER testuser"
+      - command: "PASS testpass"
+      - command: "MKD /home/testuser/new-folder"
+      - command: "CWD /home/testuser/new-folder"
+      - command: "PWD"
+        expected: "/home/testuser/new-folder"
+      - command: "CWD .."
+      - command: "RMD new-folder"
+      - command: "QUIT"
