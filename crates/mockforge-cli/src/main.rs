@@ -832,16 +832,21 @@ enum DataCommands {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
-    // Initialize tracing with configurable log level
-    let log_level = cli.log_level.parse::<tracing::Level>()
-        .unwrap_or_else(|_| {
-            eprintln!("Invalid log level '{}', defaulting to info", cli.log_level);
-            tracing::Level::INFO
-        });
+    // Initialize logging with the provided log level
+    // Note: Full logging configuration (JSON format, file output) will be applied
+    // after loading the config file in the serve command
+    let initial_logging_config = mockforge_observability::LoggingConfig {
+        level: cli.log_level.clone(),
+        json_format: false, // Will be overridden by config file if present
+        file_path: None,
+        max_file_size_mb: 10,
+        max_files: 5,
+    };
 
-    tracing_subscriber::fmt()
-        .with_max_level(log_level)
-        .init();
+    if let Err(e) = mockforge_observability::init_logging(initial_logging_config) {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
 
     match cli.command {
         Commands::Serve {
@@ -1425,6 +1430,39 @@ async fn validate_serve_config(
     Ok(())
 }
 
+/// Initialize OpenTelemetry tracing with the given configuration
+fn initialize_opentelemetry_tracing(
+    otel_config: &mockforge_core::config::OpenTelemetryConfig,
+    logging_config: &mockforge_observability::LoggingConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use mockforge_tracing::{init_tracer, TracingConfig};
+    use tracing_subscriber::layer::SubscriberExt;
+
+    // Create tracing configuration from OpenTelemetry config
+    let tracing_config = if let Some(ref otlp_endpoint) = otel_config.otlp_endpoint {
+        TracingConfig::with_otlp(otel_config.service_name.clone(), otlp_endpoint.clone())
+    } else {
+        TracingConfig::with_jaeger(
+            otel_config.service_name.clone(),
+            otel_config.jaeger_endpoint.clone(),
+        )
+    }
+    .with_sampling_rate(otel_config.sampling_rate)
+    .with_environment(otel_config.environment.clone());
+
+    // Initialize the tracer
+    let tracer = init_tracer(tracing_config)?;
+
+    // Create OpenTelemetry layer
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    // Initialize logging with OpenTelemetry layer
+    mockforge_observability::init_logging_with_otel(logging_config.clone(), otel_layer)?;
+
+    tracing::info!("OpenTelemetry tracing initialized successfully");
+    Ok(())
+}
+
 async fn handle_serve(
     config_path: Option<PathBuf>,
     http_port: u16,
@@ -1581,6 +1619,30 @@ async fn handle_serve(
             .with_delay_range(chaos_random_min_delay, chaos_random_max_delay);
 
         config.core.chaos_random = Some(chaos_config);
+    }
+
+    // Re-initialize logging with configuration from config file
+    // This allows JSON logging, file output, and OpenTelemetry integration
+    let logging_config = mockforge_observability::LoggingConfig {
+        level: config.logging.level.clone(),
+        json_format: config.logging.json_format,
+        file_path: config.logging.file_path.as_ref().map(|p| p.into()),
+        max_file_size_mb: config.logging.max_file_size_mb,
+        max_files: config.logging.max_files,
+    };
+
+    // If OpenTelemetry tracing is enabled, initialize with tracing layer
+    if let Some(ref otel_config) = config.observability.opentelemetry {
+        if otel_config.enabled {
+            // Initialize OpenTelemetry tracer
+            if let Err(e) = initialize_opentelemetry_tracing(&otel_config, &logging_config) {
+                tracing::warn!("Failed to initialize OpenTelemetry tracing: {}", e);
+                // Fall back to standard logging
+                if let Err(e) = mockforge_observability::init_logging(logging_config) {
+                    eprintln!("Failed to initialize logging: {}", e);
+                }
+            }
+        }
     }
 
     println!("🚀 Starting MockForge servers...");

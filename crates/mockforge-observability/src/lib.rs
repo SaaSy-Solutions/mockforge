@@ -1,6 +1,7 @@
 //! MockForge Observability
 //!
 //! Provides comprehensive observability features including:
+//! - Structured logging with JSON support
 //! - Prometheus metrics export
 //! - OpenTelemetry distributed tracing
 //! - Request/response recording (flight recorder)
@@ -16,12 +17,16 @@
 //! registry.record_http_request("GET", 200, 0.045);
 //! ```
 
+pub mod logging;
 pub mod prometheus;
 pub mod system_metrics;
+pub mod tracing_integration;
 
 // Re-export commonly used items
+pub use logging::{init_logging, init_logging_with_otel, LoggingConfig};
 pub use prometheus::{MetricsRegistry, get_global_registry};
 pub use system_metrics::{start_system_metrics_collector, SystemMetricsConfig};
+pub use tracing_integration::{init_with_otel, shutdown_otel, OtelTracingConfig};
 
 /// Protocol types for metrics tracking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
