@@ -169,6 +169,7 @@
 
 pub mod ai_response;
 pub mod cache;
+pub mod chaos_utilities;
 pub mod chain_execution;
 pub mod collection_export;
 pub mod conditions;
@@ -180,6 +181,7 @@ pub mod error;
 pub mod failure_injection;
 pub mod import;
 pub mod latency;
+pub mod network_profiles;
 pub mod openapi;
 pub mod openapi_routes;
 pub mod overrides;
@@ -205,6 +207,7 @@ pub mod workspace_persistence;
 pub mod ws_proxy;
 
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
+pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ApiKeyConfig,
@@ -215,6 +218,7 @@ pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
 };
 pub use latency::LatencyProfile;
+pub use network_profiles::{NetworkProfile, NetworkProfileCatalog};
 pub use openapi::{
     OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSecurityRequirement, OpenApiSpec,
 };
@@ -283,6 +287,8 @@ pub struct Config {
     pub default_latency: LatencyProfile,
     /// Traffic shaping configuration
     pub traffic_shaping: TrafficShapingConfig,
+    /// Random chaos configuration
+    pub chaos_random: Option<ChaosConfig>,
     /// Maximum number of request logs to keep in memory (default: 1000)
     /// Helps prevent unbounded memory growth from request logging
     pub max_request_logs: usize,
@@ -300,8 +306,21 @@ impl Default for Config {
             proxy: None,
             default_latency: LatencyProfile::default(),
             traffic_shaping: TrafficShapingConfig::default(),
+            chaos_random: None,
             max_request_logs: 1000, // Default: keep last 1000 requests
         }
+    }
+}
+
+impl Config {
+    /// Create a ChaosEngine from the chaos_random configuration if enabled
+    pub fn create_chaos_engine(&self) -> Option<ChaosEngine> {
+        self.chaos_random.as_ref().map(|config| ChaosEngine::new(config.clone()))
+    }
+
+    /// Check if random chaos mode is enabled
+    pub fn is_chaos_random_enabled(&self) -> bool {
+        self.chaos_random.as_ref().map(|c| c.enabled).unwrap_or(false)
     }
 }
 

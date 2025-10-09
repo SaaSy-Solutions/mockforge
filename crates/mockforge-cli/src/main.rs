@@ -256,6 +256,34 @@ enum Commands {
         #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
         burst_size: u64,
 
+        /// Network condition profile (3g, 4g, 5g, satellite_leo, satellite_geo, congested, lossy, high_latency, intermittent, extremely_poor, perfect)
+        #[arg(long, help_heading = "Network Profiles")]
+        network_profile: Option<String>,
+
+        /// List all available network profiles with descriptions
+        #[arg(long, help_heading = "Network Profiles")]
+        list_network_profiles: bool,
+
+        /// Enable random chaos mode (randomly injects errors and delays)
+        #[arg(long, help_heading = "Chaos Engineering - Random")]
+        chaos_random: bool,
+
+        /// Random chaos: error injection rate (0.0-1.0)
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - Random")]
+        chaos_random_error_rate: f64,
+
+        /// Random chaos: delay injection rate (0.0-1.0)
+        #[arg(long, default_value = "0.3", help_heading = "Chaos Engineering - Random")]
+        chaos_random_delay_rate: f64,
+
+        /// Random chaos: minimum delay in milliseconds
+        #[arg(long, default_value = "100", help_heading = "Chaos Engineering - Random")]
+        chaos_random_min_delay: u64,
+
+        /// Random chaos: maximum delay in milliseconds
+        #[arg(long, default_value = "2000", help_heading = "Chaos Engineering - Random")]
+        chaos_random_max_delay: u64,
+
         /// Enable AI-powered features
         #[arg(long, help_heading = "AI Features")]
         ai_enabled: bool,
@@ -731,12 +759,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             traffic_shaping,
             bandwidth_limit,
             burst_size,
+            network_profile,
+            list_network_profiles,
+            chaos_random,
+            chaos_random_error_rate,
+            chaos_random_delay_rate,
+            chaos_random_min_delay,
+            chaos_random_max_delay,
             ai_enabled,
             rag_provider,
             rag_model,
             rag_api_key,
             dry_run,
         } => {
+            // Handle --list-network-profiles flag
+            if list_network_profiles {
+                let catalog = mockforge_core::NetworkProfileCatalog::new();
+                println!("\n📡 Available Network Profiles:\n");
+                for (name, description) in catalog.list_profiles_with_description() {
+                    println!("  • {:<20} {}", name, description);
+                }
+                println!();
+                return Ok(());
+            }
+
             handle_serve(
                 config,
                 http_port,
@@ -772,6 +818,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 traffic_shaping,
                 bandwidth_limit,
                 burst_size,
+                network_profile,
+                chaos_random,
+                chaos_random_error_rate,
+                chaos_random_delay_rate,
+                chaos_random_min_delay,
+                chaos_random_max_delay,
                 ai_enabled,
                 rag_provider,
                 rag_model,
@@ -1193,6 +1245,12 @@ async fn handle_serve(
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
+    network_profile: Option<String>,
+    chaos_random: bool,
+    chaos_random_error_rate: f64,
+    chaos_random_delay_rate: f64,
+    chaos_random_min_delay: u64,
+    chaos_random_max_delay: u64,
     ai_enabled: bool,
     rag_provider: Option<String>,
     rag_model: Option<String>,
@@ -1230,7 +1288,7 @@ async fn handle_serve(
     }
 
     // Build comprehensive server configuration
-    let config = build_server_config_from_cli(
+    let mut config = build_server_config_from_cli(
         config_path,
         http_port,
         ws_port,
@@ -1271,6 +1329,43 @@ async fn handle_serve(
         rag_api_key.clone(),
     )
     .await;
+
+    // Apply network profile if specified
+    if let Some(profile_name) = network_profile {
+        use mockforge_core::NetworkProfileCatalog;
+        let catalog = NetworkProfileCatalog::new();
+
+        if let Some(profile) = catalog.get(&profile_name) {
+            println!("📡 Applying network profile: {} - {}", profile.name, profile.description);
+            let (latency_profile, traffic_shaping_config) = profile.apply();
+
+            // Apply latency profile
+            config.core.default_latency = latency_profile;
+            config.core.latency_enabled = true;
+
+            // Apply traffic shaping
+            config.core.traffic_shaping = traffic_shaping_config;
+            config.core.traffic_shaping_enabled = true;
+        } else {
+            eprintln!("⚠️  Warning: Unknown network profile '{}'. Use --list-network-profiles to see available profiles.", profile_name);
+        }
+    }
+
+    // Enable random chaos mode if specified
+    if chaos_random {
+        use mockforge_core::ChaosConfig;
+
+        println!("🎲 Random chaos mode enabled");
+        println!("   Error rate: {:.1}%", chaos_random_error_rate * 100.0);
+        println!("   Delay rate: {:.1}%", chaos_random_delay_rate * 100.0);
+        println!("   Delay range: {}-{} ms", chaos_random_min_delay, chaos_random_max_delay);
+
+        // Create and apply chaos config
+        let chaos_config = ChaosConfig::new(chaos_random_error_rate, chaos_random_delay_rate)
+            .with_delay_range(chaos_random_min_delay, chaos_random_max_delay);
+
+        config.core.chaos_random = Some(chaos_config);
+    }
 
     println!("🚀 Starting MockForge servers...");
     println!("📡 HTTP server on port {}", config.http.port);
