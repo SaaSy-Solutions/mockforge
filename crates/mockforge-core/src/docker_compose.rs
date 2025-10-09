@@ -2,7 +2,6 @@
 ///
 /// Automatically generates docker-compose.yml files for local integration testing
 /// with networked mock services
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -127,7 +126,7 @@ impl DockerComposeGenerator {
                 );
             }
 
-            let mut volumes = vec![
+            let volumes = vec![
                 // Mount specs directory if spec path is provided
                 "./specs:/specs:ro".to_string(),
                 // Mount config directory if config path is provided

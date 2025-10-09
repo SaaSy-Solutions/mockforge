@@ -3,11 +3,7 @@
 //! Coordinate chaos orchestrations across distributed systems with leader election,
 //! state synchronization, and distributed consensus.
 
-use crate::{
-    config::ChaosConfig,
-    scenarios::ChaosScenario,
-    scenario_orchestrator::{OrchestratedScenario, OrchestrationStatus},
-};
+use crate::scenario_orchestrator::OrchestratedScenario;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -196,28 +192,28 @@ impl DistributedCoordinator {
                     match cmd {
                         CoordinatorControl::RegisterNode(node) => {
                             info!("Registering node: {}", node.id);
-                            let mut nodes_guard = nodes.write().unwrap();
+                            let mut nodes_guard = nodes.write();
                             nodes_guard.insert(node.id.clone(), node);
                         }
                         CoordinatorControl::UnregisterNode(id) => {
                             info!("Unregistering node: {}", id);
-                            let mut nodes_guard = nodes.write().unwrap();
+                            let mut nodes_guard = nodes.write();
                             nodes_guard.remove(&id);
                         }
                         CoordinatorControl::SubmitTask(task) => {
                             info!("Submitting task: {}", task.id);
-                            let mut tasks_guard = tasks.write().unwrap();
+                            let mut tasks_guard = tasks.write();
                             tasks_guard.insert(task.id.clone(), task);
                         }
                         CoordinatorControl::UpdateNodeState(state) => {
                             debug!("Updating node state for: {}", state.node_id);
-                            let mut states_guard = execution_states.write().unwrap();
+                            let mut states_guard = execution_states.write();
                             let key = format!("{}:{}", state.task_id, state.node_id);
                             states_guard.insert(key, state);
                         }
                         CoordinatorControl::Heartbeat(node_id) => {
                             debug!("Heartbeat from node: {}", node_id);
-                            let mut nodes_guard = nodes.write().unwrap();
+                            let mut nodes_guard = nodes.write();
                             if let Some(node) = nodes_guard.get_mut(&node_id) {
                                 node.last_heartbeat = Utc::now();
                             }
@@ -234,7 +230,7 @@ impl DistributedCoordinator {
 
                     // Check if leader election needed
                     let needs_election = {
-                        let state = leader_state.read().unwrap();
+                        let state = leader_state.read();
                         state.leader_id.is_none()
                     };
 
@@ -312,7 +308,7 @@ impl DistributedCoordinator {
         nodes: &Arc<RwLock<HashMap<String, Node>>>,
         leader_state: &Arc<RwLock<LeaderState>>,
     ) {
-        let nodes_guard = nodes.read().unwrap();
+        let nodes_guard = nodes.read();
 
         // Find active nodes
         let active_nodes: Vec<_> = nodes_guard
@@ -331,7 +327,7 @@ impl DistributedCoordinator {
             .min_by(|a, b| a.id.cmp(&b.id))
             .unwrap();
 
-        let mut state = leader_state.write().unwrap();
+        let mut state = leader_state.write();
         state.leader_id = Some(leader.id.clone());
         state.term += 1;
         state.elected_at = Some(Utc::now());
@@ -344,7 +340,7 @@ impl DistributedCoordinator {
 
     /// Check node health
     fn check_node_health(nodes: &Arc<RwLock<HashMap<String, Node>>>) {
-        let mut nodes_guard = nodes.write().unwrap();
+        let mut nodes_guard = nodes.write();
         let now = Utc::now();
         let timeout = chrono::Duration::seconds(30);
 
@@ -365,25 +361,25 @@ impl DistributedCoordinator {
 
     /// Get current leader
     pub fn get_leader(&self) -> Option<String> {
-        let state = self.leader_state.read().unwrap();
+        let state = self.leader_state.read();
         state.leader_id.clone()
     }
 
     /// Check if this node is the leader
     pub fn is_leader(&self) -> bool {
-        let state = self.leader_state.read().unwrap();
+        let state = self.leader_state.read();
         state.leader_id.as_ref() == Some(&self.node_id)
     }
 
     /// Get all registered nodes
     pub fn get_nodes(&self) -> Vec<Node> {
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.nodes.read();
         nodes.values().cloned().collect()
     }
 
     /// Get active nodes
     pub fn get_active_nodes(&self) -> Vec<Node> {
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.nodes.read();
         nodes
             .values()
             .filter(|n| n.status == NodeStatus::Active)
@@ -393,19 +389,19 @@ impl DistributedCoordinator {
 
     /// Get task status
     pub fn get_task(&self, task_id: &str) -> Option<DistributedTask> {
-        let tasks = self.tasks.read().unwrap();
+        let tasks = self.tasks.read();
         tasks.get(task_id).cloned()
     }
 
     /// Get all tasks
     pub fn get_tasks(&self) -> Vec<DistributedTask> {
-        let tasks = self.tasks.read().unwrap();
+        let tasks = self.tasks.read();
         tasks.values().cloned().collect()
     }
 
     /// Get node execution states for a task
     pub fn get_task_execution_states(&self, task_id: &str) -> Vec<NodeExecutionState> {
-        let states = self.execution_states.read().unwrap();
+        let states = self.execution_states.read();
         states
             .iter()
             .filter(|(k, _)| k.starts_with(&format!("{}:", task_id)))

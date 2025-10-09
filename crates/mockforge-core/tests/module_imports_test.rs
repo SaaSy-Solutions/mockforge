@@ -54,7 +54,7 @@ mod import_tests {
     #[test]
     fn test_other_modules_can_be_imported() {
         // Verify other modules can be imported without errors
-        use mockforge_core::{config, error, validation};
+        use mockforge_core::config;
         
         // This ensures the modules are available for import
         let _config = config::ServerConfig::default();

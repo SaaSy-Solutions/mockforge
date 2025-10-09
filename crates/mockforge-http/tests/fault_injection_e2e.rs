@@ -2,7 +2,6 @@ use axum::Router;
 use mockforge_core::failure_injection::FailureConfig;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
-use serde_json::json;
 use std::net::SocketAddr;
 
 /// Test that fault injection can trigger 500 errors

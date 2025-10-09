@@ -88,6 +88,7 @@ impl Default for PluginConfig {
 
 /// Plugin execution context
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PluginContext {
     pub tenant_id: Option<String>,
     pub scenario_id: Option<String>,
@@ -96,17 +97,6 @@ pub struct PluginContext {
     pub metadata: HashMap<String, String>,
 }
 
-impl Default for PluginContext {
-    fn default() -> Self {
-        Self {
-            tenant_id: None,
-            scenario_id: None,
-            execution_id: None,
-            parameters: HashMap::new(),
-            metadata: HashMap::new(),
-        }
-    }
-}
 
 /// Plugin execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,7 +200,7 @@ impl PluginRegistry {
     pub fn register_plugin(&self, plugin: Arc<dyn ChaosPlugin>) -> Result<()> {
         let plugin_id = plugin.metadata().id.clone();
 
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
 
         if plugins.contains_key(&plugin_id) {
             return Err(PluginError::PluginAlreadyRegistered(plugin_id));
@@ -222,7 +212,7 @@ impl PluginRegistry {
 
     /// Unregister a plugin
     pub fn unregister_plugin(&self, plugin_id: &str) -> Result<()> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write();
 
         plugins
             .remove(plugin_id)
@@ -233,7 +223,7 @@ impl PluginRegistry {
 
     /// Get a plugin
     pub fn get_plugin(&self, plugin_id: &str) -> Result<Arc<dyn ChaosPlugin>> {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
 
         plugins
             .get(plugin_id)
@@ -243,7 +233,7 @@ impl PluginRegistry {
 
     /// List all plugins
     pub fn list_plugins(&self) -> Vec<PluginMetadata> {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins
             .values()
             .map(|p| p.metadata().clone())
@@ -252,7 +242,7 @@ impl PluginRegistry {
 
     /// Register a hook
     pub fn register_hook(&self, hook: Arc<dyn PluginHook>) {
-        let mut hooks = self.hooks.write().unwrap();
+        let mut hooks = self.hooks.write();
         hooks.push(hook);
     }
 
@@ -261,7 +251,7 @@ impl PluginRegistry {
         let plugin = self.get_plugin(plugin_id)?;
         plugin.validate_config(&config)?;
 
-        let mut configs = self.configs.write().unwrap();
+        let mut configs = self.configs.write();
         configs.insert(plugin_id.to_string(), config);
 
         Ok(())
@@ -269,7 +259,7 @@ impl PluginRegistry {
 
     /// Get plugin configuration
     pub fn get_config(&self, plugin_id: &str) -> Option<PluginConfig> {
-        let configs = self.configs.read().unwrap();
+        let configs = self.configs.read();
         configs.get(plugin_id).cloned()
     }
 
@@ -291,7 +281,7 @@ impl PluginRegistry {
         }
 
         // Execute before hooks
-        let hooks = self.hooks.read().unwrap().clone();
+        let hooks = self.hooks.read().clone();
         for hook in &hooks {
             hook.before_execute(&context).await?;
         }
@@ -319,7 +309,7 @@ impl PluginRegistry {
 
     /// Find plugins by capability
     pub fn find_by_capability(&self, capability: &PluginCapability) -> Vec<PluginMetadata> {
-        let plugins = self.plugins.read().unwrap();
+        let plugins = self.plugins.read();
         plugins
             .values()
             .filter(|p| p.capabilities().contains(capability))
@@ -329,7 +319,7 @@ impl PluginRegistry {
 
     /// Initialize all plugins
     pub async fn initialize_all(&self) -> Result<()> {
-        let plugins = self.plugins.write().unwrap();
+        let plugins = self.plugins.write();
 
         for (plugin_id, plugin) in plugins.iter() {
             let config = self.get_config(plugin_id).unwrap_or_default();
@@ -471,7 +461,7 @@ impl MetricsPlugin {
     }
 
     pub fn get_metrics(&self) -> Vec<HashMap<String, JsonValue>> {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read();
         metrics.clone()
     }
 }
@@ -506,7 +496,7 @@ impl ChaosPlugin for MetricsPlugin {
         }
 
         // Store metric
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write();
         metrics.push(metric.clone());
 
         Ok(PluginResult::success(
@@ -516,7 +506,7 @@ impl ChaosPlugin for MetricsPlugin {
     }
 
     async fn cleanup(&mut self) -> Result<()> {
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write();
         metrics.clear();
         self.config = None;
         Ok(())

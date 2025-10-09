@@ -279,7 +279,7 @@ impl TestGenerator {
             };
 
             endpoints.insert(format!("{} {}", request.method, request.path));
-            protocols.insert(request.protocol.clone());
+            protocols.insert(request.protocol);
 
             let test = self.generate_test_for_exchange(request, response).await?;
             tests.push(test);
@@ -384,8 +384,7 @@ impl TestGenerator {
         let method = request.method.to_lowercase();
         let path = request.path
             .trim_start_matches('/')
-            .replace('/', "_")
-            .replace('-', "_")
+            .replace(['/', '-'], "_")
             .replace("{", "")
             .replace("}", "");
 
@@ -508,7 +507,7 @@ impl TestGenerator {
         let mut code = String::new();
         let test_name = self.generate_test_name(request);
 
-        code.push_str(&format!("#[tokio::test]\n"));
+        code.push_str(&"#[tokio::test]\n".to_string());
         code.push_str(&format!("async fn {}() {{\n", test_name));
         code.push_str("    let client = reqwest::Client::new();\n");
         code.push_str(&format!("    let response = client.{}(\"{}\")\n",
@@ -545,9 +544,9 @@ impl TestGenerator {
             if let Some(body) = &response.body {
                 // Try to parse as JSON for better validation
                 if let Ok(_json) = serde_json::from_str::<Value>(body) {
-                    code.push_str(&format!("    let json: serde_json::Value = serde_json::from_str(&body).expect(\"Invalid JSON\");\n"));
-                    code.push_str(&format!("    // Validate response structure\n"));
-                    code.push_str(&format!("    assert!(json.is_object() || json.is_array());\n"));
+                    code.push_str(&"    let json: serde_json::Value = serde_json::from_str(&body).expect(\"Invalid JSON\");\n".to_string());
+                    code.push_str(&"    // Validate response structure\n".to_string());
+                    code.push_str(&"    assert!(json.is_object() || json.is_array());\n".to_string());
                 }
             }
         }
@@ -587,13 +586,13 @@ impl TestGenerator {
         // Add body
         if let Some(body) = &request.body {
             if !body.is_empty() {
-                code.push_str("\n");
+                code.push('\n');
                 code.push_str(body);
-                code.push_str("\n");
+                code.push('\n');
             }
         }
 
-        code.push_str("\n");
+        code.push('\n');
         Ok(code)
     }
 
@@ -672,7 +671,7 @@ impl TestGenerator {
         });
 
         serde_json::to_string_pretty(&item)
-            .map_err(|e| RecorderError::Serialization(e))
+            .map_err(RecorderError::Serialization)
     }
 
     /// Generate k6 test script
@@ -717,7 +716,7 @@ impl TestGenerator {
 
         // Add checks
         if self.config.validate_status {
-            code.push_str(&format!("    check(res, {{\n"));
+            code.push_str(&"    check(res, {\n".to_string());
             code.push_str(&format!("      'status is {}': (r) => r.status === {},\n",
                 response.status_code, response.status_code));
             code.push_str("    });\n");
@@ -902,8 +901,7 @@ impl TestGenerator {
         let url = format!("{}{}", base_url, request.path);
         let test_name = request.path
             .trim_start_matches('/')
-            .replace('/', " ")
-            .replace('-', " ")
+            .replace(['/', '-'], " ")
             .replace("{", "")
             .replace("}", "");
 
@@ -981,7 +979,7 @@ impl TestGenerator {
         code.push_str(&format!("    public void {}() throws Exception {{\n", test_name));
 
         // Create request
-        code.push_str(&format!("        HttpRequest request = HttpRequest.newBuilder()\n"));
+        code.push_str(&"        HttpRequest request = HttpRequest.newBuilder()\n".to_string());
         code.push_str(&format!("            .uri(URI.create(\"{}\"))\n", url));
         code.push_str(&format!("            .method(\"{}\", ", request.method));
 
@@ -1111,13 +1109,13 @@ impl TestGenerator {
 
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
             }
             TestFormat::HttpFile => {
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
             }
             TestFormat::Curl => {
@@ -1140,7 +1138,7 @@ impl TestGenerator {
                     }).collect::<Vec<_>>()
                 });
                 file = serde_json::to_string_pretty(&collection)
-                    .map_err(|e| RecorderError::Serialization(e))?;
+                    .map_err(RecorderError::Serialization)?;
             }
             TestFormat::K6 => {
                 file.push_str("import http from 'k6/http';\n");
@@ -1163,7 +1161,7 @@ impl TestGenerator {
                 file.push_str("import pytest\n\n");
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
             }
             TestFormat::JavaScriptJest => {
@@ -1173,7 +1171,7 @@ impl TestGenerator {
                 for test in tests {
                     file.push_str("  ");
                     file.push_str(&test.code.replace("\n", "\n  "));
-                    file.push_str("\n");
+                    file.push('\n');
                 }
                 file.push_str("});\n");
             }
@@ -1186,7 +1184,7 @@ impl TestGenerator {
                 file.push_str(")\n\n");
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
             }
             TestFormat::RubyRspec => {
@@ -1197,7 +1195,7 @@ impl TestGenerator {
                 file.push_str(&format!("RSpec.describe '{}' do\n", self.config.suite_name));
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
                 file.push_str("end\n");
             }
@@ -1213,7 +1211,7 @@ impl TestGenerator {
                 file.push_str(&format!("public class {} {{\n", self.config.suite_name.replace("-", "_")));
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
                 file.push_str("}\n");
             }
@@ -1231,7 +1229,7 @@ impl TestGenerator {
                 file.push_str("    {\n");
                 for test in tests {
                     file.push_str(&test.code);
-                    file.push_str("\n");
+                    file.push('\n');
                 }
                 file.push_str("    }\n");
                 file.push_str("}\n");
@@ -1300,7 +1298,7 @@ impl TestGenerator {
         let mut endpoint_data: HashMap<String, Vec<&crate::models::RecordedExchange>> = HashMap::new();
         for exchange in exchanges {
             let endpoint = format!("{} {}", exchange.request.method, exchange.request.path);
-            endpoint_data.entry(endpoint).or_insert_with(Vec::new).push(exchange);
+            endpoint_data.entry(endpoint).or_default().push(exchange);
         }
 
         // Generate fixtures for each endpoint
@@ -1331,7 +1329,7 @@ impl TestGenerator {
                 // Try to parse the LLM response as JSON
                 if let Ok(data) = serde_json::from_str::<Value>(&response) {
                     fixtures.push(TestFixture {
-                        name: format!("fixture_{}", endpoint.replace(' ', "_").replace('/', "_")),
+                        name: format!("fixture_{}", endpoint.replace([' ', '/'], "_")),
                         description: format!("Test fixture for {}", endpoint),
                         data,
                         endpoints: vec![endpoint.clone()],
@@ -1359,7 +1357,7 @@ impl TestGenerator {
         let mut endpoint_data: HashMap<String, Vec<&crate::models::RecordedExchange>> = HashMap::new();
         for exchange in exchanges {
             let key = format!("{} {}", exchange.request.method, exchange.request.path);
-            endpoint_data.entry(key).or_insert_with(Vec::new).push(exchange);
+            endpoint_data.entry(key).or_default().push(exchange);
         }
 
         for (endpoint_key, endpoint_exchanges) in endpoint_data.iter().take(5) {
@@ -1430,14 +1428,14 @@ impl TestGenerator {
             all_endpoints.insert(endpoint.clone());
             method_by_endpoint
                 .entry(endpoint.clone())
-                .or_insert_with(std::collections::HashSet::new)
+                .or_default()
                 .insert(method);
 
             if let Some(response) = &exchange.response {
                 let status_code = response.status_code as u16;
                 status_codes_by_endpoint
                     .entry(endpoint.clone())
-                    .or_insert_with(std::collections::HashSet::new)
+                    .or_default()
                     .insert(status_code);
             }
         }

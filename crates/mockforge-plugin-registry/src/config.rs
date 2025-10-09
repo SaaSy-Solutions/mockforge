@@ -1,7 +1,6 @@
 //! Registry configuration management
 
 use crate::{RegistryConfig, Result};
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
 

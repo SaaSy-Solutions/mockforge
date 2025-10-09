@@ -161,7 +161,7 @@ pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthRe
     let timestamp = start.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
     let mut checks = vec![];
-    let mut overall_status = HealthStatus::Healthy;
+    let overall_status = HealthStatus::Healthy;
 
     // Check all servers
     let servers = vec![

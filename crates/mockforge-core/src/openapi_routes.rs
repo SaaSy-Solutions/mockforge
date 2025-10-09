@@ -46,17 +46,14 @@ pub struct OpenApiRouteRegistry {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Default)]
 pub enum ValidationMode {
     Disabled,
+    #[default]
     Warn,
     Enforce,
 }
 
-impl Default for ValidationMode {
-    fn default() -> Self {
-        ValidationMode::Warn
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {

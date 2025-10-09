@@ -1,7 +1,7 @@
 //! Advanced resilience patterns: Circuit Breaker and Bulkhead
 
 use crate::config::{BulkheadConfig, CircuitBreakerConfig};
-use prometheus::{Counter, Gauge, Histogram, HistogramOpts, IntGauge, Opts, Registry};
+use prometheus::{Counter, Histogram, HistogramOpts, IntGauge, Opts, Registry};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{broadcast, RwLock};
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "distributed")]
@@ -196,7 +195,7 @@ impl CircuitBreaker {
         if let Some(path) = &self.persistence_path {
             let snapshot = self.create_snapshot().await;
             let data = bincode::serialize(&snapshot)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                .map_err(std::io::Error::other)?;
             tokio::fs::write(path, data).await?;
             debug!("Circuit breaker state saved to {:?}", path);
         }
@@ -230,7 +229,7 @@ impl CircuitBreaker {
             if path.exists() {
                 let data = tokio::fs::read(path).await?;
                 let snapshot: CircuitBreakerSnapshot = bincode::deserialize(&data)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(std::io::Error::other)?;
                 self.restore_from_snapshot(snapshot).await;
                 info!("Circuit breaker state loaded from {:?}", path);
             }

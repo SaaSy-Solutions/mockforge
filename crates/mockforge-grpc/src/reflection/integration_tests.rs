@@ -8,14 +8,14 @@
 mod tests {
     use crate::reflection::{
         rag_synthesis::{RagDataSynthesizer, RagSynthesisConfig},
-        schema_graph::{ProtoSchemaGraphExtractor, SchemaGraph},
+        schema_graph::SchemaGraph,
         smart_mock_generator::{SmartMockConfig, SmartMockGenerator},
         validation_framework::{
             CustomValidationRule, GeneratedEntity, ValidationConfig, ValidationFramework,
             ValidationRuleType,
         },
     };
-    use prost_reflect::{DescriptorPool, DynamicMessage, FieldDescriptor, Kind, MessageDescriptor};
+    
     use std::collections::HashMap;
     use std::time::SystemTime;
 
@@ -33,7 +33,7 @@ mod tests {
             deterministic: true,
         };
 
-        let mut generator = SmartMockGenerator::new_with_seed(config, 12345);
+        let generator = SmartMockGenerator::new_with_seed(config, 12345);
 
         // Step 2: Create RAG synthesizer
         let rag_config = RagSynthesisConfig {
@@ -45,7 +45,7 @@ mod tests {
             cache_contexts: true,
         };
 
-        let mut rag_synthesizer = RagDataSynthesizer::new(rag_config);
+        let rag_synthesizer = RagDataSynthesizer::new(rag_config);
 
         // Step 3: Create validation framework
         let validation_config = ValidationConfig {
@@ -139,7 +139,7 @@ mod tests {
         let mut validator = ValidationFramework::new(ValidationConfig::default());
 
         // Create a mock schema graph with foreign key relationships
-        let mut schema_graph = SchemaGraph {
+        let schema_graph = SchemaGraph {
             entities: HashMap::new(),
             relationships: vec![],
             foreign_keys: HashMap::from([(
@@ -197,7 +197,7 @@ mod tests {
     #[cfg(feature = "data-faker")]
     #[test]
     fn test_faker_integration_with_deterministic_seeding() {
-        use fake::{faker::internet::en::SafeEmail, Fake};
+        
 
         let config = SmartMockConfig {
             use_faker: true,

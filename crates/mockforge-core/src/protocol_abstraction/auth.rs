@@ -3,7 +3,7 @@
 use super::{Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse};
 use crate::config::AuthConfig;
 use crate::Result;
-use jsonwebtoken::{decode, decode_header, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -286,7 +286,7 @@ impl ProtocolMiddleware for AuthMiddleware {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ApiKeyConfig, JwtConfig};
+    use crate::config::ApiKeyConfig;
 
     #[test]
     fn test_auth_middleware_creation() {

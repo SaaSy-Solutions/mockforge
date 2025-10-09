@@ -4,9 +4,8 @@ use crate::{
     config::ChaosConfig,
     scenarios::ChaosScenario,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
@@ -197,7 +196,7 @@ impl ScenarioOrchestrator {
     pub async fn execute(&mut self, orchestrated: OrchestratedScenario) -> Result<(), String> {
         // Check if already running
         {
-            let status = self.status.read().unwrap();
+            let status = self.status.read();
             if status.is_some() {
                 return Err("Orchestration already in progress".to_string());
             }
@@ -217,7 +216,7 @@ impl ScenarioOrchestrator {
 
         // Initialize status
         {
-            let mut status = self.status.write().unwrap();
+            let mut status = self.status.write();
             *status = Some(OrchestrationStatus {
                 name: orchestration_name.clone(),
                 current_iteration: 1,
@@ -418,7 +417,7 @@ impl ScenarioOrchestrator {
 
         // Apply the step's chaos config
         {
-            let mut config = active_config.write().unwrap();
+            let mut config = active_config.write();
             *config = Some(step.scenario.chaos_config.clone());
         }
 
@@ -442,7 +441,7 @@ impl ScenarioOrchestrator {
     where
         F: FnOnce(&mut OrchestrationStatus),
     {
-        let mut status_guard = status.write().unwrap();
+        let mut status_guard = status.write();
         if let Some(ref mut s) = *status_guard {
             f(s);
         }
@@ -450,29 +449,29 @@ impl ScenarioOrchestrator {
 
     /// Clear status
     fn clear_status(status: &Arc<RwLock<Option<OrchestrationStatus>>>) {
-        let mut status_guard = status.write().unwrap();
+        let mut status_guard = status.write();
         *status_guard = None;
     }
 
     /// Clear config
     fn clear_config(config: &Arc<RwLock<Option<ChaosConfig>>>) {
-        let mut config_guard = config.write().unwrap();
+        let mut config_guard = config.write();
         *config_guard = None;
     }
 
     /// Get current orchestration status
     pub fn get_status(&self) -> Option<OrchestrationStatus> {
-        self.status.read().unwrap().clone()
+        self.status.read().clone()
     }
 
     /// Get currently active chaos config
     pub fn get_active_config(&self) -> Option<ChaosConfig> {
-        self.active_config.read().unwrap().clone()
+        self.active_config.read().clone()
     }
 
     /// Check if orchestration is running
     pub fn is_running(&self) -> bool {
-        self.status.read().unwrap().is_some()
+        self.status.read().is_some()
     }
 
     /// Stop orchestration

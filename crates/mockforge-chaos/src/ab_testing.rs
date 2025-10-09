@@ -3,12 +3,8 @@
 //! Compare different chaos configurations and strategies to determine
 //! which approach is most effective for testing system resilience.
 
-use crate::{
-    config::ChaosConfig,
-    analytics::{ChaosAnalytics, ChaosImpact, MetricsBucket, TimeBucket},
-    scenario_recorder::{RecordedScenario, ChaosEvent},
-};
-use chrono::{DateTime, Duration, Utc};
+use crate::analytics::ChaosAnalytics;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -214,7 +210,7 @@ impl ABTestingEngine {
         }
 
         // Check concurrent limit
-        let tests = self.tests.read().unwrap();
+        let tests = self.tests.read();
         let running_tests = tests.values()
             .filter(|t| t.status == ABTestStatus::Running)
             .count();
@@ -238,7 +234,7 @@ impl ABTestingEngine {
 
         let test_id = test.id.clone();
 
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         tests.insert(test_id.clone(), test);
 
         Ok(test_id)
@@ -246,7 +242,7 @@ impl ABTestingEngine {
 
     /// Start an A/B test
     pub fn start_test(&self, test_id: &str) -> Result<(), String> {
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         let test = tests.get_mut(test_id)
             .ok_or_else(|| "Test not found".to_string())?;
 
@@ -262,7 +258,7 @@ impl ABTestingEngine {
 
     /// Stop an A/B test and analyze results
     pub fn stop_test(&self, test_id: &str) -> Result<TestConclusion, String> {
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         let test = tests.get_mut(test_id)
             .ok_or_else(|| "Test not found".to_string())?;
 
@@ -287,7 +283,7 @@ impl ABTestingEngine {
         variant: &str,
         results: VariantResults,
     ) -> Result<(), String> {
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         let test = tests.get_mut(test_id)
             .ok_or_else(|| "Test not found".to_string())?;
 
@@ -459,19 +455,19 @@ impl ABTestingEngine {
 
     /// Get test by ID
     pub fn get_test(&self, test_id: &str) -> Option<ABTest> {
-        let tests = self.tests.read().unwrap();
+        let tests = self.tests.read();
         tests.get(test_id).cloned()
     }
 
     /// Get all tests
     pub fn get_all_tests(&self) -> Vec<ABTest> {
-        let tests = self.tests.read().unwrap();
+        let tests = self.tests.read();
         tests.values().cloned().collect()
     }
 
     /// Get running tests
     pub fn get_running_tests(&self) -> Vec<ABTest> {
-        let tests = self.tests.read().unwrap();
+        let tests = self.tests.read();
         tests.values()
             .filter(|t| t.status == ABTestStatus::Running)
             .cloned()
@@ -480,7 +476,7 @@ impl ABTestingEngine {
 
     /// Delete a test
     pub fn delete_test(&self, test_id: &str) -> Result<(), String> {
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         let test = tests.get(test_id)
             .ok_or_else(|| "Test not found".to_string())?;
 
@@ -494,7 +490,7 @@ impl ABTestingEngine {
 
     /// Pause a running test
     pub fn pause_test(&self, test_id: &str) -> Result<(), String> {
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         let test = tests.get_mut(test_id)
             .ok_or_else(|| "Test not found".to_string())?;
 
@@ -508,7 +504,7 @@ impl ABTestingEngine {
 
     /// Resume a paused test
     pub fn resume_test(&self, test_id: &str) -> Result<(), String> {
-        let mut tests = self.tests.write().unwrap();
+        let mut tests = self.tests.write();
         let test = tests.get_mut(test_id)
             .ok_or_else(|| "Test not found".to_string())?;
 
@@ -522,7 +518,7 @@ impl ABTestingEngine {
 
     /// Get test statistics
     pub fn get_stats(&self) -> ABTestStats {
-        let tests = self.tests.read().unwrap();
+        let tests = self.tests.read();
 
         let total = tests.len();
         let running = tests.values().filter(|t| t.status == ABTestStatus::Running).count();
@@ -532,7 +528,7 @@ impl ABTestingEngine {
         let successful_tests = tests.values()
             .filter(|t| {
                 t.status == ABTestStatus::Completed &&
-                t.conclusion.as_ref().map_or(false, |c| c.statistically_significant)
+                t.conclusion.as_ref().is_some_and(|c| c.statistically_significant)
             })
             .count();
 
@@ -635,7 +631,7 @@ mod tests {
         let analytics = Arc::new(ChaosAnalytics::new());
         let engine = ABTestingEngine::new(analytics);
 
-        let mut config = ABTestConfig {
+        let config = ABTestConfig {
             name: "Test".to_string(),
             description: "Test".to_string(),
             variant_a: TestVariant {

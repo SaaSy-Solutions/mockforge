@@ -10,17 +10,14 @@ use std::collections::HashMap;
 
 /// Validation mode for requests and responses
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Default)]
 pub enum ValidationMode {
     Disabled,
+    #[default]
     Warn,
     Enforce,
 }
 
-impl Default for ValidationMode {
-    fn default() -> Self {
-        ValidationMode::Warn
-    }
-}
 
 /// Validation options for OpenAPI route validation
 #[derive(Debug, Clone)]

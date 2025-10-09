@@ -2,7 +2,6 @@
 
 use mockforge_plugin_core::*;
 use mockforge_plugin_loader::*;
-use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 
@@ -116,7 +115,7 @@ mod tests {
     #[tokio::test]
     async fn test_plugin_loading_and_unloading() {
         let config = PluginLoaderConfig::default();
-        let mut loader = PluginLoader::new(config);
+        let loader = PluginLoader::new(config);
 
         let plugin_id = PluginId::new("test-plugin".to_string());
         let manifest = create_test_plugin_manifest();
@@ -163,7 +162,7 @@ mod tests {
     #[tokio::test]
     async fn test_plugin_reload_operations() {
         let config = PluginLoaderConfig::default();
-        let mut loader = PluginLoader::new(config);
+        let loader = PluginLoader::new(config);
 
         // Test reload all plugins
         let stats = loader.reload_all_plugins().await;

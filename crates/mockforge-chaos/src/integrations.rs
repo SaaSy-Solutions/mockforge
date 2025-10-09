@@ -240,7 +240,7 @@ impl JiraIntegration {
                 .join("\n")
         );
 
-        let priority = self.config.priority.as_deref().or_else(|| {
+        let priority = self.config.priority.as_deref().or({
             Some(match notification.severity {
                 NotificationSeverity::Critical => "Highest",
                 NotificationSeverity::Error => "High",
@@ -327,7 +327,7 @@ impl PagerDutyIntegration {
     }
 
     pub async fn trigger_incident(&self, notification: &Notification) -> Result<String> {
-        let severity = self.config.severity.as_deref().or_else(|| {
+        let severity = self.config.severity.as_deref().or({
             Some(match notification.severity {
                 NotificationSeverity::Critical => "critical",
                 NotificationSeverity::Error => "error",

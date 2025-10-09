@@ -37,7 +37,7 @@ pub async fn build_plugin(path: Option<&Path>, release: bool) -> Result<()> {
         "Profile:".bold(),
         if release { "release" } else { "debug" }
     );
-    println!("  {} {}", "Target:".bold(), "wasm32-wasi");
+    println!("  {} wasm32-wasi", "Target:".bold());
     println!();
 
     let mut cmd = Command::new("cargo");

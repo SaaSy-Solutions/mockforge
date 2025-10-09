@@ -30,8 +30,8 @@ impl LatencyInjector {
         }
 
         // Check probability
-        let mut rng = rand::thread_rng();
-        if rng.gen::<f64>() > self.config.probability {
+        let mut rng = rand::rng();
+        if rng.random::<f64>() > self.config.probability {
             return;
         }
 
@@ -44,13 +44,13 @@ impl LatencyInjector {
 
     /// Calculate the delay in milliseconds
     fn calculate_delay(&self) -> u64 {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Base delay
         let base_delay = if let Some(fixed) = self.config.fixed_delay_ms {
             fixed
         } else if let Some((min, max)) = self.config.random_delay_range_ms {
-            rng.gen_range(min..=max)
+            rng.random_range(min..=max)
         } else {
             0
         };
@@ -58,8 +58,8 @@ impl LatencyInjector {
         // Apply jitter
         if self.config.jitter_percent > 0.0 {
             let jitter = (base_delay as f64 * self.config.jitter_percent / 100.0) as u64;
-            let jitter_offset = rng.gen_range(0..=jitter);
-            if rng.gen_bool(0.5) {
+            let jitter_offset = rng.random_range(0..=jitter);
+            if rng.random_bool(0.5) {
                 base_delay + jitter_offset
             } else {
                 base_delay.saturating_sub(jitter_offset)
@@ -112,7 +112,7 @@ mod tests {
         let injector = LatencyInjector::new(config);
         for _ in 0..100 {
             let delay = injector.calculate_delay();
-            assert!(delay >= 50 && delay <= 150);
+            assert!((50..=150).contains(&delay));
         }
     }
 
@@ -130,7 +130,7 @@ mod tests {
         for _ in 0..100 {
             let delay = injector.calculate_delay();
             // Should be within 90-110ms range
-            assert!(delay >= 90 && delay <= 110);
+            assert!((90..=110).contains(&delay));
         }
     }
 

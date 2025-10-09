@@ -35,8 +35,8 @@ impl TrafficShaper {
             return false;
         }
 
-        let mut rng = rand::thread_rng();
-        let drop = rng.gen::<f64>() * 100.0 < self.config.packet_loss_percent;
+        let mut rng = rand::rng();
+        let drop = rng.random::<f64>() * 100.0 < self.config.packet_loss_percent;
 
         if drop {
             debug!("Simulating packet loss");
@@ -152,7 +152,7 @@ mod tests {
         }
 
         // Allow some variance (40-60%)
-        assert!(dropped >= 400 && dropped <= 600);
+        assert!((400..=600).contains(&dropped));
     }
 
     #[test]

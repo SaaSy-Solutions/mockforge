@@ -300,7 +300,7 @@ impl IntegrationTestGenerator {
         code.push_str("use std::collections::HashMap;\n\n");
 
         // Test function
-        code.push_str(&format!("#[tokio::test]\n"));
+        code.push_str(&"#[tokio::test]\n".to_string());
         code.push_str(&format!("async fn test_{}() {{\n", self.sanitize_name(&self.workflow.name)));
 
         // Setup
@@ -312,7 +312,7 @@ impl IntegrationTestGenerator {
         for (key, value) in &self.workflow.setup.variables {
             code.push_str(&format!("    variables.insert(\"{}\".to_string(), \"{}\".to_string());\n", key, value));
         }
-        code.push_str("\n");
+        code.push('\n');
 
         // Steps
         for (idx, step) in self.workflow.steps.iter().enumerate() {
@@ -338,7 +338,7 @@ impl IntegrationTestGenerator {
 
             // Add headers
             if !step.request.headers.is_empty() {
-                code.push_str("\n");
+                code.push('\n');
                 for (key, value) in &step.request.headers {
                     let value_with_vars = self.replace_vars(value);
                     code.push_str(&format!("        .header(\"{}\", {})\n", key, value_with_vars));
@@ -379,7 +379,7 @@ impl IntegrationTestGenerator {
                 code.push_str(&format!("    tokio::time::sleep(tokio::time::Duration::from_millis({})).await;\n", delay));
             }
 
-            code.push_str("\n");
+            code.push('\n');
         }
 
         code.push_str("}\n");
@@ -404,7 +404,7 @@ impl IntegrationTestGenerator {
         for (key, value) in &self.workflow.setup.variables {
             code.push_str(&format!("    variables['{}'] = '{}'\n", key, value));
         }
-        code.push_str("\n");
+        code.push('\n');
 
         // Steps
         for (idx, step) in self.workflow.steps.iter().enumerate() {
@@ -425,7 +425,7 @@ impl IntegrationTestGenerator {
                     .map(|(k, v)| format!("'{}': '{}'", k, self.replace_vars_python(v)))
                     .collect();
                 code.push_str(&headers.join(", "));
-                code.push_str("}");
+                code.push('}');
             }
 
             // Add body
@@ -453,7 +453,7 @@ impl IntegrationTestGenerator {
                 code.push_str(&format!("    time.sleep({:.2})\n", delay as f64 / 1000.0));
             }
 
-            code.push_str("\n");
+            code.push('\n');
         }
 
         code
@@ -473,7 +473,7 @@ impl IntegrationTestGenerator {
         for (key, value) in &self.workflow.setup.variables {
             code.push_str(&format!("    variables['{}'] = '{}';\n", key, value));
         }
-        code.push_str("\n");
+        code.push('\n');
 
         // Steps
         for (idx, step) in self.workflow.steps.iter().enumerate() {
@@ -524,7 +524,7 @@ impl IntegrationTestGenerator {
                 code.push_str(&format!("    await new Promise(resolve => setTimeout(resolve, {}));\n", delay));
             }
 
-            code.push_str("\n");
+            code.push('\n');
         }
 
         code.push_str("  });\n");
@@ -535,8 +535,7 @@ impl IntegrationTestGenerator {
     // Helper methods
     fn sanitize_name(&self, name: &str) -> String {
         name.to_lowercase()
-            .replace(' ', "_")
-            .replace('-', "_")
+            .replace([' ', '-'], "_")
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '_')
             .collect()

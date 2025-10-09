@@ -2,9 +2,7 @@
 ///
 /// Validates that mock configurations match live API responses
 /// and detects breaking changes in API contracts
-
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Validation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,7 +286,7 @@ impl ContractValidator {
     pub fn generate_report(&self, result: &ValidationResult) -> String {
         let mut report = String::new();
 
-        report.push_str(&format!("# Contract Validation Report\n\n"));
+        report.push_str(&"# Contract Validation Report\n\n".to_string());
         report.push_str(&format!("**Status**: {}\n", if result.passed { "✓ PASSED" } else { "✗ FAILED" }));
         report.push_str(&format!("**Total Checks**: {}\n", result.total_checks));
         report.push_str(&format!("**Passed**: {}\n", result.passed_checks));
@@ -302,7 +300,7 @@ impl ContractValidator {
                     change.change_type, change.severity, change.path, change.description
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         if !result.errors.is_empty() {
@@ -316,7 +314,7 @@ impl ContractValidator {
                     report.push_str(&format!("  - Actual: {}\n", actual));
                 }
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         if !result.warnings.is_empty() {

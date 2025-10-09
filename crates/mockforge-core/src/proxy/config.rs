@@ -124,8 +124,7 @@ impl ProxyConfig {
 
     /// Check if a path matches a pattern (supports wildcards)
     fn path_matches_pattern(&self, pattern: &str, path: &str) -> bool {
-        if pattern.ends_with("/*") {
-            let prefix = &pattern[..pattern.len() - 2];
+        if let Some(prefix) = pattern.strip_suffix("/*") {
             path.starts_with(prefix)
         } else {
             path == pattern

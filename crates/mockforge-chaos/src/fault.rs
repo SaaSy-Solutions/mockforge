@@ -41,34 +41,34 @@ impl FaultInjector {
             return None;
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Check for HTTP errors
         if !self.config.http_errors.is_empty()
-            && rng.gen::<f64>() < self.config.http_error_probability
+            && rng.random::<f64>() < self.config.http_error_probability
         {
-            let error_code = self.config.http_errors[rng.gen_range(0..self.config.http_errors.len())];
+            let error_code = self.config.http_errors[rng.random_range(0..self.config.http_errors.len())];
             debug!("Injecting HTTP error: {}", error_code);
             return Some(FaultType::HttpError(error_code));
         }
 
         // Check for connection errors
         if self.config.connection_errors
-            && rng.gen::<f64>() < self.config.connection_error_probability
+            && rng.random::<f64>() < self.config.connection_error_probability
         {
             debug!("Injecting connection error");
             return Some(FaultType::ConnectionError);
         }
 
         // Check for timeout errors
-        if self.config.timeout_errors && rng.gen::<f64>() < self.config.timeout_probability {
+        if self.config.timeout_errors && rng.random::<f64>() < self.config.timeout_probability {
             debug!("Injecting timeout error");
             return Some(FaultType::Timeout);
         }
 
         // Check for partial responses
         if self.config.partial_responses
-            && rng.gen::<f64>() < self.config.partial_response_probability
+            && rng.random::<f64>() < self.config.partial_response_probability
         {
             debug!("Injecting partial response");
             return Some(FaultType::PartialResponse);

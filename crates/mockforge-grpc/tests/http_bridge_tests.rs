@@ -1,8 +1,6 @@
 //! Integration tests for HTTP bridge functionality
 
-use mockforge_grpc::dynamic::{discover_services, start_dynamic_server, DynamicGrpcConfig};
-use std::time::Duration;
-use tokio::time::timeout;
+use mockforge_grpc::dynamic::{discover_services, DynamicGrpcConfig};
 
 #[tokio::test]
 async fn test_http_bridge_creation() {

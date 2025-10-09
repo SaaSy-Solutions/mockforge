@@ -365,7 +365,7 @@ impl TenantManager {
 
     /// Create a new tenant
     pub fn create_tenant(&self, name: String, plan: TenantPlan) -> Result<Tenant> {
-        let mut name_map = self.name_to_id.write().unwrap();
+        let mut name_map = self.name_to_id.write();
 
         if name_map.contains_key(&name) {
             return Err(MultiTenancyError::TenantAlreadyExists(name));
@@ -374,7 +374,7 @@ impl TenantManager {
         let tenant = Tenant::new(name.clone(), plan);
         let tenant_id = tenant.id.clone();
 
-        let mut tenants = self.tenants.write().unwrap();
+        let mut tenants = self.tenants.write();
         tenants.insert(tenant_id.clone(), tenant.clone());
         name_map.insert(name, tenant_id);
 
@@ -383,7 +383,7 @@ impl TenantManager {
 
     /// Get tenant by ID
     pub fn get_tenant(&self, tenant_id: &str) -> Result<Tenant> {
-        let tenants = self.tenants.read().unwrap();
+        let tenants = self.tenants.read();
         tenants
             .get(tenant_id)
             .cloned()
@@ -392,7 +392,7 @@ impl TenantManager {
 
     /// Get tenant by name
     pub fn get_tenant_by_name(&self, name: &str) -> Result<Tenant> {
-        let name_map = self.name_to_id.read().unwrap();
+        let name_map = self.name_to_id.read();
         let tenant_id = name_map
             .get(name)
             .ok_or_else(|| MultiTenancyError::TenantNotFound(name.to_string()))?;
@@ -402,7 +402,7 @@ impl TenantManager {
 
     /// Update tenant
     pub fn update_tenant(&self, tenant: Tenant) -> Result<()> {
-        let mut tenants = self.tenants.write().unwrap();
+        let mut tenants = self.tenants.write();
 
         if !tenants.contains_key(&tenant.id) {
             return Err(MultiTenancyError::TenantNotFound(tenant.id.clone()));
@@ -414,12 +414,12 @@ impl TenantManager {
 
     /// Delete tenant
     pub fn delete_tenant(&self, tenant_id: &str) -> Result<()> {
-        let mut tenants = self.tenants.write().unwrap();
+        let mut tenants = self.tenants.write();
         let tenant = tenants
             .remove(tenant_id)
             .ok_or_else(|| MultiTenancyError::TenantNotFound(tenant_id.to_string()))?;
 
-        let mut name_map = self.name_to_id.write().unwrap();
+        let mut name_map = self.name_to_id.write();
         name_map.remove(&tenant.name);
 
         Ok(())
@@ -427,13 +427,13 @@ impl TenantManager {
 
     /// List all tenants
     pub fn list_tenants(&self) -> Vec<Tenant> {
-        let tenants = self.tenants.read().unwrap();
+        let tenants = self.tenants.read();
         tenants.values().cloned().collect()
     }
 
     /// Increment usage counter
     pub fn increment_usage(&self, tenant_id: &str, resource_type: &str) -> Result<()> {
-        let mut tenants = self.tenants.write().unwrap();
+        let mut tenants = self.tenants.write();
         let tenant = tenants
             .get_mut(tenant_id)
             .ok_or_else(|| MultiTenancyError::TenantNotFound(tenant_id.to_string()))?;
@@ -452,7 +452,7 @@ impl TenantManager {
 
     /// Decrement usage counter
     pub fn decrement_usage(&self, tenant_id: &str, resource_type: &str) -> Result<()> {
-        let mut tenants = self.tenants.write().unwrap();
+        let mut tenants = self.tenants.write();
         let tenant = tenants
             .get_mut(tenant_id)
             .ok_or_else(|| MultiTenancyError::TenantNotFound(tenant_id.to_string()))?;

@@ -3,11 +3,8 @@
 //! Analyzes chaos engineering metrics and system behavior to generate
 //! intelligent recommendations for improving resilience testing.
 
-use crate::{
-    analytics::{ChaosImpact, MetricsBucket},
-    scenarios::ChaosScenario,
-};
-use chrono::{DateTime, Duration, Utc};
+use crate::analytics::{ChaosImpact, MetricsBucket};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -248,13 +245,13 @@ impl RecommendationEngine {
 
         // Store recommendations
         {
-            let mut recs = self.recommendations.write().unwrap();
+            let mut recs = self.recommendations.write();
             *recs = filtered.clone();
         }
 
         // Update patterns if learning is enabled
         if self.config.enable_learning {
-            let mut stored_patterns = self.patterns.write().unwrap();
+            let mut stored_patterns = self.patterns.write();
             *stored_patterns = patterns;
         }
 
@@ -293,10 +290,10 @@ impl RecommendationEngine {
         let mut endpoint_latencies: HashMap<String, Vec<f64>> = HashMap::new();
 
         for bucket in buckets {
-            for (endpoint, _count) in &bucket.affected_endpoints {
+            for endpoint in bucket.affected_endpoints.keys() {
                 endpoint_latencies
                     .entry(endpoint.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(bucket.avg_latency_ms);
             }
         }
@@ -847,7 +844,7 @@ impl RecommendationEngine {
 
     /// Get all current recommendations
     pub fn get_recommendations(&self) -> Vec<Recommendation> {
-        self.recommendations.read().unwrap().clone()
+        self.recommendations.read().clone()
     }
 
     /// Get recommendations by category
@@ -857,7 +854,6 @@ impl RecommendationEngine {
     ) -> Vec<Recommendation> {
         self.recommendations
             .read()
-            .unwrap()
             .iter()
             .filter(|r| r.category == category)
             .cloned()
@@ -871,7 +867,6 @@ impl RecommendationEngine {
     ) -> Vec<Recommendation> {
         self.recommendations
             .read()
-            .unwrap()
             .iter()
             .filter(|r| r.severity >= min_severity)
             .cloned()
@@ -880,7 +875,7 @@ impl RecommendationEngine {
 
     /// Clear all recommendations
     pub fn clear(&self) {
-        self.recommendations.write().unwrap().clear();
+        self.recommendations.write().clear();
     }
 }
 
@@ -893,7 +888,7 @@ impl Default for RecommendationEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scenario_recorder::{ChaosEvent, ChaosEventType};
+    
     use std::collections::HashMap;
 
     #[test]

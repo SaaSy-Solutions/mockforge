@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::test;
 
-use mockforge_core::chain_execution::{ChainExecutionEngine, ChainExecutionResult};
+use mockforge_core::chain_execution::ChainExecutionEngine;
 use mockforge_core::request_chaining::{
     ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestBody, RequestChainRegistry,
 };

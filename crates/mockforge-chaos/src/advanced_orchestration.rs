@@ -3,10 +3,7 @@
 //! Provides conditional logic, variables, hooks, assertions, and reporting
 //! for complex chaos engineering orchestrations.
 
-use crate::{
-    scenario_orchestrator::{OrchestratedScenario, ScenarioStep},
-    scenarios::ChaosScenario,
-};
+use crate::scenario_orchestrator::{OrchestratedScenario, ScenarioStep};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -779,25 +776,25 @@ impl OrchestrationLibrary {
 
     /// Store an orchestration
     pub fn store(&self, name: String, orchestration: AdvancedOrchestratedScenario) {
-        let mut orch = self.orchestrations.write().unwrap();
+        let mut orch = self.orchestrations.write();
         orch.insert(name, orchestration);
     }
 
     /// Retrieve an orchestration
     pub fn retrieve(&self, name: &str) -> Option<AdvancedOrchestratedScenario> {
-        let orch = self.orchestrations.read().unwrap();
+        let orch = self.orchestrations.read();
         orch.get(name).cloned()
     }
 
     /// List all orchestrations
     pub fn list(&self) -> Vec<String> {
-        let orch = self.orchestrations.read().unwrap();
+        let orch = self.orchestrations.read();
         orch.keys().cloned().collect()
     }
 
     /// Delete an orchestration
     pub fn delete(&self, name: &str) -> bool {
-        let mut orch = self.orchestrations.write().unwrap();
+        let mut orch = self.orchestrations.write();
         orch.remove(name).is_some()
     }
 
@@ -812,7 +809,7 @@ impl OrchestrationLibrary {
     pub fn export_to_directory(&self, _path: &str) -> Result<usize, OrchestrationError> {
         // In production, this would export all orchestrations to files
         // For now, just return count
-        let orch = self.orchestrations.read().unwrap();
+        let orch = self.orchestrations.read();
         Ok(orch.len())
     }
 }

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
-use tokio::time::{interval, sleep_until, Instant};
+use tokio::time::interval;
 use tracing::{debug, info, warn};
 
 /// Schedule type
@@ -175,14 +175,14 @@ impl ScenarioScheduler {
     /// Add a scheduled scenario
     pub fn add_schedule(&self, scheduled: ScheduledScenario) {
         let id = scheduled.id.clone();
-        let mut schedules = self.schedules.write().unwrap();
+        let mut schedules = self.schedules.write();
         schedules.insert(id.clone(), scheduled);
         info!("Added scheduled scenario: {}", id);
     }
 
     /// Remove a scheduled scenario
     pub fn remove_schedule(&self, id: &str) -> Option<ScheduledScenario> {
-        let mut schedules = self.schedules.write().unwrap();
+        let mut schedules = self.schedules.write();
         let removed = schedules.remove(id);
         if removed.is_some() {
             info!("Removed scheduled scenario: {}", id);
@@ -192,19 +192,19 @@ impl ScenarioScheduler {
 
     /// Get a scheduled scenario
     pub fn get_schedule(&self, id: &str) -> Option<ScheduledScenario> {
-        let schedules = self.schedules.read().unwrap();
+        let schedules = self.schedules.read();
         schedules.get(id).cloned()
     }
 
     /// Get all scheduled scenarios
     pub fn get_all_schedules(&self) -> Vec<ScheduledScenario> {
-        let schedules = self.schedules.read().unwrap();
+        let schedules = self.schedules.read();
         schedules.values().cloned().collect()
     }
 
     /// Enable a scheduled scenario
     pub fn enable_schedule(&self, id: &str) -> Result<(), String> {
-        let mut schedules = self.schedules.write().unwrap();
+        let mut schedules = self.schedules.write();
         if let Some(scheduled) = schedules.get_mut(id) {
             scheduled.enabled = true;
             scheduled.calculate_next_execution();
@@ -217,7 +217,7 @@ impl ScenarioScheduler {
 
     /// Disable a scheduled scenario
     pub fn disable_schedule(&self, id: &str) -> Result<(), String> {
-        let mut schedules = self.schedules.write().unwrap();
+        let mut schedules = self.schedules.write();
         if let Some(scheduled) = schedules.get_mut(id) {
             scheduled.enabled = false;
             info!("Disabled scheduled scenario: {}", id);
@@ -234,7 +234,7 @@ impl ScenarioScheduler {
     {
         // Check if already running
         {
-            let task_handle = self.task_handle.read().unwrap();
+            let task_handle = self.task_handle.read();
             if task_handle.is_some() {
                 warn!("Scheduler already running");
                 return;
@@ -243,11 +243,11 @@ impl ScenarioScheduler {
 
         info!("Starting scenario scheduler");
 
-        let (tx, mut rx) = mpsc::channel::<ScheduledScenario>(100);
+        let (tx, rx) = mpsc::channel::<ScheduledScenario>(100);
 
         // Store execution channel
         {
-            let mut execution_tx = self.execution_tx.write().unwrap();
+            let mut execution_tx = self.execution_tx.write();
             *execution_tx = Some(tx);
         }
 
@@ -259,7 +259,7 @@ impl ScenarioScheduler {
 
         // Store task handle
         {
-            let mut task_handle = self.task_handle.write().unwrap();
+            let mut task_handle = self.task_handle.write();
             *task_handle = Some(handle);
         }
     }
@@ -282,7 +282,7 @@ impl ScenarioScheduler {
                     let mut to_execute = Vec::new();
 
                     {
-                        let mut schedules_guard = schedules.write().unwrap();
+                        let mut schedules_guard = schedules.write();
 
                         for (id, scheduled) in schedules_guard.iter_mut() {
                             if scheduled.should_execute() {
@@ -319,12 +319,12 @@ impl ScenarioScheduler {
 
         // Clear execution channel
         {
-            let mut execution_tx = self.execution_tx.write().unwrap();
+            let mut execution_tx = self.execution_tx.write();
             *execution_tx = None;
         }
 
         // Abort task
-        let mut task_handle = self.task_handle.write().unwrap();
+        let mut task_handle = self.task_handle.write();
         if let Some(handle) = task_handle.take() {
             handle.abort();
         }
@@ -333,12 +333,12 @@ impl ScenarioScheduler {
     /// Manually trigger a scheduled scenario
     pub async fn trigger_now(&self, id: &str) -> Result<(), String> {
         let scheduled = {
-            let schedules = self.schedules.read().unwrap();
+            let schedules = self.schedules.read();
             schedules.get(id).cloned()
         };
 
         if let Some(scheduled) = scheduled {
-            let execution_tx = self.execution_tx.read().unwrap();
+            let execution_tx = self.execution_tx.read();
             if let Some(tx) = execution_tx.as_ref() {
                 tx.send(scheduled)
                     .await
@@ -354,7 +354,7 @@ impl ScenarioScheduler {
 
     /// Get next scheduled execution
     pub fn get_next_execution(&self) -> Option<(String, DateTime<Utc>)> {
-        let schedules = self.schedules.read().unwrap();
+        let schedules = self.schedules.read();
         schedules
             .iter()
             .filter_map(|(id, s)| s.next_execution.map(|t| (id.clone(), t)))

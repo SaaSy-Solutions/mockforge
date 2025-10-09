@@ -3,8 +3,8 @@
 //! Provides predictive analytics, anomaly detection, and intelligent insights.
 
 use crate::{
-    analytics::{ChaosAnalytics, ChaosImpact, MetricsBucket, TimeBucket},
-    scenario_recorder::{ChaosEvent, ChaosEventType},
+    analytics::{ChaosAnalytics, MetricsBucket, TimeBucket},
+    scenario_recorder::ChaosEvent,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -185,7 +185,7 @@ impl AdvancedAnalyticsEngine {
 
         // Add to history
         {
-            let mut history = self.event_history.write().unwrap();
+            let mut history = self.event_history.write();
             history.push_back(event.clone());
 
             // Trim history if needed
@@ -262,7 +262,7 @@ impl AdvancedAnalyticsEngine {
                         ],
                     };
 
-                    let mut anomalies = self.anomalies.write().unwrap();
+                    let mut anomalies = self.anomalies.write();
                     anomalies.push(anomaly);
                 }
             }
@@ -279,7 +279,7 @@ impl AdvancedAnalyticsEngine {
         if baseline_avg > 0.0 {
             let latency_ratio = recent_avg / baseline_avg;
 
-            if latency_ratio > 1.5 || latency_ratio < 0.5 {
+            if !(0.5..=1.5).contains(&latency_ratio) {
                 let severity = ((latency_ratio - 1.0).abs()).min(1.0);
 
                 if severity >= self.anomaly_threshold {
@@ -299,7 +299,7 @@ impl AdvancedAnalyticsEngine {
                         ],
                     };
 
-                    let mut anomalies = self.anomalies.write().unwrap();
+                    let mut anomalies = self.anomalies.write();
                     anomalies.push(anomaly);
                 }
             }
@@ -331,7 +331,7 @@ impl AdvancedAnalyticsEngine {
                         ],
                     };
 
-                    let mut anomalies = self.anomalies.write().unwrap();
+                    let mut anomalies = self.anomalies.write();
                     anomalies.push(anomaly);
                 }
             }
@@ -340,7 +340,7 @@ impl AdvancedAnalyticsEngine {
 
     /// Get recent anomalies
     pub fn get_anomalies(&self, since: DateTime<Utc>) -> Vec<Anomaly> {
-        let anomalies = self.anomalies.read().unwrap();
+        let anomalies = self.anomalies.read();
         anomalies
             .iter()
             .filter(|a| a.detected_at >= since)
@@ -506,9 +506,9 @@ impl AdvancedAnalyticsEngine {
     /// Clear all analytics data
     pub fn clear(&self) {
         self.base_analytics.clear();
-        let mut anomalies = self.anomalies.write().unwrap();
+        let mut anomalies = self.anomalies.write();
         anomalies.clear();
-        let mut history = self.event_history.write().unwrap();
+        let mut history = self.event_history.write();
         history.clear();
     }
 }

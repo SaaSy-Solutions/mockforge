@@ -201,10 +201,11 @@ mod tests {
         assert!(!config.is_enabled());
 
         // Now enabled with replay config
-        config.replay = Some(ReplayAugmentationConfig::new(
-            ReplayMode::Generated,
-            EventStrategy::CountBased,
-        ));
+        config.replay = Some(ReplayAugmentationConfig {
+            mode: ReplayMode::Generated,
+            strategy: EventStrategy::CountBased,
+            ..Default::default()
+        });
         assert!(config.is_enabled());
     }
 }

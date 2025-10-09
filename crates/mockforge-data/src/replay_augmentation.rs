@@ -146,7 +146,7 @@ impl GeneratedEvent {
     /// Convert to JSON
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(self)
-            .map_err(|e| Error::generic(&format!("Failed to serialize event: {}", e)))
+            .map_err(|e| Error::generic(format!("Failed to serialize event: {}", e)))
     }
 }
 
@@ -498,7 +498,7 @@ impl ReplayAugmentationEngine {
 
         // Parse JSON
         serde_json::from_str(json_str).map_err(|e| {
-            Error::generic(&format!("Failed to parse LLM response as JSON: {}", e))
+            Error::generic(format!("Failed to parse LLM response as JSON: {}", e))
         })
     }
 

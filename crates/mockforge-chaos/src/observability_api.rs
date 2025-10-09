@@ -4,18 +4,17 @@
 //! chaos engineering features, including metrics, alerts, traces, and scenarios.
 
 use axum::{
-    extract::{Query, State, WebSocketUpgrade},
+    extract::{State, WebSocketUpgrade},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::broadcast;
 
 use crate::{
     alerts::{Alert, AlertManager},
-    analytics::{ChaosAnalytics, ChaosImpact, MetricsBucket, TimeBucket},
+    analytics::ChaosAnalytics,
     dashboard::{DashboardManager, DashboardStats, DashboardUpdate},
     scenario_orchestrator::ScenarioOrchestrator,
     scenario_recorder::ScenarioRecorder,

@@ -109,7 +109,9 @@ impl RLAgent {
     /// Get random action (for exploration)
     fn random_action(&self) -> RemediationAction {
         let actions = self.possible_actions();
-        let idx = rand::random::<usize>() % actions.len();
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let idx = rng.random_range(0..actions.len());
         actions[idx].clone()
     }
 
@@ -332,7 +334,8 @@ impl AdaptiveRiskAssessor {
 
         // Keep only last 1000 assessments
         if history.len() > 1000 {
-            history.drain(0..history.len() - 1000);
+            let excess = history.len() - 1000;
+            history.drain(0..excess);
         }
 
         assessment

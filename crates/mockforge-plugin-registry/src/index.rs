@@ -1,6 +1,6 @@
 //! Plugin index management
 
-use crate::{RegistryEntry, Result, SearchQuery, SearchResults, SortOrder};
+use crate::{RegistryEntry, SearchQuery, SearchResults, SortOrder};
 use std::cmp::Ordering as CmpOrdering;
 
 /// Search and sort plugins

@@ -234,7 +234,7 @@ impl ScenarioEngine {
         let name = scenario.name.clone();
         info!("Starting chaos scenario: {}", name);
 
-        let mut scenarios = self.active_scenarios.write().unwrap();
+        let mut scenarios = self.active_scenarios.write();
         scenarios.insert(name, scenario);
     }
 
@@ -242,7 +242,7 @@ impl ScenarioEngine {
     pub fn stop_scenario(&self, name: &str) -> bool {
         info!("Stopping chaos scenario: {}", name);
 
-        let mut scenarios = self.active_scenarios.write().unwrap();
+        let mut scenarios = self.active_scenarios.write();
         scenarios.remove(name).is_some()
     }
 
@@ -250,25 +250,25 @@ impl ScenarioEngine {
     pub fn stop_all_scenarios(&self) {
         info!("Stopping all chaos scenarios");
 
-        let mut scenarios = self.active_scenarios.write().unwrap();
+        let mut scenarios = self.active_scenarios.write();
         scenarios.clear();
     }
 
     /// Get active scenarios
     pub fn get_active_scenarios(&self) -> Vec<ChaosScenario> {
-        let scenarios = self.active_scenarios.read().unwrap();
+        let scenarios = self.active_scenarios.read();
         scenarios.values().cloned().collect()
     }
 
     /// Get a specific scenario
     pub fn get_scenario(&self, name: &str) -> Option<ChaosScenario> {
-        let scenarios = self.active_scenarios.read().unwrap();
+        let scenarios = self.active_scenarios.read();
         scenarios.get(name).cloned()
     }
 
     /// Get merged chaos config from all active scenarios
     pub fn get_merged_config(&self) -> Option<ChaosConfig> {
-        let scenarios = self.active_scenarios.read().unwrap();
+        let scenarios = self.active_scenarios.read();
 
         if scenarios.is_empty() {
             return None;
@@ -285,7 +285,7 @@ impl ScenarioEngine {
     pub fn cleanup_expired(&self) {
         debug!("Cleaning up expired scenarios");
 
-        let mut scenarios = self.active_scenarios.write().unwrap();
+        let mut scenarios = self.active_scenarios.write();
         scenarios.retain(|name, scenario| {
             let active = scenario.is_active();
             if !active {

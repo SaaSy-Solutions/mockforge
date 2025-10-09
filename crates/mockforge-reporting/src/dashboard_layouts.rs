@@ -520,7 +520,6 @@ impl DashboardTemplates {
 }
 
 // Add uuid dependency
-use uuid::Uuid;
 
 #[cfg(test)]
 mod tests {

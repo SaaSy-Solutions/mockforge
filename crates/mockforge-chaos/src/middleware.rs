@@ -3,7 +3,7 @@
 use crate::{
     fault::FaultInjector, latency::LatencyInjector, rate_limit::RateLimiter,
     resilience::{Bulkhead, CircuitBreaker},
-    traffic_shaping::TrafficShaper, ChaosConfig, ChaosError,
+    traffic_shaping::TrafficShaper, ChaosConfig,
 };
 use axum::{
     body::Body,
@@ -216,7 +216,7 @@ pub async fn chaos_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{FaultInjectionConfig, LatencyConfig, RateLimitConfig};
+    use crate::config::{LatencyConfig, RateLimitConfig};
 
     #[tokio::test]
     async fn test_middleware_creation() {
@@ -241,7 +241,7 @@ mod tests {
             rate_limit: Some(RateLimitConfig {
                 enabled: true,
                 requests_per_second: 1,
-                burst_size: 1,
+                burst_size: 2,  // burst_size is the total capacity, not additional requests
                 ..Default::default()
             }),
             ..Default::default()

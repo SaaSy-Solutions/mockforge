@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Main chaos engineering configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ChaosConfig {
     /// Enable chaos engineering
     pub enabled: bool,
@@ -21,19 +22,6 @@ pub struct ChaosConfig {
     pub bulkhead: Option<BulkheadConfig>,
 }
 
-impl Default for ChaosConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            latency: None,
-            fault_injection: None,
-            rate_limit: None,
-            traffic_shaping: None,
-            circuit_breaker: None,
-            bulkhead: None,
-        }
-    }
-}
 
 /// Latency injection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

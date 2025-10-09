@@ -4,7 +4,6 @@ use clap::Subcommand;
 use mockforge_plugin_loader::{
     InstallOptions, PluginInstaller, PluginLoaderConfig, PluginSource,
 };
-use std::path::PathBuf;
 
 #[derive(Subcommand)]
 pub enum PluginCommands {

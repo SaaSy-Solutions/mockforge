@@ -1,7 +1,7 @@
 //! CSV export for reports and metrics
 
-use crate::{Result, ReportingError};
-use crate::comparison::{ComparisonReport, MetricDifference};
+use crate::Result;
+use crate::comparison::ComparisonReport;
 use crate::pdf::{ExecutionReport, ReportMetrics};
 use serde::{Deserialize, Serialize};
 use std::fs::File;

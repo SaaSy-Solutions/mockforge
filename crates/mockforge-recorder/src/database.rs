@@ -123,8 +123,8 @@ impl RecorderDatabase {
             "#,
         )
         .bind(&request.id)
-        .bind(&request.protocol)
-        .bind(&request.timestamp)
+        .bind(request.protocol)
+        .bind(request.timestamp)
         .bind(&request.method)
         .bind(&request.path)
         .bind(&request.query_params)
@@ -160,7 +160,7 @@ impl RecorderDatabase {
         .bind(&response.body)
         .bind(&response.body_encoding)
         .bind(response.size_bytes)
-        .bind(&response.timestamp)
+        .bind(response.timestamp)
         .execute(&self.pool)
         .await?;
 

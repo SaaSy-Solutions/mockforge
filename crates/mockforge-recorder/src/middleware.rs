@@ -23,13 +23,13 @@ pub async fn recording_middleware(
         .headers()
         .get("traceparent")
         .and_then(|v| v.to_str().ok())
-        .and_then(|tp| extract_trace_id(tp));
+        .and_then(extract_trace_id);
 
     let span_id = req
         .headers()
         .get("traceparent")
         .and_then(|v| v.to_str().ok())
-        .and_then(|tp| extract_span_id(tp));
+        .and_then(extract_span_id);
 
     // Extract request details
     let method = req.method().to_string();

@@ -1313,6 +1313,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires system keychain access
     fn test_json_field_encryption() {
         // Setup workspace
         let master_manager = MasterKeyManager::new();

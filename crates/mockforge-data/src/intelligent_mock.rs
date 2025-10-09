@@ -119,13 +119,12 @@ impl IntelligentMockConfig {
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
-        if self.mode == ResponseMode::Intelligent || self.mode == ResponseMode::Hybrid {
-            if self.prompt.is_none() {
+        if (self.mode == ResponseMode::Intelligent || self.mode == ResponseMode::Hybrid)
+            && self.prompt.is_none() {
                 return Err(Error::generic(
                     "Prompt is required for intelligent/hybrid response mode",
                 ));
             }
-        }
 
         if let Some(temp) = self.temperature {
             if !(0.0..=2.0).contains(&temp) {
@@ -305,7 +304,7 @@ impl IntelligentMockGenerator {
 
         // Parse JSON
         serde_json::from_str(json_str).map_err(|e| {
-            Error::generic(&format!("Failed to parse LLM response as JSON: {}", e))
+            Error::generic(format!("Failed to parse LLM response as JSON: {}", e))
         })
     }
 

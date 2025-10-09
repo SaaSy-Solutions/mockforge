@@ -97,11 +97,18 @@ pub use async_trait::TokenResolver;
 
 // Re-export types
 pub use auth::*;
-pub use datasource::*;
-pub use error::*;
-pub use response::*;
+pub use datasource::{
+    DataConnection, DataQuery, DataResult, DataSourcePlugin, DataSourcePluginConfig,
+};
+pub use response::{
+    ResponseData, ResponsePlugin, ResponsePluginConfig, ResponseRequest,
+};
 pub use template::*;
 pub use types::*;
+
+// Re-export helper modules with qualified names to avoid ambiguity
+pub use datasource::helpers as datasource_helpers;
+pub use response::helpers as response_helpers;
 
 // Re-export common types for backwards compatibility
 pub use types::{

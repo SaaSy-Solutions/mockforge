@@ -104,13 +104,12 @@ impl DriftRule {
             return Err(Error::generic("Rate must be non-negative"));
         }
 
-        if self.strategy == DriftStrategy::StateMachine {
-            if self.states.is_none() || self.transitions.is_none() {
+        if self.strategy == DriftStrategy::StateMachine
+            && (self.states.is_none() || self.transitions.is_none()) {
                 return Err(Error::generic(
                     "State machine strategy requires states and transitions",
                 ));
             }
-        }
 
         Ok(())
     }

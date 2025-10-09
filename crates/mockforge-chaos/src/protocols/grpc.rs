@@ -113,9 +113,7 @@ impl GrpcChaos {
 
     /// Get gRPC status code for fault injection
     pub fn get_grpc_status_code(&self) -> Option<i32> {
-        if let Some(http_code) = self.fault_injector.get_http_error_status() {
-            // Map HTTP codes to gRPC status codes
-            Some(match http_code {
+        self.fault_injector.get_http_error_status().map(|http_code| match http_code {
                 400 => 3,  // INVALID_ARGUMENT
                 401 => 16, // UNAUTHENTICATED
                 403 => 7,  // PERMISSION_DENIED
@@ -127,9 +125,6 @@ impl GrpcChaos {
                 504 => 4,  // DEADLINE_EXCEEDED
                 _ => 2,    // UNKNOWN
             })
-        } else {
-            None
-        }
     }
 
     /// Check if should interrupt stream

@@ -1,13 +1,13 @@
 //! Management API for chaos engineering
 
 use crate::{
-    ab_testing::{ABTestingEngine, ABTestConfig, ABTestStatus, VariantResults, TestConclusion},
+    ab_testing::{ABTestingEngine, ABTestConfig, VariantResults, TestConclusion},
     analytics::{ChaosAnalytics, TimeBucket},
-    auto_remediation::{RemediationEngine, RemediationConfig, SystemMetrics},
+    auto_remediation::{RemediationEngine, RemediationConfig},
     config::{BulkheadConfig, ChaosConfig, CircuitBreakerConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig, TrafficShapingConfig},
     recommendations::{RecommendationCategory, RecommendationEngine, RecommendationSeverity, Recommendation},
     scenarios::{PredefinedScenarios, ScenarioEngine, ChaosScenario},
-    scenario_orchestrator::{OrchestratedScenario, ScenarioOrchestrator, OrchestrationStatus},
+    scenario_orchestrator::{OrchestratedScenario, ScenarioOrchestrator},
 };
 use axum::{
     extract::{Path, State},
@@ -19,7 +19,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::info;
 
 /// API state
 #[derive(Clone)]
@@ -377,10 +377,10 @@ async fn get_status(State(state): State<ChaosApiState>) -> Json<ChaosStatus> {
     Json(ChaosStatus {
         enabled: config.enabled,
         active_scenarios: scenarios.iter().map(|s| s.name.clone()).collect(),
-        latency_enabled: config.latency.as_ref().map_or(false, |l| l.enabled),
-        fault_injection_enabled: config.fault_injection.as_ref().map_or(false, |f| f.enabled),
-        rate_limit_enabled: config.rate_limit.as_ref().map_or(false, |r| r.enabled),
-        traffic_shaping_enabled: config.traffic_shaping.as_ref().map_or(false, |t| t.enabled),
+        latency_enabled: config.latency.as_ref().is_some_and(|l| l.enabled),
+        fault_injection_enabled: config.fault_injection.as_ref().is_some_and(|f| f.enabled),
+        rate_limit_enabled: config.rate_limit.as_ref().is_some_and(|r| r.enabled),
+        traffic_shaping_enabled: config.traffic_shaping.as_ref().is_some_and(|t| t.enabled),
     })
 }
 
@@ -425,7 +425,7 @@ async fn inject_grpc_status_codes(
 
     info!("gRPC status codes configured: {:?}", &req.status_codes);
     Json(StatusResponse {
-        message: format!("gRPC status codes configured"),
+        message: "gRPC status codes configured".to_string(),
     })
 }
 
@@ -442,7 +442,7 @@ async fn set_grpc_stream_interruption(
 
     info!("gRPC stream interruption probability set to {}", req.probability);
     Json(StatusResponse {
-        message: format!("gRPC stream interruption configured"),
+        message: "gRPC stream interruption configured".to_string(),
     })
 }
 
@@ -479,7 +479,7 @@ async fn inject_websocket_close_codes(
 
     info!("WebSocket close codes configured: {:?}", &req.close_codes);
     Json(StatusResponse {
-        message: format!("WebSocket close codes configured"),
+        message: "WebSocket close codes configured".to_string(),
     })
 }
 
@@ -496,7 +496,7 @@ async fn set_websocket_message_drop(
 
     info!("WebSocket message drop probability set to {}", req.probability);
     Json(StatusResponse {
-        message: format!("WebSocket message drop configured"),
+        message: "WebSocket message drop configured".to_string(),
     })
 }
 
@@ -513,7 +513,7 @@ async fn set_websocket_message_corruption(
 
     info!("WebSocket message corruption probability set to {}", req.probability);
     Json(StatusResponse {
-        message: format!("WebSocket message corruption configured"),
+        message: "WebSocket message corruption configured".to_string(),
     })
 }
 
@@ -551,7 +551,7 @@ async fn inject_graphql_error_codes(
 
     info!("GraphQL error codes configured: {:?}", &req.error_codes);
     Json(StatusResponse {
-        message: format!("GraphQL error codes configured"),
+        message: "GraphQL error codes configured".to_string(),
     })
 }
 
@@ -568,7 +568,7 @@ async fn set_graphql_partial_data(
 
     info!("GraphQL partial data probability set to {}", req.probability);
     Json(StatusResponse {
-        message: format!("GraphQL partial data configured"),
+        message: "GraphQL partial data configured".to_string(),
     })
 }
 

@@ -2,7 +2,6 @@ use axum::Router;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
 use regex::Regex;
-use serde_json::json;
 use std::net::SocketAddr;
 
 /// Test that UUID templating works in override files

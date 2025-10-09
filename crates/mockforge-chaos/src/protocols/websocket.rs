@@ -128,9 +128,7 @@ impl WebSocketChaos {
 
     /// Get WebSocket close code for fault injection
     pub fn get_close_code(&self) -> Option<u16> {
-        if let Some(http_code) = self.fault_injector.get_http_error_status() {
-            // Map HTTP codes to WebSocket close codes
-            Some(match http_code {
+        self.fault_injector.get_http_error_status().map(|http_code| match http_code {
                 400 => 1002, // Protocol error
                 408 => 1001, // Going away (timeout)
                 429 => 1008, // Policy violation (rate limit)
@@ -138,9 +136,6 @@ impl WebSocketChaos {
                 503 => 1001, // Going away (unavailable)
                 _ => 1011,   // Server error
             })
-        } else {
-            None
-        }
     }
 
     /// Get traffic shaper for connection management

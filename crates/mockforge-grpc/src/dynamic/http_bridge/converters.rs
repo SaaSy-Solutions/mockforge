@@ -556,7 +556,7 @@ impl ProtobufJsonConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prost_reflect::MessageDescriptor;
+    
 
     #[test]
     fn test_json_to_protobuf_simple_types() {

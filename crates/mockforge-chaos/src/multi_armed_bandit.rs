@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -264,7 +263,9 @@ impl MultiArmedBandit {
         if keys.is_empty() {
             return String::new();
         }
-        let idx = rand::random::<usize>() % keys.len();
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let idx = rng.random_range(0..keys.len());
         keys[idx].clone()
     }
 

@@ -43,3 +43,4 @@ data-faker = ["mockforge-data"]
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true }
+opentelemetry_sdk = "0.21"

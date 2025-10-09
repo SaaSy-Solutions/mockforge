@@ -87,8 +87,8 @@ impl ProxyRouter {
         }
 
         // For wildcard patterns like "/api/*", strip the prefix and keep the rest
-        if pattern.ends_with("/*") {
-            let prefix = &pattern[..pattern.len() - 2]; // Remove "/*"
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            // Remove "/*"
             if path.starts_with(prefix) && path.len() > prefix.len() {
                 let remaining = &path[prefix.len()..];
                 // Ensure we don't have double slashes

@@ -5,7 +5,6 @@ use crate::{
     analytics::{ChaosAnalytics, ChaosImpact, MetricsBucket, TimeBucket},
     scenario_orchestrator::OrchestrationStatus,
     scenario_replay::ReplayStatus,
-    scenario_scheduler::ScheduledScenario,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -240,7 +239,7 @@ impl DashboardManager {
 
     /// Get current statistics
     pub fn get_stats(&self) -> DashboardStats {
-        let mut stats = self.last_stats.write().unwrap();
+        let mut stats = self.last_stats.write();
         *stats = DashboardStats::from_analytics(&self.analytics, &self.alert_manager);
         stats.clone()
     }

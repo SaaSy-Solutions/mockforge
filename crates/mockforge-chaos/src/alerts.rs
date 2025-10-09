@@ -1,15 +1,11 @@
 //! Alert system for chaos events
 
-use crate::{
-    analytics::{ChaosImpact, MetricsBucket, TimeBucket},
-    scenario_recorder::ChaosEvent,
-};
+use crate::analytics::MetricsBucket;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::RwLock;
-use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 /// Alert severity level
@@ -287,7 +283,7 @@ impl AlertRule {
                     None
                 }
             }
-            AlertRuleType::ImpactThreshold { threshold, .. } => {
+            AlertRuleType::ImpactThreshold {  .. } => {
                 // This would need ChaosImpact from analytics
                 // For now, return None - would be implemented with full integration
                 None
@@ -346,14 +342,14 @@ impl AlertManager {
     /// Add an alert rule
     pub fn add_rule(&self, rule: AlertRule) {
         let id = rule.id.clone();
-        let mut rules = self.rules.write().unwrap();
+        let mut rules = self.rules.write();
         rules.insert(id.clone(), rule);
         info!("Added alert rule: {}", id);
     }
 
     /// Remove an alert rule
     pub fn remove_rule(&self, id: &str) -> Option<AlertRule> {
-        let mut rules = self.rules.write().unwrap();
+        let mut rules = self.rules.write();
         let removed = rules.remove(id);
         if removed.is_some() {
             info!("Removed alert rule: {}", id);
@@ -363,7 +359,7 @@ impl AlertManager {
 
     /// Enable/disable a rule
     pub fn set_rule_enabled(&self, id: &str, enabled: bool) -> Result<(), String> {
-        let mut rules = self.rules.write().unwrap();
+        let mut rules = self.rules.write();
         if let Some(rule) = rules.get_mut(id) {
             rule.enabled = enabled;
             info!("Alert rule '{}' {}", id, if enabled { "enabled" } else { "disabled" });
@@ -375,13 +371,13 @@ impl AlertManager {
 
     /// Get all rules
     pub fn get_rules(&self) -> Vec<AlertRule> {
-        let rules = self.rules.read().unwrap();
+        let rules = self.rules.read();
         rules.values().cloned().collect()
     }
 
     /// Evaluate all rules against metrics
     pub fn evaluate_rules(&self, metrics: &[MetricsBucket]) {
-        let rules = self.rules.read().unwrap();
+        let rules = self.rules.read();
 
         for rule in rules.values() {
             if let Some(alert) = rule.evaluate(metrics) {
@@ -396,13 +392,13 @@ impl AlertManager {
 
         // Store in active alerts
         {
-            let mut active = self.active_alerts.write().unwrap();
+            let mut active = self.active_alerts.write();
             active.insert(alert.id.clone(), alert.clone());
         }
 
         // Add to history
         {
-            let mut history = self.alert_history.write().unwrap();
+            let mut history = self.alert_history.write();
             history.push(alert.clone());
 
             // Trim history if needed
@@ -413,7 +409,7 @@ impl AlertManager {
         }
 
         // Notify handlers
-        let handlers = self.handlers.read().unwrap();
+        let handlers = self.handlers.read();
         for handler in handlers.iter() {
             handler.handle(&alert);
         }
@@ -422,7 +418,7 @@ impl AlertManager {
     /// Resolve an alert
     pub fn resolve_alert(&self, alert_id: &str) -> Result<(), String> {
         let mut alert = {
-            let mut active = self.active_alerts.write().unwrap();
+            let mut active = self.active_alerts.write();
             active.remove(alert_id)
         };
 
@@ -430,7 +426,7 @@ impl AlertManager {
             alert_ref.resolve();
 
             // Update in history
-            let mut history = self.alert_history.write().unwrap();
+            let mut history = self.alert_history.write();
             if let Some(historical_alert) = history.iter_mut().find(|a| a.id == alert_id) {
                 *historical_alert = alert_ref.clone();
             }
@@ -444,13 +440,13 @@ impl AlertManager {
 
     /// Get active alerts
     pub fn get_active_alerts(&self) -> Vec<Alert> {
-        let active = self.active_alerts.read().unwrap();
+        let active = self.active_alerts.read();
         active.values().cloned().collect()
     }
 
     /// Get alert history
     pub fn get_alert_history(&self, limit: Option<usize>) -> Vec<Alert> {
-        let history = self.alert_history.read().unwrap();
+        let history = self.alert_history.read();
         let mut alerts: Vec<_> = history.clone();
 
         if let Some(limit) = limit {
@@ -462,14 +458,14 @@ impl AlertManager {
 
     /// Add a custom alert handler
     pub fn add_handler(&self, handler: Box<dyn AlertHandler>) {
-        let mut handlers = self.handlers.write().unwrap();
+        let mut handlers = self.handlers.write();
         handlers.push(handler);
     }
 
     /// Clear all alerts
     pub fn clear_alerts(&self) {
-        let mut active = self.active_alerts.write().unwrap();
-        let mut history = self.alert_history.write().unwrap();
+        let mut active = self.active_alerts.write();
+        let mut history = self.alert_history.write();
         active.clear();
         history.clear();
         info!("Cleared all alerts");
@@ -530,7 +526,7 @@ mod tests {
             },
         );
 
-        let mut bucket = MetricsBucket::new(Utc::now(), TimeBucket::Minute);
+        let mut bucket = MetricsBucket::new(Utc::now(), crate::analytics::TimeBucket::Minute);
         bucket.total_events = 100;
 
         let alert = rule.evaluate(&[bucket]);

@@ -1,8 +1,6 @@
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use std::process::Command;
-use tempfile::tempdir;
-use std::fs;
 
 /// Test CLI binary exists and can be executed
 #[test]

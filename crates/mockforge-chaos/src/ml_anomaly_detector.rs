@@ -116,7 +116,7 @@ impl AnomalyDetector {
     pub fn add_data_point(&mut self, metric_name: String, point: TimeSeriesPoint) {
         self.time_series_data
             .entry(metric_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(point);
     }
 
@@ -192,7 +192,13 @@ impl AnomalyDetector {
         let z_score = if baseline.std_dev > 0.0 {
             ((value - baseline.mean) / baseline.std_dev).abs()
         } else {
-            0.0
+            // When std_dev is 0, all baseline values are identical.
+            // If the new value differs from the mean, it's definitely an anomaly.
+            if (value - baseline.mean).abs() > f64::EPSILON {
+                f64::INFINITY
+            } else {
+                0.0
+            }
         };
 
         let threshold = self.config.std_dev_threshold * (1.0 / self.config.sensitivity);
@@ -373,7 +379,7 @@ impl AnomalyDetector {
                         *anomaly_counts.entry(timestamp_rounded).or_insert(0) += 1;
                         anomalous_metrics
                             .entry(timestamp_rounded)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(metric_name.clone());
                     }
                 }

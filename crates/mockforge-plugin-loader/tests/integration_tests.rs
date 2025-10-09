@@ -144,7 +144,7 @@ mod tests {
         let mut config = PluginLoaderConfig::default();
         config.allow_unsigned = true; // Allow unsigned plugins for testing
         config.skip_wasm_validation = true; // Skip WASM validation for test
-        let mut loader = PluginLoader::new(config);
+        let loader = PluginLoader::new(config);
 
         // 1. Validate plugin
         let validation_result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
@@ -218,7 +218,7 @@ mod tests {
     #[tokio::test]
     async fn test_bulk_plugin_operations() {
         let config = PluginLoaderConfig::default();
-        let mut loader = PluginLoader::new(config);
+        let loader = PluginLoader::new(config);
 
         // Test reload all plugins
         let reload_stats = loader.reload_all_plugins().await;
@@ -249,7 +249,7 @@ mod tests {
         let health_result = loader.get_plugin_health(&nonexistent_id).await;
         assert!(health_result.is_err());
 
-        let mut loader_mut = loader; // Would need mutable access in real impl
+        let loader_mut = loader; // Would need mutable access in real impl
                                      // Unload non-existent should not panic
                                      // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
                                      // assert!(unload_result.is_ok()); // In real impl

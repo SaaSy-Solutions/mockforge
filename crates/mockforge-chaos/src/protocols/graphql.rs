@@ -142,11 +142,7 @@ impl GraphQLChaos {
 
     /// Check if should inject GraphQL error
     pub fn should_inject_error(&self) -> Option<String> {
-        if let Some(_http_code) = self.fault_injector.get_http_error_status() {
-            Some("Internal server error".to_string())
-        } else {
-            None
-        }
+        self.fault_injector.get_http_error_status().map(|_http_code| "Internal server error".to_string())
     }
 
     /// Check if should return partial data

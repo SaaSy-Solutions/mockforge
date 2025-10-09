@@ -284,14 +284,12 @@ mod tests {
     fn test_enhanced_faker_new() {
         let _faker = EnhancedFaker::new();
         // Should create successfully
-        assert!(true);
     }
 
     #[test]
     fn test_enhanced_faker_default() {
-        let _faker = EnhancedFaker::default();
+        let _faker = EnhancedFaker;
         // Should create successfully
-        assert!(true);
     }
 
     #[test]
@@ -325,10 +323,9 @@ mod tests {
     #[test]
     fn test_boolean() {
         let mut faker = EnhancedFaker::new();
-        let value = faker.boolean(0.5);
+        let _value = faker.boolean(0.5);
 
-        // Should be either true or false
-        assert!(value || !value);
+        // Boolean generation should not panic
     }
 
     #[test]
@@ -535,13 +532,11 @@ mod tests {
     #[test]
     fn test_template_faker_new() {
         let _faker = TemplateFaker::new();
-        assert!(true);
     }
 
     #[test]
     fn test_template_faker_default() {
         let _faker = TemplateFaker::default();
-        assert!(true);
     }
 
     #[test]

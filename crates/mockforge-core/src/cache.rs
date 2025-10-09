@@ -30,7 +30,7 @@ impl<V> CacheEntry<V> {
     }
 
     fn is_expired(&self) -> bool {
-        self.expires_at.map_or(false, |expires_at| Instant::now() > expires_at)
+        self.expires_at.is_some_and(|expires_at| Instant::now() > expires_at)
     }
 
     fn access(&mut self) -> &V {

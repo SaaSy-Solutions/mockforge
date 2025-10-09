@@ -1,9 +1,6 @@
 //! Chaos analytics and metrics aggregation
 
-use crate::{
-    scenario_recorder::{ChaosEvent, ChaosEventType},
-    scenarios::ChaosScenario,
-};
+use crate::scenario_recorder::{ChaosEvent, ChaosEventType};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -298,7 +295,7 @@ impl ChaosAnalytics {
         let bucket_timestamp = bucket_size.round_timestamp(event.timestamp);
         let key = (bucket_timestamp, bucket_size);
 
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write();
 
         // Get or create bucket
         let bucket = buckets
@@ -320,7 +317,7 @@ impl ChaosAnalytics {
         end: DateTime<Utc>,
         bucket_size: TimeBucket,
     ) -> Vec<MetricsBucket> {
-        let buckets = self.buckets.read().unwrap();
+        let buckets = self.buckets.read();
 
         let mut result: Vec<_> = buckets
             .iter()
@@ -370,7 +367,7 @@ impl ChaosAnalytics {
 
     /// Clear all analytics data
     pub fn clear(&self) {
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write();
         buckets.clear();
     }
 }

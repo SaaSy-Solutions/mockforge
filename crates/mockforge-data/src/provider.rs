@@ -63,7 +63,6 @@ mod tests {
     fn test_data_faker_provider_new() {
         let _provider = DataFakerProvider::new();
         // Should create successfully
-        assert!(true);
     }
 
     #[test]
@@ -170,7 +169,6 @@ mod tests {
     fn test_register_core_faker_provider() {
         // Just test that registration doesn't panic
         register_core_faker_provider();
-        assert!(true);
     }
 
     #[test]

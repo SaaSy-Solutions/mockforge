@@ -1,7 +1,6 @@
 //! Plugin storage backend
 
-use crate::{RegistryEntry, RegistryError, Result, VersionEntry};
-use serde::{Deserialize, Serialize};
+use crate::{RegistryEntry, Result, VersionEntry};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;

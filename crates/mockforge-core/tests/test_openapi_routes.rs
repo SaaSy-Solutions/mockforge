@@ -1,8 +1,6 @@
 use axum::{
     body::Body,
     http::Request,
-    middleware::Next,
-    response::Response,
     Router,
 };
 use mockforge_core::openapi_routes::*;
@@ -154,8 +152,8 @@ async fn test_mock_route_generation() {
 
 #[tokio::test]
 async fn test_validate_request_middleware() {
-    use axum::extract::State;
-    use mockforge_core::openapi_routes::builder::validate_request;
+    
+    
 
     // Create a simple OpenAPI spec for testing
     let spec_json = json!({

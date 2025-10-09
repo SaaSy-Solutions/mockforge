@@ -114,6 +114,5 @@ mod tests {
         let registry = Arc::new(MetricsRegistry::new());
         let _router = prometheus_router(registry);
         // Router should be created successfully
-        assert!(true);
     }
 }

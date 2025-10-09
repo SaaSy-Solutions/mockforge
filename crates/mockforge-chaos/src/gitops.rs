@@ -4,7 +4,7 @@
 //! managing chaos orchestrations declaratively.
 
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
@@ -423,7 +423,7 @@ mod tests {
         );
 
         assert_eq!(kustomization.metadata.name, "chaos-orchestrations");
-        assert_eq!(kustomization.spec.prune, true);
+        assert!(kustomization.spec.prune);
     }
 
     #[test]

@@ -146,7 +146,7 @@ impl CollaborationSession {
 
     /// Add a user to the session
     pub fn add_user(&self, user: CollaborationUser) -> Result<(), String> {
-        let mut users = self.users.write().map_err(|e| e.to_string())?;
+        let mut users = self.users.write();
         users.insert(user.id.clone(), user.clone());
 
         // Broadcast user joined
@@ -159,7 +159,7 @@ impl CollaborationSession {
 
     /// Remove a user from the session
     pub fn remove_user(&self, user_id: &str) -> Result<(), String> {
-        let mut users = self.users.write().map_err(|e| e.to_string())?;
+        let mut users = self.users.write();
 
         if let Some(user) = users.remove(user_id) {
             // Broadcast user left
@@ -181,7 +181,7 @@ impl CollaborationSession {
         cursor: Option<CursorPosition>,
         active_field: Option<String>,
     ) -> Result<(), String> {
-        let mut users = self.users.write().map_err(|e| e.to_string())?;
+        let mut users = self.users.write();
 
         if let Some(user) = users.get_mut(user_id) {
             user.cursor = cursor.clone();
@@ -203,7 +203,7 @@ impl CollaborationSession {
     /// Apply a change
     pub fn apply_change(&self, change: CollaborationChange) -> Result<(), String> {
         // Check for conflicts
-        let changes = self.changes.read().map_err(|e| e.to_string())?;
+        let changes = self.changes.read();
         let conflicts: Vec<_> = changes
             .iter()
             .filter(|c| {
@@ -227,7 +227,7 @@ impl CollaborationSession {
         }
 
         // Store change
-        let mut changes = self.changes.write().map_err(|e| e.to_string())?;
+        let mut changes = self.changes.write();
         changes.push(change.clone());
 
         // Broadcast change
@@ -240,13 +240,13 @@ impl CollaborationSession {
 
     /// Get all active users
     pub fn get_users(&self) -> Result<Vec<CollaborationUser>, String> {
-        let users = self.users.read().map_err(|e| e.to_string())?;
+        let users = self.users.read();
         Ok(users.values().cloned().collect())
     }
 
     /// Get change history
     pub fn get_changes(&self) -> Result<Vec<CollaborationChange>, String> {
-        let changes = self.changes.read().map_err(|e| e.to_string())?;
+        let changes = self.changes.read();
         Ok(changes.clone())
     }
 
@@ -271,7 +271,7 @@ impl CollaborationManager {
 
     /// Get or create a session
     pub fn get_or_create_session(&self, orchestration_id: &str) -> Result<Arc<CollaborationSession>, String> {
-        let mut sessions = self.sessions.write().map_err(|e| e.to_string())?;
+        let mut sessions = self.sessions.write();
 
         if let Some(session) = sessions.get(orchestration_id) {
             Ok(Arc::clone(session))
@@ -284,14 +284,14 @@ impl CollaborationManager {
 
     /// Remove a session
     pub fn remove_session(&self, orchestration_id: &str) -> Result<(), String> {
-        let mut sessions = self.sessions.write().map_err(|e| e.to_string())?;
+        let mut sessions = self.sessions.write();
         sessions.remove(orchestration_id);
         Ok(())
     }
 
     /// Get active sessions count
     pub fn active_sessions_count(&self) -> usize {
-        self.sessions.read().map(|s| s.len()).unwrap_or(0)
+        self.sessions.read().len()
     }
 }
 
@@ -353,7 +353,7 @@ mod tests {
         let session1 = manager.get_or_create_session("orch1").unwrap();
         let session2 = manager.get_or_create_session("orch1").unwrap();
 
-        assert_eq!(Arc::ptr_eq(&session1, &session2), true);
+        assert!(Arc::ptr_eq(&session1, &session2));
         assert_eq!(manager.active_sessions_count(), 1);
     }
 }

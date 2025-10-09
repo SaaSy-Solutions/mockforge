@@ -1,9 +1,6 @@
 //! Scenario recording and replay system
 
-use crate::{
-    config::ChaosConfig,
-    scenarios::ChaosScenario,
-};
+use crate::scenarios::ChaosScenario;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -142,12 +139,12 @@ impl RecordedScenario {
         let content = match extension {
             Some("yaml") | Some("yml") => {
                 self.to_yaml().map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    std::io::Error::other(e.to_string())
                 })?
             }
             _ => {
                 self.to_json().map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    std::io::Error::other(e.to_string())
                 })?
             }
         };
@@ -166,12 +163,12 @@ impl RecordedScenario {
         let scenario = match extension {
             Some("yaml") | Some("yml") => {
                 Self::from_yaml(&content).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    std::io::Error::other(e.to_string())
                 })?
             }
             _ => {
                 Self::from_json(&content).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+                    std::io::Error::other(e.to_string())
                 })?
             }
         };
@@ -209,7 +206,7 @@ impl ScenarioRecorder {
 
     /// Start recording a scenario
     pub fn start_recording(&self, scenario: ChaosScenario) -> Result<(), String> {
-        let mut current = self.current_recording.write().unwrap();
+        let mut current = self.current_recording.write();
 
         if current.is_some() {
             return Err("Recording already in progress".to_string());
@@ -222,7 +219,7 @@ impl ScenarioRecorder {
 
     /// Stop recording
     pub fn stop_recording(&self) -> Result<RecordedScenario, String> {
-        let mut current = self.current_recording.write().unwrap();
+        let mut current = self.current_recording.write();
 
         if let Some(mut recording) = current.take() {
             recording.finish();
@@ -234,7 +231,7 @@ impl ScenarioRecorder {
             );
 
             // Store in completed recordings
-            let mut recordings = self.recordings.write().unwrap();
+            let mut recordings = self.recordings.write();
             recordings.push(recording.clone());
 
             Ok(recording)
@@ -245,7 +242,7 @@ impl ScenarioRecorder {
 
     /// Record an event
     pub fn record_event(&self, event: ChaosEvent) {
-        let mut current = self.current_recording.write().unwrap();
+        let mut current = self.current_recording.write();
 
         if let Some(recording) = current.as_mut() {
             // Check max events limit
@@ -264,24 +261,23 @@ impl ScenarioRecorder {
 
     /// Check if recording is in progress
     pub fn is_recording(&self) -> bool {
-        self.current_recording.read().unwrap().is_some()
+        self.current_recording.read().is_some()
     }
 
     /// Get current recording (read-only)
     pub fn get_current_recording(&self) -> Option<RecordedScenario> {
-        self.current_recording.read().unwrap().clone()
+        self.current_recording.read().clone()
     }
 
     /// Get all completed recordings
     pub fn get_recordings(&self) -> Vec<RecordedScenario> {
-        self.recordings.read().unwrap().clone()
+        self.recordings.read().clone()
     }
 
     /// Get recording by scenario name
     pub fn get_recording_by_name(&self, name: &str) -> Option<RecordedScenario> {
         self.recordings
             .read()
-            .unwrap()
             .iter()
             .find(|r| r.scenario.name == name)
             .cloned()
@@ -289,7 +285,7 @@ impl ScenarioRecorder {
 
     /// Clear all recordings
     pub fn clear_recordings(&self) {
-        let mut recordings = self.recordings.write().unwrap();
+        let mut recordings = self.recordings.write();
         recordings.clear();
         info!("Cleared all recordings");
     }
@@ -304,11 +300,10 @@ impl Default for ScenarioRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::LatencyConfig;
 
     #[test]
     fn test_recorded_scenario_creation() {
-        let scenario = ChaosScenario::new("test", ChaosConfig::default());
+        let scenario = ChaosScenario::new("test", crate::ChaosConfig::default());
         let recording = RecordedScenario::new(scenario);
 
         assert_eq!(recording.scenario.name, "test");
@@ -318,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_add_event() {
-        let scenario = ChaosScenario::new("test", ChaosConfig::default());
+        let scenario = ChaosScenario::new("test", crate::ChaosConfig::default());
         let mut recording = RecordedScenario::new(scenario);
 
         let event = ChaosEvent {
@@ -336,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_finish_recording() {
-        let scenario = ChaosScenario::new("test", ChaosConfig::default());
+        let scenario = ChaosScenario::new("test", crate::ChaosConfig::default());
         let mut recording = RecordedScenario::new(scenario);
 
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -349,7 +344,7 @@ mod tests {
     #[test]
     fn test_recorder_start_stop() {
         let recorder = ScenarioRecorder::new();
-        let scenario = ChaosScenario::new("test", ChaosConfig::default());
+        let scenario = ChaosScenario::new("test", crate::ChaosConfig::default());
 
         assert!(!recorder.is_recording());
 
@@ -364,7 +359,7 @@ mod tests {
     #[test]
     fn test_record_event() {
         let recorder = ScenarioRecorder::new();
-        let scenario = ChaosScenario::new("test", ChaosConfig::default());
+        let scenario = ChaosScenario::new("test", crate::ChaosConfig::default());
 
         recorder.start_recording(scenario).unwrap();
 
@@ -385,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_json_export_import() {
-        let scenario = ChaosScenario::new("test", ChaosConfig::default());
+        let scenario = ChaosScenario::new("test", crate::ChaosConfig::default());
         let mut recording = RecordedScenario::new(scenario);
 
         let event = ChaosEvent {

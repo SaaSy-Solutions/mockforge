@@ -332,7 +332,7 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{FieldDefinition, templates};
+    use crate::schema::templates;
 
     #[test]
     fn test_data_generator_new() {

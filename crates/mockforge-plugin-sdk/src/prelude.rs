@@ -11,14 +11,20 @@ pub use mockforge_plugin_core::{
     AuthPlugin, AuthPluginConfig, AuthRequest, AuthResponse, UserIdentity,
     // Template plugin types
     TemplatePlugin, TemplatePluginConfig, TemplateFunction, FunctionParameter,
-    // Response plugin types
-    ResponsePlugin, ResponsePluginConfig, ResponseRequest, ResponseData,
-    // DataSource plugin types
-    DataSourcePlugin, DataSourcePluginConfig, DataConnection, DataQuery,
-    DataResult, DataRow, ColumnInfo, Schema, TableInfo,
     // Common types
     PluginCapabilities, PluginContext, PluginResult,
     PluginError, PluginId, PluginVersion, PluginInfo, PluginManifest,
+};
+
+// Re-export response plugin types from their module
+pub use mockforge_plugin_core::response::{
+    ResponsePlugin, ResponsePluginConfig, ResponseRequest, ResponseData,
+};
+
+// Re-export datasource plugin types from their module
+pub use mockforge_plugin_core::datasource::{
+    DataSourcePlugin, DataSourcePluginConfig, DataConnection, DataQuery,
+    DataResult, DataRow, ColumnInfo, Schema, TableInfo,
 };
 
 // Re-export async trait
@@ -31,7 +37,6 @@ pub use std::collections::HashMap;
 
 // Re-export SDK utilities
 pub use crate::builders::*;
-pub use crate::macros::*;
 
 #[cfg(feature = "testing")]
 pub use crate::testing::*;

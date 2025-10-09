@@ -3,10 +3,7 @@
 //! This test starts a gRPC server and makes actual gRPC calls using a tonic client
 //! to verify that the gRPC server functionality works end-to-end.
 
-use mockforge_grpc::dynamic::{discover_services, start_dynamic_server, DynamicGrpcConfig};
-use std::time::Duration;
-use tokio::time::timeout;
-use tonic::transport::Channel;
+use mockforge_grpc::dynamic::{discover_services, DynamicGrpcConfig};
 
 #[tokio::test]
 #[ignore] // Ignore by default - requires proto files and can be slow
@@ -47,7 +44,7 @@ async fn test_grpc_server_start_and_call() {
     println!("Discovered {} gRPC services: {:?}", services.len(), services);
 
     // Start gRPC server on a random port
-    let addr = "127.0.0.1:0".parse().unwrap();
+    let addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
 
     // Note: This is a placeholder for actual server start
     // The real implementation would look like:

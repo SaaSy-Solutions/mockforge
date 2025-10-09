@@ -417,6 +417,7 @@ impl Default for RagConfig {
 
 /// Observability configuration for metrics and distributed tracing
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ObservabilityConfig {
     /// Prometheus metrics configuration
     pub prometheus: PrometheusConfig,
@@ -428,16 +429,6 @@ pub struct ObservabilityConfig {
     pub chaos: Option<ChaosEngConfig>,
 }
 
-impl Default for ObservabilityConfig {
-    fn default() -> Self {
-        Self {
-            prometheus: PrometheusConfig::default(),
-            opentelemetry: None,
-            recorder: None,
-            chaos: None,
-        }
-    }
-}
 
 /// Prometheus metrics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -540,6 +531,7 @@ impl Default for RecorderConfig {
 
 /// Chaos engineering configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ChaosEngConfig {
     /// Enable chaos engineering
     pub enabled: bool,
@@ -555,18 +547,6 @@ pub struct ChaosEngConfig {
     pub scenario: Option<String>,
 }
 
-impl Default for ChaosEngConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            latency: None,
-            fault_injection: None,
-            rate_limit: None,
-            traffic_shaping: None,
-            scenario: None,
-        }
-    }
-}
 
 /// Latency injection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

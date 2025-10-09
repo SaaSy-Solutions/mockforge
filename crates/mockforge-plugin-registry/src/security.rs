@@ -1,8 +1,7 @@
 //! Plugin security scanning and validation
 
-use crate::{RegistryError, Result};
+use crate::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 
 /// Security scan result
@@ -247,7 +246,7 @@ impl SecurityScanner {
     }
 
     async fn static_analysis(&self, _package_path: &Path) -> Result<Vec<Finding>> {
-        let mut findings = Vec::new();
+        let findings = Vec::new();
 
         // In production, run:
         // - cargo clippy for Rust
@@ -266,7 +265,7 @@ impl SecurityScanner {
     }
 
     async fn check_license_compliance(&self, _package_path: &Path) -> Result<Vec<Finding>> {
-        let mut findings = Vec::new();
+        let findings = Vec::new();
 
         // Check if license is in allowed list
         // Scan for license headers in code files

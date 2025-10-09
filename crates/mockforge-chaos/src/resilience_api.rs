@@ -11,7 +11,6 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Circuit breaker state for API response
@@ -207,7 +206,7 @@ async fn get_dashboard_summary(State(state): State<ResilienceApiState>) -> impl 
     let mut half_open_circuits = 0;
     let mut closed_circuits = 0;
 
-    for (_, cb_state) in &circuit_states {
+    for cb_state in circuit_states.values() {
         match cb_state {
             CircuitState::Open => open_circuits += 1,
             CircuitState::HalfOpen => half_open_circuits += 1,

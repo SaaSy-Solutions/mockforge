@@ -22,40 +22,40 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
     // Check for plugin.yaml
     match find_manifest(&project_dir) {
         Ok(manifest_path) => {
-            println!("{} {}", "✓".green(), "Plugin manifest found");
+            println!("{} Plugin manifest found", "✓".green());
 
             // Validate manifest contents
             match read_manifest(&manifest_path) {
                 Ok(manifest) => {
-                    println!("{} {}", "✓".green(), "Manifest is valid YAML");
+                    println!("{} Manifest is valid YAML", "✓".green());
 
                     // Check required fields
                     if get_plugin_id(&manifest).is_ok() {
-                        println!("{} {}", "✓".green(), "Plugin ID is present");
+                        println!("{} Plugin ID is present", "✓".green());
                     } else {
                         errors.push("Plugin manifest missing 'id' field".to_string());
                     }
 
                     if manifest.get("version").is_some() {
-                        println!("{} {}", "✓".green(), "Version is present");
+                        println!("{} Version is present", "✓".green());
                     } else {
                         errors.push("Plugin manifest missing 'version' field".to_string());
                     }
 
                     if manifest.get("name").is_some() {
-                        println!("{} {}", "✓".green(), "Name is present");
+                        println!("{} Name is present", "✓".green());
                     } else {
                         warnings.push("Plugin manifest missing 'name' field (recommended)".to_string());
                     }
 
                     if manifest.get("plugin_type").is_some() {
-                        println!("{} {}", "✓".green(), "Plugin type is specified");
+                        println!("{} Plugin type is specified", "✓".green());
                     } else {
                         errors.push("Plugin manifest missing 'plugin_type' field".to_string());
                     }
 
                     if manifest.get("author").is_some() {
-                        println!("{} {}", "✓".green(), "Author information present");
+                        println!("{} Author information present", "✓".green());
                     } else {
                         warnings.push("Plugin manifest missing 'author' field (recommended)".to_string());
                     }
@@ -73,18 +73,18 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
     // Check for Cargo.toml
     match find_cargo_toml(&project_dir) {
         Ok(cargo_path) => {
-            println!("{} {}", "✓".green(), "Cargo.toml found");
+            println!("{} Cargo.toml found", "✓".green());
 
             // Read and validate Cargo.toml
             if let Ok(content) = std::fs::read_to_string(&cargo_path) {
                 if content.contains("crate-type") && content.contains("cdylib") {
-                    println!("{} {}", "✓".green(), "Configured as cdylib");
+                    println!("{} Configured as cdylib", "✓".green());
                 } else {
                     warnings.push("Cargo.toml should have [lib] crate-type = [\"cdylib\"]".to_string());
                 }
 
                 if content.contains("mockforge-plugin-sdk") {
-                    println!("{} {}", "✓".green(), "SDK dependency present");
+                    println!("{} SDK dependency present", "✓".green());
                 } else {
                     warnings.push("Consider using mockforge-plugin-sdk for easier development".to_string());
                 }
@@ -98,7 +98,7 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
     // Check for src/lib.rs
     let lib_path = project_dir.join("src").join("lib.rs");
     if lib_path.exists() {
-        println!("{} {}", "✓".green(), "src/lib.rs found");
+        println!("{} src/lib.rs found", "✓".green());
     } else {
         errors.push("No src/lib.rs found".to_string());
     }

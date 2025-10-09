@@ -158,11 +158,10 @@ impl TemplateMarketplace {
                 }
 
                 // Tags filter
-                if !filters.tags.is_empty() {
-                    if !filters.tags.iter().any(|tag| t.tags.contains(tag)) {
+                if !filters.tags.is_empty()
+                    && !filters.tags.iter().any(|tag| t.tags.contains(tag)) {
                         return false;
                     }
-                }
 
                 // Min rating filter
                 if let Some(min_rating) = filters.min_rating {
@@ -275,7 +274,7 @@ impl TemplateMarketplace {
         // Add review
         self.reviews
             .entry(review.template_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(review.clone());
 
         // Update template rating

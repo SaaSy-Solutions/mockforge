@@ -376,7 +376,7 @@ pub trait AuthPluginFactory: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn test_module_compiles() {

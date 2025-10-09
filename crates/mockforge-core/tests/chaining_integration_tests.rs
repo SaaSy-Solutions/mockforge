@@ -4,11 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::test;
 
-use mockforge_core::chain_execution::{ChainExecutionEngine, ChainExecutionResult};
+use mockforge_core::chain_execution::ChainExecutionEngine;
 use mockforge_core::request_chaining::{
     ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestBody, RequestChainRegistry,
 };
-use mockforge_core::{Error, Result};
 
 /// Test helper to create a sample authentication chain
 fn create_auth_chain() -> ChainDefinition {

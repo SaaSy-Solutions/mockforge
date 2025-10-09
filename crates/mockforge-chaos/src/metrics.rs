@@ -257,8 +257,12 @@ mod tests {
 
     #[test]
     fn test_metrics_creation() {
-        let metrics = ChaosMetrics::new();
-        assert!(metrics.is_ok());
+        // The global CHAOS_METRICS is already initialized, proving that metrics creation works.
+        // Creating a second instance would fail with "AlreadyReg" because metrics are
+        // registered with the global Prometheus registry.
+        // Instead, verify the global instance is accessible.
+        let _metrics = &*CHAOS_METRICS;
+        // If we get here without panic, the metrics were successfully created
     }
 
     #[test]

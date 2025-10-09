@@ -336,7 +336,7 @@ impl ResponseGenerator {
                 Value::Object(new_map)
             }
             Value::Array(arr) => {
-                let new_arr: Vec<Value> = arr.iter().map(|v| Self::expand_templates(v)).collect();
+                let new_arr: Vec<Value> = arr.iter().map(Self::expand_templates).collect();
                 Value::Array(new_arr)
             }
             _ => value.clone(),

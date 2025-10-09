@@ -19,7 +19,7 @@ pub use proxy::*;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn test_module_compiles() {

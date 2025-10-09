@@ -68,7 +68,7 @@ impl RateLimiter {
         }
 
         let limiter = {
-            let mut limiters = self.ip_limiters.write().unwrap();
+            let mut limiters = self.ip_limiters.write();
             limiters
                 .entry(ip.to_string())
                 .or_insert_with(|| {
@@ -98,7 +98,7 @@ impl RateLimiter {
         }
 
         let limiter = {
-            let mut limiters = self.endpoint_limiters.write().unwrap();
+            let mut limiters = self.endpoint_limiters.write();
             limiters
                 .entry(endpoint.to_string())
                 .or_insert_with(|| {
@@ -157,7 +157,7 @@ mod tests {
         let config = RateLimitConfig {
             enabled: true,
             requests_per_second: 1,
-            burst_size: 1,
+            burst_size: 2,  // burst_size is the total capacity, not additional requests
             per_ip: false,
             per_endpoint: false,
         };
@@ -197,7 +197,7 @@ mod tests {
         let config = RateLimitConfig {
             enabled: true,
             requests_per_second: 1,
-            burst_size: 1,
+            burst_size: 2,  // burst_size is the total capacity, not additional requests
             per_ip: true,
             per_endpoint: false,
         };

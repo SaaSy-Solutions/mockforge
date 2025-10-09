@@ -166,7 +166,7 @@ impl AssertionGenerator {
 
         for data_point in &self.historical_data {
             let key = (data_point.orchestration_id.clone(), data_point.step_id.clone());
-            grouped.entry(key).or_insert_with(Vec::new).push(data_point.clone());
+            grouped.entry(key).or_default().push(data_point.clone());
         }
 
         grouped
@@ -261,7 +261,7 @@ impl AssertionGenerator {
         let mut all_metrics: HashMap<String, Vec<f64>> = HashMap::new();
         for data_point in data {
             for (metric_name, value) in &data_point.metrics {
-                all_metrics.entry(metric_name.clone()).or_insert_with(Vec::new).push(*value);
+                all_metrics.entry(metric_name.clone()).or_default().push(*value);
             }
         }
 

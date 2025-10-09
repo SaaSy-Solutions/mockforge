@@ -1,11 +1,7 @@
 //! Scenario replay engine for reproducing recorded chaos scenarios
 
-use crate::{
-    config::ChaosConfig,
-    scenario_recorder::{ChaosEvent, ChaosEventType, RecordedScenario},
-    scenarios::ChaosScenario,
-};
-use chrono::{DateTime, Duration, Utc};
+use crate::scenario_recorder::{ChaosEvent, ChaosEventType, RecordedScenario};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use parking_lot::RwLock;
@@ -113,7 +109,7 @@ impl ScenarioReplayEngine {
     ) -> Result<(), String> {
         // Check if already replaying
         {
-            let status = self.status.read().unwrap();
+            let status = self.status.read();
             if status.is_some() {
                 return Err("Replay already in progress".to_string());
             }
@@ -129,7 +125,7 @@ impl ScenarioReplayEngine {
 
         // Initialize status
         {
-            let mut status = self.status.write().unwrap();
+            let mut status = self.status.write();
             *status = Some(ReplayStatus {
                 scenario_name: scenario_name.clone(),
                 current_event: 0,
@@ -341,7 +337,7 @@ impl ScenarioReplayEngine {
     where
         F: FnOnce(&mut ReplayStatus),
     {
-        let mut status_guard = status.write().unwrap();
+        let mut status_guard = status.write();
         if let Some(ref mut s) = *status_guard {
             f(s);
         }
@@ -349,7 +345,7 @@ impl ScenarioReplayEngine {
 
     /// Clear status
     fn clear_status(status: &Arc<RwLock<Option<ReplayStatus>>>) {
-        let mut status_guard = status.write().unwrap();
+        let mut status_guard = status.write();
         *status_guard = None;
     }
 
@@ -391,12 +387,12 @@ impl ScenarioReplayEngine {
 
     /// Get current replay status
     pub fn get_status(&self) -> Option<ReplayStatus> {
-        self.status.read().unwrap().clone()
+        self.status.read().clone()
     }
 
     /// Check if replay is in progress
     pub fn is_replaying(&self) -> bool {
-        self.status.read().unwrap().is_some()
+        self.status.read().is_some()
     }
 }
 
@@ -409,8 +405,8 @@ impl Default for ScenarioReplayEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ChaosConfig;
-    use std::collections::HashMap;
+    
+    
 
     #[tokio::test]
     async fn test_replay_speed_calculation() {

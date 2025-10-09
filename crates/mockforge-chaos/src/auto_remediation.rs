@@ -3,10 +3,7 @@
 //! Automatically applies low-risk chaos recommendations with safety checks,
 //! rollback mechanisms, and approval workflows.
 
-use crate::{
-    recommendations::{Recommendation, RecommendationCategory, RecommendationSeverity},
-    config::ChaosConfig,
-};
+use crate::recommendations::{Recommendation, RecommendationCategory, RecommendationSeverity};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -217,18 +214,18 @@ impl RemediationEngine {
 
     /// Update configuration
     pub fn update_config(&self, config: RemediationConfig) {
-        let mut cfg = self.config.write().unwrap();
+        let mut cfg = self.config.write();
         *cfg = config;
     }
 
     /// Get current configuration
     pub fn get_config(&self) -> RemediationConfig {
-        self.config.read().unwrap().clone()
+        self.config.read().clone()
     }
 
     /// Process a recommendation for auto-remediation
     pub fn process_recommendation(&self, recommendation: &Recommendation) -> Result<String, String> {
-        let config = self.config.read().unwrap().clone();
+        let config = self.config.read().clone();
 
         if !config.enabled {
             return Err("Auto-remediation is disabled".to_string());
@@ -248,7 +245,7 @@ impl RemediationEngine {
         let risk_assessment = self.assess_risk(recommendation);
 
         // Determine if approval is needed
-        let needs_approval = self.needs_approval(&recommendation, &config, &risk_assessment);
+        let needs_approval = self.needs_approval(recommendation, &config, &risk_assessment);
 
         // Create remediation action
         let action = self.create_action(recommendation, risk_assessment.clone());
@@ -256,7 +253,7 @@ impl RemediationEngine {
 
         // Store action
         {
-            let mut actions = self.actions.write().unwrap();
+            let mut actions = self.actions.write();
             actions.insert(action_id.clone(), action.clone());
         }
 
@@ -421,13 +418,13 @@ impl RemediationEngine {
             expires_at: Utc::now() + Duration::hours(24),
         };
 
-        let mut queue = self.approval_queue.write().unwrap();
+        let mut queue = self.approval_queue.write();
         queue.push_back(request);
     }
 
     /// Get pending approval requests
     pub fn get_approval_queue(&self) -> Vec<ApprovalRequest> {
-        let queue = self.approval_queue.read().unwrap();
+        let queue = self.approval_queue.read();
         queue.iter().cloned().collect()
     }
 
@@ -435,13 +432,13 @@ impl RemediationEngine {
     pub fn approve_action(&self, action_id: &str, approver: &str) -> Result<(), String> {
         // Remove from approval queue
         {
-            let mut queue = self.approval_queue.write().unwrap();
+            let mut queue = self.approval_queue.write();
             queue.retain(|req| req.action_id != action_id);
         }
 
         // Update action
         {
-            let mut actions = self.actions.write().unwrap();
+            let mut actions = self.actions.write();
             if let Some(action) = actions.get_mut(action_id) {
                 action.status = RemediationStatus::Approved;
                 action.approved_by = Some(approver.to_string());
@@ -462,7 +459,7 @@ impl RemediationEngine {
     pub fn reject_action(&self, action_id: &str, reason: &str) -> Result<(), String> {
         // Remove from approval queue
         {
-            let mut queue = self.approval_queue.write().unwrap();
+            let mut queue = self.approval_queue.write();
             queue.retain(|req| req.action_id != action_id);
         }
 
@@ -474,14 +471,14 @@ impl RemediationEngine {
 
     /// Apply a remediation action
     fn apply_action(&self, action_id: &str) -> Result<RemediationResult, String> {
-        let config = self.config.read().unwrap().clone();
+        let config = self.config.read().clone();
         let start_time = Utc::now();
 
         self.update_action_status(action_id, RemediationStatus::Applying);
 
         // Get action
         let action = {
-            let actions = self.actions.read().unwrap();
+            let actions = self.actions.read();
             actions.get(action_id).cloned()
                 .ok_or_else(|| "Action not found".to_string())?
         };
@@ -508,7 +505,7 @@ impl RemediationEngine {
 
         // Update action
         {
-            let mut actions = self.actions.write().unwrap();
+            let mut actions = self.actions.write();
             if let Some(action) = actions.get_mut(action_id) {
                 action.status = RemediationStatus::Applied;
                 action.success = true;
@@ -524,7 +521,7 @@ impl RemediationEngine {
             action_id: action_id.to_string(),
             success: true,
             message: "Remediation applied successfully".to_string(),
-            applied_changes: applied_changes.iter().map(|s| s.clone()).collect(),
+            applied_changes: applied_changes.to_vec(),
             duration_ms: (Utc::now() - start_time).num_milliseconds() as u64,
         })
     }
@@ -532,7 +529,7 @@ impl RemediationEngine {
     /// Rollback a remediation action
     pub fn rollback_action(&self, action_id: &str) -> Result<(), String> {
         let action = {
-            let actions = self.actions.read().unwrap();
+            let actions = self.actions.read();
             actions.get(action_id).cloned()
                 .ok_or_else(|| "Action not found".to_string())?
         };
@@ -578,7 +575,7 @@ impl RemediationEngine {
             measured_at: Utc::now(),
         };
 
-        let mut effectiveness = self.effectiveness_metrics.write().unwrap();
+        let mut effectiveness = self.effectiveness_metrics.write();
         effectiveness.insert(action_id.to_string(), metrics);
     }
 
@@ -620,25 +617,25 @@ impl RemediationEngine {
 
     /// Get effectiveness metrics for an action
     pub fn get_effectiveness(&self, action_id: &str) -> Option<EffectivenessMetrics> {
-        let metrics = self.effectiveness_metrics.read().unwrap();
+        let metrics = self.effectiveness_metrics.read();
         metrics.get(action_id).cloned()
     }
 
     /// Get all effectiveness metrics
     pub fn get_all_effectiveness(&self) -> Vec<EffectivenessMetrics> {
-        let metrics = self.effectiveness_metrics.read().unwrap();
+        let metrics = self.effectiveness_metrics.read();
         metrics.values().cloned().collect()
     }
 
     /// Get action by ID
     pub fn get_action(&self, action_id: &str) -> Option<RemediationAction> {
-        let actions = self.actions.read().unwrap();
+        let actions = self.actions.read();
         actions.get(action_id).cloned()
     }
 
     /// Get all active actions
     pub fn get_active_actions(&self) -> Vec<RemediationAction> {
-        let actions = self.actions.read().unwrap();
+        let actions = self.actions.read();
         actions.values()
             .filter(|a| matches!(a.status, RemediationStatus::Pending | RemediationStatus::Applying | RemediationStatus::Applied))
             .cloned()
@@ -647,14 +644,14 @@ impl RemediationEngine {
 
     /// Get action history
     pub fn get_history(&self, limit: usize) -> Vec<RemediationAction> {
-        let history = self.action_history.read().unwrap();
+        let history = self.action_history.read();
         history.iter().take(limit).cloned().collect()
     }
 
     /// Get statistics
     pub fn get_stats(&self) -> RemediationStats {
-        let actions = self.actions.read().unwrap();
-        let history = self.action_history.read().unwrap();
+        let actions = self.actions.read();
+        let history = self.action_history.read();
 
         let total_actions = actions.len() + history.len();
         let successful = actions.values().filter(|a| a.success).count() +
@@ -664,7 +661,7 @@ impl RemediationEngine {
         let pending_approval = actions.values().filter(|a| a.status == RemediationStatus::AwaitingApproval).count();
         let rolled_back = history.iter().filter(|a| a.status == RemediationStatus::RolledBack).count();
 
-        let effectiveness_metrics = self.effectiveness_metrics.read().unwrap();
+        let effectiveness_metrics = self.effectiveness_metrics.read();
         let avg_improvement = if effectiveness_metrics.is_empty() {
             0.0
         } else {
@@ -685,17 +682,17 @@ impl RemediationEngine {
     // Helper methods
 
     fn check_cooldown(&self, config: &RemediationConfig) -> bool {
-        let actions = self.actions.read().unwrap();
+        let actions = self.actions.read();
         let cooldown_threshold = Utc::now() - Duration::minutes(config.cooldown_minutes);
 
         !actions.values().any(|a| {
             a.status == RemediationStatus::Applied &&
-            a.completed_at.map_or(false, |t| t > cooldown_threshold)
+            a.completed_at.is_some_and(|t| t > cooldown_threshold)
         })
     }
 
     fn check_concurrent_limit(&self, config: &RemediationConfig) -> bool {
-        let actions = self.actions.read().unwrap();
+        let actions = self.actions.read();
         let active_count = actions.values()
             .filter(|a| matches!(a.status, RemediationStatus::Applying))
             .count();
@@ -704,21 +701,21 @@ impl RemediationEngine {
     }
 
     fn update_action_status(&self, action_id: &str, status: RemediationStatus) {
-        let mut actions = self.actions.write().unwrap();
+        let mut actions = self.actions.write();
         if let Some(action) = actions.get_mut(action_id) {
             action.status = status;
         }
     }
 
     fn add_action_log(&self, action_id: &str, message: &str) {
-        let mut actions = self.actions.write().unwrap();
+        let mut actions = self.actions.write();
         if let Some(action) = actions.get_mut(action_id) {
             action.logs.push(format!("[{}] {}", Utc::now().format("%Y-%m-%d %H:%M:%S"), message));
         }
     }
 
     fn add_to_history(&self, action: RemediationAction) {
-        let mut history = self.action_history.write().unwrap();
+        let mut history = self.action_history.write();
         history.push_front(action);
         if history.len() > self.max_history {
             history.pop_back();
