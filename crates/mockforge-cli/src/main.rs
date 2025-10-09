@@ -481,6 +481,72 @@ enum Commands {
         #[arg(long)]
         max_duration_ms: Option<u64>,
     },
+
+    /// AI-powered API specification suggestion
+    ///
+    /// Generate complete OpenAPI specs or MockForge configs from minimal input.
+    /// Provide a single endpoint example, API description, or partial spec, and
+    /// MockForge will use AI to suggest additional endpoints and generate a
+    /// complete specification.
+    ///
+    /// Examples:
+    ///   mockforge suggest --from example.json --output openapi.yaml
+    ///   mockforge suggest --from-description "A blog API with posts and comments" --format both
+    ///   mockforge suggest --from example.json --num-suggestions 10 --domain e-commerce
+    #[command(verbatim_doc_comment)]
+    Suggest {
+        /// Input file (JSON containing endpoint example, description, or partial spec)
+        #[arg(short, long, conflicts_with = "from_description")]
+        from: Option<PathBuf>,
+
+        /// Generate from text description instead of file
+        #[arg(long, conflicts_with = "from")]
+        from_description: Option<String>,
+
+        /// Output format (openapi, mockforge, both)
+        #[arg(long, default_value = "openapi")]
+        format: String,
+
+        /// Output file path (without extension for 'both' format)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Number of additional endpoints to suggest
+        #[arg(long, default_value = "5")]
+        num_suggestions: usize,
+
+        /// Include examples in generated specs
+        #[arg(long, default_value = "true")]
+        include_examples: bool,
+
+        /// API domain hint (e-commerce, social-media, fintech, etc.)
+        #[arg(long)]
+        domain: Option<String>,
+
+        /// LLM provider (openai, anthropic, ollama, openai-compatible)
+        #[arg(long, default_value = "openai")]
+        llm_provider: String,
+
+        /// LLM model name
+        #[arg(long)]
+        llm_model: Option<String>,
+
+        /// LLM API endpoint (for custom providers)
+        #[arg(long)]
+        llm_endpoint: Option<String>,
+
+        /// LLM API key (or set OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+        #[arg(long)]
+        llm_api_key: Option<String>,
+
+        /// Temperature for LLM generation (0.0-1.0)
+        #[arg(long, default_value = "0.7")]
+        temperature: f64,
+
+        /// Print suggestions as JSON to stdout instead of saving
+        #[arg(long)]
+        print_json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -908,6 +974,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 validate_headers,
                 validate_timing,
                 max_duration_ms,
+            ).await?;
+        }
+
+        Commands::Suggest {
+            from,
+            from_description,
+            format,
+            output,
+            num_suggestions,
+            include_examples,
+            domain,
+            llm_provider,
+            llm_model,
+            llm_endpoint,
+            llm_api_key,
+            temperature,
+            print_json,
+        } => {
+            handle_suggest(
+                from,
+                from_description,
+                format,
+                output,
+                num_suggestions,
+                include_examples,
+                domain,
+                llm_provider,
+                llm_model,
+                llm_endpoint,
+                llm_api_key,
+                temperature,
+                print_json,
             ).await?;
         }
     }
@@ -3197,6 +3295,197 @@ tags:
 
             std::fs::write(&output, template)?;
             println!("✅ Template saved to: {}", output.display());
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle AI-powered spec suggestion command
+#[allow(clippy::too_many_arguments)]
+async fn handle_suggest(
+    from: Option<PathBuf>,
+    from_description: Option<String>,
+    format: String,
+    output: Option<PathBuf>,
+    num_suggestions: usize,
+    include_examples: bool,
+    domain: Option<String>,
+    llm_provider: String,
+    llm_model: Option<String>,
+    llm_endpoint: Option<String>,
+    llm_api_key: Option<String>,
+    temperature: f64,
+    print_json: bool,
+) -> anyhow::Result<()> {
+    use mockforge_core::intelligent_behavior::{
+        SpecSuggestionEngine, SuggestionConfig, SuggestionInput, OutputFormat,
+        config::BehaviorModelConfig,
+    };
+
+    // Determine output format
+    let output_format = format
+        .parse::<OutputFormat>()
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    // Build LLM config
+    let default_model = match llm_provider.to_lowercase().as_str() {
+        "openai" => "gpt-4o-mini",
+        "anthropic" => "claude-3-5-sonnet-20241022",
+        "ollama" => "llama3.1",
+        _ => "gpt-4o-mini",
+    };
+
+    let llm_config = BehaviorModelConfig {
+        llm_provider: llm_provider.clone(),
+        model: llm_model.unwrap_or_else(|| default_model.to_string()),
+        api_endpoint: llm_endpoint,
+        api_key: llm_api_key,
+        temperature,
+        max_tokens: 4000,
+        ..Default::default()
+    };
+
+    // Build suggestion config
+    let suggestion_config = SuggestionConfig {
+        llm_config,
+        output_format,
+        num_suggestions,
+        include_examples,
+        domain_hint: domain,
+    };
+
+    // Parse input
+    let input = if let Some(description) = from_description {
+        SuggestionInput::Description { text: description }
+    } else if let Some(input_path) = from {
+        let content = tokio::fs::read_to_string(&input_path).await?;
+        let json_value: serde_json::Value = serde_json::from_str(&content)?;
+
+        // Try to detect input type
+        if let Some(method) = json_value.get("method").and_then(|v| v.as_str()) {
+            // Single endpoint format
+            SuggestionInput::Endpoint {
+                method: method.to_string(),
+                path: json_value
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("Missing 'path' field in endpoint input"))?
+                    .to_string(),
+                request: json_value.get("request").cloned(),
+                response: json_value.get("response").cloned(),
+                description: json_value
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+            }
+        } else if json_value.get("openapi").is_some() || json_value.get("paths").is_some() {
+            // Partial OpenAPI spec
+            SuggestionInput::PartialSpec { spec: json_value }
+        } else if let Some(paths_array) = json_value.get("paths").and_then(|v| v.as_array()) {
+            // List of paths
+            let paths = paths_array
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
+            SuggestionInput::Paths { paths }
+        } else {
+            return Err(anyhow::anyhow!(
+                "Unable to detect input type. Expected 'method' field for endpoint, \
+                 'openapi' for spec, or 'paths' array"
+            ));
+        }
+    } else {
+        return Err(anyhow::anyhow!(
+            "Must provide either --from <file> or --from-description <text>"
+        ));
+    };
+
+    println!("🤖 Generating API specification suggestions...");
+    println!("   Provider: {}", llm_provider);
+    println!("   Model: {}", suggestion_config.llm_config.model);
+    println!("   Suggestions: {}", num_suggestions);
+    if let Some(ref d) = suggestion_config.domain_hint {
+        println!("   Domain: {}", d);
+    }
+    println!();
+
+    // Create engine and generate suggestions
+    let engine = SpecSuggestionEngine::new(suggestion_config);
+    let result = engine.suggest(&input).await?;
+
+    // Print results
+    if print_json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else {
+        println!("✅ Generated {} endpoint suggestions", result.metadata.endpoint_count);
+        if let Some(domain) = &result.metadata.detected_domain {
+            println!("   Detected domain: {}", domain);
+        }
+        println!();
+
+        // Print endpoint suggestions
+        println!("📝 Suggested Endpoints:");
+        for (i, suggestion) in result.suggestions.iter().enumerate() {
+            println!("\n{}. {} {}", i + 1, suggestion.method, suggestion.path);
+            println!("   {}", suggestion.description);
+            if !suggestion.parameters.is_empty() {
+                println!("   Parameters:");
+                for param in &suggestion.parameters {
+                    let req = if param.required { "required" } else { "optional" };
+                    println!(
+                        "     - {} ({}): {} [{}]",
+                        param.name, param.location, param.data_type, req
+                    );
+                }
+            }
+            if !suggestion.reasoning.is_empty() {
+                println!("   💡 {}", suggestion.reasoning);
+            }
+        }
+        println!();
+
+        // Save specs to file(s)
+        if let Some(base_path) = output {
+            match output_format {
+                OutputFormat::OpenAPI => {
+                    if let Some(spec) = &result.openapi_spec {
+                        let yaml = serde_yaml::to_string(spec)?;
+                        tokio::fs::write(&base_path, yaml).await?;
+                        println!("✅ OpenAPI spec saved to: {}", base_path.display());
+                    } else {
+                        println!("⚠️  No OpenAPI spec generated");
+                    }
+                }
+                OutputFormat::MockForge => {
+                    if let Some(config) = &result.mockforge_config {
+                        let yaml = serde_yaml::to_string(config)?;
+                        tokio::fs::write(&base_path, yaml).await?;
+                        println!("✅ MockForge config saved to: {}", base_path.display());
+                    } else {
+                        println!("⚠️  No MockForge config generated");
+                    }
+                }
+                OutputFormat::Both => {
+                    // Save both with different extensions
+                    let openapi_path = base_path.with_extension("openapi.yaml");
+                    let mockforge_path = base_path.with_extension("mockforge.yaml");
+
+                    if let Some(spec) = &result.openapi_spec {
+                        let yaml = serde_yaml::to_string(spec)?;
+                        tokio::fs::write(&openapi_path, yaml).await?;
+                        println!("✅ OpenAPI spec saved to: {}", openapi_path.display());
+                    }
+
+                    if let Some(config) = &result.mockforge_config {
+                        let yaml = serde_yaml::to_string(config)?;
+                        tokio::fs::write(&mockforge_path, yaml).await?;
+                        println!("✅ MockForge config saved to: {}", mockforge_path.display());
+                    }
+                }
+            }
+        } else {
+            println!("💡 Tip: Use --output <file> to save the generated specification");
         }
     }
 

@@ -10,7 +10,6 @@ use mockforge_core::{
     Result,
 };
 use mockforge_data::rag::{RagConfig, RagEngine, LlmProvider};
-use mockforge_data::rag::storage::InMemoryStorage;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -32,11 +31,8 @@ impl RagAiGenerator {
     pub fn new(rag_config: RagConfig) -> Result<Self> {
         debug!("Creating RAG AI generator with provider: {:?}", rag_config.provider);
 
-        // Create in-memory storage for the RAG engine
-        let storage = Arc::new(InMemoryStorage::new());
-
         // Create the RAG engine
-        let engine = RagEngine::new(rag_config, storage)?;
+        let engine = RagEngine::new(rag_config);
 
         Ok(Self {
             engine: Arc::new(tokio::sync::RwLock::new(engine)),
@@ -128,10 +124,10 @@ impl AiGenerator for RagAiGenerator {
         engine_config.max_tokens = config.max_tokens;
 
         // Temporarily update the engine config
-        engine.update_config(engine_config)?;
+        engine.update_config(engine_config);
 
         // Generate the response using the RAG engine
-        match engine.generate(prompt, None).await {
+        match engine.generate_text(prompt).await {
             Ok(response_text) => {
                 debug!("RAG engine generated response ({} chars)", response_text.len());
 

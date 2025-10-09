@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "/api/products",
+    "/api/products/{id}",
+    "/api/categories",
+    "/api/cart",
+    "/api/checkout"
+  ]
+}

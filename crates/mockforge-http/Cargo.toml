@@ -29,6 +29,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
+async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
 sha2 = { workspace = true }

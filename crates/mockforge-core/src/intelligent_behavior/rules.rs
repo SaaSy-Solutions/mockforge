@@ -177,7 +177,7 @@ impl StateMachine {
         let mut cumulative = 0.0;
         let random = rand::random::<f64>() * total_probability;
 
-        for transition in candidates {
+        for transition in &candidates {
             cumulative += transition.probability;
             if random <= cumulative {
                 return Some(transition.to_state.clone());

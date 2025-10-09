@@ -195,7 +195,7 @@ fn default_cache_ttl() -> u64 {
     300 // 5 minutes
 }
 
-fn default_max_history() -> u64 {
+fn default_max_history() -> usize {
     50
 }
 

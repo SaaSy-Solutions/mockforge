@@ -1,0 +1,13 @@
+{
+  "method": "GET",
+  "path": "/api/users/{id}",
+  "description": "Get a user by ID",
+  "request": null,
+  "response": {
+    "id": "user_123",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "created_at": "2024-01-15T10:30:00Z",
+    "role": "user"
+  }
+}

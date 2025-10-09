@@ -119,7 +119,7 @@ impl VectorMemoryStore {
             .filter_map(|interaction| {
                 interaction.embedding.as_ref().map(|emb| {
                     let score = cosine_similarity(&query_embedding, emb);
-                    (interaction, score)
+                    (interaction.clone(), score)
                 })
             })
             .collect();

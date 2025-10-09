@@ -77,8 +77,9 @@ impl StatefulAiContext {
 
         // Trim history if needed
         let max_history = self.config.performance.max_history_length;
-        if state.history.len() > max_history {
-            state.history.drain(0..state.history.len() - max_history);
+        let history_len = state.history.len();
+        if history_len > max_history {
+            state.history.drain(0..history_len - max_history);
         }
 
         drop(state);

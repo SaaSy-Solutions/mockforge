@@ -54,6 +54,7 @@ pub mod llm_client;
 pub mod memory;
 pub mod rules;
 pub mod session;
+pub mod spec_suggestion;
 pub mod types;
 
 // Re-export main types
@@ -63,4 +64,8 @@ pub use behavior::BehaviorModel;
 pub use memory::VectorMemoryStore;
 pub use rules::{ConsistencyRule, RuleAction, StateMachine, StateTransition};
 pub use session::{SessionManager, SessionTracking};
+pub use spec_suggestion::{
+    SpecSuggestionEngine, SuggestionConfig, SuggestionInput, SuggestionResult,
+    OutputFormat, EndpointSuggestion, ParameterInfo, SuggestionMetadata,
+};
 pub use types::{InteractionRecord, BehaviorRules};
