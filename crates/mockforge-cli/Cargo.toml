@@ -31,6 +31,7 @@ mockforge-data = { path = "../mockforge-data" }
 mockforge-ui = { path = "../mockforge-ui" }
 mockforge-observability = { path = "../mockforge-observability" }
 mockforge-recorder = { path = "../mockforge-recorder" }
+mockforge-bench = { path = "../mockforge-bench" }
 mockforge-plugin-core = { path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { path = "../mockforge-plugin-loader" }
 # mockforge-chaos = { path = "../mockforge-chaos" }  # Temporarily disabled due to compilation errors

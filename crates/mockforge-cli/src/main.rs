@@ -547,6 +547,76 @@ enum Commands {
         #[arg(long)]
         print_json: bool,
     },
+
+    /// Load test a real service using an API specification
+    ///
+    /// Examples:
+    ///   mockforge bench --spec api.yaml --target https://api.example.com
+    ///   mockforge bench --spec api.yaml --target https://staging.api.com --duration 5m --vus 100
+    ///   mockforge bench --spec api.yaml --target https://api.com --scenario spike --output results/
+    ///   mockforge bench --spec api.yaml --target https://api.com --operations "GET /users,POST /users"
+    #[command(verbatim_doc_comment)]
+    Bench {
+        /// API specification file (OpenAPI/Swagger)
+        #[arg(short, long)]
+        spec: PathBuf,
+
+        /// Target service URL
+        #[arg(short, long)]
+        target: String,
+
+        /// Test duration (e.g., 30s, 5m, 1h)
+        #[arg(short, long, default_value = "1m")]
+        duration: String,
+
+        /// Number of virtual users (concurrent connections)
+        #[arg(long, default_value = "10")]
+        vus: u32,
+
+        /// Load test scenario (constant, ramp-up, spike, stress, soak)
+        #[arg(long, default_value = "ramp-up")]
+        scenario: String,
+
+        /// Filter operations to test (comma-separated, e.g., "GET /users,POST /users")
+        #[arg(long)]
+        operations: Option<String>,
+
+        /// Authentication header value (e.g., "Bearer token123")
+        #[arg(long)]
+        auth: Option<String>,
+
+        /// Additional headers (format: "Key:Value,Key2:Value2")
+        #[arg(long)]
+        headers: Option<String>,
+
+        /// Output directory for results
+        #[arg(short, long, default_value = "bench-results")]
+        output: PathBuf,
+
+        /// Generate k6 script without running
+        #[arg(long)]
+        generate_only: bool,
+
+        /// k6 script output path (when using --generate-only)
+        #[arg(long)]
+        script_output: Option<PathBuf>,
+
+        /// Response time threshold percentile (p50, p75, p90, p95, p99)
+        #[arg(long, default_value = "p95")]
+        threshold_percentile: String,
+
+        /// Response time threshold in milliseconds
+        #[arg(long, default_value = "500")]
+        threshold_ms: u64,
+
+        /// Maximum acceptable error rate (0.0-1.0)
+        #[arg(long, default_value = "0.05")]
+        max_error_rate: f64,
+
+        /// Enable verbose output
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1007,6 +1077,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 temperature,
                 print_json,
             ).await?;
+        }
+
+        Commands::Bench {
+            spec,
+            target,
+            duration,
+            vus,
+            scenario,
+            operations,
+            auth,
+            headers,
+            output,
+            generate_only,
+            script_output,
+            threshold_percentile,
+            threshold_ms,
+            max_error_rate,
+            verbose,
+        } => {
+            let bench_cmd = mockforge_bench::BenchCommand {
+                spec,
+                target,
+                duration,
+                vus,
+                scenario,
+                operations,
+                auth,
+                headers,
+                output,
+                generate_only,
+                script_output,
+                threshold_percentile,
+                threshold_ms,
+                max_error_rate,
+                verbose,
+            };
+
+            if let Err(e) = bench_cmd.execute().await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 

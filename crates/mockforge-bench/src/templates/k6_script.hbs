@@ -1,0 +1,103 @@
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
+
+// Custom metrics per operation
+{{#each operations}}
+const {{this.name}}_latency = new Trend('{{this.name}}_latency');
+const {{this.name}}_errors = new Rate('{{this.name}}_errors');
+{{/each}}
+
+// Test configuration
+export const options = {
+  scenarios: {
+    {{scenario_name}}: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        {{#each stages}}
+        { duration: '{{this.duration}}', target: {{this.target}} },
+        {{/each}}
+      ],
+      gracefulRampDown: '10s',
+    },
+  },
+  thresholds: {
+    'http_req_duration': ['{{threshold_percentile}}<{{threshold_ms}}'],
+    'http_req_failed': ['rate<{{max_error_rate}}'],
+  },
+};
+
+const BASE_URL = '{{base_url}}';
+
+export default function () {
+  {{#each operations}}
+  // Operation {{@index}}: {{this.name}}
+  {
+    const headers = {{{this.headers}}};
+
+    {{#if this.has_body}}
+    const payload = {{{this.body}}};
+    const res = http.{{this.method}}(`${BASE_URL}{{this.path}}`, JSON.stringify(payload), { headers });
+    {{else}}
+    const res = http.{{this.method}}(`${BASE_URL}{{this.path}}`, null, { headers });
+    {{/if}}
+
+    const success = check(res, {
+      '{{this.name}}: status is OK': (r) => r.status >= 200 && r.status < 300,
+      '{{this.name}}: has response': (r) => r.body !== null && r.body.length > 0,
+    });
+
+    {{this.name}}_latency.add(res.timings.duration);
+    {{this.name}}_errors.add(!success);
+
+    sleep(1);
+  }
+  {{/each}}
+}
+
+export function handleSummary(data) {
+  return {
+    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+  };
+}
+
+function textSummary(data, options) {
+  const indent = options.indent || '';
+  const enableColors = options.enableColors || false;
+
+  const metrics = data.metrics;
+  let output = '\n';
+
+  output += indent + '='.repeat(60) + '\n';
+  output += indent + 'Load Test Summary\n';
+  output += indent + '='.repeat(60) + '\n\n';
+
+  // Request metrics
+  if (metrics.http_reqs) {
+    output += indent + `Total Requests: ${metrics.http_reqs.values.count}\n`;
+    output += indent + `Request Rate: ${metrics.http_reqs.values.rate.toFixed(2)} req/s\n\n`;
+  }
+
+  // Duration metrics
+  if (metrics.http_req_duration) {
+    output += indent + 'Response Times:\n';
+    output += indent + `  Min: ${metrics.http_req_duration.values.min.toFixed(2)}ms\n`;
+    output += indent + `  Avg: ${metrics.http_req_duration.values.avg.toFixed(2)}ms\n`;
+    output += indent + `  Med: ${metrics.http_req_duration.values.med.toFixed(2)}ms\n`;
+    output += indent + `  p90: ${metrics.http_req_duration.values['p(90)'].toFixed(2)}ms\n`;
+    output += indent + `  p95: ${metrics.http_req_duration.values['p(95)'].toFixed(2)}ms\n`;
+    output += indent + `  p99: ${metrics.http_req_duration.values['p(99)'].toFixed(2)}ms\n`;
+    output += indent + `  Max: ${metrics.http_req_duration.values.max.toFixed(2)}ms\n\n`;
+  }
+
+  // Error rate
+  if (metrics.http_req_failed) {
+    const errorRate = (metrics.http_req_failed.values.rate * 100).toFixed(2);
+    output += indent + `Error Rate: ${errorRate}%\n\n`;
+  }
+
+  output += indent + '='.repeat(60) + '\n';
+
+  return output;
+}
