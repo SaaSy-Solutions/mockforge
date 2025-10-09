@@ -185,7 +185,8 @@ impl AiResponseConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_data::{DriftRule, DriftStrategy};
+    use mockforge_data::drift::{DriftRule, DriftStrategy};
+    use mockforge_data::ResponseMode;
 
     #[test]
     fn test_ai_handler_creation_intelligent_only() {

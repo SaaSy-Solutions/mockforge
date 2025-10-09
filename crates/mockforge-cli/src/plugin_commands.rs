@@ -218,7 +218,7 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
             println!("🔍 Validating plugin: {}", source);
 
             let config = PluginLoaderConfig::default();
-            let installer = PluginInstaller::new(config)?;
+            let _installer = PluginInstaller::new(config.clone())?;
 
             // Parse source to get plugin directory
             let plugin_source = PluginSource::parse(&source)?;

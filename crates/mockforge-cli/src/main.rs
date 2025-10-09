@@ -18,7 +18,7 @@ mod plugin_commands;
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
     /// Set log level (error, warn, info, debug, trace)
-    #[arg(short = 'v', long, global = true, env = "MOCKFORGE_LOG_LEVEL", default_value = "info")]
+    #[arg(short = 'v', long, global = true, default_value = "info")]
     log_level: String,
 
     #[command(subcommand)]
@@ -85,7 +85,7 @@ enum Commands {
         jaeger_endpoint: String,
 
         /// Tracing sampling rate (0.0 to 1.0)
-        #[arg(long, default_value = "1.0", help_heading = "Tracing", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "1.0", help_heading = "Tracing")]
         tracing_sampling_rate: f64,
 
         /// Enable API Flight Recorder
@@ -129,7 +129,7 @@ enum Commands {
         chaos_latency_range: Option<String>,
 
         /// Chaos latency probability (0.0-1.0)
-        #[arg(long, default_value = "1.0", help_heading = "Chaos Engineering", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "1.0", help_heading = "Chaos Engineering")]
         chaos_latency_probability: f64,
 
         /// Chaos fault injection: HTTP error codes (comma-separated)
@@ -137,7 +137,7 @@ enum Commands {
         chaos_http_errors: Option<String>,
 
         /// Chaos fault injection: HTTP error probability (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering")]
         chaos_http_error_probability: f64,
 
         /// Chaos rate limit: requests per second
@@ -149,7 +149,7 @@ enum Commands {
         chaos_bandwidth_limit: Option<u64>,
 
         /// Chaos: packet loss percentage 0-100 (e.g., 5.0 = 5% packet loss)
-        #[arg(long, help_heading = "Chaos Engineering", value_parser = clap::value_parser!(f64).range(0.0..=100.0))]
+        #[arg(long, help_heading = "Chaos Engineering")]
         chaos_packet_loss: Option<f64>,
 
         /// Enable gRPC-specific chaos engineering
@@ -161,7 +161,7 @@ enum Commands {
         chaos_grpc_status_codes: Option<String>,
 
         /// gRPC chaos: stream interruption probability (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - gRPC", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - gRPC")]
         chaos_grpc_stream_interruption_probability: f64,
 
         /// Enable WebSocket-specific chaos engineering
@@ -173,11 +173,11 @@ enum Commands {
         chaos_websocket_close_codes: Option<String>,
 
         /// WebSocket chaos: message drop probability (0.0-1.0)
-        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket")]
         chaos_websocket_message_drop_probability: f64,
 
         /// WebSocket chaos: message corruption probability (0.0-1.0)
-        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket")]
         chaos_websocket_message_corruption_probability: f64,
 
         /// Enable GraphQL-specific chaos engineering
@@ -189,7 +189,7 @@ enum Commands {
         chaos_graphql_error_codes: Option<String>,
 
         /// GraphQL chaos: partial data probability (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - GraphQL", value_parser = clap::value_parser!(f64).range(0.0..=1.0))]
+        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - GraphQL")]
         chaos_graphql_partial_data_probability: f64,
 
         /// GraphQL chaos: enable resolver-level latency injection
@@ -213,7 +213,7 @@ enum Commands {
         circuit_breaker_timeout_ms: u64,
 
         /// Circuit breaker: failure rate threshold percentage (0-100)
-        #[arg(long, default_value = "50.0", help_heading = "Resilience Patterns", value_parser = clap::value_parser!(f64).range(0.0..=100.0))]
+        #[arg(long, default_value = "50.0", help_heading = "Resilience Patterns")]
         circuit_breaker_failure_rate: f64,
 
         /// Enable bulkhead pattern
@@ -265,7 +265,7 @@ enum Commands {
         rag_model: Option<String>,
 
         /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
-        #[arg(long, env = "MOCKFORGE_RAG_API_KEY", help_heading = "AI Features")]
+        #[arg(long, help_heading = "AI Features")]
         rag_api_key: Option<String>,
 
         /// Validate configuration and check port availability without starting servers
@@ -426,7 +426,7 @@ enum Commands {
         llm_endpoint: Option<String>,
 
         /// LLM API key (for OpenAI, Anthropic)
-        #[arg(long, env = "MOCKFORGE_LLM_API_KEY")]
+        #[arg(long)]
         llm_api_key: Option<String>,
 
         /// Include body validation assertions
@@ -939,7 +939,7 @@ async fn build_server_config_from_cli(
 
     // OpenTelemetry tracing configuration
     if tracing {
-        config.observability.opentelemetry = Some(mockforge_core::OpenTelemetryConfig {
+        config.observability.opentelemetry = Some(mockforge_core::config::OpenTelemetryConfig {
             enabled: true,
             service_name: tracing_service_name,
             environment: tracing_environment,
@@ -952,7 +952,7 @@ async fn build_server_config_from_cli(
 
     // API Flight Recorder configuration
     if recorder {
-        config.observability.recorder = Some(mockforge_core::RecorderConfig {
+        config.observability.recorder = Some(mockforge_core::config::RecorderConfig {
             enabled: true,
             database_path: recorder_db,
             api_enabled: !recorder_no_api,
@@ -968,7 +968,7 @@ async fn build_server_config_from_cli(
 
     // Chaos engineering configuration
     if chaos {
-        let mut chaos_config = mockforge_core::ChaosEngConfig {
+        let mut chaos_config = mockforge_core::config::ChaosEngConfig {
             enabled: true,
             scenario: chaos_scenario,
             latency: None,
@@ -990,7 +990,7 @@ async fn build_server_config_from_cli(
                 }
             });
 
-            chaos_config.latency = Some(mockforge_core::LatencyInjectionConfig {
+            chaos_config.latency = Some(mockforge_core::config::LatencyInjectionConfig {
                 enabled: true,
                 fixed_delay_ms: chaos_latency_ms,
                 random_delay_range_ms,
@@ -1010,7 +1010,7 @@ async fn build_server_config_from_cli(
                 })
                 .unwrap_or_default();
 
-            chaos_config.fault_injection = Some(mockforge_core::FaultConfig {
+            chaos_config.fault_injection = Some(mockforge_core::config::FaultConfig {
                 enabled: true,
                 http_errors,
                 http_error_probability: chaos_http_error_probability,
@@ -1024,7 +1024,7 @@ async fn build_server_config_from_cli(
 
         // Configure rate limiting
         if let Some(rps) = chaos_rate_limit {
-            chaos_config.rate_limit = Some(mockforge_core::RateLimitingConfig {
+            chaos_config.rate_limit = Some(mockforge_core::config::RateLimitingConfig {
                 enabled: true,
                 requests_per_second: rps,
                 burst_size: rps * 2,
@@ -1035,7 +1035,7 @@ async fn build_server_config_from_cli(
 
         // Configure traffic shaping
         if chaos_bandwidth_limit.is_some() || chaos_packet_loss.is_some() {
-            chaos_config.traffic_shaping = Some(mockforge_core::NetworkShapingConfig {
+            chaos_config.traffic_shaping = Some(mockforge_core::config::NetworkShapingConfig {
                 enabled: true,
                 bandwidth_limit_bps: chaos_bandwidth_limit.unwrap_or(1_000_000),
                 packet_loss_percent: chaos_packet_loss.unwrap_or(0.0),
@@ -1445,42 +1445,14 @@ async fn handle_serve(
     };
 
     // Start Prometheus metrics server (if enabled)
-    let metrics_handle = if config.observability.prometheus.enabled {
-        use mockforge_observability::{get_global_registry, prometheus::prometheus_router};
-        use std::sync::Arc;
+    // TEMPORARILY DISABLED: axum version conflict between mockforge-observability (0.7) and main (0.8)
+    // TODO: Update mockforge-observability to use axum 0.8
+    let metrics_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
-        let metrics_port = config.observability.prometheus.port;
-        let metrics_shutdown = shutdown_token.clone();
-        Some(tokio::spawn(async move {
-            let registry = Arc::new(get_global_registry().clone());
-            let app = prometheus_router(registry);
-            let addr = format!("0.0.0.0:{}", metrics_port);
-
-            println!("📊 Metrics endpoint available at http://localhost:{}/metrics", metrics_port);
-
-            let listener = match tokio::net::TcpListener::bind(&addr).await {
-                Ok(listener) => listener,
-                Err(e) => {
-                    return Err(format!(
-                        "Failed to bind metrics server to port {}: {}\n\
-                         Hint: The port may already be in use. Try using a different port with --metrics-port or check if another process is using this port with: lsof -i :{} or netstat -tulpn | grep {}",
-                        metrics_port, e, metrics_port, metrics_port
-                    ));
-                }
-            };
-
-            tokio::select! {
-                result = axum::serve(listener, app) => {
-                    result.map_err(|e| format!("Metrics server error: {}", e))
-                }
-                _ = metrics_shutdown.cancelled() => {
-                    Ok(())
-                }
-            }
-        }))
-    } else {
-        None
-    };
+    if config.observability.prometheus.enabled {
+        println!("⚠️  Prometheus metrics server temporarily disabled due to axum version conflicts");
+        println!("   Metrics would be at: http://0.0.0.0:{}/metrics", config.observability.prometheus.port);
+    }
 
     // Wait for all servers or shutdown signal, handling errors properly
     let result = tokio::select! {
@@ -2216,91 +2188,149 @@ async fn handle_config_validate(
     match config_result {
         Ok(config) => {
             // Successfully parsed - now validate content
-            let mut endpoints_count = 0;
-            let mut chains_count = 0;
             let mut warnings = Vec::new();
             let mut errors = Vec::new();
 
             // Validate HTTP section
-            if let Some(ref endpoints) = config.http.endpoints {
-                endpoints_count = endpoints.len();
+            if config.http.host.is_empty() {
+                errors.push("HTTP host is empty".to_string());
+            }
+            if config.http.port == 0 {
+                errors.push("HTTP port cannot be 0".to_string());
+            }
 
-                // Validate each endpoint
-                for (idx, endpoint) in endpoints.iter().enumerate() {
-                    if endpoint.path.is_empty() {
-                        errors.push(format!("HTTP endpoint #{} has empty path", idx + 1));
+            // Check OpenAPI spec if provided
+            if let Some(ref spec_path) = config.http.openapi_spec {
+                if !std::path::Path::new(spec_path).exists() {
+                    errors.push(format!("OpenAPI spec file not found: {}", spec_path));
+                } else {
+                    println!("   ✓ OpenAPI spec: {}", spec_path);
+                }
+            } else {
+                warnings.push("No OpenAPI spec configured. HTTP endpoints will need to be defined manually.".to_string());
+            }
+
+            // Validate request validation mode
+            let valid_modes = vec!["off", "warn", "enforce"];
+            if !valid_modes.contains(&config.http.request_validation.as_str()) {
+                errors.push(format!(
+                    "Invalid request validation mode '{}'. Must be one of: off, warn, enforce",
+                    config.http.request_validation
+                ));
+            }
+
+            // Validate HTTP auth if configured
+            if let Some(ref auth) = config.http.auth {
+                if let Some(ref jwt) = auth.jwt {
+                    if let Some(ref secret) = jwt.secret {
+                        if secret.is_empty() {
+                            errors.push("HTTP JWT auth is configured but secret is empty".to_string());
+                        }
+                    } else if jwt.rsa_public_key.is_none() && jwt.ecdsa_public_key.is_none() {
+                        errors.push("HTTP JWT auth requires at least one key (secret, rsa_public_key, or ecdsa_public_key)".to_string());
                     }
-                    if endpoint.methods.is_empty() {
-                        warnings.push(format!(
-                            "HTTP endpoint #{} ('{}') has no methods defined",
-                            idx + 1,
-                            endpoint.path
-                        ));
+                }
+                if let Some(ref basic) = auth.basic_auth {
+                    if basic.credentials.is_empty() {
+                        warnings.push("HTTP Basic auth is configured but no credentials are defined".to_string());
                     }
-                    if endpoint.response.is_none() {
-                        warnings.push(format!(
-                            "HTTP endpoint #{} ('{}') has no response defined",
-                            idx + 1,
-                            endpoint.path
-                        ));
+                }
+            }
+
+            // Validate WebSocket section
+            if config.websocket.port == 0 {
+                errors.push("WebSocket port cannot be 0".to_string());
+            }
+            if config.websocket.port == config.http.port {
+                errors.push("WebSocket port conflicts with HTTP port".to_string());
+            }
+
+            // Validate gRPC section
+            if config.grpc.port == 0 {
+                errors.push("gRPC port cannot be 0".to_string());
+            }
+            if config.grpc.port == config.http.port || config.grpc.port == config.websocket.port {
+                errors.push("gRPC port conflicts with HTTP or WebSocket port".to_string());
+            }
+
+            // Validate chaining configuration
+            if config.chaining.enabled {
+                if config.chaining.max_chain_length == 0 {
+                    errors.push("Chaining is enabled but max_chain_length is 0".to_string());
+                }
+                if config.chaining.global_timeout_secs == 0 {
+                    warnings.push("Chaining global timeout is 0 (no timeout)".to_string());
+                }
+                println!("   ✓ Request chaining: enabled (max length: {})", config.chaining.max_chain_length);
+            }
+
+            // Validate admin UI configuration
+            if config.admin.enabled {
+                if config.admin.port == 0 {
+                    errors.push("Admin UI is enabled but port is 0".to_string());
+                }
+                if config.admin.port == config.http.port
+                    || config.admin.port == config.websocket.port
+                    || config.admin.port == config.grpc.port
+                {
+                    errors.push("Admin UI port conflicts with another service port".to_string());
+                }
+                if config.admin.auth_required {
+                    if config.admin.username.is_none() || config.admin.password.is_none() {
+                        errors.push("Admin UI auth is required but username/password not configured".to_string());
                     }
                 }
             } else {
-                warnings.push("No HTTP endpoints configured. Add 'http.endpoints' to define mock endpoints.");
+                warnings.push("Admin UI is disabled. Enable with 'admin.enabled: true'.".to_string());
             }
 
-            // Validate chains section
-            if let Some(ref chains) = config.chaining {
-                if let Some(ref chain_defs) = chains.chains {
-                    chains_count = chain_defs.len();
-
-                    for (idx, chain) in chain_defs.iter().enumerate() {
-                        if chain.name.is_empty() {
-                            errors.push(format!("Chain #{} has empty name", idx + 1));
-                        }
-                        if chain.links.is_empty() {
-                            warnings.push(format!(
-                                "Chain #{} ('{}') has no links defined",
-                                idx + 1,
-                                chain.name
-                            ));
-                        }
-                    }
+            // Validate observability
+            if config.observability.prometheus.enabled {
+                if config.observability.prometheus.port == 0 {
+                    errors.push("Prometheus metrics enabled but port is 0".to_string());
                 }
             }
 
-            // Check for admin section
-            if config.admin.is_none() {
-                warnings.push("No admin UI configuration found. Consider adding 'admin.enabled: true' to enable the admin interface.");
+            if let Some(ref otel) = config.observability.opentelemetry {
+                if otel.enabled {
+                    if otel.service_name.is_empty() {
+                        warnings.push("OpenTelemetry service name is empty".to_string());
+                    }
+                    println!("   ✓ OpenTelemetry: enabled (service: {})", otel.service_name);
+                }
             }
 
-            // Check for TLS configuration issues
-            if let Some(ref tls) = config.tls {
-                if tls.enabled {
-                    if tls.cert_path.is_none() || tls.key_path.is_none() {
-                        errors.push("TLS is enabled but cert_path or key_path is missing".to_string());
+            if let Some(ref recorder) = config.observability.recorder {
+                if recorder.enabled {
+                    if recorder.database_path.is_empty() {
+                        errors.push("Recorder is enabled but database path is empty".to_string());
                     }
+                    println!("   ✓ Recorder: enabled (db: {})", recorder.database_path);
                 }
             }
 
             // Print results
             if !errors.is_empty() {
-                println!("❌ Configuration has errors:");
+                println!("\n❌ Configuration has errors:");
                 for error in &errors {
                     println!("   ✗ {}", error);
                 }
                 return Err("Configuration validation failed".into());
             }
 
-            println!("✅ Configuration is valid");
+            println!("\n✅ Configuration is valid");
             println!("\n📊 Summary:");
-            println!("   HTTP endpoints: {}", endpoints_count);
-            println!("   Request chains: {}", chains_count);
             println!("   HTTP server: {}:{}", config.http.host, config.http.port);
-            if let Some(ref admin) = config.admin {
-                if admin.enabled {
-                    println!("   Admin UI: http://{}:{}", admin.host, admin.port);
-                }
+            println!("   WebSocket server: {}:{}", config.websocket.host, config.websocket.port);
+            println!("   gRPC server: {}:{}", config.grpc.host, config.grpc.port);
+
+            if config.admin.enabled {
+                println!("   Admin UI: http://{}:{}", config.admin.host, config.admin.port);
+            }
+
+            if config.observability.prometheus.enabled {
+                println!("   Prometheus metrics: http://{}:{}/metrics",
+                    config.http.host, config.observability.prometheus.port);
             }
 
             if !warnings.is_empty() {
@@ -2493,7 +2523,8 @@ async fn handle_test_ai(
             let mut current_data: serde_json::Value = serde_json::from_str(&data_content)?;
 
             // Create a simple drift configuration
-            use mockforge_data::{DataDriftConfig, DriftRule, DriftStrategy};
+            use mockforge_data::DataDriftConfig;
+            use mockforge_data::drift::{DriftRule, DriftStrategy};
 
             let rule = DriftRule::new("value".to_string(), DriftStrategy::Linear)
                 .with_rate(1.0);
@@ -2541,13 +2572,12 @@ async fn handle_test_ai(
             // Create replay augmentation config
             use mockforge_data::{EventStrategy, ReplayAugmentationConfig, ReplayMode};
 
-            let config = ReplayAugmentationConfig::new(
-                ReplayMode::Generated,
-                EventStrategy::CountBased,
-            )
-            .with_narrative(narrative)
-            .with_event_count(event_count)
-            .with_rag_config(rag_config);
+            let mut config = ReplayAugmentationConfig::default();
+            config.mode = ReplayMode::Generated;
+            config.strategy = EventStrategy::CountBased;
+            config.narrative = Some(narrative);
+            config.event_count = Some(event_count);
+            config.rag_config = Some(rag_config);
 
             let mut engine = mockforge_data::ReplayAugmentationEngine::new(config)?;
 
@@ -2677,6 +2707,11 @@ async fn handle_generate_tests(
         llm_config,
         group_by_endpoint: true,
         include_setup_teardown: true,
+        generate_fixtures: ai_descriptions,
+        suggest_edge_cases: ai_descriptions,
+        analyze_test_gaps: ai_descriptions,
+        deduplicate_tests: true,
+        optimize_test_order: false,
     };
 
     // Create query filter
@@ -2685,10 +2720,11 @@ async fn handle_generate_tests(
         method: method.clone(),
         path: path.clone(),
         status_code: status_code.map(|c| c as i32),
+        trace_id: None,
         min_duration_ms: None,
         max_duration_ms: None,
-        trace_id: None,
-        limit: Some(limit as i64),
+        tags: None,
+        limit: Some(limit as i32),
         offset: Some(0),
     };
 

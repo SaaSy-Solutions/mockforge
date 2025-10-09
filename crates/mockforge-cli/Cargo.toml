@@ -15,8 +15,9 @@ name = "mockforge"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive", "std"] }
+clap = { version = "4", features = ["derive", "std", "env"] }
 clap_complete = "4"
+anyhow = "1.0"
 tokio = { workspace = true, features = ["signal"] }
 tokio-util = "0.7"
 tracing = { workspace = true }
@@ -30,6 +31,9 @@ mockforge-data = { path = "../mockforge-data" }
 mockforge-ui = { path = "../mockforge-ui" }
 mockforge-observability = { path = "../mockforge-observability" }
 mockforge-recorder = { path = "../mockforge-recorder" }
+mockforge-plugin-core = { path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { path = "../mockforge-plugin-loader" }
+# mockforge-chaos = { path = "../mockforge-chaos" }  # Temporarily disabled due to compilation errors
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

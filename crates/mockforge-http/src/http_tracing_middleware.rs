@@ -115,7 +115,6 @@ mod tests {
     #[tokio::test]
     async fn test_tracing_middleware_creates_span() {
         // Initialize tracer for test
-        use mockforge_tracing::TracingConfig;
         use opentelemetry::global;
         use opentelemetry_sdk::propagation::TraceContextPropagator;
 
