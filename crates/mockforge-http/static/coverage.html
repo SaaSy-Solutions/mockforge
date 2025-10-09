@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MockForge - API Coverage</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .coverage-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .coverage-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.3s ease;
+        }
+
+        .coverage-fill.low {
+            background: linear-gradient(90deg, #f44336, #ff9800);
+        }
+
+        .coverage-fill.medium {
+            background: linear-gradient(90deg, #ff9800, #ffc107);
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .routes-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f5f5f5;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        tr:hover {
+            background: #fafafa;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .method-get { background: #e3f2fd; color: #1976d2; }
+        .method-post { background: #e8f5e9; color: #388e3c; }
+        .method-put { background: #fff3e0; color: #f57c00; }
+        .method-patch { background: #fce4ec; color: #c2185b; }
+        .method-delete { background: #ffebee; color: #d32f2f; }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-covered {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-uncovered {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.covered {
+            background: #4caf50;
+        }
+
+        .status-dot.uncovered {
+            background: #f44336;
+        }
+
+        .hit-count {
+            font-family: 'Courier New', monospace;
+            background: #f5f5f5;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .latency {
+            font-family: 'Courier New', monospace;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .refresh-btn {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #1976d2;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            table {
+                font-size: 0.9rem;
+            }
+
+            th, td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 API Coverage Report</h1>
+            <p class="subtitle">Monitor which endpoints have been exercised during testing</p>
+        </header>
+
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Overall Coverage</div>
+                <div class="stat-value" id="overall-coverage">--%</div>
+                <div class="coverage-bar">
+                    <div class="coverage-fill" id="overall-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Routes</div>
+                <div class="stat-value" id="total-routes">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Covered Routes</div>
+                <div class="stat-value" id="covered-routes" style="color: #4caf50;">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Uncovered Routes</div>
+                <div class="stat-value" id="uncovered-routes" style="color: #f44336;">0</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Method:</label>
+                <select id="method-filter">
+                    <option value="">All Methods</option>
+                </select>
+
+                <label>Status:</label>
+                <select id="status-filter">
+                    <option value="">All</option>
+                    <option value="covered">Covered Only</option>
+                    <option value="uncovered">Uncovered Only</option>
+                </select>
+
+                <label>Path:</label>
+                <input type="text" id="path-filter" placeholder="Filter by path...">
+
+                <button class="refresh-btn" onclick="loadCoverage()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <div class="routes-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Method</th>
+                        <th>Path</th>
+                        <th>Hit Count</th>
+                        <th>Avg Latency</th>
+                        <th>Operation</th>
+                    </tr>
+                </thead>
+                <tbody id="routes-tbody">
+                    <tr>
+                        <td colspan="6" class="loading">Loading coverage data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let coverageData = null;
+
+        async function loadCoverage() {
+            try {
+                const response = await fetch('/__mockforge/coverage');
+                coverageData = await response.json();
+                updateStats();
+                updateFilters();
+                renderRoutes();
+            } catch (error) {
+                console.error('Failed to load coverage:', error);
+                document.getElementById('routes-tbody').innerHTML =
+                    '<tr><td colspan="6" class="loading" style="color: #f44336;">Failed to load coverage data</td></tr>';
+            }
+        }
+
+        function updateStats() {
+            const coverage = coverageData.coverage_percentage.toFixed(1);
+            document.getElementById('overall-coverage').textContent = coverage + '%';
+            document.getElementById('total-routes').textContent = coverageData.total_routes;
+            document.getElementById('covered-routes').textContent = coverageData.covered_routes;
+            document.getElementById('uncovered-routes').textContent = coverageData.total_routes - coverageData.covered_routes;
+
+            const bar = document.getElementById('overall-bar');
+            bar.style.width = coverage + '%';
+            bar.className = 'coverage-fill';
+            if (coverage < 30) {
+                bar.classList.add('low');
+            } else if (coverage < 70) {
+                bar.classList.add('medium');
+            }
+        }
+
+        function updateFilters() {
+            const methods = [...new Set(coverageData.routes.map(r => r.method))];
+            const methodFilter = document.getElementById('method-filter');
+            methodFilter.innerHTML = '<option value="">All Methods</option>' +
+                methods.map(m => `<option value="${m}">${m}</option>`).join('');
+        }
+
+        function renderRoutes() {
+            const methodFilter = document.getElementById('method-filter').value;
+            const statusFilter = document.getElementById('status-filter').value;
+            const pathFilter = document.getElementById('path-filter').value.toLowerCase();
+
+            let routes = coverageData.routes.filter(route => {
+                if (methodFilter && route.method !== methodFilter) return false;
+                if (statusFilter === 'covered' && !route.covered) return false;
+                if (statusFilter === 'uncovered' && route.covered) return false;
+                if (pathFilter && !route.path.toLowerCase().includes(pathFilter)) return false;
+                return true;
+            });
+
+            const tbody = document.getElementById('routes-tbody');
+            if (routes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="loading">No routes match the current filters</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = routes.map(route => `
+                <tr>
+                    <td>
+                        <span class="status-badge ${route.covered ? 'status-covered' : 'status-uncovered'}">
+                            <span class="status-dot ${route.covered ? 'covered' : 'uncovered'}"></span>
+                            ${route.covered ? 'Covered' : 'Uncovered'}
+                        </span>
+                    </td>
+                    <td><span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span></td>
+                    <td><code>${route.path}</code></td>
+                    <td><span class="hit-count">${route.hit_count}</span></td>
+                    <td><span class="latency">${route.avg_latency_seconds ? (route.avg_latency_seconds * 1000).toFixed(2) + 'ms' : '-'}</span></td>
+                    <td>${route.operation_id || route.summary || '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Add event listeners
+        document.getElementById('method-filter').addEventListener('change', renderRoutes);
+        document.getElementById('status-filter').addEventListener('change', renderRoutes);
+        document.getElementById('path-filter').addEventListener('input', renderRoutes);
+
+        // Initial load
+        loadCoverage();
+
+        // Auto-refresh every 5 seconds
+        setInterval(loadCoverage, 5000);
+    </script>
+</body>
+</html>

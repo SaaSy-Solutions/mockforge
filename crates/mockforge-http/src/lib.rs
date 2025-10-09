@@ -157,6 +157,7 @@ pub mod ai_handler;
 pub mod rag_ai_generator;
 pub mod auth;
 pub mod chain_handlers;
+pub mod coverage;
 pub mod http_tracing_middleware;
 pub mod latency_profiles;
 pub mod management;
@@ -181,6 +182,9 @@ pub use metrics_middleware::collect_http_metrics;
 
 // Re-export tracing middleware
 pub use http_tracing_middleware::http_tracing_middleware;
+
+// Re-export coverage utilities
+pub use coverage::{CoverageReport, RouteCoverage, MethodCoverage, calculate_coverage};
 
 use axum::middleware::from_fn_with_state;
 use axum::{Router, extract::State, response::Json};
@@ -368,13 +372,30 @@ pub async fn build_router(
     // Add SSE endpoints
     .merge(sse::sse_router());
 
-    // Create a router with state for the routes endpoint
+    // Create a router with state for the routes and coverage endpoints
     let routes_router = Router::new()
         .route("/__mockforge/routes", axum::routing::get(get_routes_handler))
+        .route("/__mockforge/coverage", axum::routing::get(coverage::get_coverage_handler))
         .with_state(state);
 
     // Merge the routes router with the main app
     app = app.merge(routes_router);
+
+    // Add static coverage UI
+    // Determine the path to the coverage.html file
+    let coverage_html_path = std::env::var("MOCKFORGE_COVERAGE_UI_PATH")
+        .unwrap_or_else(|_| "crates/mockforge-http/static/coverage.html".to_string());
+
+    // Check if the file exists before serving it
+    if std::path::Path::new(&coverage_html_path).exists() {
+        app = app.nest_service(
+            "/__mockforge/coverage.html",
+            tower_http::services::ServeFile::new(&coverage_html_path),
+        );
+        debug!("Serving coverage UI from: {}", coverage_html_path);
+    } else {
+        debug!("Coverage UI file not found at: {}. Skipping static file serving.", coverage_html_path);
+    }
 
     // Add management API endpoints
     let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
