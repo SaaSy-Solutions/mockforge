@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mockforge.fullname" . }}-config
+  labels:
+    {{- include "mockforge.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # MockForge Configuration
+    http:
+      enabled: {{ .Values.config.http.enabled }}
+      port: {{ .Values.config.http.port }}
+      host: {{ .Values.config.http.host | quote }}
+
+    websocket:
+      enabled: {{ .Values.config.websocket.enabled }}
+      port: {{ .Values.config.websocket.port }}
+      host: {{ .Values.config.websocket.host | quote }}
+
+    grpc:
+      enabled: {{ .Values.config.grpc.enabled }}
+      port: {{ .Values.config.grpc.port }}
+      host: {{ .Values.config.grpc.host | quote }}
+      reflection: {{ .Values.config.grpc.reflection }}
+
+    graphql:
+      enabled: {{ .Values.config.graphql.enabled }}
+
+    admin:
+      enabled: {{ .Values.config.admin.enabled }}
+      port: {{ .Values.config.admin.port }}
+      host: {{ .Values.config.admin.host | quote }}
+      api_enabled: {{ .Values.config.admin.api_enabled }}
+
+    observability:
+      metrics:
+        enabled: {{ .Values.config.observability.metrics.enabled }}
+        port: {{ .Values.config.observability.metrics.port }}
+        host: {{ .Values.config.observability.metrics.host | quote }}
+
+      tracing:
+        enabled: {{ .Values.config.observability.tracing.enabled }}
+        {{- if .Values.config.observability.tracing.otlp_endpoint }}
+        otlp_endpoint: {{ .Values.config.observability.tracing.otlp_endpoint | quote }}
+        {{- end }}
+        service_name: {{ .Values.config.observability.tracing.service_name | quote }}
+
+      recorder:
+        enabled: {{ .Values.config.observability.recorder.enabled }}
+        database_path: {{ .Values.config.observability.recorder.database_path | quote }}
+        max_events: {{ .Values.config.observability.recorder.max_events }}
+
+    chaos:
+      enabled: {{ .Values.config.observability.chaos.enabled }}
+      {{- if .Values.config.observability.chaos.scenario }}
+      scenario: {{ .Values.config.observability.chaos.scenario | quote }}
+      {{- end }}
+
+    latency:
+      base_ms: {{ .Values.config.latency.base_ms }}
+      jitter_percent: {{ .Values.config.latency.jitter_percent }}
+
+    failures:
+      enabled: {{ .Values.config.failures.enabled }}
+      rate: {{ .Values.config.failures.rate }}
+{{- if .Values.fixtures }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mockforge.fullname" . }}-fixtures
+  labels:
+    {{- include "mockforge.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.fixtures }}
+  {{ $key }}: |
+    {{- $value | nindent 4 }}
+  {{- end }}
+{{- end }}

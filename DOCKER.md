@@ -348,8 +348,50 @@ jobs:
         tags: saasy-solutions/mockforge:latest
 ```
 
+## ☁️ Cloud Deployment
+
+For production deployments on cloud platforms, see our comprehensive cloud deployment guides:
+
+- **[AWS Deployment Guide](docs/deployment/aws.md)** - ECS, EKS, App Runner, EC2
+- **[Google Cloud Guide](docs/deployment/gcp.md)** - Cloud Run, GKE, Compute Engine
+- **[Azure Guide](docs/deployment/azure.md)** - Container Apps, ACI, AKS, VMs
+- **[DigitalOcean Guide](docs/deployment/digitalocean.md)** - App Platform, DOKS, Droplets
+
+### Quick Cloud Recommendations
+
+- **Easiest & Cheapest**: [DigitalOcean App Platform](docs/deployment/digitalocean.md#digitalocean-app-platform-recommended) ($10/month) or [Google Cloud Run](docs/deployment/gcp.md#google-cloud-run-recommended) ($10-30/month)
+- **Production (Kubernetes)**: See [Kubernetes Deployment](docs/deployment/README.md#kubernetes-deployment) guides
+- **Enterprise**: [AWS ECS](docs/deployment/aws.md#aws-ecs-with-fargate) or [AKS/EKS/GKE](docs/deployment/README.md#kubernetes-services-production)
+
+All cloud guides include:
+- Step-by-step deployment instructions
+- Infrastructure as Code templates
+- Cost estimates
+- Monitoring and troubleshooting tips
+
+## 🚢 Kubernetes / Helm Deployment
+
+MockForge provides a production-ready Helm chart for Kubernetes deployments.
+
+```bash
+# Add Helm repository (when published)
+helm repo add mockforge https://saasy-solutions.github.io/mockforge/charts
+helm repo update
+
+# Install MockForge
+helm install mockforge mockforge/mockforge
+
+# Or from local chart
+helm install mockforge ./helm/mockforge
+```
+
+See the [Helm Chart README](helm/mockforge/README.md) for full configuration options.
+
 ## 📚 Additional Resources
 
+- [Cloud Deployment Overview](docs/deployment/README.md)
+- [Helm Chart Documentation](helm/mockforge/README.md)
+- [Deployment Templates](deploy/)
 - [MockForge User Guide](../book/src/README.md)
 - [Configuration Reference](../book/src/configuration/)
 - [Environment Variables Guide](../book/src/configuration/environment.md)

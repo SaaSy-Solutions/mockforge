@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mockforge.fullname" . }}
+  labels:
+    {{- include "mockforge.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mockforge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mockforge.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "mockforge.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "mockforge.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.config.http.port }}
+          protocol: TCP
+        - name: websocket
+          containerPort: {{ .Values.config.websocket.port }}
+          protocol: TCP
+        - name: grpc
+          containerPort: {{ .Values.config.grpc.port }}
+          protocol: TCP
+        - name: admin
+          containerPort: {{ .Values.config.admin.port }}
+          protocol: TCP
+        - name: metrics
+          containerPort: {{ .Values.config.observability.metrics.port }}
+          protocol: TCP
+        env:
+        - name: MOCKFORGE_HTTP_PORT
+          value: {{ .Values.config.http.port | quote }}
+        - name: MOCKFORGE_WS_PORT
+          value: {{ .Values.config.websocket.port | quote }}
+        - name: MOCKFORGE_GRPC_PORT
+          value: {{ .Values.config.grpc.port | quote }}
+        - name: MOCKFORGE_ADMIN_PORT
+          value: {{ .Values.config.admin.port | quote }}
+        - name: MOCKFORGE_ADMIN_ENABLED
+          value: {{ .Values.config.admin.enabled | quote }}
+        - name: MOCKFORGE_METRICS_PORT
+          value: {{ .Values.config.observability.metrics.port | quote }}
+        - name: MOCKFORGE_METRICS_ENABLED
+          value: {{ .Values.config.observability.metrics.enabled | quote }}
+        - name: MOCKFORGE_TRACING_ENABLED
+          value: {{ .Values.config.observability.tracing.enabled | quote }}
+        {{- if .Values.config.observability.tracing.otlp_endpoint }}
+        - name: MOCKFORGE_OTLP_ENDPOINT
+          value: {{ .Values.config.observability.tracing.otlp_endpoint | quote }}
+        {{- end }}
+        - name: MOCKFORGE_RECORDER_ENABLED
+          value: {{ .Values.config.observability.recorder.enabled | quote }}
+        - name: MOCKFORGE_RECORDER_DB
+          value: {{ .Values.config.observability.recorder.database_path | quote }}
+        - name: MOCKFORGE_LATENCY_BASE_MS
+          value: {{ .Values.config.latency.base_ms | quote }}
+        - name: MOCKFORGE_LATENCY_JITTER_PERCENT
+          value: {{ .Values.config.latency.jitter_percent | quote }}
+        - name: MOCKFORGE_FAILURES_ENABLED
+          value: {{ .Values.config.failures.enabled | quote }}
+        - name: MOCKFORGE_FAILURES_RATE
+          value: {{ .Values.config.failures.rate | quote }}
+        - name: RUST_LOG
+          value: "info"
+        {{- with .Values.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        {{- if .Values.fixtures }}
+        - name: fixtures
+          mountPath: /app/fixtures
+          readOnly: true
+        {{- end }}
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          mountPath: /app/data
+        {{- end }}
+        {{- with .Values.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 10 }}
+        startupProbe:
+          {{- toYaml .Values.startupProbe | nindent 10 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "mockforge.fullname" . }}-config
+      {{- if .Values.fixtures }}
+      - name: fixtures
+        configMap:
+          name: {{ include "mockforge.fullname" . }}-fixtures
+      {{- end }}
+      {{- if .Values.persistence.enabled }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "mockforge.fullname" . }}-data
+      {{- end }}
+      {{- with .Values.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

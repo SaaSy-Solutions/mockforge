@@ -1,0 +1,90 @@
+version: '3.8'
+
+# Production-ready Docker Compose configuration for MockForge
+# Features: Resource limits, health checks, restart policies, logging
+
+services:
+  mockforge:
+    image: ghcr.io/saasy-solutions/mockforge:latest
+    container_name: mockforge-production
+    ports:
+      - "3000:3000"    # HTTP API
+      - "3001:3001"    # WebSocket
+      - "50051:50051"  # gRPC
+      # Admin UI on internal network only - use reverse proxy for external access
+    environment:
+      - RUST_LOG=info
+      - MOCKFORGE_HTTP_PORT=3000
+      - MOCKFORGE_WS_PORT=3001
+      - MOCKFORGE_GRPC_PORT=50051
+      - MOCKFORGE_ADMIN_PORT=9080
+      - MOCKFORGE_ADMIN_ENABLED=true
+      - MOCKFORGE_METRICS_ENABLED=true
+      - MOCKFORGE_TRACING_ENABLED=true
+      - MOCKFORGE_RECORDER_ENABLED=true
+      - MOCKFORGE_RECORDER_DB=/app/data/mockforge.db
+      - MOCKFORGE_LATENCY_ENABLED=false
+      - MOCKFORGE_FAILURES_ENABLED=false
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - mockforge-data:/app/data
+      - mockforge-logs:/app/logs
+      - mockforge-fixtures:/app/fixtures:ro
+    networks:
+      - mockforge-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx reverse proxy for SSL termination and routing
+  nginx:
+    image: nginx:alpine
+    container_name: mockforge-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    networks:
+      - mockforge-network
+    depends_on:
+      - mockforge
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mockforge-data:
+    driver: local
+  mockforge-logs:
+    driver: local
+  mockforge-fixtures:
+    driver: local
+  nginx-cache:
+    driver: local
+
+networks:
+  mockforge-network:
+    driver: bridge

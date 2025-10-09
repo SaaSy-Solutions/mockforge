@@ -1,0 +1,61 @@
+version: '3.8'
+
+# CI/CD optimized Docker Compose configuration for MockForge
+# Features: Fast startup, minimal logging, ephemeral storage
+
+services:
+  mockforge:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: mockforge-ci
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "50051:50051"
+      - "9080:9080"
+    environment:
+      - RUST_LOG=warn
+      - MOCKFORGE_HTTP_PORT=3000
+      - MOCKFORGE_WS_PORT=3001
+      - MOCKFORGE_GRPC_PORT=50051
+      - MOCKFORGE_ADMIN_PORT=9080
+      - MOCKFORGE_ADMIN_ENABLED=true
+      - MOCKFORGE_METRICS_ENABLED=false
+      - MOCKFORGE_TRACING_ENABLED=false
+      - MOCKFORGE_RECORDER_ENABLED=false
+      - MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
+      - MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
+    volumes:
+      - ../examples:/app/examples:ro
+      - ../fixtures:/app/fixtures:ro
+    networks:
+      - ci-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: "no"
+
+  # Test client for automated testing
+  test-client:
+    image: curlimages/curl:latest
+    container_name: mockforge-test-client
+    networks:
+      - ci-network
+    depends_on:
+      mockforge:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Testing HTTP endpoint...' &&
+        curl -f http://mockforge:3000/ping &&
+        echo 'HTTP tests passed!' &&
+        echo 'All tests completed successfully!'
+      "
+
+networks:
+  ci-network:
+    driver: bridge

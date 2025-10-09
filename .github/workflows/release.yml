@@ -140,3 +140,114 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+  helm:
+    name: Package and Publish Helm Chart
+    runs-on: ubuntu-latest
+    if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.13.0'
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION"
+
+    - name: Update Helm chart version and appVersion
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        sed -i "s/^version:.*/version: $VERSION/" helm/mockforge/Chart.yaml
+        sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" helm/mockforge/Chart.yaml
+
+        echo "Updated Chart.yaml:"
+        cat helm/mockforge/Chart.yaml
+
+    - name: Lint Helm chart
+      run: |
+        helm lint helm/mockforge
+
+    - name: Package Helm chart
+      run: |
+        mkdir -p .helm-release
+        helm package helm/mockforge --destination .helm-release
+        echo "Packaged charts:"
+        ls -la .helm-release/
+
+    - name: Generate Helm repository index
+      run: |
+        cd .helm-release
+        helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+
+    - name: Upload Helm chart to GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          .helm-release/*.tgz
+          .helm-release/index.yaml
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Checkout gh-pages branch
+      uses: actions/checkout@v5
+      with:
+        ref: gh-pages
+        path: gh-pages
+
+    - name: Update Helm repository on GitHub Pages
+      run: |
+        # Copy packaged chart to gh-pages
+        mkdir -p gh-pages/charts
+        cp .helm-release/*.tgz gh-pages/charts/
+
+        # Generate index for all charts
+        cd gh-pages
+        helm repo index charts --url https://${{ github.repository_owner }}.github.io/mockforge/charts --merge charts/index.yaml || helm repo index charts --url https://${{ github.repository_owner }}.github.io/mockforge/charts
+
+        # Create README if it doesn't exist
+        if [ ! -f charts/README.md ]; then
+          cat > charts/README.md << 'EOF'
+        # MockForge Helm Chart Repository
+
+        ## Usage
+
+        Add the repository:
+        ```bash
+        helm repo add mockforge https://${{ github.repository_owner }}.github.io/mockforge/charts
+        helm repo update
+        ```
+
+        Install MockForge:
+        ```bash
+        helm install mockforge mockforge/mockforge
+        ```
+
+        ## Available Charts
+
+        - **mockforge**: Main application chart
+
+        ## Documentation
+
+        For full documentation, visit: https://mockforge.dev
+        EOF
+        fi
+
+    - name: Commit and push to gh-pages
+      run: |
+        cd gh-pages
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add charts/
+        git commit -m "Release Helm chart version ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+        git push origin gh-pages || echo "No changes to push"

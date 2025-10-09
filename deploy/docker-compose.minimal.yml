@@ -1,0 +1,22 @@
+version: '3.8'
+
+# Minimal Docker Compose configuration for MockForge
+# Quick start for basic API mocking
+
+services:
+  mockforge:
+    image: ghcr.io/saasy-solutions/mockforge:latest
+    container_name: mockforge
+    ports:
+      - "3000:3000"    # HTTP API
+      - "9080:9080"    # Admin UI
+    environment:
+      - MOCKFORGE_HTTP_PORT=3000
+      - MOCKFORGE_ADMIN_PORT=9080
+      - MOCKFORGE_ADMIN_ENABLED=true
+      - MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
+      - MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+      - MOCKFORGE_CORS_ENABLED=true
+    volumes:
+      - ./examples:/app/examples:ro
+    restart: unless-stopped
