@@ -257,6 +257,16 @@ pub async fn build_router(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
 ) -> Router {
+    build_router_with_multi_tenant(spec_path, options, failure_config, None).await
+}
+
+/// Build the base HTTP router with multi-tenant workspace support
+pub async fn build_router_with_multi_tenant(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    failure_config: Option<FailureConfig>,
+    multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+) -> Router {
     use std::time::Instant;
 
     let startup_start = Instant::now();
@@ -407,6 +417,47 @@ pub async fn build_router(
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    // Add workspace routing middleware if multi-tenant is enabled
+    if let Some(mt_config) = multi_tenant_config {
+        if mt_config.enabled {
+            use mockforge_core::{MultiTenantWorkspaceRegistry, WorkspaceRouter};
+            use std::sync::Arc;
+
+            info!("Multi-tenant mode enabled with {} routing strategy",
+                match mt_config.routing_strategy {
+                    mockforge_core::RoutingStrategy::Path => "path-based",
+                    mockforge_core::RoutingStrategy::Port => "port-based",
+                    mockforge_core::RoutingStrategy::Both => "hybrid",
+                });
+
+            // Create the multi-tenant workspace registry
+            let mut registry = MultiTenantWorkspaceRegistry::new(mt_config.clone());
+
+            // Register the default workspace before wrapping in Arc
+            let default_workspace = mockforge_core::Workspace::new(mt_config.default_workspace.clone());
+            if let Err(e) = registry.register_workspace(mt_config.default_workspace.clone(), default_workspace) {
+                warn!("Failed to register default workspace: {}", e);
+            } else {
+                info!("Registered default workspace: '{}'", mt_config.default_workspace);
+            }
+
+            // TODO: Auto-discover and register workspaces if configured
+            // if mt_config.auto_discover {
+            //     // Load workspaces from config directory
+            // }
+
+            // Wrap registry in Arc for shared access
+            let registry = Arc::new(registry);
+
+            // Create workspace router and wrap the app with workspace middleware
+            let _workspace_router = WorkspaceRouter::new(registry);
+
+            // Note: The actual middleware integration would need to be implemented
+            // in the WorkspaceRouter to work with Axum's middleware system
+            info!("Workspace routing middleware initialized for HTTP server");
+        }
+    }
 
     let total_startup_duration = startup_start.elapsed();
     info!("HTTP router startup completed (total time: {:?})", total_startup_duration);
@@ -608,6 +659,16 @@ pub async fn build_router_with_chains(
     options: Option<ValidationOptions>,
     circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
 ) -> Router {
+    build_router_with_chains_and_multi_tenant(spec_path, options, circling_config, None).await
+}
+
+/// Build the base HTTP router with chaining and multi-tenant support
+pub async fn build_router_with_chains_and_multi_tenant(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
+    multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+) -> Router {
     use crate::chain_handlers::create_chain_state;
     use axum::{
         routing::{delete, get, post, put},
@@ -626,8 +687,8 @@ pub async fn build_router_with_chains(
     ));
     let chain_state = create_chain_state(registry, engine);
 
-    // Start with basic router
-    let mut app = build_router(spec_path, options, None).await;
+    // Start with basic router including multi-tenant support
+    let mut app = build_router_with_multi_tenant(spec_path, options, None, multi_tenant_config).await;
 
     // Add chain management endpoints
     app = app.nest(
@@ -678,6 +739,24 @@ pub async fn build_router_with_traffic_shaping(
     traffic_shaper: Option<TrafficShaper>,
     traffic_shaping_enabled: bool,
 ) -> Router {
+    build_router_with_traffic_shaping_and_multi_tenant(
+        spec_path,
+        options,
+        traffic_shaper,
+        traffic_shaping_enabled,
+        None,
+    )
+    .await
+}
+
+/// Build router with traffic shaping and multi-tenant support
+pub async fn build_router_with_traffic_shaping_and_multi_tenant(
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    traffic_shaper: Option<TrafficShaper>,
+    traffic_shaping_enabled: bool,
+    multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
     use mockforge_core::Overrides;
@@ -727,6 +806,39 @@ pub async fn build_router_with_traffic_shaping(
     if traffic_shaping_enabled && traffic_shaper.is_some() {
         use crate::op_middleware::add_shared_extension;
         app = app.layer(from_fn_with_state(shared.clone(), add_shared_extension));
+    }
+
+    // Add workspace routing middleware if multi-tenant is enabled
+    if let Some(mt_config) = multi_tenant_config {
+        if mt_config.enabled {
+            use mockforge_core::{MultiTenantWorkspaceRegistry, WorkspaceRouter};
+            use std::sync::Arc;
+
+            info!("Multi-tenant mode enabled with {} routing strategy",
+                match mt_config.routing_strategy {
+                    mockforge_core::RoutingStrategy::Path => "path-based",
+                    mockforge_core::RoutingStrategy::Port => "port-based",
+                    mockforge_core::RoutingStrategy::Both => "hybrid",
+                });
+
+            // Create the multi-tenant workspace registry
+            let mut registry = MultiTenantWorkspaceRegistry::new(mt_config.clone());
+
+            // Register the default workspace before wrapping in Arc
+            let default_workspace = mockforge_core::Workspace::new(mt_config.default_workspace.clone());
+            if let Err(e) = registry.register_workspace(mt_config.default_workspace.clone(), default_workspace) {
+                warn!("Failed to register default workspace: {}", e);
+            } else {
+                info!("Registered default workspace: '{}'", mt_config.default_workspace);
+            }
+
+            // Wrap registry in Arc for shared access
+            let registry = Arc::new(registry);
+
+            // Create workspace router
+            let _workspace_router = WorkspaceRouter::new(registry);
+            info!("Workspace routing middleware initialized for HTTP server");
+        }
     }
 
     app

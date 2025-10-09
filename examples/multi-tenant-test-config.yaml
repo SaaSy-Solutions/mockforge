@@ -1,0 +1,31 @@
+# Multi-Tenant Test Configuration
+# This configuration enables multi-tenant workspace support for testing
+
+server:
+  multi_tenant:
+    enabled: true
+    routing_strategy: "Path"
+    workspace_prefix: "/workspace"
+    default_workspace: "default"
+    max_workspaces: 10
+    workspace_ports: {}
+    auto_discover: false
+    config_directory: null
+
+http:
+  port: 3000
+  openapi_spec: null
+
+admin:
+  enabled: true
+  port: 9080
+
+observability:
+  prometheus:
+    enabled: true
+    port: 9090
+
+core:
+  latency_enabled: false
+  failures_enabled: false
+  traffic_shaping_enabled: false

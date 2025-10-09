@@ -182,6 +182,7 @@ pub mod failure_injection;
 pub mod import;
 pub mod intelligent_behavior;
 pub mod latency;
+pub mod multi_tenant;
 pub mod network_profiles;
 pub mod openapi;
 pub mod openapi_routes;
@@ -221,6 +222,10 @@ pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
 };
 pub use latency::LatencyProfile;
+pub use multi_tenant::{
+    MultiTenantConfig, MultiTenantWorkspaceRegistry, RoutingStrategy, TenantWorkspace,
+    WorkspaceContext, WorkspaceRouter, WorkspaceStats,
+};
 pub use network_profiles::{NetworkProfile, NetworkProfileCatalog};
 pub use openapi::{
     OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSecurityRequirement, OpenApiSpec,

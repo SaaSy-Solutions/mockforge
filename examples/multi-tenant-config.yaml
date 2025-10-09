@@ -1,0 +1,109 @@
+# MockForge Multi-Tenant Configuration Example
+#
+# This configuration demonstrates how to set up MockForge with multi-tenant workspaces
+# to serve multiple isolated mock environments from a single instance.
+
+# Core MockForge configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+  cors_enabled: true
+
+admin:
+  enabled: true
+  port: 9080
+  api_enabled: true
+
+# Multi-tenant configuration
+multi_tenant:
+  # Enable multi-tenant mode
+  enabled: true
+
+  # Routing strategy: "path", "port", or "both"
+  # - path: Routes via URL path prefix (e.g., /workspace/project-a/api/users)
+  # - port: Each workspace gets its own port
+  # - both: Support both path and port-based routing
+  routing_strategy: path
+
+  # Workspace path prefix (use "/w" for short form)
+  workspace_prefix: "/workspace"
+
+  # Default workspace ID (used when no workspace specified in request)
+  default_workspace: "default"
+
+  # Maximum number of workspaces allowed (optional)
+  max_workspaces: 100
+
+  # Enable auto-discovery of workspaces from config directory
+  auto_discover: false
+
+  # Configuration directory for workspace configs (optional)
+  # config_directory: "./workspaces"
+
+  # Workspace-specific port mappings (for port-based routing)
+  # workspace_ports:
+  #   project-a: 3001
+  #   project-b: 3002
+
+# Note: Workspace configurations can be managed via:
+# 1. Admin API (/__mockforge/api/workspaces)
+# 2. CLI commands (mockforge workspace create/list/delete)
+# 3. Configuration files in the config_directory (if auto_discover is enabled)
+
+# Example workspace structure (managed via API or CLI):
+#
+# workspaces:
+#   default:
+#     name: "Default Workspace"
+#     description: "Default workspace for general mocks"
+#     enabled: true
+#     base_url: null
+#
+#   frontend-dev:
+#     name: "Frontend Development"
+#     description: "Mocks for frontend team development"
+#     enabled: true
+#     base_url: "https://api.backend.dev"
+#     auth:
+#       api_key:
+#         keys: ["dev-key-123"]
+#
+#   backend-staging:
+#     name: "Backend Staging Environment"
+#     description: "Staging environment for backend integration testing"
+#     enabled: true
+#     base_url: "https://api.staging.example.com"
+#     auth:
+#       api_key:
+#         keys: ["staging-key-456"]
+#
+#   qa-testing:
+#     name: "QA Testing Environment"
+#     description: "Isolated environment for QA team"
+#     enabled: true
+#     base_url: null
+
+# Usage Examples:
+#
+# 1. Access default workspace (no prefix):
+#    curl http://localhost:3000/api/users
+#
+# 2. Access specific workspace (with prefix):
+#    curl http://localhost:3000/workspace/frontend-dev/api/users
+#    curl http://localhost:3000/workspace/backend-staging/api/orders
+#
+# 3. Create a new workspace via API:
+#    curl -X POST http://localhost:9080/__mockforge/api/workspaces \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "id": "new-project",
+#        "name": "New Project",
+#        "description": "Mocks for new project",
+#        "enabled": true
+#      }'
+#
+# 4. List all workspaces:
+#    curl http://localhost:9080/__mockforge/api/workspaces
+#
+# 5. Get workspace details:
+#    curl http://localhost:9080/__mockforge/api/workspaces/frontend-dev

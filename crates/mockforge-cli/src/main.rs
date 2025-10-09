@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use tokio::net::TcpListener;
 
 mod plugin_commands;
+mod workspace_commands;
 
 #[derive(Parser)]
 #[command(name = "mockforge")]
@@ -388,6 +389,19 @@ enum Commands {
     Plugin {
         #[command(subcommand)]
         plugin_command: plugin_commands::PluginCommands,
+    },
+
+    /// Multi-tenant workspace management
+    ///
+    /// Examples:
+    ///   mockforge workspace list
+    ///   mockforge workspace create my-workspace --name "My Workspace"
+    ///   mockforge workspace info my-workspace
+    ///   mockforge workspace delete my-workspace
+    #[command(verbatim_doc_comment)]
+    Workspace {
+        #[command(subcommand)]
+        workspace_command: workspace_commands::WorkspaceCommands,
     },
 
     /// Chaos experiment orchestration
@@ -1006,6 +1020,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         Commands::Plugin { plugin_command } => {
             plugin_commands::handle_plugin_command(plugin_command).await?;
+        }
+        Commands::Workspace { workspace_command } => {
+            workspace_commands::handle_workspace_command(workspace_command).await?;
         }
 
         Commands::Orchestrate { orchestrate_command } => {
@@ -1709,23 +1726,31 @@ async fn handle_serve(
     // Initialize key store at startup
     init_key_store();
 
-    // Build HTTP router with OpenAPI spec, chain support, and traffic shaping if enabled
+    // Build HTTP router with OpenAPI spec, chain support, multi-tenant, and traffic shaping if enabled
+    let multi_tenant_config = if config.server.multi_tenant.enabled {
+        Some(config.server.multi_tenant.clone())
+    } else {
+        None
+    };
+
     let http_app = if config.core.traffic_shaping_enabled {
         use mockforge_core::{TrafficShaper};
         let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
-        mockforge_http::build_router_with_traffic_shaping(
+        mockforge_http::build_router_with_traffic_shaping_and_multi_tenant(
             config.http.openapi_spec.clone(),
             None,
             traffic_shaper,
             true,
+            multi_tenant_config,
         )
         .await
     } else {
         // Use chain-enabled router for standard operation
-        mockforge_http::build_router_with_chains(
+        mockforge_http::build_router_with_chains_and_multi_tenant(
             config.http.openapi_spec.clone(),
             None,
             None, // Use default chain config
+            multi_tenant_config,
         )
         .await
     };

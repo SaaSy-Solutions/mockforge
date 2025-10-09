@@ -23,6 +23,12 @@ pub struct MetricsRegistry {
     pub request_duration_by_path_seconds: HistogramVec,
     pub average_latency_by_path_seconds: GaugeVec,
 
+    // Workspace-specific metrics
+    pub workspace_requests_total: IntCounterVec,
+    pub workspace_requests_duration_seconds: HistogramVec,
+    pub workspace_active_routes: IntGaugeVec,
+    pub workspace_errors_total: IntCounterVec,
+
     // Error metrics
     pub errors_total: IntCounterVec,
     pub error_rate: GaugeVec,
@@ -171,6 +177,46 @@ impl MetricsRegistry {
         )
         .expect("Failed to create average_latency_by_path_seconds metric");
 
+        // Workspace-specific metrics
+        let workspace_requests_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_workspace_requests_total",
+                "Total number of requests by workspace, method, and status",
+            ),
+            &["workspace_id", "method", "status"],
+        )
+        .expect("Failed to create workspace_requests_total metric");
+
+        let workspace_requests_duration_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "mockforge_workspace_request_duration_seconds",
+                "Request duration by workspace in seconds",
+            )
+            .buckets(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
+            &["workspace_id", "method"],
+        )
+        .expect("Failed to create workspace_requests_duration_seconds metric");
+
+        let workspace_active_routes = IntGaugeVec::new(
+            Opts::new(
+                "mockforge_workspace_active_routes",
+                "Number of active routes in each workspace",
+            ),
+            &["workspace_id"],
+        )
+        .expect("Failed to create workspace_active_routes metric");
+
+        let workspace_errors_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_workspace_errors_total",
+                "Total number of errors by workspace",
+            ),
+            &["workspace_id", "error_type"],
+        )
+        .expect("Failed to create workspace_errors_total metric");
+
         // WebSocket metrics
         let ws_connections_active = IntGauge::new(
             "mockforge_ws_connections_active",
@@ -296,6 +342,18 @@ impl MetricsRegistry {
             .register(Box::new(average_latency_by_path_seconds.clone()))
             .expect("Failed to register average_latency_by_path_seconds");
         registry
+            .register(Box::new(workspace_requests_total.clone()))
+            .expect("Failed to register workspace_requests_total");
+        registry
+            .register(Box::new(workspace_requests_duration_seconds.clone()))
+            .expect("Failed to register workspace_requests_duration_seconds");
+        registry
+            .register(Box::new(workspace_active_routes.clone()))
+            .expect("Failed to register workspace_active_routes");
+        registry
+            .register(Box::new(workspace_errors_total.clone()))
+            .expect("Failed to register workspace_errors_total");
+        registry
             .register(Box::new(errors_total.clone()))
             .expect("Failed to register errors_total");
         registry
@@ -372,6 +430,10 @@ impl MetricsRegistry {
             requests_by_path_total,
             request_duration_by_path_seconds,
             average_latency_by_path_seconds,
+            workspace_requests_total,
+            workspace_requests_duration_seconds,
+            workspace_active_routes,
+            workspace_errors_total,
             errors_total,
             error_rate,
             plugin_executions_total,
@@ -597,6 +659,53 @@ impl MetricsRegistry {
     pub fn update_uptime(&self, seconds: f64) {
         self.uptime_seconds.set(seconds);
     }
+
+    // ==================== Workspace-specific metrics ====================
+
+    /// Record a workspace request
+    pub fn record_workspace_request(
+        &self,
+        workspace_id: &str,
+        method: &str,
+        status: u16,
+        duration_seconds: f64,
+    ) {
+        let status_str = status.to_string();
+        self.workspace_requests_total
+            .with_label_values(&[workspace_id, method, &status_str])
+            .inc();
+        self.workspace_requests_duration_seconds
+            .with_label_values(&[workspace_id, method])
+            .observe(duration_seconds);
+    }
+
+    /// Update workspace active routes count
+    pub fn update_workspace_active_routes(&self, workspace_id: &str, count: i64) {
+        self.workspace_active_routes
+            .with_label_values(&[workspace_id])
+            .set(count);
+    }
+
+    /// Record a workspace error
+    pub fn record_workspace_error(&self, workspace_id: &str, error_type: &str) {
+        self.workspace_errors_total
+            .with_label_values(&[workspace_id, error_type])
+            .inc();
+    }
+
+    /// Increment workspace active routes
+    pub fn increment_workspace_routes(&self, workspace_id: &str) {
+        self.workspace_active_routes
+            .with_label_values(&[workspace_id])
+            .inc();
+    }
+
+    /// Decrement workspace active routes
+    pub fn decrement_workspace_routes(&self, workspace_id: &str) {
+        self.workspace_active_routes
+            .with_label_values(&[workspace_id])
+            .dec();
+    }
 }
 
 /// Normalize path to avoid high cardinality
@@ -729,6 +838,45 @@ mod tests {
         registry.update_cpu_usage(45.5);
         registry.update_thread_count(25.0);
         registry.update_uptime(3600.0); // 1 hour
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_workspace_metrics() {
+        let registry = MetricsRegistry::new();
+
+        // Record workspace requests
+        registry.record_workspace_request("workspace1", "GET", 200, 0.045);
+        registry.record_workspace_request("workspace1", "POST", 201, 0.123);
+        registry.record_workspace_request("workspace2", "GET", 200, 0.055);
+
+        // Update active routes
+        registry.update_workspace_active_routes("workspace1", 10);
+        registry.update_workspace_active_routes("workspace2", 5);
+
+        // Record errors
+        registry.record_workspace_error("workspace1", "validation");
+        registry.record_workspace_error("workspace2", "timeout");
+
+        // Test increment/decrement
+        registry.increment_workspace_routes("workspace1");
+        registry.decrement_workspace_routes("workspace1");
+
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_workspace_metrics_isolation() {
+        let registry = MetricsRegistry::new();
+
+        // Ensure metrics for different workspaces are independent
+        registry.record_workspace_request("ws1", "GET", 200, 0.1);
+        registry.record_workspace_request("ws2", "GET", 200, 0.2);
+
+        registry.update_workspace_active_routes("ws1", 5);
+        registry.update_workspace_active_routes("ws2", 10);
+
+        // Both should be tracked independently
         assert!(registry.is_initialized());
     }
 }

@@ -112,6 +112,9 @@ pub struct ServerConfig {
     pub data: DataConfig,
     /// Observability configuration (metrics, tracing)
     pub observability: ObservabilityConfig,
+    /// Multi-tenant workspace configuration
+    #[serde(default)]
+    pub multi_tenant: crate::multi_tenant::MultiTenantConfig,
 }
 
 // Default is derived for ServerConfig
