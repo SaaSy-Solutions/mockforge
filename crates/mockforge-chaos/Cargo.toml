@@ -67,7 +67,7 @@ mockforge-recorder = { path = "../mockforge-recorder" }
 printpdf = "0.7"
 
 # WebSocket support
-tokio-tungstenite = "0.21"
+tokio-tungstenite = "0.28"
 
 [features]
 default = []
