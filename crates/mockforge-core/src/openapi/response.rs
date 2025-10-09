@@ -7,12 +7,30 @@ use crate::{
     ai_response::{expand_prompt_template, AiResponseConfig, RequestContext},
     OpenApiSpec, Result,
 };
+use async_trait::async_trait;
 use chrono;
 use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
 use rand::{rng, Rng};
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid;
+
+/// Trait for AI response generation
+///
+/// This trait allows the HTTP layer to provide custom AI generation
+/// implementations without creating circular dependencies between crates.
+#[async_trait]
+pub trait AiGenerator: Send + Sync {
+    /// Generate an AI response from a prompt
+    ///
+    /// # Arguments
+    /// * `prompt` - The expanded prompt to send to the LLM
+    /// * `config` - The AI response configuration with temperature, max_tokens, etc.
+    ///
+    /// # Returns
+    /// A JSON value containing the generated response
+    async fn generate(&self, prompt: &str, config: &AiResponseConfig) -> Result<Value>;
+}
 
 /// Response generator for creating mock responses
 pub struct ResponseGenerator;
@@ -23,11 +41,17 @@ impl ResponseGenerator {
     /// This method generates a dynamic response based on request context
     /// using the configured LLM provider (OpenAI, Anthropic, etc.)
     ///
-    /// Note: This is a placeholder that will be implemented when mockforge-data is available.
-    /// For now, it returns a descriptive JSON object.
+    /// # Arguments
+    /// * `ai_config` - The AI response configuration
+    /// * `context` - The request context for prompt expansion
+    /// * `generator` - Optional AI generator implementation (if None, returns placeholder)
+    ///
+    /// # Returns
+    /// A JSON value containing the generated response
     pub async fn generate_ai_response(
         ai_config: &AiResponseConfig,
         context: &RequestContext,
+        generator: Option<&dyn AiGenerator>,
     ) -> Result<Value> {
         // Get the prompt template and expand it with request context
         let prompt_template = ai_config
@@ -42,17 +66,21 @@ impl ResponseGenerator {
             expanded_prompt
         );
 
-        // TODO: Implement actual AI generation by calling RAG engine
-        // This requires refactoring to avoid circular dependency with mockforge-data
-        //
-        // For now, return a descriptive response indicating AI would be used
+        // Use the provided generator if available
+        if let Some(gen) = generator {
+            tracing::debug!("Using provided AI generator for response");
+            return gen.generate(&expanded_prompt, ai_config).await;
+        }
+
+        // Fallback: return a descriptive placeholder if no generator is provided
+        tracing::warn!("No AI generator provided, returning placeholder response");
         Ok(serde_json::json!({
             "ai_response": "AI generation placeholder",
-            "note": "This endpoint is configured for AI-assisted responses",
+            "note": "This endpoint is configured for AI-assisted responses, but no AI generator was provided",
             "expanded_prompt": expanded_prompt,
             "mode": format!("{:?}", ai_config.mode),
             "temperature": ai_config.temperature,
-            "implementation_note": "AI generation will be implemented in the route handler layer where mockforge-data is available"
+            "implementation_note": "Pass an AiGenerator implementation to ResponseGenerator::generate_ai_response to enable actual AI generation"
         }))
     }
 

@@ -3,11 +3,140 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use colored::Colorize;
+use mockforge_plugin_core::manifest::ManifestLoader;
+use mockforge_plugin_loader::installer::{InstallOptions, PluginInstaller, PluginLoaderConfig};
 use mockforge_plugin_registry::{
-    api::RegistryClient,
+    api::{PublishRequest, RegistryClient},
     config::{load_config, set_token, clear_token},
+    manifest::{validate_manifest, PluginManifest as RegistryPluginManifest},
     PluginCategory, SearchQuery, SortOrder,
 };
+use ring::digest::{Context, SHA256};
+use std::fs;
+use std::path::Path;
+use tempfile;
+
+/// Calculate SHA-256 checksum of data
+fn calculate_checksum(data: &[u8]) -> String {
+    let mut context = Context::new(&SHA256);
+    context.update(data);
+    let digest = context.finish();
+    hex::encode(digest.as_ref())
+}
+
+/// Build plugin WASM module
+async fn build_plugin_wasm(path: &str) -> Result<()> {
+    use std::process::Command;
+
+    // Check prerequisites
+    check_cargo().context("Cargo not found")?;
+    check_wasm_target().context("wasm32-wasi target not available")?;
+
+    // Change to project directory
+    std::env::set_current_dir(path)
+        .with_context(|| format!("Failed to change to directory {}", path))?;
+
+    // Build the plugin
+    let status = Command::new("cargo")
+        .args(["build", "--target", "wasm32-wasi", "--release"])
+        .status()
+        .context("Failed to execute cargo build")?;
+
+    if !status.success() {
+        anyhow::bail!("Plugin build failed");
+    }
+
+    Ok(())
+}
+
+/// Convert core PluginManifest to registry PluginManifest
+fn convert_to_registry_manifest(
+    core_manifest: &mockforge_plugin_core::PluginManifest,
+) -> Result<RegistryPluginManifest> {
+    use mockforge_plugin_registry::manifest::{AuthorInfo, PluginCategory};
+
+    let plugin_info = &core_manifest.plugin;
+
+    // Convert author
+    let author = if let Some(core_author) = &plugin_info.author {
+        AuthorInfo {
+            name: core_author.name.clone(),
+            email: core_author.email.clone(),
+            url: core_author.url.clone(),
+        }
+    } else {
+        AuthorInfo {
+            name: "Unknown".to_string(),
+            email: None,
+            url: None,
+        }
+    };
+
+    // Convert category (map from types or use default)
+    let category = if plugin_info.types.contains(&"auth".to_string()) {
+        PluginCategory::Auth
+    } else if plugin_info.types.contains(&"template".to_string()) {
+        PluginCategory::Template
+    } else if plugin_info.types.contains(&"response".to_string()) {
+        PluginCategory::Response
+    } else if plugin_info.types.contains(&"datasource".to_string()) {
+        PluginCategory::DataSource
+    } else if plugin_info.types.contains(&"middleware".to_string()) {
+        PluginCategory::Middleware
+    } else if plugin_info.types.contains(&"testing".to_string()) {
+        PluginCategory::Testing
+    } else if plugin_info.types.contains(&"observability".to_string()) {
+        PluginCategory::Observability
+    } else {
+        PluginCategory::Other
+    };
+
+    // Convert dependencies
+    let mut dependencies = std::collections::HashMap::new();
+    for dep in &core_manifest.dependencies {
+        dependencies.insert(dep.id.to_string(), dep.version.clone());
+    }
+
+    Ok(RegistryPluginManifest {
+        name: plugin_info.id.to_string(),
+        version: plugin_info.version.to_string(),
+        description: plugin_info.description.clone().unwrap_or_else(|| "No description".to_string()),
+        author,
+        license: plugin_info.license.clone().unwrap_or_else(|| "Unknown".to_string()),
+        repository: plugin_info.repository.clone(),
+        homepage: plugin_info.homepage.clone(),
+        tags: plugin_info.keywords.clone(),
+        category,
+        min_mockforge_version: None, // TODO: Extract from metadata if available
+        dependencies,
+    })
+}
+
+/// Check if cargo is available
+fn check_cargo() -> Result<()> {
+    std::process::Command::new("cargo")
+        .arg("--version")
+        .output()
+        .context("Cargo not found")?;
+    Ok(())
+}
+
+/// Check if wasm32-wasi target is installed
+fn check_wasm_target() -> Result<()> {
+    let output = std::process::Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .context("Failed to check installed targets")?;
+
+    let installed = String::from_utf8(output.stdout)
+        .context("Failed to parse target list")?;
+
+    if !installed.lines().any(|line| line.trim() == "wasm32-wasi") {
+        anyhow::bail!("wasm32-wasi target not installed. Run: rustup target add wasm32-wasi");
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Subcommand)]
 pub enum RegistryCommand {
@@ -246,7 +375,7 @@ async fn show_plugin_info(name: &str, version: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-async fn install_from_registry(plugin_spec: &str, _force: bool) -> Result<()> {
+async fn install_from_registry(plugin_spec: &str, force: bool) -> Result<()> {
     let config = load_config().await?;
     let client = RegistryClient::new(config)?;
 
@@ -279,21 +408,54 @@ async fn install_from_registry(plugin_spec: &str, _force: bool) -> Result<()> {
     println!("{} Downloading version {}...", "↓".green(), target_version);
 
     // Download plugin
-    let _data = client.download(&version_entry.download_url).await?;
+    let data = client.download(&version_entry.download_url).await?;
 
-    // TODO: Verify checksum and install plugin
+    // Verify checksum
+    let calculated_checksum = calculate_checksum(&data);
+    if calculated_checksum != version_entry.checksum {
+        anyhow::bail!(
+            "Checksum verification failed! Expected: {}, Got: {}",
+            version_entry.checksum,
+            calculated_checksum
+        );
+    }
+
+    println!("{} Checksum verified", "✓".green());
+
+    // Save to temporary file
+    let temp_file = tempfile::NamedTempFile::new()
+        .context("Failed to create temporary file")?;
+    fs::write(&temp_file, &data)
+        .context("Failed to write plugin data to temporary file")?;
+
+    // Install plugin
+    let loader_config = PluginLoaderConfig::default();
+    let installer = PluginInstaller::new(loader_config)
+        .context("Failed to create plugin installer")?;
+
+    let install_options = InstallOptions {
+        force,
+        skip_validation: false,
+        verify_signature: true,
+        expected_checksum: None,
+    };
+
+    let plugin_id = installer
+        .install(temp_file.path().to_string_lossy().as_ref(), install_options)
+        .await
+        .context("Failed to install plugin")?;
 
     println!(
         "{} {} {} installed successfully!",
         "✓".green(),
-        name.bold(),
+        plugin_id,
         target_version
     );
 
     Ok(())
 }
 
-async fn publish_plugin(_path: &str, dry_run: bool) -> Result<()> {
+async fn publish_plugin(path: &str, dry_run: bool) -> Result<()> {
     let config = load_config().await?;
 
     if config.token.is_none() {
@@ -302,21 +464,81 @@ async fn publish_plugin(_path: &str, dry_run: bool) -> Result<()> {
 
     let client = RegistryClient::new(config)?;
 
-    // TODO: Load and validate plugin manifest from path
-    // TODO: Build plugin if needed
-    // TODO: Calculate checksum
-    // TODO: Create publish request
+    // Load and validate plugin manifest from path
+    println!("{} Loading plugin manifest from {}...", "📄".blue(), path);
+    let manifest_path = Path::new(path).join("plugin.yaml");
+    if !manifest_path.exists() {
+        anyhow::bail!("Plugin manifest not found at: {}", manifest_path.display());
+    }
+
+    let core_manifest = ManifestLoader::load_and_validate_from_file(&manifest_path)
+        .context("Failed to load and validate plugin manifest")?;
+
+    println!("{} Manifest loaded and validated", "✓".green());
+
+    // Build plugin if needed
+    let target_dir = Path::new(path).join("target").join("wasm32-wasi").join("release");
+    let wasm_file = target_dir.join(format!("{}.wasm", core_manifest.id()));
+
+    if !wasm_file.exists() {
+        println!("{} Building plugin WASM module...", "🔨".blue());
+        build_plugin_wasm(path).await?;
+        println!("{} Plugin built successfully", "✓".green());
+    } else {
+        println!("{} Using existing WASM file: {}", "📦".blue(), wasm_file.display());
+    }
+
+    // Calculate checksum
+    let wasm_data = fs::read(&wasm_file)
+        .context(format!("Failed to read WASM file: {}", wasm_file.display()))?;
+    let checksum = calculate_checksum(&wasm_data);
+    let size = wasm_data.len() as u64;
+
+    println!("{} Checksum calculated: {}", "🔐".blue(), checksum);
+
+    // Convert to registry manifest
+    let registry_manifest = convert_to_registry_manifest(&core_manifest)?;
+
+    // Validate registry manifest
+    validate_manifest(&registry_manifest)
+        .context("Registry manifest validation failed")?;
+
+    // Create publish request
+    let publish_request = PublishRequest {
+        name: registry_manifest.name.clone(),
+        version: registry_manifest.version.clone(),
+        description: registry_manifest.description.clone(),
+        author: registry_manifest.author.clone(),
+        license: registry_manifest.license.clone(),
+        repository: registry_manifest.repository.clone(),
+        homepage: registry_manifest.homepage.clone(),
+        tags: registry_manifest.tags.clone(),
+        category: registry_manifest.category.clone(),
+        checksum,
+        size,
+        min_mockforge_version: registry_manifest.min_mockforge_version.clone(),
+    };
 
     if dry_run {
         println!("{} Dry run - validation passed!", "✓".green());
+        println!("  Name: {}", publish_request.name);
+        println!("  Version: {}", publish_request.version);
+        println!("  Checksum: {}", publish_request.checksum);
+        println!("  Size: {} bytes", publish_request.size);
         return Ok(());
     }
 
     println!("{} Publishing plugin...", "📦".blue());
 
-    // TODO: Call client.publish()
+    // Call client.publish()
+    let response = client.publish(publish_request).await
+        .context("Failed to publish plugin")?;
 
     println!("{} Plugin published successfully!", "✓".green());
+    println!("  Upload URL: {}", response.upload_url);
+    if !response.message.is_empty() {
+        println!("  Message: {}", response.message);
+    }
 
     Ok(())
 }

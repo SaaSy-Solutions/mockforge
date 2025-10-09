@@ -11,7 +11,9 @@
 use super::*;
 use crate::git::{GitPluginConfig, GitPluginLoader, GitPluginSource};
 use crate::loader::PluginLoader;
+use crate::metadata::{MetadataStore, PluginMetadata};
 use crate::remote::{RemotePluginConfig, RemotePluginLoader};
+use crate::signature::SignatureVerifier;
 use std::path::{Path, PathBuf};
 
 /// Plugin source specification
@@ -125,20 +127,34 @@ pub struct PluginInstaller {
     loader: PluginLoader,
     remote_loader: RemotePluginLoader,
     git_loader: GitPluginLoader,
+    config: PluginLoaderConfig,
+    metadata_store: std::sync::Arc<tokio::sync::RwLock<MetadataStore>>,
 }
 
 impl PluginInstaller {
     /// Create a new plugin installer with default configuration
     pub fn new(loader_config: PluginLoaderConfig) -> LoaderResult<Self> {
-        let loader = PluginLoader::new(loader_config);
+        let loader = PluginLoader::new(loader_config.clone());
         let remote_loader = RemotePluginLoader::new(RemotePluginConfig::default())?;
         let git_loader = GitPluginLoader::new(GitPluginConfig::default())?;
+
+        // Create metadata store in a standard location
+        let metadata_dir = shellexpand::tilde("~/.mockforge/plugin-metadata");
+        let metadata_store = MetadataStore::new(PathBuf::from(metadata_dir.as_ref()));
 
         Ok(Self {
             loader,
             remote_loader,
             git_loader,
+            config: loader_config,
+            metadata_store: std::sync::Arc::new(tokio::sync::RwLock::new(metadata_store)),
         })
+    }
+
+    /// Initialize the installer (creates directories, loads metadata)
+    pub async fn init(&self) -> LoaderResult<()> {
+        let mut store = self.metadata_store.write().await;
+        store.load().await
     }
 
     /// Install a plugin from a source string
@@ -205,30 +221,31 @@ impl PluginInstaller {
         // Load the plugin
         self.loader.load_plugin(&plugin_id).await?;
 
+        // Save metadata for future updates
+        let version = manifest.info.version.to_string();
+        let metadata = PluginMetadata::new(plugin_id.clone(), source.clone(), version);
+        let mut store = self.metadata_store.write().await;
+        store.save(metadata).await?;
+
         tracing::info!("Plugin installed successfully: {}", plugin_id);
         Ok(plugin_id)
     }
 
-    /// Verify plugin signature
+    /// Verify plugin signature using cryptographic verification
     fn verify_plugin_signature(&self, plugin_dir: &Path) -> LoaderResult<()> {
-        // Look for signature file
-        let sig_file = plugin_dir.join("plugin.sig");
-        if !sig_file.exists() {
-            return Err(PluginLoaderError::security(
-                "No signature file found (plugin.sig)",
-            ));
-        }
-
-        // TODO: Implement GPG/RSA signature verification
-        // For now, just check that the file exists
-        tracing::debug!("Signature file found at: {}", sig_file.display());
-
-        Ok(())
+        let verifier = SignatureVerifier::new(&self.config);
+        verifier.verify_plugin_signature(plugin_dir)
     }
 
     /// Uninstall a plugin
     pub async fn uninstall(&self, plugin_id: &PluginId) -> LoaderResult<()> {
-        self.loader.unload_plugin(plugin_id).await
+        self.loader.unload_plugin(plugin_id).await?;
+
+        // Remove metadata
+        let mut store = self.metadata_store.write().await;
+        store.remove(plugin_id).await?;
+
+        Ok(())
     }
 
     /// List installed plugins
@@ -238,19 +255,120 @@ impl PluginInstaller {
 
     /// Update a plugin to the latest version
     pub async fn update(&self, plugin_id: &PluginId) -> LoaderResult<()> {
-        // TODO: Implement plugin update logic
-        // Need to track original source and fetch latest version
-        Err(PluginLoaderError::load(
-            "Plugin update not yet implemented",
-        ))
+        tracing::info!("Updating plugin: {}", plugin_id);
+
+        // Get plugin metadata to find original source
+        let metadata = {
+            let store = self.metadata_store.read().await;
+            store
+                .get(plugin_id)
+                .cloned()
+                .ok_or_else(|| {
+                    PluginLoaderError::load(format!(
+                        "No installation metadata found for plugin {}. Cannot update.",
+                        plugin_id
+                    ))
+                })?
+        };
+
+        tracing::info!(
+            "Updating plugin {} from source: {}",
+            plugin_id,
+            metadata.source
+        );
+
+        // Unload the plugin first
+        if self.loader.get_plugin(plugin_id).await.is_some() {
+            self.loader.unload_plugin(plugin_id).await?;
+        }
+
+        // Reinstall from original source with force flag
+        let options = InstallOptions {
+            force: true,
+            skip_validation: false,
+            verify_signature: true,
+            expected_checksum: None,
+        };
+
+        let new_plugin_id = self.install_from_source(&metadata.source, options).await?;
+
+        // Verify it's the same plugin
+        if new_plugin_id != *plugin_id {
+            return Err(PluginLoaderError::load(format!(
+                "Plugin ID mismatch after update: expected {}, got {}",
+                plugin_id, new_plugin_id
+            )));
+        }
+
+        // Update metadata with new version
+        let new_manifest = self
+            .loader
+            .get_plugin(&new_plugin_id)
+            .await
+            .ok_or_else(|| PluginLoaderError::load("Failed to get updated plugin"))?
+            .manifest;
+
+        let mut store = self.metadata_store.write().await;
+        if let Some(meta) = store.get(plugin_id).cloned() {
+            let mut updated_meta = meta;
+            updated_meta.mark_updated(new_manifest.info.version.to_string());
+            store.save(updated_meta).await?;
+        }
+
+        tracing::info!("Plugin {} updated successfully", plugin_id);
+        Ok(())
     }
 
     /// Update all plugins to their latest versions
     pub async fn update_all(&self) -> LoaderResult<Vec<PluginId>> {
-        // TODO: Implement bulk plugin update
-        Err(PluginLoaderError::load(
-            "Bulk plugin update not yet implemented",
-        ))
+        tracing::info!("Updating all plugins");
+
+        // Get list of all plugins with metadata
+        let plugin_ids = {
+            let store = self.metadata_store.read().await;
+            store.list()
+        };
+
+        if plugin_ids.is_empty() {
+            tracing::info!("No plugins found with metadata to update");
+            return Ok(Vec::new());
+        }
+
+        tracing::info!("Found {} plugins to update", plugin_ids.len());
+
+        let mut updated = Vec::new();
+        let mut failed = Vec::new();
+
+        // Update each plugin
+        for plugin_id in plugin_ids {
+            match self.update(&plugin_id).await {
+                Ok(_) => {
+                    tracing::info!("Successfully updated plugin: {}", plugin_id);
+                    updated.push(plugin_id);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to update plugin {}: {}", plugin_id, e);
+                    failed.push((plugin_id, e.to_string()));
+                }
+            }
+        }
+
+        tracing::info!(
+            "Plugin update complete: {} succeeded, {} failed",
+            updated.len(),
+            failed.len()
+        );
+
+        if !failed.is_empty() {
+            let failed_list = failed
+                .iter()
+                .map(|(id, err)| format!("{}: {}", id, err))
+                .collect::<Vec<_>>()
+                .join(", ");
+            tracing::warn!("Failed updates: {}", failed_list);
+        }
+
+        Ok(updated)
     }
 
     /// Clear all caches (downloads and Git repositories)
@@ -263,15 +381,29 @@ impl PluginInstaller {
     /// Get cache statistics
     pub async fn get_cache_stats(&self) -> LoaderResult<CacheStats> {
         let download_cache_size = self.remote_loader.get_cache_size()?;
-
-        // TODO: Add Git cache size calculation
-        let git_cache_size = 0;
+        let git_cache_size = self.git_loader.get_cache_size()?;
 
         Ok(CacheStats {
             download_cache_size,
             git_cache_size,
             total_size: download_cache_size + git_cache_size,
         })
+    }
+
+    /// Get plugin metadata
+    pub async fn get_plugin_metadata(&self, plugin_id: &PluginId) -> Option<PluginMetadata> {
+        let store = self.metadata_store.read().await;
+        store.get(plugin_id).cloned()
+    }
+
+    /// List all plugins with metadata
+    pub async fn list_plugins_with_metadata(&self) -> Vec<(PluginId, PluginMetadata)> {
+        let store = self.metadata_store.read().await;
+        store
+            .list()
+            .into_iter()
+            .filter_map(|id| store.get(&id).map(|meta| (id, meta.clone())))
+            .collect()
     }
 }
 

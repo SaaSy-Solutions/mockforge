@@ -154,6 +154,7 @@
 //! - [API Reference](https://docs.rs/mockforge-http)
 
 pub mod ai_handler;
+pub mod rag_ai_generator;
 pub mod auth;
 pub mod chain_handlers;
 pub mod http_tracing_middleware;

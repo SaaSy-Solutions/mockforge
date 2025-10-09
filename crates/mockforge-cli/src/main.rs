@@ -4,11 +4,15 @@ use mockforge_core::encryption::init_key_store;
 use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
 use mockforge_data;
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
+use axum::serve;
 use mockforge_grpc;
 use mockforge_http;
+use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
 use mockforge_ui;
 use mockforge_ws;
+use std::net::SocketAddr;
 use std::path::PathBuf;
+use tokio::net::TcpListener;
 
 mod plugin_commands;
 
@@ -1365,6 +1369,9 @@ async fn handle_serve(
 
     println!("💡 Press Ctrl+C to stop");
 
+    // Create metrics registry
+    let metrics_registry = std::sync::Arc::new(MetricsRegistry::new());
+
     // Create a cancellation token for graceful shutdown
     use tokio_util::sync::CancellationToken;
     let shutdown_token = CancellationToken::new();
@@ -1445,14 +1452,28 @@ async fn handle_serve(
     };
 
     // Start Prometheus metrics server (if enabled)
-    // TEMPORARILY DISABLED: axum version conflict between mockforge-observability (0.7) and main (0.8)
-    // TODO: Update mockforge-observability to use axum 0.8
-    let metrics_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
-
-    if config.observability.prometheus.enabled {
-        println!("⚠️  Prometheus metrics server temporarily disabled due to axum version conflicts");
-        println!("   Metrics would be at: http://0.0.0.0:{}/metrics", config.observability.prometheus.port);
-    }
+    let metrics_handle = if config.observability.prometheus.enabled {
+        let metrics_port = config.observability.prometheus.port;
+        let metrics_registry = metrics_registry.clone();
+        let metrics_shutdown = shutdown_token.clone();
+        Some(tokio::spawn(async move {
+            println!("📊 Prometheus metrics server listening on http://0.0.0.0:{}/metrics", metrics_port);
+            let app = prometheus_router(metrics_registry);
+            let addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
+            let listener = TcpListener::bind(addr).await
+                .map_err(|e| format!("Failed to bind metrics server to {}: {}", addr, e))?;
+            tokio::select! {
+                result = serve(listener, app) => {
+                    result.map_err(|e| format!("Metrics server error: {}", e))
+                }
+                _ = metrics_shutdown.cancelled() => {
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
 
     // Wait for all servers or shutdown signal, handling errors properly
     let result = tokio::select! {

@@ -41,9 +41,10 @@ pub mod scenario_recorder;
 pub mod scenario_replay;
 pub mod scenario_scheduler;
 pub mod scenarios;
-pub mod template_marketplace;
-pub mod traffic_shaping;
-pub mod version_control;
+ pub mod template_marketplace;
+ pub mod trace_collector;
+ pub mod traffic_shaping;
+ pub mod version_control;
 
 pub use ab_testing::{
     ABTestingEngine, ABTestConfig, ABTest, ABTestStatus, TestVariant, SuccessCriteria,

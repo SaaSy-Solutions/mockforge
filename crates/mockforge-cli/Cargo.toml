@@ -43,6 +43,8 @@ base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
+tempfile = "3.8"
+hex = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = "2.0"

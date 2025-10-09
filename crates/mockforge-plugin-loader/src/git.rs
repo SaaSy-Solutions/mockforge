@@ -451,6 +451,56 @@ impl GitPluginLoader {
         }
         Ok(())
     }
+
+    /// Get the size of the Git repository cache
+    pub fn get_cache_size(&self) -> LoaderResult<u64> {
+        let mut total_size = 0u64;
+
+        if !self.config.cache_dir.exists() {
+            return Ok(0);
+        }
+
+        for entry in std::fs::read_dir(&self.config.cache_dir)
+            .map_err(|e| PluginLoaderError::fs(format!("Failed to read cache directory: {}", e)))?
+        {
+            let entry =
+                entry.map_err(|e| PluginLoaderError::fs(format!("Failed to read entry: {}", e)))?;
+            let metadata = entry
+                .metadata()
+                .map_err(|e| PluginLoaderError::fs(format!("Failed to read metadata: {}", e)))?;
+
+            if metadata.is_file() {
+                total_size += metadata.len();
+            } else if metadata.is_dir() {
+                total_size += self.calculate_dir_size(&entry.path())?;
+            }
+        }
+
+        Ok(total_size)
+    }
+
+    /// Calculate the size of a directory recursively
+    fn calculate_dir_size(&self, dir: &Path) -> LoaderResult<u64> {
+        let mut total_size = 0u64;
+
+        for entry in std::fs::read_dir(dir)
+            .map_err(|e| PluginLoaderError::fs(format!("Failed to read directory: {}", e)))?
+        {
+            let entry =
+                entry.map_err(|e| PluginLoaderError::fs(format!("Failed to read entry: {}", e)))?;
+            let metadata = entry
+                .metadata()
+                .map_err(|e| PluginLoaderError::fs(format!("Failed to read metadata: {}", e)))?;
+
+            if metadata.is_file() {
+                total_size += metadata.len();
+            } else if metadata.is_dir() {
+                total_size += self.calculate_dir_size(&entry.path())?;
+            }
+        }
+
+        Ok(total_size)
+    }
 }
 
 #[cfg(not(feature = "git-support"))]
@@ -465,6 +515,18 @@ impl GitPluginLoader {
     }
 
     pub async fn clone_from_git(&self, _source: &GitPluginSource) -> LoaderResult<PathBuf> {
+        Err(PluginLoaderError::load(
+            "Git support not enabled. Recompile with 'git-support' feature",
+        ))
+    }
+
+    pub async fn clear_cache(&self) -> LoaderResult<()> {
+        Err(PluginLoaderError::load(
+            "Git support not enabled. Recompile with 'git-support' feature",
+        ))
+    }
+
+    pub fn get_cache_size(&self) -> LoaderResult<u64> {
         Err(PluginLoaderError::load(
             "Git support not enabled. Recompile with 'git-support' feature",
         ))

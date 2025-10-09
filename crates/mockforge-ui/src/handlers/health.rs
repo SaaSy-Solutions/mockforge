@@ -6,6 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use chrono;
 
 use crate::handlers::AdminState;
 
@@ -43,11 +44,13 @@ pub async fn liveness_probe(State(state): State<AdminState>) -> Json<HealthRespo
         .unwrap()
         .as_secs();
 
+    let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
+
     let response = HealthResponse {
         status: HealthStatus::Healthy,
         timestamp,
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: 0, // TODO: Track actual uptime
+        uptime_seconds,
         checks: vec![],
     };
 
@@ -112,11 +115,13 @@ pub async fn readiness_probe(State(state): State<AdminState>) -> Json<HealthResp
         overall_status = HealthStatus::Unhealthy;
     }
 
+    let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
+
     let response = HealthResponse {
         status: overall_status,
         timestamp,
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: 0,
+        uptime_seconds,
         checks,
     };
 
@@ -138,11 +143,13 @@ pub async fn startup_probe(State(state): State<AdminState>) -> Json<HealthRespon
         HealthStatus::Unhealthy
     };
 
+    let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
+
     let response = HealthResponse {
         status: status.clone(),
         timestamp,
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: 0,
+        uptime_seconds,
         checks: vec![HealthCheck {
             name: "initialization".to_string(),
             status: status.clone(),
@@ -206,11 +213,13 @@ pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthRe
         .unwrap()
         .as_millis() as u64;
 
+    let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
+
     let response = HealthResponse {
         status: overall_status,
         timestamp,
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: 0,
+        uptime_seconds,
         checks,
     };
 

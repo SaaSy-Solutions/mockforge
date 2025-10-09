@@ -57,6 +57,15 @@ bincode = "1.3"
 # Distributed state (Redis)
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
+# Tracing
+mockforge-tracing = { path = "../mockforge-tracing" }
+
+# Recorder
+mockforge-recorder = { path = "../mockforge-recorder" }
+
+# PDF generation
+printpdf = "0.7"
+
 # WebSocket support
 tokio-tungstenite = "0.21"
 

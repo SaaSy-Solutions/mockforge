@@ -26,18 +26,24 @@ use mockforge_plugin_core::{
 pub mod git;
 pub mod installer;
 pub mod loader;
+pub mod metadata;
 pub mod registry;
 pub mod remote;
 pub mod sandbox;
+pub mod signature;
+pub mod signature_gen;
 pub mod validator;
 
 /// Re-export commonly used types
 pub use git::*;
 pub use installer::*;
 pub use loader::*;
+pub use metadata::*;
 pub use registry::*;
 pub use remote::*;
 pub use sandbox::*;
+pub use signature::*;
+pub use signature_gen::*;
 pub use validator::*;
 
 /// Plugin loader result type

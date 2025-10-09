@@ -129,9 +129,14 @@ impl OpenApiRoute {
     ///
     /// This method checks if AI response generation is configured and uses it if available,
     /// otherwise falls back to standard OpenAPI response generation.
+    ///
+    /// # Arguments
+    /// * `context` - The request context for AI prompt expansion
+    /// * `ai_generator` - Optional AI generator implementation for actual LLM calls
     pub async fn mock_response_with_status_async(
         &self,
         context: &crate::ai_response::RequestContext,
+        ai_generator: Option<&dyn crate::openapi::response::AiGenerator>,
     ) -> (u16, serde_json::Value) {
         use crate::openapi::response::ResponseGenerator;
 
@@ -147,7 +152,7 @@ impl OpenApiRoute {
                     self.path
                 );
 
-                match ResponseGenerator::generate_ai_response(ai_config, context).await {
+                match ResponseGenerator::generate_ai_response(ai_config, context, ai_generator).await {
                     Ok(response_body) => {
                         tracing::debug!(
                             "AI response generated successfully for {} {}: {:?}",
