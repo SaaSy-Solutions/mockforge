@@ -1,0 +1,48 @@
+# Time Travel / Temporal Testing Demo Configuration
+# This example demonstrates how to use MockForge's time travel features
+# for testing time-dependent behavior without waiting.
+
+# Core configuration with time travel enabled
+core:
+  time_travel:
+    # Enable time travel at startup
+    enabled: true
+    # Start at a specific time (ISO 8601 format)
+    # If not specified, starts at current time when enabled
+    initial_time: "2025-01-01T00:00:00Z"
+    # Time scale factor: 1.0 = real time, 2.0 = 2x speed, 0.5 = half speed
+    scale_factor: 1.0
+    # Enable response scheduling
+    enable_scheduling: true
+
+# HTTP server configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+  # Enable template expansion to use time travel features in responses
+  response_template_expand: true
+
+# Admin UI configuration
+admin:
+  enabled: true
+  port: 9080
+
+# Example responses using time-based templates
+# These will respect the virtual clock when time travel is enabled
+
+# Example: API endpoint that returns current time
+# GET /time
+# Response uses {{now}} which will use the virtual clock
+#
+# Example: API endpoint that simulates token expiry
+# GET /auth/token
+# Returns a token that expires in 1 hour from virtual time
+# Response: {"token": "abc123", "expires_at": "{{now+1h}}"}
+#
+# Example: Scheduled response
+# POST /__mockforge/time-travel/schedule
+# {
+#   "trigger_time": "+30m",
+#   "body": {"event": "scheduled_notification"},
+#   "status": 200
+# }

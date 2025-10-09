@@ -7,6 +7,7 @@
 
 use crate::encryption::init_key_store;
 use crate::request_chaining::ChainTemplatingContext;
+use crate::time_travel::VirtualClock;
 use crate::Config;
 use chrono::{Duration as ChronoDuration, Utc};
 use once_cell::sync::{Lazy, OnceCell};
@@ -135,6 +136,7 @@ impl EnvironmentTemplatingContext {
 pub struct TemplatingContext {
     pub chain_context: Option<ChainTemplatingContext>,
     pub env_context: Option<EnvironmentTemplatingContext>,
+    pub virtual_clock: Option<Arc<VirtualClock>>,
 }
 
 impl TemplatingContext {
@@ -143,6 +145,7 @@ impl TemplatingContext {
         Self {
             chain_context: None,
             env_context: None,
+            virtual_clock: None,
         }
     }
 
@@ -151,6 +154,7 @@ impl TemplatingContext {
         Self {
             chain_context: None,
             env_context: Some(EnvironmentTemplatingContext::new(variables)),
+            virtual_clock: None,
         }
     }
 
@@ -159,6 +163,7 @@ impl TemplatingContext {
         Self {
             chain_context: Some(chain_context),
             env_context: None,
+            virtual_clock: None,
         }
     }
 
@@ -170,7 +175,23 @@ impl TemplatingContext {
         Self {
             chain_context: Some(chain_context),
             env_context: Some(EnvironmentTemplatingContext::new(variables)),
+            virtual_clock: None,
         }
+    }
+
+    /// Create context with virtual clock
+    pub fn with_virtual_clock(clock: Arc<VirtualClock>) -> Self {
+        Self {
+            chain_context: None,
+            env_context: None,
+            virtual_clock: Some(clock),
+        }
+    }
+
+    /// Add virtual clock to existing context
+    pub fn with_clock(mut self, clock: Arc<VirtualClock>) -> Self {
+        self.virtual_clock = Some(clock);
+        self
     }
 }
 
@@ -206,10 +227,17 @@ pub fn expand_str(input: &str) -> String {
 pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> String {
     // Basic replacements first (fast paths)
     let mut out = input.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
-    out = out.replace("{{now}}", &Utc::now().to_rfc3339());
+
+    // Use virtual clock if available, otherwise use real time
+    let current_time = if let Some(clock) = &context.virtual_clock {
+        clock.now()
+    } else {
+        Utc::now()
+    };
+    out = out.replace("{{now}}", &current_time.to_rfc3339());
 
     // now±Nd (days), now±Nh (hours), now±Nm (minutes), now±Ns (seconds)
-    out = replace_now_offset(&out);
+    out = replace_now_offset_with_time(&out, current_time);
 
     // Randoms
     if out.contains("{{rand.int}}") {
@@ -325,6 +353,10 @@ fn replace_randint_ranges(input: &str) -> String {
 }
 
 fn replace_now_offset(input: &str) -> String {
+    replace_now_offset_with_time(input, Utc::now())
+}
+
+fn replace_now_offset_with_time(input: &str, current_time: chrono::DateTime<Utc>) -> String {
     // {{ now+1d }}, {{now-2h}}, {{now+30m}}, {{now-10s}}
     NOW_OFFSET_RE.replace_all(input, |caps: &regex::Captures| {
         let sign = caps.get(1).map(|m| m.as_str()).unwrap_or("+");
@@ -337,9 +369,9 @@ fn replace_now_offset(input: &str) -> String {
             _ => ChronoDuration::days(amount),
         };
         let ts = if sign == "+" {
-            Utc::now() + dur
+            current_time + dur
         } else {
-            Utc::now() - dur
+            current_time - dur
         };
         ts.to_rfc3339()
     })

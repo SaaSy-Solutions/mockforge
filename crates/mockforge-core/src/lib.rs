@@ -200,6 +200,8 @@ pub mod schema_diff;
 pub mod server_utils;
 pub mod sync_watcher;
 pub mod templating;
+pub mod time_travel;
+pub mod time_travel_handler;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod workspace;
@@ -257,6 +259,13 @@ pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};
+pub use time_travel::{
+    RepeatConfig, ResponseScheduler, ScheduledResponse, TimeTravelConfig, TimeTravelManager,
+    TimeTravelStatus, VirtualClock,
+};
+pub use time_travel_handler::{
+    time_travel_middleware, ScheduledResponseWrapper, TimeTravelHandler,
+};
 pub use traffic_shaping::{BandwidthConfig, BurstLossConfig, TrafficShaper, TrafficShapingConfig};
 pub use uuid::Uuid;
 pub use validation::{validate_openapi_operation_security, validate_openapi_security, Validator};
@@ -293,6 +302,8 @@ pub struct Config {
     /// Maximum number of request logs to keep in memory (default: 1000)
     /// Helps prevent unbounded memory growth from request logging
     pub max_request_logs: usize,
+    /// Time travel configuration for temporal testing
+    pub time_travel: TimeTravelConfig,
 }
 
 /// Default configuration
@@ -309,6 +320,7 @@ impl Default for Config {
             traffic_shaping: TrafficShapingConfig::default(),
             chaos_random: None,
             max_request_logs: 1000, // Default: keep last 1000 requests
+            time_travel: TimeTravelConfig::default(),
         }
     }
 }

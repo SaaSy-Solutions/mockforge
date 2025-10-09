@@ -9,6 +9,7 @@ use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use crate::handlers::AdminState;
 use crate::handlers::*;
+use crate::time_travel_handlers;
 use mockforge_core::{get_global_logger, init_global_logger};
 
 /// Create the admin router with static assets and optional API endpoints
@@ -116,6 +117,17 @@ pub fn create_admin_router(
         // Smoke test routes
         .route("/__mockforge/smoke", get(get_smoke_tests))
         .route("/__mockforge/smoke/run", get(run_smoke_tests_endpoint))
+        // Time travel / temporal testing routes
+        .route("/__mockforge/time-travel/status", get(time_travel_handlers::get_time_travel_status))
+        .route("/__mockforge/time-travel/enable", post(time_travel_handlers::enable_time_travel))
+        .route("/__mockforge/time-travel/disable", post(time_travel_handlers::disable_time_travel))
+        .route("/__mockforge/time-travel/advance", post(time_travel_handlers::advance_time))
+        .route("/__mockforge/time-travel/scale", post(time_travel_handlers::set_time_scale))
+        .route("/__mockforge/time-travel/reset", post(time_travel_handlers::reset_time_travel))
+        .route("/__mockforge/time-travel/schedule", post(time_travel_handlers::schedule_response))
+        .route("/__mockforge/time-travel/scheduled", get(time_travel_handlers::list_scheduled_responses))
+        .route("/__mockforge/time-travel/scheduled/{id}", delete(time_travel_handlers::cancel_scheduled_response))
+        .route("/__mockforge/time-travel/scheduled/clear", post(time_travel_handlers::clear_scheduled_responses))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))
