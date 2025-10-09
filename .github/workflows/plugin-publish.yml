@@ -176,7 +176,7 @@ jobs:
           cargo install mockforge-cli --locked
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts/
 
