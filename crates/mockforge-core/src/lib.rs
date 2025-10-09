@@ -167,6 +167,7 @@
 //! - [API Reference](https://docs.rs/mockforge-core)
 //! - [GitHub Repository](https://github.com/SaaSy-Solutions/mockforge)
 
+pub mod ai_response;
 pub mod cache;
 pub mod chain_execution;
 pub mod collection_export;

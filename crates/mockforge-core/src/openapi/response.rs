@@ -3,7 +3,10 @@
 //! This module provides functionality for generating mock responses
 //! based on OpenAPI specifications.
 
-use crate::{OpenApiSpec, Result};
+use crate::{
+    ai_response::{expand_prompt_template, AiResponseConfig, RequestContext},
+    OpenApiSpec, Result,
+};
 use chrono;
 use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
 use rand::{rng, Rng};
@@ -15,6 +18,44 @@ use uuid;
 pub struct ResponseGenerator;
 
 impl ResponseGenerator {
+    /// Generate an AI-assisted response using LLM
+    ///
+    /// This method generates a dynamic response based on request context
+    /// using the configured LLM provider (OpenAI, Anthropic, etc.)
+    ///
+    /// Note: This is a placeholder that will be implemented when mockforge-data is available.
+    /// For now, it returns a descriptive JSON object.
+    pub async fn generate_ai_response(
+        ai_config: &AiResponseConfig,
+        context: &RequestContext,
+    ) -> Result<Value> {
+        // Get the prompt template and expand it with request context
+        let prompt_template = ai_config
+            .prompt
+            .as_ref()
+            .ok_or_else(|| crate::Error::generic("AI prompt is required"))?;
+
+        let expanded_prompt = expand_prompt_template(prompt_template, context);
+
+        tracing::info!(
+            "AI response generation requested with prompt: {}",
+            expanded_prompt
+        );
+
+        // TODO: Implement actual AI generation by calling RAG engine
+        // This requires refactoring to avoid circular dependency with mockforge-data
+        //
+        // For now, return a descriptive response indicating AI would be used
+        Ok(serde_json::json!({
+            "ai_response": "AI generation placeholder",
+            "note": "This endpoint is configured for AI-assisted responses",
+            "expanded_prompt": expanded_prompt,
+            "mode": format!("{:?}", ai_config.mode),
+            "temperature": ai_config.temperature,
+            "implementation_note": "AI generation will be implemented in the route handler layer where mockforge-data is available"
+        }))
+    }
+
     /// Generate a mock response for an operation and status code
     pub fn generate_response(
         spec: &OpenApiSpec,

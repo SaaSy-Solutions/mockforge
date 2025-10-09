@@ -3,7 +3,7 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
-use crate::{openapi::spec::OpenApiSpec, Result};
+use crate::{ai_response::AiResponseConfig, openapi::spec::OpenApiSpec, Result};
 use openapiv3::{Operation, PathItem, ReferenceOr};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -51,12 +51,18 @@ pub struct OpenApiRoute {
     pub parameters: Vec<String>,
     /// Reference to the OpenAPI spec for response generation
     pub spec: Arc<OpenApiSpec>,
+    /// AI response configuration (parsed from x-mockforge-ai extension)
+    pub ai_config: Option<AiResponseConfig>,
 }
 
 impl OpenApiRoute {
     /// Create a new OpenApiRoute
     pub fn new(method: String, path: String, operation: Operation, spec: Arc<OpenApiSpec>) -> Self {
         let parameters = extract_path_parameters(&path);
+
+        // Parse AI configuration from x-mockforge-ai vendor extension
+        let ai_config = Self::parse_ai_config(&operation);
+
         Self {
             method,
             path,
@@ -64,7 +70,37 @@ impl OpenApiRoute {
             metadata: BTreeMap::new(),
             parameters,
             spec,
+            ai_config,
         }
+    }
+
+    /// Parse AI configuration from OpenAPI operation's vendor extensions
+    fn parse_ai_config(operation: &Operation) -> Option<AiResponseConfig> {
+        // Check for x-mockforge-ai extension
+        if let Some(ai_config_value) = operation.extensions.get("x-mockforge-ai") {
+            // Try to deserialize the AI config from the extension value
+            match serde_json::from_value::<AiResponseConfig>(ai_config_value.clone()) {
+                Ok(config) => {
+                    if config.is_active() {
+                        tracing::debug!(
+                            "Parsed AI config for operation {}: mode={:?}, prompt={:?}",
+                            operation.operation_id.as_deref().unwrap_or("unknown"),
+                            config.mode,
+                            config.prompt
+                        );
+                        return Some(config);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to parse x-mockforge-ai extension for operation {}: {}",
+                        operation.operation_id.as_deref().unwrap_or("unknown"),
+                        e
+                    );
+                }
+            }
+        }
+        None
     }
 
     /// Create an OpenApiRoute from an operation
@@ -89,7 +125,95 @@ impl OpenApiRoute {
         self
     }
 
-    /// Generate a mock response with status code for this route
+    /// Generate a mock response with status code for this route (async version with AI support)
+    ///
+    /// This method checks if AI response generation is configured and uses it if available,
+    /// otherwise falls back to standard OpenAPI response generation.
+    pub async fn mock_response_with_status_async(
+        &self,
+        context: &crate::ai_response::RequestContext,
+    ) -> (u16, serde_json::Value) {
+        use crate::openapi::response::ResponseGenerator;
+
+        // Find the first available status code from the OpenAPI spec
+        let status_code = self.find_first_available_status_code();
+
+        // Check if AI response generation is configured
+        if let Some(ai_config) = &self.ai_config {
+            if ai_config.is_active() {
+                tracing::info!(
+                    "Using AI-assisted response generation for {} {}",
+                    self.method,
+                    self.path
+                );
+
+                match ResponseGenerator::generate_ai_response(ai_config, context).await {
+                    Ok(response_body) => {
+                        tracing::debug!(
+                            "AI response generated successfully for {} {}: {:?}",
+                            self.method,
+                            self.path,
+                            response_body
+                        );
+                        return (status_code, response_body);
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "AI response generation failed for {} {}: {}, falling back to standard generation",
+                            self.method,
+                            self.path,
+                            e
+                        );
+                        // Continue to standard generation on error
+                    }
+                }
+            }
+        }
+
+        // Standard OpenAPI-based response generation
+        let expand_tokens = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+
+        match ResponseGenerator::generate_response_with_expansion(
+            &self.spec,
+            &self.operation,
+            status_code,
+            Some("application/json"),
+            expand_tokens,
+        ) {
+            Ok(response_body) => {
+                tracing::debug!(
+                    "ResponseGenerator succeeded for {} {} with status {}: {:?}",
+                    self.method,
+                    self.path,
+                    status_code,
+                    response_body
+                );
+                (status_code, response_body)
+            }
+            Err(e) => {
+                tracing::debug!(
+                    "ResponseGenerator failed for {} {}: {}, using fallback",
+                    self.method,
+                    self.path,
+                    e
+                );
+                // Fallback to simple mock response if schema-based generation fails
+                let response_body = serde_json::json!({
+                    "message": format!("Mock response for {} {}", self.method, self.path),
+                    "operation_id": self.operation.operation_id,
+                    "status": status_code
+                });
+                (status_code, response_body)
+            }
+        }
+    }
+
+    /// Generate a mock response with status code for this route (synchronous version)
+    ///
+    /// Note: This method does not support AI-assisted response generation.
+    /// Use `mock_response_with_status_async` for AI features.
     pub fn mock_response_with_status(&self) -> (u16, serde_json::Value) {
         use crate::openapi::response::ResponseGenerator;
 
