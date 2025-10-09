@@ -12,7 +12,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
-use wasmtime::{Engine, Linker, Module, Store};
+use tracing;
+use wasmtime::{Config, Engine, Linker, Module, PoolingAllocationConfig, ResourceLimiter, Store, StoreLimits, StoreLimitsBuilder};
 use wasmtime_wasi::p2::WasiCtxBuilder;
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 use wasmtime_wasi::{DirPerms, FilePerms};
@@ -44,7 +45,30 @@ impl PluginRuntime {
     fn get_engine(&self) -> &Engine {
         self.engine.get_or_init(|| {
             // Lazy initialization: only create engine when first plugin is loaded
-            Engine::default()
+            // Configure engine with security and resource limits
+            let mut config = Config::new();
+
+            // Enable fuel consumption tracking for CPU time limits
+            config.consume_fuel(true);
+
+            // Enable epoch-based interruption for wall clock timeouts
+            config.epoch_interruption(true);
+
+            // Enable memory limiting
+            config.max_wasm_stack(2 * 1024 * 1024); // 2MB stack limit
+
+            // Disable features that could be security risks
+            config.wasm_threads(false);
+            config.wasm_bulk_memory(true); // Allow for efficiency
+            config.wasm_simd(false); // Disable SIMD for now
+            config.wasm_multi_memory(false);
+
+            // Enable pooling allocator for better performance and memory isolation
+            config.allocation_strategy(wasmtime::InstanceAllocationStrategy::Pooling(
+                PoolingAllocationConfig::default(),
+            ));
+
+            Engine::new(&config).expect("Failed to create WASM engine with security config")
         })
     }
 
@@ -351,6 +375,43 @@ impl Default for RuntimeConfig {
     }
 }
 
+/// WASI context with resource limits
+pub struct WasiCtxWithLimits {
+    /// WASI P1 context
+    wasi: WasiP1Ctx,
+    /// Store limits
+    limits: StoreLimits,
+}
+
+impl WasiCtxWithLimits {
+    fn new(wasi: WasiP1Ctx, limits: StoreLimits) -> Self {
+        Self { wasi, limits }
+    }
+}
+
+/// Implement ResourceLimiter to enforce memory limits
+impl ResourceLimiter for WasiCtxWithLimits {
+    fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> anyhow::Result<bool> {
+        // Check if the desired memory growth exceeds our limits
+        self.limits.memory_growing(current, desired, _maximum)
+    }
+
+    fn table_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> anyhow::Result<bool> {
+        // Check if the desired table growth exceeds our limits
+        self.limits.table_growing(current, desired, _maximum)
+    }
+}
+
 /// Plugin instance wrapper
 pub struct PluginInstance {
     /// Plugin ID
@@ -361,8 +422,8 @@ pub struct PluginInstance {
     manifest: PluginManifest,
     /// WebAssembly instance with WASI support
     instance: wasmtime::Instance,
-    /// WebAssembly store with WASI context
-    store: Store<WasiP1Ctx>,
+    /// WebAssembly store with WASI context and limits
+    store: Store<WasiCtxWithLimits>,
     /// Plugin state
     state: PluginState,
     /// Plugin metrics
@@ -373,6 +434,8 @@ pub struct PluginInstance {
     /// Creation time
     #[allow(dead_code)]
     created_at: chrono::DateTime<chrono::Utc>,
+    /// Execution limits
+    limits: ExecutionLimits,
 }
 
 impl PluginInstance {
@@ -383,6 +446,23 @@ impl PluginInstance {
         module: Module,
         config: RuntimeConfig,
     ) -> Result<Self> {
+        // Create execution limits from config
+        let limits = ExecutionLimits {
+            memory_limit: config.max_memory_per_plugin,
+            cpu_time_limit: config.max_execution_time_ms as u64 * 1_000_000, // Convert ms to ns
+            wall_time_limit: config.max_execution_time_ms as u64 * 2 * 1_000_000, // 2x for wall time
+            fuel_limit: (config.max_execution_time_ms as u64 * 1_000), // ~1K fuel per ms
+        };
+
+        // Build store limits for memory enforcement
+        let store_limits = StoreLimitsBuilder::new()
+            .memory_size(limits.memory_limit)
+            .table_elements(1000) // Limit table size
+            .instances(1) // Single instance per store
+            .tables(10) // Limit number of tables
+            .memories(1) // Single memory per instance
+            .build();
+
         // Create WASI context with appropriate permissions
         let mut wasi_ctx_builder = WasiCtxBuilder::new();
 
@@ -401,12 +481,26 @@ impl PluginInstance {
 
         let wasi_ctx = wasi_ctx_builder.build_p1();
 
-        // Create WebAssembly store with WASI context
-        let mut store = Store::new(module.engine(), wasi_ctx);
+        // Wrap WASI context with resource limits
+        let ctx_with_limits = WasiCtxWithLimits::new(wasi_ctx, store_limits);
+
+        // Create WebAssembly store with WASI context and limits
+        let mut store = Store::new(module.engine(), ctx_with_limits);
+
+        // Set store limiter to enforce memory limits
+        store.limiter(|ctx| &mut ctx.limits);
+
+        // Configure fuel for CPU time limiting
+        store.set_fuel(limits.fuel_limit)
+            .map_err(|e| PluginError::wasm(format!("Failed to set fuel limit: {}", e)))?;
+
+        // Set epoch deadline for wall clock timeout
+        // Epoch is incremented by a background thread in production
+        store.set_epoch_deadline(1);
 
         // Link WASI functions to the store
-        let mut linker = Linker::<WasiP1Ctx>::new(module.engine());
-        preview1::add_to_linker_sync(&mut linker, |t| t)
+        let mut linker = Linker::<WasiCtxWithLimits>::new(module.engine());
+        preview1::add_to_linker_sync(&mut linker, |t| &mut t.wasi)
             .map_err(|e| PluginError::wasm(format!("Failed to add WASI to linker: {}", e)))?;
 
         // Instantiate the module with WASI support
@@ -426,6 +520,7 @@ impl PluginInstance {
             metrics: PluginMetrics::default(),
             config,
             created_at: chrono::Utc::now(),
+            limits,
         })
     }
 
@@ -445,6 +540,13 @@ impl PluginInstance {
         self.state = PluginState::Executing;
         self.metrics.total_executions += 1;
 
+        // Reset fuel before execution to prevent fuel starvation
+        self.store.set_fuel(self.limits.fuel_limit)
+            .map_err(|e| PluginError::execution(format!("Failed to reset fuel: {}", e)))?;
+
+        // Reset epoch deadline for this execution
+        self.store.set_epoch_deadline(1);
+
         // Prepare input parameters
         let context_json = serde_json::to_string(context)
             .map_err(|e| PluginError::execution(format!("Failed to serialize context: {}", e)))?;
@@ -452,6 +554,12 @@ impl PluginInstance {
         // Execute function (this is a simplified implementation)
         // In practice, you'd need to handle the WASM calling convention
         let result = self.call_plugin_function(function_name, &context_json).await;
+
+        // Check remaining fuel to track CPU usage
+        let fuel_consumed = match self.store.get_fuel() {
+            Ok(remaining) => self.limits.fuel_limit.saturating_sub(remaining),
+            Err(_) => 0, // Fuel tracking disabled or error
+        };
 
         // Update metrics
         let execution_time = start_time.elapsed();
@@ -471,7 +579,14 @@ impl PluginInstance {
             Ok(output) => {
                 self.metrics.successful_executions += 1;
                 match serde_json::from_slice::<T>(&output) {
-                    Ok(data) => Ok(PluginResult::success(data, execution_time.as_millis() as u64)),
+                    Ok(data) => {
+                        tracing::debug!(
+                            "Plugin execution completed: {} fuel consumed, {}ms elapsed",
+                            fuel_consumed,
+                            execution_time.as_millis()
+                        );
+                        Ok(PluginResult::success(data, execution_time.as_millis() as u64))
+                    }
                     Err(e) => {
                         self.metrics.failed_executions += 1;
                         Err(PluginError::execution(format!("Failed to deserialize result: {}", e)))
@@ -480,6 +595,12 @@ impl PluginInstance {
             }
             Err(e) => {
                 self.metrics.failed_executions += 1;
+                tracing::error!(
+                    "Plugin execution failed: {} fuel consumed, {}ms elapsed, error: {}",
+                    fuel_consumed,
+                    execution_time.as_millis(),
+                    e
+                );
                 Err(e)
             }
         }

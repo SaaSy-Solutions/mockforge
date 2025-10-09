@@ -4089,6 +4089,7 @@ dependencies = [
  "serde_yaml 0.9.34+deprecated",
  "thiserror 2.0.17",
  "tokio",
+ "tracing",
  "url",
  "urlencoding",
  "uuid",

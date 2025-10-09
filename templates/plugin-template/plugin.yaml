@@ -1,0 +1,38 @@
+plugin:
+  id: "{{plugin_name}}"
+  version: "0.1.0"
+  name: "{{plugin_title}}"
+  description: "{{plugin_description}}"
+  types: ["{{plugin_type}}"]
+  author:
+    name: "{{author_name}}"
+    email: "{{author_email}}"
+  homepage: "https://github.com/{{author_name}}/{{plugin_name}}"
+  repository: "https://github.com/{{author_name}}/{{plugin_name}}"
+  license: "MIT OR Apache-2.0"
+  keywords: ["mockforge", "plugin", "{{plugin_type}}"]
+
+capabilities:
+  network:
+    allow_http_outbound: {{allow_network}}
+    allowed_hosts: []
+  filesystem:
+    allow_read: {{allow_filesystem}}
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: {{max_memory_mb}}000000  # {{max_memory_mb}}MB
+    max_cpu_time_ms: {{max_cpu_time_ms}}
+
+dependencies: []
+
+configuration:
+  schema:
+    type: object
+    properties:
+      # Add your configuration properties here
+      example_setting:
+        type: string
+        description: "An example configuration setting"
+        default: "default_value"
+    required: []

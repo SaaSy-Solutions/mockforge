@@ -406,10 +406,122 @@ impl ResponsePluginEntry {
     }
 }
 
+/// Response modifier plugin trait
+///
+/// Implement this trait to modify responses after they have been generated.
+/// This allows plugins to transform, enhance, or filter responses before
+/// they are sent to the client.
+///
+/// Use cases include:
+/// - Adding custom headers or metadata
+/// - Compressing response bodies
+/// - Encrypting sensitive data
+/// - Filtering or redacting content
+/// - Adding CORS headers
+/// - Response validation
+#[async_trait::async_trait]
+pub trait ResponseModifierPlugin: Send + Sync {
+    /// Get plugin capabilities (permissions and limits)
+    fn capabilities(&self) -> PluginCapabilities;
+
+    /// Initialize the plugin with configuration
+    async fn initialize(&self, config: &ResponseModifierConfig) -> Result<()>;
+
+    /// Check if this plugin should modify the given response
+    ///
+    /// # Arguments
+    /// * `context` - Plugin execution context
+    /// * `request` - Original request information
+    /// * `response` - Current response data
+    /// * `config` - Plugin configuration
+    ///
+    /// # Returns
+    /// True if this plugin should modify the response
+    async fn should_modify(
+        &self,
+        context: &PluginContext,
+        request: &ResponseRequest,
+        response: &ResponseData,
+        config: &ResponseModifierConfig,
+    ) -> Result<PluginResult<bool>>;
+
+    /// Modify the response
+    ///
+    /// This method is called when the plugin has indicated it should modify
+    /// the response. It receives the current response and returns a modified version.
+    ///
+    /// # Arguments
+    /// * `context` - Plugin execution context
+    /// * `request` - Original request information
+    /// * `response` - Current response data to modify
+    /// * `config` - Plugin configuration
+    ///
+    /// # Returns
+    /// Modified response data
+    async fn modify_response(
+        &self,
+        context: &PluginContext,
+        request: &ResponseRequest,
+        response: ResponseData,
+        config: &ResponseModifierConfig,
+    ) -> Result<PluginResult<ResponseData>>;
+
+    /// Get plugin priority (lower numbers = higher priority, executed first)
+    fn priority(&self) -> i32;
+
+    /// Validate plugin configuration
+    fn validate_config(&self, config: &ResponseModifierConfig) -> Result<()>;
+
+    /// Cleanup plugin resources
+    async fn cleanup(&self) -> Result<()>;
+}
+
+/// Response modifier plugin configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseModifierConfig {
+    /// Plugin-specific configuration
+    pub config: HashMap<String, serde_json::Value>,
+    /// Enable/disable the plugin
+    pub enabled: bool,
+    /// Plugin priority (lower numbers = higher priority, executed first)
+    pub priority: i32,
+    /// Content types this plugin modifies
+    pub content_types: Vec<String>,
+    /// URL patterns this plugin matches
+    pub url_patterns: Vec<String>,
+    /// HTTP methods this plugin handles
+    pub methods: Vec<String>,
+    /// Status codes this plugin modifies (empty = all)
+    pub status_codes: Vec<u16>,
+    /// Custom settings
+    pub settings: HashMap<String, serde_json::Value>,
+}
+
+impl Default for ResponseModifierConfig {
+    fn default() -> Self {
+        Self {
+            config: HashMap::new(),
+            enabled: true,
+            priority: 100,
+            content_types: vec!["application/json".to_string()],
+            url_patterns: vec!["*".to_string()],
+            methods: vec!["GET".to_string(), "POST".to_string()],
+            status_codes: vec![], // Empty means all status codes
+            settings: HashMap::new(),
+        }
+    }
+}
+
 /// Helper trait for creating response plugins
 pub trait ResponsePluginFactory: Send + Sync {
     /// Create a new response plugin instance
     fn create_plugin(&self) -> Result<Box<dyn ResponsePlugin>>;
+}
+
+/// Helper trait for creating response modifier plugins
+pub trait ResponseModifierPluginFactory: Send + Sync {
+    /// Create a new response modifier plugin instance
+    fn create_plugin(&self) -> Result<Box<dyn ResponseModifierPlugin>>;
 }
 
 /// Built-in response helpers

@@ -2,16 +2,64 @@
 
 This guide provides comprehensive instructions for developing plugins for the MockForge plugin system.
 
-## 🏗️ Project Structure
+## 🚀 Quick Start with cargo-generate
 
-### Recommended Plugin Structure
+The fastest way to create a new plugin is using our official template:
+
+```bash
+# Install cargo-generate if you haven't already
+cargo install cargo-generate
+
+# Create a new plugin from the template
+cargo generate --git https://github.com/mockforge/mockforge \
+  --name my-plugin-name \
+  templates/plugin-template
+
+# Or if you have the repository cloned locally:
+cargo generate --path ./templates/plugin-template \
+  --name my-plugin-name
+```
+
+The template will prompt you for:
+- Plugin name and description
+- Plugin type (auth, template, response, datasource)
+- Author information
+- Resource limits
+- Network and filesystem permissions
+
+This creates a complete project structure with:
+- Pre-configured `Cargo.toml` with all necessary dependencies
+- `plugin.yaml` manifest with your settings
+- Template implementation based on your chosen plugin type
+- Example tests and documentation
+- Build configuration optimized for WebAssembly
+
+### Building Your New Plugin
+
+```bash
+cd my-plugin-name
+
+# Build for WebAssembly
+cargo build --target wasm32-wasi --release
+
+# Run tests
+cargo test
+
+# Install locally for testing
+mockforge plugin install .
+```
+
+## 🏗️ Manual Project Structure
+
+If you prefer to set up manually, use this recommended structure:
+
 ```
 my-plugin/
 ├── Cargo.toml                 # Rust dependencies
 ├── plugin.yaml               # Plugin manifest
 ├── src/
 │   ├── lib.rs               # Main plugin implementation
-│   └── plugin.rs            # Plugin logic
+│   └── plugin.rs            # Plugin logic (optional)
 ├── tests/                    # Integration tests
 ├── examples/                 # Usage examples
 └── README.md                 # Plugin documentation
@@ -179,12 +227,13 @@ impl ResponsePlugin for MyPlugin {
     async fn generate_response(
         &self,
         context: &PluginContext,
+        request: &ResponseRequest,
         config: &ResponsePluginConfig,
-    ) -> PluginResult<Value> {
+    ) -> PluginResult<ResponseData> {
         // Access request data
-        let method = &context.method;
-        let path = &context.uri;
-        let headers = &context.headers;
+        let method = &request.method;
+        let path = &request.path;
+        let headers = &request.headers;
 
         // Generate response based on request
         let response = match (method.as_str(), path.as_str()) {
@@ -194,6 +243,61 @@ impl ResponsePlugin for MyPlugin {
         };
 
         PluginResult::success(response)
+    }
+}
+```
+
+#### Response Modifier Plugin
+```rust
+#[async_trait::async_trait]
+impl ResponseModifierPlugin for MyPlugin {
+    async fn should_modify(
+        &self,
+        context: &PluginContext,
+        request: &ResponseRequest,
+        response: &ResponseData,
+        config: &ResponseModifierConfig,
+    ) -> Result<PluginResult<bool>> {
+        // Check if we should modify this response
+        Ok(PluginResult::success(
+            response.content_type.contains("application/json")
+        ))
+    }
+
+    async fn modify_response(
+        &self,
+        context: &PluginContext,
+        request: &ResponseRequest,
+        mut response: ResponseData,
+        config: &ResponseModifierConfig,
+    ) -> Result<PluginResult<ResponseData>> {
+        // Add custom headers
+        response.headers.insert(
+            "X-Custom-Header".to_string(),
+            "Modified by plugin".to_string(),
+        );
+
+        // Modify body if needed
+        if let Some(mut json) = response.body_as_json() {
+            json["modified_by"] = serde_json::json!("my-plugin");
+            json["timestamp"] = serde_json::json!(chrono::Utc::now().to_rfc3339());
+            response.body = serde_json::to_vec(&json)?;
+        }
+
+        Ok(PluginResult::success(response))
+    }
+
+    fn priority(&self) -> i32 {
+        50 // Lower numbers execute first
+    }
+
+    fn validate_config(&self, config: &ResponseModifierConfig) -> Result<()> {
+        // Validate configuration
+        Ok(())
+    }
+
+    async fn cleanup(&self) -> Result<()> {
+        Ok(())
     }
 }
 ```

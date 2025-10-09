@@ -1,0 +1,53 @@
+[template]
+cargo_generate_version = ">=0.17.0"
+
+[placeholders.plugin_name]
+type = "string"
+prompt = "Plugin name (lowercase with hyphens, e.g., 'my-auth-plugin')"
+regex = "^[a-z][a-z0-9-]*$"
+
+[placeholders.plugin_title]
+type = "string"
+prompt = "Plugin title (human-readable name)"
+default = "{{plugin_name | title_case}}"
+
+[placeholders.plugin_description]
+type = "string"
+prompt = "Plugin description"
+default = "A custom MockForge plugin"
+
+[placeholders.plugin_type]
+type = "string"
+prompt = "Plugin type (auth, template, response, or datasource)"
+choices = ["auth", "template", "response", "datasource"]
+default = "template"
+
+[placeholders.author_name]
+type = "string"
+prompt = "Author name"
+default = "Your Name"
+
+[placeholders.author_email]
+type = "string"
+prompt = "Author email"
+default = "you@example.com"
+
+[placeholders.max_memory_mb]
+type = "string"
+prompt = "Maximum memory (MB)"
+default = "10"
+
+[placeholders.max_cpu_time_ms]
+type = "string"
+prompt = "Maximum CPU time (milliseconds)"
+default = "1000"
+
+[placeholders.allow_network]
+type = "bool"
+prompt = "Allow network access?"
+default = false
+
+[placeholders.allow_filesystem]
+type = "bool"
+prompt = "Allow filesystem access?"
+default = false

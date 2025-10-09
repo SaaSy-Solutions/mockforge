@@ -101,7 +101,8 @@ pub use datasource::{
     DataConnection, DataQuery, DataResult, DataSourcePlugin, DataSourcePluginConfig,
 };
 pub use response::{
-    ResponseData, ResponsePlugin, ResponsePluginConfig, ResponseRequest,
+    ResponseData, ResponseModifierConfig, ResponseModifierPlugin, ResponsePlugin,
+    ResponsePluginConfig, ResponseRequest,
 };
 pub use template::*;
 pub use types::*;
