@@ -1,0 +1,205 @@
+# Example: Intelligent Mock Behavior for E-commerce API
+#
+# This configuration demonstrates how to use MockForge's Intelligent Mock Behavior
+# system to create a stateful, context-aware e-commerce API that maintains consistency
+# across multiple requests.
+
+intelligent_behavior:
+  enabled: true
+
+  # Session tracking configuration
+  session_tracking:
+    method: cookie          # cookie, header, or query_param
+    cookie_name: "mockforge_session"
+    header_name: "X-Session-ID"
+    query_param: "session_id"
+    auto_create: true       # Automatically create sessions if not present
+
+  # Behavior model powered by LLM
+  behavior_model:
+    llm_provider: openai    # openai, anthropic, ollama, or openai-compatible
+    model: gpt-4
+    api_key: ${OPENAI_API_KEY}  # Use environment variable
+    # api_endpoint: "https://api.openai.com/v1/chat/completions"  # Optional
+
+    temperature: 0.7        # Creativity level (0.0 to 2.0)
+    max_tokens: 1024        # Maximum response length
+
+    # System prompt defining API behavior
+    rules:
+      system_prompt: |
+        You are simulating a realistic e-commerce REST API. Your role is to maintain
+        consistency and logical behavior across multiple requests within a session.
+
+        Follow these rules:
+        1. Users must login before accessing their cart or creating orders
+        2. Items added to cart persist across requests until checkout
+        3. Creating an order consumes cart items (cart becomes empty after order)
+        4. Stock quantities should decrease when orders are placed
+        5. Order statuses progress realistically (pending → processing → shipped → delivered)
+        6. Users can only access their own data (cart, orders, profile)
+
+        Generate realistic, consistent responses that maintain these invariants.
+
+      # Resource schemas (JSON Schema format)
+      schemas:
+        User:
+          type: object
+          required: [id, email, name]
+          properties:
+            id:
+              type: string
+              description: Unique user identifier
+            email:
+              type: string
+              format: email
+            name:
+              type: string
+            address:
+              type: object
+              properties:
+                street: {type: string}
+                city: {type: string}
+                zipcode: {type: string}
+
+        Product:
+          type: object
+          required: [id, name, price, stock]
+          properties:
+            id: {type: string}
+            name: {type: string}
+            price: {type: number, minimum: 0}
+            stock: {type: integer, minimum: 0}
+            category: {type: string}
+            description: {type: string}
+
+        CartItem:
+          type: object
+          required: [product_id, quantity, price]
+          properties:
+            product_id: {type: string}
+            quantity: {type: integer, minimum: 1}
+            price: {type: number, minimum: 0}
+
+        Cart:
+          type: object
+          required: [items, subtotal]
+          properties:
+            items:
+              type: array
+              items: {$ref: "#/schemas/CartItem"}
+            subtotal: {type: number, minimum: 0}
+
+        Order:
+          type: object
+          required: [id, user_id, items, total, status]
+          properties:
+            id: {type: string}
+            user_id: {type: string}
+            items:
+              type: array
+              items: {$ref: "#/schemas/CartItem"}
+            total: {type: number, minimum: 0}
+            status:
+              type: string
+              enum: [pending, processing, shipped, delivered, cancelled]
+            created_at: {type: string, format: date-time}
+            tracking_number: {type: string}
+
+      # Consistency rules to enforce
+      consistency_rules:
+        - name: require_authentication
+          description: Require authentication for cart and order endpoints
+          condition: "path starts_with '/api/cart' OR path starts_with '/api/orders'"
+          priority: 100
+          action:
+            type: require_auth
+            message: "You must be logged in to access this resource"
+
+        - name: cart_to_order_transformation
+          description: When creating an order, consume cart items
+          condition: "method == 'POST' AND path == '/api/orders'"
+          priority: 50
+          action:
+            type: transform
+            description: "Create order from cart items, clear cart, update stock quantities"
+
+        - name: order_ownership
+          description: Users can only access their own orders
+          condition: "path matches '/api/orders/.*'"
+          priority: 75
+          action:
+            type: transform
+            description: "Filter orders to only show those belonging to the authenticated user"
+
+      # State machines for resource lifecycle
+      state_transitions:
+        order_status:
+          resource_type: Order
+          states:
+            - pending
+            - processing
+            - shipped
+            - delivered
+            - cancelled
+          initial_state: pending
+          transitions:
+            - from: pending
+              to: processing
+              probability: 0.8
+            - from: pending
+              to: cancelled
+              probability: 0.2
+            - from: processing
+              to: shipped
+              probability: 0.9
+            - from: processing
+              to: cancelled
+              probability: 0.1
+            - from: shipped
+              to: delivered
+              probability: 0.95
+            - from: shipped
+              to: cancelled
+              probability: 0.05  # Lost/damaged shipments
+
+      max_context_interactions: 10
+      enable_semantic_search: true
+
+  # Vector store for long-term memory
+  vector_store:
+    enabled: true
+    embedding_provider: openai
+    embedding_model: text-embedding-ada-002
+    # storage_path: ./mockforge-vectors  # Optional: persist to disk
+    semantic_search_limit: 10
+    similarity_threshold: 0.7
+
+  # Performance settings
+  performance:
+    cache_ttl_seconds: 300        # 5 minutes
+    max_history_length: 50        # Keep last 50 interactions per session
+    session_timeout_seconds: 3600 # 1 hour
+    enable_response_cache: true
+
+# Regular HTTP server configuration
+http:
+  enabled: true
+  host: 0.0.0.0
+  port: 3000
+
+  # Note: Intelligent behavior works alongside standard OpenAPI mocking
+  openapi_spec: examples/ecommerce-api.json
+
+  # Request validation
+  request_validation: warn
+  validate_responses: false
+  response_template_expand: true
+
+# Admin UI for monitoring sessions
+admin:
+  enabled: true
+  port: 9080
+
+# Logging
+log_level: debug

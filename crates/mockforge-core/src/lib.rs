@@ -180,6 +180,7 @@ pub mod encryption;
 pub mod error;
 pub mod failure_injection;
 pub mod import;
+pub mod intelligent_behavior;
 pub mod latency;
 pub mod network_profiles;
 pub mod openapi;
