@@ -7,6 +7,7 @@ pub mod routes;
 // Templates module removed; static assets in `static/` are the single source of truth
 pub mod models;
 pub mod time_travel_handlers;
+pub mod prometheus_client;
 
 pub use models::{RequestLog, RouteInfo, ServerStatus, SystemInfo};
 pub use routes::create_admin_router;

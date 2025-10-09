@@ -257,10 +257,16 @@ async fn ws_handler_with_proxy_path(
 }
 
 async fn handle_socket(mut socket: WebSocket) {
+    use std::time::Instant;
+
     // Track WebSocket connection
     let registry = get_global_registry();
-    registry.ws_connections_active.inc();
+    let connection_start = Instant::now();
+    registry.record_ws_connection_established();
     debug!("WebSocket connection established, tracking metrics");
+
+    // Track connection status (for metrics reporting)
+    let mut status = "normal";
 
     // Check if replay mode is enabled
     if let Ok(replay_file) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
@@ -269,26 +275,41 @@ async fn handle_socket(mut socket: WebSocket) {
     } else {
         // Normal echo mode
         while let Some(msg) = socket.recv().await {
-            if let Ok(Message::Text(text)) = msg {
-                registry.record_ws_message_received();
+            match msg {
+                Ok(Message::Text(text)) => {
+                    registry.record_ws_message_received();
 
-                // Echo the message back with "echo: " prefix
-                let response = format!("echo: {}", text);
-                if socket.send(Message::Text(response.into())).await.is_err() {
+                    // Echo the message back with "echo: " prefix
+                    let response = format!("echo: {}", text);
+                    if socket.send(Message::Text(response.into())).await.is_err() {
+                        status = "send_error";
+                        break;
+                    }
+                    registry.record_ws_message_sent();
+                }
+                Ok(Message::Close(_)) => {
+                    status = "client_close";
                     break;
                 }
-                registry.record_ws_message_sent();
+                Err(e) => {
+                    error!("WebSocket error: {}", e);
+                    registry.record_ws_error();
+                    status = "error";
+                    break;
+                }
+                _ => {}
             }
         }
     }
 
-    // Connection closed
-    registry.ws_connections_active.dec();
-    debug!("WebSocket connection closed");
+    // Connection closed - record duration
+    let duration = connection_start.elapsed().as_secs_f64();
+    registry.record_ws_connection_closed(duration, status);
+    debug!("WebSocket connection closed (status: {}, duration: {:.2}s)", status, duration);
 }
 
 async fn handle_socket_with_replay(mut socket: WebSocket, replay_file: &str) {
-    let registry = get_global_registry();
+    let _registry = get_global_registry(); // Available for future message tracking
 
     // Read the replay file
     let content = match fs::read_to_string(replay_file).await {
@@ -409,17 +430,35 @@ fn expand_tokens(text: &str) -> String {
 }
 
 async fn handle_socket_with_proxy(socket: WebSocket, proxy: WsProxyHandler, path: String) {
+    use std::time::Instant;
+
+    let registry = get_global_registry();
+    let connection_start = Instant::now();
+    registry.record_ws_connection_established();
+
+    let mut status = "normal";
+
     // Check if this connection should be proxied
     if proxy.config.should_proxy(&path) {
         info!("Proxying WebSocket connection for path: {}", path);
         if let Err(e) = proxy.proxy_connection(&path, socket).await {
             error!("Failed to proxy WebSocket connection: {}", e);
+            registry.record_ws_error();
+            status = "proxy_error";
         }
     } else {
         info!("Handling WebSocket connection locally for path: {}", path);
         // Handle locally by echoing messages
+        // Note: handle_socket already tracks its own connection metrics,
+        // so we need to avoid double-counting
+        registry.record_ws_connection_closed(0.0, ""); // Decrement the one we just added
         handle_socket(socket).await;
+        return; // Early return to avoid double-tracking
     }
+
+    let duration = connection_start.elapsed().as_secs_f64();
+    registry.record_ws_connection_closed(duration, status);
+    debug!("Proxied WebSocket connection closed (status: {}, duration: {:.2}s)", status, duration);
 }
 
 #[cfg(test)]

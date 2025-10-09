@@ -1,0 +1,47 @@
+plugin:
+  id: "auth-go-jwt"
+  version: "0.1.0"
+  name: "JWT Authentication Plugin (Go)"
+  description: "JWT-based authentication plugin written in Go using TinyGo"
+  types: ["auth"]
+  author:
+    name: "MockForge Team"
+    email: "team@mockforge.dev"
+    homepage: "https://mockforge.dev"
+  homepage: "https://github.com/mockforge/mockforge/tree/main/examples/plugins/auth-go-jwt"
+  repository: "https://github.com/mockforge/mockforge"
+  license: "MIT OR Apache-2.0"
+  keywords: ["authentication", "jwt", "go", "wasm"]
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 10485760  # 10MB
+    max_cpu_time_ms: 500        # 500ms
+
+dependencies: []
+
+configuration:
+  schema:
+    type: object
+    properties:
+      secret_key:
+        type: string
+        description: "Secret key for JWT verification"
+      issuer:
+        type: string
+        default: "mockforge"
+        description: "Expected issuer (iss claim)"
+      allowed_audiences:
+        type: array
+        items:
+          type: string
+        default: ["mockforge-api"]
+        description: "Allowed audiences (aud claim)"
+    required: []

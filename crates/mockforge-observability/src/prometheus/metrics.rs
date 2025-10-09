@@ -18,6 +18,11 @@ pub struct MetricsRegistry {
     pub requests_duration_seconds: HistogramVec,
     pub requests_in_flight: IntGaugeVec,
 
+    // Request metrics by path (endpoint-specific)
+    pub requests_by_path_total: IntCounterVec,
+    pub request_duration_by_path_seconds: HistogramVec,
+    pub average_latency_by_path_seconds: GaugeVec,
+
     // Error metrics
     pub errors_total: IntCounterVec,
     pub error_rate: GaugeVec,
@@ -29,12 +34,24 @@ pub struct MetricsRegistry {
 
     // WebSocket specific metrics
     pub ws_connections_active: IntGauge,
+    pub ws_connections_total: IntCounter,
+    pub ws_connection_duration_seconds: HistogramVec,
     pub ws_messages_sent: IntCounter,
     pub ws_messages_received: IntCounter,
+    pub ws_errors_total: IntCounter,
+
+    // SMTP specific metrics
+    pub smtp_connections_active: IntGauge,
+    pub smtp_connections_total: IntCounter,
+    pub smtp_messages_received_total: IntCounter,
+    pub smtp_messages_stored_total: IntCounter,
+    pub smtp_errors_total: IntCounterVec,
 
     // System metrics
     pub memory_usage_bytes: Gauge,
     pub cpu_usage_percent: Gauge,
+    pub thread_count: Gauge,
+    pub uptime_seconds: Gauge,
 
     // Scenario metrics (for Phase 4)
     pub active_scenario_mode: IntGauge,
@@ -123,11 +140,59 @@ impl MetricsRegistry {
         .expect("Failed to create plugin_errors_total metric");
 
         // WebSocket metrics
+        // Path-based request metrics
+        let requests_by_path_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_requests_by_path_total",
+                "Total number of requests by path, method, and status",
+            ),
+            &["path", "method", "status"],
+        )
+        .expect("Failed to create requests_by_path_total metric");
+
+        let request_duration_by_path_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "mockforge_request_duration_by_path_seconds",
+                "Request duration by path in seconds",
+            )
+            .buckets(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
+            &["path", "method"],
+        )
+        .expect("Failed to create request_duration_by_path_seconds metric");
+
+        let average_latency_by_path_seconds = GaugeVec::new(
+            Opts::new(
+                "mockforge_average_latency_by_path_seconds",
+                "Average request latency by path in seconds",
+            ),
+            &["path", "method"],
+        )
+        .expect("Failed to create average_latency_by_path_seconds metric");
+
+        // WebSocket metrics
         let ws_connections_active = IntGauge::new(
             "mockforge_ws_connections_active",
             "Number of active WebSocket connections",
         )
         .expect("Failed to create ws_connections_active metric");
+
+        let ws_connections_total = IntCounter::new(
+            "mockforge_ws_connections_total",
+            "Total number of WebSocket connections established",
+        )
+        .expect("Failed to create ws_connections_total metric");
+
+        let ws_connection_duration_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "mockforge_ws_connection_duration_seconds",
+                "WebSocket connection duration in seconds",
+            )
+            .buckets(vec![1.0, 5.0, 10.0, 30.0, 60.0, 300.0, 600.0, 1800.0, 3600.0]),
+            &["status"],
+        )
+        .expect("Failed to create ws_connection_duration_seconds metric");
 
         let ws_messages_sent = IntCounter::new(
             "mockforge_ws_messages_sent_total",
@@ -141,6 +206,46 @@ impl MetricsRegistry {
         )
         .expect("Failed to create ws_messages_received metric");
 
+        let ws_errors_total = IntCounter::new(
+            "mockforge_ws_errors_total",
+            "Total number of WebSocket errors",
+        )
+        .expect("Failed to create ws_errors_total metric");
+
+        // SMTP metrics
+        let smtp_connections_active = IntGauge::new(
+            "mockforge_smtp_connections_active",
+            "Number of active SMTP connections",
+        )
+        .expect("Failed to create smtp_connections_active metric");
+
+        let smtp_connections_total = IntCounter::new(
+            "mockforge_smtp_connections_total",
+            "Total number of SMTP connections",
+        )
+        .expect("Failed to create smtp_connections_total metric");
+
+        let smtp_messages_received_total = IntCounter::new(
+            "mockforge_smtp_messages_received_total",
+            "Total number of SMTP messages received",
+        )
+        .expect("Failed to create smtp_messages_received_total metric");
+
+        let smtp_messages_stored_total = IntCounter::new(
+            "mockforge_smtp_messages_stored_total",
+            "Total number of SMTP messages stored in mailbox",
+        )
+        .expect("Failed to create smtp_messages_stored_total metric");
+
+        let smtp_errors_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_smtp_errors_total",
+                "Total number of SMTP errors by type",
+            ),
+            &["error_type"],
+        )
+        .expect("Failed to create smtp_errors_total metric");
+
         // System metrics
         let memory_usage_bytes =
             Gauge::new("mockforge_memory_usage_bytes", "Memory usage in bytes")
@@ -149,6 +254,14 @@ impl MetricsRegistry {
         let cpu_usage_percent =
             Gauge::new("mockforge_cpu_usage_percent", "CPU usage percentage")
                 .expect("Failed to create cpu_usage_percent metric");
+
+        let thread_count =
+            Gauge::new("mockforge_thread_count", "Number of active threads")
+                .expect("Failed to create thread_count metric");
+
+        let uptime_seconds =
+            Gauge::new("mockforge_uptime_seconds", "Server uptime in seconds")
+                .expect("Failed to create uptime_seconds metric");
 
         // Scenario metrics
         let active_scenario_mode = IntGauge::new(
@@ -174,6 +287,15 @@ impl MetricsRegistry {
             .register(Box::new(requests_in_flight.clone()))
             .expect("Failed to register requests_in_flight");
         registry
+            .register(Box::new(requests_by_path_total.clone()))
+            .expect("Failed to register requests_by_path_total");
+        registry
+            .register(Box::new(request_duration_by_path_seconds.clone()))
+            .expect("Failed to register request_duration_by_path_seconds");
+        registry
+            .register(Box::new(average_latency_by_path_seconds.clone()))
+            .expect("Failed to register average_latency_by_path_seconds");
+        registry
             .register(Box::new(errors_total.clone()))
             .expect("Failed to register errors_total");
         registry
@@ -192,17 +314,47 @@ impl MetricsRegistry {
             .register(Box::new(ws_connections_active.clone()))
             .expect("Failed to register ws_connections_active");
         registry
+            .register(Box::new(ws_connections_total.clone()))
+            .expect("Failed to register ws_connections_total");
+        registry
+            .register(Box::new(ws_connection_duration_seconds.clone()))
+            .expect("Failed to register ws_connection_duration_seconds");
+        registry
             .register(Box::new(ws_messages_sent.clone()))
             .expect("Failed to register ws_messages_sent");
         registry
             .register(Box::new(ws_messages_received.clone()))
             .expect("Failed to register ws_messages_received");
         registry
+            .register(Box::new(ws_errors_total.clone()))
+            .expect("Failed to register ws_errors_total");
+        registry
+            .register(Box::new(smtp_connections_active.clone()))
+            .expect("Failed to register smtp_connections_active");
+        registry
+            .register(Box::new(smtp_connections_total.clone()))
+            .expect("Failed to register smtp_connections_total");
+        registry
+            .register(Box::new(smtp_messages_received_total.clone()))
+            .expect("Failed to register smtp_messages_received_total");
+        registry
+            .register(Box::new(smtp_messages_stored_total.clone()))
+            .expect("Failed to register smtp_messages_stored_total");
+        registry
+            .register(Box::new(smtp_errors_total.clone()))
+            .expect("Failed to register smtp_errors_total");
+        registry
             .register(Box::new(memory_usage_bytes.clone()))
             .expect("Failed to register memory_usage_bytes");
         registry
             .register(Box::new(cpu_usage_percent.clone()))
             .expect("Failed to register cpu_usage_percent");
+        registry
+            .register(Box::new(thread_count.clone()))
+            .expect("Failed to register thread_count");
+        registry
+            .register(Box::new(uptime_seconds.clone()))
+            .expect("Failed to register uptime_seconds");
         registry
             .register(Box::new(active_scenario_mode.clone()))
             .expect("Failed to register active_scenario_mode");
@@ -217,16 +369,29 @@ impl MetricsRegistry {
             requests_total,
             requests_duration_seconds,
             requests_in_flight,
+            requests_by_path_total,
+            request_duration_by_path_seconds,
+            average_latency_by_path_seconds,
             errors_total,
             error_rate,
             plugin_executions_total,
             plugin_execution_duration_seconds,
             plugin_errors_total,
             ws_connections_active,
+            ws_connections_total,
+            ws_connection_duration_seconds,
             ws_messages_sent,
             ws_messages_received,
+            ws_errors_total,
+            smtp_connections_active,
+            smtp_connections_total,
+            smtp_messages_received_total,
+            smtp_messages_stored_total,
+            smtp_errors_total,
             memory_usage_bytes,
             cpu_usage_percent,
+            thread_count,
+            uptime_seconds,
             active_scenario_mode,
             chaos_triggers_total,
         }
@@ -336,6 +501,132 @@ impl MetricsRegistry {
     pub fn record_chaos_trigger(&self) {
         self.chaos_triggers_total.inc();
     }
+
+    /// Record an HTTP request with path information
+    pub fn record_http_request_with_path(
+        &self,
+        path: &str,
+        method: &str,
+        status: u16,
+        duration_seconds: f64,
+    ) {
+        // Normalize path to avoid cardinality explosion
+        let normalized_path = normalize_path(path);
+        let status_str = status.to_string();
+
+        // Record by path
+        self.requests_by_path_total
+            .with_label_values(&[&normalized_path, method, &status_str])
+            .inc();
+        self.request_duration_by_path_seconds
+            .with_label_values(&[&normalized_path, method])
+            .observe(duration_seconds);
+
+        // Update average latency (simple moving average approximation)
+        // Note: For production use, consider using a proper moving average or quantiles
+        let current = self
+            .average_latency_by_path_seconds
+            .with_label_values(&[&normalized_path, method])
+            .get();
+        let new_avg = if current == 0.0 {
+            duration_seconds
+        } else {
+            (current * 0.95) + (duration_seconds * 0.05)
+        };
+        self.average_latency_by_path_seconds
+            .with_label_values(&[&normalized_path, method])
+            .set(new_avg);
+
+        // Also record in the general metrics
+        self.record_http_request(method, status, duration_seconds);
+    }
+
+    /// Record a WebSocket connection established
+    pub fn record_ws_connection_established(&self) {
+        self.ws_connections_total.inc();
+        self.ws_connections_active.inc();
+    }
+
+    /// Record a WebSocket connection closed
+    pub fn record_ws_connection_closed(&self, duration_seconds: f64, status: &str) {
+        self.ws_connections_active.dec();
+        self.ws_connection_duration_seconds
+            .with_label_values(&[status])
+            .observe(duration_seconds);
+    }
+
+    /// Record a WebSocket error
+    pub fn record_ws_error(&self) {
+        self.ws_errors_total.inc();
+    }
+
+    /// Record an SMTP connection established
+    pub fn record_smtp_connection_established(&self) {
+        self.smtp_connections_total.inc();
+        self.smtp_connections_active.inc();
+    }
+
+    /// Record an SMTP connection closed
+    pub fn record_smtp_connection_closed(&self) {
+        self.smtp_connections_active.dec();
+    }
+
+    /// Record an SMTP message received
+    pub fn record_smtp_message_received(&self) {
+        self.smtp_messages_received_total.inc();
+    }
+
+    /// Record an SMTP message stored
+    pub fn record_smtp_message_stored(&self) {
+        self.smtp_messages_stored_total.inc();
+    }
+
+    /// Record an SMTP error
+    pub fn record_smtp_error(&self, error_type: &str) {
+        self.smtp_errors_total
+            .with_label_values(&[error_type])
+            .inc();
+    }
+
+    /// Update thread count
+    pub fn update_thread_count(&self, count: f64) {
+        self.thread_count.set(count);
+    }
+
+    /// Update uptime
+    pub fn update_uptime(&self, seconds: f64) {
+        self.uptime_seconds.set(seconds);
+    }
+}
+
+/// Normalize path to avoid high cardinality
+///
+/// This function replaces dynamic path segments (IDs, UUIDs, etc.) with placeholders
+/// to prevent metric explosion.
+fn normalize_path(path: &str) -> String {
+    let mut segments: Vec<&str> = path.split('/').collect();
+
+    for segment in &mut segments {
+        // Replace UUIDs
+        if is_uuid(segment) {
+            *segment = ":id";
+        }
+        // Replace numeric IDs
+        else if segment.parse::<i64>().is_ok() {
+            *segment = ":id";
+        }
+        // Replace hex strings (common in some APIs)
+        else if segment.len() > 8 && segment.chars().all(|c| c.is_ascii_hexdigit()) {
+            *segment = ":id";
+        }
+    }
+
+    segments.join("/")
+}
+
+/// Check if a string is a UUID
+fn is_uuid(s: &str) -> bool {
+    s.len() == 36 && s.chars().filter(|&c| c == '-').count() == 4
 }
 
 impl Default for MetricsRegistry {
@@ -391,6 +682,53 @@ mod tests {
         let registry = MetricsRegistry::new();
         registry.record_ws_message_sent();
         registry.record_ws_message_received();
+        registry.record_ws_connection_established();
+        registry.record_ws_connection_closed(120.5, "normal");
+        registry.record_ws_error();
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_path_normalization() {
+        assert_eq!(normalize_path("/api/users/123"), "/api/users/:id");
+        assert_eq!(
+            normalize_path("/api/users/550e8400-e29b-41d4-a716-446655440000"),
+            "/api/users/:id"
+        );
+        assert_eq!(
+            normalize_path("/api/users/abc123def456"),
+            "/api/users/:id"
+        );
+        assert_eq!(normalize_path("/api/users/list"), "/api/users/list");
+    }
+
+    #[test]
+    fn test_path_based_metrics() {
+        let registry = MetricsRegistry::new();
+        registry.record_http_request_with_path("/api/users/123", "GET", 200, 0.045);
+        registry.record_http_request_with_path("/api/users/456", "GET", 200, 0.055);
+        registry.record_http_request_with_path("/api/posts", "POST", 201, 0.123);
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_smtp_metrics() {
+        let registry = MetricsRegistry::new();
+        registry.record_smtp_connection_established();
+        registry.record_smtp_message_received();
+        registry.record_smtp_message_stored();
+        registry.record_smtp_connection_closed();
+        registry.record_smtp_error("timeout");
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_system_metrics() {
+        let registry = MetricsRegistry::new();
+        registry.update_memory_usage(1024.0 * 1024.0 * 100.0); // 100 MB
+        registry.update_cpu_usage(45.5);
+        registry.update_thread_count(25.0);
+        registry.update_uptime(3600.0); // 1 hour
         assert!(registry.is_initialized());
     }
 }

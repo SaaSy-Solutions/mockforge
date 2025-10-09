@@ -1,0 +1,171 @@
+# Prometheus Alerting Rules for MockForge
+# These rules define conditions that trigger alerts
+
+groups:
+  - name: mockforge_alerts
+    interval: 30s
+    rules:
+      # High error rate (>5% errors)
+      - alert: HighErrorRate
+        expr: mockforge:error_rate:5m > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "High error rate detected in MockForge"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Critical error rate (>10% errors)
+      - alert: CriticalErrorRate
+        expr: mockforge:error_rate:5m > 10
+        for: 1m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "Critical error rate detected in MockForge"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+
+      # High latency (p99 > 1 second)
+      - alert: HighLatency
+        expr: mockforge:request_duration_p99:5m > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "High latency detected in MockForge"
+          description: "P99 latency is {{ $value | humanizeDuration }} (threshold: 1s)"
+
+      # Very high latency (p99 > 5 seconds)
+      - alert: VeryHighLatency
+        expr: mockforge:request_duration_p99:5m > 5
+        for: 2m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "Very high latency detected in MockForge"
+          description: "P99 latency is {{ $value | humanizeDuration }} (threshold: 5s)"
+
+      # High memory usage (>80%)
+      - alert: HighMemoryUsage
+        expr: (mockforge_memory_usage_bytes / 1024 / 1024 / 1024) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "High memory usage in MockForge"
+          description: "Memory usage is {{ $value | humanize }}GB"
+
+      # Critical memory usage (>90%)
+      - alert: CriticalMemoryUsage
+        expr: (mockforge_memory_usage_bytes / 1024 / 1024 / 1024) > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "Critical memory usage in MockForge"
+          description: "Memory usage is {{ $value | humanize }}GB"
+
+      # High CPU usage (>80%)
+      - alert: HighCPUUsage
+        expr: mockforge_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "High CPU usage in MockForge"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      # Critical CPU usage (>95%)
+      - alert: CriticalCPUUsage
+        expr: mockforge_cpu_usage_percent > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "Critical CPU usage in MockForge"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      # MockForge is down
+      - alert: MockForgeDown
+        expr: up{job="mockforge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: mockforge
+        annotations:
+          summary: "MockForge is down"
+          description: "MockForge has been down for more than 1 minute"
+
+      # High number of active connections
+      - alert: HighActiveConnections
+        expr: mockforge:total_active_connections > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "High number of active connections"
+          description: "{{ $value }} active connections (threshold: 1000)"
+
+      # WebSocket error rate is high
+      - alert: HighWebSocketErrorRate
+        expr: mockforge:ws_error_rate:5m > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: mockforge-websocket
+        annotations:
+          summary: "High WebSocket error rate"
+          description: "WebSocket error rate is {{ $value }} errors/sec"
+
+      # SMTP error rate is high
+      - alert: HighSMTPErrorRate
+        expr: mockforge:smtp_error_rate:5m > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: mockforge-smtp
+        annotations:
+          summary: "High SMTP error rate"
+          description: "SMTP error rate is {{ $value }} errors/sec"
+
+      # Plugin execution errors
+      - alert: PluginExecutionErrors
+        expr: mockforge:plugin_error_rate:5m > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: mockforge-plugins
+        annotations:
+          summary: "High plugin execution error rate"
+          description: "Plugin error rate is {{ $value | humanizePercentage }}"
+
+      # No requests in last 5 minutes (possible issue)
+      - alert: NoRequestsReceived
+        expr: rate(mockforge_requests_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: info
+          component: mockforge
+        annotations:
+          summary: "No requests received"
+          description: "MockForge has not received any requests in the last 5 minutes"
+
+      # Slow endpoint detected (specific path with high latency)
+      - alert: SlowEndpoint
+        expr: mockforge_average_latency_by_path_seconds > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: mockforge
+        annotations:
+          summary: "Slow endpoint detected"
+          description: "Path {{ $labels.path }} ({{ $labels.method }}) has average latency of {{ $value | humanizeDuration }}"

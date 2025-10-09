@@ -1,0 +1,187 @@
+# Prometheus Recording Rules for MockForge
+# These rules pre-compute commonly used queries for better dashboard performance
+
+groups:
+  - name: mockforge_request_metrics
+    interval: 30s
+    rules:
+      # Request rate (requests per second)
+      - record: mockforge:request_rate:5m
+        expr: rate(mockforge_requests_total[5m])
+
+      - record: mockforge:request_rate_by_path:5m
+        expr: rate(mockforge_requests_by_path_total[5m])
+
+      # Error rate (percentage)
+      - record: mockforge:error_rate:5m
+        expr: |
+          (
+            rate(mockforge_errors_total[5m])
+            /
+            rate(mockforge_requests_total[5m])
+          ) * 100
+
+      # Success rate (percentage)
+      - record: mockforge:success_rate:5m
+        expr: |
+          (
+            1 - (
+              rate(mockforge_errors_total[5m])
+              /
+              rate(mockforge_requests_total[5m])
+            )
+          ) * 100
+
+  - name: mockforge_latency_metrics
+    interval: 30s
+    rules:
+      # Average request duration
+      - record: mockforge:request_duration_avg:5m
+        expr: |
+          rate(mockforge_request_duration_seconds_sum[5m])
+          /
+          rate(mockforge_request_duration_seconds_count[5m])
+
+      # p50 latency
+      - record: mockforge:request_duration_p50:5m
+        expr: histogram_quantile(0.50, rate(mockforge_request_duration_seconds_bucket[5m]))
+
+      # p95 latency
+      - record: mockforge:request_duration_p95:5m
+        expr: histogram_quantile(0.95, rate(mockforge_request_duration_seconds_bucket[5m]))
+
+      # p99 latency
+      - record: mockforge:request_duration_p99:5m
+        expr: histogram_quantile(0.99, rate(mockforge_request_duration_seconds_bucket[5m]))
+
+      # p99.9 latency
+      - record: mockforge:request_duration_p999:5m
+        expr: histogram_quantile(0.999, rate(mockforge_request_duration_seconds_bucket[5m]))
+
+      # Average latency by path
+      - record: mockforge:request_duration_by_path_avg:5m
+        expr: |
+          rate(mockforge_request_duration_by_path_seconds_sum[5m])
+          /
+          rate(mockforge_request_duration_by_path_seconds_count[5m])
+
+      # p95 latency by path
+      - record: mockforge:request_duration_by_path_p95:5m
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mockforge_request_duration_by_path_seconds_bucket[5m])) by (path, method, le)
+          )
+
+      # p99 latency by path
+      - record: mockforge:request_duration_by_path_p99:5m
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(mockforge_request_duration_by_path_seconds_bucket[5m])) by (path, method, le)
+          )
+
+  - name: mockforge_websocket_metrics
+    interval: 30s
+    rules:
+      # WebSocket message rate (total)
+      - record: mockforge:ws_message_rate:5m
+        expr: |
+          rate(mockforge_ws_messages_sent_total[5m])
+          +
+          rate(mockforge_ws_messages_received_total[5m])
+
+      # WebSocket message rate (sent)
+      - record: mockforge:ws_message_sent_rate:5m
+        expr: rate(mockforge_ws_messages_sent_total[5m])
+
+      # WebSocket message rate (received)
+      - record: mockforge:ws_message_received_rate:5m
+        expr: rate(mockforge_ws_messages_received_total[5m])
+
+      # WebSocket error rate
+      - record: mockforge:ws_error_rate:5m
+        expr: rate(mockforge_ws_errors_total[5m])
+
+      # Average WebSocket connection duration
+      - record: mockforge:ws_connection_duration_avg:5m
+        expr: |
+          rate(mockforge_ws_connection_duration_seconds_sum[5m])
+          /
+          rate(mockforge_ws_connection_duration_seconds_count[5m])
+
+  - name: mockforge_smtp_metrics
+    interval: 30s
+    rules:
+      # SMTP message rate
+      - record: mockforge:smtp_message_rate:5m
+        expr: rate(mockforge_smtp_messages_received_total[5m])
+
+      # SMTP error rate
+      - record: mockforge:smtp_error_rate:5m
+        expr: rate(mockforge_smtp_errors_total[5m])
+
+      # SMTP storage rate
+      - record: mockforge:smtp_storage_rate:5m
+        expr: rate(mockforge_smtp_messages_stored_total[5m])
+
+  - name: mockforge_plugin_metrics
+    interval: 30s
+    rules:
+      # Plugin execution rate
+      - record: mockforge:plugin_execution_rate:5m
+        expr: rate(mockforge_plugin_executions_total[5m])
+
+      # Plugin error rate
+      - record: mockforge:plugin_error_rate:5m
+        expr: |
+          rate(mockforge_plugin_errors_total[5m])
+          /
+          rate(mockforge_plugin_executions_total[5m])
+
+      # Average plugin execution duration
+      - record: mockforge:plugin_execution_duration_avg:5m
+        expr: |
+          rate(mockforge_plugin_execution_duration_seconds_sum[5m])
+          /
+          rate(mockforge_plugin_execution_duration_seconds_count[5m])
+
+  - name: mockforge_system_metrics
+    interval: 30s
+    rules:
+      # Memory usage in MB
+      - record: mockforge:memory_usage_mb
+        expr: mockforge_memory_usage_bytes / 1024 / 1024
+
+      # Memory usage in GB
+      - record: mockforge:memory_usage_gb
+        expr: mockforge_memory_usage_bytes / 1024 / 1024 / 1024
+
+      # Uptime in hours
+      - record: mockforge:uptime_hours
+        expr: mockforge_uptime_seconds / 3600
+
+      # Uptime in days
+      - record: mockforge:uptime_days
+        expr: mockforge_uptime_seconds / 86400
+
+  - name: mockforge_aggregate_metrics
+    interval: 30s
+    rules:
+      # Total active connections (all protocols)
+      - record: mockforge:total_active_connections
+        expr: sum(mockforge_requests_in_flight)
+
+      # Total request rate (all protocols)
+      - record: mockforge:total_request_rate:5m
+        expr: sum(rate(mockforge_requests_total[5m]))
+
+      # Total error count
+      - record: mockforge:total_errors:5m
+        expr: sum(rate(mockforge_errors_total[5m]))
+
+      # Requests per minute
+      - record: mockforge:requests_per_minute:5m
+        expr: sum(rate(mockforge_requests_total[5m])) * 60
+
+      # Requests per hour
+      - record: mockforge:requests_per_hour:5m
+        expr: sum(rate(mockforge_requests_total[5m])) * 3600

@@ -58,8 +58,8 @@ pub async fn collect_http_metrics(
     let duration_seconds = duration.as_secs_f64();
     let status_code = response.status().as_u16();
 
-    // Record metrics
-    registry.record_http_request(&method, status_code, duration_seconds);
+    // Record metrics with path information
+    registry.record_http_request_with_path(&path, &method, status_code, duration_seconds);
 
     // Record errors separately
     if status_code >= 400 {
@@ -76,7 +76,7 @@ pub async fn collect_http_metrics(
         path = %path,
         status = status_code,
         duration_ms = duration.as_millis(),
-        "HTTP request metrics recorded"
+        "HTTP request metrics recorded (including path-based metrics)"
     );
 
     response

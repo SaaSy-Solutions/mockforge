@@ -1,0 +1,95 @@
+plugin:
+  id: "auth-python-oauth"
+  version: "0.1.0"
+  name: "OAuth2 Authentication Plugin (Python)"
+  description: "OAuth2 token validation plugin written in Python as a remote service"
+  types: ["auth"]
+  runtime: "remote"  # This is a remote plugin
+  author:
+    name: "MockForge Team"
+    email: "team@mockforge.dev"
+    homepage: "https://mockforge.dev"
+  homepage: "https://github.com/mockforge/mockforge/tree/main/examples/plugins/auth-python-oauth"
+  repository: "https://github.com/mockforge/mockforge"
+  license: "MIT OR Apache-2.0"
+  keywords: ["authentication", "oauth2", "python", "remote"]
+
+# Remote plugin configuration
+remote:
+  protocol: "http"
+  endpoint: "http://localhost:8080"
+  timeout_ms: 5000
+  retry_policy:
+    max_retries: 3
+    backoff_ms: 1000
+  health_check:
+    enabled: true
+    endpoint: "/health"
+    interval_seconds: 30
+
+# Capabilities (for documentation - enforced differently for remote plugins)
+capabilities:
+  network:
+    allow_outbound: true
+    allowed_hosts:
+      - "auth.example.com"
+      - "*.oauth-provider.com"
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_concurrent_requests: 10
+    timeout_ms: 5000
+    max_memory_bytes: 52428800  # 50MB
+
+dependencies: []
+
+# Configuration schema
+configuration:
+  schema:
+    type: object
+    properties:
+      auth_server_url:
+        type: string
+        description: "OAuth2 authorization server URL"
+        default: "https://auth.example.com"
+      client_id:
+        type: string
+        description: "OAuth2 client ID for introspection"
+        default: "mockforge"
+      client_secret:
+        type: string
+        description: "OAuth2 client secret"
+        format: "password"
+      cache_ttl:
+        type: integer
+        description: "Token cache TTL in seconds"
+        default: 300
+      introspection_endpoint:
+        type: string
+        description: "Token introspection endpoint path"
+        default: "/oauth/introspect"
+      userinfo_endpoint:
+        type: string
+        description: "User info endpoint path"
+        default: "/oauth/userinfo"
+    required: ["auth_server_url", "client_id"]
+
+# Environment variables
+environment:
+  - name: AUTH_SERVER_URL
+    description: "OAuth2 server URL"
+    required: true
+  - name: OAUTH_CLIENT_ID
+    description: "OAuth2 client ID"
+    required: true
+  - name: OAUTH_CLIENT_SECRET
+    description: "OAuth2 client secret"
+    required: false
+  - name: HOST
+    description: "Host to bind to"
+    default: "0.0.0.0"
+  - name: PORT
+    description: "Port to listen on"
+    default: "8080"

@@ -9,6 +9,7 @@ use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
 use crate::handlers::AdminState;
 use crate::handlers::*;
+use crate::handlers::analytics::AnalyticsState;
 use crate::time_travel_handlers;
 use mockforge_core::{get_global_logger, init_global_logger};
 
@@ -133,6 +134,23 @@ pub fn create_admin_router(
         .route("/health/ready", get(health::readiness_probe))
         .route("/health/startup", get(health::startup_probe))
         .route("/health", get(health::deep_health_check));
+
+    // Analytics routes with Prometheus integration
+    // TODO: Make prometheus_url configurable via environment variable or config file
+    let prometheus_url = std::env::var("PROMETHEUS_URL")
+        .unwrap_or_else(|_| "http://localhost:9090".to_string());
+    let analytics_state = AnalyticsState::new(prometheus_url);
+
+    let analytics_router = Router::new()
+        .route("/__mockforge/analytics/summary", get(analytics::get_summary))
+        .route("/__mockforge/analytics/requests", get(analytics::get_requests))
+        .route("/__mockforge/analytics/endpoints", get(analytics::get_endpoints))
+        .route("/__mockforge/analytics/websocket", get(analytics::get_websocket))
+        .route("/__mockforge/analytics/smtp", get(analytics::get_smtp))
+        .route("/__mockforge/analytics/system", get(analytics::get_system))
+        .with_state(analytics_state);
+
+    router = router.merge(analytics_router);
 
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes

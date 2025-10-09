@@ -41,3 +41,8 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9091']  # Prometheus's own metrics
+
+# Recording rules for better query performance
+rule_files:
+  - 'recording_rules.yml'
+  - 'alerting_rules.yml'

@@ -5,6 +5,7 @@
 //! - OpenTelemetry distributed tracing
 //! - Request/response recording (flight recorder)
 //! - Scenario control and chaos engineering
+//! - System metrics collection (CPU, memory, threads)
 //!
 //! # Example
 //!
@@ -16,9 +17,11 @@
 //! ```
 
 pub mod prometheus;
+pub mod system_metrics;
 
 // Re-export commonly used items
 pub use prometheus::{MetricsRegistry, get_global_registry};
+pub use system_metrics::{start_system_metrics_collector, SystemMetricsConfig};
 
 /// Protocol types for metrics tracking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -42,6 +42,7 @@ const navItems = [
   { id: 'fixtures', label: 'Fixtures', icon: Database },
   { id: 'logs', label: 'Logs', icon: FileText },
   { id: 'metrics', label: 'Metrics', icon: Activity },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'testing', label: 'Testing', icon: TestTube },
   { id: 'import', label: 'Import', icon: Import },
   { id: 'plugins', label: 'Plugins', icon: Puzzle },

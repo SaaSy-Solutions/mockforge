@@ -19,6 +19,7 @@ const ImportPage = lazy(() => import('./pages/ImportPage').then(m => ({ default:
 const WorkspacesPage = lazy(() => import('./pages/WorkspacesPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -48,6 +49,8 @@ function App() {
         return <LogsPage />;
       case 'metrics':
         return <MetricsPage />;
+      case 'analytics':
+        return <AnalyticsPage />;
       case 'fixtures':
         return <FixturesPage />;
       case 'import':

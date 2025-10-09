@@ -1680,8 +1680,22 @@ async fn handle_serve(
 
     println!("💡 Press Ctrl+C to stop");
 
-    // Create metrics registry
+    // Create metrics registry (use global registry)
     let metrics_registry = std::sync::Arc::new(MetricsRegistry::new());
+
+    // Start system metrics collector if Prometheus is enabled
+    if config.observability.prometheus.enabled {
+        use mockforge_observability::{get_global_registry, SystemMetricsConfig};
+        let system_metrics_config = SystemMetricsConfig {
+            enabled: true,
+            interval_seconds: 15,
+        };
+        mockforge_observability::system_metrics::start_with_config(
+            get_global_registry(),
+            system_metrics_config,
+        );
+        println!("📈 System metrics collector started (interval: 15s)");
+    }
 
     // Create a cancellation token for graceful shutdown
     use tokio_util::sync::CancellationToken;
