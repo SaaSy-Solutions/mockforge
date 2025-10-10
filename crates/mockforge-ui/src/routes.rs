@@ -21,6 +21,7 @@ pub fn create_admin_router(
     graphql_server_addr: Option<std::net::SocketAddr>,
     api_enabled: bool,
     admin_port: u16,
+    prometheus_url: String,
 ) -> Router {
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
@@ -136,9 +137,6 @@ pub fn create_admin_router(
         .route("/health", get(health::deep_health_check));
 
     // Analytics routes with Prometheus integration
-    // TODO: Make prometheus_url configurable via environment variable or config file
-    let prometheus_url = std::env::var("PROMETHEUS_URL")
-        .unwrap_or_else(|_| "http://localhost:9090".to_string());
     let analytics_state = AnalyticsState::new(prometheus_url);
 
     let analytics_router = Router::new()
@@ -176,6 +174,7 @@ mod tests {
             None,
             true,
             8080,
+            "http://localhost:9090".to_string(),
         );
 
         // Router should be created successfully
@@ -191,6 +190,7 @@ mod tests {
             None,
             false,
             8080,
+            "http://localhost:9090".to_string(),
         );
 
         // Router should still work without server addresses

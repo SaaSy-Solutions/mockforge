@@ -71,24 +71,20 @@ impl GlobalRateLimiter {
 
 /// Rate limiting middleware
 pub async fn rate_limit_middleware(
+    State(state): axum::extract::State<crate::HttpServerState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // TODO: Get rate limiter from app state
-    // For now, create a permissive limiter to avoid breaking existing functionality
-    let config = RateLimitConfig {
-        requests_per_minute: 1000, // Generous default
-        burst: 2000,
-        per_ip: true,
-        per_endpoint: false,
-    };
-
-    let limiter = GlobalRateLimiter::new(config);
-
-    if !limiter.check_rate_limit() {
-        warn!("Rate limit exceeded for IP: {}", addr.ip());
-        return Err(StatusCode::TOO_MANY_REQUESTS);
+    // Get rate limiter from app state
+    if let Some(limiter) = &state.rate_limiter {
+        if !limiter.check_rate_limit() {
+            warn!("Rate limit exceeded for IP: {}", addr.ip());
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
+    } else {
+        // No rate limiter configured, allow request to proceed
+        tracing::debug!("No rate limiter configured, allowing request");
     }
 
     Ok(next.run(req).await)

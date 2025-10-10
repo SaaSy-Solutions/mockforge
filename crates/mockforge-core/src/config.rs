@@ -285,6 +285,8 @@ pub struct AdminConfig {
     pub mount_path: Option<String>,
     /// Enable Admin API endpoints (under `__mockforge`)
     pub api_enabled: bool,
+    /// Prometheus server URL for analytics queries
+    pub prometheus_url: String,
 }
 
 impl Default for AdminConfig {
@@ -298,6 +300,7 @@ impl Default for AdminConfig {
             password: None,
             mount_path: None,
             api_enabled: true,
+            prometheus_url: "http://localhost:9090".to_string(),
         }
     }
 }
@@ -763,6 +766,10 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
     if let Ok(api_enabled) = std::env::var("MOCKFORGE_ADMIN_API_ENABLED") {
         let on = api_enabled == "1" || api_enabled.eq_ignore_ascii_case("true");
         config.admin.api_enabled = on;
+    }
+
+    if let Ok(prometheus_url) = std::env::var("PROMETHEUS_URL") {
+        config.admin.prometheus_url = prometheus_url;
     }
 
     // Core configuration overrides

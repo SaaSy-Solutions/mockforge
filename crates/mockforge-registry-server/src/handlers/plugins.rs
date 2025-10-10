@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{Plugin, PluginVersion, PluginWithVersions},
+    middleware::AuthUser,
+    models::{Plugin, PluginVersion, PluginWithVersions, User},
     AppState,
 };
 
@@ -91,14 +92,30 @@ pub async fn search_plugins(
             });
         }
 
+        // Fetch author information
+        let author = User::find_by_id(pool, plugin.author_id)
+            .await
+            .map_err(|e| ApiError::Database(e))?
+            .unwrap_or_else(|| User {
+                id: plugin.author_id,
+                username: "Unknown".to_string(),
+                email: String::new(),
+                password_hash: String::new(),
+                api_token: None,
+                is_verified: false,
+                is_admin: false,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            });
+
         entries.push(RegistryEntry {
             name: plugin.name.clone(),
             description: plugin.description.clone(),
             version: plugin.current_version.clone(),
             versions: version_entries,
             author: AuthorInfo {
-                name: "Author".to_string(), // TODO: Join with users table
-                email: None,
+                name: author.username,
+                email: Some(author.email),
                 url: None,
             },
             tags,
@@ -167,14 +184,30 @@ pub async fn get_plugin(
         });
     }
 
+    // Fetch author information
+    let author = User::find_by_id(pool, plugin.author_id)
+        .await
+        .map_err(|e| ApiError::Database(e))?
+        .unwrap_or_else(|| User {
+            id: plugin.author_id,
+            username: "Unknown".to_string(),
+            email: String::new(),
+            password_hash: String::new(),
+            api_token: None,
+            is_verified: false,
+            is_admin: false,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        });
+
     let entry = RegistryEntry {
         name: plugin.name.clone(),
         description: plugin.description.clone(),
         version: plugin.current_version.clone(),
         versions: version_entries,
         author: AuthorInfo {
-            name: "Author".to_string(),
-            email: None,
+            name: author.username,
+            email: Some(author.email),
             url: None,
         },
         tags,
@@ -251,14 +284,11 @@ pub struct PublishResponse {
 }
 
 pub async fn publish_plugin(
+    AuthUser(author_id): AuthUser,
     State(state): State<AppState>,
     Json(request): Json<PublishRequest>,
 ) -> ApiResult<Json<PublishResponse>> {
     let pool = state.db.pool();
-
-    // TODO: Get user_id from JWT token in middleware
-    // For now, use admin user
-    let author_id = uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
 
     // Check if plugin exists
     let existing = Plugin::find_by_name(pool, &request.name)

@@ -25,6 +25,7 @@ members = [
 ]
 exclude = [
    # "test_openapi_demo"
+   "crates/mockforge-registry-server"
  ]
 resolver = "2"
 

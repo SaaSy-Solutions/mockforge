@@ -63,7 +63,7 @@ ring = "0.17"
 hex.workspace = true
 
 # HTTP client for remote plugin downloads
-reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
 
 # Archive extraction
 zip = "2.2"

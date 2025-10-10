@@ -97,6 +97,14 @@ fn convert_to_registry_manifest(
         dependencies.insert(dep.id.to_string(), dep.version.clone());
     }
 
+    // Extract min_mockforge_version from metadata
+    let min_mockforge_version = core_manifest.metadata
+        .get("runtime")
+        .and_then(|runtime| runtime.as_object())
+        .and_then(|obj| obj.get("min_mockforge_version"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     Ok(RegistryPluginManifest {
         name: plugin_info.id.to_string(),
         version: plugin_info.version.to_string(),
@@ -107,7 +115,7 @@ fn convert_to_registry_manifest(
         homepage: plugin_info.homepage.clone(),
         tags: plugin_info.keywords.clone(),
         category,
-        min_mockforge_version: None, // TODO: Extract from metadata if available
+        min_mockforge_version,
         dependencies,
     })
 }
@@ -601,4 +609,126 @@ async fn show_config() -> Result<()> {
     }
 
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockforge_plugin_core::{PluginCapabilities, PluginId, PluginVersion};
+    use mockforge_plugin_core::manifest::models::{PluginInfo, PluginManifest};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_convert_manifest_without_min_version() {
+        let plugin_info = PluginInfo {
+            id: PluginId::new("test-plugin").unwrap(),
+            name: "Test Plugin".to_string(),
+            version: PluginVersion::new("1.0.0").unwrap(),
+            description: Some("A test plugin".to_string()),
+            author: None,
+            types: vec!["auth".to_string()],
+            homepage: None,
+            repository: None,
+            license: Some("MIT".to_string()),
+            keywords: vec!["test".to_string()],
+        };
+
+        let core_manifest = PluginManifest {
+            manifest_version: "1.0".to_string(),
+            plugin: plugin_info,
+            capabilities: PluginCapabilities::default(),
+            dependencies: Vec::new(),
+            config_schema: None,
+            metadata: HashMap::new(),
+        };
+
+        let result = convert_to_registry_manifest(&core_manifest);
+        assert!(result.is_ok());
+
+        let registry_manifest = result.unwrap();
+        assert_eq!(registry_manifest.name, "test-plugin");
+        assert_eq!(registry_manifest.version, "1.0.0");
+        assert!(registry_manifest.min_mockforge_version.is_none());
+    }
+
+    #[test]
+    fn test_convert_manifest_with_min_version() {
+        let plugin_info = PluginInfo {
+            id: PluginId::new("test-plugin").unwrap(),
+            name: "Test Plugin".to_string(),
+            version: PluginVersion::new("1.0.0").unwrap(),
+            description: Some("A test plugin".to_string()),
+            author: None,
+            types: vec!["auth".to_string()],
+            homepage: None,
+            repository: None,
+            license: Some("MIT".to_string()),
+            keywords: vec!["test".to_string()],
+        };
+
+        let mut metadata = HashMap::new();
+        let mut runtime = serde_json::Map::new();
+        runtime.insert(
+            "min_mockforge_version".to_string(),
+            serde_json::Value::String("0.1.0".to_string()),
+        );
+        metadata.insert("runtime".to_string(), serde_json::Value::Object(runtime));
+
+        let core_manifest = PluginManifest {
+            manifest_version: "1.0".to_string(),
+            plugin: plugin_info,
+            capabilities: PluginCapabilities::default(),
+            dependencies: Vec::new(),
+            config_schema: None,
+            metadata,
+        };
+
+        let result = convert_to_registry_manifest(&core_manifest);
+        assert!(result.is_ok());
+
+        let registry_manifest = result.unwrap();
+        assert_eq!(registry_manifest.name, "test-plugin");
+        assert_eq!(registry_manifest.version, "1.0.0");
+        assert_eq!(
+            registry_manifest.min_mockforge_version,
+            Some("0.1.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_convert_manifest_with_invalid_runtime_type() {
+        let plugin_info = PluginInfo {
+            id: PluginId::new("test-plugin").unwrap(),
+            name: "Test Plugin".to_string(),
+            version: PluginVersion::new("1.0.0").unwrap(),
+            description: Some("A test plugin".to_string()),
+            author: None,
+            types: vec!["auth".to_string()],
+            homepage: None,
+            repository: None,
+            license: Some("MIT".to_string()),
+            keywords: vec!["test".to_string()],
+        };
+
+        let mut metadata = HashMap::new();
+        // Insert runtime as a string instead of an object
+        metadata.insert("runtime".to_string(), serde_json::Value::String("invalid".to_string()));
+
+        let core_manifest = PluginManifest {
+            manifest_version: "1.0".to_string(),
+            plugin: plugin_info,
+            capabilities: PluginCapabilities::default(),
+            dependencies: Vec::new(),
+            config_schema: None,
+            metadata,
+        };
+
+        let result = convert_to_registry_manifest(&core_manifest);
+        assert!(result.is_ok());
+
+        let registry_manifest = result.unwrap();
+        // Should gracefully handle invalid type and return None
+        assert!(registry_manifest.min_mockforge_version.is_none());
+    }
 }

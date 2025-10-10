@@ -92,7 +92,7 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
-    Json(request): Json(LoginRequest>,
+    Json(request): Json<LoginRequest>,
 ) -> ApiResult<Json<AuthResponse>> {
     let pool = state.db.pool();
 

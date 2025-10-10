@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use tracing::Level;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
-    EnvFilter,
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    EnvFilter, Layer,
 };
 
 /// Logging configuration
@@ -73,17 +75,13 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
         .or_else(|_| EnvFilter::try_new(&config.level))
         .unwrap_or_else(|_| EnvFilter::new("info"));
 
-    // Build the subscriber with layers
-    // Note: File output temporarily disabled due to trait bound complexity
-    // TODO: Re-enable with proper MakeWriter implementation
-    if config.file_path.is_some() {
-        tracing::warn!("File logging not yet supported, logging to console only");
-    }
+    // Build the subscriber with layers using Registry
+    let registry = tracing_subscriber::registry().with(env_filter);
 
     // Add console layer (JSON or plain text)
-    if config.json_format {
+    let console_layer = if config.json_format {
         // JSON formatted console output
-        tracing_subscriber::fmt()
+        fmt::layer()
             .json()
             .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
             .with_current_span(true)
@@ -92,25 +90,77 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
             .with_target(true)
             .with_file(true)
             .with_line_number(true)
-            .with_env_filter(env_filter)
-            .init();
+            .boxed()
     } else {
         // Plain text console output
-        tracing_subscriber::fmt()
+        fmt::layer()
             .with_span_events(FmtSpan::CLOSE)
             .with_target(true)
             .with_thread_ids(false)
             .with_file(false)
             .with_line_number(false)
-            .with_env_filter(env_filter)
-            .init();
-    }
+            .boxed()
+    };
 
-    tracing::info!(
-        "Logging initialized: level={}, format={}",
-        config.level,
-        if config.json_format { "json" } else { "text" }
-    );
+    // Add file layer if configured
+    if let Some(ref file_path) = config.file_path {
+        // Extract directory and file name
+        let directory = file_path.parent().ok_or("Invalid file path")?;
+        let file_name = file_path
+            .file_name()
+            .ok_or("Invalid file name")?
+            .to_str()
+            .ok_or("Invalid file name encoding")?;
+
+        // Create rolling file appender with daily rotation
+        let file_appender = tracing_appender::rolling::daily(directory, file_name);
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+        // Store the guard to prevent it from being dropped
+        // Note: In a production application, you would want to keep this guard alive
+        // for the lifetime of your application. Here we use Box::leak to ensure it's never dropped.
+        Box::leak(Box::new(_guard));
+
+        let file_layer = if config.json_format {
+            fmt::layer()
+                .json()
+                .with_writer(non_blocking)
+                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+                .with_current_span(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_target(true)
+                .with_file(true)
+                .with_line_number(true)
+                .boxed()
+        } else {
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_span_events(FmtSpan::CLOSE)
+                .with_target(true)
+                .with_thread_ids(false)
+                .with_file(false)
+                .with_line_number(false)
+                .boxed()
+        };
+
+        registry.with(console_layer).with(file_layer).init();
+
+        tracing::info!(
+            "Logging initialized: level={}, format={}, file={}",
+            config.level,
+            if config.json_format { "json" } else { "text" },
+            file_path.display()
+        );
+    } else {
+        registry.with(console_layer).init();
+
+        tracing::info!(
+            "Logging initialized: level={}, format={}",
+            config.level,
+            if config.json_format { "json" } else { "text" }
+        );
+    }
 
     Ok(())
 }
@@ -152,18 +202,6 @@ where
 
     // Return early - users should set up their own subscriber when using OpenTelemetry
     Err("OpenTelemetry integration requires manual subscriber setup. Please use tracing_subscriber directly.".into())
-}
-
-/// Create a file logging layer with optional rotation
-/// TODO: Re-implement with proper MakeWriter trait bounds
-#[allow(dead_code)]
-fn create_file_layer(
-    _file_path: &PathBuf,
-    _config: &LoggingConfig,
-    _json_format: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Temporarily disabled - needs proper MakeWriter implementation
-    Err("File logging not yet implemented".into())
 }
 
 /// Parse log level from string
@@ -217,5 +255,33 @@ mod tests {
         assert_eq!(config.level, "debug");
         assert!(config.json_format);
         assert!(config.file_path.is_some());
+    }
+
+    #[test]
+    fn test_init_logging_with_file() {
+        use std::fs;
+        use std::time::SystemTime;
+
+        // Create a unique test log file path
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let test_dir = PathBuf::from("/tmp/mockforge-test-logs");
+        fs::create_dir_all(&test_dir).ok();
+        let log_file = test_dir.join(format!("test-{}.log", timestamp));
+
+        let config = LoggingConfig {
+            level: "info".to_string(),
+            json_format: false,
+            file_path: Some(log_file.clone()),
+            max_file_size_mb: 10,
+            max_files: 5,
+        };
+
+        // This test verifies that init_logging completes without error
+        // when file logging is configured
+        let result = init_logging(config);
+        assert!(result.is_ok(), "Failed to initialize logging with file: {:?}", result);
     }
 }

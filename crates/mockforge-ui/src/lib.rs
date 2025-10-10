@@ -22,6 +22,7 @@ pub async fn start_admin_server(
     grpc_server_addr: Option<SocketAddr>,
     graphql_server_addr: Option<SocketAddr>,
     api_enabled: bool,
+    prometheus_url: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = create_admin_router(
         http_server_addr,
@@ -30,6 +31,7 @@ pub async fn start_admin_server(
         graphql_server_addr,
         api_enabled,
         addr.port(),
+        prometheus_url,
     );
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);

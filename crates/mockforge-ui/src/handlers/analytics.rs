@@ -274,14 +274,40 @@ pub async fn get_endpoints(
                         .and_then(|r| PrometheusClient::extract_single_value(&r))
                         .unwrap_or(0.0);
 
+                    // Query error count (status codes 4xx and 5xx)
+                    let error_count_query = format!(
+                        "sum(rate(mockforge_requests_by_path_total{{path=\"{}\",method=\"{}\",status=~\"4..|5..\"}}[5m]))",
+                        path, method
+                    );
+                    let error_count = state
+                        .prometheus_client
+                        .query(&error_count_query)
+                        .await
+                        .ok()
+                        .and_then(|r| PrometheusClient::extract_single_value(&r))
+                        .unwrap_or(0.0);
+
+                    // Query error rate percentage
+                    let error_rate_query = format!(
+                        "(sum(rate(mockforge_requests_by_path_total{{path=\"{}\",method=\"{}\",status=~\"4..|5..\"}}[5m])) / sum(rate(mockforge_requests_by_path_total{{path=\"{}\",method=\"{}\"}}[5m]))) * 100",
+                        path, method, path, method
+                    );
+                    let error_rate_percent = state
+                        .prometheus_client
+                        .query(&error_rate_query)
+                        .await
+                        .ok()
+                        .and_then(|r| PrometheusClient::extract_single_value(&r))
+                        .unwrap_or(0.0);
+
                     endpoints.push(EndpointMetrics {
                         path,
                         method,
                         request_rate,
                         avg_latency_ms: avg_latency,
                         p95_latency_ms: p95_latency,
-                        errors: 0.0, // TODO: Query error count
-                        error_rate_percent: 0.0,
+                        errors: error_count,
+                        error_rate_percent,
                     });
                 }
             }

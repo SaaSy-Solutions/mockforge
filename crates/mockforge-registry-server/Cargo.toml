@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 axum = "0.7"
 tokio = { version = "1.35", features = ["full"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace", "compression"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-full"] }
 
 # Database
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "migrate"] }

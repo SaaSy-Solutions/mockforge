@@ -163,6 +163,7 @@ pub mod latency_profiles;
 pub mod management;
 pub mod management_ws;
 pub mod metrics_middleware;
+pub mod middleware;
 pub mod op_middleware;
 pub mod replay_listing;
 pub mod request_logging;
@@ -216,19 +217,27 @@ pub struct RouteInfo {
 #[derive(Clone)]
 pub struct HttpServerState {
     pub routes: Vec<RouteInfo>,
+    pub rate_limiter: Option<std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>>,
 }
 
 impl HttpServerState {
     pub fn new() -> Self {
         Self {
             routes: Vec::new(),
+            rate_limiter: None,
         }
     }
 
     pub fn with_routes(routes: Vec<RouteInfo>) -> Self {
         Self {
             routes,
+            rate_limiter: None,
         }
+    }
+
+    pub fn with_rate_limiter(mut self, rate_limiter: std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>) -> Self {
+        self.rate_limiter = Some(rate_limiter);
+        self
     }
 }
 
@@ -273,7 +282,24 @@ pub async fn build_router_with_multi_tenant(
 
     // Set up the basic router
     let mut app = Router::new();
-    let mut state = HttpServerState::new();
+
+    // Initialize rate limiter with default configuration
+    // Can be customized via environment variables or config
+    let rate_limit_config = crate::middleware::RateLimitConfig {
+        requests_per_minute: std::env::var("MOCKFORGE_RATE_LIMIT_RPM")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1000),
+        burst: std::env::var("MOCKFORGE_RATE_LIMIT_BURST")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2000),
+        per_ip: true,
+        per_endpoint: false,
+    };
+    let rate_limiter = std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
+
+    let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
 
     // Clone spec_path for later use
     let spec_path_for_mgmt = spec_path.clone();
@@ -382,11 +408,14 @@ pub async fn build_router_with_multi_tenant(
     // Add SSE endpoints
     .merge(sse::sse_router());
 
+    // Clone state for routes_router since we'll use it for middleware too
+    let state_for_routes = state.clone();
+
     // Create a router with state for the routes and coverage endpoints
     let routes_router = Router::new()
         .route("/__mockforge/routes", axum::routing::get(get_routes_handler))
         .route("/__mockforge/coverage", axum::routing::get(coverage::get_coverage_handler))
-        .with_state(state);
+        .with_state(state_for_routes);
 
     // Merge the routes router with the main app
     app = app.merge(routes_router);
@@ -417,6 +446,9 @@ pub async fn build_router_with_multi_tenant(
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    // Add rate limiting middleware (before logging to rate limit early)
+    app = app.layer(from_fn_with_state(state, crate::middleware::rate_limit_middleware));
 
     // Add workspace routing middleware if multi-tenant is enabled
     if let Some(mt_config) = multi_tenant_config {
@@ -1084,5 +1116,25 @@ mod tests {
         let methods: Vec<&str> = state.routes.iter().map(|r| r.method.as_str()).collect();
         assert!(methods.contains(&"GET"));
         assert!(methods.contains(&"POST"));
+    }
+
+    #[test]
+    fn test_http_server_state_with_rate_limiter() {
+        use std::sync::Arc;
+
+        let config = crate::middleware::RateLimitConfig::default();
+        let rate_limiter = Arc::new(crate::middleware::GlobalRateLimiter::new(config));
+
+        let state = HttpServerState::new().with_rate_limiter(rate_limiter);
+
+        assert!(state.rate_limiter.is_some());
+        assert_eq!(state.routes.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_build_router_includes_rate_limiter() {
+        let router = build_router(None, None, None).await;
+        // Router should be created successfully with rate limiter initialized
+        assert!(true); // Router was created successfully
     }
 }

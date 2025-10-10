@@ -5,7 +5,7 @@ use tower::ServiceExt;
 /// Test that static assets are served with correct MIME types
 #[tokio::test]
 async fn test_static_assets_mime_types() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     // Test HTML serving
     let response = app
@@ -20,7 +20,7 @@ async fn test_static_assets_mime_types() {
     assert_eq!(content_type, "text/html; charset=utf-8");
 
     // Test CSS serving
-    let app2 = create_admin_router(None, None, None, None, true, 9080);
+    let app2 = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
     let response_css = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
@@ -33,7 +33,7 @@ async fn test_static_assets_mime_types() {
     assert_eq!(css_content_type, "text/css");
 
     // Test JavaScript serving
-    let app3 = create_admin_router(None, None, None, None, true, 9080);
+    let app3 = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
     let response_js = app3
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
@@ -49,7 +49,7 @@ async fn test_static_assets_mime_types() {
 /// Test that image assets are served with correct MIME types
 #[tokio::test]
 async fn test_image_assets_mime_types() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     // Test PNG icon serving
     let response = app
@@ -78,7 +78,7 @@ async fn test_image_assets_mime_types() {
     ];
 
     for icon_path in icon_sizes {
-        let app_test = create_admin_router(None, None, None, None, true, 9080);
+        let app_test = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
         let response = app_test
             .oneshot(Request::builder().uri(icon_path).body(Body::empty()).unwrap())
             .await
@@ -98,7 +98,7 @@ async fn test_image_assets_mime_types() {
 /// Test caching headers for static assets
 #[tokio::test]
 async fn test_static_assets_caching_headers() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     // Test CSS caching headers
     let response = app
@@ -124,7 +124,7 @@ async fn test_static_assets_caching_headers() {
     }
 
     // Test JavaScript caching headers
-    let app2 = create_admin_router(None, None, None, None, true, 9080);
+    let app2 = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
     let response_js = app2
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
@@ -146,7 +146,7 @@ async fn test_static_assets_caching_headers() {
     }
 
     // Test image caching headers
-    let app3 = create_admin_router(None, None, None, None, true, 9080);
+    let app3 = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
     let response_img = app3
         .oneshot(Request::builder().uri("/mockforge-icon.png").body(Body::empty()).unwrap())
         .await
@@ -171,7 +171,7 @@ async fn test_static_assets_caching_headers() {
 /// Test that static assets have appropriate ETags
 #[tokio::test]
 async fn test_static_assets_etags() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     // Test HTML ETag
     let response = app
@@ -195,7 +195,7 @@ async fn test_static_assets_etags() {
     }
 
     // Test CSS ETag
-    let app2 = create_admin_router(None, None, None, None, true, 9080);
+    let app2 = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
     let response_css = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
@@ -217,7 +217,7 @@ async fn test_static_assets_etags() {
 /// Test that static assets handle conditional requests
 #[tokio::test]
 async fn test_conditional_requests() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     // First, get the ETag
     let response = app
@@ -232,7 +232,7 @@ async fn test_conditional_requests() {
         let etag_value = etag_header.to_str().unwrap();
 
         // Now make a conditional request with If-None-Match
-        let app2 = create_admin_router(None, None, None, None, true, 9080);
+        let app2 = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
         let conditional_response = app2
             .oneshot(
                 Request::builder()
@@ -269,7 +269,7 @@ async fn test_all_static_routes_accessible() {
     ];
 
     for route in static_routes {
-        let app = create_admin_router(None, None, None, None, true, 9080);
+        let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
         let response = app
             .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
             .await
@@ -287,7 +287,7 @@ async fn test_all_static_routes_accessible() {
 /// Test that static assets have reasonable content lengths
 #[tokio::test]
 async fn test_static_assets_content_length() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     let response = app
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
@@ -318,7 +318,7 @@ async fn test_static_assets_content_length() {
 /// Test SPA fallback routing (client-side routing support)
 #[tokio::test]
 async fn test_spa_fallback_routing() {
-    let _app = create_admin_router(None, None, None, None, true, 9080);
+    let _app = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
     // Test various client-side routes that should serve index.html
     let client_routes = vec![
@@ -330,7 +330,7 @@ async fn test_spa_fallback_routing() {
     ];
 
     for route in client_routes {
-        let app_test = create_admin_router(None, None, None, None, true, 9080);
+        let app_test = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
         let response = app_test
             .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
             .await

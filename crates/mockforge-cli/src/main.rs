@@ -1880,6 +1880,7 @@ async fn handle_serve(
         let http_port = config.http.port;
         let ws_port = config.websocket.port;
         let grpc_port = config.grpc.port;
+        let prometheus_url = config.admin.prometheus_url.clone();
         let admin_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://localhost:{}", admin_port);
@@ -1892,6 +1893,7 @@ async fn handle_serve(
                     Some(format!("127.0.0.1:{}", grpc_port).parse().unwrap()),
                     None,
                     true,
+                    prometheus_url,
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))
                 }
@@ -2152,12 +2154,15 @@ async fn handle_admin(
 
     // Start the admin UI server
     let addr = format!("127.0.0.1:{}", port).parse()?;
+    let prometheus_url = std::env::var("PROMETHEUS_URL")
+        .unwrap_or_else(|_| "http://localhost:9090".to_string());
     mockforge_ui::start_admin_server(
         addr, None, // http_server_addr
         None, // ws_server_addr
         None, // grpc_server_addr
         None, // graphql_server_addr
         true, // api_enabled
+        prometheus_url,
     )
     .await?;
 
