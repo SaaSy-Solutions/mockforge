@@ -38,8 +38,8 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 once_cell = "1.19"
 parking_lot = { workspace = true }
 
-# Metrics
-prometheus = { version = "0.13", features = ["process"] }
+# Metrics (updated to 0.14+ to fix protobuf vulnerability RUSTSEC-2024-0437)
+prometheus = { version = "0.14", features = ["process"] }
 
 # Rate limiting
 governor = "0.6"

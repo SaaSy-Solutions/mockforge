@@ -704,6 +704,293 @@ pub fn validate_openapi_operation_security(
     ValidationResult::success()
 }
 
+// ============================================================================
+// INPUT SANITIZATION
+// ============================================================================
+
+/// Sanitize HTML to prevent XSS attacks
+///
+/// This function escapes HTML special characters to prevent script injection.
+/// Use this for any user-provided content that will be displayed in HTML contexts.
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::sanitize_html;
+///
+/// let malicious = "<script>alert('xss')</script>";
+/// let safe = sanitize_html(malicious);
+/// assert_eq!(safe, "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;");
+/// ```
+pub fn sanitize_html(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+        .replace('/', "&#x2F;")
+}
+
+/// Validate and sanitize file paths to prevent path traversal attacks
+///
+/// This function checks for common path traversal patterns and returns an error
+/// if any are detected. It also normalizes the path to prevent bypass attempts.
+///
+/// # Security Concerns
+/// - Blocks `..` (parent directory)
+/// - Blocks `~` (home directory expansion)
+/// - Blocks absolute paths (starting with `/` or drive letters on Windows)
+/// - Blocks null bytes
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::validate_safe_path;
+///
+/// assert!(validate_safe_path("data/file.txt").is_ok());
+/// assert!(validate_safe_path("../etc/passwd").is_err());
+/// assert!(validate_safe_path("/etc/passwd").is_err());
+/// ```
+pub fn validate_safe_path(path: &str) -> Result<String> {
+    // Check for null bytes
+    if path.contains('\0') {
+        return Err(Error::validation("Path contains null bytes".to_string()));
+    }
+
+    // Check for path traversal attempts
+    if path.contains("..") {
+        return Err(Error::validation(
+            "Path traversal detected: '..' not allowed".to_string(),
+        ));
+    }
+
+    // Check for home directory expansion
+    if path.contains('~') {
+        return Err(Error::validation(
+            "Home directory expansion '~' not allowed".to_string(),
+        ));
+    }
+
+    // Check for absolute paths (Unix)
+    if path.starts_with('/') {
+        return Err(Error::validation(
+            "Absolute paths not allowed".to_string(),
+        ));
+    }
+
+    // Check for absolute paths (Windows drive letters)
+    if path.len() >= 2 && path.chars().nth(1) == Some(':') {
+        return Err(Error::validation(
+            "Absolute paths with drive letters not allowed".to_string(),
+        ));
+    }
+
+    // Check for UNC paths (Windows network paths)
+    if path.starts_with("\\\\") || path.starts_with("//") {
+        return Err(Error::validation("UNC paths not allowed".to_string()));
+    }
+
+    // Normalize path separators to forward slashes
+    let normalized = path.replace('\\', "/");
+
+    // Additional check: ensure no empty segments (e.g., "foo//bar")
+    if normalized.contains("//") {
+        return Err(Error::validation(
+            "Path contains empty segments".to_string(),
+        ));
+    }
+
+    Ok(normalized)
+}
+
+/// Sanitize SQL input to prevent SQL injection
+///
+/// This function escapes SQL special characters. However, **parameterized queries
+/// should always be preferred** over manual sanitization.
+///
+/// # Warning
+/// This is a last-resort defense. Always use parameterized queries when possible.
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::sanitize_sql;
+///
+/// let input = "admin' OR '1'='1";
+/// let safe = sanitize_sql(input);
+/// assert_eq!(safe, "admin'' OR ''1''=''1");
+/// ```
+pub fn sanitize_sql(input: &str) -> String {
+    // Escape single quotes by doubling them (SQL standard)
+    input.replace('\'', "''")
+}
+
+/// Validate command arguments to prevent command injection
+///
+/// This function checks for shell metacharacters and returns an error if any
+/// are detected. Use this when building shell commands from user input.
+///
+/// # Security Concerns
+/// Blocks the following shell metacharacters:
+/// - Pipes: `|`, `||`
+/// - Command separators: `;`, `&`, `&&`
+/// - Redirection: `<`, `>`, `>>`
+/// - Command substitution: `` ` ``, `$(`, `)`
+/// - Wildcards: `*`, `?`
+/// - Null byte: `\0`
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::validate_command_arg;
+///
+/// assert!(validate_command_arg("safe_filename.txt").is_ok());
+/// assert!(validate_command_arg("file; rm -rf /").is_err());
+/// assert!(validate_command_arg("file | cat /etc/passwd").is_err());
+/// ```
+pub fn validate_command_arg(arg: &str) -> Result<String> {
+    // List of dangerous shell metacharacters
+    let dangerous_chars = [
+        '|', ';', '&', '<', '>', '`', '$', '(', ')', '*', '?', '[', ']', '{', '}', '~', '!',
+        '\n', '\r', '\0',
+    ];
+
+    for ch in dangerous_chars.iter() {
+        if arg.contains(*ch) {
+            return Err(Error::validation(format!(
+                "Command argument contains dangerous character: '{}'",
+                ch
+            )));
+        }
+    }
+
+    // Check for command substitution patterns
+    if arg.contains("$(") {
+        return Err(Error::validation(
+            "Command substitution pattern '$(' not allowed".to_string(),
+        ));
+    }
+
+    Ok(arg.to_string())
+}
+
+/// Sanitize JSON string values to prevent JSON injection
+///
+/// This function escapes special characters in JSON string values to prevent
+/// injection attacks when building JSON dynamically.
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::sanitize_json_string;
+///
+/// let input = r#"test","admin":true,"#;
+/// let safe = sanitize_json_string(input);
+/// assert!(safe.contains(r#"\""#));
+/// ```
+pub fn sanitize_json_string(input: &str) -> String {
+    input
+        .replace('\\', "\\\\") // Backslash must be first
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+
+/// Validate URL to prevent SSRF (Server-Side Request Forgery) attacks
+///
+/// This function checks URLs for private IP ranges, localhost, and metadata endpoints
+/// that could be exploited in SSRF attacks.
+///
+/// # Security Concerns
+/// - Blocks localhost (127.0.0.1, ::1, localhost)
+/// - Blocks private IP ranges (10.x, 172.16-31.x, 192.168.x)
+/// - Blocks link-local addresses (169.254.x)
+/// - Blocks cloud metadata endpoints
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::validate_url_safe;
+///
+/// assert!(validate_url_safe("https://example.com").is_ok());
+/// assert!(validate_url_safe("http://localhost:8080").is_err());
+/// assert!(validate_url_safe("http://169.254.169.254/metadata").is_err());
+/// ```
+pub fn validate_url_safe(url: &str) -> Result<String> {
+    // Parse URL to extract host
+    let url_lower = url.to_lowercase();
+
+    // Block localhost variants
+    let localhost_patterns = [
+        "localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0",
+    ];
+    for pattern in localhost_patterns.iter() {
+        if url_lower.contains(pattern) {
+            return Err(Error::validation(
+                "URLs pointing to localhost are not allowed".to_string(),
+            ));
+        }
+    }
+
+    // Block private IP ranges (rough check)
+    let private_ranges = [
+        "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
+        "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
+        "172.31.", "192.168.",
+    ];
+    for range in private_ranges.iter() {
+        if url_lower.contains(range) {
+            return Err(Error::validation(format!(
+                "URLs pointing to private IP range '{}' are not allowed",
+                range
+            )));
+        }
+    }
+
+    // Block link-local addresses (AWS/cloud metadata endpoints)
+    if url_lower.contains("169.254.") {
+        return Err(Error::validation(
+            "URLs pointing to link-local addresses (169.254.x) are not allowed".to_string(),
+        ));
+    }
+
+    // Block common cloud metadata endpoints
+    let metadata_endpoints = [
+        "metadata.google.internal",
+        "169.254.169.254", // AWS, Azure, GCP
+        "fd00:ec2::254",   // AWS IPv6
+    ];
+    for endpoint in metadata_endpoints.iter() {
+        if url_lower.contains(endpoint) {
+            return Err(Error::validation(format!(
+                "URLs pointing to cloud metadata endpoint '{}' are not allowed",
+                endpoint
+            )));
+        }
+    }
+
+    Ok(url.to_string())
+}
+
+/// Sanitize header values to prevent header injection attacks
+///
+/// This function removes or escapes newline characters that could be used
+/// to inject additional HTTP headers.
+///
+/// # Example
+/// ```
+/// use mockforge_core::validation::sanitize_header_value;
+///
+/// let malicious = "value\r\nX-Evil-Header: injected";
+/// let safe = sanitize_header_value(malicious);
+/// assert!(!safe.contains('\r'));
+/// assert!(!safe.contains('\n'));
+/// ```
+pub fn sanitize_header_value(input: &str) -> String {
+    // Remove CR and LF characters to prevent header injection
+    input
+        .replace('\r', "")
+        .replace('\n', "")
+        .trim()
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1028,5 +1315,273 @@ mod tests {
             "paths": {}
         })).unwrap();
         assert!(openapi_validator.is_implemented());
+    }
+
+    // ========================================================================
+    // SANITIZATION TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_sanitize_html() {
+        // Basic XSS attempt
+        assert_eq!(
+            sanitize_html("<script>alert('xss')</script>"),
+            "&lt;script&gt;alert(&#39;xss&#39;)&lt;&#x2F;script&gt;"
+        );
+
+        // Image tag with onerror
+        assert_eq!(
+            sanitize_html("<img src=x onerror=\"alert(1)\">"),
+            "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
+        );
+
+        // JavaScript protocol
+        assert_eq!(
+            sanitize_html("<a href=\"javascript:void(0)\">"),
+            "&lt;a href=&quot;javascript:void(0)&quot;&gt;"
+        );
+
+        // Ampersand should be escaped first
+        assert_eq!(sanitize_html("&<>"), "&amp;&lt;&gt;");
+
+        // Mixed content
+        assert_eq!(
+            sanitize_html("Hello <b>World</b> & 'Friends'"),
+            "Hello &lt;b&gt;World&lt;&#x2F;b&gt; &amp; &#39;Friends&#39;"
+        );
+    }
+
+    #[test]
+    fn test_validate_safe_path() {
+        // Valid paths
+        assert!(validate_safe_path("data/file.txt").is_ok());
+        assert!(validate_safe_path("subdir/file.json").is_ok());
+        assert!(validate_safe_path("file.txt").is_ok());
+
+        // Path traversal attempts
+        assert!(validate_safe_path("../etc/passwd").is_err());
+        assert!(validate_safe_path("dir/../../../etc/passwd").is_err());
+        assert!(validate_safe_path("./../../secret").is_err());
+
+        // Home directory expansion
+        assert!(validate_safe_path("~/secret").is_err());
+        assert!(validate_safe_path("dir/~/file").is_err());
+
+        // Absolute paths
+        assert!(validate_safe_path("/etc/passwd").is_err());
+        assert!(validate_safe_path("/var/log/app.log").is_err());
+
+        // Windows drive letters
+        assert!(validate_safe_path("C:\\Windows\\System32").is_err());
+        assert!(validate_safe_path("D:\\data\\file.txt").is_err());
+
+        // UNC paths
+        assert!(validate_safe_path("\\\\server\\share").is_err());
+        assert!(validate_safe_path("//server/share").is_err());
+
+        // Null bytes
+        assert!(validate_safe_path("file\0.txt").is_err());
+
+        // Empty segments
+        assert!(validate_safe_path("dir//file.txt").is_err());
+
+        // Path normalization (backslash to forward slash)
+        let result = validate_safe_path("dir\\subdir\\file.txt").unwrap();
+        assert_eq!(result, "dir/subdir/file.txt");
+    }
+
+    #[test]
+    fn test_sanitize_sql() {
+        // Basic SQL injection
+        assert_eq!(
+            sanitize_sql("admin' OR '1'='1"),
+            "admin'' OR ''1''=''1"
+        );
+
+        // Multiple quotes
+        assert_eq!(sanitize_sql("'; DROP TABLE users; --"), "''; DROP TABLE users; --");
+
+        // No quotes
+        assert_eq!(sanitize_sql("admin"), "admin");
+
+        // Single quote
+        assert_eq!(sanitize_sql("O'Brien"), "O''Brien");
+    }
+
+    #[test]
+    fn test_validate_command_arg() {
+        // Safe arguments
+        assert!(validate_command_arg("safe_filename.txt").is_ok());
+        assert!(validate_command_arg("file-123.log").is_ok());
+        assert!(validate_command_arg("data.json").is_ok());
+
+        // Command injection attempts - pipes
+        assert!(validate_command_arg("file | cat /etc/passwd").is_err());
+        assert!(validate_command_arg("file || echo pwned").is_err());
+
+        // Command separators
+        assert!(validate_command_arg("file; rm -rf /").is_err());
+        assert!(validate_command_arg("file & background").is_err());
+        assert!(validate_command_arg("file && next").is_err());
+
+        // Redirection
+        assert!(validate_command_arg("file > /dev/null").is_err());
+        assert!(validate_command_arg("file < input.txt").is_err());
+        assert!(validate_command_arg("file >> log.txt").is_err());
+
+        // Command substitution
+        assert!(validate_command_arg("file `whoami`").is_err());
+        assert!(validate_command_arg("file $(whoami)").is_err());
+
+        // Wildcards
+        assert!(validate_command_arg("file*.txt").is_err());
+        assert!(validate_command_arg("file?.log").is_err());
+
+        // Brackets
+        assert!(validate_command_arg("file[0-9]").is_err());
+        assert!(validate_command_arg("file{1,2}").is_err());
+
+        // Null byte
+        assert!(validate_command_arg("file\0.txt").is_err());
+
+        // Newlines
+        assert!(validate_command_arg("file\nrm -rf /").is_err());
+        assert!(validate_command_arg("file\rcommand").is_err());
+
+        // Other dangerous chars
+        assert!(validate_command_arg("file~").is_err());
+        assert!(validate_command_arg("file!").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_json_string() {
+        // Quote injection
+        assert_eq!(
+            sanitize_json_string(r#"value","admin":true,"#),
+            r#"value\",\"admin\":true,"#
+        );
+
+        // Backslash escape
+        assert_eq!(
+            sanitize_json_string(r#"C:\Windows\System32"#),
+            r#"C:\\Windows\\System32"#
+        );
+
+        // Control characters
+        assert_eq!(sanitize_json_string("line1\nline2"), r#"line1\nline2"#);
+        assert_eq!(sanitize_json_string("tab\there"), r#"tab\there"#);
+        assert_eq!(sanitize_json_string("carriage\rreturn"), r#"carriage\rreturn"#);
+
+        // Combined
+        assert_eq!(
+            sanitize_json_string("Test\"value\"\nNext\\line"),
+            r#"Test\"value\"\nNext\\line"#
+        );
+    }
+
+    #[test]
+    fn test_validate_url_safe() {
+        // Safe URLs
+        assert!(validate_url_safe("https://example.com").is_ok());
+        assert!(validate_url_safe("http://api.example.com/data").is_ok());
+        assert!(validate_url_safe("https://subdomain.example.org:8080/path").is_ok());
+
+        // Localhost variants
+        assert!(validate_url_safe("http://localhost:8080").is_err());
+        assert!(validate_url_safe("http://127.0.0.1").is_err());
+        assert!(validate_url_safe("http://[::1]:8080").is_err());
+        assert!(validate_url_safe("http://0.0.0.0").is_err());
+
+        // Private IP ranges
+        assert!(validate_url_safe("http://10.0.0.1").is_err());
+        assert!(validate_url_safe("http://192.168.1.1").is_err());
+        assert!(validate_url_safe("http://172.16.0.1").is_err());
+        assert!(validate_url_safe("http://172.31.255.255").is_err());
+
+        // Link-local (AWS metadata)
+        assert!(validate_url_safe("http://169.254.169.254/latest/meta-data").is_err());
+
+        // Cloud metadata endpoints
+        assert!(validate_url_safe("http://metadata.google.internal").is_err());
+        assert!(validate_url_safe("http://169.254.169.254").is_err());
+
+        // Case insensitive
+        assert!(validate_url_safe("HTTP://LOCALHOST:8080").is_err());
+        assert!(validate_url_safe("http://LocalHost").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_header_value() {
+        // Header injection attempt
+        let malicious = "value\r\nX-Evil-Header: injected";
+        let safe = sanitize_header_value(malicious);
+        assert!(!safe.contains('\r'));
+        assert!(!safe.contains('\n'));
+        assert_eq!(safe, "valueX-Evil-Header: injected");
+
+        // CRLF injection
+        let malicious = "session123\r\nSet-Cookie: admin=true";
+        let safe = sanitize_header_value(malicious);
+        assert_eq!(safe, "session123Set-Cookie: admin=true");
+
+        // Whitespace trimming
+        assert_eq!(sanitize_header_value("  value  "), "value");
+
+        // Multiple newlines
+        let malicious = "val\nue\r\nhe\na\rder";
+        let safe = sanitize_header_value(malicious);
+        assert_eq!(safe, "valueheader");
+
+        // Clean value
+        assert_eq!(sanitize_header_value("clean-value-123"), "clean-value-123");
+    }
+
+    #[test]
+    fn test_sanitize_html_empty_and_whitespace() {
+        assert_eq!(sanitize_html(""), "");
+        assert_eq!(sanitize_html("   "), "   ");
+    }
+
+    #[test]
+    fn test_validate_safe_path_edge_cases() {
+        // Single dot (current directory) - should be allowed
+        assert!(validate_safe_path(".").is_ok());
+
+        // Just a filename
+        assert!(validate_safe_path("README.md").is_ok());
+
+        // Deep nested path
+        assert!(validate_safe_path("a/b/c/d/e/f/file.txt").is_ok());
+
+        // Multiple dots in filename (not traversal)
+        assert!(validate_safe_path("file.test.txt").is_ok());
+
+        // But two consecutive dots are blocked
+        assert!(validate_safe_path("..").is_err());
+        assert!(validate_safe_path("dir/..").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_sql_edge_cases() {
+        // Empty string
+        assert_eq!(sanitize_sql(""), "");
+
+        // Already escaped
+        assert_eq!(sanitize_sql("''"), "''''");
+
+        // Multiple consecutive quotes
+        assert_eq!(sanitize_sql("'''"), "''''''");
+    }
+
+    #[test]
+    fn test_validate_command_arg_edge_cases() {
+        // Empty string
+        assert!(validate_command_arg("").is_ok());
+
+        // Alphanumeric with dash and underscore
+        assert!(validate_command_arg("file_name-123").is_ok());
+
+        // Just numbers
+        assert!(validate_command_arg("12345").is_ok());
     }
 }

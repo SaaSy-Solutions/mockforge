@@ -13,6 +13,7 @@ pub use mockforge_core::config::{
 };
 
 // Sub-modules
+pub mod admin_auth;
 pub mod middleware;
 pub mod state;
 pub mod types;
@@ -21,6 +22,7 @@ pub mod authenticator;
 pub mod oauth2;
 
 // Re-export main types and functions for convenience
+pub use admin_auth::check_admin_auth;
 pub use authenticator::{authenticate_jwt, authenticate_request};
 pub use middleware::auth_middleware;
 pub use oauth2::create_oauth2_client;
