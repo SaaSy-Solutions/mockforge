@@ -1,8 +1,8 @@
-///! Mock Coverage Tracking
-///!
-///! This module provides API coverage tracking functionality, allowing users to see
-///! which endpoints from their OpenAPI spec have been exercised during testing.
-///! This is analogous to code coverage but for API surface area.
+//! Mock Coverage Tracking
+//!
+//! This module provides API coverage tracking functionality, allowing users to see
+//! which endpoints from their OpenAPI spec have been exercised during testing.
+//! This is analogous to code coverage but for API surface area.
 use axum::{
     extract::{Query, State},
     response::Json,
@@ -188,7 +188,7 @@ fn extract_path_metrics(metric_families: &[MetricFamily]) -> HashMap<String, Has
                 let key = format!("{} {}", method, path);
                 let count = metric.get_counter().value.unwrap_or(0.0) as u64;
 
-                path_metrics.entry(key).or_insert_with(HashMap::new).insert(status, count);
+                path_metrics.entry(key).or_default().insert(status, count);
             }
         }
     }
@@ -231,19 +231,11 @@ fn normalize_path(path: &str) -> String {
 
     for segment in &mut segments {
         // Replace path parameters like {id} with :id
-        if segment.starts_with('{') && segment.ends_with('}') {
-            *segment = ":id";
-        }
-        // Replace UUIDs
-        else if is_uuid(segment) {
-            *segment = ":id";
-        }
-        // Replace numeric IDs
-        else if segment.parse::<i64>().is_ok() {
-            *segment = ":id";
-        }
-        // Replace hex strings (common in some APIs)
-        else if segment.len() > 8 && segment.chars().all(|c| c.is_ascii_hexdigit()) {
+        if segment.starts_with('{') && segment.ends_with('}')
+            || is_uuid(segment)
+            || segment.parse::<i64>().is_ok()
+            || (segment.len() > 8 && segment.chars().all(|c| c.is_ascii_hexdigit()))
+        {
             *segment = ":id";
         }
     }

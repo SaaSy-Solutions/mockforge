@@ -166,10 +166,10 @@ async fn test_validate_request_middleware() {
         }
     });
 
-    let registry = create_registry_from_json(spec_json).unwrap();
+    let _registry = create_registry_from_json(spec_json).unwrap();
 
     // Create a valid request
-    let request = Request::builder().method("GET").uri("/users").body(Body::empty()).unwrap();
+    let _request = Request::builder().method("GET").uri("/users").body(Body::empty()).unwrap();
 
     // Create a mock next middleware
     // let next =

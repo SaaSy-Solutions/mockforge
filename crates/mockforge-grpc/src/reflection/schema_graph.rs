@@ -155,27 +155,23 @@ enum EntityExtractionMethod {
 impl ProtoSchemaGraphExtractor {
     /// Create a new proto schema graph extractor
     pub fn new() -> Self {
-        let mut patterns = Vec::new();
-
-        // Standard ID patterns
-        patterns.push(ForeignKeyPattern {
-            pattern: regex::Regex::new(r"^(.+)_id$").unwrap(),
-            entity_extraction: EntityExtractionMethod::RemoveSuffix("_id".to_string()),
-            confidence: 0.9,
-        });
-
-        patterns.push(ForeignKeyPattern {
-            pattern: regex::Regex::new(r"^(.+)Id$").unwrap(),
-            entity_extraction: EntityExtractionMethod::RemoveSuffix("Id".to_string()),
-            confidence: 0.85,
-        });
-
-        // Reference patterns
-        patterns.push(ForeignKeyPattern {
-            pattern: regex::Regex::new(r"^(.+)_ref$").unwrap(),
-            entity_extraction: EntityExtractionMethod::RemoveSuffix("_ref".to_string()),
-            confidence: 0.8,
-        });
+        let patterns = vec![
+            ForeignKeyPattern {
+                pattern: regex::Regex::new(r"^(.+)_id$").unwrap(),
+                entity_extraction: EntityExtractionMethod::RemoveSuffix("_id".to_string()),
+                confidence: 0.9,
+            },
+            ForeignKeyPattern {
+                pattern: regex::Regex::new(r"^(.+)Id$").unwrap(),
+                entity_extraction: EntityExtractionMethod::RemoveSuffix("Id".to_string()),
+                confidence: 0.85,
+            },
+            ForeignKeyPattern {
+                pattern: regex::Regex::new(r"^(.+)_ref$").unwrap(),
+                entity_extraction: EntityExtractionMethod::RemoveSuffix("_ref".to_string()),
+                confidence: 0.8,
+            },
+        ];
 
         Self {
             foreign_key_patterns: patterns,
@@ -372,7 +368,7 @@ impl ProtoSchemaGraphExtractor {
                         RelationshipType::Composition
                     };
 
-                    let cardinality = if field.constraints.get("repeated").is_some() {
+                    let cardinality = if field.constraints.contains_key("repeated") {
                         Cardinality { min: 0, max: None }
                     } else {
                         Cardinality {
@@ -410,13 +406,13 @@ impl ProtoSchemaGraphExtractor {
             // Track what references what
             references_map
                 .entry(rel.from_entity.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(rel.to_entity.clone());
 
             // Track what is referenced by what
             referenced_by_map
                 .entry(rel.to_entity.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(rel.from_entity.clone());
         }
 

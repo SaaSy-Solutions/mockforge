@@ -27,6 +27,26 @@ use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info, warn};
 
+/// Type alias for the bridge handler function to reduce type complexity
+type BridgeHandlerFn = dyn Fn(
+        State<Arc<HttpBridge>>,
+        Path<HashMap<String, String>>,
+        Query<BridgeQuery>,
+        Bytes,
+    ) -> Pin<Box<dyn Future<Output = axum::response::Response> + Send>>
+    + Send
+    + Sync;
+
+/// Parameters for bridge request handling
+struct BridgeRequestParams<'a> {
+    proxy: &'a MockReflectionProxy,
+    converter: &'a ProtobufJsonConverter,
+    service_name: &'a str,
+    method_name: &'a str,
+    server_streaming: bool,
+    body: Bytes,
+}
+
 /// Configuration for the HTTP bridge
 #[derive(Debug, Clone)]
 pub struct HttpBridgeConfig {
@@ -233,7 +253,7 @@ impl HttpBridge {
     async fn handle_generic_bridge_request(
         State(state): State<Arc<HttpBridge>>,
         Path(path_params): Path<HashMap<String, String>>,
-        Query(query): Query<BridgeQuery>,
+        _query: Query<BridgeQuery>,
         body: Bytes,
     ) -> axum::response::Response {
         // Extract service and method from path parameters
@@ -301,17 +321,15 @@ impl HttpBridge {
         }
 
         // Handle the request
-        let result = Self::handle_bridge_request(
-            &state.proxy,
-            &state.converter,
-            service_name,
-            method_name,
-            method_info.client_streaming,
-            method_info.server_streaming,
-            Query(query),
+        let params = BridgeRequestParams {
+            proxy: &state.proxy,
+            converter: &state.converter,
+            service_name: service_name.as_str(),
+            method_name: method_name.as_str(),
+            server_streaming: method_info.server_streaming,
             body,
-        )
-        .await;
+        };
+        let result = Self::handle_bridge_request(&params).await;
 
         match result {
             Ok(response) => {
@@ -347,22 +365,13 @@ impl HttpBridge {
         &self,
         service_name: String,
         method_name: String,
-        client_streaming: bool,
+        _client_streaming: bool,
         server_streaming: bool,
-    ) -> Box<
-        dyn Fn(
-                State<Arc<Self>>,
-                Path<HashMap<String, String>>,
-                Query<BridgeQuery>,
-                Bytes,
-            ) -> Pin<Box<dyn Future<Output = axum::response::Response> + Send>>
-            + Send
-            + Sync,
-    > {
+    ) -> Box<BridgeHandlerFn> {
         Box::new(
             move |state: State<Arc<Self>>,
                   _path: Path<HashMap<String, String>>,
-                  query: Query<BridgeQuery>,
+                  _query: Query<BridgeQuery>,
                   body: Bytes| {
                 let service_name = service_name.clone();
                 let method_name = method_name.clone();
@@ -378,17 +387,15 @@ impl HttpBridge {
                     }
 
                     // Handle the request
-                    let result = Self::handle_bridge_request(
-                        &proxy,
-                        &converter,
-                        &service_name,
-                        &method_name,
-                        client_streaming,
+                    let params = BridgeRequestParams {
+                        proxy: &proxy,
+                        converter: &converter,
+                        service_name: service_name.as_str(),
+                        method_name: method_name.as_str(),
                         server_streaming,
-                        query,
                         body,
-                    )
-                    .await;
+                    };
+                    let result = Self::handle_bridge_request(&params).await;
 
                     match result {
                         Ok(response) => {
@@ -469,22 +476,15 @@ impl HttpBridge {
 
     /// Handle a bridge request by calling the appropriate gRPC method
     async fn handle_bridge_request(
-        proxy: &MockReflectionProxy,
-        _converter: &ProtobufJsonConverter,
-        service_name: &str,
-        method_name: &str,
-        _client_streaming: bool,
-        server_streaming: bool,
-        _query: Query<BridgeQuery>,
-        body: Bytes,
+        params: &BridgeRequestParams<'_>,
     ) -> Result<BridgeResponse<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        debug!("Handling bridge request for {}.{}", service_name, method_name);
+        debug!("Handling bridge request for {}.{}", params.service_name, params.method_name);
 
         // Parse JSON request body
-        let json_request: Value = if body.is_empty() {
+        let json_request: Value = if params.body.is_empty() {
             Value::Null
         } else {
-            serde_json::from_slice(&body).map_err(|e| {
+            serde_json::from_slice(&params.body).map_err(|e| {
                 Box::<dyn std::error::Error + Send + Sync>::from(format!(
                     "Failed to parse JSON request: {}",
                     e
@@ -493,20 +493,26 @@ impl HttpBridge {
         };
 
         // Call appropriate gRPC method based on streaming type
-        if server_streaming {
+        if params.server_streaming {
             // Handle streaming response
             Self::handle_streaming_request(
-                proxy,
-                _converter,
-                service_name,
-                method_name,
+                params.proxy,
+                params.converter,
+                params.service_name,
+                params.method_name,
                 json_request,
             )
             .await
         } else {
             // Handle unary request
-            Self::handle_unary_request(proxy, _converter, service_name, method_name, json_request)
-                .await
+            Self::handle_unary_request(
+                params.proxy,
+                params.converter,
+                params.service_name,
+                params.method_name,
+                json_request,
+            )
+            .await
         }
     }
 
@@ -590,7 +596,5 @@ impl Clone for HttpBridge {
 mod tests {
 
     #[test]
-    fn test_module_compiles() {
-        assert!(true);
-    }
+    fn test_module_compiles() {}
 }

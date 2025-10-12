@@ -162,17 +162,16 @@ pub trait ChaosPlugin: Send + Sync {
 #[async_trait]
 pub trait PluginHook: Send + Sync {
     /// Called before plugin execution
-    async fn before_execute(&self, context: &PluginContext) -> Result<()> {
+    async fn before_execute(&self, _context: &PluginContext) -> Result<()> {
         Ok(())
     }
 
     /// Called after plugin execution
-    async fn after_execute(&self, context: &PluginContext, result: &PluginResult) -> Result<()> {
+    async fn after_execute(&self, _context: &PluginContext, _result: &PluginResult) -> Result<()> {
         Ok(())
     }
 
-    /// Called on plugin error
-    async fn on_error(&self, context: &PluginContext, error: &PluginError) -> Result<()> {
+    async fn on_error(&self, _context: &PluginContext, _error: &PluginError) -> Result<()> {
         Ok(())
     }
 }
@@ -314,8 +313,8 @@ impl PluginRegistry {
     pub async fn initialize_all(&self) -> Result<()> {
         let plugins = self.plugins.write();
 
-        for (plugin_id, plugin) in plugins.iter() {
-            let config = self.get_config(plugin_id).unwrap_or_default();
+        for (plugin_id, _plugin) in plugins.iter() {
+            let _config = self.get_config(plugin_id).unwrap_or_default();
 
             // Create a mutable reference to the plugin
             // Note: This requires the plugin to be properly designed for interior mutability
@@ -564,8 +563,10 @@ mod tests {
         registry.register_plugin(plugin.clone()).unwrap();
         registry.configure_plugin("metrics-collector", PluginConfig::default()).unwrap();
 
-        let mut context = PluginContext::default();
-        context.tenant_id = Some("tenant-1".to_string());
+        let context = PluginContext {
+            tenant_id: Some("tenant-1".to_string()),
+            ..Default::default()
+        };
 
         let result = registry.execute_plugin("metrics-collector", context).await.unwrap();
         assert!(result.success);

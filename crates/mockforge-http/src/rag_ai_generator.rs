@@ -168,7 +168,6 @@ impl AiGenerator for RagAiGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::ai_response::{AiResponseMode, RequestContext};
 
     #[test]
     fn test_rag_generator_creation() {

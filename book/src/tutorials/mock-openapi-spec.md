@@ -207,14 +207,16 @@ For more control, create a config file:
 
 **`petstore-config.yaml`:**
 ```yaml
-http:
-  port: 3000
-  openapi_spec: petstore-api.json
-  request_validation: enforce
-  response_template_expand: true
-  cors:
-    enabled: true
-    allow_origins: ["*"]
+server:
+  http_port: 3000
+
+spec: petstore-api.json
+
+validation:
+  mode: enforce
+
+response:
+  template_expand: true
 
 admin:
   enabled: true
@@ -259,6 +261,52 @@ http:
             }
           ]
 ```
+
+## Step 7: Configure Request Validation
+
+MockForge supports comprehensive OpenAPI request validation. Update your config to enable validation:
+
+```yaml
+validation:
+  mode: enforce          # Reject invalid requests
+  aggregate_errors: true # Combine multiple validation errors
+  status_code: 422       # Use 422 for validation errors
+
+# Optional: Skip validation for specific routes
+validation:
+  overrides:
+    "GET /health": "off"  # Health checks don't need validation
+```
+
+Test validation by sending an invalid request:
+
+```bash
+# This will fail validation (missing required fields)
+curl -X POST http://localhost:3000/pets \
+  -H "Content-Type: application/json" \
+  -d '{"species": "dog"}'
+```
+
+Response:
+```json
+{
+  "error": "request validation failed",
+  "status": 422,
+  "details": [
+    {
+      "path": "body.name",
+      "code": "required",
+      "message": "Missing required field: name"
+    }
+  ]
+}
+```
+
+### Validation Modes
+
+- **`off`**: Disable validation completely
+- **`warn`**: Log warnings but allow invalid requests
+- **`enforce`**: Reject invalid requests with error responses
 
 ## Common Use Cases
 

@@ -181,7 +181,7 @@ async fn test_http_server_with_openapi_spec() {
 
     // Test 1: GET /users - should return synthetic response with template expansion
     println!("Test 1: GET /users");
-    let response = client.get(&format!("{}/users", base_url)).send().await.unwrap();
+    let response = client.get(format!("{}/users", base_url)).send().await.unwrap();
     assert!(response.status().is_success(), "GET /users should succeed");
 
     let users: serde_json::Value = response.json().await.unwrap();
@@ -196,7 +196,7 @@ async fn test_http_server_with_openapi_spec() {
     });
 
     let response = client
-        .post(&format!("{}/users", base_url))
+        .post(format!("{}/users", base_url))
         .json(&valid_user)
         .send()
         .await
@@ -217,7 +217,7 @@ async fn test_http_server_with_openapi_spec() {
     });
 
     let response = client
-        .post(&format!("{}/users", base_url))
+        .post(format!("{}/users", base_url))
         .json(&invalid_user)
         .send()
         .await
@@ -234,7 +234,7 @@ async fn test_http_server_with_openapi_spec() {
     println!("Test 4: GET /products/{{id}}");
     let product_id = uuid::Uuid::new_v4().to_string();
     let response = client
-        .get(&format!("{}/products/{}", base_url, product_id))
+        .get(format!("{}/products/{}", base_url, product_id))
         .send()
         .await
         .unwrap();
@@ -296,14 +296,14 @@ async fn test_websocket_connection_and_messages() {
             println!("✓ Sent message to WebSocket");
 
             // Receive response (with timeout)
-            if let Ok(Some(msg_result)) = timeout(Duration::from_secs(2), ws_stream.next()).await {
-                if let Ok(Message::Text(text)) = msg_result {
-                    println!("✓ Received WebSocket message: {}", text);
-                    assert!(
-                        text.contains("HELLO") || !text.is_empty(),
-                        "Should receive on_connect message"
-                    );
-                }
+            if let Ok(Some(Ok(Message::Text(text)))) =
+                timeout(Duration::from_secs(2), ws_stream.next()).await
+            {
+                println!("✓ Received WebSocket message: {}", text);
+                assert!(
+                    text.contains("HELLO") || !text.is_empty(),
+                    "Should receive on_connect message"
+                );
             }
         }
     } else {
@@ -336,7 +336,7 @@ async fn test_plugin_system_validation() {
 
     // Create plugin capabilities
     let capabilities =
-        PluginCapabilities::from_strings(&vec!["template".to_string(), "network:http".to_string()]);
+        PluginCapabilities::from_strings(&["template".to_string(), "network:http".to_string()]);
 
     assert!(capabilities.custom.contains_key("template"));
     assert!(capabilities.network.allow_http);

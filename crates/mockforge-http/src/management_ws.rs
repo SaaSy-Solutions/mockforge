@@ -92,8 +92,8 @@ impl WsManagementState {
     pub fn broadcast(
         &self,
         event: MockEvent,
-    ) -> Result<usize, broadcast::error::SendError<MockEvent>> {
-        self.tx.send(event)
+    ) -> Result<usize, Box<broadcast::error::SendError<MockEvent>>> {
+        self.tx.send(event).map_err(Box::new)
     }
 }
 
@@ -178,9 +178,8 @@ mod tests {
 
     #[test]
     fn test_ws_management_state_creation() {
-        let state = WsManagementState::new();
+        let _state = WsManagementState::new();
         // Should be able to create state without errors
-        assert!(true);
     }
 
     #[test]
@@ -225,6 +224,5 @@ mod tests {
         let state = WsManagementState::new();
         let _router = ws_management_router(state);
         // Router should be created successfully
-        assert!(true);
     }
 }

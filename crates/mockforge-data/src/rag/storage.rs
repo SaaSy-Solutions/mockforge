@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+type VectorStore = Arc<RwLock<Vec<(String, Vec<f32>)>>>;
+
 /// Vector index for similarity search
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorIndex {
@@ -315,7 +317,7 @@ pub struct StorageMetrics {
 /// In-memory storage implementation for development and testing
 pub struct InMemoryStorage {
     chunks: Arc<RwLock<HashMap<String, DocumentChunk>>>,
-    vectors: Arc<RwLock<Vec<(String, Vec<f32>)>>>,
+    vectors: VectorStore,
     stats: Arc<RwLock<StorageStats>>,
 }
 

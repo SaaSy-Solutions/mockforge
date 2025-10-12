@@ -652,7 +652,7 @@ fn test_config_validate_binary_file() {
     let config_path = temp_dir.path().join("binary.yaml");
 
     // Write binary data
-    fs::write(&config_path, &[0xFF, 0xFE, 0xFD, 0x00, 0x01, 0x02]).unwrap();
+    fs::write(&config_path, [0xFF, 0xFE, 0xFD, 0x00, 0x01, 0x02]).unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());

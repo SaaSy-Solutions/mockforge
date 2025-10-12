@@ -82,7 +82,7 @@ fn create_simple_http_chain() -> ChainDefinition {
 async fn test_chain_execution_with_http_requests() {
     // Create registry and engine
     let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
-    let engine = Arc::new(ChainExecutionEngine::new(registry.clone(), ChainConfig::default()));
+    let _engine = Arc::new(ChainExecutionEngine::new(registry.clone(), ChainConfig::default()));
 
     // Register the chain
     let chain_definition = create_simple_http_chain();

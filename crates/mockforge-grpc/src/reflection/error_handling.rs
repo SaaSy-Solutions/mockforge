@@ -125,7 +125,5 @@ pub async fn simulate_latency(latency_ms: u64) {
 mod tests {
 
     #[test]
-    fn test_module_compiles() {
-        assert!(true);
-    }
+    fn test_module_compiles() {}
 }

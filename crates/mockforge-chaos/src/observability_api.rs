@@ -28,38 +28,6 @@ use parking_lot::RwLock;
 use printpdf::*;
 use std::collections::HashMap;
 
-/// Generate a basic SVG flamegraph
-fn generate_basic_flamegraph(trace_id: &str, stats: &FlamegraphStatsResponse) -> String {
-    let width = 800;
-    let height = 400;
-    let bar_height = 20;
-
-    let mut svg = format!(
-        r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="white"/>
-        <text x="10" y="20" font-family="monospace" font-size="12">Flamegraph for trace: {}</text>
-        <text x="10" y="35" font-family="monospace" font-size="10">Total spans: {}, Max depth: {}, Duration: {}μs</text>"#,
-        width, height, trace_id, stats.total_spans, stats.max_depth, stats.total_duration_us
-    );
-
-    // Generate mock flame bars
-    let mut y = 60;
-    for (i, span_name) in stats.hottest_path.iter().enumerate() {
-        let bar_width = (width - 20) * (stats.max_depth - i) / stats.max_depth;
-        svg.push_str(&format!(
-            "<rect x=\"10\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"#{:x}\" stroke=\"black\" stroke-width=\"1\"/>
-            <text x=\"15\" y=\"{}\" font-family=\"monospace\" font-size=\"10\" fill=\"white\">{}</text>",
-            y, bar_width, bar_height,
-            (i * 50) % 256, // Color
-            y + 12, span_name
-        ));
-        y += bar_height + 2;
-    }
-
-    svg.push_str("</svg>");
-    svg
-}
-
 /// Generate flamegraph SVG from actual trace data
 fn generate_flamegraph_from_trace(
     trace_id: &str,
@@ -284,7 +252,7 @@ fn generate_csv_content(scenario_names: &[String], include_comparison: bool) -> 
 
     for scenario in scenario_names {
         // Mock data - in real implementation, would fetch actual metrics
-        let (requests, success_rate, avg_latency, error_rate) = match scenario.as_str() {
+        let (requests, success_rate, avg_latency, _error_rate) = match scenario.as_str() {
             "network_degradation" => (1000, 92.5, 250.0, 7.5),
             "service_instability" => (800, 88.0, 180.0, 12.0),
             "cascading_failure" => (1200, 85.0, 320.0, 15.0),
@@ -552,7 +520,7 @@ async fn handle_websocket(mut socket: axum::extract::ws::WebSocket, state: Obser
     let mut rx = state.dashboard.subscribe();
 
     // Send initial stats
-    let stats = state.dashboard.get_stats();
+    let _stats = state.dashboard.get_stats();
     let update = DashboardUpdate::Ping {
         timestamp: chrono::Utc::now(),
     };
@@ -611,7 +579,7 @@ struct ScenariosResponse {
     scenarios: Vec<String>,
 }
 
-async fn list_scenarios(State(state): State<ObservabilityState>) -> Json<ScenariosResponse> {
+async fn list_scenarios(State(_state): State<ObservabilityState>) -> Json<ScenariosResponse> {
     let scenarios = vec![
         "network_degradation".to_string(),
         "service_instability".to_string(),
@@ -801,11 +769,10 @@ async fn export_recording(
 struct StartReplayRequest {
     scenario_name: String,
     speed: f64,
-    loop_replay: bool,
 }
 
 async fn start_replay(
-    State(state): State<ObservabilityState>,
+    State(_state): State<ObservabilityState>,
     Json(req): Json<StartReplayRequest>,
 ) -> Json<ApiResponse<String>> {
     tracing::info!("Starting replay: {} at {}x speed", req.scenario_name, req.speed);
@@ -1120,7 +1087,7 @@ async fn delete_dashboard_layout(
 
 /// Get dashboard templates
 async fn get_dashboard_templates(
-    State(state): State<ObservabilityState>,
+    State(_state): State<ObservabilityState>,
 ) -> Json<ApiResponse<Vec<DashboardLayoutSummary>>> {
     tracing::info!("Getting dashboard templates");
     // For now, return static templates
@@ -1231,7 +1198,7 @@ fn generate_scenario_pdf(
 }
 
 async fn generate_pdf_report(
-    State(state): State<ObservabilityState>,
+    State(_state): State<ObservabilityState>,
     Json(req): Json<GeneratePdfRequest>,
 ) -> Response {
     tracing::info!("Generating PDF report for: {}", req.scenario_name);
@@ -1255,7 +1222,7 @@ struct GenerateCsvRequest {
 }
 
 async fn generate_csv_report(
-    State(state): State<ObservabilityState>,
+    State(_state): State<ObservabilityState>,
     Json(req): Json<GenerateCsvRequest>,
 ) -> Response {
     tracing::info!("Generating CSV report for: {:?}", req.scenario_names);
@@ -1279,7 +1246,7 @@ struct CompareRequest {
 }
 
 async fn compare_scenarios(
-    State(state): State<ObservabilityState>,
+    State(_state): State<ObservabilityState>,
     Json(req): Json<CompareRequest>,
 ) -> Json<ApiResponse<ComparisonResult>> {
     tracing::info!(

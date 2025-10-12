@@ -163,6 +163,12 @@ The Configuration tab allows runtime configuration changes:
 - **Environment Profiles** - Different configs for dev/staging/prod
 - **Backup/Restore** - Version control for configurations
 
+### Validation Management
+- **Validation Mode Toggle** - Switch between off/warn/enforce modes
+- **Per-Route Overrides** - Set custom validation rules for specific endpoints
+- **Real-time Updates** - Apply validation changes without server restart
+- **Validation Statistics** - View validation errors and success rates
+
 ## Metrics and Analytics
 
 The Metrics tab provides detailed performance analytics:

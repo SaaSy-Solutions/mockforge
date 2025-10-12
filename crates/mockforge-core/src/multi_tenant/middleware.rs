@@ -176,8 +176,10 @@ mod tests {
     use crate::workspace::Workspace;
 
     fn create_test_router() -> WorkspaceRouter {
-        let mut config = MultiTenantConfig::default();
-        config.enabled = true;
+        let config = MultiTenantConfig {
+            enabled: true,
+            ..Default::default()
+        };
 
         let mut registry = MultiTenantWorkspaceRegistry::new(config);
 

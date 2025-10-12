@@ -252,7 +252,7 @@
   - [ ] Verify server accepts connections
 
 - [ ] **RFC 5321 Commands**
-  - [ ] Test HELO command
+  - [ ] Test HELLO command
   - [ ] Test EHLO command
   - [ ] Test MAIL FROM
   - [ ] Test RCPT TO

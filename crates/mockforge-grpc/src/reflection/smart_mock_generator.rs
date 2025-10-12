@@ -540,7 +540,7 @@ impl SmartMockGenerator {
             Kind::Fixed64 => Value::U64(self.next_sequence()),
             Kind::Sfixed32 => Value::I32(self.next_sequence() as i32),
             Kind::Sfixed64 => Value::I64(self.next_sequence() as i64),
-            Kind::Bool => Value::Bool(self.next_sequence() % 2 == 0),
+            Kind::Bool => Value::Bool(self.next_sequence().is_multiple_of(2)),
             Kind::Double => Value::F64(self.next_random::<f64>() * 100.0),
             Kind::Float => Value::F32(self.next_random::<f32>() * 100.0),
             Kind::Bytes => {
@@ -740,9 +740,11 @@ mod tests {
 
     #[test]
     fn test_generator_reset() {
-        let mut config = SmartMockConfig::default();
-        config.seed = Some(777);
-        config.deterministic = true;
+        let config = SmartMockConfig {
+            seed: Some(777),
+            deterministic: true,
+            ..Default::default()
+        };
 
         let mut generator = SmartMockGenerator::new(config);
 
@@ -793,8 +795,10 @@ mod tests {
     #[cfg(feature = "data-faker")]
     #[test]
     fn test_faker_integration() {
-        let mut config = SmartMockConfig::default();
-        config.use_faker = true;
+        let config = SmartMockConfig {
+            use_faker: true,
+            ..Default::default()
+        };
         let mut generator = SmartMockGenerator::new(config);
 
         // Test that faker is initialized

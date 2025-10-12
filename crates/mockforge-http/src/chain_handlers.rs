@@ -305,9 +305,8 @@ mod tests {
     async fn test_chain_state_creation() {
         let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
         let engine = Arc::new(ChainExecutionEngine::new(registry.clone(), ChainConfig::default()));
-        let state = create_chain_state(registry, engine);
+        let _state = create_chain_state(registry, engine);
 
         // Just verify creation works
-        assert!(true);
     }
 }

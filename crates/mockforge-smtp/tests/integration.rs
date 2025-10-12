@@ -1,7 +1,7 @@
 //! Integration tests for SMTP server
 
 use mockforge_smtp::{
-    AutoReply, BehaviorConfig, MatchCriteria, SmtpConfig, SmtpFixture, SmtpResponse, SmtpServer,
+    BehaviorConfig, MatchCriteria, SmtpConfig, SmtpFixture, SmtpResponse, SmtpServer,
     SmtpSpecRegistry, StorageConfig,
 };
 use std::sync::Arc;
@@ -232,7 +232,6 @@ async fn test_smtp_fixture_matching() {
     };
 
     // Manually add fixture
-    use std::path::PathBuf;
     let temp_dir = tempfile::tempdir().unwrap();
     let fixture_path = temp_dir.path().join("test.yaml");
     std::fs::write(&fixture_path, serde_yaml::to_string(&fixture).unwrap()).unwrap();

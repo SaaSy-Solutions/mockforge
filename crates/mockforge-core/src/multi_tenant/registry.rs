@@ -469,8 +469,10 @@ mod tests {
 
     #[test]
     fn test_max_workspaces_limit() {
-        let mut config = MultiTenantConfig::default();
-        config.max_workspaces = Some(2);
+        let config = MultiTenantConfig {
+            max_workspaces: Some(2),
+            ..Default::default()
+        };
 
         let mut registry = MultiTenantWorkspaceRegistry::new(config);
 
@@ -492,8 +494,10 @@ mod tests {
 
     #[test]
     fn test_extract_workspace_id_from_path() {
-        let mut config = MultiTenantConfig::default();
-        config.enabled = true;
+        let config = MultiTenantConfig {
+            enabled: true,
+            ..Default::default()
+        };
 
         let registry = MultiTenantWorkspaceRegistry::new(config);
 
@@ -513,8 +517,10 @@ mod tests {
 
     #[test]
     fn test_strip_workspace_prefix() {
-        let mut config = MultiTenantConfig::default();
-        config.enabled = true;
+        let config = MultiTenantConfig {
+            enabled: true,
+            ..Default::default()
+        };
 
         let registry = MultiTenantWorkspaceRegistry::new(config);
 
@@ -557,8 +563,10 @@ mod tests {
 
     #[test]
     fn test_cannot_remove_default_workspace() {
-        let mut config = MultiTenantConfig::default();
-        config.default_workspace = "default".to_string();
+        let config = MultiTenantConfig {
+            default_workspace: "default".to_string(),
+            ..Default::default()
+        };
 
         let mut registry = MultiTenantWorkspaceRegistry::new(config);
 

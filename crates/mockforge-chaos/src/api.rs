@@ -971,7 +971,7 @@ async fn orchestration_status(
 
 /// Import orchestration from JSON/YAML
 async fn import_orchestration(
-    State(state): State<ChaosApiState>,
+    State(_state): State<ChaosApiState>,
     Json(req): Json<ImportRequest>,
 ) -> Result<Json<StatusResponse>, ChaosApiError> {
     // Parse based on format
@@ -1157,7 +1157,6 @@ struct StartRecordingRequest {
 #[derive(Debug, Deserialize)]
 struct ExportRequest {
     path: String,
-    format: Option<String>, // json or yaml
 }
 
 #[derive(Debug, Serialize)]
@@ -1209,11 +1208,7 @@ struct ScheduledScenarioRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct TriggerScheduleRequest {
-    id: String,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct ScheduleSummary {
     id: String,
     scenario_name: String,

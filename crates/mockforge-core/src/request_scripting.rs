@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::rc::Rc;
-#[allow(clippy::arc_with_non_send_sync)]
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 

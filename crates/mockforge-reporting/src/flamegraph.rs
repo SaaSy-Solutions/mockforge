@@ -33,6 +33,7 @@ pub struct FlamegraphGenerator {
     collapse_threshold_us: u64,
 }
 
+#[allow(clippy::only_used_in_recursion)]
 impl FlamegraphGenerator {
     /// Create a new flamegraph generator
     pub fn new() -> Self {
@@ -100,7 +101,7 @@ impl FlamegraphGenerator {
     fn build_node(
         &self,
         span: &TraceSpan,
-        span_map: &HashMap<String, &TraceSpan>,
+        _span_map: &HashMap<String, &TraceSpan>,
         trace: &TraceData,
     ) -> SpanNode {
         let mut children = Vec::new();
@@ -109,7 +110,7 @@ impl FlamegraphGenerator {
         for candidate in &trace.spans {
             if let Some(parent_id) = &candidate.parent_span_id {
                 if parent_id == &span.span_id {
-                    let child_node = self.build_node(candidate, span_map, trace);
+                    let child_node = self.build_node(candidate, _span_map, trace);
                     children.push(child_node);
                 }
             }
@@ -122,7 +123,7 @@ impl FlamegraphGenerator {
     }
 
     /// Generate folded stack representation
-    fn generate_folded_stacks(&self, root: &SpanNode, trace: &TraceData) -> Vec<String> {
+    fn generate_folded_stacks(&self, root: &SpanNode, _trace: &TraceData) -> Vec<String> {
         let mut stacks = Vec::new();
         self.collect_stacks(root, String::new(), &mut stacks);
         stacks
@@ -213,7 +214,7 @@ impl FlamegraphGenerator {
                 r#"<text x="{}" y="{}" fill="white">{}</text>"#,
                 x + 5.0,
                 y + 14.0,
-                stack.split(';').last().unwrap_or(&stack)
+                stack.split(';').next_back().unwrap_or(&stack)
             ));
 
             y += height + 2.0;
@@ -266,6 +267,7 @@ impl FlamegraphGenerator {
     }
 
     /// Calculate maximum depth of span tree
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_max_depth(&self, node: &SpanNode, current_depth: usize) -> usize {
         if node.children.is_empty() {
             current_depth

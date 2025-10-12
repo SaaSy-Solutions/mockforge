@@ -87,7 +87,6 @@ enum ReplayControl {
     Pause,
     Resume,
     Stop,
-    Skip(usize),
 }
 
 impl ScenarioReplayEngine {
@@ -196,10 +195,7 @@ impl ScenarioReplayEngine {
                             Self::clear_status(&status);
                             return;
                         }
-                        ReplayControl::Skip(n) => {
-                            info!("Skipping {} events", n);
-                            // Skip is handled by the outer loop
-                        }
+
                         _ => {}
                     }
                 }

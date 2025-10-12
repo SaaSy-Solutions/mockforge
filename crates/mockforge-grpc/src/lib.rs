@@ -209,7 +209,6 @@ mod tests {
     fn test_dynamic_grpc_config_default() {
         let _config = DynamicGrpcConfig::default();
         // Config should be created successfully
-        assert!(true);
     }
 
     #[test]

@@ -69,8 +69,10 @@ mod tests {
 
     #[test]
     fn test_openapi_operation_with_security() {
-        let mut operation = openapiv3::Operation::default();
-        operation.security = Some(vec![]);
+        let operation = openapiv3::Operation {
+            security: Some(vec![]),
+            ..Default::default()
+        };
 
         let op = OpenApiOperation::new("POST".to_string(), "/secure".to_string(), operation);
 

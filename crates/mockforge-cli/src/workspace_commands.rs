@@ -3,7 +3,6 @@
 use clap::Subcommand;
 use colored::*;
 use serde_json::json;
-use std::path::PathBuf;
 
 #[derive(Subcommand)]
 pub enum WorkspaceCommands {

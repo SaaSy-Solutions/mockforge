@@ -16,8 +16,8 @@ echo -e "${YELLOW}[WARNING]${NC} SMTP tests require SMTP client tools (telnet, s
 echo -e "${YELLOW}[WARNING]${NC} These tests are complex and may require manual testing"
 
 # Basic server startup test
-mockforge serve --smtp --smtp-port 1025 > /tmp/smtp-test.log 2>&1 &
-local pid=$!
+mockforge serve --smtp-port 1026 > /tmp/smtp-test.log 2>&1 &
+pid=$!
 sleep 3
 
 if kill -0 $pid 2>/dev/null; then

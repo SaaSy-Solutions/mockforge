@@ -9,6 +9,7 @@ use crate::scenarios::LoadScenario;
 use crate::spec_parser::SpecParser;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 /// Bench command configuration
 pub struct BenchCommand {
@@ -73,7 +74,7 @@ impl BenchCommand {
         TerminalReporter::print_progress("Generating request templates...");
         let templates: Vec<_> = operations
             .iter()
-            .map(|op| RequestGenerator::generate_template(op))
+            .map(RequestGenerator::generate_template)
             .collect::<Result<Vec<_>>>()?;
         TerminalReporter::print_success("Request templates generated");
 
@@ -83,7 +84,7 @@ impl BenchCommand {
         // Generate k6 script
         TerminalReporter::print_progress("Generating k6 load test script...");
         let scenario =
-            LoadScenario::from_str(&self.scenario).map_err(|e| BenchError::InvalidScenario(e))?;
+            LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
 
         let k6_config = K6Config {
             target_url: self.target.clone(),

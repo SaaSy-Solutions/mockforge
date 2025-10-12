@@ -472,7 +472,6 @@ mod tests {
     fn test_router_creation() {
         let _router = router();
         // Router should be created successfully
-        assert!(true);
     }
 
     #[test]
@@ -481,7 +480,6 @@ mod tests {
         let latency_injector = LatencyInjector::new(latency_profile, Default::default());
         let _router = router_with_latency(latency_injector);
         // Router should be created successfully
-        assert!(true);
     }
 
     #[test]
@@ -493,7 +491,6 @@ mod tests {
         let proxy_handler = WsProxyHandler::new(config);
         let _router = router_with_proxy(proxy_handler);
         // Router should be created successfully
-        assert!(true);
     }
 
     #[tokio::test]

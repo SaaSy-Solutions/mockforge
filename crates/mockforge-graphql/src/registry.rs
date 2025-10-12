@@ -3,7 +3,7 @@
 //! This module provides a SpecRegistry implementation that can load GraphQL schemas
 //! from files and generate mock responses.
 
-use async_graphql::{parser::parse_schema, Value};
+use async_graphql::parser::parse_schema;
 use mockforge_core::protocol_abstraction::{
     Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
 };
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 /// GraphQL Schema Registry implementing SpecRegistry
 pub struct GraphQLSchemaRegistry {
     /// Parsed schema SDL
-    schema_sdl: String,
+    _schema_sdl: String,
     /// Query operations
     query_operations: Vec<SpecOperation>,
     /// Mutation operations
@@ -52,7 +52,7 @@ impl GraphQLSchemaRegistry {
         }
 
         Ok(Self {
-            schema_sdl: sdl.to_string(),
+            _schema_sdl: sdl.to_string(),
             query_operations,
             mutation_operations,
         })
@@ -77,7 +77,7 @@ impl GraphQLSchemaRegistry {
                 }
 
                 // Extract field name (before '(' or ':')
-                let field_name = trimmed.split(|c| c == '(' || c == ':').next()?.trim().to_string();
+                let field_name = trimmed.split(['(', ':']).next()?.trim().to_string();
 
                 Some(SpecOperation {
                     name: field_name.clone(),
@@ -95,29 +95,6 @@ impl GraphQLSchemaRegistry {
     pub async fn from_file(path: &str) -> Result<Self> {
         let sdl = tokio::fs::read_to_string(path).await?;
         Self::from_sdl(&sdl)
-    }
-
-    /// Generate mock value for a GraphQL type
-    fn generate_mock_value_for_type(&self, _type_name: &str, field_name: &str) -> Value {
-        // Use pattern matching based on field names
-        match field_name.to_lowercase().as_str() {
-            "id" => Value::String(mockforge_core::templating::expand_str("{{uuid}}")),
-            "name" | "title" | "username" => Value::String(format!("Mock {}", field_name)),
-            "email" => Value::String(mockforge_core::templating::expand_str("{{faker.email}}")),
-            "description" | "content" | "body" => Value::String("Mock content".to_string()),
-            "age" | "count" | "quantity" | "total" => Value::Number((42).into()),
-            "price" | "amount" | "cost" => {
-                Value::Number(serde_json::Number::from_f64(99.99).unwrap())
-            }
-            "active" | "enabled" | "published" => Value::Boolean(true),
-            "createdat" | "updatedat" | "timestamp" => {
-                use std::time::SystemTime;
-                let now =
-                    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-                Value::String(format!("2024-01-01T{}:00:00Z", now % 86400))
-            }
-            _ => Value::String(format!("Mock {}", field_name)),
-        }
     }
 
     /// Generate mock response for a query/mutation

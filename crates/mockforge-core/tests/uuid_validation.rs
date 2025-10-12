@@ -298,7 +298,7 @@ fn test_uuid_validation_edge_cases() {
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 
     // Test strings that might be confused with UUIDs
-    let _edge_cases = vec![
+    let _edge_cases = [
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", // valid format but might be confusing
         "00000000-0000-0000-0000-000000000000", // nil UUID
         "ffffffff-ffff-ffff-ffff-ffffffffffff", // max UUID

@@ -167,6 +167,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::invalid_regex)]
     fn test_regex_error_conversion() {
         let regex_err = regex::Regex::new("[invalid(");
         assert!(regex_err.is_err());

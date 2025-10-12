@@ -194,8 +194,10 @@ mod tests {
 
     #[test]
     fn test_websocket_ai_config_is_enabled() {
-        let mut config = WebSocketAiConfig::default();
-        config.enabled = true;
+        let mut config = WebSocketAiConfig {
+            enabled: true,
+            ..Default::default()
+        };
 
         // Still not enabled without replay config
         assert!(!config.is_enabled());

@@ -297,7 +297,7 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
         PluginCommands::Search {
             query,
             category,
-            limit,
+            limit: _,
         } => {
             println!("🔍 Searching plugins: {}", query);
             if let Some(cat) = category {

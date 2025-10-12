@@ -521,7 +521,7 @@ mod validation_tests {
 
         // Verify we get comprehensive error information
         assert!(!result.valid, "Invalid request should fail validation");
-        assert!(result.errors.len() >= 1, "Should have validation errors");
+        assert!(!result.errors.is_empty(), "Should have validation errors");
 
         // Check that we get detailed error information
         let error_text = result.errors.join(" ");
@@ -623,7 +623,7 @@ mod validation_tests {
             let proto_file = "../../proto/gretter.proto";
             if std::path::Path::new(proto_file).exists() {
                 let output = Command::new("protoc")
-                    .args(&[
+                    .args([
                         "--proto_path=../../proto",
                         &format!("--descriptor_set_out={}", descriptor_path),
                         "gretter.proto",

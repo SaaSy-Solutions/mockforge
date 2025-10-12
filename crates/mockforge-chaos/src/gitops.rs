@@ -98,15 +98,10 @@ impl GitOpsManager {
 
         // Simulate sync process
         let manifests = self.discover_manifests().await?;
-        let changes = self.calculate_changes(&manifests)?;
+        let _changes: Vec<()> = self.calculate_changes(&manifests)?;
 
-        // Apply changes
+        // Apply changes - not implemented
         let mut errors = Vec::new();
-        for change in changes {
-            if let Err(e) = self.apply_change(change).await {
-                errors.push(format!("Failed to apply change: {}", e));
-            }
-        }
 
         // Cleanup (prune) if enabled
         if self.config.prune {
@@ -138,34 +133,10 @@ impl GitOpsManager {
     }
 
     /// Calculate changes between current and desired state
-    fn calculate_changes(
-        &self,
-        _manifests: &[OrchestrationManifest],
-    ) -> Result<Vec<GitOpsChange>, String> {
+    fn calculate_changes(&self, _manifests: &[OrchestrationManifest]) -> Result<Vec<()>, String> {
         // Compare manifests with currently deployed orchestrations
         // Return list of changes (create, update, delete)
         Ok(Vec::new())
-    }
-
-    /// Apply a single change
-    async fn apply_change(&mut self, change: GitOpsChange) -> Result<(), String> {
-        match change.action {
-            ChangeAction::Create => {
-                // Create new orchestration
-                self.manifests.insert(change.name.clone(), change.manifest);
-                Ok(())
-            }
-            ChangeAction::Update => {
-                // Update existing orchestration
-                self.manifests.insert(change.name.clone(), change.manifest);
-                Ok(())
-            }
-            ChangeAction::Delete => {
-                // Delete orchestration
-                self.manifests.remove(&change.name);
-                Ok(())
-            }
-        }
     }
 
     /// Prune orchestrations that are no longer in Git
@@ -218,22 +189,6 @@ impl GitOpsManager {
                 .await;
         }
     }
-}
-
-/// Change to apply
-#[derive(Debug, Clone)]
-struct GitOpsChange {
-    name: String,
-    action: ChangeAction,
-    manifest: OrchestrationManifest,
-}
-
-/// Type of change
-#[derive(Debug, Clone, PartialEq)]
-enum ChangeAction {
-    Create,
-    Update,
-    Delete,
 }
 
 /// Flux integration

@@ -112,12 +112,12 @@ ls -la ./examples/openapi.json
 #### 3. Invalid Validation Mode
 ```yaml
 # ❌ Wrong - invalid mode
-http:
-  request_validation: "strict"
+validation:
+  mode: "strict"
 
 # ✅ Correct - must be: off, warn, or enforce
-http:
-  request_validation: "enforce"
+validation:
+  mode: "enforce"
 ```
 
 #### 4. Invalid Latency Configuration
@@ -177,6 +177,23 @@ admin:
   mount_path: "/admin"    # Embedded under HTTP server
   # OR
   port: 9080              # Standalone mode (no mount_path)
+```
+
+#### 8. Advanced Validation Configuration
+```yaml
+# ✅ Complete validation configuration
+validation:
+  mode: enforce                    # off | warn | enforce
+  aggregate_errors: true          # Combine multiple errors
+  validate_responses: false       # Validate response payloads
+  status_code: 400                # Error status code (400 or 422)
+  skip_admin_validation: true     # Skip validation for admin routes
+
+  # Per-route overrides
+  overrides:
+    "GET /health": "off"          # Disable validation for health checks
+    "POST /api/users": "warn"     # Warning mode for user creation
+    "/api/internal/**": "off"     # Disable for internal endpoints
 ```
 
 ## Validation Tools

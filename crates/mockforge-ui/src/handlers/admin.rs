@@ -78,15 +78,15 @@ pub async fn get_logs(
         })
         .filter(|log| {
             // Apply method filter
-            method_filter.as_ref().map_or(true, |filter| log.method == *filter)
+            method_filter.as_ref().is_none_or(|filter| log.method == *filter)
         })
         .filter(|log| {
             // Apply path filter (simple substring match)
-            path_filter.as_ref().map_or(true, |filter| log.path.contains(filter))
+            path_filter.as_ref().is_none_or(|filter| log.path.contains(filter))
         })
         .filter(|log| {
             // Apply status filter
-            status_filter.map_or(true, |filter| log.status_code == filter)
+            status_filter.is_none_or(|filter| log.status_code == filter)
         })
         .map(|log| LogEntry {
             timestamp: log.timestamp,
@@ -108,12 +108,8 @@ pub async fn get_logs(
 /// Get metrics data
 pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<SimpleMetricsData>> {
     let metrics = state.metrics.read().await;
-    let error_rate = if metrics.total_requests > 0 {
-        0.0 // Note: total_errors field doesn't exist in this RequestMetrics, setting to 0.0
-    } else {
-        0.0
-    };
-    // Note: Some fields from the original RequestMetrics aren't available, using defaults
+    let error_rate = 0.0; // Note: total_errors field doesn't exist in this RequestMetrics, setting to 0.0
+                          // Note: Some fields from the original RequestMetrics aren't available, using defaults
     Json(ApiResponse::success(SimpleMetricsData {
         total_requests: metrics.total_requests,
         active_requests: metrics.active_connections, // Using active_connections as proxy

@@ -369,9 +369,11 @@ mod tests {
     #[test]
     fn test_config_deserialization() {
         // Use default config and modify
-        let mut config = Config::default();
-        config.latency_enabled = false;
-        config.failures_enabled = true;
+        let config = Config {
+            latency_enabled: false,
+            failures_enabled: true,
+            ..Default::default()
+        };
 
         // Serialize and deserialize
         let json = serde_json::to_string(&config).unwrap();
@@ -384,9 +386,11 @@ mod tests {
 
     #[test]
     fn test_config_with_custom_values() {
-        let mut config = Config::default();
-        config.latency_enabled = false;
-        config.failures_enabled = true;
+        let config = Config {
+            latency_enabled: false,
+            failures_enabled: true,
+            ..Default::default()
+        };
 
         assert!(!config.latency_enabled);
         assert!(config.failures_enabled);

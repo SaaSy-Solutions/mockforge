@@ -432,7 +432,7 @@ impl TrafficAllocator {
 
     /// Start automatic reallocation
     pub async fn start_auto_allocation(&self) {
-        let bandit = self.bandit.clone();
+        let _bandit = self.bandit.clone();
         let interval = self.update_interval;
 
         tokio::spawn(async move {

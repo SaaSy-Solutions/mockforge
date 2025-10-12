@@ -191,12 +191,12 @@ async fn test_fault_injection_different_status_codes() {
 
     // Test endpoint that should return 502
     let url_502 = format!("http://{}/error-502", addr);
-    let res_502 = client.get(&url_502).send().await.unwrap();
+    let _res_502 = client.get(&url_502).send().await.unwrap();
     // In real implementation, this should be 502 when fault injection is configured
 
     // Test endpoint that should return 503
     let url_503 = format!("http://{}/error-503", addr);
-    let res_503 = client.get(&url_503).send().await.unwrap();
+    let _res_503 = client.get(&url_503).send().await.unwrap();
     // In real implementation, this should be 503 when fault injection is configured
 
     drop(server);

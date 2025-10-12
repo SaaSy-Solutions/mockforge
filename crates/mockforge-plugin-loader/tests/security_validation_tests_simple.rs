@@ -206,6 +206,7 @@ mod loader_security {
         }
     }
 
+    #[allow(dead_code)]
     fn create_valid_manifest(id: &str, version: &str) -> PluginManifest {
         let plugin_id = PluginId::new(id);
         let plugin_version = PluginVersion::parse(version).unwrap();

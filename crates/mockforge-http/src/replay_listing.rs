@@ -42,11 +42,11 @@ pub fn list_all(fixtures_root: &str) -> anyhow::Result<Vec<ReplayItem>> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn create_fixture_file(
-        dir: &PathBuf,
+        dir: &Path,
         protocol: &str,
         op_id: &str,
         timestamp: &str,

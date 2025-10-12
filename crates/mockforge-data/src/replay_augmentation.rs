@@ -166,7 +166,7 @@ pub struct ReplayAugmentationEngine {
 #[derive(Debug, Clone)]
 struct ScenarioState {
     /// Current timestamp in scenario
-    current_time: std::time::Instant,
+    _current_time: std::time::Instant,
     /// Events generated so far
     events_generated: usize,
     /// Last event data (for progressive evolution)
@@ -178,7 +178,7 @@ struct ScenarioState {
 impl Default for ScenarioState {
     fn default() -> Self {
         Self {
-            current_time: std::time::Instant::now(),
+            _current_time: std::time::Instant::now(),
             events_generated: 0,
             last_event: None,
             context: Vec::new(),

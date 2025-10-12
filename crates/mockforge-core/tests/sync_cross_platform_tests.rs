@@ -192,7 +192,7 @@ mod cross_platform_tests {
 
         // Test to_string_lossy for safe string conversion
         let path_str = joined.to_string_lossy();
-        assert!(path_str.len() > 0);
+        assert!(!path_str.is_empty());
 
         // Verify the string can be used to recreate the path
         let reconstructed = PathBuf::from(path_str.as_ref());
@@ -333,10 +333,10 @@ mod cross_platform_tests {
             fs::write(file, "test").unwrap();
             assert!(file.exists());
 
-            let extension = file.extension().unwrap();
+            let _extension = file.extension().unwrap();
             match file.extension().and_then(|e| e.to_str()) {
-                Some("yaml") | Some("yml") => assert!(true),
-                Some("json") => assert!(true),
+                Some("yaml") | Some("yml") => (),
+                Some("json") => (),
                 _ => panic!("Unexpected extension"),
             }
         }

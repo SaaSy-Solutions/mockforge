@@ -36,7 +36,7 @@ pub struct SmtpFixture {
 }
 
 /// Criteria for matching incoming emails
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MatchCriteria {
     /// Match by recipient pattern (regex)
     #[serde(default)]
@@ -167,17 +167,6 @@ pub struct StoredEmail {
     /// Raw email data
     #[serde(default)]
     pub raw: Option<Vec<u8>>,
-}
-
-impl Default for MatchCriteria {
-    fn default() -> Self {
-        Self {
-            recipient_pattern: None,
-            sender_pattern: None,
-            subject_pattern: None,
-            match_all: false,
-        }
-    }
 }
 
 impl SmtpFixture {

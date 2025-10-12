@@ -186,6 +186,38 @@ services.filter(s => s.tags.includes('api'))
 - **Bulk Rename**: Apply naming patterns to multiple files
 - **Mass Delete**: Remove multiple fixtures with confirmation
 
+### Validation Management
+
+Admin UI v2 provides comprehensive validation controls for OpenAPI request validation:
+
+#### Validation Mode Control
+- **Global Mode Toggle**: Switch between `off`, `warn`, and `enforce` validation modes
+- **Per-Route Overrides**: Set custom validation rules for specific endpoints
+- **Real-time Application**: Changes take effect immediately without server restart
+
+#### Validation Monitoring
+- **Error Statistics**: View validation failure rates and error types
+- **Route-specific Metrics**: See which endpoints are failing validation
+- **Error Details**: Inspect detailed validation error messages
+
+#### Advanced Validation Features
+- **Aggregate Error Reporting**: Combine multiple validation errors into single responses
+- **Response Validation**: Validate response payloads against OpenAPI schemas
+- **Admin Route Exclusion**: Skip validation for admin UI routes when configured
+
+```typescript
+// Example: Update validation mode programmatically
+const { updateValidation } = useValidationStore();
+updateValidation({
+  mode: 'warn',
+  aggregate_errors: true,
+  overrides: {
+    'GET /health': 'off',
+    'POST /api/users': 'enforce'
+  }
+});
+```
+
 ## Configuration
 
 ### Environment Variables

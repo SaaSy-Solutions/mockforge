@@ -98,7 +98,7 @@ async fn test_image_assets_mime_types() {
     // Verify we got actual PNG data (currently empty placeholder)
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     // Note: Currently returns empty body as placeholder
-    assert!(body_bytes.len() == 0, "PNG file should be empty placeholder");
+    assert!(body_bytes.is_empty(), "PNG file should be empty placeholder");
 
     // Test different icon sizes
     let icon_sizes = vec![
@@ -131,7 +131,7 @@ async fn test_image_assets_mime_types() {
 
         let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         // Note: Currently returns empty body as placeholder
-        assert!(body_bytes.len() == 0, "No data for {}", icon_path);
+        assert!(body_bytes.is_empty(), "No data for {}", icon_path);
     }
 }
 

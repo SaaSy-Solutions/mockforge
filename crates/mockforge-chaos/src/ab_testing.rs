@@ -367,9 +367,7 @@ impl ABTestingEngine {
         } else if improvement_pct >= test.config.success_criteria.min_improvement {
             format!(
                 "Variant {} is the clear winner with {:.2}% improvement in {:?}.",
-                winner,
-                improvement_pct,
-                test.config.success_criteria.primary_metric
+                winner, improvement_pct, test.config.success_criteria.primary_metric
             )
         } else {
             format!("Variants show similar performance. Improvement ({:.2}%) below minimum threshold ({:.2}%).", improvement_pct, test.config.success_criteria.min_improvement)

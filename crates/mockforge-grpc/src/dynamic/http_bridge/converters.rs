@@ -160,7 +160,7 @@ impl ProtobufJsonConverter {
                             // Try to parse as number
                             match s.parse::<i32>() {
                                 Ok(num) => {
-                                    if let Some(_) = enum_descriptor.get_value(num) {
+                                    if enum_descriptor.get_value(num).is_some() {
                                         Ok(Value::EnumNumber(num))
                                     } else {
                                         Err(ConversionError::InvalidValue {
@@ -179,7 +179,7 @@ impl ProtobufJsonConverter {
                     JsonValue::Number(n) => {
                         if let Some(num) = n.as_i64() {
                             let num = num as i32;
-                            if let Some(_) = enum_descriptor.get_value(num) {
+                            if enum_descriptor.get_value(num).is_some() {
                                 Ok(Value::EnumNumber(num))
                             } else {
                                 Err(ConversionError::InvalidValue {
@@ -650,8 +650,9 @@ mod tests {
             "number"
         );
         assert_eq!(
-            converter
-                .json_type_name(&JsonValue::Number(serde_json::Number::from_f64(3.14).unwrap())),
+            converter.json_type_name(&JsonValue::Number(
+                serde_json::Number::from_f64(std::f64::consts::PI).unwrap()
+            )),
             "number"
         );
         assert_eq!(converter.json_type_name(&JsonValue::String("test".to_string())), "string");
@@ -743,7 +744,7 @@ mod tests {
             serde_json::Number::from_f64(0.0).unwrap(),
             serde_json::Number::from_f64(1.5).unwrap(),
             serde_json::Number::from_f64(-1.5).unwrap(),
-            serde_json::Number::from_f64(3.14159).unwrap(),
+            serde_json::Number::from_f64(std::f64::consts::PI).unwrap(),
             serde_json::Number::from_f64(1e10).unwrap(),
             serde_json::Number::from_f64(-1e10).unwrap(),
             serde_json::Number::from_f64(1.23456789e-10).unwrap(),

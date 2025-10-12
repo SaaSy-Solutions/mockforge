@@ -21,8 +21,8 @@ echo -e "${BLUE}[INFO]${NC}   - Test HTTP bridge functionality"
 echo -e "${BLUE}[INFO]${NC}   - Test OpenAPI documentation generation"
 
 # Basic server startup test
-mockforge serve --grpc-port 50051 > /tmp/grpc-test.log 2>&1 &
-local pid=$!
+mockforge serve --grpc-port 50053 > /tmp/grpc-test.log 2>&1 &
+pid=$!
 sleep 3
 
 if kill -0 $pid 2>/dev/null; then

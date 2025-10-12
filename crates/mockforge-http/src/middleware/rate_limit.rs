@@ -46,7 +46,7 @@ impl Default for RateLimitConfig {
 /// Global rate limiter state
 pub struct GlobalRateLimiter {
     limiter: Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
-    config: RateLimitConfig,
+    _config: RateLimitConfig,
 }
 
 impl GlobalRateLimiter {
@@ -59,7 +59,10 @@ impl GlobalRateLimiter {
 
         let limiter = Arc::new(RateLimiter::direct(quota));
 
-        Self { limiter, config }
+        Self {
+            limiter,
+            _config: config,
+        }
     }
 
     /// Check if request should be rate limited

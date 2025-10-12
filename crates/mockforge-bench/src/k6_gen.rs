@@ -104,8 +104,6 @@ impl K6ScriptGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec_parser::ApiOperation;
-    use openapiv3::Operation;
 
     #[test]
     fn test_k6_config_creation() {

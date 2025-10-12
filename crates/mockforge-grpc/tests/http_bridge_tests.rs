@@ -32,7 +32,7 @@ async fn test_http_bridge_creation() {
     // Test that gRPC-only server can be started (but don't actually start it due to port conflicts)
     let registry = discover_services(&grpc_config).await.unwrap();
     assert!(
-        registry.service_names().len() >= 1,
+        !registry.service_names().is_empty(),
         "Should discover at least the greeter service"
     );
 

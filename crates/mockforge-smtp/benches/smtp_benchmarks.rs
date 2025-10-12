@@ -30,9 +30,11 @@ fn bench_server_startup(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
     c.bench_function("smtp_server_startup", |b| {
-        b.to_async(&rt).iter(|| async {
-            let (server, _port) = start_test_server().await;
-            black_box(server);
+        b.iter(|| {
+            rt.block_on(async {
+                let (server, _port) = start_test_server().await;
+                black_box(server);
+            })
         });
     });
 }
@@ -51,17 +53,19 @@ fn bench_connection_greeting(c: &mut Criterion) {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     c.bench_function("smtp_connection_greeting", |b| {
-        b.to_async(&rt).iter(|| async {
-            let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
-                .await
-                .expect("Failed to connect");
+        b.iter(|| {
+            rt.block_on(async {
+                let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+                    .await
+                    .expect("Failed to connect");
 
-            let (reader, _writer) = stream.into_split();
-            let mut reader = BufReader::new(reader);
-            let mut greeting = String::new();
-            reader.read_line(&mut greeting).await.expect("Failed to read greeting");
+                let (reader, _writer) = stream.into_split();
+                let mut reader = BufReader::new(reader);
+                let mut greeting = String::new();
+                reader.read_line(&mut greeting).await.expect("Failed to read greeting");
 
-            black_box(greeting);
+                black_box(greeting);
+            })
         });
     });
 }
@@ -78,58 +82,60 @@ fn bench_full_conversation(c: &mut Criterion) {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     c.bench_function("smtp_full_conversation", |b| {
-        b.to_async(&rt).iter(|| async {
-            let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
-                .await
-                .expect("Failed to connect");
+        b.iter(|| {
+            rt.block_on(async {
+                let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+                    .await
+                    .expect("Failed to connect");
 
-            let (reader, mut writer) = stream.into_split();
-            let mut reader = BufReader::new(reader);
-            let mut response = String::new();
+                let (reader, mut writer) = stream.into_split();
+                let mut reader = BufReader::new(reader);
+                let mut response = String::new();
 
-            // Read greeting
-            reader.read_line(&mut response).await.unwrap();
-            response.clear();
+                // Read greeting
+                reader.read_line(&mut response).await.unwrap();
+                response.clear();
 
-            // EHLO
-            writer.write_all(b"EHLO client.example.com\r\n").await.unwrap();
-            loop {
-                let mut line = String::new();
-                reader.read_line(&mut line).await.unwrap();
-                if line.starts_with("250 ") {
-                    break;
+                // EHLO
+                writer.write_all(b"EHLO client.example.com\r\n").await.unwrap();
+                loop {
+                    let mut line = String::new();
+                    reader.read_line(&mut line).await.unwrap();
+                    if line.starts_with("250 ") {
+                        break;
+                    }
                 }
-            }
 
-            // MAIL FROM
-            writer.write_all(b"MAIL FROM:<sender@example.com>\r\n").await.unwrap();
-            response.clear();
-            reader.read_line(&mut response).await.unwrap();
+                // MAIL FROM
+                writer.write_all(b"MAIL FROM:<sender@example.com>\r\n").await.unwrap();
+                response.clear();
+                reader.read_line(&mut response).await.unwrap();
 
-            // RCPT TO
-            writer.write_all(b"RCPT TO:<recipient@example.com>\r\n").await.unwrap();
-            response.clear();
-            reader.read_line(&mut response).await.unwrap();
+                // RCPT TO
+                writer.write_all(b"RCPT TO:<recipient@example.com>\r\n").await.unwrap();
+                response.clear();
+                reader.read_line(&mut response).await.unwrap();
 
-            // DATA
-            writer.write_all(b"DATA\r\n").await.unwrap();
-            response.clear();
-            reader.read_line(&mut response).await.unwrap();
+                // DATA
+                writer.write_all(b"DATA\r\n").await.unwrap();
+                response.clear();
+                reader.read_line(&mut response).await.unwrap();
 
-            // Send email
-            writer
-                .write_all(b"Subject: Benchmark\r\n\r\nBenchmark email\r\n.\r\n")
-                .await
-                .unwrap();
-            response.clear();
-            reader.read_line(&mut response).await.unwrap();
+                // Send email
+                writer
+                    .write_all(b"Subject: Benchmark\r\n\r\nBenchmark email\r\n.\r\n")
+                    .await
+                    .unwrap();
+                response.clear();
+                reader.read_line(&mut response).await.unwrap();
 
-            // QUIT
-            writer.write_all(b"QUIT\r\n").await.unwrap();
-            response.clear();
-            reader.read_line(&mut response).await.unwrap();
+                // QUIT
+                writer.write_all(b"QUIT\r\n").await.unwrap();
+                response.clear();
+                reader.read_line(&mut response).await.unwrap();
 
-            black_box(response);
+                black_box(response);
+            })
         });
     });
 }
@@ -149,24 +155,26 @@ fn bench_command_processing(c: &mut Criterion) {
 
     for command in &["NOOP", "HELP", "RSET"] {
         group.bench_with_input(BenchmarkId::from_parameter(command), command, |b, &cmd| {
-            b.to_async(&rt).iter(|| async {
-                let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
-                    .await
-                    .expect("Failed to connect");
+            b.iter(|| {
+                rt.block_on(async {
+                    let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+                        .await
+                        .expect("Failed to connect");
 
-                let (reader, mut writer) = stream.into_split();
-                let mut reader = BufReader::new(reader);
-                let mut response = String::new();
+                    let (reader, mut writer) = stream.into_split();
+                    let mut reader = BufReader::new(reader);
+                    let mut response = String::new();
 
-                // Read greeting
-                reader.read_line(&mut response).await.unwrap();
-                response.clear();
+                    // Read greeting
+                    reader.read_line(&mut response).await.unwrap();
+                    response.clear();
 
-                // Send command
-                writer.write_all(format!("{}\r\n", cmd).as_bytes()).await.unwrap();
-                reader.read_line(&mut response).await.unwrap();
+                    // Send command
+                    writer.write_all(format!("{}\r\n", cmd).as_bytes()).await.unwrap();
+                    reader.read_line(&mut response).await.unwrap();
 
-                black_box(response);
+                    black_box(response);
+                })
             });
         });
     }
@@ -177,9 +185,8 @@ fn bench_command_processing(c: &mut Criterion) {
 /// Benchmark fixture matching performance
 fn bench_fixture_matching(c: &mut Criterion) {
     use mockforge_smtp::{BehaviorConfig, MatchCriteria, SmtpFixture, SmtpResponse, StorageConfig};
-    use std::path::PathBuf;
 
-    let rt = Runtime::new().unwrap();
+    let _rt = Runtime::new().unwrap();
 
     // Create registry with multiple fixtures
     let mut registry = SmtpSpecRegistry::new();
@@ -321,45 +328,47 @@ fn bench_concurrent_connections(c: &mut Criterion) {
             BenchmarkId::from_parameter(num_connections),
             num_connections,
             |b, &count| {
-                b.to_async(&rt).iter(|| async {
-                    let mut handles = Vec::new();
+                b.iter(|| {
+                    rt.block_on(async {
+                        let mut handles = Vec::new();
 
-                    for _ in 0..count {
-                        let handle = tokio::spawn(async move {
-                            let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
-                                .await
-                                .expect("Failed to connect");
+                        for _ in 0..count {
+                            let handle = tokio::spawn(async move {
+                                let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+                                    .await
+                                    .expect("Failed to connect");
 
-                            let (reader, mut writer) = stream.into_split();
-                            let mut reader = BufReader::new(reader);
-                            let mut response = String::new();
+                                let (reader, mut writer) = stream.into_split();
+                                let mut reader = BufReader::new(reader);
+                                let mut response = String::new();
 
-                            // Read greeting
-                            reader.read_line(&mut response).await.unwrap();
-                            response.clear();
+                                // Read greeting
+                                reader.read_line(&mut response).await.unwrap();
+                                response.clear();
 
-                            // EHLO
-                            writer.write_all(b"EHLO client.example.com\r\n").await.unwrap();
-                            loop {
-                                let mut line = String::new();
-                                reader.read_line(&mut line).await.unwrap();
-                                if line.starts_with("250 ") {
-                                    break;
+                                // EHLO
+                                writer.write_all(b"EHLO client.example.com\r\n").await.unwrap();
+                                loop {
+                                    let mut line = String::new();
+                                    reader.read_line(&mut line).await.unwrap();
+                                    if line.starts_with("250 ") {
+                                        break;
+                                    }
                                 }
-                            }
 
-                            // QUIT
-                            writer.write_all(b"QUIT\r\n").await.unwrap();
-                            response.clear();
-                            reader.read_line(&mut response).await.unwrap();
-                        });
+                                // QUIT
+                                writer.write_all(b"QUIT\r\n").await.unwrap();
+                                response.clear();
+                                reader.read_line(&mut response).await.unwrap();
+                            });
 
-                        handles.push(handle);
-                    }
+                            handles.push(handle);
+                        }
 
-                    for handle in handles {
-                        handle.await.unwrap();
-                    }
+                        for handle in handles {
+                            handle.await.unwrap();
+                        }
+                    })
                 });
             },
         );

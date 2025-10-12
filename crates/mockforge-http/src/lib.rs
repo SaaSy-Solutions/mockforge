@@ -194,6 +194,7 @@ use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi_routes::ValidationOptions;
+
 use mockforge_core::LatencyProfile;
 use mockforge_core::TrafficShaper;
 #[cfg(feature = "data-faker")]
@@ -204,7 +205,6 @@ use std::path::Path;
 use tokio::fs;
 use tokio::sync::RwLock;
 use tracing::*;
-use serde_yaml;
 
 /// Route info for storing in state
 #[derive(Clone)]
@@ -222,6 +222,12 @@ pub struct RouteInfo {
 pub struct HttpServerState {
     pub routes: Vec<RouteInfo>,
     pub rate_limiter: Option<std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>>,
+}
+
+impl Default for HttpServerState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HttpServerState {
@@ -277,7 +283,7 @@ pub async fn build_router(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
 ) -> Router {
-    build_router_with_multi_tenant(spec_path, options, failure_config, None).await
+    build_router_with_multi_tenant(spec_path, options, failure_config, None, None, None).await
 }
 
 /// Build the base HTTP router with multi-tenant workspace support
@@ -286,6 +292,8 @@ pub async fn build_router_with_multi_tenant(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+    _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
+    _cors_config: Option<mockforge_core::config::HttpCorsConfig>,
 ) -> Router {
     use std::time::Instant;
 
@@ -519,9 +527,16 @@ pub async fn build_router_with_multi_tenant(
                                     if path.extension() == Some(OsStr::new("yaml")) {
                                         match fs::read_to_string(&path).await {
                                             Ok(content) => {
-                                                match serde_yaml::from_str::<mockforge_core::Workspace>(&content) {
+                                                match serde_yaml::from_str::<
+                                                    mockforge_core::Workspace,
+                                                >(
+                                                    &content
+                                                ) {
                                                     Ok(workspace) => {
-                                                        if let Err(e) = registry.register_workspace(workspace.id.clone(), workspace).await {
+                                                        if let Err(e) = registry.register_workspace(
+                                                            workspace.id.clone(),
+                                                            workspace,
+                                                        ) {
                                                             warn!("Failed to register auto-discovered workspace from {:?}: {}", path, e);
                                                         } else {
                                                             info!("Auto-registered workspace from {:?}", path);
@@ -533,7 +548,10 @@ pub async fn build_router_with_multi_tenant(
                                                 }
                                             }
                                             Err(e) => {
-                                                warn!("Failed to read workspace file {:?}: {}", path, e);
+                                                warn!(
+                                                    "Failed to read workspace file {:?}: {}",
+                                                    path, e
+                                                );
                                             }
                                         }
                                     }
@@ -544,7 +562,10 @@ pub async fn build_router_with_multi_tenant(
                             }
                         }
                     } else {
-                        warn!("Config directory {:?} does not exist or is not a directory", config_path);
+                        warn!(
+                            "Config directory {:?} does not exist or is not a directory",
+                            config_path
+                        );
                     }
                 }
             }
@@ -757,7 +778,8 @@ pub async fn build_router_with_chains(
     options: Option<ValidationOptions>,
     circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
 ) -> Router {
-    build_router_with_chains_and_multi_tenant(spec_path, options, circling_config, None).await
+    build_router_with_chains_and_multi_tenant(spec_path, options, circling_config, None, None, None)
+        .await
 }
 
 /// Build the base HTTP router with chaining and multi-tenant support
@@ -766,6 +788,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     options: Option<ValidationOptions>,
     circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+    route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
+    cors_config: Option<mockforge_core::config::HttpCorsConfig>,
 ) -> Router {
     use crate::chain_handlers::create_chain_state;
     use axum::{
@@ -786,8 +810,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
     let chain_state = create_chain_state(registry, engine);
 
     // Start with basic router including multi-tenant support
-    let mut app =
-        build_router_with_multi_tenant(spec_path, options, None, multi_tenant_config).await;
+    let mut app = build_router_with_multi_tenant(
+        spec_path,
+        options,
+        None,
+        multi_tenant_config,
+        route_configs,
+        cors_config,
+    )
+    .await;
 
     // Add chain management endpoints
     app = app.nest(
@@ -873,7 +904,7 @@ pub async fn build_router_with_traffic_shaping_and_multi_tenant(
     let mut app = Router::new();
 
     // If an OpenAPI spec is provided, integrate it
-    if let Some(spec) = spec_path {
+    if let Some(ref spec) = spec_path {
         match OpenApiSpec::from_file(&spec).await {
             Ok(openapi) => {
                 info!("Loaded OpenAPI spec from {}", spec);
@@ -885,7 +916,7 @@ pub async fn build_router_with_traffic_shaping_and_multi_tenant(
                 app = registry.build_router();
             }
             Err(e) => {
-                warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec, e);
+                warn!("Failed to load OpenAPI spec from {:?}: {}. Starting without OpenAPI integration.", spec_path, e);
             }
         }
     }
@@ -1058,58 +1089,50 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_router_without_openapi() {
-        let router = build_router(None, None, None).await;
+        let _router = build_router(None, None, None).await;
         // Should succeed without OpenAPI spec
-        assert!(true); // Router was created successfully
     }
 
     #[tokio::test]
     async fn test_build_router_with_nonexistent_spec() {
-        let router = build_router(Some("/nonexistent/spec.yaml".to_string()), None, None).await;
+        let _router = build_router(Some("/nonexistent/spec.yaml".to_string()), None, None).await;
         // Should succeed but log a warning
-        assert!(true); // Router was created successfully despite missing spec
     }
 
     #[tokio::test]
     async fn test_build_router_with_auth_and_latency() {
-        let router = build_router_with_auth_and_latency(None, None, None, None).await;
+        let _router = build_router_with_auth_and_latency(None, None, None, None).await;
         // Should succeed without parameters
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_build_router_with_latency() {
-        let router = build_router_with_latency(None, None, None).await;
+        let _router = build_router_with_latency(None, None, None).await;
         // Should succeed without parameters
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_build_router_with_auth() {
-        let router = build_router_with_auth(None, None, None).await;
+        let _router = build_router_with_auth(None, None, None).await;
         // Should succeed without parameters
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_build_router_with_chains() {
-        let router = build_router_with_chains(None, None, None).await;
+        let _router = build_router_with_chains(None, None, None).await;
         // Should succeed without parameters
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_build_router_with_traffic_shaping_disabled() {
-        let router = build_router_with_traffic_shaping(None, None, None, false).await;
+        let _router = build_router_with_traffic_shaping(None, None, None, false).await;
         // Should succeed with traffic shaping disabled
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_build_router_with_traffic_shaping_enabled_no_shaper() {
-        let router = build_router_with_traffic_shaping(None, None, None, true).await;
+        let _router = build_router_with_traffic_shaping(None, None, None, true).await;
         // Should succeed even without a traffic shaper
-        assert!(true);
     }
 
     #[test]
@@ -1205,8 +1228,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_router_includes_rate_limiter() {
-        let router = build_router(None, None, None).await;
+        let _router = build_router(None, None, None).await;
         // Router should be created successfully with rate limiter initialized
-        assert!(true); // Router was created successfully
     }
 }

@@ -93,7 +93,7 @@ mod validation_tests {
             // Validation might succeed or fail, but should never panic
             let result = validate_json_schema(&data, &schema);
             // Verify result is either valid or has errors
-            assert!(result.valid || !result.errors.is_empty() || result.valid);
+            assert!(result.valid || !result.errors.is_empty());
         }
 
         #[test]
@@ -315,11 +315,11 @@ mod type_handling {
             let as_number = json!({"id": val});
             let as_string = json!({"id": val.to_string()});
 
-            let result_num = validate_json_schema(&as_number, &schema);
+            let _result_num = validate_json_schema(&as_number, &schema);
             let result_str = validate_json_schema(&as_string, &schema);
 
             // String should be valid, number should not, but neither should panic
-            assert!(!result_str.valid || result_str.errors.is_empty() || result_str.valid);
+            assert!(!result_str.valid || result_str.errors.is_empty());
             // Number will likely be invalid, but shouldn't panic
         }
 
@@ -346,7 +346,7 @@ mod type_handling {
 
             let result = validate_json_schema(&data, &schema);
             // Should handle null and missing fields gracefully
-            assert!(result.valid || !result.errors.is_empty() || result.valid);
+            assert!(result.valid || !result.errors.is_empty());
         }
     }
 }

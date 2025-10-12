@@ -18,9 +18,10 @@ pub enum LoadScenario {
     Soak,
 }
 
-impl LoadScenario {
-    /// Parse scenario from string
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl std::str::FromStr for LoadScenario {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "constant" => Ok(Self::Constant),
             "ramp-up" | "ramp_up" | "rampup" => Ok(Self::RampUp),
@@ -30,7 +31,9 @@ impl LoadScenario {
             _ => Err(format!("Unknown scenario: {}", s)),
         }
     }
+}
 
+impl LoadScenario {
     /// Generate k6 stages configuration for this scenario
     pub fn generate_stages(&self, duration_secs: u64, max_vus: u32) -> Vec<Stage> {
         match self {
@@ -164,6 +167,7 @@ pub struct Stage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_scenario_from_str() {

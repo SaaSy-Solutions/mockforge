@@ -183,7 +183,5 @@ impl Clone for MockReflectionProxy {
 mod tests {
 
     #[test]
-    fn test_module_compiles() {
-        assert!(true);
-    }
+    fn test_module_compiles() {}
 }

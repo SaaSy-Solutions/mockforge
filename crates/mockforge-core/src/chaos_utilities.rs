@@ -415,7 +415,7 @@ mod tests {
         for _ in 0..10 {
             let result = engine.process_request(&[]).await;
             if let ChaosResult::Delay { delay_ms } = result {
-                assert!(delay_ms >= 100 && delay_ms <= 200);
+                assert!((100..=200).contains(&delay_ms));
                 delay_count += 1;
             }
         }

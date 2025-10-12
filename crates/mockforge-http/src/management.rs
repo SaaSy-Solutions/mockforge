@@ -207,9 +207,9 @@ async fn export_mocks(
 
     let format = params
         .get("format")
-        .and_then(|f| match f.as_str() {
-            "yaml" | "yml" => Some(ExportFormat::Yaml),
-            _ => Some(ExportFormat::Json),
+        .map(|f| match f.as_str() {
+            "yaml" | "yml" => ExportFormat::Yaml,
+            _ => ExportFormat::Json,
         })
         .unwrap_or(ExportFormat::Json);
 
@@ -231,9 +231,9 @@ async fn import_mocks(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let format = params
         .get("format")
-        .and_then(|f| match f.as_str() {
-            "yaml" | "yml" => Some(ExportFormat::Yaml),
-            _ => Some(ExportFormat::Json),
+        .map(|f| match f.as_str() {
+            "yaml" | "yml" => ExportFormat::Yaml,
+            _ => ExportFormat::Json,
         })
         .unwrap_or(ExportFormat::Json);
 

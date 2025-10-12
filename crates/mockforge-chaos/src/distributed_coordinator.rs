@@ -124,7 +124,6 @@ enum CoordinatorControl {
     RegisterNode(Node),
     UnregisterNode(String),
     SubmitTask(DistributedTask),
-    UpdateNodeState(NodeExecutionState),
     Heartbeat(String),
     TriggerElection,
 }
@@ -183,7 +182,7 @@ impl DistributedCoordinator {
         nodes: Arc<RwLock<HashMap<String, Node>>>,
         leader_state: Arc<RwLock<LeaderState>>,
         tasks: Arc<RwLock<HashMap<String, DistributedTask>>>,
-        execution_states: Arc<RwLock<HashMap<String, NodeExecutionState>>>,
+        _execution_states: Arc<RwLock<HashMap<String, NodeExecutionState>>>,
         control_rx: &mut mpsc::Receiver<CoordinatorControl>,
     ) {
         loop {
@@ -204,12 +203,6 @@ impl DistributedCoordinator {
                             info!("Submitting task: {}", task.id);
                             let mut tasks_guard = tasks.write();
                             tasks_guard.insert(task.id.clone(), task);
-                        }
-                        CoordinatorControl::UpdateNodeState(state) => {
-                            debug!("Updating node state for: {}", state.node_id);
-                            let mut states_guard = execution_states.write();
-                            let key = format!("{}:{}", state.task_id, state.node_id);
-                            states_guard.insert(key, state);
                         }
                         CoordinatorControl::Heartbeat(node_id) => {
                             debug!("Heartbeat from node: {}", node_id);
@@ -304,7 +297,7 @@ impl DistributedCoordinator {
 
     /// Elect leader (simple implementation)
     fn elect_leader(
-        current_node_id: &str,
+        _current_node_id: &str,
         nodes: &Arc<RwLock<HashMap<String, Node>>>,
         leader_state: &Arc<RwLock<LeaderState>>,
     ) {

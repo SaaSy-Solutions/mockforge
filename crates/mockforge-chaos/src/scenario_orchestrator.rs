@@ -173,10 +173,7 @@ pub struct ScenarioOrchestrator {
 
 /// Orchestration control commands
 enum OrchestrationControl {
-    Pause,
-    Resume,
     Stop,
-    SkipStep,
 }
 
 impl ScenarioOrchestrator {
@@ -319,31 +316,10 @@ impl ScenarioOrchestrator {
             // Check for control commands
             if let Ok(cmd) = control_rx.try_recv() {
                 match cmd {
-                    OrchestrationControl::Pause => {
-                        info!("Orchestration paused");
-                        // Wait for resume or stop
-                        if let Some(cmd) = control_rx.recv().await {
-                            match cmd {
-                                OrchestrationControl::Resume => {
-                                    info!("Orchestration resumed");
-                                }
-                                OrchestrationControl::Stop => {
-                                    info!("Orchestration stopped");
-                                    return false;
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
                     OrchestrationControl::Stop => {
                         info!("Orchestration stopped");
                         return false;
                     }
-                    OrchestrationControl::SkipStep => {
-                        info!("Skipping step: {}", step.name);
-                        continue;
-                    }
-                    _ => {}
                 }
             }
 
@@ -395,7 +371,7 @@ impl ScenarioOrchestrator {
     /// Execute a single step
     async fn execute_step(
         step: &ScenarioStep,
-        status: &Arc<RwLock<Option<OrchestrationStatus>>>,
+        _status: &Arc<RwLock<Option<OrchestrationStatus>>>,
         active_config: &Arc<RwLock<Option<ChaosConfig>>>,
     ) -> bool {
         info!("Executing step: {}", step.name);

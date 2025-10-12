@@ -55,10 +55,10 @@ mod tests {
         fs::write(&wasm_path, malicious_wasm).unwrap();
 
         let config = PluginLoaderConfig::default();
-        let loader = PluginLoader::new(config);
+        let plugin_loader = PluginLoader::new(config);
 
         // Test loading malicious WASM - API should handle it gracefully
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = plugin_loader.validate_plugin(temp_dir.path()).await;
 
         // The result may be ok or err depending on validation strictness
         let _ = result; // Ensure the function completes without panic
@@ -82,14 +82,16 @@ mod tests {
         ];
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
-                                            // For this test, we need to allow the capabilities in the security policies
-                                            // But since we can't modify security policies easily, let's modify the manifest to not request excessive permissions
-        let loader = PluginLoader::new(config);
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true,
+            ..Default::default()
+        };
+        // For this test, we need to allow the capabilities in the security policies
+        // But since we can't modify security policies easily, let's modify the manifest to not request excessive permissions
+        let plugin_loader = PluginLoader::new(config);
 
         // Test validation - should pass manifest validation but be restricted at runtime
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = plugin_loader.validate_plugin(temp_dir.path()).await;
         assert!(
             result.is_ok(),
             "Manifest validation should pass even with excessive permissions"
@@ -204,7 +206,7 @@ mod tests {
         // Test that plugins are properly isolated from each other and the host
 
         let config = PluginLoaderConfig::default();
-        let loader = PluginLoader::new(config);
+        let plugin_loader = PluginLoader::new(config);
 
         // Verify that plugins cannot access each other's data
         // This is more of an integration test, but we can verify the API structure
@@ -213,8 +215,8 @@ mod tests {
         let plugin2_id = PluginId::new("plugin2".to_string());
 
         // Both plugins should be isolated
-        let plugin1 = loader.get_plugin(&plugin1_id).await;
-        let plugin2 = loader.get_plugin(&plugin2_id).await;
+        let plugin1 = plugin_loader.get_plugin(&plugin1_id).await;
+        let plugin2 = plugin_loader.get_plugin(&plugin2_id).await;
 
         assert!(plugin1.is_none()); // Neither exists
         assert!(plugin2.is_none()); // Neither exists
@@ -276,10 +278,10 @@ mod tests {
         fs::write(&wasm_path, valid_wasm).unwrap();
 
         let config = PluginLoaderConfig::default();
-        let loader = PluginLoader::new(config);
+        let plugin_loader = PluginLoader::new(config);
 
         // Test validation of minimal WASM - API should handle it gracefully
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = plugin_loader.validate_plugin(temp_dir.path()).await;
         // The result may be ok or err depending on validation strictness
         let _ = result; // Ensure the function completes without panic
 
@@ -287,7 +289,7 @@ mod tests {
         let invalid_wasm = vec![0x00, 0x61, 0x73]; // Incomplete magic number
         fs::write(&wasm_path, invalid_wasm).unwrap();
 
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = plugin_loader.validate_plugin(temp_dir.path()).await;
         // Invalid WASM - API should handle it gracefully
         let _ = result; // Ensure the function completes without panic
     }
@@ -334,7 +336,7 @@ mod tests {
         // Test that plugin execution is properly isolated
 
         let config = PluginLoaderConfig::default();
-        let loader = PluginLoader::new(config);
+        let _loader = PluginLoader::new(config);
 
         // Test that plugin execution contexts are separate
         // This is verified by the runtime isolation in the actual implementation

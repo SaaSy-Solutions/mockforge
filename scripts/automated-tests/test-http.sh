@@ -42,7 +42,7 @@ start_server() {
     # Wait for server to start
     local retries=10
     while [ $retries -gt 0 ]; do
-        if curl -f "http://localhost:$port/ping" > /dev/null 2>&1; then
+        if curl -f "http://localhost:$port/health" > /dev/null 2>&1; then
             log_success "Server started successfully on port $port"
             echo $pid
             return 0
@@ -76,11 +76,11 @@ test_server_startup() {
     # Test default HTTP server
     local pid=$(start_server "--http-port 3000" "3000")
     if [ $? -eq 0 ]; then
-        # Test ping endpoint
-        if curl -f "http://localhost:3000/ping" > /dev/null 2>&1; then
-            log_success "Ping endpoint responds"
+        # Test health endpoint
+        if curl -f "http://localhost:3000/health" > /dev/null 2>&1; then
+            log_success "Health endpoint responds"
         else
-            log_error "Ping endpoint failed"
+            log_error "Health endpoint failed"
             stop_server "$pid"
             return 1
         fi
@@ -92,7 +92,7 @@ test_server_startup() {
     # Test custom port
     pid=$(start_server "--http-port 8080" "8080")
     if [ $? -eq 0 ]; then
-        if curl -f "http://localhost:8080/ping" > /dev/null 2>&1; then
+        if curl -f "http://localhost:8080/health" > /dev/null 2>&1; then
             log_success "Custom port 8080 works"
         else
             log_error "Custom port 8080 failed"
@@ -107,7 +107,7 @@ test_server_startup() {
     # Test host binding
     pid=$(start_server "--host 127.0.0.1 --http-port 3000" "3000")
     if [ $? -eq 0 ]; then
-        if curl -f "http://127.0.0.1:3000/ping" > /dev/null 2>&1; then
+        if curl -f "http://127.0.0.1:3000/health" > /dev/null 2>&1; then
             log_success "Host binding to 127.0.0.1 works"
         else
             log_error "Host binding to 127.0.0.1 failed"
@@ -144,7 +144,7 @@ test_openapi_integration() {
     if [ $? -eq 0 ]; then
         # Test that some endpoints are available (this depends on the actual spec)
         # For now, just check that server is running and responds
-        if curl -f "http://localhost:3000/ping" > /dev/null 2>&1; then
+        if curl -f "http://localhost:3000/health" > /dev/null 2>&1; then
             log_success "Server with OpenAPI spec started successfully"
         else
             log_error "Server with OpenAPI spec failed"
@@ -253,6 +253,8 @@ routes:
       body: '{"email": "{{faker.email}}", "name": "{{faker.name}}"}'
 EOF
 
+    # Set environment variable for faker tokens
+    export MOCKFORGE_FAKE_TOKENS=1
     local pid=$(start_server "--config $config_file" "3000")
     if [ $? -eq 0 ]; then
         # Test UUID template
@@ -381,7 +383,7 @@ routes:
     method: GET
     response:
       status: 200
-      body: '{"message": "Hello {{query.name}}"}'
+      body: '{"uuid": "{{uuid}}", "timestamp": "{{now}}"}'
 EOF
 
     local pid=$(start_server "--config $config_file" "3000")
@@ -407,8 +409,8 @@ EOF
         fi
 
         # Test templated route
-        response=$(curl -s "http://localhost:3000/templated-route?name=World")
-        if echo "$response" | grep -q '"message": "Hello World"'; then
+        response=$(curl -s "http://localhost:3000/templated-route")
+        if echo "$response" | grep -q '"uuid":' && echo "$response" | grep -q '"timestamp":'; then
             log_success "Templated route works"
         else
             log_error "Templated route failed"

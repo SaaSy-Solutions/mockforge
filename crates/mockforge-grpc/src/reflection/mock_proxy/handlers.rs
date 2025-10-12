@@ -369,7 +369,7 @@ impl MockReflectionProxy {
             .lock()
             .map_err(|_| Status::internal("Failed to acquire lock on smart generator"))?;
 
-        Ok((&mut *smart_generator).generate_message(&descriptor))
+        Ok(smart_generator.generate_message(&descriptor))
     }
 
     /// Generate a mock message with a specific generator
@@ -389,7 +389,5 @@ impl MockReflectionProxy {
 mod tests {
 
     #[test]
-    fn test_module_compiles() {
-        assert!(true);
-    }
+    fn test_module_compiles() {}
 }

@@ -103,9 +103,9 @@ impl ScheduledScenario {
                 }
             }
             ScheduleType::Cron {
-                hour,
-                minute,
-                day_of_week,
+                hour: _,
+                minute: _,
+                day_of_week: _,
                 max_executions,
             } => {
                 if *max_executions > 0 && self.execution_count >= *max_executions {

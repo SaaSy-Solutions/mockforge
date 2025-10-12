@@ -208,19 +208,14 @@ impl ValidationFramework {
         let primary_key = entity.primary_key.clone();
 
         // Add to entities list
-        let entities_list =
-            self.data_store.entities.entry(entity_type.clone()).or_insert_with(Vec::new);
+        let entities_list = self.data_store.entities.entry(entity_type.clone()).or_default();
         let entity_index = entities_list.len();
         entities_list.push(entity);
 
         // Update foreign key index if primary key exists
         if let Some(pk) = primary_key {
-            let type_index = self
-                .data_store
-                .foreign_key_index
-                .entry(entity_type)
-                .or_insert_with(HashMap::new);
-            let pk_index = type_index.entry(pk).or_insert_with(Vec::new);
+            let type_index = self.data_store.foreign_key_index.entry(entity_type).or_default();
+            let pk_index = type_index.entry(pk).or_default();
             pk_index.push(entity_index);
         }
 

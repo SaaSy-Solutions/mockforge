@@ -37,7 +37,7 @@ async fn test_server_starts_with_malformed_json_spec() {
     let base_url = format!("http://{}", addr);
 
     // Health endpoint should still work
-    let response = client.get(&format!("{}/health", base_url)).send().await.unwrap();
+    let response = client.get(format!("{}/health", base_url)).send().await.unwrap();
     assert!(
         response.status().is_success(),
         "Health endpoint should work even with invalid spec"
@@ -86,7 +86,7 @@ async fn test_server_starts_with_incomplete_openapi_spec() {
     let client = reqwest::Client::new();
 
     // Health check should work
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -116,7 +116,7 @@ async fn test_server_starts_with_empty_spec_file() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -146,7 +146,7 @@ async fn test_server_starts_with_whitespace_only_spec() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -187,7 +187,7 @@ async fn test_server_starts_with_invalid_openapi_version() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -213,7 +213,7 @@ async fn test_server_starts_with_nonexistent_spec_path() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -246,22 +246,18 @@ async fn test_management_endpoints_work_with_failed_spec() {
     let base_url = format!("http://{}", addr);
 
     // Test health endpoint
-    let response = client.get(&format!("{}/health", base_url)).send().await.unwrap();
+    let response = client.get(format!("{}/health", base_url)).send().await.unwrap();
     assert!(response.status().is_success());
 
     // Test routes endpoint (should return empty list)
-    let response = client.get(&format!("{}/__mockforge/routes", base_url)).send().await.unwrap();
+    let response = client.get(format!("{}/__mockforge/routes", base_url)).send().await.unwrap();
     assert!(response.status().is_success());
 
     let routes: serde_json::Value = response.json().await.unwrap();
     assert_eq!(routes["total"], 0, "Should have no routes when spec fails to load");
 
     // Test management API health
-    let response = client
-        .get(&format!("{}/__mockforge/api/health", base_url))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(format!("{}/__mockforge/api/health", base_url)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -293,7 +289,7 @@ async fn test_server_starts_with_malformed_yaml_spec() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -363,7 +359,7 @@ async fn test_server_handles_spec_with_circular_refs() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -407,7 +403,7 @@ async fn test_validation_ignored_when_spec_fails() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
+    let response = client.get(format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);

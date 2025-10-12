@@ -276,7 +276,7 @@ impl RemediationEngine {
     fn create_action(
         &self,
         recommendation: &Recommendation,
-        risk_assessment: RiskAssessment,
+        _risk_assessment: RiskAssessment,
     ) -> RemediationAction {
         let config_changes = self.extract_config_changes(recommendation);
         let rollback_data = self.create_rollback_data(&config_changes);
@@ -622,7 +622,7 @@ impl RemediationEngine {
         weight_total += 0.25;
 
         if weight_total > 0.0 {
-            (score / weight_total).max(0.0).min(1.0)
+            (score / weight_total).clamp(0.0, 1.0)
         } else {
             0.0
         }
@@ -783,8 +783,10 @@ mod tests {
     #[test]
     fn test_config_update() {
         let engine = RemediationEngine::new();
-        let mut config = RemediationConfig::default();
-        config.enabled = true;
+        let config = RemediationConfig {
+            enabled: true,
+            ..Default::default()
+        };
         engine.update_config(config);
         assert!(engine.get_config().enabled);
     }

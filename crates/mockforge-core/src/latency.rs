@@ -576,9 +576,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_injector_process_request_with_failure() {
-        let mut fault_config = FaultConfig::default();
-        fault_config.failure_rate = 1.0;
-        fault_config.status_codes = vec![503]; // Set to only one status code
+        let fault_config = FaultConfig {
+            failure_rate: 1.0,
+            status_codes: vec![503], // Set to only one status code
+            ..Default::default()
+        };
 
         let injector = LatencyInjector::new(LatencyProfile::new(10, 0), fault_config);
 

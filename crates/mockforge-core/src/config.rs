@@ -89,6 +89,45 @@ impl Default for AuthConfig {
     }
 }
 
+/// Route configuration for custom HTTP routes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteConfig {
+    /// Route path
+    pub path: String,
+    /// HTTP method
+    pub method: String,
+    /// Request configuration
+    pub request: Option<RouteRequestConfig>,
+    /// Response configuration
+    pub response: RouteResponseConfig,
+}
+
+/// Request configuration for routes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteRequestConfig {
+    /// Request validation configuration
+    pub validation: Option<RouteValidationConfig>,
+}
+
+/// Response configuration for routes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteResponseConfig {
+    /// HTTP status code
+    pub status: u16,
+    /// Response headers
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    /// Response body
+    pub body: Option<serde_json::Value>,
+}
+
+/// Validation configuration for routes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteValidationConfig {
+    /// JSON schema for request validation
+    pub schema: serde_json::Value,
+}
+
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -115,9 +154,35 @@ pub struct ServerConfig {
     pub observability: ObservabilityConfig,
     /// Multi-tenant workspace configuration
     pub multi_tenant: crate::multi_tenant::MultiTenantConfig,
+    /// Custom routes configuration
+    #[serde(default)]
+    pub routes: Vec<RouteConfig>,
 }
 
 // Default is derived for ServerConfig
+
+/// HTTP validation configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpValidationConfig {
+    /// Request validation mode: off, warn, enforce
+    pub mode: String,
+}
+
+/// HTTP CORS configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpCorsConfig {
+    /// Enable CORS
+    pub enabled: bool,
+    /// Allowed origins
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+    /// Allowed methods
+    #[serde(default)]
+    pub allowed_methods: Vec<String>,
+    /// Allowed headers
+    #[serde(default)]
+    pub allowed_headers: Vec<String>,
+}
 
 /// HTTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,12 +193,12 @@ pub struct HttpConfig {
     pub host: String,
     /// Path to OpenAPI spec file for HTTP server
     pub openapi_spec: Option<String>,
-    /// Enable CORS
-    pub cors_enabled: bool,
+    /// CORS configuration
+    pub cors: Option<HttpCorsConfig>,
     /// Request timeout in seconds
     pub request_timeout_secs: u64,
-    /// Request validation mode: off, warn, enforce
-    pub request_validation: String,
+    /// Request validation configuration
+    pub validation: Option<HttpValidationConfig>,
     /// Aggregate validation errors into JSON array
     pub aggregate_validation_errors: bool,
     /// Validate responses (warn-only logging)
@@ -156,9 +221,23 @@ impl Default for HttpConfig {
             port: 3000,
             host: "0.0.0.0".to_string(),
             openapi_spec: None,
-            cors_enabled: true,
+            cors: Some(HttpCorsConfig {
+                enabled: true,
+                allowed_origins: vec!["*".to_string()],
+                allowed_methods: vec![
+                    "GET".to_string(),
+                    "POST".to_string(),
+                    "PUT".to_string(),
+                    "DELETE".to_string(),
+                    "PATCH".to_string(),
+                    "OPTIONS".to_string(),
+                ],
+                allowed_headers: vec!["content-type".to_string(), "authorization".to_string()],
+            }),
             request_timeout_secs: 30,
-            request_validation: "enforce".to_string(),
+            validation: Some(HttpValidationConfig {
+                mode: "enforce".to_string(),
+            }),
             aggregate_validation_errors: true,
             validate_responses: false,
             response_template_expand: false,

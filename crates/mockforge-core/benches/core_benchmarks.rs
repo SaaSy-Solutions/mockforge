@@ -353,13 +353,10 @@ fn bench_memory_usage(c: &mut Criterion) {
 
     // Benchmark large OpenAPI spec parsing
     group.bench_function("large_spec_parsing", |b| {
-        b.iter_with_setup(
-            || create_large_openapi_spec(),
-            |spec| {
-                let result = create_registry_from_json(black_box(spec));
-                black_box(result)
-            },
-        );
+        b.iter_with_setup(create_large_openapi_spec, |spec| {
+            let result = create_registry_from_json(black_box(spec));
+            black_box(result)
+        });
     });
 
     // Benchmark deep template rendering

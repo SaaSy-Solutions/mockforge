@@ -64,7 +64,7 @@ fn default_request_timeout_seconds() -> u64 {
 }
 
 /// Configuration for response transformations
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ResponseTransformConfig {
     /// Enable response transformations
     pub enabled: bool,
@@ -74,17 +74,6 @@ pub struct ResponseTransformConfig {
     pub overrides: Option<Overrides>,
     /// Enable response validation
     pub validate_responses: bool,
-}
-
-impl Default for ResponseTransformConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            custom_headers: std::collections::HashMap::new(),
-            overrides: None,
-            validate_responses: false,
-        }
-    }
 }
 
 impl ProxyConfig {
@@ -116,7 +105,5 @@ impl ProxyConfig {
 mod tests {
 
     #[test]
-    fn test_module_compiles() {
-        assert!(true);
-    }
+    fn test_module_compiles() {}
 }

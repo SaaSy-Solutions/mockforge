@@ -1012,7 +1012,7 @@ mod tests {
     #[test]
     fn test_get_http_method() {
         let config = HttpBridgeConfig::default();
-        let generator = RouteGenerator::new(config);
+        let _generator = RouteGenerator::new(config);
 
         // Create mock method descriptors for different streaming types
         // Note: This is simplified since we don't have actual descriptors
@@ -1036,7 +1036,6 @@ mod tests {
 
         if let serde_json::Value::Array(params_array) = params {
             assert!(!params_array.is_empty(), "Parameters array should not be empty");
-            assert!(params_array.len() >= 1, "Should have at least stream parameter");
 
             // Check if stream parameter exists
             let stream_param = params_array

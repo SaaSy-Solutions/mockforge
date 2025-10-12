@@ -19,7 +19,7 @@ pub struct GrpcProtoRegistry {
     /// Proto parser
     parser: ProtoParser,
     /// Services defined in the proto files
-    services: Vec<ProtoService>,
+    _services: Vec<ProtoService>,
     /// Operations (RPCs) extracted from services
     operations: Vec<SpecOperation>,
 }
@@ -37,7 +37,7 @@ impl GrpcProtoRegistry {
 
         Ok(Self {
             parser,
-            services,
+            _services: services,
             operations,
         })
     }
@@ -50,7 +50,7 @@ impl GrpcProtoRegistry {
 
         Ok(Self {
             parser,
-            services,
+            _services: services,
             operations,
         })
     }

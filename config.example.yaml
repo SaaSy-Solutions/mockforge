@@ -80,8 +80,14 @@ core:
     include_tags: []  # If empty, all tags are included
     exclude_tags: ["health", "metrics"]  # Exclude these tags from failure injection
   proxy:
-    upstream_url: "http://api.example.com"
+    enabled: true
+    target_url: "http://api.example.com"
     timeout_seconds: 30
+    follow_redirects: true
+    headers: {}
+    prefix: "/proxy"
+    passthrough_by_default: false
+    rules: []
   default_latency:
     base_ms: 50
     jitter_ms: 20

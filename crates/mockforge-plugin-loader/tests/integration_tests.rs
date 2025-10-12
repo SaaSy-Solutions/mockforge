@@ -6,7 +6,6 @@ use mockforge_plugin_loader::*;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
-use tokio;
 
 #[cfg(test)]
 mod tests {
@@ -14,6 +13,7 @@ mod tests {
 
     // Mock plugin implementation for testing
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct MockTemplatePlugin;
 
     #[::async_trait::async_trait]
@@ -141,13 +141,15 @@ mod tests {
         let wasm_bytes = create_minimal_wasm_module();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.allow_unsigned = true; // Allow unsigned plugins for testing
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            allow_unsigned: true,       // Allow unsigned plugins for testing
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
         // 1. Validate plugin
-        let validation_result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let validation_result = loader.validate_plugin(temp_dir.path()).await;
         assert!(validation_result.is_ok(), "Plugin validation should succeed");
 
         let validated_manifest = validation_result.unwrap();
@@ -162,8 +164,7 @@ mod tests {
         assert!(load_result.is_ok() || load_result.is_err()); // Either is acceptable
 
         // 3. Check plugin status
-        let stats = loader.get_load_stats().await;
-        assert!(stats.discovered >= 0);
+        let _stats = loader.get_load_stats().await;
 
         // 4. Unload plugin
         let unload_result = loader.unload_plugin(&plugin_id).await;
@@ -177,10 +178,9 @@ mod tests {
 
         // Test listing plugins
         let initial_plugins = loader.list_plugins().await;
-        let initial_count = initial_plugins.len();
+        let _initial_count = initial_plugins.len();
 
         // Verify plugin listing works
-        assert!(initial_count >= 0);
 
         // Test getting non-existent plugin
         let nonexistent_id = PluginId::new("nonexistent-plugin".to_string());
@@ -249,10 +249,10 @@ mod tests {
         let health_result = loader.get_plugin_health(&nonexistent_id).await;
         assert!(health_result.is_err());
 
-        let loader_mut = loader; // Would need mutable access in real impl
-                                 // Unload non-existent should not panic
-                                 // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
-                                 // assert!(unload_result.is_ok()); // In real impl
+        let _loader_mut = loader; // Would need mutable access in real impl
+                                  // Unload non-existent should not panic
+                                  // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
+                                  // assert!(unload_result.is_ok()); // In real impl
     }
 
     #[tokio::test]
@@ -329,7 +329,6 @@ mod tests {
         assert!(success_result.success);
         assert_eq!(success_result.data, Some("test data".to_string()));
         assert!(success_result.error.is_none());
-        assert!(success_result.execution_time_ms >= 0);
 
         // Test failure result
         let failure_result =
@@ -460,11 +459,11 @@ mod tests {
         // This is more of a stress test for the API
 
         let config = PluginLoaderConfig::default();
-        let loader = PluginLoader::new(config);
+        let _loader = PluginLoader::new(config);
 
         // Spawn multiple concurrent operations
         let tasks = (0..10).map(|i| {
-            let plugin_id = PluginId::new(format!("test-plugin-{}", i));
+            let _plugin_id = PluginId::new(format!("test-plugin-{}", i));
 
             tokio::spawn(async move {
                 // Test concurrent listing (using shared loader reference)
@@ -484,6 +483,5 @@ mod tests {
         }
 
         // If we get here without panicking, concurrent operations work
-        assert!(true);
     }
 }

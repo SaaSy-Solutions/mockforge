@@ -612,8 +612,10 @@ mod tests {
         ];
 
         for objective in objectives {
-            let mut config = OptimizerConfig::default();
-            config.objective = objective;
+            let config = OptimizerConfig {
+                objective,
+                ..Default::default()
+            };
             let optimizer = ParameterOptimizer::new(config);
 
             // Just verify it can be created with different objectives

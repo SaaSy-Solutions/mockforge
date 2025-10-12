@@ -196,7 +196,7 @@ impl RemotePluginLoader {
         // Create progress bar if enabled
         let progress_bar = if self.config.show_progress {
             total_size.map(|size| {
-                let mut pb = ProgressBar::new(size);
+                let pb = ProgressBar::new(size);
                 pb.set_style(
                     ProgressStyle::default_bar()
                         .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")

@@ -426,7 +426,7 @@ impl MockReflectionProxy {
                     Kind::Int64 | Kind::Uint64 => {
                         // For timestamp fields, check reasonable range (1970-2100)
                         if let Some(timestamp) = field_value.as_i64() {
-                            if timestamp < 0 || timestamp > 4102444800 {
+                            if !(0..=4102444800).contains(&timestamp) {
                                 // 2100-01-01
                                 return Err(format!(
                                     "Timestamp {} out of reasonable range for field '{}' in {}/{}",
@@ -776,7 +776,5 @@ impl MockReflectionProxy {
 mod tests {
 
     #[test]
-    fn test_module_compiles() {
-        assert!(true);
-    }
+    fn test_module_compiles() {}
 }

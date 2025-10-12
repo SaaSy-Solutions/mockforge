@@ -43,7 +43,7 @@ start_server_with_env() {
     # Wait for server to start
     local retries=$timeout
     while [ $retries -gt 0 ]; do
-        if curl -f "http://localhost:$port/ping" > /dev/null 2>&1; then
+        if curl -f "http://localhost:$port/health" > /dev/null 2>&1; then
             log_success "Server started successfully on port $port"
             echo $pid
             return 0

@@ -1,19 +1,16 @@
 //! Admin API handlers for time travel features
 
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Duration, Utc};
-use mockforge_core::{
-    RepeatConfig, ResponseScheduler, ScheduledResponse, TimeTravelManager, TimeTravelStatus,
-    VirtualClock,
-};
+use mockforge_core::{RepeatConfig, ScheduledResponse, TimeTravelManager, VirtualClock};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{error, info};
+use tracing::info;
 
 /// Global time travel manager (optional, can be set by the application)
 static TIME_TRAVEL_MANAGER: once_cell::sync::OnceCell<Arc<RwLock<Option<Arc<TimeTravelManager>>>>> =

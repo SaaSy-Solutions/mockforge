@@ -124,7 +124,7 @@ pub async fn chaos_middleware(
     };
 
     // Check rate limits
-    if let Err(e) = chaos.rate_limiter.check(Some(&ip), Some(&path)) {
+    if let Err(_e) = chaos.rate_limiter.check(Some(&ip), Some(&path)) {
         warn!("Rate limit exceeded: {} - {}", ip, path);
         return (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded").into_response();
     }

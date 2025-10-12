@@ -29,10 +29,37 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to cleanup running processes and ports
+cleanup_processes() {
+    log_info "Cleaning up running processes and ports..."
+
+    # Kill any running mockforge processes owned by current user (with timeout)
+    timeout 10 pkill -u $(id -u) -f mockforge 2>/dev/null || true
+
+    # Wait a moment for processes to terminate
+    sleep 2
+
+    # Kill any remaining processes on test ports (may require root, with timeout per port)
+    for port in 3000 3001 50051 9080 1025 1026; do
+        timeout 5 fuser -k ${port}/tcp 2>/dev/null || true
+    done
+
+    # Clean up any Docker containers (with timeout)
+    timeout 30 docker ps -q --filter "name=mockforge" | xargs -r docker rm -f 2>/dev/null || true
+
+    # Wait for ports to be freed
+    sleep 3
+
+    log_info "Cleanup completed"
+}
+
 # Function to run a test section
 run_test_section() {
     local section_name="$1"
     local script_path="$2"
+
+    # Cleanup before each test section
+    cleanup_processes
 
     log_info "Running $section_name tests..."
     if [ -f "$script_path" ]; then

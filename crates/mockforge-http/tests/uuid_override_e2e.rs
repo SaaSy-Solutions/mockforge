@@ -120,7 +120,7 @@ async fn test_uuid_override_templating() {
     assert!(uuid_regex.is_match(session_token), "sessionToken should be a valid UUID format");
 
     // Verify all UUIDs are unique
-    let uuids = vec![request_id, correlation_id, trace_id, session_token];
+    let uuids = [request_id, correlation_id, trace_id, session_token];
     let unique_uuids: std::collections::HashSet<_> = uuids.iter().collect();
     assert_eq!(unique_uuids.len(), 4, "All UUIDs should be unique");
 

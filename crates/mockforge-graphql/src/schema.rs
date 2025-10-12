@@ -140,19 +140,18 @@ mod tests {
     fn test_query_root_creation() {
         let _query = QueryRoot;
         // Should create successfully
-        assert!(true);
     }
 
     #[test]
     fn test_graphql_schema_new() {
         let schema = GraphQLSchema::new();
-        assert!(schema.schema().sdl().len() > 0);
+        assert!(!schema.schema().sdl().is_empty());
     }
 
     #[test]
     fn test_graphql_schema_default() {
         let schema = GraphQLSchema::default();
-        assert!(schema.schema().sdl().len() > 0);
+        assert!(!schema.schema().sdl().is_empty());
     }
 
     #[test]

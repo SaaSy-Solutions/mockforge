@@ -146,8 +146,6 @@ struct SystemWeakness {
     weakness_type: String,
     /// Affected endpoints
     endpoints: Vec<String>,
-    /// Severity score (0.0 - 1.0)
-    severity: f64,
     /// Evidence metrics
     evidence: HashMap<String, f64>,
 }
@@ -429,7 +427,6 @@ impl RecommendationEngine {
             weaknesses.push(SystemWeakness {
                 weakness_type: "low_resilience".to_string(),
                 endpoints: impact.top_affected_endpoints.iter().map(|(ep, _)| ep.clone()).collect(),
-                severity: impact.severity_score,
                 evidence: {
                     let mut map = HashMap::new();
                     map.insert("severity_score".to_string(), impact.severity_score);
@@ -444,7 +441,6 @@ impl RecommendationEngine {
             weaknesses.push(SystemWeakness {
                 weakness_type: "insufficient_fault_coverage".to_string(),
                 endpoints: vec![],
-                severity: 0.6,
                 evidence: HashMap::new(),
             });
         }
@@ -458,7 +454,6 @@ impl RecommendationEngine {
             return Some(SystemWeakness {
                 weakness_type: "no_chaos_testing".to_string(),
                 endpoints: vec![],
-                severity: 0.8,
                 evidence: HashMap::new(),
             });
         }

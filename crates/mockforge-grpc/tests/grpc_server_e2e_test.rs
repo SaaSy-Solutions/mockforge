@@ -44,7 +44,7 @@ async fn test_grpc_server_start_and_call() {
     println!("Discovered {} gRPC services: {:?}", services.len(), services);
 
     // Start gRPC server on a random port
-    let addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
+    let _addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
 
     // Note: This is a placeholder for actual server start
     // The real implementation would look like:

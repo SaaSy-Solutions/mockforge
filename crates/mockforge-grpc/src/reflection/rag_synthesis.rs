@@ -494,14 +494,10 @@ impl RagDataSynthesizer {
 
     /// Find applicable prompt template for entity
     fn find_applicable_template(&self, entity_name: &str) -> Option<&PromptTemplate> {
-        for template in self.config.prompt_templates.values() {
-            if template.entity_types.contains(&entity_name.to_string())
+        self.config.prompt_templates.values().find(|template| {
+            template.entity_types.contains(&entity_name.to_string())
                 || template.entity_types.contains(&"*".to_string())
-            {
-                return Some(template);
-            }
-        }
-        None
+        })
     }
 
     /// Build prompt from template
@@ -604,7 +600,7 @@ mod tests {
         let context = "Users must provide a valid email format. Phone numbers should be in international format.";
         let rules = synthesizer.extract_business_rules(context, "User").unwrap();
 
-        assert!(rules.len() >= 1);
+        assert!(!rules.is_empty());
         assert!(rules.iter().any(|r| matches!(r.rule_type, BusinessRuleType::Format)));
     }
 }

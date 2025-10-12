@@ -32,10 +32,10 @@ mod tests {
     #[tokio::test]
     async fn test_plugin_loader_initialization() {
         let config = PluginLoaderConfig::default();
-        let loader = PluginLoader::new(config);
+        let _loader = PluginLoader::new(config);
 
         // Verify loader is initialized
-        assert!(!loader.list_plugins().await.is_empty() || true); // May be empty initially
+        // Note: plugins list may be empty initially
     }
 
     #[tokio::test]
@@ -53,12 +53,14 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
         // Test validation
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should succeed");
 
         let validated_manifest = result.unwrap();
@@ -74,7 +76,7 @@ mod tests {
         let loader = PluginLoader::new(config);
 
         // Test validation with missing manifest
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_err(), "Plugin validation should fail with missing manifest");
     }
 
@@ -90,7 +92,7 @@ mod tests {
         let loader = PluginLoader::new(config);
 
         // Test validation with invalid manifest
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_err(), "Plugin validation should fail with invalid manifest");
     }
 
@@ -108,7 +110,7 @@ mod tests {
         let loader = PluginLoader::new(config);
 
         // Test validation with missing WASM
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_err(), "Plugin validation should fail with missing WASM");
     }
 
@@ -118,8 +120,8 @@ mod tests {
         let loader = PluginLoader::new(config);
 
         let plugin_id = PluginId::new("test-plugin".to_string());
-        let manifest = create_test_plugin_manifest();
-        let wasm_bytes = create_test_wasm_bytes();
+        let _manifest = create_test_plugin_manifest();
+        let _wasm_bytes = create_test_wasm_bytes();
 
         // Test loading (this would normally fail due to WASM complexity, but tests the API)
         let result = loader.load_plugin(&plugin_id).await;
@@ -203,12 +205,14 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
-        // Test validation - should pass (security limits are enforced at runtime)
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        // Test validation
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should pass even with high resource limits");
     }
 
@@ -227,12 +231,14 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
         // Test validation
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should pass with network capabilities");
 
         let validated_manifest = result.unwrap();
@@ -254,12 +260,14 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
         // Test validation
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should pass with filesystem capabilities");
 
         let validated_manifest = result.unwrap();
@@ -281,12 +289,14 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
-        // Test validation - should pass (dependencies are checked at load time)
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        // Test validation
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should pass with dependencies");
 
         let validated_manifest = result.unwrap();
@@ -307,11 +317,13 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should pass");
 
         let validated_manifest = result.unwrap();
@@ -336,12 +348,14 @@ mod tests {
         let wasm_bytes = create_test_wasm_bytes();
         fs::write(&wasm_path, wasm_bytes).unwrap();
 
-        let mut config = PluginLoaderConfig::default();
-        config.skip_wasm_validation = true; // Skip WASM validation for test
+        let config = PluginLoaderConfig {
+            skip_wasm_validation: true, // Skip WASM validation for test
+            ..Default::default()
+        };
         let loader = PluginLoader::new(config);
 
         // Test validation
-        let result = loader.validate_plugin(&temp_dir.path().to_path_buf()).await;
+        let result = loader.validate_plugin(temp_dir.path()).await;
         assert!(result.is_ok(), "Plugin validation should pass with configuration schema");
 
         let validated_manifest = result.unwrap();

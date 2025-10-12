@@ -96,9 +96,6 @@ impl SSEStreamManager {
         // Use a simpler approach to avoid pinning issues
         let event_type = event_type.clone();
         let data_template = data_template.clone();
-        let max_events = max_events;
-        let interval_duration = interval_duration;
-        let initial_delay = initial_delay;
 
         stream::unfold(0usize, move |count| {
             let event_type = event_type.clone();
@@ -253,6 +250,6 @@ mod tests {
         let event_data = SSEStreamManager::generate_event_data(template, 1);
 
         assert_eq!(event_data.id, Some("1".to_string()));
-        assert!(event_data.timestamp.len() > 0);
+        assert!(!event_data.timestamp.is_empty());
     }
 }

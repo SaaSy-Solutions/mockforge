@@ -63,14 +63,12 @@ async fn test_admin_ui_build_and_serve() {
             let mut has_css = false;
             let mut has_js = false;
 
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let file_name = entry.file_name().to_string_lossy().to_string();
-                    if file_name.ends_with(".css") {
-                        has_css = true;
-                    } else if file_name.ends_with(".js") {
-                        has_js = true;
-                    }
+            for entry in entries.flatten() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                if file_name.ends_with(".css") {
+                    has_css = true;
+                } else if file_name.ends_with(".js") {
+                    has_js = true;
                 }
             }
 
@@ -149,7 +147,7 @@ async fn test_admin_ui_serves_built_assets() {
         assert_eq!(css_content_type, "text/css", "CSS should have correct content type");
 
         let css_body = axum::body::to_bytes(css_response.into_body(), usize::MAX).await.unwrap();
-        assert!(css_body.len() > 0, "CSS content should not be empty");
+        assert!(!css_body.is_empty(), "CSS content should not be empty");
     }
 
     // Test JavaScript asset serving
@@ -181,7 +179,7 @@ async fn test_admin_ui_serves_built_assets() {
         );
 
         let js_body = axum::body::to_bytes(js_response.into_body(), usize::MAX).await.unwrap();
-        assert!(js_body.len() > 0, "JavaScript content should not be empty");
+        assert!(!js_body.is_empty(), "JavaScript content should not be empty");
     }
 }
 

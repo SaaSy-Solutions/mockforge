@@ -353,9 +353,7 @@ impl ComparisonReportGenerator {
 
         let critical_regressions = regressions.iter().filter(|r| r.severity == "Critical").count();
 
-        let verdict = if critical_regressions > 0 {
-            ComparisonVerdict::Worse
-        } else if regressions_count > improvements_count {
+        let verdict = if critical_regressions > 0 || regressions_count > improvements_count {
             ComparisonVerdict::Worse
         } else if improvements_count > regressions_count {
             ComparisonVerdict::Better
@@ -462,7 +460,7 @@ mod tests {
 
         let report = generator.compare(vec![comparison]).unwrap();
 
-        assert!(report.metric_differences.len() > 0);
+        assert!(!report.metric_differences.is_empty());
         assert_eq!(report.overall_assessment.verdict, ComparisonVerdict::Better);
     }
 }

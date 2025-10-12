@@ -548,7 +548,6 @@ mod tests {
         let _engine = ChainExecutionEngine::new(registry, ChainConfig::default());
 
         // Engine should be created successfully
-        assert!(true); // If we reach here, creation worked
     }
 
     #[tokio::test]

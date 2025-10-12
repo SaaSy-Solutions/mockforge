@@ -73,10 +73,8 @@ impl RequestGenerator {
         }
 
         // Extract request body
-        if let Some(request_body_ref) = &operation.operation.request_body {
-            if let ReferenceOr::Item(request_body) = request_body_ref {
-                template.body = Self::generate_body(request_body)?;
-            }
+        if let Some(ReferenceOr::Item(request_body)) = &operation.operation.request_body {
+            template.body = Self::generate_body(request_body)?;
         }
 
         Ok(template)
@@ -117,10 +115,8 @@ impl RequestGenerator {
         }
 
         // Generate from schema
-        if let ParameterSchemaOrContent::Schema(schema_ref) = &param_data.format {
-            if let ReferenceOr::Item(schema) = schema_ref {
-                return Ok(Self::generate_value_from_schema(schema));
-            }
+        if let ParameterSchemaOrContent::Schema(ReferenceOr::Item(schema)) = &param_data.format {
+            return Ok(Self::generate_value_from_schema(schema));
         }
 
         // Default value based on parameter name
@@ -157,10 +153,8 @@ impl RequestGenerator {
         }
 
         // Generate from schema
-        if let Some(schema_ref) = &media_type.schema {
-            if let ReferenceOr::Item(schema) = schema_ref {
-                return Self::generate_json_from_schema(schema);
-            }
+        if let Some(ReferenceOr::Item(schema)) = &media_type.schema {
+            return Self::generate_json_from_schema(schema);
         }
 
         json!({})
@@ -181,10 +175,8 @@ impl RequestGenerator {
                 Value::Object(map)
             }
             SchemaKind::Type(Type::Array(arr)) => {
-                if let Some(items) = &arr.items {
-                    if let ReferenceOr::Item(item_schema) = items {
-                        return json!([Self::generate_json_from_schema(item_schema)]);
-                    }
+                if let Some(ReferenceOr::Item(item_schema)) = &arr.items {
+                    return json!([Self::generate_json_from_schema(item_schema)]);
                 }
                 json!([])
             }
@@ -221,7 +213,7 @@ impl RequestGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openapiv3::{Operation, Schema};
+    use openapiv3::Operation;
 
     #[test]
     fn test_generate_path() {

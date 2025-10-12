@@ -136,7 +136,7 @@ mod tests {
         let executor = GraphQLExecutor::new(schema);
 
         // Verify executor is created
-        assert!(executor.schema.schema().sdl().len() > 0);
+        assert!(!executor.schema.schema().sdl().is_empty());
     }
 
     #[test]
@@ -145,7 +145,7 @@ mod tests {
         let executor = GraphQLExecutor::new(schema);
 
         let retrieved_schema = executor.schema();
-        assert!(retrieved_schema.schema().sdl().len() > 0);
+        assert!(!retrieved_schema.schema().sdl().is_empty());
     }
 
     #[tokio::test]
@@ -182,7 +182,6 @@ mod tests {
         let response = graphql_playground().await;
         // Convert to response to verify it's valid HTML
         let _html_response = response.into_response();
-        assert!(true);
     }
 
     #[test]

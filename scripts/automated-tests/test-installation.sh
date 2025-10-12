@@ -39,12 +39,11 @@ check_command() {
 }
 
 test_build_from_source() {
-    local project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local project_root="$(pwd)"
 
     log_info "Testing build from source..."
 
-    # Change to project root
-    cd "$project_root"
+    # Already in project root from main test runner
 
     # Check if we're in a git repo
     if ! git rev-parse --git-dir > /dev/null 2>&1; then
@@ -121,7 +120,7 @@ test_docker_installation() {
     # Test single container
     log_info "Testing single container..."
     # Run in background and capture PID - use HTTP only to avoid gRPC proto issues
-    docker run -d -p 3000:3000 -p 9080:9080 --name mockforge-test mockforge serve --http-port 3000 --admin-port 9080 > /dev/null 2>&1
+    docker run -d -p 3000:3000 -p 9080:9080 --name mockforge-test --entrypoint mockforge mockforge serve --http-port 3000 --admin-port 9080 > /dev/null 2>&1
     local container_id=$?
 
     # Wait a bit for container to start

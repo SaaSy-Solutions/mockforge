@@ -293,7 +293,7 @@ impl AdminState {
                 let memory_mb_u64 = memory_usage_mb as u64;
 
                 // Only log every 10 refreshes to avoid spam
-                if refresh_count % 10 == 0 {
+                if refresh_count.is_multiple_of(10) {
                     tracing::debug!(
                         "System metrics updated: CPU={:.1}%, Mem={}MB, Threads={}",
                         cpu_usage,
@@ -1383,9 +1383,7 @@ async fn get_parent_process_id(pid: u32) -> Result<u32> {
         })
         .await
         {
-            if let Ok(ppid) = ppid {
-                return Ok(ppid);
-            }
+            return ppid;
         }
     }
 
@@ -1598,13 +1596,6 @@ fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
     }
 
     Ok(count)
-}
-
-/// Helper function to count JSON files in a directory recursively (async version)
-async fn count_fixtures_in_directory_async(dir_path: std::path::PathBuf) -> Result<usize> {
-    tokio::task::spawn_blocking(move || count_fixtures_in_directory(&dir_path))
-        .await
-        .map_err(|e| Error::generic(format!("Task join error: {}", e)))?
 }
 
 /// Check if a specific route has fixtures
@@ -2049,7 +2040,7 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
 
     // Delete the file using spawn_blocking
     let file_path_clone = file_path.clone();
-    let delete_result = tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         if file_path_clone.exists() {
             std::fs::remove_file(&file_path_clone).map_err(|e| {
                 Error::generic(format!(
@@ -2070,7 +2061,7 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
     // Also try to remove empty parent directories
     cleanup_empty_directories(&file_path).await;
 
-    Ok(delete_result)
+    Ok(())
 }
 
 /// Find a fixture file by its ID across all protocols

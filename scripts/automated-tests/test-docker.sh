@@ -245,8 +245,9 @@ EOF
                     -p 3000:3000 \
                     -v "$temp_config_dir:/app/config" \
                     -v "$temp_examples_dir:/app/examples" \
+                    --entrypoint mockforge \
                     "$image_name" \
-                    mockforge serve --config /app/config/config.yaml; then
+                    serve --config /app/config/config.yaml; then
 
         # Wait for container to start
         sleep 5

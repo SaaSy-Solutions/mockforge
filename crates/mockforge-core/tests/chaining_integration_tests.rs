@@ -79,7 +79,7 @@ fn create_auth_chain() -> ChainDefinition {
 #[test]
 async fn test_registry_basic_functionality() {
     let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
-    let engine = Arc::new(ChainExecutionEngine::new(registry.clone(), ChainConfig::default()));
+    let _engine = Arc::new(ChainExecutionEngine::new(registry.clone(), ChainConfig::default()));
 
     // Test empty registry
     let chains = registry.list_chains().await;
@@ -463,8 +463,7 @@ async fn test_chain_engine_creation() {
         enable_parallel_execution: true,
     };
 
-    let engine = Arc::new(ChainExecutionEngine::new(registry, config));
+    let _engine = Arc::new(ChainExecutionEngine::new(registry, config));
 
     // Just test that the engine can be created without errors
-    assert!(true);
 }

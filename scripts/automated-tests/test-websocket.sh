@@ -41,8 +41,8 @@ main() {
     log_info "  - Test connection management and limits"
 
     # Basic server startup test
-    mockforge serve --ws-port 3001 > /tmp/ws-test.log 2>&1 &
-    local pid=$!
+    mockforge serve --ws-port 3003 > /tmp/ws-test.log 2>&1 &
+    pid=$!
     sleep 3
 
     if kill -0 $pid 2>/dev/null; then

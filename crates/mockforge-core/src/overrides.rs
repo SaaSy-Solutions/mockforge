@@ -147,7 +147,7 @@ mod tests {
         };
 
         let mut body = json!({"status": "normal"});
-        overrides.apply("any_op", &vec!["test_tag".to_string()], "/test", &mut body);
+        overrides.apply("any_op", &["test_tag".to_string()], "/test", &mut body);
 
         assert_eq!(body["status"], "tagged");
     }

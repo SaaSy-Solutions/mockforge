@@ -33,7 +33,7 @@ mod tests {
             deterministic: true,
         };
 
-        let generator = SmartMockGenerator::new_with_seed(config, 12345);
+        let _generator = SmartMockGenerator::new_with_seed(config, 12345);
 
         // Step 2: Create RAG synthesizer
         let rag_config = RagSynthesisConfig {
@@ -45,7 +45,7 @@ mod tests {
             cache_contexts: true,
         };
 
-        let rag_synthesizer = RagDataSynthesizer::new(rag_config);
+        let _rag_synthesizer = RagDataSynthesizer::new(rag_config);
 
         // Step 3: Create validation framework
         let validation_config = ValidationConfig {
@@ -295,9 +295,11 @@ mod tests {
 
     #[test]
     fn test_generator_reset_functionality() {
-        let mut config = SmartMockConfig::default();
-        config.seed = Some(555);
-        config.deterministic = true;
+        let config = SmartMockConfig {
+            seed: Some(555),
+            deterministic: true,
+            ..Default::default()
+        };
 
         let mut generator = SmartMockGenerator::new(config);
 
@@ -422,7 +424,7 @@ mod tests {
         let mut validator = ValidationFramework::new(validation_config);
 
         // Step 4: Register all generated entities
-        for (_i, user_data) in users_data.iter().enumerate() {
+        for user_data in users_data.iter() {
             let entity = GeneratedEntity {
                 entity_type: "User".to_string(),
                 primary_key: Some(user_data.get("id").unwrap().clone()),
