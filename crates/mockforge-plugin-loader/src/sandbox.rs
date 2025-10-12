@@ -676,11 +676,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_sandbox_resources() {
-        let mut resources = SandboxResources::default();
-        resources.execution_count = 10;
-        resources.success_count = 8;
-        resources.error_count = 2;
-        resources.total_execution_time = std::time::Duration::from_millis(1000);
+        let resources = SandboxResources {
+            execution_count: 10,
+            success_count: 8,
+            error_count: 2,
+            total_execution_time: std::time::Duration::from_millis(1000),
+            ..Default::default()
+        };
 
         assert_eq!(resources.avg_execution_time_ms(), 100.0);
         assert_eq!(resources.success_rate(), 80.0);

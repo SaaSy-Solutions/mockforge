@@ -97,9 +97,8 @@ impl ManifestBuilder {
     /// Build and save to file
     pub fn build_and_save(self, path: &str) -> std::result::Result<PluginManifest, std::io::Error> {
         let manifest = self.manifest;
-        let yaml = serde_yaml::to_string(&manifest).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::Other, format!("YAML error: {}", e))
-        })?;
+        let yaml = serde_yaml::to_string(&manifest)
+            .map_err(|e| std::io::Error::other(format!("YAML error: {}", e)))?;
         std::fs::write(path, yaml)?;
         Ok(manifest)
     }

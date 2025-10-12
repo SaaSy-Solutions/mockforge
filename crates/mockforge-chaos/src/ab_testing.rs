@@ -184,6 +184,7 @@ pub struct SingleMetricComparison {
 /// A/B testing engine
 pub struct ABTestingEngine {
     tests: Arc<RwLock<HashMap<String, ABTest>>>,
+    #[allow(dead_code)]
     analytics: Arc<ChaosAnalytics>,
     max_concurrent_tests: usize,
 }
@@ -365,10 +366,10 @@ impl ABTestingEngine {
             format!("Variant {} shows improvement in primary metric but degrades secondary metrics beyond acceptable threshold.", winner)
         } else if improvement_pct >= test.config.success_criteria.min_improvement {
             format!(
-                "Variant {} is the clear winner with {:.2}% improvement in {}.",
+                "Variant {} is the clear winner with {:.2}% improvement in {:?}.",
                 winner,
                 improvement_pct,
-                format!("{:?}", test.config.success_criteria.primary_metric)
+                test.config.success_criteria.primary_metric
             )
         } else {
             format!("Variants show similar performance. Improvement ({:.2}%) below minimum threshold ({:.2}%).", improvement_pct, test.config.success_criteria.min_improvement)
@@ -485,7 +486,7 @@ impl ABTestingEngine {
         // Rough approximation: larger sample sizes and larger effect sizes = lower p-value
         let p_value = 1.0 / (1.0 + pooled_n * effect_size);
 
-        p_value.max(0.001).min(0.999)
+        p_value.clamp(0.001, 0.999)
     }
 
     /// Get test by ID

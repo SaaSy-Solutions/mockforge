@@ -329,8 +329,8 @@ impl ScenarioScheduler {
         };
 
         if let Some(scheduled) = scheduled {
-            let execution_tx = self.execution_tx.read();
-            if let Some(tx) = execution_tx.as_ref() {
+            let tx = self.execution_tx.read().as_ref().cloned();
+            if let Some(tx) = tx {
                 tx.send(scheduled).await.map_err(|e| format!("Failed to trigger: {}", e))?;
                 Ok(())
             } else {

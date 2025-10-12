@@ -1366,7 +1366,7 @@ async fn approve_remediation(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Action {} approved", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1385,7 +1385,7 @@ async fn reject_remediation(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Action {} rejected", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1398,7 +1398,7 @@ async fn rollback_remediation(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Action {} rolled back", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1493,7 +1493,7 @@ async fn start_ab_test(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Test {} started", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1505,7 +1505,7 @@ async fn stop_ab_test(
     let engine = state.ab_testing_engine.read().await;
     match engine.stop_test(&id) {
         Ok(conclusion) => Ok(Json(conclusion)),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1519,7 +1519,7 @@ async fn pause_ab_test(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Test {} paused", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1533,7 +1533,7 @@ async fn resume_ab_test(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Test {} resumed", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1548,7 +1548,7 @@ async fn record_ab_test_result(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Results recorded for variant {}", variant),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 
@@ -1562,7 +1562,7 @@ async fn delete_ab_test(
         Ok(_) => Ok(Json(StatusResponse {
             message: format!("Test {} deleted", id),
         })),
-        Err(err) => Err(StatusCode::BAD_REQUEST),
+        Err(_err) => Err(StatusCode::BAD_REQUEST),
     }
 }
 

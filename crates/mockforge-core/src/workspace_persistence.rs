@@ -632,6 +632,7 @@ impl WorkspacePersistence {
     }
 
     /// Advanced sync with additional configuration options
+    #[allow(clippy::too_many_arguments)]
     pub async fn sync_to_directory_advanced(
         &self,
         target_dir: &str,
@@ -728,6 +729,7 @@ impl WorkspacePersistence {
     }
 
     /// Advanced sync for a single workspace with custom filename patterns
+    #[allow(clippy::too_many_arguments)]
     async fn sync_workspace_to_directory_advanced(
         &self,
         workspace: &Workspace,

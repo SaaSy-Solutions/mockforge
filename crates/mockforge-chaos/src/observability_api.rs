@@ -412,9 +412,17 @@ impl SimpleDashboardLayoutManager {
             layouts: Arc::new(RwLock::new(layouts)),
         }
     }
+}
 
+impl Default for SimpleDashboardLayoutManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SimpleDashboardLayoutManager {
     pub fn list_layouts(&self) -> Vec<DashboardLayoutSummary> {
-        self.layouts.read().values().map(|v| v.clone()).collect()
+        self.layouts.read().values().cloned().collect()
     }
 
     pub fn get_layout(&self, id: &str) -> Option<DashboardLayoutSummary> {
@@ -1031,7 +1039,7 @@ async fn list_dashboard_layouts(
 }
 
 #[derive(Serialize, Clone)]
-struct DashboardLayoutSummary {
+pub struct DashboardLayoutSummary {
     id: String,
     name: String,
     description: Option<String>,
@@ -1146,7 +1154,7 @@ fn generate_scenario_pdf(
     output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (doc, page1, layer1) = PdfDocument::new(
-        &format!("Chaos Engineering Report - {}", scenario_name),
+        format!("Chaos Engineering Report - {}", scenario_name),
         Mm(210.0), // A4 width
         Mm(297.0), // A4 height
         "Layer 1",
@@ -1159,7 +1167,7 @@ fn generate_scenario_pdf(
 
     // Title
     current_layer.use_text(
-        &format!("Chaos Engineering Report"),
+        "Chaos Engineering Report".to_string(),
         20.0,
         Mm(20.0),
         Mm(270.0),
@@ -1168,7 +1176,7 @@ fn generate_scenario_pdf(
 
     // Scenario name
     current_layer.use_text(
-        &format!("Scenario: {}", scenario_name),
+        format!("Scenario: {}", scenario_name),
         14.0,
         Mm(20.0),
         Mm(250.0),
@@ -1178,7 +1186,7 @@ fn generate_scenario_pdf(
     // Generated timestamp
     let now = chrono::Utc::now();
     current_layer.use_text(
-        &format!("Generated: {}", now.format("%Y-%m-%d %H:%M:%S UTC")),
+        format!("Generated: {}", now.format("%Y-%m-%d %H:%M:%S UTC")),
         10.0,
         Mm(20.0),
         Mm(235.0),
@@ -1197,7 +1205,7 @@ fn generate_scenario_pdf(
     ];
 
     for (label, value) in &metrics {
-        current_layer.use_text(&format!("{}: {}", label, value), 10.0, Mm(20.0), Mm(y), &font);
+        current_layer.use_text(format!("{}: {}", label, value), 10.0, Mm(20.0), Mm(y), &font);
         y -= 10.0;
     }
 

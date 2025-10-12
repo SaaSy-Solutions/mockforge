@@ -167,6 +167,6 @@ mod tests {
     #[test]
     fn test_macro_compilation() {
         // Just verify macros compile
-        assert!(true);
+        // Test passes if compilation succeeds
     }
 }

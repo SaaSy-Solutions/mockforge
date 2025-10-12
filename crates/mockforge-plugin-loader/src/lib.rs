@@ -426,6 +426,6 @@ mod tests {
         let _ = std::marker::PhantomData::<PluginLoader>;
         let _ = std::marker::PhantomData::<PluginRegistry>;
         let _ = std::marker::PhantomData::<PluginValidator>;
-        assert!(true);
+        // Compilation test - if this compiles, the types are properly defined
     }
 }

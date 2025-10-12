@@ -128,12 +128,12 @@ impl PluginRegistry {
             let req_parts: Vec<&str> = req_version.split('.').collect();
             let ver_parts: Vec<u32> = vec![version.major, version.minor, version.patch];
 
-            if req_parts.len() >= 1 && req_parts[0].parse::<u32>().unwrap_or(0) == ver_parts[0] {
+            if !req_parts.is_empty() && req_parts[0].parse::<u32>().unwrap_or(0) == ver_parts[0] {
                 return true;
             }
         } else {
             // Exact match
-            return requirement == &version.to_string();
+            return requirement == version.to_string();
         }
         false
     }
@@ -153,7 +153,7 @@ impl PluginRegistry {
 
     /// Validate plugin dependencies
     fn validate_dependencies(&self, plugin: &PluginInstance) -> LoaderResult<()> {
-        for (dep_id, _dep_version) in &plugin.manifest.dependencies {
+        for dep_id in plugin.manifest.dependencies.keys() {
             // Check if dependency is loaded
             if !self.has_plugin(dep_id) {
                 return Err(PluginLoaderError::dependency(format!(

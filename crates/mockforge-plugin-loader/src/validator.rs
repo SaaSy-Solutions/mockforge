@@ -252,7 +252,7 @@ impl PluginValidator {
     }
 
     /// Validate a dependency version requirement
-
+    ///
     /// Check if adding this dependency would create a circular dependency
     fn would_create_circular_dependency(
         &self,
@@ -1449,6 +1449,6 @@ mod tests {
         let config = PluginLoaderConfig::default();
         let _validator = PluginValidator::new(config);
         // Basic smoke test - validator was created successfully
-        assert!(true);
+        // Test passes if no panic occurs during creation
     }
 }

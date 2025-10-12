@@ -102,7 +102,7 @@ impl RemotePluginLoader {
 
         let file_name = url_parsed
             .path_segments()
-            .and_then(|segments| segments.last())
+            .and_then(|mut segments| segments.next_back())
             .ok_or_else(|| PluginLoaderError::load("Could not determine file name from URL"))?;
 
         // Check cache first
@@ -194,16 +194,18 @@ impl RemotePluginLoader {
         let total_size = response.content_length();
 
         // Create progress bar if enabled
-        let progress_bar = if self.config.show_progress && total_size.is_some() {
-            let pb = ProgressBar::new(total_size.unwrap());
-            pb.set_style(
-                ProgressStyle::default_bar()
-                    .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-                    .unwrap()
-                    .progress_chars("#>-"),
-            );
-            pb.set_message(format!("Downloading {}", file_name));
-            Some(pb)
+        let progress_bar = if self.config.show_progress {
+            total_size.map(|size| {
+                let mut pb = ProgressBar::new(size);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                        .unwrap()
+                        .progress_chars("#>-"),
+                );
+                pb.set_message(format!("Downloading {}", file_name));
+                pb
+            })
         } else {
             None
         };
@@ -411,6 +413,7 @@ impl RemotePluginLoader {
     }
 
     /// Calculate the size of a directory recursively
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_dir_size(&self, dir: &Path) -> LoaderResult<u64> {
         let mut total_size = 0u64;
 

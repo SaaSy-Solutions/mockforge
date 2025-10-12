@@ -360,7 +360,7 @@ impl PagerDutyIntegration {
             .await
             .context("Failed to trigger PagerDuty incident")?;
 
-        let result: serde_json::Value = response.json().await?;
+        let _result: serde_json::Value = response.json().await?;
         Ok(dedup_key)
     }
 

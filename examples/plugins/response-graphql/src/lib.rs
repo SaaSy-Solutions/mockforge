@@ -116,6 +116,7 @@ impl GraphQLResponsePlugin {
     }
 
     /// Recursively extract field names from a selection set
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_fields_from_selection_set<'a>(
         &self,
         selection_set: &graphql_parser::query::SelectionSet<'a, &'a str>,
@@ -431,6 +432,9 @@ impl ResponsePlugin for GraphQLResponsePlugin {
 }
 
 /// Plugin factory function
+///
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
 #[no_mangle]
 pub unsafe extern "C" fn create_response_plugin(
     config_json: *const u8,
@@ -453,6 +457,8 @@ pub unsafe extern "C" fn create_response_plugin(
 }
 
 /// Plugin cleanup function
+/// # Safety
+/// This function is unsafe because it dereferences raw pointers.
 #[no_mangle]
 pub unsafe extern "C" fn destroy_response_plugin(plugin: *mut GraphQLResponsePlugin) {
     if !plugin.is_null() {

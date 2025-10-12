@@ -44,7 +44,7 @@ impl GitRef {
         }
 
         // Check if it starts with 'v' followed by numbers (version tag)
-        if s.starts_with('v') && s[1..].chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if s.starts_with('v') && s[1..].chars().next().is_some_and(|c| c.is_ascii_digit()) {
             return GitRef::Tag(s.to_string());
         }
 
@@ -476,6 +476,7 @@ impl GitPluginLoader {
     }
 
     /// Calculate the size of a directory recursively
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_dir_size(&self, dir: &Path) -> LoaderResult<u64> {
         let mut total_size = 0u64;
 

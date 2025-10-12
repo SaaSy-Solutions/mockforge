@@ -56,10 +56,16 @@ unreachable_pub = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
+# Allow common development warnings
+dead_code = "allow"
+unused_variables = "allow"
+unused_imports = "allow"
+private_interfaces = "allow"
+
 # Enable pedantic lints for high code quality
-pedantic = "warn"
-nursery = "warn"
-cargo = "warn"
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
 
 # Common workspace dependencies
 [workspace.dependencies]

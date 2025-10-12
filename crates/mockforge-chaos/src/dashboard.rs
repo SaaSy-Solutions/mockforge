@@ -261,7 +261,7 @@ impl DashboardManager {
     /// Start background update loop
     pub async fn start_update_loop(&self, interval_seconds: u64) {
         let analytics = Arc::clone(&self.analytics);
-        let alert_manager = Arc::clone(&self.alert_manager);
+        let _alert_manager = Arc::clone(&self.alert_manager);
         let update_tx = self.update_tx.clone();
 
         tokio::spawn(async move {

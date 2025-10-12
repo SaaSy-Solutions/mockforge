@@ -28,7 +28,7 @@ pub enum SignatureAlgorithm {
 
 impl SignatureAlgorithm {
     /// Convert to ring's verification algorithm
-    fn to_ring_algorithm(&self) -> &'static dyn signature::VerificationAlgorithm {
+    fn as_ring_algorithm(&self) -> &'static dyn signature::VerificationAlgorithm {
         match self {
             SignatureAlgorithm::RsaPkcs1_2048Sha256 => &signature::RSA_PKCS1_2048_8192_SHA256,
             SignatureAlgorithm::RsaPkcs1_3072Sha256 => &signature::RSA_PKCS1_2048_8192_SHA256,
@@ -169,7 +169,7 @@ impl<'a> SignatureVerifier<'a> {
 
         // Verify signature
         let public_key = signature::UnparsedPublicKey::new(
-            signature.algorithm.to_ring_algorithm(),
+            signature.algorithm.as_ring_algorithm(),
             public_key_bytes,
         );
 

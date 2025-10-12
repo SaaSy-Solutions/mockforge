@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Type alias for complex bucket map
+type BucketMap = Arc<RwLock<HashMap<(DateTime<Utc>, TimeBucket), MetricsBucket>>>;
+
 /// Time bucket for aggregated metrics
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TimeBucket {
@@ -273,7 +276,7 @@ impl ChaosImpact {
 /// Chaos analytics engine
 pub struct ChaosAnalytics {
     /// Metrics buckets by time
-    buckets: Arc<RwLock<HashMap<(DateTime<Utc>, TimeBucket), MetricsBucket>>>,
+    buckets: BucketMap,
     /// Maximum buckets to retain
     max_buckets: usize,
 }

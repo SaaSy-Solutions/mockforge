@@ -18,9 +18,11 @@ use tracing::debug;
 pub struct RateLimiter {
     config: RateLimitConfig,
     global_limiter: Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
+    #[allow(clippy::type_complexity)]
     ip_limiters: Arc<
         RwLock<HashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
     >,
+    #[allow(clippy::type_complexity)]
     endpoint_limiters: Arc<
         RwLock<HashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
     >,

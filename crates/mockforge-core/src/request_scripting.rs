@@ -9,6 +9,8 @@ use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::rc::Rc;
+#[allow(clippy::arc_with_non_send_sync)]
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -42,7 +44,7 @@ pub struct ScriptContext {
 
 /// JavaScript scripting engine
 pub struct ScriptEngine {
-    _runtime: Arc<Runtime>,
+    _runtime: Rc<Runtime>,
     semaphore: Arc<Semaphore>,
 }
 
@@ -50,7 +52,7 @@ pub struct ScriptEngine {
 impl ScriptEngine {
     /// Create a new script engine
     pub fn new() -> Self {
-        let runtime = Arc::new(Runtime::new().expect("Failed to create JavaScript runtime"));
+        let runtime = Rc::new(Runtime::new().expect("Failed to create JavaScript runtime"));
         let semaphore = Arc::new(Semaphore::new(10)); // Limit concurrent script executions
 
         Self {
