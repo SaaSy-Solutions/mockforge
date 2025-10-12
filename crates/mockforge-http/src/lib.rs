@@ -199,8 +199,12 @@ use mockforge_core::TrafficShaper;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
 use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::path::Path;
+use tokio::fs;
 use tokio::sync::RwLock;
 use tracing::*;
+use serde_yaml;
 
 /// Route info for storing in state
 #[derive(Clone)]
@@ -503,10 +507,47 @@ pub async fn build_router_with_multi_tenant(
                 info!("Registered default workspace: '{}'", mt_config.default_workspace);
             }
 
-            // TODO: Auto-discover and register workspaces if configured
-            // if mt_config.auto_discover {
-            //     // Load workspaces from config directory
-            // }
+            // Auto-discover and register workspaces if configured
+            if mt_config.auto_discover {
+                if let Some(config_dir) = &mt_config.config_directory {
+                    let config_path = Path::new(config_dir);
+                    if config_path.exists() && config_path.is_dir() {
+                        match fs::read_dir(config_path).await {
+                            Ok(mut entries) => {
+                                while let Ok(Some(entry)) = entries.next_entry().await {
+                                    let path = entry.path();
+                                    if path.extension() == Some(OsStr::new("yaml")) {
+                                        match fs::read_to_string(&path).await {
+                                            Ok(content) => {
+                                                match serde_yaml::from_str::<mockforge_core::Workspace>(&content) {
+                                                    Ok(workspace) => {
+                                                        if let Err(e) = registry.register_workspace(workspace.id.clone(), workspace).await {
+                                                            warn!("Failed to register auto-discovered workspace from {:?}: {}", path, e);
+                                                        } else {
+                                                            info!("Auto-registered workspace from {:?}", path);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        warn!("Failed to parse workspace from {:?}: {}", path, e);
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                warn!("Failed to read workspace file {:?}: {}", path, e);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to read config directory {:?}: {}", config_path, e);
+                            }
+                        }
+                    } else {
+                        warn!("Config directory {:?} does not exist or is not a directory", config_path);
+                    }
+                }
+            }
 
             // Wrap registry in Arc for shared access
             let registry = Arc::new(registry);

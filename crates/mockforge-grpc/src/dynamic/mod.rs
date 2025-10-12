@@ -197,7 +197,7 @@ pub async fn start_dynamic_server(
     info!("gRPC server startup completed (total time: {:?})", total_startup_duration);
 
     // Start HTTP server (bridge) if enabled
-    // For now, just start the gRPC server directly
+    // Currently, just start the gRPC server directly
     // HTTP bridge functionality is disabled
     start_grpc_only_server(port, &config, registry_arc.clone(), mock_proxy).await?;
 
@@ -241,7 +241,7 @@ async fn start_grpc_only_server(
         info!("  - Service: {}", service_name);
     }
 
-    // For now, create a basic gRPC server that at least starts successfully
+    // Create a basic gRPC server that at least starts successfully
     // Full implementation would require generating actual service implementations
     use std::net::SocketAddr;
 

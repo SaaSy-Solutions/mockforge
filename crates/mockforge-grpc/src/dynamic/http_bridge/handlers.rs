@@ -337,7 +337,7 @@ impl StreamHandler {
         let smart_generator = proxy.smart_generator().clone();
         let output_descriptor = method_descriptor.output();
 
-        // Generate a single mock response for now
+        // Generate a single mock response
         let mock_response = {
             match smart_generator.lock() {
                 Ok(mut gen) => gen.generate_message(&output_descriptor),

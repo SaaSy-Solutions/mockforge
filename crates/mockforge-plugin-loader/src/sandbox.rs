@@ -16,7 +16,7 @@ use wasmtime_wasi::p2::{WasiCtx, WasiCtxBuilder};
 
 /// Plugin sandbox for secure execution
 pub struct PluginSandbox {
-    /// WebAssembly engine (optional for now)
+    /// WebAssembly engine (optional)
     engine: Option<Arc<Engine>>,
     /// Sandbox configuration
     _config: PluginLoaderConfig,
