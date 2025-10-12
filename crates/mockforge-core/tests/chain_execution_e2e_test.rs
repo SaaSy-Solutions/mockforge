@@ -32,9 +32,10 @@ fn create_simple_http_chain() -> ChainDefinition {
                     id: "get_data".to_string(),
                     method: "GET".to_string(),
                     url: "https://httpbin.org/json".to_string(),
-                    headers: HashMap::from([
-                        ("User-Agent".to_string(), "MockForge-Test".to_string()),
-                    ]),
+                    headers: HashMap::from([(
+                        "User-Agent".to_string(),
+                        "MockForge-Test".to_string(),
+                    )]),
                     body: None,
                     depends_on: vec![],
                     timeout_secs: Some(10),
@@ -67,9 +68,7 @@ fn create_simple_http_chain() -> ChainDefinition {
                     expected_status: Some(vec![200]),
                     scripting: None,
                 },
-                extract: HashMap::from([
-                    ("posted_data".to_string(), "json".to_string()),
-                ]),
+                extract: HashMap::from([("posted_data".to_string(), "json".to_string())]),
                 store_as: Some("post_data_response".to_string()),
             },
         ],
@@ -117,7 +116,9 @@ async fn test_chain_execution_with_http_requests() {
     );
 
     println!("✓ Chain execution test structure validated");
-    println!("  Note: Actual HTTP execution requires ChainExecutionEngine.execute() implementation");
+    println!(
+        "  Note: Actual HTTP execution requires ChainExecutionEngine.execute() implementation"
+    );
 }
 
 #[test]

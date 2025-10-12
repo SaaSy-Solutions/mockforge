@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::embedding_client::{EmbeddingClient, cosine_similarity};
 use super::config::VectorStoreConfig;
+use super::embedding_client::{cosine_similarity, EmbeddingClient};
 use super::types::InteractionRecord;
 use crate::Result;
 
@@ -126,7 +126,8 @@ impl VectorMemoryStore {
 
         // Filter by threshold and sort by score
         scored_interactions.retain(|(_, score)| *score >= self.config.similarity_threshold);
-        scored_interactions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored_interactions
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Return top-k results
         Ok(scored_interactions
@@ -137,7 +138,10 @@ impl VectorMemoryStore {
     }
 
     /// Get all interactions for a session
-    pub async fn get_session_interactions(&self, session_id: &str) -> Result<Vec<InteractionRecord>> {
+    pub async fn get_session_interactions(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<InteractionRecord>> {
         let storage = self.storage.read().await;
 
         Ok(storage.get(session_id).cloned().unwrap_or_default())

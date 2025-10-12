@@ -45,7 +45,8 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
                     if manifest.get("name").is_some() {
                         println!("{} Name is present", "✓".green());
                     } else {
-                        warnings.push("Plugin manifest missing 'name' field (recommended)".to_string());
+                        warnings
+                            .push("Plugin manifest missing 'name' field (recommended)".to_string());
                     }
 
                     if manifest.get("plugin_type").is_some() {
@@ -57,7 +58,9 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
                     if manifest.get("author").is_some() {
                         println!("{} Author information present", "✓".green());
                     } else {
-                        warnings.push("Plugin manifest missing 'author' field (recommended)".to_string());
+                        warnings.push(
+                            "Plugin manifest missing 'author' field (recommended)".to_string(),
+                        );
                     }
                 }
                 Err(e) => {
@@ -80,13 +83,16 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
                 if content.contains("crate-type") && content.contains("cdylib") {
                     println!("{} Configured as cdylib", "✓".green());
                 } else {
-                    warnings.push("Cargo.toml should have [lib] crate-type = [\"cdylib\"]".to_string());
+                    warnings
+                        .push("Cargo.toml should have [lib] crate-type = [\"cdylib\"]".to_string());
                 }
 
                 if content.contains("mockforge-plugin-sdk") {
                     println!("{} SDK dependency present", "✓".green());
                 } else {
-                    warnings.push("Consider using mockforge-plugin-sdk for easier development".to_string());
+                    warnings.push(
+                        "Consider using mockforge-plugin-sdk for easier development".to_string(),
+                    );
                 }
             }
         }

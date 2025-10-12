@@ -9,7 +9,15 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_dashboard_endpoint_integration() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/dashboard").body(Body::empty()).unwrap())
@@ -23,7 +31,6 @@ async fn test_dashboard_endpoint_integration() {
 
     // Parse the JSON response
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
-
 
     // Verify response structure
     assert_eq!(json_response["success"], true);
@@ -54,7 +61,15 @@ async fn test_dashboard_endpoint_integration() {
 
 #[tokio::test]
 async fn test_logs_endpoint_with_filters() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test with method filter
     let response = app
@@ -79,7 +94,15 @@ async fn test_logs_endpoint_with_filters() {
 
 #[tokio::test]
 async fn test_metrics_endpoint() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/metrics").body(Body::empty()).unwrap())
@@ -103,7 +126,15 @@ async fn test_metrics_endpoint() {
 
 #[tokio::test]
 async fn test_configuration_endpoints() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test GET config
     let response = app
@@ -129,7 +160,15 @@ async fn test_configuration_endpoints() {
 
 #[tokio::test]
 async fn test_latency_configuration_update() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let update_payload = json!({
         "config_type": "latency",
@@ -167,7 +206,15 @@ async fn test_latency_configuration_update() {
 
 #[tokio::test]
 async fn test_fault_injection_update() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let update_payload = json!({
         "config_type": "faults",
@@ -201,7 +248,15 @@ async fn test_fault_injection_update() {
 
 #[tokio::test]
 async fn test_proxy_configuration_update() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let update_payload = json!({
         "config_type": "proxy",
@@ -235,7 +290,15 @@ async fn test_proxy_configuration_update() {
 
 #[tokio::test]
 async fn test_latency_settings_update() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let update_payload = json!({
         "config_type": "latency",
@@ -263,7 +326,6 @@ async fn test_latency_settings_update() {
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
 
-
     let json_response: serde_json::Value = serde_json::from_str(&body_str).unwrap();
 
     assert!(json_response["success"].is_boolean());
@@ -271,7 +333,15 @@ async fn test_latency_settings_update() {
 
 #[tokio::test]
 async fn test_fixtures_endpoint() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/fixtures").body(Body::empty()).unwrap())
@@ -290,7 +360,15 @@ async fn test_fixtures_endpoint() {
 
 #[tokio::test]
 async fn test_config_endpoint() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/config").body(Body::empty()).unwrap())
@@ -310,7 +388,15 @@ async fn test_config_endpoint() {
 
 #[tokio::test]
 async fn test_server_restart_endpoint() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -336,7 +422,15 @@ async fn test_server_restart_endpoint() {
 
 #[tokio::test]
 async fn test_logs_clear_endpoint() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(
@@ -361,7 +455,15 @@ async fn test_logs_clear_endpoint() {
 
 #[tokio::test]
 async fn test_health_endpoint() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/health").body(Body::empty()).unwrap())
@@ -383,7 +485,15 @@ async fn test_health_endpoint() {
 
 #[tokio::test]
 async fn test_error_responses() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test invalid JSON in POST request
     let response = app
@@ -402,7 +512,15 @@ async fn test_error_responses() {
     assert!(response.status().is_client_error() || response.status().is_success());
 
     // Test non-existent endpoint (should fall back to SPA)
-    let app2 = create_admin_router(None, None, None, None, true, 9080);
+    let app2 = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
     let response = app2
         .oneshot(Request::builder().uri("/__mockforge/nonexistent").body(Body::empty()).unwrap())
         .await
@@ -414,7 +532,15 @@ async fn test_error_responses() {
 
 #[tokio::test]
 async fn test_cors_headers() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(

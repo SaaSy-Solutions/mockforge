@@ -69,7 +69,7 @@ export function SkeletonTable({ rows = 5, cols = 4, className, ...props }: { row
           <Skeleton key={`header-${index}`} height={16} className="flex-1" />
         ))}
       </div>
-      
+
       {/* Table Rows */}
       {Array.from({ length: rows }).map((_, rowIndex) => (
         <div key={`row-${rowIndex}`} className="flex space-x-4">

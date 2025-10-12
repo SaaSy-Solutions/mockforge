@@ -83,9 +83,11 @@ impl RecorderDatabase {
         .await?;
 
         // Create indexes for common queries
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON requests(timestamp DESC)")
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON requests(timestamp DESC)",
+        )
+        .execute(&self.pool)
+        .await?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_requests_protocol ON requests(protocol)")
             .execute(&self.pool)
@@ -257,11 +259,10 @@ impl RecorderDatabase {
             .fetch_one(&self.pool)
             .await?;
 
-        let total_size: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(size_bytes), 0) FROM responses"
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let total_size: i64 =
+            sqlx::query_scalar("SELECT COALESCE(SUM(size_bytes), 0) FROM responses")
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(DatabaseStats {
             total_requests,
@@ -277,11 +278,10 @@ impl RecorderDatabase {
             .await?;
 
         // Get count by protocol
-        let protocol_rows: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT protocol, COUNT(*) as count FROM requests GROUP BY protocol"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let protocol_rows: Vec<(String, i64)> =
+            sqlx::query_as("SELECT protocol, COUNT(*) as count FROM requests GROUP BY protocol")
+                .fetch_all(&self.pool)
+                .await?;
 
         let by_protocol: HashMap<String, i64> = protocol_rows.into_iter().collect();
 
@@ -296,7 +296,7 @@ impl RecorderDatabase {
 
         // Get average duration
         let avg_duration: Option<f64> = sqlx::query_scalar(
-            "SELECT AVG(duration_ms) FROM requests WHERE duration_ms IS NOT NULL"
+            "SELECT AVG(duration_ms) FROM requests WHERE duration_ms IS NOT NULL",
         )
         .fetch_one(&self.pool)
         .await?;

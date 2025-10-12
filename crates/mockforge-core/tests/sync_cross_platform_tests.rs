@@ -5,9 +5,7 @@
 //! attention to path handling and file system operations.
 
 use mockforge_core::sync_watcher::SyncWatcher;
-use mockforge_core::workspace::{
-    SyncConfig, SyncDirection, SyncDirectoryStructure, Workspace,
-};
+use mockforge_core::workspace::{SyncConfig, SyncDirection, SyncDirectoryStructure, Workspace};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -147,11 +145,7 @@ mod cross_platform_tests {
         let workspace_dir = temp_dir.path();
 
         // Create deeply nested directories
-        let nested_path = workspace_dir
-            .join("level1")
-            .join("level2")
-            .join("level3")
-            .join("level4");
+        let nested_path = workspace_dir.join("level1").join("level2").join("level3").join("level4");
 
         fs::create_dir_all(&nested_path).unwrap();
         assert!(nested_path.exists());
@@ -217,17 +211,11 @@ mod cross_platform_tests {
 
         // Test current directory reference (.)
         let with_dot = base_path.join(".").join("test");
-        assert_eq!(
-            with_dot.canonicalize().unwrap(),
-            test_dir.canonicalize().unwrap()
-        );
+        assert_eq!(with_dot.canonicalize().unwrap(), test_dir.canonicalize().unwrap());
 
         // Test parent directory reference (..)
         let with_dotdot = test_dir.join("..").join("test");
-        assert_eq!(
-            with_dotdot.canonicalize().unwrap(),
-            test_dir.canonicalize().unwrap()
-        );
+        assert_eq!(with_dotdot.canonicalize().unwrap(), test_dir.canonicalize().unwrap());
     }
 
     /// Windows-specific: Test handling of drive letters and UNC paths

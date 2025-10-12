@@ -31,7 +31,7 @@ export function ErrorFallback({
       <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-4">
         <StatusIcon status="error" size="lg" />
       </div>
-      
+
       <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
       <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">{description}</p>
 
@@ -103,7 +103,7 @@ export function DataErrorFallback({ retry, resetError }: { retry?: () => void; r
       <div className="p-4 rounded-full bg-orange-50 dark:bg-orange-900/20 mb-4">
         <Database className="h-8 w-8 text-orange-600 dark:text-orange-400" />
       </div>
-      
+
       <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Data Loading Failed</h3>
       <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">
         There was a problem loading the data. This might be a temporary issue.
@@ -141,7 +141,7 @@ export function TimeoutErrorFallback({ retry, resetError }: { retry?: () => void
       <div className="p-4 rounded-full bg-yellow-50 dark:bg-yellow-900/20 mb-4">
         <Clock className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
       </div>
-      
+
       <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Request Timed Out</h3>
       <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">
         The request took too long to complete. This might be due to a slow connection or server issues.
@@ -174,14 +174,14 @@ export function TimeoutErrorFallback({ retry, resetError }: { retry?: () => void
 }
 
 // Compact error fallback for smaller components
-export function CompactErrorFallback({ 
-  error, 
-  retry, 
-  message = 'Failed to load' 
-}: { 
-  error?: Error; 
-  retry?: () => void; 
-  message?: string; 
+export function CompactErrorFallback({
+  error,
+  retry,
+  message = 'Failed to load'
+}: {
+  error?: Error;
+  retry?: () => void;
+  message?: string;
 }) {
   return (
     <div className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -194,7 +194,7 @@ export function CompactErrorFallback({
           )}
         </div>
       </div>
-      
+
       {retry && (
         <Button
           onClick={retry}

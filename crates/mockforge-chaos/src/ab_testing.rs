@@ -5,10 +5,10 @@
 
 use crate::analytics::ChaosAnalytics;
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use uuid::Uuid;
 
 /// A/B test configuration
@@ -211,12 +211,13 @@ impl ABTestingEngine {
 
         // Check concurrent limit
         let tests = self.tests.read();
-        let running_tests = tests.values()
-            .filter(|t| t.status == ABTestStatus::Running)
-            .count();
+        let running_tests = tests.values().filter(|t| t.status == ABTestStatus::Running).count();
 
         if running_tests >= self.max_concurrent_tests {
-            return Err(format!("Maximum concurrent tests ({}) reached", self.max_concurrent_tests));
+            return Err(format!(
+                "Maximum concurrent tests ({}) reached",
+                self.max_concurrent_tests
+            ));
         }
         drop(tests);
 
@@ -243,8 +244,7 @@ impl ABTestingEngine {
     /// Start an A/B test
     pub fn start_test(&self, test_id: &str) -> Result<(), String> {
         let mut tests = self.tests.write();
-        let test = tests.get_mut(test_id)
-            .ok_or_else(|| "Test not found".to_string())?;
+        let test = tests.get_mut(test_id).ok_or_else(|| "Test not found".to_string())?;
 
         if test.status != ABTestStatus::Draft {
             return Err("Test must be in Draft status to start".to_string());
@@ -259,8 +259,7 @@ impl ABTestingEngine {
     /// Stop an A/B test and analyze results
     pub fn stop_test(&self, test_id: &str) -> Result<TestConclusion, String> {
         let mut tests = self.tests.write();
-        let test = tests.get_mut(test_id)
-            .ok_or_else(|| "Test not found".to_string())?;
+        let test = tests.get_mut(test_id).ok_or_else(|| "Test not found".to_string())?;
 
         if test.status != ABTestStatus::Running {
             return Err("Test must be running to stop".to_string());
@@ -284,8 +283,7 @@ impl ABTestingEngine {
         results: VariantResults,
     ) -> Result<(), String> {
         let mut tests = self.tests.write();
-        let test = tests.get_mut(test_id)
-            .ok_or_else(|| "Test not found".to_string())?;
+        let test = tests.get_mut(test_id).ok_or_else(|| "Test not found".to_string())?;
 
         if test.status != ABTestStatus::Running {
             return Err("Test must be running to record results".to_string());
@@ -304,26 +302,31 @@ impl ABTestingEngine {
 
     /// Analyze test results and determine winner
     fn analyze_results(&self, test: &ABTest) -> Result<TestConclusion, String> {
-        let variant_a = test.variant_a_results.as_ref()
+        let variant_a = test
+            .variant_a_results
+            .as_ref()
             .ok_or_else(|| "Variant A results not available".to_string())?;
-        let variant_b = test.variant_b_results.as_ref()
+        let variant_b = test
+            .variant_b_results
+            .as_ref()
             .ok_or_else(|| "Variant B results not available".to_string())?;
 
         // Check minimum sample size
-        if variant_a.sample_size < test.config.min_sample_size ||
-           variant_b.sample_size < test.config.min_sample_size {
+        if variant_a.sample_size < test.config.min_sample_size
+            || variant_b.sample_size < test.config.min_sample_size
+        {
             return Err("Insufficient sample size for analysis".to_string());
         }
 
         // Compare primary metric
-        let primary = self.compare_metric(
-            &test.config.success_criteria.primary_metric,
-            variant_a,
-            variant_b,
-        );
+        let primary =
+            self.compare_metric(&test.config.success_criteria.primary_metric, variant_a, variant_b);
 
         // Compare secondary metrics
-        let secondary: Vec<SingleMetricComparison> = test.config.success_criteria.secondary_metrics
+        let secondary: Vec<SingleMetricComparison> = test
+            .config
+            .success_criteria
+            .secondary_metrics
             .iter()
             .map(|metric| self.compare_metric(metric, variant_a, variant_b))
             .collect();
@@ -343,12 +346,16 @@ impl ABTestingEngine {
         };
 
         // Check if statistically significant
-        let p_value = self.calculate_p_value(variant_a.sample_size, variant_b.sample_size, &primary);
-        let statistically_significant = p_value < (1.0 - test.config.success_criteria.significance_level);
+        let p_value =
+            self.calculate_p_value(variant_a.sample_size, variant_b.sample_size, &primary);
+        let statistically_significant =
+            p_value < (1.0 - test.config.success_criteria.significance_level);
 
         // Check secondary metrics for degradation
         let secondary_degraded = secondary.iter().any(|comp| {
-            comp.winner == "A" && comp.difference_pct.abs() > test.config.success_criteria.max_secondary_degradation
+            comp.winner == "A"
+                && comp.difference_pct.abs()
+                    > test.config.success_criteria.max_secondary_degradation
         });
 
         // Generate recommendation
@@ -357,7 +364,12 @@ impl ABTestingEngine {
         } else if secondary_degraded {
             format!("Variant {} shows improvement in primary metric but degrades secondary metrics beyond acceptable threshold.", winner)
         } else if improvement_pct >= test.config.success_criteria.min_improvement {
-            format!("Variant {} is the clear winner with {:.2}% improvement in {}.", winner, improvement_pct, format!("{:?}", test.config.success_criteria.primary_metric))
+            format!(
+                "Variant {} is the clear winner with {:.2}% improvement in {}.",
+                winner,
+                improvement_pct,
+                format!("{:?}", test.config.success_criteria.primary_metric)
+            )
         } else {
             format!("Variants show similar performance. Improvement ({:.2}%) below minimum threshold ({:.2}%).", improvement_pct, test.config.success_criteria.min_improvement)
         };
@@ -376,10 +388,7 @@ impl ABTestingEngine {
             statistically_significant,
             p_value,
             improvement_pct,
-            comparison: MetricComparison {
-                primary,
-                secondary,
-            },
+            comparison: MetricComparison { primary, secondary },
             recommendation,
             confidence,
         })
@@ -394,14 +403,30 @@ impl ABTestingEngine {
     ) -> SingleMetricComparison {
         let (a_value, b_value) = match metric {
             MetricType::ErrorRate => (variant_a.metrics.error_rate, variant_b.metrics.error_rate),
-            MetricType::LatencyP50 => (variant_a.metrics.latency_p50, variant_b.metrics.latency_p50),
-            MetricType::LatencyP95 => (variant_a.metrics.latency_p95, variant_b.metrics.latency_p95),
-            MetricType::LatencyP99 => (variant_a.metrics.latency_p99, variant_b.metrics.latency_p99),
-            MetricType::SuccessRate => (variant_a.metrics.success_rate, variant_b.metrics.success_rate),
-            MetricType::RecoveryTime => (variant_a.metrics.recovery_time_ms, variant_b.metrics.recovery_time_ms),
-            MetricType::ResilienceScore => (variant_a.metrics.resilience_score, variant_b.metrics.resilience_score),
-            MetricType::ChaosEffectiveness => (variant_a.metrics.chaos_effectiveness, variant_b.metrics.chaos_effectiveness),
-            MetricType::FaultDetectionRate => (variant_a.metrics.fault_detection_rate, variant_b.metrics.fault_detection_rate),
+            MetricType::LatencyP50 => {
+                (variant_a.metrics.latency_p50, variant_b.metrics.latency_p50)
+            }
+            MetricType::LatencyP95 => {
+                (variant_a.metrics.latency_p95, variant_b.metrics.latency_p95)
+            }
+            MetricType::LatencyP99 => {
+                (variant_a.metrics.latency_p99, variant_b.metrics.latency_p99)
+            }
+            MetricType::SuccessRate => {
+                (variant_a.metrics.success_rate, variant_b.metrics.success_rate)
+            }
+            MetricType::RecoveryTime => {
+                (variant_a.metrics.recovery_time_ms, variant_b.metrics.recovery_time_ms)
+            }
+            MetricType::ResilienceScore => {
+                (variant_a.metrics.resilience_score, variant_b.metrics.resilience_score)
+            }
+            MetricType::ChaosEffectiveness => {
+                (variant_a.metrics.chaos_effectiveness, variant_b.metrics.chaos_effectiveness)
+            }
+            MetricType::FaultDetectionRate => {
+                (variant_a.metrics.fault_detection_rate, variant_b.metrics.fault_detection_rate)
+            }
         };
 
         let difference = b_value - a_value;
@@ -413,13 +438,23 @@ impl ABTestingEngine {
 
         // For error rate and latency, lower is better
         let winner = match metric {
-            MetricType::ErrorRate | MetricType::LatencyP50 |
-            MetricType::LatencyP95 | MetricType::LatencyP99 |
-            MetricType::RecoveryTime => {
-                if b_value < a_value { "B" } else { "A" }
+            MetricType::ErrorRate
+            | MetricType::LatencyP50
+            | MetricType::LatencyP95
+            | MetricType::LatencyP99
+            | MetricType::RecoveryTime => {
+                if b_value < a_value {
+                    "B"
+                } else {
+                    "A"
+                }
             }
             _ => {
-                if b_value > a_value { "B" } else { "A" }
+                if b_value > a_value {
+                    "B"
+                } else {
+                    "A"
+                }
             }
         };
 
@@ -468,17 +503,13 @@ impl ABTestingEngine {
     /// Get running tests
     pub fn get_running_tests(&self) -> Vec<ABTest> {
         let tests = self.tests.read();
-        tests.values()
-            .filter(|t| t.status == ABTestStatus::Running)
-            .cloned()
-            .collect()
+        tests.values().filter(|t| t.status == ABTestStatus::Running).cloned().collect()
     }
 
     /// Delete a test
     pub fn delete_test(&self, test_id: &str) -> Result<(), String> {
         let mut tests = self.tests.write();
-        let test = tests.get(test_id)
-            .ok_or_else(|| "Test not found".to_string())?;
+        let test = tests.get(test_id).ok_or_else(|| "Test not found".to_string())?;
 
         if test.status == ABTestStatus::Running {
             return Err("Cannot delete running test".to_string());
@@ -491,8 +522,7 @@ impl ABTestingEngine {
     /// Pause a running test
     pub fn pause_test(&self, test_id: &str) -> Result<(), String> {
         let mut tests = self.tests.write();
-        let test = tests.get_mut(test_id)
-            .ok_or_else(|| "Test not found".to_string())?;
+        let test = tests.get_mut(test_id).ok_or_else(|| "Test not found".to_string())?;
 
         if test.status != ABTestStatus::Running {
             return Err("Only running tests can be paused".to_string());
@@ -505,8 +535,7 @@ impl ABTestingEngine {
     /// Resume a paused test
     pub fn resume_test(&self, test_id: &str) -> Result<(), String> {
         let mut tests = self.tests.write();
-        let test = tests.get_mut(test_id)
-            .ok_or_else(|| "Test not found".to_string())?;
+        let test = tests.get_mut(test_id).ok_or_else(|| "Test not found".to_string())?;
 
         if test.status != ABTestStatus::Paused {
             return Err("Only paused tests can be resumed".to_string());
@@ -525,10 +554,11 @@ impl ABTestingEngine {
         let completed = tests.values().filter(|t| t.status == ABTestStatus::Completed).count();
         let cancelled = tests.values().filter(|t| t.status == ABTestStatus::Cancelled).count();
 
-        let successful_tests = tests.values()
+        let successful_tests = tests
+            .values()
             .filter(|t| {
-                t.status == ABTestStatus::Completed &&
-                t.conclusion.as_ref().is_some_and(|c| c.statistically_significant)
+                t.status == ABTestStatus::Completed
+                    && t.conclusion.as_ref().is_some_and(|c| c.statistically_significant)
             })
             .count();
 
@@ -543,7 +573,8 @@ impl ABTestingEngine {
     }
 
     fn calculate_avg_improvement(&self, tests: &HashMap<String, ABTest>) -> f64 {
-        let improvements: Vec<f64> = tests.values()
+        let improvements: Vec<f64> = tests
+            .values()
             .filter_map(|t| {
                 if t.status == ABTestStatus::Completed {
                     t.conclusion.as_ref().map(|c| c.improvement_pct)

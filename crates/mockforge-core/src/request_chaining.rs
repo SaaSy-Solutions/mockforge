@@ -298,6 +298,7 @@ impl ChainTemplatingContext {
     }
 
     /// Navigate JSON value using path segments
+    #[allow(clippy::only_used_in_recursion)]
     fn navigate_json_path(
         &self,
         value: &serde_json::Value,
@@ -501,6 +502,7 @@ impl RequestChainRegistry {
     }
 
     /// Validate link dependencies for circular references
+    #[allow(clippy::only_used_in_recursion)]
     fn validate_link_dependencies(
         &self,
         link: &ChainLink,

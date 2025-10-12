@@ -730,8 +730,8 @@ mod tests {
 
     #[test]
     fn test_schema_definition_with_description() {
-        let schema = SchemaDefinition::new("Test".to_string())
-            .with_description("Test schema".to_string());
+        let schema =
+            SchemaDefinition::new("Test".to_string()).with_description("Test schema".to_string());
 
         assert_eq!(schema.description, Some("Test schema".to_string()));
     }

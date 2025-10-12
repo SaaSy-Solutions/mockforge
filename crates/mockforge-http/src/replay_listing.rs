@@ -45,7 +45,12 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    fn create_fixture_file(dir: &PathBuf, protocol: &str, op_id: &str, timestamp: &str) -> std::io::Result<()> {
+    fn create_fixture_file(
+        dir: &PathBuf,
+        protocol: &str,
+        op_id: &str,
+        timestamp: &str,
+    ) -> std::io::Result<()> {
         let path = dir.join(protocol).join(op_id);
         fs::create_dir_all(&path)?;
         let file_path = path.join(format!("{}.json", timestamp));

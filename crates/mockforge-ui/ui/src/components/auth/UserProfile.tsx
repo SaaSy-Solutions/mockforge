@@ -119,7 +119,7 @@ export function UserProfile() {
               </div>
 
               <div className="border-t my-2"></div>
-              
+
 
               <div className="space-y-1">
                 <div className="px-3 py-2 text-xs text-muted-foreground">

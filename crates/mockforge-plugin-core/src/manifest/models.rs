@@ -299,11 +299,9 @@ impl PluginDependency {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
-        assert!(true);
     }
 }

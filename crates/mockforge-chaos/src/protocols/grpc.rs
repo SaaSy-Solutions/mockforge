@@ -1,8 +1,8 @@
 //! gRPC chaos engineering
 
 use crate::{
-    config::ChaosConfig, fault::FaultInjector, latency::LatencyInjector,
-    rate_limit::RateLimiter, traffic_shaping::TrafficShaper, ChaosError, Result,
+    config::ChaosConfig, fault::FaultInjector, latency::LatencyInjector, rate_limit::RateLimiter,
+    traffic_shaping::TrafficShaper, ChaosError, Result,
 };
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -33,21 +33,17 @@ pub struct GrpcChaos {
 impl GrpcChaos {
     /// Create new gRPC chaos handler
     pub fn new(config: ChaosConfig) -> Self {
-        let latency_injector = Arc::new(LatencyInjector::new(
-            config.latency.clone().unwrap_or_default(),
-        ));
+        let latency_injector =
+            Arc::new(LatencyInjector::new(config.latency.clone().unwrap_or_default()));
 
-        let fault_injector = Arc::new(FaultInjector::new(
-            config.fault_injection.clone().unwrap_or_default(),
-        ));
+        let fault_injector =
+            Arc::new(FaultInjector::new(config.fault_injection.clone().unwrap_or_default()));
 
-        let rate_limiter = Arc::new(RateLimiter::new(
-            config.rate_limit.clone().unwrap_or_default(),
-        ));
+        let rate_limiter =
+            Arc::new(RateLimiter::new(config.rate_limit.clone().unwrap_or_default()));
 
-        let traffic_shaper = Arc::new(TrafficShaper::new(
-            config.traffic_shaping.clone().unwrap_or_default(),
-        ));
+        let traffic_shaper =
+            Arc::new(TrafficShaper::new(config.traffic_shaping.clone().unwrap_or_default()));
 
         Self {
             latency_injector,
@@ -114,17 +110,17 @@ impl GrpcChaos {
     /// Get gRPC status code for fault injection
     pub fn get_grpc_status_code(&self) -> Option<i32> {
         self.fault_injector.get_http_error_status().map(|http_code| match http_code {
-                400 => 3,  // INVALID_ARGUMENT
-                401 => 16, // UNAUTHENTICATED
-                403 => 7,  // PERMISSION_DENIED
-                404 => 5,  // NOT_FOUND
-                429 => 8,  // RESOURCE_EXHAUSTED
-                500 => 13, // INTERNAL
-                501 => 12, // UNIMPLEMENTED
-                503 => 14, // UNAVAILABLE
-                504 => 4,  // DEADLINE_EXCEEDED
-                _ => 2,    // UNKNOWN
-            })
+            400 => 3,  // INVALID_ARGUMENT
+            401 => 16, // UNAUTHENTICATED
+            403 => 7,  // PERMISSION_DENIED
+            404 => 5,  // NOT_FOUND
+            429 => 8,  // RESOURCE_EXHAUSTED
+            500 => 13, // INTERNAL
+            501 => 12, // UNIMPLEMENTED
+            503 => 14, // UNAVAILABLE
+            504 => 4,  // DEADLINE_EXCEEDED
+            _ => 2,    // UNKNOWN
+        })
     }
 
     /// Check if should interrupt stream

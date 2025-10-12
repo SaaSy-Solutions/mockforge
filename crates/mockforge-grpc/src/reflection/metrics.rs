@@ -229,7 +229,6 @@ pub async fn decrement_in_flight(service_name: &str, method_name: &str) {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

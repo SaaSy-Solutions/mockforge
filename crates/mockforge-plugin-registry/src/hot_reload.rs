@@ -85,11 +85,7 @@ impl Default for HotReloadConfig {
                 "*.dll".to_string(),
                 "*.wasm".to_string(),
             ],
-            exclude_patterns: vec![
-                "*.tmp".to_string(),
-                "*.swp".to_string(),
-                "*~".to_string(),
-            ],
+            exclude_patterns: vec!["*.tmp".to_string(), "*.swp".to_string(), "*~".to_string()],
         }
     }
 }
@@ -208,9 +204,10 @@ impl HotReloadManager {
 
         let mut changed_plugins = Vec::new();
 
-        let mut watchers = self.watchers.write().map_err(|e| {
-            RegistryError::Storage(format!("Failed to acquire write lock: {}", e))
-        })?;
+        let mut watchers = self
+            .watchers
+            .write()
+            .map_err(|e| RegistryError::Storage(format!("Failed to acquire write lock: {}", e)))?;
 
         let now = SystemTime::now();
 
@@ -249,9 +246,10 @@ impl HotReloadManager {
 
     /// Reload a plugin
     pub fn reload_plugin(&self, name: &str) -> Result<ReloadEvent> {
-        let mut plugins = self.plugins.write().map_err(|e| {
-            RegistryError::Storage(format!("Failed to acquire write lock: {}", e))
-        })?;
+        let mut plugins = self
+            .plugins
+            .write()
+            .map_err(|e| RegistryError::Storage(format!("Failed to acquire write lock: {}", e)))?;
 
         let plugin = plugins.get_mut(name).ok_or_else(|| {
             RegistryError::PluginNotFound(format!("Plugin not registered: {}", name))
@@ -278,9 +276,10 @@ impl HotReloadManager {
 
     /// Get plugin info
     pub fn get_plugin_info(&self, name: &str) -> Result<PluginInfo> {
-        let plugins = self.plugins.read().map_err(|e| {
-            RegistryError::Storage(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let plugins = self
+            .plugins
+            .read()
+            .map_err(|e| RegistryError::Storage(format!("Failed to acquire read lock: {}", e)))?;
 
         let plugin = plugins
             .get(name)
@@ -297,9 +296,10 @@ impl HotReloadManager {
 
     /// List all registered plugins
     pub fn list_plugins(&self) -> Result<Vec<PluginInfo>> {
-        let plugins = self.plugins.read().map_err(|e| {
-            RegistryError::Storage(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let plugins = self
+            .plugins
+            .read()
+            .map_err(|e| RegistryError::Storage(format!("Failed to acquire read lock: {}", e)))?;
 
         Ok(plugins
             .values()
@@ -396,9 +396,7 @@ mod tests {
         let plugin_path = temp_dir.path().join("plugin.so");
         File::create(&plugin_path).unwrap();
 
-        manager
-            .register_plugin("test-plugin", &plugin_path, "1.0.0")
-            .unwrap();
+        manager.register_plugin("test-plugin", &plugin_path, "1.0.0").unwrap();
         manager.unregister_plugin("test-plugin").unwrap();
 
         let info = manager.get_plugin_info("test-plugin");
@@ -418,9 +416,7 @@ mod tests {
         let plugin_path = temp_dir.path().join("plugin.so");
         let mut file = File::create(&plugin_path).unwrap();
 
-        manager
-            .register_plugin("test-plugin", &plugin_path, "1.0.0")
-            .unwrap();
+        manager.register_plugin("test-plugin", &plugin_path, "1.0.0").unwrap();
 
         // Wait a bit
         std::thread::sleep(Duration::from_millis(100));
@@ -433,7 +429,7 @@ mod tests {
         // Wait a bit more to ensure modification time updates
         std::thread::sleep(Duration::from_millis(100));
 
-        let changed = manager.check_for_changes().unwrap();
+        let _changed = manager.check_for_changes().unwrap();
         // Note: This test may be flaky due to filesystem timing
         // In a real implementation, we'd use a proper file watcher library
     }

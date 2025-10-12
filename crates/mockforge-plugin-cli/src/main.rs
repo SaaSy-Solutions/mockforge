@@ -149,12 +149,9 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Commands::Package { path, output } => {
-            let package_path = commands::package::package_plugin(path.as_deref(), output.as_deref()).await?;
-            println!(
-                "{} {}",
-                "✅ Plugin packaged:".green().bold(),
-                package_path.display()
-            );
+            let package_path =
+                commands::package::package_plugin(path.as_deref(), output.as_deref()).await?;
+            println!("{} {}", "✅ Plugin packaged:".green().bold(), package_path.display());
         }
 
         Commands::Validate { path } => {
@@ -162,7 +159,10 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", "✅ Plugin is valid!".green().bold());
         }
 
-        Commands::Init { plugin_type, output } => {
+        Commands::Init {
+            plugin_type,
+            output,
+        } => {
             commands::init::init_manifest(&plugin_type, output.as_deref()).await?;
             println!("{}", "✅ Manifest created successfully!".green().bold());
         }

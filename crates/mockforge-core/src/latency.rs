@@ -391,9 +391,7 @@ mod tests {
 
     #[test]
     fn test_latency_profile_with_bounds() {
-        let profile = LatencyProfile::default()
-            .with_min_ms(10)
-            .with_max_ms(1000);
+        let profile = LatencyProfile::default().with_min_ms(10).with_max_ms(1000);
 
         assert_eq!(profile.min_ms, 10);
         assert_eq!(profile.max_ms, Some(1000));
@@ -401,8 +399,7 @@ mod tests {
 
     #[test]
     fn test_calculate_latency_with_tag_override() {
-        let profile = LatencyProfile::default()
-            .with_tag_override("slow".to_string(), 500);
+        let profile = LatencyProfile::default().with_tag_override("slow".to_string(), 500);
 
         let tags = vec!["slow".to_string()];
         let latency = profile.calculate_latency(&tags);
@@ -427,8 +424,7 @@ mod tests {
 
     #[test]
     fn test_calculate_latency_respects_max_bound() {
-        let profile = LatencyProfile::with_pareto_distribution(100, 2.0)
-            .with_max_ms(200);
+        let profile = LatencyProfile::with_pareto_distribution(100, 2.0).with_max_ms(200);
 
         for _ in 0..100 {
             let latency = profile.calculate_latency(&[]);
@@ -461,9 +457,7 @@ mod tests {
 
     #[test]
     fn test_fault_config_with_status_code() {
-        let config = FaultConfig::default()
-            .with_status_code(400)
-            .with_status_code(404);
+        let config = FaultConfig::default().with_status_code(400).with_status_code(404);
 
         assert!(config.status_codes.contains(&400));
         assert!(config.status_codes.contains(&404));
@@ -472,8 +466,8 @@ mod tests {
     #[test]
     fn test_fault_config_with_error_response() {
         let response = serde_json::json!({"error": "test"});
-        let config = FaultConfig::default()
-            .with_error_response("test".to_string(), response.clone());
+        let config =
+            FaultConfig::default().with_error_response("test".to_string(), response.clone());
 
         assert_eq!(config.error_responses.get("test"), Some(&response));
     }
@@ -509,8 +503,7 @@ mod tests {
 
     #[test]
     fn test_fault_config_get_failure_response() {
-        let config = FaultConfig::new(1.0)
-            .with_status_code(502);
+        let config = FaultConfig::new(1.0).with_status_code(502);
 
         let (status, _) = config.get_failure_response();
         assert!(config.status_codes.contains(&status));
@@ -518,10 +511,7 @@ mod tests {
 
     #[test]
     fn test_latency_injector_new() {
-        let injector = LatencyInjector::new(
-            LatencyProfile::default(),
-            FaultConfig::default()
-        );
+        let injector = LatencyInjector::new(LatencyProfile::default(), FaultConfig::default());
         assert!(injector.is_enabled());
     }
 
@@ -539,10 +529,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_injector_inject_latency() {
-        let injector = LatencyInjector::new(
-            LatencyProfile::new(10, 0),
-            FaultConfig::default()
-        );
+        let injector = LatencyInjector::new(LatencyProfile::new(10, 0), FaultConfig::default());
 
         let start = std::time::Instant::now();
         injector.inject_latency(&[]).await.unwrap();
@@ -553,10 +540,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_injector_disabled_no_latency() {
-        let mut injector = LatencyInjector::new(
-            LatencyProfile::new(100, 0),
-            FaultConfig::default()
-        );
+        let mut injector =
+            LatencyInjector::new(LatencyProfile::new(100, 0), FaultConfig::default());
         injector.set_enabled(false);
 
         let start = std::time::Instant::now();
@@ -568,20 +553,14 @@ mod tests {
 
     #[test]
     fn test_latency_injector_should_inject_failure() {
-        let injector = LatencyInjector::new(
-            LatencyProfile::default(),
-            FaultConfig::new(1.0)
-        );
+        let injector = LatencyInjector::new(LatencyProfile::default(), FaultConfig::new(1.0));
 
         assert!(injector.should_inject_failure());
     }
 
     #[test]
     fn test_latency_injector_disabled_no_failure() {
-        let mut injector = LatencyInjector::new(
-            LatencyProfile::default(),
-            FaultConfig::new(1.0)
-        );
+        let mut injector = LatencyInjector::new(LatencyProfile::default(), FaultConfig::new(1.0));
         injector.set_enabled(false);
 
         assert!(!injector.should_inject_failure());
@@ -589,10 +568,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_injector_process_request_no_failure() {
-        let injector = LatencyInjector::new(
-            LatencyProfile::new(10, 0),
-            FaultConfig::new(0.0)
-        );
+        let injector = LatencyInjector::new(LatencyProfile::new(10, 0), FaultConfig::new(0.0));
 
         let result = injector.process_request(&[]).await.unwrap();
         assert!(result.is_none());
@@ -604,10 +580,7 @@ mod tests {
         fault_config.failure_rate = 1.0;
         fault_config.status_codes = vec![503]; // Set to only one status code
 
-        let injector = LatencyInjector::new(
-            LatencyProfile::new(10, 0),
-            fault_config
-        );
+        let injector = LatencyInjector::new(LatencyProfile::new(10, 0), fault_config);
 
         let result = injector.process_request(&[]).await.unwrap();
         assert!(result.is_some());
@@ -618,10 +591,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_injector_process_request_disabled() {
-        let mut injector = LatencyInjector::new(
-            LatencyProfile::new(100, 0),
-            FaultConfig::new(1.0)
-        );
+        let mut injector = LatencyInjector::new(LatencyProfile::new(100, 0), FaultConfig::new(1.0));
         injector.set_enabled(false);
 
         let result = injector.process_request(&[]).await.unwrap();

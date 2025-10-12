@@ -4,13 +4,13 @@
 //! Allows users to create and integrate custom chaos scenarios, fault injectors,
 //! and resilience patterns.
 
+use async_trait::async_trait;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use async_trait::async_trait;
 use thiserror::Error;
-use serde_json::Value as JsonValue;
 
 /// Plugin system errors
 #[derive(Error, Debug)]
@@ -87,8 +87,7 @@ impl Default for PluginConfig {
 }
 
 /// Plugin execution context
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PluginContext {
     pub tenant_id: Option<String>,
     pub scenario_id: Option<String>,
@@ -96,7 +95,6 @@ pub struct PluginContext {
     pub parameters: HashMap<String, JsonValue>,
     pub metadata: HashMap<String, String>,
 }
-
 
 /// Plugin execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,10 +232,7 @@ impl PluginRegistry {
     /// List all plugins
     pub fn list_plugins(&self) -> Vec<PluginMetadata> {
         let plugins = self.plugins.read();
-        plugins
-            .values()
-            .map(|p| p.metadata().clone())
-            .collect()
+        plugins.values().map(|p| p.metadata().clone()).collect()
     }
 
     /// Register a hook
@@ -274,9 +269,7 @@ impl PluginRegistry {
         // Check if plugin is enabled
         if let Some(config) = self.get_config(plugin_id) {
             if !config.enabled {
-                return Err(PluginError::ExecutionFailed(
-                    "Plugin is disabled".to_string()
-                ));
+                return Err(PluginError::ExecutionFailed("Plugin is disabled".to_string()));
             }
         }
 
@@ -384,7 +377,9 @@ impl ChaosPlugin for CustomFaultPlugin {
 
     async fn execute(&self, context: PluginContext) -> Result<PluginResult> {
         // Custom fault injection logic here
-        let fault_type = context.parameters.get("fault_type")
+        let fault_type = context
+            .parameters
+            .get("fault_type")
             .and_then(|v| v.as_str())
             .unwrap_or("generic");
 
@@ -392,10 +387,7 @@ impl ChaosPlugin for CustomFaultPlugin {
         data.insert("fault_type".to_string(), JsonValue::String(fault_type.to_string()));
         data.insert("injected_at".to_string(), JsonValue::String(chrono::Utc::now().to_rfc3339()));
 
-        Ok(PluginResult::success(
-            format!("Injected {} fault", fault_type),
-            data,
-        ))
+        Ok(PluginResult::success(format!("Injected {} fault", fault_type), data))
     }
 
     async fn cleanup(&mut self) -> Result<()> {
@@ -499,10 +491,7 @@ impl ChaosPlugin for MetricsPlugin {
         let mut metrics = self.metrics.write();
         metrics.push(metric.clone());
 
-        Ok(PluginResult::success(
-            "Metric collected".to_string(),
-            metric,
-        ))
+        Ok(PluginResult::success("Metric collected".to_string(), metric))
     }
 
     async fn cleanup(&mut self) -> Result<()> {
@@ -545,10 +534,9 @@ mod tests {
         registry.configure_plugin("custom-fault-injector", config).unwrap();
 
         let mut context = PluginContext::default();
-        context.parameters.insert(
-            "fault_type".to_string(),
-            JsonValue::String("timeout".to_string()),
-        );
+        context
+            .parameters
+            .insert("fault_type".to_string(), JsonValue::String("timeout".to_string()));
 
         let result = registry.execute_plugin("custom-fault-injector", context).await.unwrap();
         assert!(result.success);

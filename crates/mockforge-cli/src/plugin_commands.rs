@@ -1,9 +1,7 @@
 //! Plugin management CLI commands
 
 use clap::Subcommand;
-use mockforge_plugin_loader::{
-    InstallOptions, PluginInstaller, PluginLoaderConfig, PluginSource,
-};
+use mockforge_plugin_loader::{InstallOptions, PluginInstaller, PluginLoaderConfig, PluginSource};
 
 #[derive(Subcommand)]
 pub enum PluginCommands {
@@ -296,7 +294,11 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
             }
         }
 
-        PluginCommands::Search { query, category, limit } => {
+        PluginCommands::Search {
+            query,
+            category,
+            limit,
+        } => {
             println!("🔍 Searching plugins: {}", query);
             if let Some(cat) = category {
                 println!("   Category: {}", cat);

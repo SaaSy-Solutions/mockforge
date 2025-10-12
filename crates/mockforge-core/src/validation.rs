@@ -36,10 +36,10 @@ impl Validator {
 
     /// Create a validator that supports OpenAPI 3.1 features from a schema
     pub fn from_openapi31_schema(schema: &Value) -> Result<Self> {
-        let compiled = jsonschema::options()
-            .with_draft(Draft::Draft7)
-            .build(schema)
-            .map_err(|e| Error::validation(format!("Failed to compile OpenAPI 3.1 schema: {}", e)))?;
+        let compiled =
+            jsonschema::options().with_draft(Draft::Draft7).build(schema).map_err(|e| {
+                Error::validation(format!("Failed to compile OpenAPI 3.1 schema: {}", e))
+            })?;
 
         Ok(Self::OpenApi31Schema(compiled, schema.clone()))
     }
@@ -96,7 +96,10 @@ impl Validator {
                 }
 
                 if !errors.is_empty() {
-                    return Err(Error::validation(format!("Validation failed: {}", errors.join(", "))));
+                    return Err(Error::validation(format!(
+                        "Validation failed: {}",
+                        errors.join(", ")
+                    )));
                 }
 
                 // Then validate OpenAPI 3.1 extensions
@@ -509,7 +512,9 @@ pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
     // Basic validation - check if the spec has required OpenAPI fields
     let spec_obj = match spec.as_object() {
         Some(obj) => obj,
-        None => return ValidationResult::failure(vec!["OpenAPI spec must be an object".to_string()]),
+        None => {
+            return ValidationResult::failure(vec!["OpenAPI spec must be an object".to_string()])
+        }
     };
 
     // Check required fields
@@ -544,12 +549,11 @@ pub fn validate_openapi(data: &Value, spec: &Value) -> ValidationResult {
 
     // Now perform actual schema validation if possible
     if serde_json::from_value::<openapiv3::OpenAPI>(spec.clone()).is_ok() {
-        let _spec_wrapper = OpenApiSpec::from_json(spec.clone())
-            .unwrap_or_else(|_| {
-                // Fallback to empty spec on error - this should never happen with valid JSON
-                OpenApiSpec::from_json(json!({}))
-                    .expect("Empty JSON object should always create valid OpenApiSpec")
-            });
+        let _spec_wrapper = OpenApiSpec::from_json(spec.clone()).unwrap_or_else(|_| {
+            // Fallback to empty spec on error - this should never happen with valid JSON
+            OpenApiSpec::from_json(json!({}))
+                .expect("Empty JSON object should always create valid OpenApiSpec")
+        });
 
         // Try to validate the data against the spec
         // For now, we'll do a basic check to see if the data structure is reasonable
@@ -758,30 +762,22 @@ pub fn validate_safe_path(path: &str) -> Result<String> {
 
     // Check for path traversal attempts
     if path.contains("..") {
-        return Err(Error::validation(
-            "Path traversal detected: '..' not allowed".to_string(),
-        ));
+        return Err(Error::validation("Path traversal detected: '..' not allowed".to_string()));
     }
 
     // Check for home directory expansion
     if path.contains('~') {
-        return Err(Error::validation(
-            "Home directory expansion '~' not allowed".to_string(),
-        ));
+        return Err(Error::validation("Home directory expansion '~' not allowed".to_string()));
     }
 
     // Check for absolute paths (Unix)
     if path.starts_with('/') {
-        return Err(Error::validation(
-            "Absolute paths not allowed".to_string(),
-        ));
+        return Err(Error::validation("Absolute paths not allowed".to_string()));
     }
 
     // Check for absolute paths (Windows drive letters)
     if path.len() >= 2 && path.chars().nth(1) == Some(':') {
-        return Err(Error::validation(
-            "Absolute paths with drive letters not allowed".to_string(),
-        ));
+        return Err(Error::validation("Absolute paths with drive letters not allowed".to_string()));
     }
 
     // Check for UNC paths (Windows network paths)
@@ -794,9 +790,7 @@ pub fn validate_safe_path(path: &str) -> Result<String> {
 
     // Additional check: ensure no empty segments (e.g., "foo//bar")
     if normalized.contains("//") {
-        return Err(Error::validation(
-            "Path contains empty segments".to_string(),
-        ));
+        return Err(Error::validation("Path contains empty segments".to_string()));
     }
 
     Ok(normalized)
@@ -848,8 +842,8 @@ pub fn sanitize_sql(input: &str) -> String {
 pub fn validate_command_arg(arg: &str) -> Result<String> {
     // List of dangerous shell metacharacters
     let dangerous_chars = [
-        '|', ';', '&', '<', '>', '`', '$', '(', ')', '*', '?', '[', ']', '{', '}', '~', '!',
-        '\n', '\r', '\0',
+        '|', ';', '&', '<', '>', '`', '$', '(', ')', '*', '?', '[', ']', '{', '}', '~', '!', '\n',
+        '\r', '\0',
     ];
 
     for ch in dangerous_chars.iter() {
@@ -863,9 +857,7 @@ pub fn validate_command_arg(arg: &str) -> Result<String> {
 
     // Check for command substitution patterns
     if arg.contains("$(") {
-        return Err(Error::validation(
-            "Command substitution pattern '$(' not allowed".to_string(),
-        ));
+        return Err(Error::validation("Command substitution pattern '$(' not allowed".to_string()));
     }
 
     Ok(arg.to_string())
@@ -917,9 +909,7 @@ pub fn validate_url_safe(url: &str) -> Result<String> {
     let url_lower = url.to_lowercase();
 
     // Block localhost variants
-    let localhost_patterns = [
-        "localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0",
-    ];
+    let localhost_patterns = ["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"];
     for pattern in localhost_patterns.iter() {
         if url_lower.contains(pattern) {
             return Err(Error::validation(
@@ -984,11 +974,7 @@ pub fn validate_url_safe(url: &str) -> Result<String> {
 /// ```
 pub fn sanitize_header_value(input: &str) -> String {
     // Remove CR and LF characters to prevent header injection
-    input
-        .replace('\r', "")
-        .replace('\n', "")
-        .trim()
-        .to_string()
+    input.replace(['\r', '\n'], "").trim().to_string()
 }
 
 #[cfg(test)]
@@ -1313,7 +1299,8 @@ mod tests {
             "openapi": "3.0.0",
             "info": {"title": "Test", "version": "1.0.0"},
             "paths": {}
-        })).unwrap();
+        }))
+        .unwrap();
         assert!(openapi_validator.is_implemented());
     }
 
@@ -1393,10 +1380,7 @@ mod tests {
     #[test]
     fn test_sanitize_sql() {
         // Basic SQL injection
-        assert_eq!(
-            sanitize_sql("admin' OR '1'='1"),
-            "admin'' OR ''1''=''1"
-        );
+        assert_eq!(sanitize_sql("admin' OR '1'='1"), "admin'' OR ''1''=''1");
 
         // Multiple quotes
         assert_eq!(sanitize_sql("'; DROP TABLE users; --"), "''; DROP TABLE users; --");
@@ -1456,16 +1440,10 @@ mod tests {
     #[test]
     fn test_sanitize_json_string() {
         // Quote injection
-        assert_eq!(
-            sanitize_json_string(r#"value","admin":true,"#),
-            r#"value\",\"admin\":true,"#
-        );
+        assert_eq!(sanitize_json_string(r#"value","admin":true,"#), r#"value\",\"admin\":true,"#);
 
         // Backslash escape
-        assert_eq!(
-            sanitize_json_string(r#"C:\Windows\System32"#),
-            r#"C:\\Windows\\System32"#
-        );
+        assert_eq!(sanitize_json_string(r#"C:\Windows\System32"#), r#"C:\\Windows\\System32"#);
 
         // Control characters
         assert_eq!(sanitize_json_string("line1\nline2"), r#"line1\nline2"#);

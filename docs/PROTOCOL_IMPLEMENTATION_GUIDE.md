@@ -910,7 +910,7 @@ async fn handle_smtp_session(
                 data.push_str(cmd);
                 data.push_str("\n");
             }
-        } else if cmd.starts_with("HELO") || cmd.starts_with("EHLO") {
+        } else if cmd.starts_with("HELLO") || cmd.starts_with("EHLO") {
             writer.write_all(format!("250 {} Hello\r\n", hostname).as_bytes()).await?;
         } else if cmd.starts_with("MAIL FROM:") {
             mail_from = Some(cmd.strip_prefix("MAIL FROM:").unwrap().trim().to_string());

@@ -201,19 +201,19 @@ impl CollectionExporter {
 
                 for (method, op_opt) in operations {
                     if let Some(op) = op_opt {
-                        let name = op.operation_id.clone()
+                        let name = op
+                            .operation_id
+                            .clone()
                             .or_else(|| op.summary.clone())
                             .unwrap_or_else(|| format!("{} {}", method, path));
 
                         let request = PostmanRequest {
                             method: method.to_string(),
-                            header: vec![
-                                PostmanHeader {
-                                    key: "Content-Type".to_string(),
-                                    value: "application/json".to_string(),
-                                    header_type: "text".to_string(),
-                                }
-                            ],
+                            header: vec![PostmanHeader {
+                                key: "Content-Type".to_string(),
+                                value: "application/json".to_string(),
+                                header_type: "text".to_string(),
+                            }],
                             body: if matches!(method, "POST" | "PUT" | "PATCH") {
                                 Some(PostmanBody {
                                     mode: "raw".to_string(),
@@ -230,7 +230,11 @@ impl CollectionExporter {
                             url: PostmanUrl {
                                 raw: format!("{}{}", self.base_url, path),
                                 host: vec![self.base_url.clone()],
-                                path: path.split('/').filter(|s| !s.is_empty()).map(String::from).collect(),
+                                path: path
+                                    .split('/')
+                                    .filter(|s| !s.is_empty())
+                                    .map(String::from)
+                                    .collect(),
                                 query: None,
                             },
                             description: op.description.clone(),
@@ -250,17 +254,16 @@ impl CollectionExporter {
             info: PostmanInfo {
                 name: spec.spec.info.title.clone(),
                 description: spec.spec.info.description.clone().unwrap_or_default(),
-                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json".to_string(),
+                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+                    .to_string(),
                 version: Some(spec.spec.info.version.clone()),
             },
             item: items,
-            variable: Some(vec![
-                PostmanVariable {
-                    key: "baseUrl".to_string(),
-                    value: self.base_url.clone(),
-                    var_type: "string".to_string(),
-                }
-            ]),
+            variable: Some(vec![PostmanVariable {
+                key: "baseUrl".to_string(),
+                value: self.base_url.clone(),
+                var_type: "string".to_string(),
+            }]),
         }
     }
 
@@ -297,7 +300,9 @@ impl CollectionExporter {
                     if let Some(op) = op_opt {
                         id_counter += 1;
 
-                        let name = op.operation_id.clone()
+                        let name = op
+                            .operation_id
+                            .clone()
                             .or_else(|| op.summary.clone())
                             .unwrap_or_else(|| format!("{} {}", method, path));
 
@@ -315,12 +320,10 @@ impl CollectionExporter {
                             } else {
                                 None
                             },
-                            headers: Some(vec![
-                                InsomniaHeader {
-                                    name: "Content-Type".to_string(),
-                                    value: "application/json".to_string(),
-                                }
-                            ]),
+                            headers: Some(vec![InsomniaHeader {
+                                name: "Content-Type".to_string(),
+                                value: "application/json".to_string(),
+                            }]),
                         });
                     }
                 }
@@ -354,7 +357,9 @@ impl CollectionExporter {
 
                 for (method, op_opt) in operations {
                     if let Some(op) = op_opt {
-                        let name = op.operation_id.clone()
+                        let name = op
+                            .operation_id
+                            .clone()
                             .or_else(|| op.summary.clone())
                             .unwrap_or_else(|| format!("{} {}", method, path));
 
@@ -362,13 +367,11 @@ impl CollectionExporter {
                             name,
                             method: method.to_string(),
                             endpoint: format!("{}{}", self.base_url, path),
-                            headers: vec![
-                                HoppscotchHeader {
-                                    key: "Content-Type".to_string(),
-                                    value: "application/json".to_string(),
-                                    active: true,
-                                }
-                            ],
+                            headers: vec![HoppscotchHeader {
+                                key: "Content-Type".to_string(),
+                                value: "application/json".to_string(),
+                                active: true,
+                            }],
                             params: vec![],
                             body: HoppscotchBody {
                                 content_type: "application/json".to_string(),
@@ -398,7 +401,8 @@ mod tests {
             info: PostmanInfo {
                 name: "Test API".to_string(),
                 description: "Test description".to_string(),
-                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json".to_string(),
+                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+                    .to_string(),
                 version: Some("1.0.0".to_string()),
             },
             item: vec![],

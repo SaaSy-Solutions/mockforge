@@ -129,7 +129,9 @@ impl SessionManager {
                     self.create_session(new_id.clone()).await?;
                     new_id
                 } else {
-                    return Err(crate::Error::generic("No session ID provided and auto-create is disabled"));
+                    return Err(crate::Error::generic(
+                        "No session ID provided and auto-create is disabled",
+                    ));
                 }
             }
         };

@@ -22,8 +22,7 @@ static CREDIT_CARD_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 static SSN_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b")
-        .expect("SSN_PATTERN regex is valid")
+    Regex::new(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b").expect("SSN_PATTERN regex is valid")
 });
 
 /// Workspace persistence manager

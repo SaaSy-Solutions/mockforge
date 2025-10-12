@@ -731,21 +731,21 @@ pub enum PluginError {
     #[error("Token resolution failed: {message}")]
     ResolutionFailed {
         /// Detailed error message
-        message: String
+        message: String,
     },
 
     /// Invalid token format was encountered
     #[error("Invalid token format: {token}")]
     InvalidToken {
         /// The invalid token string
-        token: String
+        token: String,
     },
 
     /// Plugin configuration is invalid or missing
     #[error("Plugin configuration error: {message}")]
     ConfigurationError {
         /// Configuration error details
-        message: String
+        message: String,
     },
 
     /// Plugin execution exceeded the timeout limit
@@ -756,42 +756,42 @@ pub enum PluginError {
     #[error("Plugin permission denied: {action}")]
     PermissionDenied {
         /// The action that was denied
-        action: String
+        action: String,
     },
 
     /// A required plugin dependency is missing
     #[error("Plugin dependency missing: {dependency}")]
     DependencyMissing {
         /// The missing dependency identifier
-        dependency: String
+        dependency: String,
     },
 
     /// Internal plugin error
     #[error("Plugin internal error: {message}")]
     InternalError {
         /// Internal error details
-        message: String
+        message: String,
     },
 
     /// Plugin execution failed
     #[error("Plugin execution error: {message}")]
     ExecutionError {
         /// Execution error details
-        message: String
+        message: String,
     },
 
     /// Security policy violation
     #[error("Security violation: {violation}")]
     SecurityViolation {
         /// Details of the security violation
-        violation: String
+        violation: String,
     },
 
     /// WASM module loading or initialization error
     #[error("WASM module error: {message}")]
     WasmError {
         /// WASM error details
-        message: String
+        message: String,
     },
 
     /// WASM runtime error
@@ -926,11 +926,9 @@ impl From<Vec<String>> for PluginError {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
-        assert!(true);
     }
 }

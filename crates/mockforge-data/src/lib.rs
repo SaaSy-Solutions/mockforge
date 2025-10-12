@@ -198,8 +198,7 @@ mod tests {
     #[test]
     fn test_generation_result_with_warning() {
         let data = vec![json!({"id": 1})];
-        let result = GenerationResult::new(data, 50)
-            .with_warning("Test warning".to_string());
+        let result = GenerationResult::new(data, 50).with_warning("Test warning".to_string());
 
         assert_eq!(result.warnings.len(), 1);
         assert_eq!(result.warnings[0], "Test warning");
@@ -219,10 +218,7 @@ mod tests {
 
     #[test]
     fn test_generation_result_to_jsonl_string() {
-        let data = vec![
-            json!({"id": 1}),
-            json!({"id": 2}),
-        ];
+        let data = vec![json!({"id": 1}), json!({"id": 2})];
         let result = GenerationResult::new(data, 10);
 
         let jsonl_string = result.to_jsonl_string();

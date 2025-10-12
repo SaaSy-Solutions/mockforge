@@ -68,11 +68,8 @@ impl Default for OtelTracingConfig {
 #[cfg(feature = "opentelemetry")]
 pub fn init_with_otel(
     logging_config: LoggingConfig,
-    tracing_config: OtelTracingConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use tracing_opentelemetry::OpenTelemetryLayer;
-    use tracing_subscriber::layer::SubscriberExt;
-
+    _tracing_config: OtelTracingConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize the OpenTelemetry tracer using mockforge-tracing
     // This would require mockforge-tracing as a dependency
     // For now, we'll just use the logging config without OpenTelemetry
@@ -94,7 +91,7 @@ pub fn shutdown_otel() {
 pub fn init_with_otel(
     logging_config: LoggingConfig,
     _tracing_config: OtelTracingConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::warn!("OpenTelemetry feature not enabled, using standard logging");
     crate::logging::init_logging(logging_config)?;
     Ok(())

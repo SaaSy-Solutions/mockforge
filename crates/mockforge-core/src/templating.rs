@@ -29,13 +29,11 @@ static NOW_OFFSET_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static ENV_TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{\{\s*([^{}\s]+)\s*\}\}")
-        .expect("ENV_TOKEN_RE regex pattern is valid")
+    Regex::new(r"\{\{\s*([^{}\s]+)\s*\}\}").expect("ENV_TOKEN_RE regex pattern is valid")
 });
 
 static CHAIN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{\{\s*chain\.([^}]+)\s*\}\}")
-        .expect("CHAIN_TOKEN_RE regex pattern is valid")
+    Regex::new(r"\{\{\s*chain\.([^}]+)\s*\}\}").expect("CHAIN_TOKEN_RE regex pattern is valid")
 });
 
 static RESPONSE_FN_RE: Lazy<Regex> = Lazy::new(|| {
@@ -352,73 +350,77 @@ fn replace_randint_ranges(input: &str) -> String {
     s
 }
 
+#[allow(dead_code)]
 fn replace_now_offset(input: &str) -> String {
     replace_now_offset_with_time(input, Utc::now())
 }
 
 fn replace_now_offset_with_time(input: &str, current_time: chrono::DateTime<Utc>) -> String {
     // {{ now+1d }}, {{now-2h}}, {{now+30m}}, {{now-10s}}
-    NOW_OFFSET_RE.replace_all(input, |caps: &regex::Captures| {
-        let sign = caps.get(1).map(|m| m.as_str()).unwrap_or("+");
-        let amount: i64 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
-        let unit = caps.get(3).map(|m| m.as_str()).unwrap_or("d");
-        let dur = match unit {
-            "s" => ChronoDuration::seconds(amount),
-            "m" => ChronoDuration::minutes(amount),
-            "h" => ChronoDuration::hours(amount),
-            _ => ChronoDuration::days(amount),
-        };
-        let ts = if sign == "+" {
-            current_time + dur
-        } else {
-            current_time - dur
-        };
-        ts.to_rfc3339()
-    })
-    .to_string()
+    NOW_OFFSET_RE
+        .replace_all(input, |caps: &regex::Captures| {
+            let sign = caps.get(1).map(|m| m.as_str()).unwrap_or("+");
+            let amount: i64 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
+            let unit = caps.get(3).map(|m| m.as_str()).unwrap_or("d");
+            let dur = match unit {
+                "s" => ChronoDuration::seconds(amount),
+                "m" => ChronoDuration::minutes(amount),
+                "h" => ChronoDuration::hours(amount),
+                _ => ChronoDuration::days(amount),
+            };
+            let ts = if sign == "+" {
+                current_time + dur
+            } else {
+                current_time - dur
+            };
+            ts.to_rfc3339()
+        })
+        .to_string()
 }
 
 /// Replace environment variable tokens in a template string
 fn replace_env_tokens(input: &str, env_context: &EnvironmentTemplatingContext) -> String {
-    ENV_TOKEN_RE.replace_all(input, |caps: &regex::Captures| {
-        let var_name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+    ENV_TOKEN_RE
+        .replace_all(input, |caps: &regex::Captures| {
+            let var_name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
 
-        // Skip built-in tokens (uuid, now, rand.*, faker.*, chain.*, encrypt.*, decrypt.*, secure.*)
-        if matches!(var_name, "uuid" | "now")
-            || var_name.starts_with("rand.")
-            || var_name.starts_with("faker.")
-            || var_name.starts_with("chain.")
-            || var_name.starts_with("encrypt")
-            || var_name.starts_with("decrypt")
-            || var_name.starts_with("secure")
-        {
-            return caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default();
-        }
+            // Skip built-in tokens (uuid, now, rand.*, faker.*, chain.*, encrypt.*, decrypt.*, secure.*)
+            if matches!(var_name, "uuid" | "now")
+                || var_name.starts_with("rand.")
+                || var_name.starts_with("faker.")
+                || var_name.starts_with("chain.")
+                || var_name.starts_with("encrypt")
+                || var_name.starts_with("decrypt")
+                || var_name.starts_with("secure")
+            {
+                return caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default();
+            }
 
-        // Look up the variable in environment context
-        match env_context.get_variable(var_name) {
-            Some(value) => value.clone(),
-            None => format!("{{{{{}}}}}", var_name), // Keep original if not found
-        }
-    })
-    .to_string()
+            // Look up the variable in environment context
+            match env_context.get_variable(var_name) {
+                Some(value) => value.clone(),
+                None => format!("{{{{{}}}}}", var_name), // Keep original if not found
+            }
+        })
+        .to_string()
 }
 
 /// Replace chain context tokens in a template string
 fn replace_chain_tokens(input: &str, chain_context: Option<&ChainTemplatingContext>) -> String {
     if let Some(context) = chain_context {
-        CHAIN_TOKEN_RE.replace_all(input, |caps: &regex::Captures| {
-            let path = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        CHAIN_TOKEN_RE
+            .replace_all(input, |caps: &regex::Captures| {
+                let path = caps.get(1).map(|m| m.as_str()).unwrap_or("");
 
-            match context.extract_value(path) {
-                Some(Value::String(s)) => s,
-                Some(Value::Number(n)) => n.to_string(),
-                Some(Value::Bool(b)) => b.to_string(),
-                Some(val) => serde_json::to_string(&val).unwrap_or_else(|_| "null".to_string()),
-                None => "null".to_string(), // Return null for missing values instead of empty string
-            }
-        })
-        .to_string()
+                match context.extract_value(path) {
+                    Some(Value::String(s)) => s,
+                    Some(Value::Number(n)) => n.to_string(),
+                    Some(Value::Bool(b)) => b.to_string(),
+                    Some(val) => serde_json::to_string(&val).unwrap_or_else(|_| "null".to_string()),
+                    None => "null".to_string(), // Return null for missing values instead of empty string
+                }
+            })
+            .to_string()
     } else {
         // No chain context available, return input unchanged
         input.to_string()
@@ -573,19 +575,20 @@ fn replace_encryption_tokens(input: &str) -> String {
 /// Replace file system tokens in a template string
 fn replace_fs_tokens(input: &str) -> String {
     // Handle {{fs.readFile "path/to/file"}} or {{fs.readFile('path/to/file')}}
-    FS_READFILE_RE.replace_all(input, |caps: &regex::Captures| {
-        let file_path = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
+    FS_READFILE_RE
+        .replace_all(input, |caps: &regex::Captures| {
+            let file_path = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
 
-        if file_path.is_empty() {
-            return "<fs.readFile: empty path>".to_string();
-        }
+            if file_path.is_empty() {
+                return "<fs.readFile: empty path>".to_string();
+            }
 
-        match std::fs::read_to_string(file_path) {
-            Ok(content) => content,
-            Err(e) => format!("<fs.readFile error: {}>", e),
-        }
-    })
-    .to_string()
+            match std::fs::read_to_string(file_path) {
+                Ok(content) => content,
+                Err(e) => format!("<fs.readFile error: {}>", e),
+            }
+        })
+        .to_string()
 }
 
 fn replace_faker_tokens(input: &str) -> String {
@@ -699,7 +702,7 @@ mod tests {
         chain_ctx.store_response("login".to_string(), response);
         let template_ctx = ChainTemplatingContext::new(chain_ctx);
         let context = Some(&template_ctx);
-        
+
         let result = replace_response_function(r#"response('login', 'user_id')"#, context);
         assert_eq!(result, "12345");
     }

@@ -152,7 +152,9 @@ impl OpenApiRoute {
                     self.path
                 );
 
-                match ResponseGenerator::generate_ai_response(ai_config, context, ai_generator).await {
+                match ResponseGenerator::generate_ai_response(ai_config, context, ai_generator)
+                    .await
+                {
                     Ok(response_body) => {
                         tracing::debug!(
                             "AI response generated successfully for {} {}: {:?}",
@@ -239,11 +241,22 @@ impl OpenApiRoute {
             expand_tokens,
         ) {
             Ok(response_body) => {
-                tracing::debug!("ResponseGenerator succeeded for {} {} with status {}: {:?}", self.method, self.path, status_code, response_body);
+                tracing::debug!(
+                    "ResponseGenerator succeeded for {} {} with status {}: {:?}",
+                    self.method,
+                    self.path,
+                    status_code,
+                    response_body
+                );
                 (status_code, response_body)
-            },
+            }
             Err(e) => {
-                tracing::debug!("ResponseGenerator failed for {} {}: {}, using fallback", self.method, self.path, e);
+                tracing::debug!(
+                    "ResponseGenerator failed for {} {}: {}, using fallback",
+                    self.method,
+                    self.path,
+                    e
+                );
                 // Fallback to simple mock response if schema-based generation fails
                 let response_body = serde_json::json!({
                     "message": format!("Mock response for {} {}", self.method, self.path),
@@ -262,7 +275,7 @@ impl OpenApiRoute {
             match status {
                 openapiv3::StatusCode::Code(code) => {
                     return *code;
-                },
+                }
                 openapiv3::StatusCode::Range(range) => {
                     // For ranges, use the appropriate status code
                     match range {

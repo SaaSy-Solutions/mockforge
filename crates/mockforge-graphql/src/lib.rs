@@ -159,8 +159,7 @@ pub use schema::GraphQLSchema;
 
 // Re-export tracing utilities
 pub use graphql_tracing::{
-    create_graphql_span, create_resolver_span,
-    record_graphql_error, record_graphql_success,
+    create_graphql_span, create_resolver_span, record_graphql_error, record_graphql_success,
     record_resolver_error, record_resolver_success,
 };
 

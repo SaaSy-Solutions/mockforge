@@ -549,7 +549,13 @@ impl WorkspaceSyncManager {
 
         // Commit changes
         let output = Command::new("git")
-            .args(["-C", repo_path_str.as_ref(), "commit", "-m", "Update workspace"])
+            .args([
+                "-C",
+                repo_path_str.as_ref(),
+                "commit",
+                "-m",
+                "Update workspace",
+            ])
             .output()
             .map_err(|e| format!("Failed to commit changes: {}", e))?;
 

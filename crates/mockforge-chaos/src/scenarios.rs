@@ -2,10 +2,10 @@
 
 use crate::config::{ChaosConfig, FaultInjectionConfig, LatencyConfig};
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tracing::{debug, info};
 
 /// A chaos engineering scenario
@@ -276,9 +276,7 @@ impl ScenarioEngine {
 
         // For simplicity, use the first active scenario's config
         // In a more sophisticated implementation, you could merge configs
-        scenarios.values()
-            .find(|s| s.is_active())
-            .map(|s| s.chaos_config.clone())
+        scenarios.values().find(|s| s.is_active()).map(|s| s.chaos_config.clone())
     }
 
     /// Clean up expired scenarios

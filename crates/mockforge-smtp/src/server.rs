@@ -1,7 +1,9 @@
 //! SMTP server implementation
 
 use crate::{SmtpConfig, SmtpSpecRegistry};
-use mockforge_core::protocol_abstraction::{MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry};
+use mockforge_core::protocol_abstraction::{
+    MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry,
+};
 use mockforge_core::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -59,7 +61,10 @@ impl SmtpServer {
                     let hostname = self.config.hostname.clone();
 
                     tokio::spawn(async move {
-                        if let Err(e) = handle_smtp_session(stream, peer_addr, registry, middleware, hostname).await {
+                        if let Err(e) =
+                            handle_smtp_session(stream, peer_addr, registry, middleware, hostname)
+                                .await
+                        {
                             error!("SMTP session error from {}: {}", peer_addr, e);
                         }
                     });
@@ -144,7 +149,7 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
     let cmd = parts[0].to_uppercase();
 
     match cmd.as_str() {
-        "HELO" | "EHLO" => {
+        "HELLO" | "EHLO" => {
             let domain = parts.get(1).unwrap_or(&hostname);
             let response = if cmd == "EHLO" {
                 format!(
@@ -206,7 +211,7 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
 
         "HELP" => {
             let help_text = "214-Commands supported:\r\n\
-                            214-  HELO EHLO MAIL RCPT DATA\r\n\
+                            214-  HELLO EHLO MAIL RCPT DATA\r\n\
                             214-  RSET NOOP QUIT HELP\r\n\
                             214 End of HELP info\r\n";
             writer.write_all(help_text.as_bytes()).await?;
@@ -221,13 +226,7 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
                     state.in_data_mode = false;
 
                     // Process the email
-                    let response = process_email(
-                        state,
-                        registry,
-                        middleware,
-                        peer_addr,
-                    )
-                    .await?;
+                    let response = process_email(state, registry, middleware, peer_addr).await?;
 
                     writer.write_all(response.as_bytes()).await?;
                     state.reset();
@@ -253,7 +252,10 @@ async fn process_email(
     middleware: &Arc<MiddlewareChain>,
     peer_addr: SocketAddr,
 ) -> Result<String> {
-    let from = state.mail_from.as_ref().ok_or_else(|| mockforge_core::Error::generic("Missing MAIL FROM"))?;
+    let from = state
+        .mail_from
+        .as_ref()
+        .ok_or_else(|| mockforge_core::Error::generic("Missing MAIL FROM"))?;
     let to = state.rcpt_to.join(", ");
 
     // Extract subject from data
@@ -348,7 +350,8 @@ mod tests {
 
     #[test]
     fn test_extract_subject() {
-        let data = "From: sender@example.com\nSubject: Test Email\nTo: recipient@example.com\n\nBody text";
+        let data =
+            "From: sender@example.com\nSubject: Test Email\nTo: recipient@example.com\n\nBody text";
         assert_eq!(extract_subject(data), "Test Email");
     }
 

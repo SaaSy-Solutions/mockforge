@@ -598,7 +598,6 @@ impl Default for RagConfigBuilder {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

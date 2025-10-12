@@ -7,10 +7,10 @@ use crate::{
     scenario_recorder::ChaosEvent,
 };
 use chrono::{DateTime, Duration, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// Anomaly detected in chaos patterns
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,8 +180,7 @@ impl AdvancedAnalyticsEngine {
     /// Record and analyze an event
     pub fn record_event(&self, event: ChaosEvent) {
         // Add to base analytics
-        self.base_analytics
-            .record_event(&event, TimeBucket::Minute);
+        self.base_analytics.record_event(&event, TimeBucket::Minute);
 
         // Add to history
         {
@@ -203,9 +202,7 @@ impl AdvancedAnalyticsEngine {
         let now = Utc::now();
         let recent_start = now - Duration::minutes(5);
 
-        let recent_metrics = self
-            .base_analytics
-            .get_metrics(recent_start, now, TimeBucket::Minute);
+        let recent_metrics = self.base_analytics.get_metrics(recent_start, now, TimeBucket::Minute);
 
         if recent_metrics.is_empty() {
             return;
@@ -214,9 +211,9 @@ impl AdvancedAnalyticsEngine {
         // Calculate baseline from older data
         let baseline_start = now - Duration::minutes(30);
         let baseline_end = now - Duration::minutes(10);
-        let baseline_metrics = self
-            .base_analytics
-            .get_metrics(baseline_start, baseline_end, TimeBucket::Minute);
+        let baseline_metrics =
+            self.base_analytics
+                .get_metrics(baseline_start, baseline_end, TimeBucket::Minute);
 
         if baseline_metrics.is_empty() {
             return;
@@ -234,10 +231,10 @@ impl AdvancedAnalyticsEngine {
 
     /// Detect event spikes
     fn detect_event_spike(&self, recent: &[MetricsBucket], baseline: &[MetricsBucket]) {
-        let recent_avg = recent.iter().map(|b| b.total_events).sum::<usize>() as f64
-            / recent.len() as f64;
-        let baseline_avg = baseline.iter().map(|b| b.total_events).sum::<usize>() as f64
-            / baseline.len() as f64;
+        let recent_avg =
+            recent.iter().map(|b| b.total_events).sum::<usize>() as f64 / recent.len() as f64;
+        let baseline_avg =
+            baseline.iter().map(|b| b.total_events).sum::<usize>() as f64 / baseline.len() as f64;
 
         if baseline_avg > 0.0 {
             let spike_ratio = recent_avg / baseline_avg;
@@ -271,10 +268,9 @@ impl AdvancedAnalyticsEngine {
 
     /// Detect latency anomalies
     fn detect_latency_anomaly(&self, recent: &[MetricsBucket], baseline: &[MetricsBucket]) {
-        let recent_avg = recent.iter().map(|b| b.avg_latency_ms).sum::<f64>()
-            / recent.len() as f64;
-        let baseline_avg = baseline.iter().map(|b| b.avg_latency_ms).sum::<f64>()
-            / baseline.len() as f64;
+        let recent_avg = recent.iter().map(|b| b.avg_latency_ms).sum::<f64>() / recent.len() as f64;
+        let baseline_avg =
+            baseline.iter().map(|b| b.avg_latency_ms).sum::<f64>() / baseline.len() as f64;
 
         if baseline_avg > 0.0 {
             let latency_ratio = recent_avg / baseline_avg;
@@ -324,7 +320,10 @@ impl AdvancedAnalyticsEngine {
                         anomaly_type: AnomalyType::HighErrorRate,
                         severity,
                         description: format!("Error rate at {:.1}%", error_rate * 100.0),
-                        affected_metrics: vec!["total_faults".to_string(), "total_events".to_string()],
+                        affected_metrics: vec![
+                            "total_faults".to_string(),
+                            "total_events".to_string(),
+                        ],
                         suggested_actions: vec![
                             "Review fault injection settings".to_string(),
                             "Check system resilience".to_string(),
@@ -341,11 +340,7 @@ impl AdvancedAnalyticsEngine {
     /// Get recent anomalies
     pub fn get_anomalies(&self, since: DateTime<Utc>) -> Vec<Anomaly> {
         let anomalies = self.anomalies.read();
-        anomalies
-            .iter()
-            .filter(|a| a.detected_at >= since)
-            .cloned()
-            .collect()
+        anomalies.iter().filter(|a| a.detected_at >= since).cloned().collect()
     }
 
     /// Perform trend analysis on a metric
@@ -355,9 +350,7 @@ impl AdvancedAnalyticsEngine {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> TrendAnalysis {
-        let buckets = self
-            .base_analytics
-            .get_metrics(start, end, TimeBucket::FiveMinutes);
+        let buckets = self.base_analytics.get_metrics(start, end, TimeBucket::FiveMinutes);
 
         let data_points: Vec<DataPoint> = buckets
             .iter()
@@ -398,14 +391,10 @@ impl AdvancedAnalyticsEngine {
         }
 
         // Simple moving average comparison
-        let first_half: Vec<f64> = data_points[..data_points.len() / 2]
-            .iter()
-            .map(|p| p.value)
-            .collect();
-        let second_half: Vec<f64> = data_points[data_points.len() / 2..]
-            .iter()
-            .map(|p| p.value)
-            .collect();
+        let first_half: Vec<f64> =
+            data_points[..data_points.len() / 2].iter().map(|p| p.value).collect();
+        let second_half: Vec<f64> =
+            data_points[data_points.len() / 2..].iter().map(|p| p.value).collect();
 
         let first_avg: f64 = first_half.iter().sum::<f64>() / first_half.len() as f64;
         let second_avg: f64 = second_half.iter().sum::<f64>() / second_half.len() as f64;
@@ -460,9 +449,7 @@ impl AdvancedAnalyticsEngine {
         let now = Utc::now();
         let lookback = now - Duration::minutes(15);
 
-        let impact = self
-            .base_analytics
-            .get_impact_analysis(lookback, now, TimeBucket::Minute);
+        let impact = self.base_analytics.get_impact_analysis(lookback, now, TimeBucket::Minute);
 
         let mut components = HashMap::new();
         let mut factors = Vec::new();

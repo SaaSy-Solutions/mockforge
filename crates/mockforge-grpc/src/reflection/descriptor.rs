@@ -91,7 +91,6 @@ impl ServiceDescriptorCache {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

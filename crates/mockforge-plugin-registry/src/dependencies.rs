@@ -48,6 +48,7 @@ pub struct ResolvedDependency {
 }
 
 /// Dependency graph node
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct DependencyNode {
     name: String,
@@ -104,9 +105,8 @@ impl DependencyResolver {
                 })?;
 
                 // Find compatible version
-                let compatible_version = self
-                    .find_compatible_version(&dep.name, &version_req)?
-                    .ok_or_else(|| {
+                let compatible_version =
+                    self.find_compatible_version(&dep.name, &version_req)?.ok_or_else(|| {
                         RegistryError::InvalidVersion(format!(
                             "No compatible version found for {} with requirement {}",
                             dep.name, dep.version_req
@@ -114,10 +114,12 @@ impl DependencyResolver {
                     })?;
 
                 // Get version entry
-                let version_entry = self
-                    .get_version_entry(&dep.name, &compatible_version)
-                    .ok_or_else(|| {
-                        RegistryError::PluginNotFound(format!("{} {}", dep.name, compatible_version))
+                let version_entry =
+                    self.get_version_entry(&dep.name, &compatible_version).ok_or_else(|| {
+                        RegistryError::PluginNotFound(format!(
+                            "{} {}",
+                            dep.name, compatible_version
+                        ))
                     })?;
 
                 // Parse transitive dependencies
@@ -183,12 +185,10 @@ impl DependencyResolver {
 
     /// Get version entry for a specific version
     fn get_version_entry(&self, package: &str, version: &Version) -> Option<&VersionEntry> {
-        self.available_versions.get(package)?.iter().find(|v| {
-            Version::parse(&v.version)
-                .ok()
-                .map(|v| &v == version)
-                .unwrap_or(false)
-        })
+        self.available_versions
+            .get(package)?
+            .iter()
+            .find(|v| Version::parse(&v.version).ok().map(|v| &v == version).unwrap_or(false))
     }
 
     /// Check for circular dependencies
@@ -206,7 +206,7 @@ impl DependencyResolver {
         let mut rec_stack = HashSet::new();
 
         for node in graph.keys() {
-            if self.has_cycle(&graph, node, &mut visited, &mut rec_stack) {
+            if Self::has_cycle_impl(&graph, node, &mut visited, &mut rec_stack) {
                 return Err(RegistryError::InvalidManifest(format!(
                     "Circular dependency detected involving package: {}",
                     node
@@ -218,8 +218,7 @@ impl DependencyResolver {
     }
 
     /// Check if there's a cycle starting from a node
-    fn has_cycle(
-        &self,
+    fn has_cycle_impl(
         graph: &HashMap<String, Vec<String>>,
         node: &str,
         visited: &mut HashSet<String>,
@@ -238,7 +237,7 @@ impl DependencyResolver {
 
         if let Some(neighbors) = graph.get(node) {
             for neighbor in neighbors {
-                if self.has_cycle(graph, neighbor, visited, rec_stack) {
+                if Self::has_cycle_impl(graph, neighbor, visited, rec_stack) {
                     return true;
                 }
             }
@@ -249,10 +248,7 @@ impl DependencyResolver {
     }
 
     /// Calculate installation order (topological sort)
-    pub fn calculate_install_order(
-        &self,
-        resolved: &[ResolvedDependency],
-    ) -> Result<Vec<String>> {
+    pub fn calculate_install_order(&self, resolved: &[ResolvedDependency]) -> Result<Vec<String>> {
         let mut graph: HashMap<String, Vec<String>> = HashMap::new();
         let mut in_degree: HashMap<String, usize> = HashMap::new();
 
@@ -261,10 +257,7 @@ impl DependencyResolver {
             in_degree.entry(dep.name.clone()).or_insert(0);
 
             for child_dep in &dep.dependencies {
-                graph
-                    .entry(dep.name.clone())
-                    .or_insert_with(Vec::new)
-                    .push(child_dep.name.clone());
+                graph.entry(dep.name.clone()).or_default().push(child_dep.name.clone());
 
                 *in_degree.entry(child_dep.name.clone()).or_insert(0) += 1;
             }

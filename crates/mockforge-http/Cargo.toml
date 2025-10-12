@@ -47,6 +47,7 @@ tokio-stream = "0.1"
 jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
+governor = "0.8"
 mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-observability = { path = "../mockforge-observability" }

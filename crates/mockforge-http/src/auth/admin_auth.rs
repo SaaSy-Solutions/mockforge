@@ -22,10 +22,7 @@ pub fn check_admin_auth(
     }
 
     // Get authorization header
-    let auth_header = req
-        .headers()
-        .get("authorization")
-        .and_then(|h| h.to_str().ok());
+    let auth_header = req.headers().get("authorization").and_then(|h| h.to_str().ok());
 
     if let Some(auth_value) = auth_header {
         // Check if it's Basic auth

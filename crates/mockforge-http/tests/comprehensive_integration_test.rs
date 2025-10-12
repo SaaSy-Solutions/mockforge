@@ -147,9 +147,7 @@ async fn test_http_server_with_openapi_spec() {
     // Write spec to temp file
     let temp_dir = tempfile::tempdir().unwrap();
     let spec_path = temp_dir.path().join("comprehensive-spec.json");
-    tokio::fs::write(&spec_path, serde_json::to_vec(&spec).unwrap())
-        .await
-        .unwrap();
+    tokio::fs::write(&spec_path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
     // Build router with validation
     let validation_options = Some(ValidationOptions {
@@ -162,24 +160,17 @@ async fn test_http_server_with_openapi_spec() {
         validation_status: None,
     });
 
-    let app: Router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        validation_options,
-        None,
-    )
-    .await;
+    let app: Router =
+        build_router(Some(spec_path.to_string_lossy().to_string()), validation_options, None).await;
 
     // Start server on random port
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     // Give server time to start
@@ -292,27 +283,20 @@ async fn test_websocket_connection_and_messages() {
     // Connect to WebSocket
     let url = format!("ws://{}/ws", addr);
 
-    let connect_result = timeout(
-        Duration::from_secs(5),
-        tokio_tungstenite::connect_async(&url),
-    )
-    .await;
+    let connect_result =
+        timeout(Duration::from_secs(5), tokio_tungstenite::connect_async(&url)).await;
 
     if let Ok(Ok((mut ws_stream, _))) = connect_result {
         println!("✓ WebSocket connection established");
 
         // Send a message
-        let send_result = ws_stream
-            .send(Message::Text("CLIENT_READY".into()))
-            .await;
+        let send_result = ws_stream.send(Message::Text("CLIENT_READY".into())).await;
 
         if send_result.is_ok() {
             println!("✓ Sent message to WebSocket");
 
             // Receive response (with timeout)
-            if let Ok(Some(msg_result)) =
-                timeout(Duration::from_secs(2), ws_stream.next()).await
-            {
+            if let Ok(Some(msg_result)) = timeout(Duration::from_secs(2), ws_stream.next()).await {
                 if let Ok(Message::Text(text)) = msg_result {
                     println!("✓ Received WebSocket message: {}", text);
                     assert!(
@@ -346,18 +330,13 @@ async fn test_plugin_system_validation() {
     // Verify plugin context creation
     assert_eq!(context.plugin_id, plugin_id);
     assert_eq!(context.version, version);
-    assert_eq!(
-        context.custom.get("test_key"),
-        Some(&serde_json::json!("test_value"))
-    );
+    assert_eq!(context.custom.get("test_key"), Some(&serde_json::json!("test_value")));
 
     println!("✓ Plugin context creation validated");
 
     // Create plugin capabilities
-    let capabilities = PluginCapabilities::from_strings(&vec![
-        "template".to_string(),
-        "network:http".to_string(),
-    ]);
+    let capabilities =
+        PluginCapabilities::from_strings(&vec!["template".to_string(), "network:http".to_string()]);
 
     assert!(capabilities.custom.contains_key("template"));
     assert!(capabilities.network.allow_http);
@@ -387,7 +366,7 @@ async fn test_end_to_end_feature_integration() {
         ("Template Expansion", true),
         ("Plugin System", true),
         ("Chain Execution", true), // Has structure tests
-        ("gRPC Server", true),      // Has discovery tests
+        ("gRPC Server", true),     // Has discovery tests
     ];
 
     for (feature, has_test) in features {

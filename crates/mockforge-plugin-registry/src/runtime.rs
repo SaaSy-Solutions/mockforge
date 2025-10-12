@@ -38,11 +38,7 @@ impl PluginLanguage {
 /// Runtime executor trait
 pub trait RuntimeExecutor: Send + Sync {
     /// Start the plugin process
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>>;
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>>;
 
     /// Check if runtime is available
     fn is_available(&self) -> bool;
@@ -112,11 +108,7 @@ impl Default for RuntimeConfig {
 struct RustExecutor;
 
 impl RuntimeExecutor for RustExecutor {
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>> {
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>> {
         let mut cmd = Command::new(plugin_path);
 
         cmd.args(&config.args)
@@ -137,10 +129,7 @@ impl RuntimeExecutor for RustExecutor {
     }
 
     fn is_available(&self) -> bool {
-        Command::new("rustc")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("rustc").arg("--version").output().is_ok()
     }
 
     fn version(&self) -> Result<String> {
@@ -178,17 +167,14 @@ struct PythonExecutor {
 }
 
 impl PythonExecutor {
+    #[allow(dead_code)]
     fn new(python_cmd: String) -> Self {
         Self { python_cmd }
     }
 }
 
 impl RuntimeExecutor for PythonExecutor {
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>> {
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>> {
         let python_cmd = if self.python_cmd.is_empty() {
             "python3"
         } else {
@@ -208,18 +194,15 @@ impl RuntimeExecutor for PythonExecutor {
             cmd.current_dir(dir);
         }
 
-        let child = cmd.spawn().map_err(|e| {
-            RegistryError::Storage(format!("Failed to start Python plugin: {}", e))
-        })?;
+        let child = cmd
+            .spawn()
+            .map_err(|e| RegistryError::Storage(format!("Failed to start Python plugin: {}", e)))?;
 
         Ok(Box::new(ProcessWrapper::new(child)))
     }
 
     fn is_available(&self) -> bool {
-        Command::new("python3")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("python3").arg("--version").output().is_ok()
     }
 
     fn version(&self) -> Result<String> {
@@ -240,8 +223,8 @@ impl RuntimeExecutor for PythonExecutor {
                 .arg(&requirements)
                 .output()
                 .map_err(|e| {
-                    RegistryError::Storage(format!("Failed to install Python dependencies: {}", e))
-                })?;
+                RegistryError::Storage(format!("Failed to install Python dependencies: {}", e))
+            })?;
 
             if !output.status.success() {
                 return Err(RegistryError::Storage(format!(
@@ -263,17 +246,14 @@ struct JavaScriptExecutor {
 }
 
 impl JavaScriptExecutor {
+    #[allow(dead_code)]
     fn new(runtime: String) -> Self {
         Self { runtime }
     }
 }
 
 impl RuntimeExecutor for JavaScriptExecutor {
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>> {
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>> {
         let runtime = if self.runtime.is_empty() {
             "node"
         } else {
@@ -301,10 +281,7 @@ impl RuntimeExecutor for JavaScriptExecutor {
     }
 
     fn is_available(&self) -> bool {
-        Command::new("node")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("node").arg("--version").output().is_ok()
     }
 
     fn version(&self) -> Result<String> {
@@ -320,13 +297,12 @@ impl RuntimeExecutor for JavaScriptExecutor {
         let package_json = plugin_path.join("package.json");
 
         if package_json.exists() {
-            let output = Command::new("npm")
-                .arg("install")
-                .current_dir(plugin_path)
-                .output()
-                .map_err(|e| {
-                    RegistryError::Storage(format!("Failed to install npm dependencies: {}", e))
-                })?;
+            let output =
+                Command::new("npm").arg("install").current_dir(plugin_path).output().map_err(
+                    |e| {
+                        RegistryError::Storage(format!("Failed to install npm dependencies: {}", e))
+                    },
+                )?;
 
             if !output.status.success() {
                 return Err(RegistryError::Storage(format!(
@@ -345,11 +321,7 @@ impl RuntimeExecutor for JavaScriptExecutor {
 struct GoExecutor;
 
 impl RuntimeExecutor for GoExecutor {
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>> {
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>> {
         let mut cmd = Command::new(plugin_path);
 
         cmd.args(&config.args)
@@ -405,11 +377,7 @@ impl RuntimeExecutor for GoExecutor {
 struct RubyExecutor;
 
 impl RuntimeExecutor for RubyExecutor {
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>> {
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>> {
         let mut cmd = Command::new("ruby");
 
         cmd.arg(plugin_path)
@@ -431,10 +399,7 @@ impl RuntimeExecutor for RubyExecutor {
     }
 
     fn is_available(&self) -> bool {
-        Command::new("ruby")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("ruby").arg("--version").output().is_ok()
     }
 
     fn version(&self) -> Result<String> {
@@ -475,11 +440,7 @@ impl RuntimeExecutor for RubyExecutor {
 struct GenericExecutor;
 
 impl RuntimeExecutor for GenericExecutor {
-    fn start(
-        &self,
-        plugin_path: &Path,
-        config: &RuntimeConfig,
-    ) -> Result<Box<dyn RuntimeProcess>> {
+    fn start(&self, plugin_path: &Path, config: &RuntimeConfig) -> Result<Box<dyn RuntimeProcess>> {
         let mut cmd = Command::new(plugin_path);
 
         cmd.args(&config.args)

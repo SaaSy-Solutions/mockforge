@@ -154,7 +154,6 @@
 //! - [API Reference](https://docs.rs/mockforge-http)
 
 pub mod ai_handler;
-pub mod rag_ai_generator;
 pub mod auth;
 pub mod chain_handlers;
 pub mod coverage;
@@ -165,6 +164,7 @@ pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
 pub mod op_middleware;
+pub mod rag_ai_generator;
 pub mod replay_listing;
 pub mod request_logging;
 pub mod sse;
@@ -176,7 +176,7 @@ pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandl
 pub use management::{management_router, ManagementState, MockConfig, ServerConfig, ServerStats};
 
 // Re-export management WebSocket utilities
-pub use management_ws::{ws_management_router, WsManagementState, MockEvent};
+pub use management_ws::{ws_management_router, MockEvent, WsManagementState};
 
 // Re-export metrics middleware
 pub use metrics_middleware::collect_http_metrics;
@@ -185,10 +185,10 @@ pub use metrics_middleware::collect_http_metrics;
 pub use http_tracing_middleware::http_tracing_middleware;
 
 // Re-export coverage utilities
-pub use coverage::{CoverageReport, RouteCoverage, MethodCoverage, calculate_coverage};
+pub use coverage::{calculate_coverage, CoverageReport, MethodCoverage, RouteCoverage};
 
 use axum::middleware::from_fn_with_state;
-use axum::{Router, extract::State, response::Json};
+use axum::{extract::State, response::Json, Router};
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
 use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
@@ -235,7 +235,10 @@ impl HttpServerState {
         }
     }
 
-    pub fn with_rate_limiter(mut self, rate_limiter: std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>) -> Self {
+    pub fn with_rate_limiter(
+        mut self,
+        rate_limiter: std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>,
+    ) -> Self {
         self.rate_limiter = Some(rate_limiter);
         self
     }
@@ -243,16 +246,20 @@ impl HttpServerState {
 
 /// Handler to return OpenAPI routes information
 async fn get_routes_handler(State(state): State<HttpServerState>) -> Json<serde_json::Value> {
-    let route_info: Vec<serde_json::Value> = state.routes.iter().map(|route| {
-        serde_json::json!({
-            "method": route.method,
-            "path": route.path,
-            "operation_id": route.operation_id,
-            "summary": route.summary,
-            "description": route.description,
-            "parameters": route.parameters
+    let route_info: Vec<serde_json::Value> = state
+        .routes
+        .iter()
+        .map(|route| {
+            serde_json::json!({
+                "method": route.method,
+                "path": route.path,
+                "operation_id": route.operation_id,
+                "summary": route.summary,
+                "description": route.description,
+                "parameters": route.parameters
+            })
         })
-    }).collect();
+        .collect();
 
     Json(serde_json::json!({
         "routes": route_info,
@@ -297,7 +304,8 @@ pub async fn build_router_with_multi_tenant(
         per_ip: true,
         per_endpoint: false,
     };
-    let rate_limiter = std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
+    let rate_limiter =
+        std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
 
     let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
 
@@ -313,7 +321,10 @@ pub async fn build_router_with_multi_tenant(
         match OpenApiSpec::from_file(&spec_path).await {
             Ok(openapi) => {
                 let spec_load_duration = spec_load_start.elapsed();
-                info!("Successfully loaded OpenAPI spec from {} (took {:?})", spec_path, spec_load_duration);
+                info!(
+                    "Successfully loaded OpenAPI spec from {} (took {:?})",
+                    spec_path, spec_load_duration
+                );
 
                 // Measure route registry creation
                 tracing::debug!("Creating OpenAPI route registry...");
@@ -326,20 +337,26 @@ pub async fn build_router_with_multi_tenant(
                     OpenApiRouteRegistry::new_with_env(openapi)
                 };
                 let registry_duration = registry_start.elapsed();
-                info!("Created OpenAPI route registry with {} routes (took {:?})", registry.routes().len(), registry_duration);
+                info!(
+                    "Created OpenAPI route registry with {} routes (took {:?})",
+                    registry.routes().len(),
+                    registry_duration
+                );
 
                 // Measure route extraction
                 let extract_start = Instant::now();
-                let route_info: Vec<RouteInfo> = registry.routes().iter().map(|route| {
-                    RouteInfo {
+                let route_info: Vec<RouteInfo> = registry
+                    .routes()
+                    .iter()
+                    .map(|route| RouteInfo {
                         method: route.method.clone(),
                         path: route.path.clone(),
                         operation_id: route.operation.operation_id.clone(),
                         summary: route.operation.summary.clone(),
                         description: route.operation.description.clone(),
                         parameters: route.parameters.clone(),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 state.routes = route_info;
                 let extract_duration = extract_start.elapsed();
                 debug!("Extracted route information (took {:?})", extract_duration);
@@ -351,7 +368,11 @@ pub async fn build_router_with_multi_tenant(
                     match mockforge_core::Overrides::load_from_globs(&[]).await {
                         Ok(overrides) => {
                             let overrides_duration = overrides_start.elapsed();
-                            info!("Loaded {} override rules (took {:?})", overrides.rules().len(), overrides_duration);
+                            info!(
+                                "Loaded {} override rules (took {:?})",
+                                overrides.rules().len(),
+                                overrides_duration
+                            );
                             Some(overrides)
                         }
                         Err(e) => {
@@ -433,7 +454,10 @@ pub async fn build_router_with_multi_tenant(
         );
         debug!("Serving coverage UI from: {}", coverage_html_path);
     } else {
-        debug!("Coverage UI file not found at: {}. Skipping static file serving.", coverage_html_path);
+        debug!(
+            "Coverage UI file not found at: {}. Skipping static file serving.",
+            coverage_html_path
+        );
     }
 
     // Add management API endpoints
@@ -456,19 +480,24 @@ pub async fn build_router_with_multi_tenant(
             use mockforge_core::{MultiTenantWorkspaceRegistry, WorkspaceRouter};
             use std::sync::Arc;
 
-            info!("Multi-tenant mode enabled with {} routing strategy",
+            info!(
+                "Multi-tenant mode enabled with {} routing strategy",
                 match mt_config.routing_strategy {
                     mockforge_core::RoutingStrategy::Path => "path-based",
                     mockforge_core::RoutingStrategy::Port => "port-based",
                     mockforge_core::RoutingStrategy::Both => "hybrid",
-                });
+                }
+            );
 
             // Create the multi-tenant workspace registry
             let mut registry = MultiTenantWorkspaceRegistry::new(mt_config.clone());
 
             // Register the default workspace before wrapping in Arc
-            let default_workspace = mockforge_core::Workspace::new(mt_config.default_workspace.clone());
-            if let Err(e) = registry.register_workspace(mt_config.default_workspace.clone(), default_workspace) {
+            let default_workspace =
+                mockforge_core::Workspace::new(mt_config.default_workspace.clone());
+            if let Err(e) =
+                registry.register_workspace(mt_config.default_workspace.clone(), default_workspace)
+            {
                 warn!("Failed to register default workspace: {}", e);
             } else {
                 info!("Registered default workspace: '{}'", mt_config.default_workspace);
@@ -628,11 +657,7 @@ pub async fn serve_router(
         )
     })?;
 
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
     Ok(())
 }
 
@@ -720,7 +745,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     let chain_state = create_chain_state(registry, engine);
 
     // Start with basic router including multi-tenant support
-    let mut app = build_router_with_multi_tenant(spec_path, options, None, multi_tenant_config).await;
+    let mut app =
+        build_router_with_multi_tenant(spec_path, options, None, multi_tenant_config).await;
 
     // Add chain management endpoints
     app = app.nest(
@@ -846,19 +872,24 @@ pub async fn build_router_with_traffic_shaping_and_multi_tenant(
             use mockforge_core::{MultiTenantWorkspaceRegistry, WorkspaceRouter};
             use std::sync::Arc;
 
-            info!("Multi-tenant mode enabled with {} routing strategy",
+            info!(
+                "Multi-tenant mode enabled with {} routing strategy",
                 match mt_config.routing_strategy {
                     mockforge_core::RoutingStrategy::Path => "path-based",
                     mockforge_core::RoutingStrategy::Port => "port-based",
                     mockforge_core::RoutingStrategy::Both => "hybrid",
-                });
+                }
+            );
 
             // Create the multi-tenant workspace registry
             let mut registry = MultiTenantWorkspaceRegistry::new(mt_config.clone());
 
             // Register the default workspace before wrapping in Arc
-            let default_workspace = mockforge_core::Workspace::new(mt_config.default_workspace.clone());
-            if let Err(e) = registry.register_workspace(mt_config.default_workspace.clone(), default_workspace) {
+            let default_workspace =
+                mockforge_core::Workspace::new(mt_config.default_workspace.clone());
+            if let Err(e) =
+                registry.register_workspace(mt_config.default_workspace.clone(), default_workspace)
+            {
                 warn!("Failed to register default workspace: {}", e);
             } else {
                 info!("Registered default workspace: '{}'", mt_config.default_workspace);

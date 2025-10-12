@@ -1,7 +1,7 @@
 //! Comparison reports for orchestration executions
 
-use crate::{Result, ReportingError};
 use crate::pdf::ExecutionReport;
+use crate::{ReportingError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -117,13 +117,14 @@ impl ComparisonReportGenerator {
 
     /// Compare against baseline
     pub fn compare(&self, comparison_reports: Vec<ExecutionReport>) -> Result<ComparisonReport> {
-        let baseline = self.baseline.as_ref()
+        let baseline = self
+            .baseline
+            .as_ref()
             .ok_or_else(|| ReportingError::Analysis("No baseline set".to_string()))?;
 
         let baseline_summary = self.extract_summary(baseline);
-        let comparison_summaries: Vec<_> = comparison_reports.iter()
-            .map(|r| self.extract_summary(r))
-            .collect();
+        let comparison_summaries: Vec<_> =
+            comparison_reports.iter().map(|r| self.extract_summary(r)).collect();
 
         // Calculate metric differences for each comparison
         let mut all_differences = Vec::new();
@@ -132,7 +133,8 @@ impl ComparisonReportGenerator {
 
         for comp_summary in &comparison_summaries {
             let differences = self.calculate_differences(&baseline_summary, comp_summary);
-            let (regressions, improvements) = self.identify_regressions_and_improvements(&differences);
+            let (regressions, improvements) =
+                self.identify_regressions_and_improvements(&differences);
 
             all_differences.extend(differences);
             all_regressions.extend(regressions);
@@ -161,8 +163,10 @@ impl ComparisonReportGenerator {
         metrics_snapshot.insert("p95_latency_ms".to_string(), report.metrics.p95_latency_ms);
         metrics_snapshot.insert("p99_latency_ms".to_string(), report.metrics.p99_latency_ms);
         metrics_snapshot.insert("total_requests".to_string(), report.metrics.total_requests as f64);
-        metrics_snapshot.insert("failed_requests".to_string(), report.metrics.failed_requests as f64);
-        metrics_snapshot.insert("successful_requests".to_string(), report.metrics.successful_requests as f64);
+        metrics_snapshot
+            .insert("failed_requests".to_string(), report.metrics.failed_requests as f64);
+        metrics_snapshot
+            .insert("successful_requests".to_string(), report.metrics.successful_requests as f64);
         metrics_snapshot.insert("duration_seconds".to_string(), report.duration_seconds as f64);
         metrics_snapshot.insert("failed_steps".to_string(), report.failed_steps as f64);
 
@@ -247,8 +251,13 @@ impl ComparisonReportGenerator {
             // Metrics where increase is bad
             let increase_is_bad = matches!(
                 diff.metric_name.as_str(),
-                "error_rate" | "avg_latency_ms" | "p95_latency_ms" | "p99_latency_ms" |
-                "failed_requests" | "duration_seconds" | "failed_steps"
+                "error_rate"
+                    | "avg_latency_ms"
+                    | "p95_latency_ms"
+                    | "p99_latency_ms"
+                    | "failed_requests"
+                    | "duration_seconds"
+                    | "failed_steps"
             );
 
             let is_significant = diff.significance != SignificanceLevel::NotSignificant;
@@ -342,9 +351,7 @@ impl ComparisonReportGenerator {
         let regressions_count = regressions.len();
         let improvements_count = improvements.len();
 
-        let critical_regressions = regressions.iter()
-            .filter(|r| r.severity == "Critical")
-            .count();
+        let critical_regressions = regressions.iter().filter(|r| r.severity == "Critical").count();
 
         let verdict = if critical_regressions > 0 {
             ComparisonVerdict::Worse

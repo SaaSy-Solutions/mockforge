@@ -38,10 +38,7 @@ impl TimeTravelHandler {
         }
 
         // Return the first due response
-        due_responses
-            .into_iter()
-            .next()
-            .map(ScheduledResponseWrapper::new)
+        due_responses.into_iter().next().map(ScheduledResponseWrapper::new)
     }
 
     /// Get all due responses
@@ -95,10 +92,7 @@ impl ScheduledResponseWrapper {
             }
 
             // Add custom header to indicate this is a scheduled response
-            headers.insert(
-                "X-MockForge-Scheduled-Response",
-                HeaderValue::from_static("true"),
-            );
+            headers.insert("X-MockForge-Scheduled-Response", HeaderValue::from_static("true"));
 
             if let Some(name) = &self.inner.name {
                 if let Ok(value) = HeaderValue::from_str(name) {
@@ -109,14 +103,12 @@ impl ScheduledResponseWrapper {
 
         // Set body
         let body_str = serde_json::to_string(&self.inner.body).unwrap_or_else(|_| "{}".to_string());
-        response
-            .body(Body::from(body_str))
-            .unwrap_or_else(|_| {
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::from("Failed to build response"))
-                    .unwrap()
-            })
+        response.body(Body::from(body_str)).unwrap_or_else(|_| {
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from("Failed to build response"))
+                .unwrap()
+        })
     }
 }
 
@@ -136,22 +128,17 @@ impl IntoResponse for ScheduledResponseWrapper {
             }
 
             // Add custom header
-            headers.insert(
-                "X-MockForge-Scheduled-Response",
-                HeaderValue::from_static("true"),
-            );
+            headers.insert("X-MockForge-Scheduled-Response", HeaderValue::from_static("true"));
         }
 
         // Set body
         let body_str = serde_json::to_string(&self.inner.body).unwrap_or_else(|_| "{}".to_string());
-        response
-            .body(Body::from(body_str))
-            .unwrap_or_else(|_| {
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::from("Failed to build response"))
-                    .unwrap()
-            })
+        response.body(Body::from(body_str)).unwrap_or_else(|_| {
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from("Failed to build response"))
+                .unwrap()
+        })
     }
 }
 

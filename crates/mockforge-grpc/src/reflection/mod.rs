@@ -23,15 +23,14 @@ pub use client::ReflectionClient;
 pub use config::ProxyConfig;
 pub use connection_pool::ConnectionPool;
 pub use grpc_tracing::{
-    create_grpc_span, record_grpc_error, record_grpc_success,
-    extract_grpc_trace_context, inject_grpc_trace_context,
+    create_grpc_span, extract_grpc_trace_context, inject_grpc_trace_context, record_grpc_error,
+    record_grpc_success,
 };
 pub use mock_proxy::MockReflectionProxy;
 pub use proxy::ReflectionProxy;
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

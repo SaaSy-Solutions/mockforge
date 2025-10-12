@@ -8,13 +8,13 @@ import {
   AlertTriangle,
   Info,
   Clock,
-  
+
   // System Icons
   Cpu,
   HardDrive,
   Activity,
   Zap,
-  
+
   // Navigation Icons
   Home,
   Settings,
@@ -23,7 +23,7 @@ import {
   Database,
   Shield,
   Users,
-  
+
   // Action Icons
   Plus,
   Minus,
@@ -34,7 +34,7 @@ import {
   Copy,
   Eye,
   EyeOff,
-  
+
   // UI Icons
   ChevronDown,
   ChevronUp,
@@ -45,20 +45,20 @@ import {
   Search,
   Filter,
   MoreHorizontal,
-  
+
   // Communication Icons
   Mail,
   Bell,
   MessageSquare,
   Phone,
-  
+
   type LucideIcon
 } from 'lucide-react';
 
 // Standardized icon sizes
 export const iconSizes = {
   xs: 'h-3 w-3',
-  sm: 'h-4 w-4', 
+  sm: 'h-4 w-4',
   md: 'h-5 w-5',
   lg: 'h-6 w-6',
   xl: 'h-8 w-8',
@@ -86,14 +86,14 @@ interface IconProps {
   'aria-label'?: string;
 }
 
-export function Icon({ 
-  icon: IconComponent, 
-  size = 'md', 
-  color = 'default', 
+export function Icon({
+  icon: IconComponent,
+  size = 'md',
+  color = 'default',
   className,
   onClick,
   'aria-label': ariaLabel,
-  ...props 
+  ...props
 }: IconProps) {
   return (
     <IconComponent
@@ -111,11 +111,11 @@ export function Icon({
 }
 
 // Status Icons with predefined styles
-export function StatusIcon({ 
-  status, 
-  size = 'md', 
-  className 
-}: { 
+export function StatusIcon({
+  status,
+  size = 'md',
+  className
+}: {
   status: 'success' | 'error' | 'warning' | 'info' | 'pending';
   size?: keyof typeof iconSizes;
   className?: string;
@@ -141,11 +141,11 @@ export function StatusIcon({
 }
 
 // System Metric Icons
-export function MetricIcon({ 
-  metric, 
-  size = 'lg', 
-  className 
-}: { 
+export function MetricIcon({
+  metric,
+  size = 'lg',
+  className
+}: {
   metric: 'cpu' | 'memory' | 'activity' | 'uptime' | 'performance';
   size?: keyof typeof iconSizes;
   className?: string;
@@ -171,11 +171,11 @@ export function MetricIcon({
 }
 
 // Navigation Icons
-export function NavIcon({ 
-  nav, 
-  size = 'md', 
-  className 
-}: { 
+export function NavIcon({
+  nav,
+  size = 'md',
+  className
+}: {
   nav: 'dashboard' | 'services' | 'logs' | 'metrics' | 'fixtures' | 'config' | 'users';
   size?: keyof typeof iconSizes;
   className?: string;
@@ -203,13 +203,13 @@ export function NavIcon({
 }
 
 // Action Icons with consistent styling
-export function ActionIcon({ 
-  action, 
-  size = 'sm', 
+export function ActionIcon({
+  action,
+  size = 'sm',
   onClick,
   className,
   'aria-label': ariaLabel
-}: { 
+}: {
   action: 'add' | 'remove' | 'edit' | 'delete' | 'download' | 'upload' | 'copy' | 'view' | 'hide';
   size?: keyof typeof iconSizes;
   onClick?: () => void;
@@ -243,12 +243,12 @@ export function ActionIcon({
 }
 
 // Chevron Icons for directional navigation
-export function ChevronIcon({ 
-  direction, 
-  size = 'sm', 
+export function ChevronIcon({
+  direction,
+  size = 'sm',
   onClick,
-  className 
-}: { 
+  className
+}: {
   direction: 'up' | 'down' | 'left' | 'right';
   size?: keyof typeof iconSizes;
   onClick?: () => void;
@@ -280,18 +280,18 @@ export function ChevronIcon({
 export const Icons = {
   // Status
   Success: CheckCircle,
-  Error: XCircle, 
+  Error: XCircle,
   Warning: AlertTriangle,
   Info: Info,
   Clock: Clock,
-  
+
   // System
   Cpu: Cpu,
   Memory: HardDrive,
   Activity: Activity,
   Performance: Zap,
-  
-  // Navigation  
+
+  // Navigation
   Dashboard: Home,
   Services: Database,
   Logs: FileText,
@@ -299,7 +299,7 @@ export const Icons = {
   Settings: Settings,
   Users: Users,
   Security: Shield,
-  
+
   // Actions
   Add: Plus,
   Remove: Minus,
@@ -310,20 +310,20 @@ export const Icons = {
   Copy: Copy,
   View: Eye,
   Hide: EyeOff,
-  
+
   // UI
   Close: X,
   Menu: Menu,
   Search: Search,
   Filter: Filter,
   More: MoreHorizontal,
-  
+
   // Communication
   Mail: Mail,
   Notification: Bell,
   Message: MessageSquare,
   Phone: Phone,
-  
+
   // Directional
   ChevronUp: ChevronUp,
   ChevronDown: ChevronDown,

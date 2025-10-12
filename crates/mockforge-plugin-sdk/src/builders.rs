@@ -84,9 +84,7 @@ impl ManifestBuilder {
     /// Add a dependency
     pub fn dependency(mut self, plugin_id: &str, version: &str) -> Self {
         if let Ok(parsed_version) = PluginVersion::parse(version) {
-            self.manifest
-                .dependencies
-                .insert(PluginId::new(plugin_id), parsed_version);
+            self.manifest.dependencies.insert(PluginId::new(plugin_id), parsed_version);
         }
         self
     }

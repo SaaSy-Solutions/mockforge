@@ -91,13 +91,11 @@ pub async fn get_plugins(
             };
 
             // Apply filters
-            let matches_type = query.plugin_type.as_ref()
-                .map(|t| ui_plugin.types.contains(t))
-                .unwrap_or(true);
+            let matches_type =
+                query.plugin_type.as_ref().map(|t| ui_plugin.types.contains(t)).unwrap_or(true);
 
-            let matches_status = query.status.as_ref()
-                .map(|s| ui_plugin.status == *s)
-                .unwrap_or(true);
+            let matches_status =
+                query.status.as_ref().map(|s| ui_plugin.status == *s).unwrap_or(true);
 
             if matches_type && matches_status {
                 plugins.push(ui_plugin);
@@ -126,7 +124,8 @@ pub async fn get_plugin_status(
 
     for plugin_id in registry.list_plugins() {
         if let Some(plugin_instance) = registry.get_plugin(&plugin_id) {
-            let is_loaded = matches!(plugin_instance.state, mockforge_plugin_core::PluginState::Ready);
+            let is_loaded =
+                matches!(plugin_instance.state, mockforge_plugin_core::PluginState::Ready);
 
             if is_loaded {
                 loaded += 1;
@@ -231,18 +230,14 @@ pub async fn delete_plugin(
     let plugin_id_core = mockforge_plugin_core::PluginId::new(&plugin_id);
 
     match registry.remove_plugin(&plugin_id_core) {
-        Ok(removed_plugin) => {
-            Json(ApiResponse::success(json!({
-                "message": format!("Plugin '{}' removed successfully", plugin_id),
-                "plugin": {
-                    "id": removed_plugin.id.as_str(),
-                    "name": removed_plugin.manifest.info.name
-                }
-            })))
-        }
-        Err(_) => {
-            Json(ApiResponse::error(format!("Failed to remove plugin: {}", plugin_id)))
-        }
+        Ok(removed_plugin) => Json(ApiResponse::success(json!({
+            "message": format!("Plugin '{}' removed successfully", plugin_id),
+            "plugin": {
+                "id": removed_plugin.id.as_str(),
+                "name": removed_plugin.manifest.info.name
+            }
+        }))),
+        Err(_) => Json(ApiResponse::error(format!("Failed to remove plugin: {}", plugin_id))),
     }
 }
 

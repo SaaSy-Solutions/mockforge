@@ -250,9 +250,9 @@ mod tests {
         assert!(health_result.is_err());
 
         let loader_mut = loader; // Would need mutable access in real impl
-                                     // Unload non-existent should not panic
-                                     // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
-                                     // assert!(unload_result.is_ok()); // In real impl
+                                 // Unload non-existent should not panic
+                                 // let unload_result = loader_mut.unload_plugin(&nonexistent_id).await;
+                                 // assert!(unload_result.is_ok()); // In real impl
     }
 
     #[tokio::test]

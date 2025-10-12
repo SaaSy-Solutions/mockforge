@@ -31,7 +31,7 @@ export function useProgressiveLoading<T>({
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
-  
+
   const scrollElementRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -42,13 +42,13 @@ export function useProgressiveLoading<T>({
     try {
       setIsLoadingMore(true);
       setError(null);
-      
+
       const newData = await loadData(offset, pageSize);
-      
+
       if (newData.length < pageSize) {
         setHasMore(false);
       }
-      
+
       setData(prev => [...prev, ...newData]);
       setOffset(prev => prev + newData.length);
     } catch (err) {
@@ -65,13 +65,13 @@ export function useProgressiveLoading<T>({
       setData([]);
       setOffset(0);
       setHasMore(true);
-      
+
       const newData = await loadData(0, pageSize);
-      
+
       if (newData.length < pageSize) {
         setHasMore(false);
       }
-      
+
       setData(newData);
       setOffset(newData.length);
     } catch (err) {
@@ -177,9 +177,9 @@ export function useVirtualizedLoading<T>({
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const newData = await loadData(offset, pageSize);
-      
+
       if (newData.length < pageSize) {
         setHasMore(false);
       }

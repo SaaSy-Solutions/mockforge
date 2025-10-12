@@ -3,8 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Main chaos engineering configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChaosConfig {
     /// Enable chaos engineering
     pub enabled: bool,
@@ -21,7 +20,6 @@ pub struct ChaosConfig {
     /// Bulkhead configuration
     pub bulkhead: Option<BulkheadConfig>,
 }
-
 
 /// Latency injection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

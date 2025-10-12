@@ -15,7 +15,7 @@ mod tests {
             ValidationRuleType,
         },
     };
-    
+
     use std::collections::HashMap;
     use std::time::SystemTime;
 
@@ -197,8 +197,6 @@ mod tests {
     #[cfg(feature = "data-faker")]
     #[test]
     fn test_faker_integration_with_deterministic_seeding() {
-        
-
         let config = SmartMockConfig {
             use_faker: true,
             seed: Some(777),

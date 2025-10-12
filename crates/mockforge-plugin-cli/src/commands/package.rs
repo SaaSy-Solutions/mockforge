@@ -1,6 +1,8 @@
 //! Package plugin command
 
-use crate::utils::{current_dir, find_manifest, get_plugin_id, get_wasm_output_path, read_manifest};
+use crate::utils::{
+    current_dir, find_manifest, get_plugin_id, get_wasm_output_path, read_manifest,
+};
 use anyhow::{Context, Result};
 use colored::*;
 use std::fs::File;
@@ -59,15 +61,15 @@ fn find_wasm_file(project_dir: &Path, plugin_id: &str) -> Result<PathBuf> {
     let plugin_lib_name = plugin_id.replace('-', "_");
 
     // Try release first
-    let release_path = get_wasm_output_path(project_dir, true)?
-        .join(format!("{}.wasm", plugin_lib_name));
+    let release_path =
+        get_wasm_output_path(project_dir, true)?.join(format!("{}.wasm", plugin_lib_name));
     if release_path.exists() {
         return Ok(release_path);
     }
 
     // Try debug
-    let debug_path = get_wasm_output_path(project_dir, false)?
-        .join(format!("{}.wasm", plugin_lib_name));
+    let debug_path =
+        get_wasm_output_path(project_dir, false)?.join(format!("{}.wasm", plugin_lib_name));
     if debug_path.exists() {
         return Ok(debug_path);
     }
@@ -78,11 +80,7 @@ fn find_wasm_file(project_dir: &Path, plugin_id: &str) -> Result<PathBuf> {
     )
 }
 
-fn create_plugin_archive(
-    manifest_path: &Path,
-    wasm_path: &Path,
-    output_path: &Path,
-) -> Result<()> {
+fn create_plugin_archive(manifest_path: &Path, wasm_path: &Path, output_path: &Path) -> Result<()> {
     let file = File::create(output_path)
         .with_context(|| format!("Failed to create archive at {}", output_path.display()))?;
 
@@ -102,8 +100,7 @@ fn create_plugin_archive(
         .context("Invalid WASM filename")?;
     add_file_to_zip(&mut zip, wasm_path, wasm_filename, options)?;
 
-    zip.finish()
-        .context("Failed to finalize ZIP archive")?;
+    zip.finish().context("Failed to finalize ZIP archive")?;
 
     Ok(())
 }
@@ -114,8 +111,8 @@ fn add_file_to_zip(
     archive_path: &str,
     options: SimpleFileOptions,
 ) -> Result<()> {
-    let mut file = File::open(file_path)
-        .with_context(|| format!("Failed to open {}", file_path.display()))?;
+    let mut file =
+        File::open(file_path).with_context(|| format!("Failed to open {}", file_path.display()))?;
 
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)

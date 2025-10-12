@@ -36,8 +36,8 @@ impl Default for ChaosConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            error_rate: 0.1,        // 10% error rate
-            delay_rate: 0.3,        // 30% delay rate
+            error_rate: 0.1, // 10% error rate
+            delay_rate: 0.3, // 30% delay rate
             min_delay_ms: 100,
             max_delay_ms: 2000,
             status_codes: vec![500, 502, 503, 504],
@@ -176,7 +176,7 @@ impl ChaosEngine {
 
     /// Process a request with random chaos injection
     /// Returns Some((status_code, error_message)) if an error should be injected
-    pub async fn process_request(&self, tags: &[String]) -> ChaosResult {
+    pub async fn process_request(&self, _tags: &[String]) -> ChaosResult {
         let config = self.config.read().await;
 
         if !config.enabled {
@@ -301,18 +301,11 @@ pub enum ChaosResult {
     /// No chaos effect - request should proceed normally
     Success,
     /// Inject an error response
-    Error {
-        status_code: u16,
-        message: String,
-    },
+    Error { status_code: u16, message: String },
     /// Inject a delay
-    Delay {
-        delay_ms: u64,
-    },
+    Delay { delay_ms: u64 },
     /// Inject a timeout
-    Timeout {
-        timeout_ms: u64,
-    },
+    Timeout { timeout_ms: u64 },
 }
 
 /// Chaos engine statistics
@@ -436,8 +429,7 @@ mod tests {
         let config = ChaosConfig::new(0.5, 0.5);
         let engine = ChaosEngine::new(config);
 
-        let new_config = ChaosConfig::new(0.2, 0.8)
-            .with_delay_range(50, 100);
+        let new_config = ChaosConfig::new(0.2, 0.8).with_delay_range(50, 100);
 
         engine.update_config(new_config).await;
 
@@ -450,9 +442,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chaos_engine_statistics() {
-        let config = ChaosConfig::new(0.3, 0.4)
-            .with_delay_range(100, 500)
-            .with_timeouts(2000);
+        let config = ChaosConfig::new(0.3, 0.4).with_delay_range(100, 500).with_timeouts(2000);
 
         let engine = ChaosEngine::new(config);
         let stats = engine.get_statistics().await;

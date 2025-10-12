@@ -154,7 +154,10 @@ impl UCB1 {
                 },
             );
         }
-        Self { arms, total_pulls: 0 }
+        Self {
+            arms,
+            total_pulls: 0,
+        }
     }
 
     pub fn select_arm(&self) -> String {
@@ -215,15 +218,12 @@ impl MultiArmedBandit {
         let arm_ids: Vec<String> = arms.iter().map(|a| a.id.clone()).collect();
 
         let (thompson_sampling, ucb1, epsilon) = match &strategy {
-            BanditStrategy::ThompsonSampling => {
-                (Some(ThompsonSampling::new(&arm_ids)), None, 0.0)
-            }
+            BanditStrategy::ThompsonSampling => (Some(ThompsonSampling::new(&arm_ids)), None, 0.0),
             BanditStrategy::UCB1 => (None, Some(UCB1::new(&arm_ids)), 0.0),
             BanditStrategy::EpsilonGreedy { epsilon } => (None, None, *epsilon),
         };
 
-        let arms_map: HashMap<String, Arm> =
-            arms.into_iter().map(|a| (a.id.clone(), a)).collect();
+        let arms_map: HashMap<String, Arm> = arms.into_iter().map(|a| (a.id.clone(), a)).collect();
 
         Self {
             arms: Arc::new(RwLock::new(arms_map)),
@@ -365,10 +365,7 @@ impl MultiArmedBandit {
         let std_error = (arm.mean_reward * (1.0 - arm.mean_reward) / arm.pulls as f64).sqrt();
         let margin = z * std_error;
 
-        (
-            (arm.mean_reward - margin).max(0.0),
-            (arm.mean_reward + margin).min(1.0),
-        )
+        ((arm.mean_reward - margin).max(0.0), (arm.mean_reward + margin).min(1.0))
     }
 }
 
@@ -414,10 +411,7 @@ impl TrafficAllocator {
         if total_pulls < self.min_samples {
             // Equal allocation during exploration phase
             let equal_share = 1.0 / arms.len() as f64;
-            return arms
-                .iter()
-                .map(|a| (a.id.clone(), equal_share))
-                .collect();
+            return arms.iter().map(|a| (a.id.clone(), equal_share)).collect();
         }
 
         // Allocate based on performance
@@ -425,10 +419,7 @@ impl TrafficAllocator {
 
         if total_reward == 0.0 {
             let equal_share = 1.0 / arms.len() as f64;
-            return arms
-                .iter()
-                .map(|a| (a.id.clone(), equal_share))
-                .collect();
+            return arms.iter().map(|a| (a.id.clone(), equal_share)).collect();
         }
 
         arms.iter()
@@ -462,21 +453,9 @@ mod tests {
     #[tokio::test]
     async fn test_thompson_sampling() {
         let arms = vec![
-            Arm::new(
-                "v1".to_string(),
-                "Variant 1".to_string(),
-                serde_json::json!({}),
-            ),
-            Arm::new(
-                "v2".to_string(),
-                "Variant 2".to_string(),
-                serde_json::json!({}),
-            ),
-            Arm::new(
-                "v3".to_string(),
-                "Variant 3".to_string(),
-                serde_json::json!({}),
-            ),
+            Arm::new("v1".to_string(), "Variant 1".to_string(), serde_json::json!({})),
+            Arm::new("v2".to_string(), "Variant 2".to_string(), serde_json::json!({})),
+            Arm::new("v3".to_string(), "Variant 3".to_string(), serde_json::json!({})),
         ];
 
         let bandit = MultiArmedBandit::new(arms, BanditStrategy::ThompsonSampling);
@@ -495,16 +474,8 @@ mod tests {
     #[tokio::test]
     async fn test_ucb1() {
         let arms = vec![
-            Arm::new(
-                "a".to_string(),
-                "Arm A".to_string(),
-                serde_json::json!({}),
-            ),
-            Arm::new(
-                "b".to_string(),
-                "Arm B".to_string(),
-                serde_json::json!({}),
-            ),
+            Arm::new("a".to_string(), "Arm A".to_string(), serde_json::json!({})),
+            Arm::new("b".to_string(), "Arm B".to_string(), serde_json::json!({})),
         ];
 
         let bandit = MultiArmedBandit::new(arms, BanditStrategy::UCB1);

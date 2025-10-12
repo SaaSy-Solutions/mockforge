@@ -7,12 +7,12 @@ use tokio::sync::RwLock;
 /// State representation for RL agent
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct SystemState {
-    pub error_rate: u8,          // 0-100
-    pub latency_level: u8,       // 0-100
-    pub cpu_usage: u8,           // 0-100
-    pub memory_usage: u8,        // 0-100
-    pub active_failures: u8,     // Number of active failures
-    pub service_health: String,  // "healthy", "degraded", "critical"
+    pub error_rate: u8,         // 0-100
+    pub latency_level: u8,      // 0-100
+    pub cpu_usage: u8,          // 0-100
+    pub memory_usage: u8,       // 0-100
+    pub active_failures: u8,    // Number of active failures
+    pub service_health: String, // "healthy", "degraded", "critical"
 }
 
 /// Remediation action
@@ -32,11 +32,11 @@ pub enum RemediationAction {
 /// Q-Learning parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QLearningConfig {
-    pub learning_rate: f64,      // Alpha: 0.0 - 1.0
-    pub discount_factor: f64,    // Gamma: 0.0 - 1.0
-    pub exploration_rate: f64,   // Epsilon: 0.0 - 1.0
-    pub exploration_decay: f64,  // Epsilon decay rate
-    pub min_exploration: f64,    // Minimum epsilon
+    pub learning_rate: f64,     // Alpha: 0.0 - 1.0
+    pub discount_factor: f64,   // Gamma: 0.0 - 1.0
+    pub exploration_rate: f64,  // Epsilon: 0.0 - 1.0
+    pub exploration_decay: f64, // Epsilon decay rate
+    pub min_exploration: f64,   // Minimum epsilon
 }
 
 impl Default for QLearningConfig {
@@ -156,8 +156,9 @@ impl RLAgent {
             .fold(f64::NEG_INFINITY, f64::max);
 
         // Q-learning update: Q(s,a) = Q(s,a) + α[r + γ·max Q(s',a') - Q(s,a)]
-        let new_q = current_q + self.config.learning_rate *
-            (reward + self.config.discount_factor * max_next_q - current_q);
+        let new_q = current_q
+            + self.config.learning_rate
+                * (reward + self.config.discount_factor * max_next_q - current_q);
 
         // Update Q-table
         q_table
@@ -172,8 +173,8 @@ impl RLAgent {
             });
 
         // Decay exploration rate
-        self.current_epsilon = (self.current_epsilon * self.config.exploration_decay)
-            .max(self.config.min_exploration);
+        self.current_epsilon =
+            (self.current_epsilon * self.config.exploration_decay).max(self.config.min_exploration);
     }
 
     /// Calculate reward based on outcome
@@ -275,9 +276,9 @@ pub struct AdaptiveRiskAssessor {
 pub struct RiskAssessment {
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub state: SystemState,
-    pub risk_level: f64,  // 0.0 - 1.0
+    pub risk_level: f64, // 0.0 - 1.0
     pub recommended_actions: Vec<RemediationAction>,
-    pub confidence: f64,   // 0.0 - 1.0
+    pub confidence: f64, // 0.0 - 1.0
 }
 
 impl AdaptiveRiskAssessor {
@@ -344,10 +345,7 @@ impl AdaptiveRiskAssessor {
     /// Get risk trend over time
     pub async fn get_risk_trend(&self) -> Vec<(chrono::DateTime<chrono::Utc>, f64)> {
         let history = self.risk_history.read().await;
-        history
-            .iter()
-            .map(|a| (a.timestamp, a.risk_level))
-            .collect()
+        history.iter().map(|a| (a.timestamp, a.risk_level)).collect()
     }
 }
 

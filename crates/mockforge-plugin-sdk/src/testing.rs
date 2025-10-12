@@ -40,10 +40,7 @@ impl TestHarness {
 
     /// Create a mock plugin context
     pub fn create_context(&mut self, plugin_id: &str, request_id: &str) -> PluginContext {
-        let mut context = PluginContext::new(
-            PluginId::new(plugin_id),
-            PluginVersion::new(0, 1, 0),
-        );
+        let mut context = PluginContext::new(PluginId::new(plugin_id), PluginVersion::new(0, 1, 0));
 
         // Override request_id if provided
         context.request_id = request_id.to_string();
@@ -94,12 +91,7 @@ impl MockAuthRequest {
         let mut headers = HeaderMap::new();
         headers.insert("authorization", HeaderValue::from_str(&auth_value).unwrap());
 
-        AuthRequest::from_axum(
-            Method::GET,
-            Uri::from_static("/"),
-            headers,
-            None,
-        )
+        AuthRequest::from_axum(Method::GET, Uri::from_static("/"), headers, None)
     }
 
     /// Create a mock auth request with bearer token
@@ -111,12 +103,7 @@ impl MockAuthRequest {
         let mut headers = HeaderMap::new();
         headers.insert("authorization", HeaderValue::from_str(&auth_value).unwrap());
 
-        AuthRequest::from_axum(
-            Method::GET,
-            Uri::from_static("/"),
-            headers,
-            None,
-        )
+        AuthRequest::from_axum(Method::GET, Uri::from_static("/"), headers, None)
     }
 
     /// Create a mock auth request with custom headers
@@ -125,20 +112,14 @@ impl MockAuthRequest {
 
         let mut headers = HeaderMap::new();
         for (key, value) in headers_map {
-            if let (Ok(header_name), Ok(header_value)) = (
-                key.parse::<HeaderName>(),
-                HeaderValue::from_str(&value)
-            ) {
+            if let (Ok(header_name), Ok(header_value)) =
+                (key.parse::<HeaderName>(), HeaderValue::from_str(&value))
+            {
                 headers.insert(header_name, header_value);
             }
         }
 
-        AuthRequest::from_axum(
-            Method::GET,
-            Uri::from_static("/"),
-            headers,
-            None,
-        )
+        AuthRequest::from_axum(Method::GET, Uri::from_static("/"), headers, None)
     }
 }
 
@@ -178,20 +159,14 @@ macro_rules! assert_plugin_err {
 
 /// Create a test plugin context
 pub fn test_context() -> PluginContext {
-    let mut context = PluginContext::new(
-        PluginId::new("test-plugin"),
-        PluginVersion::new(0, 1, 0),
-    );
+    let mut context = PluginContext::new(PluginId::new("test-plugin"), PluginVersion::new(0, 1, 0));
     context.request_id = "test-request".to_string();
     context
 }
 
 /// Create a test plugin context with custom ID
 pub fn test_context_with_id(plugin_id: &str) -> PluginContext {
-    let mut context = PluginContext::new(
-        PluginId::new(plugin_id),
-        PluginVersion::new(0, 1, 0),
-    );
+    let mut context = PluginContext::new(PluginId::new(plugin_id), PluginVersion::new(0, 1, 0));
     context.request_id = "test-request".to_string();
     context
 }

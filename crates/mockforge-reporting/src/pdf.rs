@@ -1,11 +1,11 @@
 //! PDF report generation for orchestration execution results
 
-use crate::{Result, ReportingError};
+use crate::{ReportingError, Result};
+use chrono::{DateTime, Utc};
 use printpdf::*;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufWriter;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 /// PDF generation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,16 +78,14 @@ impl PdfReportGenerator {
 
     /// Generate PDF report from execution data
     pub fn generate(&self, report: &ExecutionReport, output_path: &str) -> Result<()> {
-        let (doc, page1, layer1) = PdfDocument::new(
-            &self.config.title,
-            Mm(210.0),
-            Mm(297.0),
-            "Layer 1",
-        );
+        let (doc, page1, layer1) =
+            PdfDocument::new(&self.config.title, Mm(210.0), Mm(297.0), "Layer 1");
 
-        let font = doc.add_builtin_font(BuiltinFont::Helvetica)
+        let font = doc
+            .add_builtin_font(BuiltinFont::Helvetica)
             .map_err(|e| ReportingError::Pdf(e.to_string()))?;
-        let font_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)
+        let font_bold = doc
+            .add_builtin_font(BuiltinFont::HelveticaBold)
             .map_err(|e| ReportingError::Pdf(e.to_string()))?;
 
         let current_layer = doc.get_page(page1).get_layer(layer1);

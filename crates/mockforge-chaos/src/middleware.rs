@@ -1,9 +1,12 @@
 //! Chaos engineering middleware for HTTP
 
 use crate::{
-    fault::FaultInjector, latency::LatencyInjector, rate_limit::RateLimiter,
+    fault::FaultInjector,
+    latency::LatencyInjector,
+    rate_limit::RateLimiter,
     resilience::{Bulkhead, CircuitBreaker},
-    traffic_shaping::TrafficShaper, ChaosConfig,
+    traffic_shaping::TrafficShaper,
+    ChaosConfig,
 };
 use axum::{
     body::Body,
@@ -30,29 +33,22 @@ pub struct ChaosMiddleware {
 impl ChaosMiddleware {
     /// Create new chaos middleware from config
     pub fn new(config: ChaosConfig) -> Self {
-        let latency_injector = Arc::new(LatencyInjector::new(
-            config.latency.clone().unwrap_or_default(),
-        ));
+        let latency_injector =
+            Arc::new(LatencyInjector::new(config.latency.clone().unwrap_or_default()));
 
-        let fault_injector = Arc::new(FaultInjector::new(
-            config.fault_injection.clone().unwrap_or_default(),
-        ));
+        let fault_injector =
+            Arc::new(FaultInjector::new(config.fault_injection.clone().unwrap_or_default()));
 
-        let rate_limiter = Arc::new(RateLimiter::new(
-            config.rate_limit.clone().unwrap_or_default(),
-        ));
+        let rate_limiter =
+            Arc::new(RateLimiter::new(config.rate_limit.clone().unwrap_or_default()));
 
-        let traffic_shaper = Arc::new(TrafficShaper::new(
-            config.traffic_shaping.clone().unwrap_or_default(),
-        ));
+        let traffic_shaper =
+            Arc::new(TrafficShaper::new(config.traffic_shaping.clone().unwrap_or_default()));
 
-        let circuit_breaker = Arc::new(CircuitBreaker::new(
-            config.circuit_breaker.clone().unwrap_or_default(),
-        ));
+        let circuit_breaker =
+            Arc::new(CircuitBreaker::new(config.circuit_breaker.clone().unwrap_or_default()));
 
-        let bulkhead = Arc::new(Bulkhead::new(
-            config.bulkhead.clone().unwrap_or_default(),
-        ));
+        let bulkhead = Arc::new(Bulkhead::new(config.bulkhead.clone().unwrap_or_default()));
 
         Self {
             latency_injector,
@@ -110,7 +106,11 @@ pub async fn chaos_middleware(
     // Check circuit breaker
     if !chaos.circuit_breaker.allow_request().await {
         warn!("Circuit breaker open, rejecting request: {}", path);
-        return (StatusCode::SERVICE_UNAVAILABLE, "Service temporarily unavailable (circuit breaker open)").into_response();
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Service temporarily unavailable (circuit breaker open)",
+        )
+            .into_response();
     }
 
     // Try to acquire bulkhead slot
@@ -118,7 +118,8 @@ pub async fn chaos_middleware(
         Ok(guard) => guard,
         Err(e) => {
             warn!("Bulkhead rejected request: {} - {:?}", path, e);
-            return (StatusCode::SERVICE_UNAVAILABLE, format!("Service overloaded: {}", e)).into_response();
+            return (StatusCode::SERVICE_UNAVAILABLE, format!("Service overloaded: {}", e))
+                .into_response();
         }
     };
 
@@ -135,7 +136,8 @@ pub async fn chaos_middleware(
     }
 
     // Always release connection on scope exit
-    let _connection_guard = crate::traffic_shaping::ConnectionGuard::new(chaos.traffic_shaper.as_ref().clone());
+    let _connection_guard =
+        crate::traffic_shaping::ConnectionGuard::new(chaos.traffic_shaper.as_ref().clone());
 
     // Check for packet loss (simulate dropped connection)
     if chaos.traffic_shaper.should_drop_packet() {
@@ -241,7 +243,7 @@ mod tests {
             rate_limit: Some(RateLimitConfig {
                 enabled: true,
                 requests_per_second: 1,
-                burst_size: 2,  // burst_size is the total capacity, not additional requests
+                burst_size: 2, // burst_size is the total capacity, not additional requests
                 ..Default::default()
             }),
             ..Default::default()
@@ -250,19 +252,10 @@ mod tests {
         let middleware = Arc::new(ChaosMiddleware::new(config));
 
         // First two requests should succeed (rate + burst)
-        assert!(middleware
-            .rate_limiter
-            .check(Some("127.0.0.1"), Some("/test"))
-            .is_ok());
-        assert!(middleware
-            .rate_limiter
-            .check(Some("127.0.0.1"), Some("/test"))
-            .is_ok());
+        assert!(middleware.rate_limiter.check(Some("127.0.0.1"), Some("/test")).is_ok());
+        assert!(middleware.rate_limiter.check(Some("127.0.0.1"), Some("/test")).is_ok());
 
         // Third should fail
-        assert!(middleware
-            .rate_limiter
-            .check(Some("127.0.0.1"), Some("/test"))
-            .is_err());
+        assert!(middleware.rate_limiter.check(Some("127.0.0.1"), Some("/test")).is_err());
     }
 }

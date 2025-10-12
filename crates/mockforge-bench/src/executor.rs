@@ -3,7 +3,7 @@
 use crate::error::{BenchError, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 
@@ -37,9 +37,7 @@ impl K6Executor {
             .map_err(|e| BenchError::K6ExecutionFailed(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(BenchError::K6ExecutionFailed(
-                "Failed to get k6 version".to_string(),
-            ));
+            return Err(BenchError::K6ExecutionFailed("Failed to get k6 version".to_string()));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -72,17 +70,17 @@ impl K6Executor {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| BenchError::K6ExecutionFailed(e.to_string()))?;
+        let mut child = cmd.spawn().map_err(|e| BenchError::K6ExecutionFailed(e.to_string()))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| {
-            BenchError::K6ExecutionFailed("Failed to capture stdout".to_string())
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| BenchError::K6ExecutionFailed("Failed to capture stdout".to_string()))?;
 
-        let stderr = child.stderr.take().ok_or_else(|| {
-            BenchError::K6ExecutionFailed("Failed to capture stderr".to_string())
-        })?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| BenchError::K6ExecutionFailed("Failed to capture stderr".to_string()))?;
 
         // Stream output
         let stdout_reader = BufReader::new(stdout);
@@ -94,9 +92,7 @@ impl K6Executor {
         // Create progress indicator
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
-                .unwrap(),
+            ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap(),
         );
         spinner.set_message("Running load test...");
 
@@ -120,10 +116,8 @@ impl K6Executor {
         });
 
         // Wait for completion
-        let status = child
-            .wait()
-            .await
-            .map_err(|e| BenchError::K6ExecutionFailed(e.to_string()))?;
+        let status =
+            child.wait().await.map_err(|e| BenchError::K6ExecutionFailed(e.to_string()))?;
 
         if !status.success() {
             return Err(BenchError::K6ExecutionFailed(format!(
@@ -157,9 +151,7 @@ impl K6Executor {
             .map_err(|e| BenchError::ResultsParseError(e.to_string()))?;
 
         Ok(K6Results {
-            total_requests: json["metrics"]["http_reqs"]["values"]["count"]
-                .as_u64()
-                .unwrap_or(0),
+            total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
             failed_requests: json["metrics"]["http_req_failed"]["values"]["passes"]
                 .as_u64()
                 .unwrap_or(0),

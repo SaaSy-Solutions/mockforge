@@ -84,7 +84,9 @@ mod validation_tests {
         let result =
             validate_openapi_operation_security(&openapi_spec, "/users", "GET", None, None);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.contains("Security validation failed") || e.contains("authentication") || e.contains("Bearer")));
+        assert!(result.errors.iter().any(|e| e.contains("Security validation failed")
+            || e.contains("authentication")
+            || e.contains("Bearer")));
 
         // Test with invalid Bearer token format
         let result = validate_openapi_operation_security(
@@ -95,7 +97,9 @@ mod validation_tests {
             None,
         );
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.contains("Security validation failed") || e.contains("Bearer") || e.contains("authentication")));
+        assert!(result.errors.iter().any(|e| e.contains("Security validation failed")
+            || e.contains("Bearer")
+            || e.contains("authentication")));
     }
 
     #[test]
@@ -138,7 +142,9 @@ mod validation_tests {
         let result =
             validate_openapi_operation_security(&openapi_spec, "/users", "GET", None, None);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.contains("Security validation failed") || e.contains("API key") || e.contains("authentication")));
+        assert!(result.errors.iter().any(|e| e.contains("Security validation failed")
+            || e.contains("API key")
+            || e.contains("authentication")));
     }
 
     #[test]
@@ -208,12 +214,22 @@ mod validation_tests {
 
         // Check that we get detailed error information
         let error_text = result.errors.join(" ");
-        assert!(error_text.contains("shorter than 3 characters") || error_text.contains("minLength"),
-                "Should have username length error: {}", error_text);
-        assert!(error_text.contains("email") && error_text.contains("required"),
-                "Should have missing email error: {}", error_text);
-        assert!(error_text.contains("greater than the maximum of 100") || error_text.contains("maximum"),
-                "Should have age range error: {}", error_text);
+        assert!(
+            error_text.contains("shorter than 3 characters") || error_text.contains("minLength"),
+            "Should have username length error: {}",
+            error_text
+        );
+        assert!(
+            error_text.contains("email") && error_text.contains("required"),
+            "Should have missing email error: {}",
+            error_text
+        );
+        assert!(
+            error_text.contains("greater than the maximum of 100")
+                || error_text.contains("maximum"),
+            "Should have age range error: {}",
+            error_text
+        );
 
         println!("✓ Enhanced schema validation integration test passed");
     }
@@ -459,7 +475,6 @@ mod validation_tests {
 
     #[test]
     fn test_schema_diff_with_enhanced_error_reporting() {
-
         // Test complex nested object validation
         let expected_schema = json!({
             "type": "object",
@@ -510,14 +525,28 @@ mod validation_tests {
 
         // Check that we get detailed error information
         let error_text = result.errors.join(" ");
-        assert!(error_text.contains("pattern") || error_text.contains("John123"),
-                "Should have pattern validation error: {}", error_text);
-        assert!(error_text.contains("format") || error_text.contains("uri") || error_text.contains("not-a-uri"),
-                "Should have format validation error: {}", error_text);
-        assert!(error_text.contains("additional") || error_text.contains("extra_field"),
-                "Should have additional property error: {}", error_text);
-        assert!(error_text.contains("minLength") || error_text.contains("shorter than 2 characters"),
-                "Should have array item validation error: {}", error_text);
+        assert!(
+            error_text.contains("pattern") || error_text.contains("John123"),
+            "Should have pattern validation error: {}",
+            error_text
+        );
+        assert!(
+            error_text.contains("format")
+                || error_text.contains("uri")
+                || error_text.contains("not-a-uri"),
+            "Should have format validation error: {}",
+            error_text
+        );
+        assert!(
+            error_text.contains("additional") || error_text.contains("extra_field"),
+            "Should have additional property error: {}",
+            error_text
+        );
+        assert!(
+            error_text.contains("minLength") || error_text.contains("shorter than 2 characters"),
+            "Should have array item validation error: {}",
+            error_text
+        );
     }
 
     #[test]
@@ -604,7 +633,9 @@ mod validation_tests {
 
                 if output.is_err() || !output.unwrap().status.success() {
                     // If protoc fails, skip the test
-                    println!("Skipping protobuf test - protoc not available or proto file not found");
+                    println!(
+                        "Skipping protobuf test - protoc not available or proto file not found"
+                    );
                     return;
                 }
             } else {

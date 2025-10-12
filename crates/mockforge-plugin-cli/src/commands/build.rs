@@ -12,10 +12,7 @@ pub async fn build_plugin(path: Option<&Path>, release: bool) -> Result<()> {
 
     // Check if wasm32-wasi target is installed
     if !check_wasm_target()? {
-        println!(
-            "{}",
-            "wasm32-wasi target not found. Installing...".yellow()
-        );
+        println!("{}", "wasm32-wasi target not found. Installing...".yellow());
         install_wasm_target()?;
     }
 
@@ -32,11 +29,7 @@ pub async fn build_plugin(path: Option<&Path>, release: bool) -> Result<()> {
 
     // Build the plugin
     println!("{}", "Building plugin WASM module...".cyan().bold());
-    println!(
-        "  {} {}",
-        "Profile:".bold(),
-        if release { "release" } else { "debug" }
-    );
+    println!("  {} {}", "Profile:".bold(), if release { "release" } else { "debug" });
     println!("  {} wasm32-wasi", "Target:".bold());
     println!();
 
@@ -47,9 +40,7 @@ pub async fn build_plugin(path: Option<&Path>, release: bool) -> Result<()> {
         cmd.arg("--release");
     }
 
-    let status = cmd
-        .status()
-        .context("Failed to execute cargo build")?;
+    let status = cmd.status().context("Failed to execute cargo build")?;
 
     if !status.success() {
         anyhow::bail!("Build failed");
@@ -57,10 +48,7 @@ pub async fn build_plugin(path: Option<&Path>, release: bool) -> Result<()> {
 
     // Print output location
     let profile = if release { "release" } else { "debug" };
-    let output_path = project_dir
-        .join("target")
-        .join("wasm32-wasi")
-        .join(profile);
+    let output_path = project_dir.join("target").join("wasm32-wasi").join(profile);
 
     println!();
     println!("{}", "Build successful!".green().bold());

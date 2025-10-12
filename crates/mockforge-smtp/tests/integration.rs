@@ -70,14 +70,17 @@ async fn find_available_port() -> u16 {
 }
 
 /// Connect to SMTP server and read greeting
-async fn connect_and_read_greeting(port: u16) -> (BufReader<tokio::net::tcp::OwnedReadHalf>, tokio::net::tcp::OwnedWriteHalf, String) {
-    let stream = timeout(
-        Duration::from_secs(5),
-        TcpStream::connect(format!("127.0.0.1:{}", port)),
-    )
-    .await
-    .expect("Connection timeout")
-    .expect("Failed to connect");
+async fn connect_and_read_greeting(
+    port: u16,
+) -> (
+    BufReader<tokio::net::tcp::OwnedReadHalf>,
+    tokio::net::tcp::OwnedWriteHalf,
+    String,
+) {
+    let stream = timeout(Duration::from_secs(5), TcpStream::connect(format!("127.0.0.1:{}", port)))
+        .await
+        .expect("Connection timeout")
+        .expect("Failed to connect");
 
     let (reader, writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
@@ -107,11 +110,7 @@ async fn test_smtp_server_starts_and_accepts_connections() {
     // Try to connect
     let (_reader, _writer, greeting) = connect_and_read_greeting(port).await;
 
-    assert!(
-        greeting.starts_with("220"),
-        "Expected SMTP greeting, got: {}",
-        greeting
-    );
+    assert!(greeting.starts_with("220"), "Expected SMTP greeting, got: {}", greeting);
     assert!(greeting.contains("test-smtp"), "Greeting should contain hostname");
 }
 
@@ -137,10 +136,7 @@ async fn test_smtp_basic_conversation() {
     // Read all EHLO response lines (it returns multiple lines)
     loop {
         let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .await
-            .expect("Failed to read EHLO response");
+        reader.read_line(&mut line).await.expect("Failed to read EHLO response");
         response.push_str(&line);
 
         // EHLO responses end with "250 " (with space) instead of "250-"
@@ -168,22 +164,13 @@ async fn test_smtp_basic_conversation() {
         .write_all(b"RCPT TO:<recipient@example.com>\r\n")
         .await
         .expect("Failed to write RCPT TO");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read RCPT TO response");
+    reader.read_line(&mut response).await.expect("Failed to read RCPT TO response");
     assert!(response.contains("250"), "Expected 250 OK for RCPT TO");
     response.clear();
 
     // DATA command
-    writer
-        .write_all(b"DATA\r\n")
-        .await
-        .expect("Failed to write DATA");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read DATA response");
+    writer.write_all(b"DATA\r\n").await.expect("Failed to write DATA");
+    reader.read_line(&mut response).await.expect("Failed to read DATA response");
     assert!(response.contains("354"), "Expected 354 response for DATA");
     response.clear();
 
@@ -192,18 +179,12 @@ async fn test_smtp_basic_conversation() {
         .write_all(b"Subject: Test Email\r\n")
         .await
         .expect("Failed to write subject");
-    writer
-        .write_all(b"\r\n")
-        .await
-        .expect("Failed to write blank line");
+    writer.write_all(b"\r\n").await.expect("Failed to write blank line");
     writer
         .write_all(b"This is a test email.\r\n")
         .await
         .expect("Failed to write body");
-    writer
-        .write_all(b".\r\n")
-        .await
-        .expect("Failed to write end of data");
+    writer.write_all(b".\r\n").await.expect("Failed to write end of data");
 
     reader
         .read_line(&mut response)
@@ -217,14 +198,8 @@ async fn test_smtp_basic_conversation() {
     response.clear();
 
     // QUIT command
-    writer
-        .write_all(b"QUIT\r\n")
-        .await
-        .expect("Failed to write QUIT");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read QUIT response");
+    writer.write_all(b"QUIT\r\n").await.expect("Failed to write QUIT");
+    reader.read_line(&mut response).await.expect("Failed to read QUIT response");
     assert!(response.contains("221"), "Expected 221 Bye response");
 }
 
@@ -265,18 +240,12 @@ async fn test_smtp_fixture_matching() {
     registry.load_fixtures(temp_dir.path()).expect("Failed to load fixtures");
 
     // Test matching
-    let matching_fixture = registry.find_matching_fixture(
-        "sender@test.com",
-        "user123@example.com",
-        "Test Subject",
-    );
+    let matching_fixture =
+        registry.find_matching_fixture("sender@test.com", "user123@example.com", "Test Subject");
     assert!(matching_fixture.is_some(), "Should find matching fixture");
 
-    let non_matching = registry.find_matching_fixture(
-        "sender@test.com",
-        "admin@example.com",
-        "Test Subject",
-    );
+    let non_matching =
+        registry.find_matching_fixture("sender@test.com", "admin@example.com", "Test Subject");
     assert!(non_matching.is_none(), "Should not find non-matching fixture");
 }
 
@@ -298,9 +267,7 @@ async fn test_smtp_mailbox_storage() {
         raw: None,
     };
 
-    registry
-        .store_email(email.clone())
-        .expect("Failed to store email");
+    registry.store_email(email.clone()).expect("Failed to store email");
 
     // Retrieve emails
     let emails = registry.get_emails().expect("Failed to get emails");
@@ -309,9 +276,7 @@ async fn test_smtp_mailbox_storage() {
     assert_eq!(emails[0].subject, "Test Email");
 
     // Get specific email by ID
-    let retrieved = registry
-        .get_email_by_id("test-123")
-        .expect("Failed to get email by ID");
+    let retrieved = registry.get_email_by_id("test-123").expect("Failed to get email by ID");
     assert!(retrieved.is_some());
     assert_eq!(retrieved.unwrap().id, "test-123");
 
@@ -362,30 +327,18 @@ async fn test_smtp_protocol_commands() {
     let mut response = String::new();
 
     // Test NOOP command
-    writer
-        .write_all(b"NOOP\r\n")
-        .await
-        .expect("Failed to write NOOP");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read NOOP response");
+    writer.write_all(b"NOOP\r\n").await.expect("Failed to write NOOP");
+    reader.read_line(&mut response).await.expect("Failed to read NOOP response");
     assert!(response.contains("250"), "NOOP should return 250 OK");
     response.clear();
 
     // Test HELP command
-    writer
-        .write_all(b"HELP\r\n")
-        .await
-        .expect("Failed to write HELP");
+    writer.write_all(b"HELP\r\n").await.expect("Failed to write HELP");
 
     // Read all HELP response lines (it returns multiple lines)
     loop {
         let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .await
-            .expect("Failed to read HELP response");
+        reader.read_line(&mut line).await.expect("Failed to read HELP response");
         response.push_str(&line);
 
         // HELP responses end with "214 " (with space) instead of "214-"
@@ -404,19 +357,13 @@ async fn test_smtp_protocol_commands() {
     reader.read_line(&mut response).await.ok();
     response.clear();
 
-    writer
-        .write_all(b"RSET\r\n")
-        .await
-        .expect("Failed to write RSET");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read RSET response");
+    writer.write_all(b"RSET\r\n").await.expect("Failed to write RSET");
+    reader.read_line(&mut response).await.expect("Failed to read RSET response");
     assert!(response.contains("250"), "RSET should return 250 OK");
 }
 
 #[tokio::test]
-async fn test_smtp_helo_vs_ehlo() {
+async fn test_smtp_hello_vs_ehlo() {
     let (server, port) = start_test_server().await;
 
     tokio::spawn(async move {
@@ -425,20 +372,17 @@ async fn test_smtp_helo_vs_ehlo() {
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // Test HELO
+    // Test HELLO
     let (mut reader, mut writer, _greeting) = connect_and_read_greeting(port).await;
     let mut response = String::new();
 
     writer
-        .write_all(b"HELO client.example.com\r\n")
+        .write_all(b"HELLO client.example.com\r\n")
         .await
-        .expect("Failed to write HELO");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read HELO response");
-    assert!(response.contains("250"), "HELO should return 250");
-    assert!(!response.contains("SIZE"), "HELO should not list extensions");
+        .expect("Failed to write HELLO");
+    reader.read_line(&mut response).await.expect("Failed to read HELLO response");
+    assert!(response.contains("250"), "HELLO should return 250");
+    assert!(!response.contains("SIZE"), "HELLO should not list extensions");
 
     writer.write_all(b"QUIT\r\n").await.ok();
 
@@ -486,10 +430,7 @@ async fn test_smtp_invalid_command() {
         .write_all(b"INVALID COMMAND\r\n")
         .await
         .expect("Failed to write invalid command");
-    reader
-        .read_line(&mut response)
-        .await
-        .expect("Failed to read response");
+    reader.read_line(&mut response).await.expect("Failed to read response");
 
     // Should return 502 (command not implemented) or 500 (syntax error)
     assert!(

@@ -155,13 +155,7 @@ impl ContractValidator {
 
                 for (method, op_opt) in operations {
                     if let Some(op) = op_opt {
-                        self.validate_endpoint(
-                            &mut result,
-                            base_url,
-                            method,
-                            path,
-                            op,
-                        ).await;
+                        self.validate_endpoint(&mut result, base_url, method, path, op).await;
                     }
                 }
             }
@@ -286,8 +280,15 @@ impl ContractValidator {
     pub fn generate_report(&self, result: &ValidationResult) -> String {
         let mut report = String::new();
 
-        report.push_str(&"# Contract Validation Report\n\n".to_string());
-        report.push_str(&format!("**Status**: {}\n", if result.passed { "✓ PASSED" } else { "✗ FAILED" }));
+        report.push_str("# Contract Validation Report\n\n");
+        report.push_str(&format!(
+            "**Status**: {}\n",
+            if result.passed {
+                "✓ PASSED"
+            } else {
+                "✗ FAILED"
+            }
+        ));
         report.push_str(&format!("**Total Checks**: {}\n", result.total_checks));
         report.push_str(&format!("**Passed**: {}\n", result.passed_checks));
         report.push_str(&format!("**Failed**: {}\n\n", result.failed_checks));

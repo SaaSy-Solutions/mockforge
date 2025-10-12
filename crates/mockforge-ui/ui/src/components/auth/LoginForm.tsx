@@ -39,7 +39,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       admin: { username: 'admin', password: 'admin123' },
       viewer: { username: 'viewer', password: 'viewer123' },
     };
-    
+
     setCredentials(demoCredentials[role]);
   };
 

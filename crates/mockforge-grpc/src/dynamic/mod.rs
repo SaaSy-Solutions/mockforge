@@ -145,7 +145,11 @@ pub async fn discover_services(
         debug!("Registered service: {}", service_name);
     }
     let service_reg_duration = service_reg_start.elapsed();
-    info!("Service registration completed for {} services (took {:?})", registry.service_names().len(), service_reg_duration);
+    info!(
+        "Service registration completed for {} services (took {:?})",
+        registry.service_names().len(),
+        service_reg_duration
+    );
 
     let total_discovery_duration = discovery_start.elapsed();
     info!("Service discovery completed (total time: {:?})", total_discovery_duration);
@@ -336,7 +340,6 @@ async fn start_grpc_only_server(
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

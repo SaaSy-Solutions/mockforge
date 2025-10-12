@@ -15,29 +15,19 @@ async fn test_server_starts_with_malformed_json_spec() {
     let spec_path = temp_dir.path().join("invalid.json");
 
     // Write malformed JSON
-    tokio::fs::write(&spec_path, "{ invalid json }")
-        .await
-        .unwrap();
+    tokio::fs::write(&spec_path, "{ invalid json }").await.unwrap();
 
     // Server should build successfully despite invalid spec
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     // Start server to verify it doesn't crash
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     // Give server time to start
@@ -48,7 +38,10 @@ async fn test_server_starts_with_malformed_json_spec() {
 
     // Health endpoint should still work
     let response = client.get(&format!("{}/health", base_url)).send().await.unwrap();
-    assert!(response.status().is_success(), "Health endpoint should work even with invalid spec");
+    assert!(
+        response.status().is_success(),
+        "Health endpoint should work even with invalid spec"
+    );
 
     // Cleanup
     drop(server);
@@ -77,23 +70,15 @@ async fn test_server_starts_with_incomplete_openapi_spec() {
         .unwrap();
 
     // Server should build successfully despite incomplete spec
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -101,11 +86,7 @@ async fn test_server_starts_with_incomplete_openapi_spec() {
     let client = reqwest::Client::new();
 
     // Health check should work
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -121,33 +102,21 @@ async fn test_server_starts_with_empty_spec_file() {
     // Write empty file
     tokio::fs::write(&spec_path, "").await.unwrap();
 
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -163,33 +132,21 @@ async fn test_server_starts_with_whitespace_only_spec() {
     // Write file with only whitespace
     tokio::fs::write(&spec_path, "   \n\t  \n  ").await.unwrap();
 
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -216,33 +173,21 @@ async fn test_server_starts_with_invalid_openapi_version() {
         .await
         .unwrap();
 
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -260,22 +205,15 @@ async fn test_server_starts_with_nonexistent_spec_path() {
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -289,27 +227,17 @@ async fn test_management_endpoints_work_with_failed_spec() {
     let spec_path = temp_dir.path().join("broken.json");
 
     // Write completely broken spec
-    tokio::fs::write(&spec_path, "not even json at all!@#$")
-        .await
-        .unwrap();
+    tokio::fs::write(&spec_path, "not even json at all!@#$").await.unwrap();
 
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -322,11 +250,7 @@ async fn test_management_endpoints_work_with_failed_spec() {
     assert!(response.status().is_success());
 
     // Test routes endpoint (should return empty list)
-    let response = client
-        .get(&format!("{}/__mockforge/routes", base_url))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("{}/__mockforge/routes", base_url)).send().await.unwrap();
     assert!(response.status().is_success());
 
     let routes: serde_json::Value = response.json().await.unwrap();
@@ -355,33 +279,21 @@ async fn test_server_starts_with_malformed_yaml_spec() {
         .await
         .unwrap();
 
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -434,38 +346,24 @@ async fn test_server_handles_spec_with_circular_refs() {
         }
     });
 
-    tokio::fs::write(&spec_path, serde_json::to_vec(&spec).unwrap())
-        .await
-        .unwrap();
+    tokio::fs::write(&spec_path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
     // Should handle gracefully
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        None,
-        None,
-    )
-    .await;
+    let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);
@@ -494,33 +392,22 @@ async fn test_validation_ignored_when_spec_fails() {
     });
 
     // Should still build successfully
-    let router = build_router(
-        Some(spec_path.to_string_lossy().to_string()),
-        validation_options,
-        None,
-    )
-    .await;
+    let router =
+        build_router(Some(spec_path.to_string_lossy().to_string()), validation_options, None).await;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let server = tokio::spawn(async move {
-        axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap()
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(&format!("http://{}/health", addr))
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(&format!("http://{}/health", addr)).send().await.unwrap();
     assert!(response.status().is_success());
 
     drop(server);

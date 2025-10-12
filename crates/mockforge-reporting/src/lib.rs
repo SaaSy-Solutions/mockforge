@@ -13,15 +13,15 @@ pub mod pdf;
 pub mod trend_analysis;
 
 pub use comparison::{ComparisonReport, ComparisonReportGenerator};
-pub use csv_export::{CsvExporter, CsvExportConfig, CsvBatchExporter};
+pub use csv_export::{CsvBatchExporter, CsvExportConfig, CsvExporter};
 pub use dashboard_layouts::{
-    DashboardLayout, DashboardLayoutManager, DashboardLayoutBuilder,
-    DashboardTemplates, Widget, WidgetType, DataSource, GridConfig,
+    DashboardLayout, DashboardLayoutBuilder, DashboardLayoutManager, DashboardTemplates,
+    DataSource, GridConfig, Widget, WidgetType,
 };
-pub use email::{EmailNotifier, EmailConfig, EmailReport};
-pub use flamegraph::{FlamegraphGenerator, TraceData, TraceSpan, FlamegraphStats};
-pub use pdf::{PdfReportGenerator, PdfConfig};
-pub use trend_analysis::{TrendAnalyzer, TrendReport, TrendDirection};
+pub use email::{EmailConfig, EmailNotifier, EmailReport};
+pub use flamegraph::{FlamegraphGenerator, FlamegraphStats, TraceData, TraceSpan};
+pub use pdf::{PdfConfig, PdfReportGenerator};
+pub use trend_analysis::{TrendAnalyzer, TrendDirection, TrendReport};
 
 use thiserror::Error;
 

@@ -99,17 +99,10 @@ pub struct AuthRequest {
 
 impl AuthRequest {
     /// Create from axum request components
-    pub fn from_axum(
-        method: Method,
-        uri: Uri,
-        headers: HeaderMap,
-        body: Option<Vec<u8>>,
-    ) -> Self {
+    pub fn from_axum(method: Method, uri: Uri, headers: HeaderMap, body: Option<Vec<u8>>) -> Self {
         let query_params = uri
             .query()
-            .map(|q| url::form_urlencoded::parse(q.as_bytes())
-                .into_owned()
-                .collect())
+            .map(|q| url::form_urlencoded::parse(q.as_bytes()).into_owned().collect())
             .unwrap_or_default();
 
         let client_ip = headers
@@ -118,10 +111,8 @@ impl AuthRequest {
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
 
-        let user_agent = headers
-            .get("user-agent")
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string());
+        let user_agent =
+            headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
         Self {
             method,
@@ -137,22 +128,21 @@ impl AuthRequest {
 
     /// Get authorization header value
     pub fn authorization_header(&self) -> Option<&str> {
-        self.headers
-            .get("authorization")
-            .and_then(|h| h.to_str().ok())
+        self.headers.get("authorization").and_then(|h| h.to_str().ok())
     }
 
     /// Get bearer token from authorization header
     pub fn bearer_token(&self) -> Option<&str> {
-        self.authorization_header()
-            .and_then(|auth| auth.strip_prefix("Bearer "))
+        self.authorization_header().and_then(|auth| auth.strip_prefix("Bearer "))
     }
 
     /// Get basic auth credentials from authorization header
     pub fn basic_credentials(&self) -> Option<(String, String)> {
         self.authorization_header()
             .and_then(|auth| auth.strip_prefix("Basic "))
-            .and_then(|encoded| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded).ok())
+            .and_then(|encoded| {
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded).ok()
+            })
             .and_then(|decoded| String::from_utf8(decoded).ok())
             .and_then(|creds| {
                 let parts: Vec<&str> = creds.splitn(2, ':').collect();
@@ -166,9 +156,7 @@ impl AuthRequest {
 
     /// Get custom header value
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .get(name)
-            .and_then(|h| h.to_str().ok())
+        self.headers.get(name).and_then(|h| h.to_str().ok())
     }
 
     /// Get query parameter value
@@ -373,14 +361,11 @@ pub trait AuthPluginFactory: Send + Sync {
     fn create_plugin(&self) -> Result<Box<dyn AuthPlugin>>;
 }
 
-
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
-        assert!(true);
     }
 }

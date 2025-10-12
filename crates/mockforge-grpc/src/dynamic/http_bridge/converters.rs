@@ -556,7 +556,6 @@ impl ProtobufJsonConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_json_to_protobuf_simple_types() {

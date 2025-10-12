@@ -3,10 +3,10 @@
 //! Supports multi-endpoint test flows with state management, variable extraction,
 //! and conditional logic for comprehensive integration testing.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Integration test workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -300,7 +300,7 @@ impl IntegrationTestGenerator {
         code.push_str("use std::collections::HashMap;\n\n");
 
         // Test function
-        code.push_str(&"#[tokio::test]\n".to_string());
+        code.push_str("#[tokio::test]\n");
         code.push_str(&format!("async fn test_{}() {{\n", self.sanitize_name(&self.workflow.name)));
 
         // Setup
@@ -310,7 +310,10 @@ impl IntegrationTestGenerator {
         // Variables
         code.push_str("    let mut variables: HashMap<String, String> = HashMap::new();\n");
         for (key, value) in &self.workflow.setup.variables {
-            code.push_str(&format!("    variables.insert(\"{}\".to_string(), \"{}\".to_string());\n", key, value));
+            code.push_str(&format!(
+                "    variables.insert(\"{}\".to_string(), \"{}\".to_string());\n",
+                key, value
+            ));
         }
         code.push('\n');
 
@@ -324,7 +327,11 @@ impl IntegrationTestGenerator {
             }
 
             // Build URL
-            code.push_str(&format!("    let url_{} = format!(\"{{}}{}\"", idx, self.replace_vars(&step.request.path)));
+            code.push_str(&format!(
+                "    let url_{} = format!(\"{{}}{}\"",
+                idx,
+                self.replace_vars(&step.request.path)
+            ));
             code.push_str(", base_url");
             // Add variable substitutions
             for var in self.extract_variables(&step.request.path) {
@@ -333,8 +340,12 @@ impl IntegrationTestGenerator {
             code.push_str(");\n");
 
             // Build request
-            code.push_str(&format!("    let mut request_{} = client.{}(&url_{})",
-                idx, step.request.method.to_lowercase(), idx));
+            code.push_str(&format!(
+                "    let mut request_{} = client.{}(&url_{})",
+                idx,
+                step.request.method.to_lowercase(),
+                idx
+            ));
 
             // Add headers
             if !step.request.headers.is_empty() {
@@ -354,16 +365,25 @@ impl IntegrationTestGenerator {
             code.push_str(";\n\n");
 
             // Send request
-            code.push_str(&format!("    let response_{} = request_{}.send().await.expect(\"Request failed\");\n", idx, idx));
+            code.push_str(&format!(
+                "    let response_{} = request_{}.send().await.expect(\"Request failed\");\n",
+                idx, idx
+            ));
 
             // Validation
             if let Some(status) = step.validation.status_code {
-                code.push_str(&format!("    assert_eq!(response_{}.status().as_u16(), {});\n", idx, status));
+                code.push_str(&format!(
+                    "    assert_eq!(response_{}.status().as_u16(), {});\n",
+                    idx, status
+                ));
             }
 
             // Extract variables
             if !step.extract.is_empty() {
-                code.push_str(&format!("    let body_{} = response_{}.text().await.expect(\"Failed to read body\");\n", idx, idx));
+                code.push_str(&format!(
+                    "    let body_{} = response_{}.text().await.expect(\"Failed to read body\");\n",
+                    idx, idx
+                ));
                 code.push_str(&format!("    let json_{}: Value = serde_json::from_str(&body_{}).expect(\"Invalid JSON\");\n", idx, idx));
 
                 for extraction in &step.extract {
@@ -376,7 +396,10 @@ impl IntegrationTestGenerator {
 
             // Delay
             if let Some(delay) = step.delay_ms {
-                code.push_str(&format!("    tokio::time::sleep(tokio::time::Duration::from_millis({})).await;\n", delay));
+                code.push_str(&format!(
+                    "    tokio::time::sleep(tokio::time::Duration::from_millis({})).await;\n",
+                    delay
+                ));
             }
 
             code.push('\n');
@@ -421,7 +444,10 @@ impl IntegrationTestGenerator {
             // Add headers
             if !step.request.headers.is_empty() {
                 code.push_str(", headers={");
-                let headers: Vec<String> = step.request.headers.iter()
+                let headers: Vec<String> = step
+                    .request
+                    .headers
+                    .iter()
                     .map(|(k, v)| format!("'{}': '{}'", k, self.replace_vars_python(v)))
                     .collect();
                 code.push_str(&headers.join(", "));
@@ -443,8 +469,12 @@ impl IntegrationTestGenerator {
             // Extract variables
             for extraction in &step.extract {
                 if extraction.source == ExtractionSource::Body {
-                    code.push_str(&format!("    variables['{}'] = response.json().get('{}', '{}')\n",
-                        extraction.name, extraction.pattern, extraction.default.as_deref().unwrap_or("")));
+                    code.push_str(&format!(
+                        "    variables['{}'] = response.json().get('{}', '{}')\n",
+                        extraction.name,
+                        extraction.pattern,
+                        extraction.default.as_deref().unwrap_or("")
+                    ));
                 }
             }
 
@@ -491,14 +521,21 @@ impl IntegrationTestGenerator {
             if !step.request.headers.is_empty() {
                 code.push_str("      headers: {\n");
                 for (key, value) in &step.request.headers {
-                    code.push_str(&format!("        '{}': '{}',\n", key, self.replace_vars_js(value)));
+                    code.push_str(&format!(
+                        "        '{}': '{}',\n",
+                        key,
+                        self.replace_vars_js(value)
+                    ));
                 }
                 code.push_str("      },\n");
             }
 
             // Add body
             if let Some(body) = &step.request.body {
-                code.push_str(&format!("      body: JSON.stringify({}),\n", self.replace_vars_js(body)));
+                code.push_str(&format!(
+                    "      body: JSON.stringify({}),\n",
+                    self.replace_vars_js(body)
+                ));
             }
 
             code.push_str("    });\n");
@@ -513,15 +550,23 @@ impl IntegrationTestGenerator {
                 code.push_str(&format!("    const data{} = await response{}.json();\n", idx, idx));
                 for extraction in &step.extract {
                     if extraction.source == ExtractionSource::Body {
-                        code.push_str(&format!("    variables['{}'] = data{}.{} || '{}';\n",
-                            extraction.name, idx, extraction.pattern, extraction.default.as_deref().unwrap_or("")));
+                        code.push_str(&format!(
+                            "    variables['{}'] = data{}.{} || '{}';\n",
+                            extraction.name,
+                            idx,
+                            extraction.pattern,
+                            extraction.default.as_deref().unwrap_or("")
+                        ));
                     }
                 }
             }
 
             // Delay
             if let Some(delay) = step.delay_ms {
-                code.push_str(&format!("    await new Promise(resolve => setTimeout(resolve, {}));\n", delay));
+                code.push_str(&format!(
+                    "    await new Promise(resolve => setTimeout(resolve, {}));\n",
+                    delay
+                ));
             }
 
             code.push('\n');
@@ -579,7 +624,7 @@ impl IntegrationTestGenerator {
     fn replace_vars_python(&self, text: &str) -> String {
         let mut result = text.to_string();
         for var in self.extract_variables(text) {
-            result = result.replace(&format!("{{{}}}", var), &format!("{{variables['{}']}}",  var));
+            result = result.replace(&format!("{{{}}}", var), &format!("{{variables['{}']}}", var));
         }
         result
     }
@@ -587,22 +632,29 @@ impl IntegrationTestGenerator {
     fn replace_vars_js(&self, text: &str) -> String {
         let mut result = text.to_string();
         for var in self.extract_variables(text) {
-            result = result.replace(&format!("{{{}}}", var), &format!("${{variables['{}']}}",  var));
+            result = result.replace(&format!("{{{}}}", var), &format!("${{variables['{}']}}", var));
         }
         result
     }
 
     fn generate_condition_check(&self, condition: &StepCondition) -> String {
         let mut code = String::new();
-        code.push_str(&format!("    if let Some(val) = variables.get(\"{}\") {{\n", condition.variable));
+        code.push_str(&format!(
+            "    if let Some(val) = variables.get(\"{}\") {{\n",
+            condition.variable
+        ));
 
         let check = match condition.operator {
             ConditionOperator::Equals => format!("val == \"{}\"", condition.value),
             ConditionOperator::NotEquals => format!("val != \"{}\"", condition.value),
             ConditionOperator::Contains => format!("val.contains(\"{}\")", condition.value),
             ConditionOperator::Exists => "true".to_string(),
-            ConditionOperator::GreaterThan => format!("val.parse::<f64>().unwrap_or(0.0) > {}", condition.value),
-            ConditionOperator::LessThan => format!("val.parse::<f64>().unwrap_or(0.0) < {}", condition.value),
+            ConditionOperator::GreaterThan => {
+                format!("val.parse::<f64>().unwrap_or(0.0) > {}", condition.value)
+            }
+            ConditionOperator::LessThan => {
+                format!("val.parse::<f64>().unwrap_or(0.0) < {}", condition.value)
+            }
         };
 
         code.push_str(&format!("        if !({}) {{\n", check));

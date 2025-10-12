@@ -704,7 +704,6 @@ impl RouteGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_clean_service_name() {
@@ -930,9 +929,9 @@ mod tests {
             ("/api/greeter/sayhello", Some("greeter".to_string())),
             ("/api/user/get", Some("user".to_string())),
             ("/api/complex.service/name", Some("complex.service".to_string())),
-            ("/api/single", None), // Not enough parts
+            ("/api/single", None),     // Not enough parts
             ("/v1/test/method", None), // Wrong base path
-            ("/other/path", None), // Wrong base path
+            ("/other/path", None),     // Wrong base path
             ("", None),
             ("/api/", None),
             ("/api/greeter/", None), // Empty method name
@@ -977,9 +976,9 @@ mod tests {
             ("/api/greeter/sayhello", Some("sayhello".to_string())),
             ("/api/user/get", Some("get".to_string())),
             ("/api/complex.service/method_name", Some("method_name".to_string())),
-            ("/api/single", None), // Not enough parts
+            ("/api/single", None),     // Not enough parts
             ("/v1/test/method", None), // Wrong base path
-            ("/other/path", None), // Wrong base path
+            ("/other/path", None),     // Wrong base path
             ("", None),
             ("/api/", None),
             ("/api/greeter/", None), // Empty method name

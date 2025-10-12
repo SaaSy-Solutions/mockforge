@@ -8,23 +8,36 @@
 // Re-export core plugin traits and types
 pub use mockforge_plugin_core::{
     // Auth plugin types
-    AuthPlugin, AuthPluginConfig, AuthRequest, AuthResponse, UserIdentity,
-    // Template plugin types
-    TemplatePlugin, TemplatePluginConfig, TemplateFunction, FunctionParameter,
+    AuthPlugin,
+    AuthPluginConfig,
+    AuthRequest,
+    AuthResponse,
+    FunctionParameter,
     // Common types
-    PluginCapabilities, PluginContext, PluginResult,
-    PluginError, PluginId, PluginVersion, PluginInfo, PluginManifest,
+    PluginCapabilities,
+    PluginContext,
+    PluginError,
+    PluginId,
+    PluginInfo,
+    PluginManifest,
+    PluginResult,
+    PluginVersion,
+    TemplateFunction,
+    // Template plugin types
+    TemplatePlugin,
+    TemplatePluginConfig,
+    UserIdentity,
 };
 
 // Re-export response plugin types from their module
 pub use mockforge_plugin_core::response::{
-    ResponsePlugin, ResponsePluginConfig, ResponseRequest, ResponseData,
+    ResponseData, ResponsePlugin, ResponsePluginConfig, ResponseRequest,
 };
 
 // Re-export datasource plugin types from their module
 pub use mockforge_plugin_core::datasource::{
-    DataSourcePlugin, DataSourcePluginConfig, DataConnection, DataQuery,
-    DataResult, DataRow, ColumnInfo, Schema, TableInfo,
+    ColumnInfo, DataConnection, DataQuery, DataResult, DataRow, DataSourcePlugin,
+    DataSourcePluginConfig, Schema, TableInfo,
 };
 
 // Re-export async trait

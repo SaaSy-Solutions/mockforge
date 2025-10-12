@@ -43,7 +43,9 @@ impl Difference {
         let description = match &difference_type {
             DifferenceType::Added { value, .. } => format!("Added: {}", value),
             DifferenceType::Removed { value, .. } => format!("Removed: {}", value),
-            DifferenceType::Changed { original, current, .. } => {
+            DifferenceType::Changed {
+                original, current, ..
+            } => {
                 format!("Changed from '{}' to '{}'", original, current)
             }
             DifferenceType::TypeChanged {
@@ -323,9 +325,8 @@ impl ResponseComparator {
 
                     match (orig_arr.get(i), curr_arr.get(i)) {
                         (Some(orig_val), Some(curr_val)) => {
-                            differences.extend(Self::compare_json_values(
-                                orig_val, curr_val, &new_path,
-                            ));
+                            differences
+                                .extend(Self::compare_json_values(orig_val, curr_val, &new_path));
                         }
                         (Some(orig_val), None) => {
                             differences.push(Difference::new(
@@ -528,10 +529,7 @@ mod tests {
         assert!(result.differences.len() >= 2);
 
         // Check for name change
-        let name_diff = result
-            .differences
-            .iter()
-            .find(|d| d.path == "body.name");
+        let name_diff = result.differences.iter().find(|d| d.path == "body.name");
         assert!(name_diff.is_some());
     }
 
@@ -546,10 +544,7 @@ mod tests {
         assert!(!result.matches);
 
         // Should detect array item added
-        let array_diff = result
-            .differences
-            .iter()
-            .find(|d| d.path.contains("items[3]"));
+        let array_diff = result.differences.iter().find(|d| d.path.contains("items[3]"));
         assert!(array_diff.is_some());
     }
 

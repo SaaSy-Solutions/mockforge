@@ -77,7 +77,10 @@ impl OpenApiRouteRegistry {
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
-        tracing::debug!("Generating routes from OpenAPI spec with {} paths", spec.spec.paths.paths.len());
+        tracing::debug!(
+            "Generating routes from OpenAPI spec with {} paths",
+            spec.spec.paths.paths.len()
+        );
 
         for (path, path_item) in &spec.spec.paths.paths {
             tracing::debug!("Processing path: {}", path);
@@ -177,14 +180,17 @@ impl OpenApiRouteRegistry {
 
     /// Build an Axum router from the generated routes
     pub fn build_router(&self) -> axum::Router {
-        use axum::routing::{get, post, put, delete, patch};
+        use axum::routing::{delete, get, patch, post, put};
 
         let mut router = axum::Router::new();
         tracing::debug!("Building router from {} routes", self.routes.len());
 
         for route in &self.routes {
             println!("Adding route: {} {}", route.method, route.path);
-            println!("Route operation responses: {:?}", route.operation.responses.responses.keys().collect::<Vec<_>>());
+            println!(
+                "Route operation responses: {:?}",
+                route.operation.responses.responses.keys().collect::<Vec<_>>()
+            );
 
             let route_clone = route.clone();
             let handler = move || {
@@ -194,7 +200,8 @@ impl OpenApiRouteRegistry {
                     let (status, response) = route.mock_response_with_status();
                     println!("Generated response with status: {}", status);
                     (
-                        axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK),
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
                         axum::response::Json(response),
                     )
                 }
@@ -204,23 +211,23 @@ impl OpenApiRouteRegistry {
                 "GET" => {
                     println!("Registering GET route: {}", route.path);
                     router = router.route(&route.path, get(handler));
-                },
+                }
                 "POST" => {
                     println!("Registering POST route: {}", route.path);
                     router = router.route(&route.path, post(handler));
-                },
+                }
                 "PUT" => {
                     println!("Registering PUT route: {}", route.path);
                     router = router.route(&route.path, put(handler));
-                },
+                }
                 "DELETE" => {
                     println!("Registering DELETE route: {}", route.path);
                     router = router.route(&route.path, delete(handler));
-                },
+                }
                 "PATCH" => {
                     println!("Registering PATCH route: {}", route.path);
                     router = router.route(&route.path, patch(handler));
-                },
+                }
                 _ => println!("Unsupported HTTP method: {}", route.method),
             }
         }
@@ -234,7 +241,7 @@ impl OpenApiRouteRegistry {
         latency_injector: crate::latency::LatencyInjector,
         failure_injector: Option<crate::failure_injection::FailureInjector>,
     ) -> axum::Router {
-        use axum::routing::{get, post, put, delete, patch};
+        use axum::routing::{delete, get, patch, post, put};
 
         let mut router = axum::Router::new();
         tracing::debug!("Building router with injectors from {} routes", self.routes.len());
@@ -252,7 +259,11 @@ impl OpenApiRouteRegistry {
                 let failure_injector = failure_injector_clone.clone();
 
                 async move {
-                    tracing::debug!("Handling request with injectors for route: {} {}", route.method, route.path);
+                    tracing::debug!(
+                        "Handling request with injectors for route: {} {}",
+                        route.method,
+                        route.path
+                    );
 
                     // Extract tags from the operation
                     let tags = route.operation.tags.clone();
@@ -279,7 +290,8 @@ impl OpenApiRouteRegistry {
                     // Generate normal response
                     let (status, response) = route.mock_response_with_status();
                     (
-                        axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK),
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
                         axum::response::Json(response),
                     )
                 }
@@ -297,7 +309,6 @@ impl OpenApiRouteRegistry {
 
         router
     }
-
 
     /// Extract path parameters from a request path by matching against known routes
     pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {

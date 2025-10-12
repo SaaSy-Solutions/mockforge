@@ -3,9 +3,9 @@
 //! This module provides functionality to automatically generate test cases
 //! from recorded API requests and responses using AI/LLM capabilities.
 
-use crate::{RecorderDatabase, RecorderError, Result};
 use crate::models::{Protocol, RecordedRequest, RecordedResponse};
-use crate::query::{QueryFilter, execute_query};
+use crate::query::{execute_query, QueryFilter};
+use crate::{RecorderDatabase, RecorderError, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -244,7 +244,10 @@ impl TestGenerator {
     }
 
     /// Create from an Arc<RecorderDatabase>
-    pub fn from_arc(database: std::sync::Arc<RecorderDatabase>, config: TestGenerationConfig) -> Self {
+    pub fn from_arc(
+        database: std::sync::Arc<RecorderDatabase>,
+        config: TestGenerationConfig,
+    ) -> Self {
         Self {
             database: (*database).clone(),
             config,
@@ -252,10 +255,7 @@ impl TestGenerator {
     }
 
     /// Generate tests from a query filter
-    pub async fn generate_from_filter(
-        &self,
-        filter: QueryFilter,
-    ) -> Result<TestGenerationResult> {
+    pub async fn generate_from_filter(&self, filter: QueryFilter) -> Result<TestGenerationResult> {
         // Execute query to get recordings
         let query_result = execute_query(&self.database, filter).await?;
 
@@ -382,7 +382,8 @@ impl TestGenerator {
     /// Generate test name from request
     fn generate_test_name(&self, request: &RecordedRequest) -> String {
         let method = request.method.to_lowercase();
-        let path = request.path
+        let path = request
+            .path
             .trim_start_matches('/')
             .replace(['/', '-'], "_")
             .replace("{", "")
@@ -406,9 +407,7 @@ impl TestGenerator {
                 Status: {}\n\
                 \n\
                 Describe what this endpoint does and what the test validates in one sentence.",
-                request.method,
-                request.path,
-                response.status_code
+                request.method, request.path, response.status_code
             );
 
             match self.call_llm(llm_config, &prompt).await {
@@ -442,10 +441,9 @@ impl TestGenerator {
                     .await
                     .map_err(|e| RecorderError::Replay(format!("LLM request failed: {}", e)))?;
 
-                let result: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| RecorderError::Replay(format!("Failed to parse JSON response: {}", e)))?;
+                let result: Value = response.json().await.map_err(|e| {
+                    RecorderError::Replay(format!("Failed to parse JSON response: {}", e))
+                })?;
 
                 result
                     .get("response")
@@ -464,12 +462,11 @@ impl TestGenerator {
                     "max_tokens": 100
                 });
 
-                let mut request_builder = client
-                    .post(&config.api_endpoint)
-                    .json(&body);
+                let mut request_builder = client.post(&config.api_endpoint).json(&body);
 
                 if let Some(api_key) = &config.api_key {
-                    request_builder = request_builder.header("Authorization", format!("Bearer {}", api_key));
+                    request_builder =
+                        request_builder.header("Authorization", format!("Bearer {}", api_key));
                 }
 
                 let response = request_builder
@@ -477,10 +474,9 @@ impl TestGenerator {
                     .await
                     .map_err(|e| RecorderError::Replay(format!("LLM request failed: {}", e)))?;
 
-                let result: Value = response
-                    .json()
-                    .await
-                    .map_err(|e| RecorderError::Replay(format!("Failed to parse JSON response: {}", e)))?;
+                let result: Value = response.json().await.map_err(|e| {
+                    RecorderError::Replay(format!("Failed to parse JSON response: {}", e))
+                })?;
 
                 result
                     .get("choices")
@@ -491,7 +487,9 @@ impl TestGenerator {
                     .map(|s| s.trim().to_string())
                     .ok_or_else(|| RecorderError::Replay("Invalid LLM response".to_string()))
             }
-            _ => Err(RecorderError::Replay(format!("Unsupported LLM provider: {}", config.provider))),
+            _ => {
+                Err(RecorderError::Replay(format!("Unsupported LLM provider: {}", config.provider)))
+            }
         }
     }
 
@@ -507,11 +505,14 @@ impl TestGenerator {
         let mut code = String::new();
         let test_name = self.generate_test_name(request);
 
-        code.push_str(&"#[tokio::test]\n".to_string());
+        code.push_str("#[tokio::test]\n");
         code.push_str(&format!("async fn {}() {{\n", test_name));
         code.push_str("    let client = reqwest::Client::new();\n");
-        code.push_str(&format!("    let response = client.{}(\"{}\")\n",
-            request.method.to_lowercase(), url));
+        code.push_str(&format!(
+            "    let response = client.{}(\"{}\")\n",
+            request.method.to_lowercase(),
+            url
+        ));
 
         // Add headers
         if let Ok(headers) = serde_json::from_str::<HashMap<String, String>>(&request.headers) {
@@ -535,25 +536,32 @@ impl TestGenerator {
 
         // Add assertions
         if self.config.validate_status {
-            code.push_str(&format!("    assert_eq!(response.status().as_u16(), {});\n",
-                response.status_code));
+            code.push_str(&format!(
+                "    assert_eq!(response.status().as_u16(), {});\n",
+                response.status_code
+            ));
         }
 
         if self.config.validate_body && response.body.is_some() {
-            code.push_str("    let body = response.text().await.expect(\"Failed to read body\");\n");
+            code.push_str(
+                "    let body = response.text().await.expect(\"Failed to read body\");\n",
+            );
             if let Some(body) = &response.body {
                 // Try to parse as JSON for better validation
                 if let Ok(_json) = serde_json::from_str::<Value>(body) {
-                    code.push_str(&"    let json: serde_json::Value = serde_json::from_str(&body).expect(\"Invalid JSON\");\n".to_string());
-                    code.push_str(&"    // Validate response structure\n".to_string());
-                    code.push_str(&"    assert!(json.is_object() || json.is_array());\n".to_string());
+                    code.push_str("    let json: serde_json::Value = serde_json::from_str(&body).expect(\"Invalid JSON\");\n");
+                    code.push_str("    // Validate response structure\n");
+                    code.push_str("    assert!(json.is_object() || json.is_array());\n");
                 }
             }
         }
 
         if self.config.validate_timing {
             if let Some(max_duration) = self.config.max_duration_ms {
-                code.push_str(&format!("    // Note: Add timing validation (max {} ms)\n", max_duration));
+                code.push_str(&format!(
+                    "    // Note: Add timing validation (max {} ms)\n",
+                    max_duration
+                ));
             }
         }
 
@@ -670,8 +678,7 @@ impl TestGenerator {
             }
         });
 
-        serde_json::to_string_pretty(&item)
-            .map_err(RecorderError::Serialization)
+        serde_json::to_string_pretty(&item).map_err(RecorderError::Serialization)
     }
 
     /// Generate k6 test script
@@ -706,9 +713,15 @@ impl TestGenerator {
         if let Some(body) = &request.body {
             if !body.is_empty() {
                 code.push_str(&format!("    const payload = `{}`;\n", body));
-                code.push_str(&format!("    const res = http.{}('{}', payload, params);\n", method, url));
+                code.push_str(&format!(
+                    "    const res = http.{}('{}', payload, params);\n",
+                    method, url
+                ));
             } else {
-                code.push_str(&format!("    const res = http.{}('{}', null, params);\n", method, url));
+                code.push_str(&format!(
+                    "    const res = http.{}('{}', null, params);\n",
+                    method, url
+                ));
             }
         } else {
             code.push_str(&format!("    const res = http.{}('{}', null, params);\n", method, url));
@@ -716,9 +729,11 @@ impl TestGenerator {
 
         // Add checks
         if self.config.validate_status {
-            code.push_str(&"    check(res, {\n".to_string());
-            code.push_str(&format!("      'status is {}': (r) => r.status === {},\n",
-                response.status_code, response.status_code));
+            code.push_str("    check(res, {\n");
+            code.push_str(&format!(
+                "      'status is {}': (r) => r.status === {},\n",
+                response.status_code, response.status_code
+            ));
             code.push_str("    });\n");
         }
 
@@ -755,18 +770,29 @@ impl TestGenerator {
         if let Some(body) = &request.body {
             if !body.is_empty() {
                 code.push_str(&format!("    data = r'''{}'''\n", body));
-                code.push_str(&format!("    response = requests.{}('{}', headers=headers, data=data)\n",
-                    method, url));
+                code.push_str(&format!(
+                    "    response = requests.{}('{}', headers=headers, data=data)\n",
+                    method, url
+                ));
             } else {
-                code.push_str(&format!("    response = requests.{}('{}', headers=headers)\n", method, url));
+                code.push_str(&format!(
+                    "    response = requests.{}('{}', headers=headers)\n",
+                    method, url
+                ));
             }
         } else {
-            code.push_str(&format!("    response = requests.{}('{}', headers=headers)\n", method, url));
+            code.push_str(&format!(
+                "    response = requests.{}('{}', headers=headers)\n",
+                method, url
+            ));
         }
 
         // Assertions
         if self.config.validate_status {
-            code.push_str(&format!("    assert response.status_code == {}\n", response.status_code));
+            code.push_str(&format!(
+                "    assert response.status_code == {}\n",
+                response.status_code
+            ));
         }
 
         Ok(code)
@@ -829,7 +855,8 @@ impl TestGenerator {
     ) -> Result<String> {
         let base_url = self.config.base_url.as_deref().unwrap_or("http://localhost:3000");
         let url = format!("{}{}", base_url, request.path);
-        let test_name = self.generate_test_name(request)
+        let test_name = self
+            .generate_test_name(request)
             .split('_')
             .map(|s| {
                 let mut c = s.chars();
@@ -847,15 +874,21 @@ impl TestGenerator {
         if let Some(body) = &request.body {
             if !body.is_empty() {
                 code.push_str(&format!("    body := strings.NewReader(`{}`)\n", body));
-                code.push_str(&format!("    req, err := http.NewRequest(\"{}\", \"{}\", body)\n",
-                    request.method, url));
+                code.push_str(&format!(
+                    "    req, err := http.NewRequest(\"{}\", \"{}\", body)\n",
+                    request.method, url
+                ));
             } else {
-                code.push_str(&format!("    req, err := http.NewRequest(\"{}\", \"{}\", nil)\n",
-                    request.method, url));
+                code.push_str(&format!(
+                    "    req, err := http.NewRequest(\"{}\", \"{}\", nil)\n",
+                    request.method, url
+                ));
             }
         } else {
-            code.push_str(&format!("    req, err := http.NewRequest(\"{}\", \"{}\", nil)\n",
-                request.method, url));
+            code.push_str(&format!(
+                "    req, err := http.NewRequest(\"{}\", \"{}\", nil)\n",
+                request.method, url
+            ));
         }
 
         code.push_str("    if err != nil {\n");
@@ -882,8 +915,10 @@ impl TestGenerator {
         // Assertions
         if self.config.validate_status {
             code.push_str(&format!("    if resp.StatusCode != {} {{\n", response.status_code));
-            code.push_str(&format!("        t.Errorf(\"Expected status {}, got %d\", resp.StatusCode)\n",
-                response.status_code));
+            code.push_str(&format!(
+                "        t.Errorf(\"Expected status {}, got %d\", resp.StatusCode)\n",
+                response.status_code
+            ));
             code.push_str("    }\n");
         }
 
@@ -899,7 +934,8 @@ impl TestGenerator {
     ) -> Result<String> {
         let base_url = self.config.base_url.as_deref().unwrap_or("http://localhost:3000");
         let url = format!("{}{}", base_url, request.path);
-        let test_name = request.path
+        let test_name = request
+            .path
             .trim_start_matches('/')
             .replace(['/', '-'], " ")
             .replace("{", "")
@@ -913,7 +949,8 @@ impl TestGenerator {
 
         // Add headers
         if let Ok(headers) = serde_json::from_str::<HashMap<String, String>>(&request.headers) {
-            let header_items: Vec<String> = headers.iter()
+            let header_items: Vec<String> = headers
+                .iter()
                 .filter(|(k, _)| k.to_lowercase() != "host")
                 .map(|(k, v)| format!("'{}' => '{}'", k, v))
                 .collect();
@@ -930,10 +967,12 @@ impl TestGenerator {
             }
         }
 
-        code.push_str(&format!("    response = HTTParty.{}('{}', {})\n",
+        code.push_str(&format!(
+            "    response = HTTParty.{}('{}', {})\n",
             request.method.to_lowercase(),
             url,
-            request_params.join(", ")));
+            request_params.join(", ")
+        ));
 
         // Add assertions
         if self.config.validate_status {
@@ -960,11 +999,14 @@ impl TestGenerator {
     ) -> Result<String> {
         let base_url = self.config.base_url.as_deref().unwrap_or("http://localhost:3000");
         let url = format!("{}{}", base_url, request.path);
-        let test_name = self.generate_test_name(request)
+        let test_name = self
+            .generate_test_name(request)
             .split('_')
             .enumerate()
             .map(|(i, s)| {
-                if i == 0 { s.to_string() } else {
+                if i == 0 {
+                    s.to_string()
+                } else {
                     let mut c = s.chars();
                     match c.next() {
                         None => String::new(),
@@ -979,14 +1021,17 @@ impl TestGenerator {
         code.push_str(&format!("    public void {}() throws Exception {{\n", test_name));
 
         // Create request
-        code.push_str(&"        HttpRequest request = HttpRequest.newBuilder()\n".to_string());
+        code.push_str("        HttpRequest request = HttpRequest.newBuilder()\n");
         code.push_str(&format!("            .uri(URI.create(\"{}\"))\n", url));
         code.push_str(&format!("            .method(\"{}\", ", request.method));
 
         if let Some(body) = &request.body {
             if !body.is_empty() {
                 let escaped_body = body.replace('"', "\\\"").replace('\n', "\\n");
-                code.push_str(&format!("HttpRequest.BodyPublishers.ofString(\"{}\"))\n", escaped_body));
+                code.push_str(&format!(
+                    "HttpRequest.BodyPublishers.ofString(\"{}\"))\n",
+                    escaped_body
+                ));
             } else {
                 code.push_str("HttpRequest.BodyPublishers.noBody())\n");
             }
@@ -1011,7 +1056,10 @@ impl TestGenerator {
 
         // Assertions
         if self.config.validate_status {
-            code.push_str(&format!("        assertEquals({}, response.statusCode());\n", response.status_code));
+            code.push_str(&format!(
+                "        assertEquals({}, response.statusCode());\n",
+                response.status_code
+            ));
         }
 
         if self.config.validate_body && response.body.is_some() {
@@ -1034,7 +1082,8 @@ impl TestGenerator {
     ) -> Result<String> {
         let base_url = self.config.base_url.as_deref().unwrap_or("http://localhost:3000");
         let url = format!("{}{}", base_url, request.path);
-        let test_name = self.generate_test_name(request)
+        let test_name = self
+            .generate_test_name(request)
             .split('_')
             .map(|s| {
                 let mut c = s.chars();
@@ -1054,15 +1103,21 @@ impl TestGenerator {
         code.push_str("            using var client = new HttpClient();\n");
 
         // Create request message
-        code.push_str(&format!("            var request = new HttpRequestMessage(HttpMethod.{}, \"{}\");\n",
-            request.method.chars().next().unwrap().to_uppercase().collect::<String>() + &request.method[1..].to_lowercase(),
-            url));
+        code.push_str(&format!(
+            "            var request = new HttpRequestMessage(HttpMethod.{}, \"{}\");\n",
+            request.method.chars().next().unwrap().to_uppercase().collect::<String>()
+                + &request.method[1..].to_lowercase(),
+            url
+        ));
 
         // Add headers
         if let Ok(headers) = serde_json::from_str::<HashMap<String, String>>(&request.headers) {
             for (key, value) in headers.iter() {
                 if key.to_lowercase() != "host" && key.to_lowercase() != "content-type" {
-                    code.push_str(&format!("            request.Headers.Add(\"{}\", \"{}\");\n", key, value));
+                    code.push_str(&format!(
+                        "            request.Headers.Add(\"{}\", \"{}\");\n",
+                        key, value
+                    ));
                 }
             }
         }
@@ -1081,11 +1136,16 @@ impl TestGenerator {
 
         // Assertions
         if self.config.validate_status {
-            code.push_str(&format!("            Assert.Equal({}, (int)response.StatusCode);\n", response.status_code));
+            code.push_str(&format!(
+                "            Assert.Equal({}, (int)response.StatusCode);\n",
+                response.status_code
+            ));
         }
 
         if self.config.validate_body && response.body.is_some() {
-            code.push_str("            var content = await response.Content.ReadAsStringAsync();\n");
+            code.push_str(
+                "            var content = await response.Content.ReadAsStringAsync();\n",
+            );
             code.push_str("            Assert.NotNull(content);\n");
             code.push_str("            Assert.NotEmpty(content);\n");
         }
@@ -1208,7 +1268,10 @@ impl TestGenerator {
                 file.push_str("import java.net.http.HttpClient;\n");
                 file.push_str("import java.net.http.HttpRequest;\n");
                 file.push_str("import java.net.http.HttpResponse;\n\n");
-                file.push_str(&format!("public class {} {{\n", self.config.suite_name.replace("-", "_")));
+                file.push_str(&format!(
+                    "public class {} {{\n",
+                    self.config.suite_name.replace("-", "_")
+                ));
                 for test in tests {
                     file.push_str(&test.code);
                     file.push('\n');
@@ -1295,7 +1358,8 @@ impl TestGenerator {
         let mut fixtures = Vec::new();
 
         // Group exchanges by endpoint
-        let mut endpoint_data: HashMap<String, Vec<&crate::models::RecordedExchange>> = HashMap::new();
+        let mut endpoint_data: HashMap<String, Vec<&crate::models::RecordedExchange>> =
+            HashMap::new();
         for exchange in exchanges {
             let endpoint = format!("{} {}", exchange.request.method, exchange.request.path);
             endpoint_data.entry(endpoint).or_default().push(exchange);
@@ -1354,7 +1418,8 @@ impl TestGenerator {
         let mut edge_cases = Vec::new();
 
         // Group by endpoint
-        let mut endpoint_data: HashMap<String, Vec<&crate::models::RecordedExchange>> = HashMap::new();
+        let mut endpoint_data: HashMap<String, Vec<&crate::models::RecordedExchange>> =
+            HashMap::new();
         for exchange in exchanges {
             let key = format!("{} {}", exchange.request.method, exchange.request.path);
             endpoint_data.entry(key).or_default().push(exchange);
@@ -1419,17 +1484,16 @@ impl TestGenerator {
     ) -> Result<TestGapAnalysis> {
         // Collect all unique endpoints from exchanges
         let mut all_endpoints = std::collections::HashSet::new();
-        let mut method_by_endpoint: HashMap<String, std::collections::HashSet<String>> = HashMap::new();
-        let mut status_codes_by_endpoint: HashMap<String, std::collections::HashSet<u16>> = HashMap::new();
+        let mut method_by_endpoint: HashMap<String, std::collections::HashSet<String>> =
+            HashMap::new();
+        let mut status_codes_by_endpoint: HashMap<String, std::collections::HashSet<u16>> =
+            HashMap::new();
 
         for exchange in exchanges {
             let endpoint = exchange.request.path.clone();
             let method = exchange.request.method.clone();
             all_endpoints.insert(endpoint.clone());
-            method_by_endpoint
-                .entry(endpoint.clone())
-                .or_default()
-                .insert(method);
+            method_by_endpoint.entry(endpoint.clone()).or_default().insert(method);
 
             if let Some(response) = &exchange.response {
                 let status_code = response.status_code as u16;
@@ -1447,10 +1511,8 @@ impl TestGenerator {
         }
 
         // Find gaps
-        let untested_endpoints: Vec<String> = all_endpoints
-            .difference(&tested_endpoints)
-            .cloned()
-            .collect();
+        let untested_endpoints: Vec<String> =
+            all_endpoints.difference(&tested_endpoints).cloned().collect();
 
         let mut missing_methods: HashMap<String, Vec<String>> = HashMap::new();
         for (endpoint, methods) in &method_by_endpoint {
@@ -1460,10 +1522,7 @@ impl TestGenerator {
                 .map(|t| t.method.clone())
                 .collect();
 
-            let missing: Vec<String> = methods
-                .difference(&tested_methods)
-                .cloned()
-                .collect();
+            let missing: Vec<String> = methods.difference(&tested_methods).cloned().collect();
 
             if !missing.is_empty() {
                 missing_methods.insert(endpoint.clone(), missing);
@@ -1498,10 +1557,8 @@ impl TestGenerator {
 
         let mut recommendations = Vec::new();
         if !untested_endpoints.is_empty() {
-            recommendations.push(format!(
-                "Add tests for {} untested endpoints",
-                untested_endpoints.len()
-            ));
+            recommendations
+                .push(format!("Add tests for {} untested endpoints", untested_endpoints.len()));
         }
         if !missing_methods.is_empty() {
             recommendations.push(format!(
@@ -1527,7 +1584,7 @@ impl TestGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{RecordedRequest, RecordedResponse, Protocol};
+    use crate::models::{Protocol, RecordedRequest, RecordedResponse};
 
     #[tokio::test]
     async fn test_generate_test_name() {

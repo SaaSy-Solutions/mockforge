@@ -35,12 +35,7 @@ pub async fn clean_artifacts(path: Option<&Path>) -> Result<()> {
     if let Ok(entries) = glob::glob(zip_pattern.to_str().unwrap_or("")) {
         for entry in entries.flatten() {
             if let Err(e) = std::fs::remove_file(&entry) {
-                println!(
-                    "{} Failed to remove {}: {}",
-                    "⚠".yellow(),
-                    entry.display(),
-                    e
-                );
+                println!("{} Failed to remove {}: {}", "⚠".yellow(), entry.display(), e);
             } else {
                 println!("{} Removed {}", "✓".green(), entry.display());
             }

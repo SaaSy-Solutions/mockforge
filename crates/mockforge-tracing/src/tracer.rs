@@ -174,10 +174,7 @@ mod tests {
 
         assert_eq!(config.service_name, "test-service");
         assert_eq!(config.exporter_type, ExporterType::Jaeger);
-        assert_eq!(
-            config.jaeger_endpoint,
-            Some("http://custom:14268/api/traces".to_string())
-        );
+        assert_eq!(config.jaeger_endpoint, Some("http://custom:14268/api/traces".to_string()));
         assert_eq!(config.sampling_rate, 0.5);
         assert_eq!(config.environment, "staging");
         assert_eq!(config.service_version, Some("1.0.0".to_string()));
@@ -195,10 +192,7 @@ mod tests {
 
         assert_eq!(config.service_name, "test-service");
         assert_eq!(config.exporter_type, ExporterType::Otlp);
-        assert_eq!(
-            config.otlp_endpoint,
-            Some("http://otel-collector:4317".to_string())
-        );
+        assert_eq!(config.otlp_endpoint, Some("http://otel-collector:4317".to_string()));
         assert!(config.jaeger_endpoint.is_none());
         assert_eq!(config.sampling_rate, 0.8);
         assert_eq!(config.environment, "production");

@@ -68,7 +68,7 @@ export function useKeyboardNavigation({
 
   useEffect(() => {
     const targetElement = element || document;
-    
+
     if (!isEnabled || !targetElement) return;
 
     targetElement.addEventListener('keydown', handleKeyDown, capture);
@@ -90,7 +90,7 @@ export function useKeyboardNavigation({
   }) => {
     shortcutsRef.current = shortcutsRef.current.filter(shortcut => {
       if (shortcut.key.toLowerCase() !== key.toLowerCase()) return true;
-      
+
       if (modifiers) {
         return !(
           !!shortcut.ctrl === !!modifiers.ctrl &&
@@ -99,7 +99,7 @@ export function useKeyboardNavigation({
           !!shortcut.meta === !!modifiers.meta
         );
       }
-      
+
       return false;
     });
   }, []);
@@ -379,12 +379,12 @@ export function useShortcutsHelp(shortcuts: KeyboardShortcut[]) {
         key: 'title',
         className: 'text-xl font-bold text-gray-900 dark:text-gray-100'
       }, 'Keyboard Shortcuts'),
-      React.createElement('div', { 
+      React.createElement('div', {
         key: 'content',
-        className: 'space-y-2' 
+        className: 'space-y-2'
       }, shortcuts
         .filter(shortcut => shortcut.description)
-        .map((shortcut, index) => 
+        .map((shortcut, index) =>
           React.createElement('div', {
             key: index,
             className: 'flex justify-between items-center'

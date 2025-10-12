@@ -59,7 +59,7 @@ pub struct FieldInfo {
 pub struct Relationship {
     /// Source entity name
     pub from_entity: String,
-    /// Target entity name  
+    /// Target entity name
     pub to_entity: String,
     /// Type of relationship
     pub relationship_type: RelationshipType,

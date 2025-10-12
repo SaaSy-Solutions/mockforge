@@ -401,11 +401,7 @@ mod tests {
             PluginAuthor::new("test-author"),
         ));
 
-        let result = PluginDiscovery::success(
-            plugin_id,
-            manifest,
-            "/path/to/plugin".to_string(),
-        );
+        let result = PluginDiscovery::success(plugin_id, manifest, "/path/to/plugin".to_string());
 
         assert!(result.is_success());
         assert!(result.first_error().is_none());
@@ -416,11 +412,8 @@ mod tests {
         let plugin_id = PluginId("failing-plugin".to_string());
         let errors = vec!["Error 1".to_string(), "Error 2".to_string()];
 
-        let result = PluginDiscovery::failure(
-            plugin_id,
-            "/path/to/plugin".to_string(),
-            errors.clone(),
-        );
+        let result =
+            PluginDiscovery::failure(plugin_id, "/path/to/plugin".to_string(), errors.clone());
 
         assert!(!result.is_success());
         assert_eq!(result.first_error(), Some("Error 1"));

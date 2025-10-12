@@ -1,11 +1,11 @@
 //! Collaborative editing support for orchestrations
 
+use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::broadcast;
-use chrono::{DateTime, Utc};
 
 /// User in a collaboration session
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,33 +62,19 @@ pub struct CollaborationSession {
 #[serde(tag = "type")]
 pub enum CollaborationMessage {
     #[serde(rename = "user_joined")]
-    UserJoined {
-        data: UserJoinedData,
-    },
+    UserJoined { data: UserJoinedData },
     #[serde(rename = "user_left")]
-    UserLeft {
-        data: UserLeftData,
-    },
+    UserLeft { data: UserLeftData },
     #[serde(rename = "user_presence")]
-    UserPresence {
-        data: UserPresenceData,
-    },
+    UserPresence { data: UserPresenceData },
     #[serde(rename = "change")]
-    Change {
-        data: ChangeData,
-    },
+    Change { data: ChangeData },
     #[serde(rename = "sync")]
-    Sync {
-        data: SyncData,
-    },
+    Sync { data: SyncData },
     #[serde(rename = "conflict")]
-    Conflict {
-        data: ConflictData,
-    },
+    Conflict { data: ConflictData },
     #[serde(rename = "users_list")]
-    UsersList {
-        data: UsersListData,
-    },
+    UsersList { data: UsersListData },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,7 +195,11 @@ impl CollaborationSession {
             .filter(|c| {
                 c.path == change.path
                     && c.user_id != change.user_id
-                    && c.timestamp > change.timestamp.checked_sub_signed(chrono::Duration::seconds(5)).unwrap_or(change.timestamp)
+                    && c.timestamp
+                        > change
+                            .timestamp
+                            .checked_sub_signed(chrono::Duration::seconds(5))
+                            .unwrap_or(change.timestamp)
             })
             .map(|c| c.id.clone())
             .collect();
@@ -270,7 +260,10 @@ impl CollaborationManager {
     }
 
     /// Get or create a session
-    pub fn get_or_create_session(&self, orchestration_id: &str) -> Result<Arc<CollaborationSession>, String> {
+    pub fn get_or_create_session(
+        &self,
+        orchestration_id: &str,
+    ) -> Result<Arc<CollaborationSession>, String> {
         let mut sessions = self.sessions.write();
 
         if let Some(session) = sessions.get(orchestration_id) {

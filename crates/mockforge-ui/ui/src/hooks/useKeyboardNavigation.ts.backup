@@ -136,7 +136,7 @@ export function useListNavigation<T>({
     if (!enabled || items.length === 0) return;
 
     let newIndex = index;
-    
+
     if (loop) {
       if (newIndex < 0) {
         newIndex = items.length - 1;

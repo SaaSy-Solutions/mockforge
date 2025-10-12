@@ -90,7 +90,7 @@ impl AuthMiddleware {
 
 ### Backend Development (Rust)
 - **API Endpoints**: ~2-3 days to implement all REST endpoints
-- **WebSocket Support**: ~1-2 days for real-time features  
+- **WebSocket Support**: ~1-2 days for real-time features
 - **Authentication**: ~1 day for JWT implementation
 - **File Operations**: ~1 day for fixture management
 - **Testing**: ~1 day for integration tests
@@ -110,7 +110,7 @@ For immediate testing, you can run both separately:
 # Terminal 1: Start MockForge CLI
 mockforge serve --admin-ui=false
 
-# Terminal 2: Start React dev server  
+# Terminal 2: Start React dev server
 cd ui-v2
 npm run dev
 # Access at http://localhost:5173

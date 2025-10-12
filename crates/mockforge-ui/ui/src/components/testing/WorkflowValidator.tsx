@@ -82,7 +82,7 @@ export function WorkflowValidator() {
 
   const runTest = async (workflow: Omit<TestResult, 'status'>): Promise<TestResult> => {
     const result: TestResult = { ...workflow, status: 'running' };
-    
+
     try {
       switch (workflow.id) {
         case 'auth-admin':
@@ -119,7 +119,7 @@ export function WorkflowValidator() {
 
   const testAdminAuth = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Test admin login
     try {
       await authStore.login('admin', 'admin123');
@@ -147,10 +147,10 @@ export function WorkflowValidator() {
 
   const testViewerAuth = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Logout current user
     authStore.logout();
-    
+
     // Test viewer login
     try {
       await authStore.login('viewer', 'viewer123');
@@ -171,7 +171,7 @@ export function WorkflowValidator() {
 
   const testServiceManagement = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Get initial state
     const initialServices = serviceStore.services;
     if (initialServices.length === 0) {
@@ -183,10 +183,10 @@ export function WorkflowValidator() {
     // Test service toggle
     const testService = initialServices[0];
     const originalState = testService.enabled;
-    
+
     serviceStore.updateService(testService.id, { enabled: !originalState });
     const updatedService = serviceStore.services.find(s => s.id === testService.id);
-    
+
     if (updatedService?.enabled !== !originalState) {
       throw new Error('Service toggle failed');
     }
@@ -197,13 +197,13 @@ export function WorkflowValidator() {
       const testRoute = testService.routes[0];
       const routeId = testRoute.method ? `${testRoute.method}-${testRoute.path}` : testRoute.path;
       const originalRouteState = testRoute.enabled !== false;
-      
+
       serviceStore.toggleRoute(testService.id, routeId, !originalRouteState);
       const updatedServiceWithRoute = serviceStore.services.find(s => s.id === testService.id);
-      const updatedRoute = updatedServiceWithRoute?.routes.find(r => 
+      const updatedRoute = updatedServiceWithRoute?.routes.find(r =>
         (r.method ? `${r.method}-${r.path}` : r.path) === routeId
       );
-      
+
       if (updatedRoute?.enabled === originalRouteState) {
         throw new Error('Route toggle failed');
       }
@@ -215,7 +215,7 @@ export function WorkflowValidator() {
 
   const testFixtureEditing = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Get initial fixtures
     const fixtures = fixtureStore.fixtures;
     if (fixtures.length === 0) {
@@ -228,10 +228,10 @@ export function WorkflowValidator() {
     const testFixture = fixtures[0];
     const originalContent = testFixture.content;
     const newContent = originalContent + '\n// Test comment added via UI';
-    
+
     fixtureStore.updateFixture(testFixture.id, newContent);
     const updatedFixture = fixtureStore.fixtures.find(f => f.id === testFixture.id);
-    
+
     if (updatedFixture?.content !== newContent) {
       throw new Error('Fixture content update failed');
     }
@@ -240,10 +240,10 @@ export function WorkflowValidator() {
     // Test fixture rename
     const originalName = testFixture.name;
     const newName = `${originalName}.backup`;
-    
+
     fixtureStore.renameFixture(testFixture.id, newName);
     const renamedFixture = fixtureStore.fixtures.find(f => f.id === testFixture.id);
-    
+
     if (renamedFixture?.name !== newName) {
       throw new Error('Fixture rename failed');
     }
@@ -254,7 +254,7 @@ export function WorkflowValidator() {
 
   const testFixtureDiffing = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Test diff generation
     const fixtures = fixtureStore.fixtures;
     if (fixtures.length === 0) {
@@ -263,17 +263,17 @@ export function WorkflowValidator() {
 
     const testFixture = fixtures[0];
     const modifiedContent = String(testFixture.content || '').replace('test', 'TEST_MODIFIED');
-    
+
     try {
       const diff = fixtureStore.generateDiff(testFixture.id, modifiedContent);
-      
+
       if (diff.changes.length === 0) {
         throw new Error('Diff generation produced no changes');
       }
-      
+
       details.push(`✓ Generated diff with ${diff.changes.length} changes`);
       details.push('✓ Diff visualization ready');
-      
+
     } catch (error) {
       throw new Error(`Diff generation failed: ${error}`);
     }
@@ -283,7 +283,7 @@ export function WorkflowValidator() {
 
   const testLiveLogs = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Check log store
     const logs = logStore.logs;
     details.push(`✓ Found ${logs.length} log entries`);
@@ -292,7 +292,7 @@ export function WorkflowValidator() {
     logStore.setFilter({ method: 'GET' });
     const filteredLogs = logStore.filteredLogs;
     const getRequests = filteredLogs.filter(log => log.method === 'GET');
-    
+
     if (getRequests.length !== filteredLogs.length) {
       throw new Error('Log filtering by method failed');
     }
@@ -302,7 +302,7 @@ export function WorkflowValidator() {
     logStore.setFilter({ path_pattern: '/api/users' });
     const searchedLogs = logStore.filteredLogs;
     const userApiLogs = searchedLogs.filter(log => log.path.includes('/api/users'));
-    
+
     if (userApiLogs.length === 0 && searchedLogs.length > 0) {
       throw new Error('Log search filtering failed');
     }
@@ -316,11 +316,11 @@ export function WorkflowValidator() {
 
   const testMetricsAnalysis = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Check metrics data
     const latencyMetrics = metricsStore.latencyMetrics;
     const failureMetrics = metricsStore.failureMetrics;
-    
+
     if (latencyMetrics.length === 0) {
       throw new Error('No latency metrics available');
     }
@@ -349,7 +349,7 @@ export function WorkflowValidator() {
 
   const testBulkOperations = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     const services = serviceStore.services;
     if (services.length < 2) {
       throw new Error('Need at least 2 services for bulk operations test');
@@ -359,7 +359,7 @@ export function WorkflowValidator() {
     services.forEach(service => {
       serviceStore.updateService(service.id, { enabled: true });
     });
-    
+
     const enabledServices = serviceStore.services.filter(s => s.enabled);
     if (enabledServices.length !== services.length) {
       throw new Error('Bulk enable operation failed');
@@ -370,7 +370,7 @@ export function WorkflowValidator() {
     services.forEach(service => {
       serviceStore.updateService(service.id, { enabled: false });
     });
-    
+
     const disabledServices = serviceStore.services.filter(s => !s.enabled);
     if (disabledServices.length !== services.length) {
       throw new Error('Bulk disable operation failed');
@@ -382,7 +382,7 @@ export function WorkflowValidator() {
 
   const testSearchFiltering = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Test service search (simulate by checking if services have searchable content)
     const services = serviceStore.services;
     const servicesWithNames = services.filter(s => s.name && s.name.length > 0);
@@ -412,7 +412,7 @@ export function WorkflowValidator() {
 
   const testRoleBasedAccess = async (result: TestResult): Promise<TestResult> => {
     const details: string[] = [];
-    
+
     // Check current user role
     const currentUser = authStore.user;
     if (!currentUser) {
@@ -438,13 +438,13 @@ export function WorkflowValidator() {
     setTestResults(workflows.map(w => ({ ...w, status: 'pending' })));
 
     for (const workflow of workflows) {
-      setTestResults(prev => prev.map(r => 
+      setTestResults(prev => prev.map(r =>
         r.id === workflow.id ? { ...r, status: 'running' } : r
       ));
 
       const result = await runTest(workflow);
-      
-      setTestResults(prev => prev.map(r => 
+
+      setTestResults(prev => prev.map(r =>
         r.id === workflow.id ? result : r
       ));
 
@@ -486,8 +486,8 @@ export function WorkflowValidator() {
             Testing all admin workflows to ensure file editing is not required
           </p>
         </div>
-        <Button 
-          onClick={runAllTests} 
+        <Button
+          onClick={runAllTests}
           disabled={isRunning}
           className="min-w-32"
         >
@@ -527,13 +527,13 @@ export function WorkflowValidator() {
                 {test.status.toUpperCase()}
               </span>
             </div>
-            
+
             {test.error && (
               <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
                 <strong>Error:</strong> {test.error}
               </div>
             )}
-            
+
             {test.details && test.details.length > 0 && (
               <div className="mt-2 space-y-1">
                 {test.details.map((detail, index) => (

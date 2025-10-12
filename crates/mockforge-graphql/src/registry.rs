@@ -7,7 +7,10 @@ use async_graphql::{parser::parse_schema, Value};
 use mockforge_core::protocol_abstraction::{
     Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
 };
-use mockforge_core::{ProtocolValidationError as ValidationError, ProtocolValidationResult as ValidationResult, Result};
+use mockforge_core::{
+    ProtocolValidationError as ValidationError, ProtocolValidationResult as ValidationResult,
+    Result,
+};
 use std::collections::HashMap;
 
 /// GraphQL Schema Registry implementing SpecRegistry
@@ -24,8 +27,9 @@ impl GraphQLSchemaRegistry {
     /// Create a new GraphQL schema registry from SDL string
     pub fn from_sdl(sdl: &str) -> Result<Self> {
         // Validate SDL by parsing it
-        let _schema_doc = parse_schema(sdl)
-            .map_err(|e| mockforge_core::Error::validation(format!("Invalid GraphQL schema: {}", e)))?;
+        let _schema_doc = parse_schema(sdl).map_err(|e| {
+            mockforge_core::Error::validation(format!("Invalid GraphQL schema: {}", e))
+        })?;
 
         // Simple SDL parsing to extract operations
         // This is a basic implementation - a more robust solution would use the parser API
@@ -42,7 +46,8 @@ impl GraphQLSchemaRegistry {
         // Extract Mutation type fields
         if let Some(mutation_start) = sdl.find("type Mutation") {
             if let Some(mutation_block) = Self::extract_type_block(sdl, mutation_start) {
-                mutation_operations = Self::extract_fields_as_operations(&mutation_block, "Mutation");
+                mutation_operations =
+                    Self::extract_fields_as_operations(&mutation_block, "Mutation");
             }
         }
 
@@ -72,11 +77,7 @@ impl GraphQLSchemaRegistry {
                 }
 
                 // Extract field name (before '(' or ':')
-                let field_name = trimmed
-                    .split(|c| c == '(' || c == ':')
-                    .next()?
-                    .trim()
-                    .to_string();
+                let field_name = trimmed.split(|c| c == '(' || c == ':').next()?.trim().to_string();
 
                 Some(SpecOperation {
                     name: field_name.clone(),
@@ -105,14 +106,14 @@ impl GraphQLSchemaRegistry {
             "email" => Value::String(mockforge_core::templating::expand_str("{{faker.email}}")),
             "description" | "content" | "body" => Value::String("Mock content".to_string()),
             "age" | "count" | "quantity" | "total" => Value::Number((42).into()),
-            "price" | "amount" | "cost" => Value::Number(serde_json::Number::from_f64(99.99).unwrap()),
+            "price" | "amount" | "cost" => {
+                Value::Number(serde_json::Number::from_f64(99.99).unwrap())
+            }
             "active" | "enabled" | "published" => Value::Boolean(true),
             "createdat" | "updatedat" | "timestamp" => {
                 use std::time::SystemTime;
-                let now = SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
+                let now =
+                    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
                 Value::String(format!("2024-01-01T{}:00:00Z", now % 86400))
             }
             _ => Value::String(format!("Mock {}", field_name)),
@@ -125,8 +126,8 @@ impl GraphQLSchemaRegistry {
         let field_name = operation.name.as_str();
 
         // Check if it returns a list (common pattern: plural names or explicit list type)
-        let is_list = field_name.ends_with('s') ||
-                      operation.output_schema.as_ref().map(|s| s.starts_with('[')).unwrap_or(false);
+        let is_list = field_name.ends_with('s')
+            || operation.output_schema.as_ref().map(|s| s.starts_with('[')).unwrap_or(false);
 
         if is_list {
             // Generate a list of mock objects
@@ -174,22 +175,23 @@ impl SpecRegistry for GraphQLSchemaRegistry {
         if let Some(_op) = self.find_operation(&request.operation, &request.path) {
             Ok(ValidationResult::success())
         } else {
-            Ok(ValidationResult::failure(vec![
-                ValidationError {
-                    message: format!("Unknown GraphQL operation: {}", request.operation),
-                    path: Some(request.path.clone()),
-                    code: Some("UNKNOWN_OPERATION".to_string()),
-                },
-            ]))
+            Ok(ValidationResult::failure(vec![ValidationError {
+                message: format!("Unknown GraphQL operation: {}", request.operation),
+                path: Some(request.path.clone()),
+                code: Some("UNKNOWN_OPERATION".to_string()),
+            }]))
         }
     }
 
     fn generate_mock_response(&self, request: &ProtocolRequest) -> Result<ProtocolResponse> {
         // Find the operation
-        let operation = self.find_operation(&request.operation, &request.path)
-            .ok_or_else(|| mockforge_core::Error::validation(
-                format!("Unknown operation: {}", request.operation)
-            ))?;
+        let operation =
+            self.find_operation(&request.operation, &request.path).ok_or_else(|| {
+                mockforge_core::Error::validation(format!(
+                    "Unknown operation: {}",
+                    request.operation
+                ))
+            })?;
 
         // Generate mock data
         let data = self.generate_mock_response_data(&operation);

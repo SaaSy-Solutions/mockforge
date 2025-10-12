@@ -392,7 +392,6 @@ impl Default for PluginLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[tokio::test]
     async fn test_plugin_loader_creation() {

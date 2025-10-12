@@ -4,12 +4,8 @@
 //! using the RAG engine from mockforge-data.
 
 use async_trait::async_trait;
-use mockforge_core::{
-    ai_response::AiResponseConfig,
-    openapi::response::AiGenerator,
-    Result,
-};
-use mockforge_data::rag::{RagConfig, RagEngine, LlmProvider};
+use mockforge_core::{ai_response::AiResponseConfig, openapi::response::AiGenerator, Result};
+use mockforge_data::rag::{LlmProvider, RagConfig, RagEngine};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -49,8 +45,8 @@ impl RagAiGenerator {
     /// - `MOCKFORGE_AI_TEMPERATURE`: Temperature for generation (optional, default: 0.7)
     /// - `MOCKFORGE_AI_MAX_TOKENS`: Max tokens for generation (optional, default: 1024)
     pub fn from_env() -> Result<Self> {
-        let provider = std::env::var("MOCKFORGE_AI_PROVIDER")
-            .unwrap_or_else(|_| "openai".to_string());
+        let provider =
+            std::env::var("MOCKFORGE_AI_PROVIDER").unwrap_or_else(|_| "openai".to_string());
 
         let provider = match provider.to_lowercase().as_str() {
             "openai" => LlmProvider::OpenAI,
@@ -65,23 +61,20 @@ impl RagAiGenerator {
 
         let api_key = std::env::var("MOCKFORGE_AI_API_KEY").ok();
 
-        let model = std::env::var("MOCKFORGE_AI_MODEL")
-            .unwrap_or_else(|_| {
-                match provider {
-                    LlmProvider::OpenAI => "gpt-3.5-turbo".to_string(),
-                    LlmProvider::Anthropic => "claude-3-haiku-20240307".to_string(),
-                    LlmProvider::Ollama => "llama2".to_string(),
-                    LlmProvider::OpenAICompatible => "gpt-3.5-turbo".to_string(),
-                }
-            });
+        let model = std::env::var("MOCKFORGE_AI_MODEL").unwrap_or_else(|_| match provider {
+            LlmProvider::OpenAI => "gpt-3.5-turbo".to_string(),
+            LlmProvider::Anthropic => "claude-3-haiku-20240307".to_string(),
+            LlmProvider::Ollama => "llama2".to_string(),
+            LlmProvider::OpenAICompatible => "gpt-3.5-turbo".to_string(),
+        });
 
-        let api_endpoint = std::env::var("MOCKFORGE_AI_ENDPOINT")
-            .unwrap_or_else(|_| {
-                match provider {
-                    LlmProvider::OpenAI => "https://api.openai.com/v1/chat/completions".to_string(),
-                    LlmProvider::Anthropic => "https://api.anthropic.com/v1/messages".to_string(),
-                    LlmProvider::Ollama => "http://localhost:11434/api/generate".to_string(),
-                    LlmProvider::OpenAICompatible => "http://localhost:8080/v1/chat/completions".to_string(),
+        let api_endpoint =
+            std::env::var("MOCKFORGE_AI_ENDPOINT").unwrap_or_else(|_| match provider {
+                LlmProvider::OpenAI => "https://api.openai.com/v1/chat/completions".to_string(),
+                LlmProvider::Anthropic => "https://api.anthropic.com/v1/messages".to_string(),
+                LlmProvider::Ollama => "http://localhost:11434/api/generate".to_string(),
+                LlmProvider::OpenAICompatible => {
+                    "http://localhost:8080/v1/chat/completions".to_string()
                 }
             });
 

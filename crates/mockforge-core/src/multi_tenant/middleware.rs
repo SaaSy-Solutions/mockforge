@@ -3,7 +3,7 @@
 //! This module provides middleware for routing requests to the appropriate workspace
 //! based on path-based or port-based routing strategies.
 
-use super::{MultiTenantConfig, MultiTenantWorkspaceRegistry, TenantWorkspace};
+use super::{MultiTenantWorkspaceRegistry, TenantWorkspace};
 use crate::{Error, Result};
 use std::sync::Arc;
 
@@ -54,10 +54,7 @@ impl WorkspaceRouter {
             let workspace = self.registry.get_workspace(&workspace_id)?;
 
             if !workspace.enabled {
-                return Err(Error::generic(format!(
-                    "Workspace '{}' is disabled",
-                    workspace_id
-                )));
+                return Err(Error::generic(format!("Workspace '{}' is disabled", workspace_id)));
             }
 
             let stripped_path = self.registry.strip_workspace_prefix(path, &workspace_id);
@@ -103,15 +100,14 @@ impl WorkspaceRouter {
 }
 
 /// Workspace middleware layer for Axum
-#[cfg(feature = "axum")]
-pub mod axum {
+pub mod axum_middleware {
     use super::*;
-    use axum::{
+    use ::axum::http::StatusCode;
+    use ::axum::{
         extract::Request,
         middleware::Next,
         response::{IntoResponse, Response},
     };
-    use http::StatusCode;
 
     /// Axum middleware for workspace routing
     pub async fn workspace_middleware(
@@ -125,11 +121,7 @@ pub mod axum {
         let context = match router.extract_workspace_context(path) {
             Ok(ctx) => ctx,
             Err(e) => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    format!("Workspace error: {}", e),
-                )
-                    .into_response();
+                return (StatusCode::NOT_FOUND, format!("Workspace error: {}", e)).into_response();
             }
         };
 
@@ -139,13 +131,9 @@ pub mod axum {
         // Update request URI with stripped path
         if context.original_path != context.stripped_path {
             let mut parts = request.uri().clone().into_parts();
-            parts.path_and_query = context
-                .stripped_path
-                .parse()
-                .ok()
-                .or(parts.path_and_query);
+            parts.path_and_query = context.stripped_path.parse().ok().or(parts.path_and_query);
 
-            if let Ok(uri) = http::Uri::from_parts(parts) {
+            if let Ok(uri) = ::axum::http::Uri::from_parts(parts) {
                 *request.uri_mut() = uri;
             }
         }
@@ -176,8 +164,7 @@ pub mod axum {
         }
 
         fn stripped_path(&self) -> Option<&str> {
-            self.workspace_context()
-                .map(|ctx| ctx.stripped_path.as_str())
+            self.workspace_context().map(|ctx| ctx.stripped_path.as_str())
         }
     }
 }
@@ -196,15 +183,11 @@ mod tests {
 
         // Create default workspace
         let default_ws = Workspace::new("Default".to_string());
-        registry
-            .register_workspace("default".to_string(), default_ws)
-            .unwrap();
+        registry.register_workspace("default".to_string(), default_ws).unwrap();
 
         // Create test workspace
         let test_ws = Workspace::new("Test Workspace".to_string());
-        registry
-            .register_workspace("test".to_string(), test_ws)
-            .unwrap();
+        registry.register_workspace("test".to_string(), test_ws).unwrap();
 
         WorkspaceRouter::new(Arc::new(registry))
     }
@@ -213,9 +196,7 @@ mod tests {
     fn test_extract_workspace_context_with_prefix() {
         let router = create_test_router();
 
-        let context = router
-            .extract_workspace_context("/workspace/test/api/users")
-            .unwrap();
+        let context = router.extract_workspace_context("/workspace/test/api/users").unwrap();
 
         assert_eq!(context.workspace_id, "test");
         assert_eq!(context.original_path, "/workspace/test/api/users");
@@ -254,15 +235,11 @@ mod tests {
         let mut registry = MultiTenantWorkspaceRegistry::new(config);
 
         let default_ws = Workspace::new("Default".to_string());
-        registry
-            .register_workspace("default".to_string(), default_ws)
-            .unwrap();
+        registry.register_workspace("default".to_string(), default_ws).unwrap();
 
         let router = WorkspaceRouter::new(Arc::new(registry));
 
-        let context = router
-            .extract_workspace_context("/workspace/test/api/users")
-            .unwrap();
+        let context = router.extract_workspace_context("/workspace/test/api/users").unwrap();
 
         // Should use default workspace when multi-tenant is disabled
         assert_eq!(context.workspace_id, "default");

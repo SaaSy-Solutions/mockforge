@@ -33,9 +33,13 @@ serde_json = "1.0"
 # System metrics collection
 sysinfo = { version = "0.32", optional = true }
 
+# OpenTelemetry tracing (optional)
+tracing-opentelemetry = { version = "0.25", optional = true }
+
 [features]
 default = ["sysinfo"]
 sysinfo = ["dep:sysinfo"]
+opentelemetry = ["dep:tracing-opentelemetry"]
 
 [dev-dependencies]
 tokio-test = "0.4"

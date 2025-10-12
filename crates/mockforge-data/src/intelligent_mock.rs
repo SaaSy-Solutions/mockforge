@@ -120,11 +120,10 @@ impl IntelligentMockConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
         if (self.mode == ResponseMode::Intelligent || self.mode == ResponseMode::Hybrid)
-            && self.prompt.is_none() {
-                return Err(Error::generic(
-                    "Prompt is required for intelligent/hybrid response mode",
-                ));
-            }
+            && self.prompt.is_none()
+        {
+            return Err(Error::generic("Prompt is required for intelligent/hybrid response mode"));
+        }
 
         if let Some(temp) = self.temperature {
             if !(0.0..=2.0).contains(&temp) {
@@ -207,19 +206,24 @@ impl IntelligentMockGenerator {
             }
         }
 
-        let rag_engine = self.rag_engine.as_mut().ok_or_else(|| {
-            Error::generic("RAG engine not initialized for intelligent mode")
-        })?;
+        let rag_engine = self
+            .rag_engine
+            .as_mut()
+            .ok_or_else(|| Error::generic("RAG engine not initialized for intelligent mode"))?;
 
         // Build the generation prompt
-        let mut full_prompt = format!("Generate realistic mock data based on the following intent:\n\n{}\n", prompt);
+        let mut full_prompt =
+            format!("Generate realistic mock data based on the following intent:\n\n{}\n", prompt);
 
         if let Some(context) = &self.config.context {
             full_prompt.push_str(&format!("\nContext: {}\n", context));
         }
 
         if let Some(schema) = &self.config.schema {
-            full_prompt.push_str(&format!("\nConform to this schema:\n{}\n", serde_json::to_string_pretty(schema).unwrap_or_default()));
+            full_prompt.push_str(&format!(
+                "\nConform to this schema:\n{}\n",
+                serde_json::to_string_pretty(schema).unwrap_or_default()
+            ));
         }
 
         if !self.config.constraints.is_empty() {
@@ -252,13 +256,15 @@ impl IntelligentMockGenerator {
         let mut base_response = self.generate_static()?;
 
         // Then enhance with LLM
-        let prompt = self.config.prompt.as_ref().ok_or_else(|| {
-            Error::generic("Prompt is required for hybrid response generation")
-        })?;
+        let prompt =
+            self.config.prompt.as_ref().ok_or_else(|| {
+                Error::generic("Prompt is required for hybrid response generation")
+            })?;
 
-        let rag_engine = self.rag_engine.as_mut().ok_or_else(|| {
-            Error::generic("RAG engine not initialized for hybrid mode")
-        })?;
+        let rag_engine = self
+            .rag_engine
+            .as_mut()
+            .ok_or_else(|| Error::generic("RAG engine not initialized for hybrid mode"))?;
 
         let enhancement_prompt = format!(
             "Enhance this mock data based on the intent: {}\n\nCurrent data:\n{}\n\nReturn the enhanced JSON only.",
@@ -270,7 +276,9 @@ impl IntelligentMockGenerator {
         let enhanced_response = self.extract_json(&response)?;
 
         // Merge the enhanced response with the base
-        if let (Some(base_obj), Some(enhanced_obj)) = (base_response.as_object_mut(), enhanced_response.as_object()) {
+        if let (Some(base_obj), Some(enhanced_obj)) =
+            (base_response.as_object_mut(), enhanced_response.as_object())
+        {
             for (key, value) in enhanced_obj {
                 base_obj.insert(key.clone(), value.clone());
             }
@@ -303,9 +311,8 @@ impl IntelligentMockGenerator {
         };
 
         // Parse JSON
-        serde_json::from_str(json_str).map_err(|e| {
-            Error::generic(format!("Failed to parse LLM response as JSON: {}", e))
-        })
+        serde_json::from_str(json_str)
+            .map_err(|e| Error::generic(format!("Failed to parse LLM response as JSON: {}", e)))
     }
 
     /// Update configuration
@@ -369,8 +376,7 @@ mod tests {
 
     #[test]
     fn test_intelligent_mock_config_validate_invalid_temperature() {
-        let config = IntelligentMockConfig::new(ResponseMode::Static)
-            .with_temperature(3.0);
+        let config = IntelligentMockConfig::new(ResponseMode::Static).with_temperature(3.0);
         assert!(config.validate().is_err());
     }
 
@@ -383,9 +389,9 @@ mod tests {
 
     #[test]
     fn test_extract_json_plain() {
-        let generator = IntelligentMockGenerator::new(
-            IntelligentMockConfig::new(ResponseMode::Static)
-        ).unwrap();
+        let generator =
+            IntelligentMockGenerator::new(IntelligentMockConfig::new(ResponseMode::Static))
+                .unwrap();
 
         let json_str = r#"{"key": "value"}"#;
         let result = generator.extract_json(json_str);
@@ -394,9 +400,9 @@ mod tests {
 
     #[test]
     fn test_extract_json_markdown() {
-        let generator = IntelligentMockGenerator::new(
-            IntelligentMockConfig::new(ResponseMode::Static)
-        ).unwrap();
+        let generator =
+            IntelligentMockGenerator::new(IntelligentMockConfig::new(ResponseMode::Static))
+                .unwrap();
 
         let json_str = "```json\n{\"key\": \"value\"}\n```";
         let result = generator.extract_json(json_str);

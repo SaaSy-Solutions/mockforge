@@ -198,7 +198,7 @@ impl DataSourceCredentials {
 }
 
 /// SSL/TLS configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SslConfig {
     /// Enable SSL/TLS
     pub enabled: bool,
@@ -212,19 +212,6 @@ pub struct SslConfig {
     pub skip_verify: bool,
     /// Custom SSL settings
     pub custom: HashMap<String, serde_json::Value>,
-}
-
-impl Default for SslConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            ca_cert_path: None,
-            client_cert_path: None,
-            client_key_path: None,
-            skip_verify: false,
-            custom: HashMap::new(),
-        }
-    }
 }
 
 /// Data connection handle
@@ -663,7 +650,9 @@ impl DataRow {
 
     /// Get value by column name
     pub fn get_by_name(&self, name: &str, columns: &[ColumnInfo]) -> Option<&Value> {
-        columns.iter().position(|col| col.name == name)
+        columns
+            .iter()
+            .position(|col| col.name == name)
             .and_then(|index| self.get(index))
     }
 
@@ -677,7 +666,6 @@ impl DataRow {
         }
         Ok(Value::Object(obj))
     }
-
 }
 
 /// Column information
@@ -774,6 +762,12 @@ pub struct Schema {
     pub tables: Vec<TableInfo>,
     /// Custom schema metadata
     pub metadata: HashMap<String, Value>,
+}
+
+impl Default for Schema {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Schema {
@@ -1026,11 +1020,9 @@ pub mod helpers {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
-        assert!(true);
     }
 }

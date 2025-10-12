@@ -88,7 +88,10 @@ impl TraceCollector {
     }
 
     /// Get a specific trace by ID from the configured backend
-    pub async fn get_trace_by_id(&self, trace_id: &str) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
+    pub async fn get_trace_by_id(
+        &self,
+        trace_id: &str,
+    ) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
         match self.config.backend_type {
             ExporterType::Jaeger => self.get_trace_from_jaeger(trace_id).await,
             ExporterType::Otlp => self.get_trace_from_otlp(trace_id).await,
@@ -97,8 +100,9 @@ impl TraceCollector {
 
     /// Collect traces from Jaeger backend
     async fn collect_from_jaeger(&self) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
-        let endpoint = self.config.jaeger_endpoint.as_ref()
-            .ok_or_else(|| TraceCollectorError::ConfigError("Jaeger endpoint not configured".to_string()))?;
+        let endpoint = self.config.jaeger_endpoint.as_ref().ok_or_else(|| {
+            TraceCollectorError::ConfigError("Jaeger endpoint not configured".to_string())
+        })?;
 
         // Query recent traces from Jaeger API
         let url = format!("{}/api/traces", endpoint);
@@ -107,23 +111,21 @@ impl TraceCollector {
         let start_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() - 3600000; // 1 hour ago
+            .as_millis()
+            - 3600000; // 1 hour ago
 
         let params = [
             ("start", start_time.to_string()),
             ("limit", self.config.max_traces.to_string()),
         ];
 
-        let response = self.client
-            .get(&url)
-            .query(&params)
-            .send()
-            .await?;
+        let response = self.client.get(&url).query(&params).send().await?;
 
         if !response.status().is_success() {
-            return Err(TraceCollectorError::BackendUnavailable(
-                format!("Jaeger API returned status: {}", response.status())
-            ));
+            return Err(TraceCollectorError::BackendUnavailable(format!(
+                "Jaeger API returned status: {}",
+                response.status()
+            )));
         }
 
         let jaeger_response: JaegerTracesResponse = response.json().await?;
@@ -137,7 +139,10 @@ impl TraceCollector {
                     span_id: span.span_id,
                     parent_span_id: span.parent_span_id,
                     name: span.operation_name,
-                    start_time: format!("{:?}", UNIX_EPOCH + Duration::from_micros(span.start_time)),
+                    start_time: format!(
+                        "{:?}",
+                        UNIX_EPOCH + Duration::from_micros(span.start_time)
+                    ),
                     end_time: {
                         let end_micros = span.start_time.saturating_add(span.duration);
                         format!("{:?}", UNIX_EPOCH + Duration::from_micros(end_micros))
@@ -159,22 +164,24 @@ impl TraceCollector {
     }
 
     /// Get a specific trace from Jaeger backend
-    async fn get_trace_from_jaeger(&self, trace_id: &str) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
-        let endpoint = self.config.jaeger_endpoint.as_ref()
-            .ok_or_else(|| TraceCollectorError::ConfigError("Jaeger endpoint not configured".to_string()))?;
+    async fn get_trace_from_jaeger(
+        &self,
+        trace_id: &str,
+    ) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
+        let endpoint = self.config.jaeger_endpoint.as_ref().ok_or_else(|| {
+            TraceCollectorError::ConfigError("Jaeger endpoint not configured".to_string())
+        })?;
 
         // Query specific trace from Jaeger API
         let url = format!("{}/api/traces/{}", endpoint, trace_id);
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await?;
+        let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
-            return Err(TraceCollectorError::BackendUnavailable(
-                format!("Jaeger API returned status: {}", response.status())
-            ));
+            return Err(TraceCollectorError::BackendUnavailable(format!(
+                "Jaeger API returned status: {}",
+                response.status()
+            )));
         }
 
         let jaeger_response: JaegerTracesResponse = response.json().await?;
@@ -188,7 +195,10 @@ impl TraceCollector {
                     span_id: span.span_id,
                     parent_span_id: span.parent_span_id,
                     name: span.operation_name,
-                    start_time: format!("{:?}", UNIX_EPOCH + Duration::from_micros(span.start_time)),
+                    start_time: format!(
+                        "{:?}",
+                        UNIX_EPOCH + Duration::from_micros(span.start_time)
+                    ),
                     end_time: {
                         let end_micros = span.start_time.saturating_add(span.duration);
                         format!("{:?}", UNIX_EPOCH + Duration::from_micros(end_micros))
@@ -218,7 +228,10 @@ impl TraceCollector {
     }
 
     /// Get a specific trace from OTLP backend (placeholder)
-    async fn get_trace_from_otlp(&self, _trace_id: &str) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
+    async fn get_trace_from_otlp(
+        &self,
+        _trace_id: &str,
+    ) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
         // OTLP is primarily for exporting, not querying
         // In a real implementation, you might need to query a separate trace storage backend
         // For now, return empty results

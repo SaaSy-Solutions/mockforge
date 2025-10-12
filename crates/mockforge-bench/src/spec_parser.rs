@@ -3,7 +3,6 @@
 use crate::error::{BenchError, Result};
 use mockforge_core::openapi::spec::OpenApiSpec;
 use openapiv3::{OpenAPI, Operation, PathItem, ReferenceOr};
-use std::collections::HashMap;
 use std::path::Path;
 
 /// An API operation extracted from an OpenAPI spec
@@ -33,10 +32,11 @@ impl SpecParser {
     /// Load and parse an OpenAPI spec from a file
     pub async fn from_file(path: &Path) -> Result<Self> {
         let spec = OpenApiSpec::from_file(path)
+            .await
             .map_err(|e| BenchError::SpecParseError(e.to_string()))?;
 
         Ok(Self {
-            spec: spec.spec().clone(),
+            spec: spec.spec.clone(),
         })
     }
 
@@ -77,7 +77,8 @@ impl SpecParser {
             let path_pattern = parts[1];
 
             for op in &all_ops {
-                if op.method.to_uppercase() == method && Self::matches_path(&op.path, path_pattern) {
+                if op.method.to_uppercase() == method && Self::matches_path(&op.path, path_pattern)
+                {
                     filtered.push(op.clone());
                 }
             }
@@ -136,18 +137,12 @@ impl SpecParser {
 
     /// Get the base URL from the spec (if available)
     pub fn get_base_url(&self) -> Option<String> {
-        self.spec
-            .servers
-            .first()
-            .map(|server| server.url.clone())
+        self.spec.servers.first().map(|server| server.url.clone())
     }
 
     /// Get API info
     pub fn get_info(&self) -> (String, String) {
-        (
-            self.spec.info.title.clone(),
-            self.spec.info.version.clone(),
-        )
+        (self.spec.info.title.clone(), self.spec.info.version.clone())
     }
 }
 

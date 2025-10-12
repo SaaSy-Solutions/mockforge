@@ -44,7 +44,7 @@ impl Default for RemotePluginConfig {
     fn default() -> Self {
         Self {
             max_download_size: 100 * 1024 * 1024, // 100MB
-            timeout: Duration::from_secs(300),     // 5 minutes
+            timeout: Duration::from_secs(300),    // 5 minutes
             max_retries: 3,
             cache_dir: dirs::cache_dir()
                 .unwrap_or_else(|| PathBuf::from(".cache"))
@@ -209,8 +209,9 @@ impl RemotePluginLoader {
         };
 
         // Create temporary file
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| PluginLoaderError::fs(format!("Failed to create temp directory: {}", e)))?;
+        let temp_dir = tempfile::tempdir().map_err(|e| {
+            PluginLoaderError::fs(format!("Failed to create temp directory: {}", e))
+        })?;
         let temp_file = temp_dir.path().join(file_name);
         let mut file = std::fs::File::create(&temp_file)
             .map_err(|e| PluginLoaderError::fs(format!("Failed to create temp file: {}", e)))?;
@@ -287,9 +288,8 @@ impl RemotePluginLoader {
                 }
                 let mut outfile = fs::File::create(&outpath)
                     .map_err(|e| PluginLoaderError::fs(format!("Failed to create file: {}", e)))?;
-                std::io::copy(&mut file, &mut outfile).map_err(|e| {
-                    PluginLoaderError::fs(format!("Failed to extract file: {}", e))
-                })?;
+                std::io::copy(&mut file, &mut outfile)
+                    .map_err(|e| PluginLoaderError::fs(format!("Failed to extract file: {}", e)))?;
             }
         }
 
@@ -358,9 +358,7 @@ impl RemotePluginLoader {
                 return Ok(path);
             }
         }
-        Err(PluginLoaderError::load(
-            "No .wasm file found in plugin directory",
-        ))
+        Err(PluginLoaderError::load("No .wasm file found in plugin directory"))
     }
 
     /// Generate a cache key from URL
@@ -375,22 +373,12 @@ impl RemotePluginLoader {
     /// Clear the download cache
     pub async fn clear_cache(&self) -> LoaderResult<()> {
         if self.config.cache_dir.exists() {
-            async_fs::remove_dir_all(&self.config.cache_dir)
-                .await
-                .map_err(|e| {
-                    PluginLoaderError::fs(format!(
-                        "Failed to clear cache directory: {}",
-                        e
-                    ))
-                })?;
-            async_fs::create_dir_all(&self.config.cache_dir)
-                .await
-                .map_err(|e| {
-                    PluginLoaderError::fs(format!(
-                        "Failed to recreate cache directory: {}",
-                        e
-                    ))
-                })?;
+            async_fs::remove_dir_all(&self.config.cache_dir).await.map_err(|e| {
+                PluginLoaderError::fs(format!("Failed to clear cache directory: {}", e))
+            })?;
+            async_fs::create_dir_all(&self.config.cache_dir).await.map_err(|e| {
+                PluginLoaderError::fs(format!("Failed to recreate cache directory: {}", e))
+            })?;
         }
         Ok(())
     }

@@ -29,8 +29,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -61,8 +60,7 @@ fn test_config_validate_malformed_json() {
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -81,8 +79,7 @@ fn test_config_validate_empty_file() {
     fs::write(&config_path, "").unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -127,8 +124,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -155,8 +151,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -187,8 +182,7 @@ tls:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     // This might pass or fail depending on how strict the validation is
     // We just want to ensure it doesn't crash
@@ -223,8 +217,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     // YAML parsers typically accept this and use the last value
     // but we want to ensure it doesn't crash
@@ -264,6 +257,16 @@ websocket:
   host: "0.0.0.0"
   connection_timeout_secs: 300
 
+smtp:
+  enabled: false
+  port: 1025
+  host: "0.0.0.0"
+  hostname: "mockforge-smtp"
+  timeout_secs: 300
+  max_connections: 10
+  enable_mailbox: true
+  max_mailbox_messages: 1000
+
 grpc:
   port: 50051
   host: "0.0.0.0"
@@ -274,6 +277,7 @@ admin:
   host: "127.0.0.1"
   auth_required: false
   api_enabled: true
+  prometheus_url: "http://localhost:9090"
 
 chaining:
   enabled: false
@@ -306,6 +310,11 @@ core:
       loss_rate_during_burst: 0.5
       recovery_time_ms: 30000
       tag_overrides: {}
+  time_travel:
+    enabled: false
+    initial_time: null
+    scale_factor: 1.0
+    enable_scheduling: true
 
 logging:
   level: "info"
@@ -341,8 +350,7 @@ observability:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .success()
@@ -378,6 +386,16 @@ websocket:
   host: "0.0.0.0"
   connection_timeout_secs: 300
 
+smtp:
+  enabled: false
+  port: 1025
+  host: "0.0.0.0"
+  hostname: "mockforge-smtp"
+  timeout_secs: 300
+  max_connections: 10
+  enable_mailbox: true
+  max_mailbox_messages: 1000
+
 grpc:
   port: 50051
   host: "0.0.0.0"
@@ -388,6 +406,7 @@ admin:
   host: "0.0.0.0"
   auth_required: false
   api_enabled: true
+  prometheus_url: "http://localhost:9090"
 
 chaining:
   enabled: false
@@ -420,6 +439,11 @@ core:
       loss_rate_during_burst: 0.5
       recovery_time_ms: 30000
       tag_overrides: {}
+  time_travel:
+    enabled: false
+    initial_time: null
+    scale_factor: 1.0
+    enable_scheduling: true
 
 logging:
   level: "info"
@@ -455,8 +479,7 @@ observability:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .success()
@@ -475,8 +498,7 @@ fn test_config_validate_whitespace_only() {
     fs::write(&config_path, "   \n\t\n   \n").unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -503,8 +525,7 @@ fn test_config_validate_comments_only() {
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -531,8 +552,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -562,8 +582,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     // Should either fail or succeed with warnings
     let output = cmd.output().unwrap();
@@ -598,8 +617,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     // Should handle special characters gracefully
     let output = cmd.output().unwrap();
@@ -620,9 +638,9 @@ fn test_config_validate_auto_discovery_no_file() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.current_dir(&temp_dir).args(["config", "validate"]);
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("onfiguration file").or(predicate::str::contains("No such")));
+    cmd.assert().failure().stderr(
+        predicate::str::contains("onfiguration file").or(predicate::str::contains("No such")),
+    );
 
     println!("✓ Config validation correctly handles missing config during auto-discovery");
 }
@@ -637,8 +655,7 @@ fn test_config_validate_binary_file() {
     fs::write(&config_path, &[0xFF, 0xFE, 0xFD, 0x00, 0x01, 0x02]).unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     cmd.assert()
         .failure()
@@ -681,8 +698,7 @@ http:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
-    cmd.args(["config", "validate", "--config"])
-        .arg(config_path.to_str().unwrap());
+    cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
     // Should handle deep nesting
     let output = cmd.output().unwrap();

@@ -26,10 +26,7 @@ pub async fn proxy_chains_create(
 }
 
 /// Proxy get chain requests to the main HTTP server
-pub async fn proxy_chain_get(
-    State(state): State<AdminState>,
-    Path(id): Path<String>,
-) -> Response {
+pub async fn proxy_chain_get(State(state): State<AdminState>, Path(id): Path<String>) -> Response {
     proxy_to_http_server(&state, &format!("/chains/{}", id), None).await
 }
 
@@ -76,16 +73,9 @@ pub async fn proxy_chain_history(
 }
 
 /// Helper function to proxy requests to the main HTTP server
-async fn proxy_to_http_server(
-    state: &AdminState,
-    path: &str,
-    body: Option<Value>,
-) -> Response {
+async fn proxy_to_http_server(state: &AdminState, path: &str, body: Option<Value>) -> Response {
     let Some(http_addr) = state.http_server_addr else {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "HTTP server address not configured",
-        )
+        return (StatusCode::SERVICE_UNAVAILABLE, "HTTP server address not configured")
             .into_response();
     };
 
@@ -109,13 +99,19 @@ async fn proxy_to_http_server(
                 Ok(text) => {
                     // Try to parse as JSON, otherwise return as text
                     if let Ok(json) = serde_json::from_str::<Value>(&text) {
-                        (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK), Json(json)).into_response()
+                        (
+                            StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK),
+                            Json(json),
+                        )
+                            .into_response()
                     } else {
-                        (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK), text).into_response()
+                        (StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::OK), text)
+                            .into_response()
                     }
                 }
                 Err(e) => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read response: {}", e)).into_response()
+                    (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read response: {}", e))
+                        .into_response()
                 }
             }
         }
@@ -131,14 +127,7 @@ mod tests {
     use std::net::SocketAddr;
 
     fn create_test_state(http_addr: Option<SocketAddr>) -> AdminState {
-        AdminState::new(
-            http_addr,
-            None,
-            None,
-            None,
-            false,
-            8080,
-        )
+        AdminState::new(http_addr, None, None, None, false, 8080)
     }
 
     #[tokio::test]
@@ -150,5 +139,4 @@ mod tests {
         // We can't easily extract status from Response, but we verify it compiles
         let _ = response;
     }
-
 }

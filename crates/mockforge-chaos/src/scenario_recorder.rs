@@ -2,12 +2,12 @@
 
 use crate::scenarios::ChaosScenario;
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tracing::{debug, info, warn};
 
 /// A recorded chaos event
@@ -41,10 +41,7 @@ pub enum ChaosEventType {
         endpoint: Option<String>,
     },
     /// Traffic shaping event
-    TrafficShaping {
-        action: String,
-        bytes: usize,
-    },
+    TrafficShaping { action: String, bytes: usize },
     /// Protocol-specific event
     ProtocolEvent {
         protocol: String,
@@ -93,18 +90,15 @@ impl RecordedScenario {
     /// Finish recording
     pub fn finish(&mut self) {
         self.recording_ended = Some(Utc::now());
-        self.total_duration_ms = self.recording_ended
+        self.total_duration_ms = self
+            .recording_ended
             .unwrap()
             .signed_duration_since(self.recording_started)
             .num_milliseconds() as u64;
     }
 
     /// Get events within a time range
-    pub fn events_in_range(
-        &self,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Vec<&ChaosEvent> {
+    pub fn events_in_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<&ChaosEvent> {
         self.events
             .iter()
             .filter(|e| e.timestamp >= start && e.timestamp <= end)
@@ -138,15 +132,9 @@ impl RecordedScenario {
 
         let content = match extension {
             Some("yaml") | Some("yml") => {
-                self.to_yaml().map_err(|e| {
-                    std::io::Error::other(e.to_string())
-                })?
+                self.to_yaml().map_err(|e| std::io::Error::other(e.to_string()))?
             }
-            _ => {
-                self.to_json().map_err(|e| {
-                    std::io::Error::other(e.to_string())
-                })?
-            }
+            _ => self.to_json().map_err(|e| std::io::Error::other(e.to_string()))?,
         };
 
         fs::write(path, content)?;
@@ -162,15 +150,9 @@ impl RecordedScenario {
 
         let scenario = match extension {
             Some("yaml") | Some("yml") => {
-                Self::from_yaml(&content).map_err(|e| {
-                    std::io::Error::other(e.to_string())
-                })?
+                Self::from_yaml(&content).map_err(|e| std::io::Error::other(e.to_string()))?
             }
-            _ => {
-                Self::from_json(&content).map_err(|e| {
-                    std::io::Error::other(e.to_string())
-                })?
-            }
+            _ => Self::from_json(&content).map_err(|e| std::io::Error::other(e.to_string()))?,
         };
 
         info!("Loaded recorded scenario from: {}", path.display());
@@ -247,10 +229,7 @@ impl ScenarioRecorder {
         if let Some(recording) = current.as_mut() {
             // Check max events limit
             if self.max_events > 0 && recording.events.len() >= self.max_events {
-                warn!(
-                    "Max events limit ({}) reached, stopping recording",
-                    self.max_events
-                );
+                warn!("Max events limit ({}) reached, stopping recording", self.max_events);
                 return;
             }
 
@@ -276,11 +255,7 @@ impl ScenarioRecorder {
 
     /// Get recording by scenario name
     pub fn get_recording_by_name(&self, name: &str) -> Option<RecordedScenario> {
-        self.recordings
-            .read()
-            .iter()
-            .find(|r| r.scenario.name == name)
-            .cloned()
+        self.recordings.read().iter().find(|r| r.scenario.name == name).cloned()
     }
 
     /// Clear all recordings

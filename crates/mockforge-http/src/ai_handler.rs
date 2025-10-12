@@ -142,11 +142,10 @@ pub async fn process_response_with_ai(
     drift_config: Option<Value>,
 ) -> Result<Value> {
     // Parse configs if present
-    let intelligent: Option<IntelligentMockConfig> = intelligent_config
-        .and_then(|v| serde_json::from_value(v).ok());
+    let intelligent: Option<IntelligentMockConfig> =
+        intelligent_config.and_then(|v| serde_json::from_value(v).ok());
 
-    let drift: Option<DataDriftConfig> = drift_config
-        .and_then(|v| serde_json::from_value(v).ok());
+    let drift: Option<DataDriftConfig> = drift_config.and_then(|v| serde_json::from_value(v).ok());
 
     // If no AI config, return original response
     if intelligent.is_none() && drift.is_none() {
@@ -204,8 +203,7 @@ mod tests {
 
     #[test]
     fn test_ai_handler_creation_drift_only() {
-        let rule = DriftRule::new("field".to_string(), DriftStrategy::Linear)
-            .with_rate(1.0);
+        let rule = DriftRule::new("field".to_string(), DriftStrategy::Linear).with_rate(1.0);
         let drift_config = DataDriftConfig::new().with_rule(rule);
 
         let result = AiResponseHandler::new(None, Some(drift_config));
@@ -219,8 +217,8 @@ mod tests {
 
     #[test]
     fn test_ai_handler_creation_both() {
-        let intelligent_config = IntelligentMockConfig::new(ResponseMode::Intelligent)
-            .with_prompt("Test".to_string());
+        let intelligent_config =
+            IntelligentMockConfig::new(ResponseMode::Intelligent).with_prompt("Test".to_string());
         let rule = DriftRule::new("field".to_string(), DriftStrategy::Linear);
         let drift_config = DataDriftConfig::new().with_rule(rule);
 

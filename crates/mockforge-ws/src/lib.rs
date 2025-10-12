@@ -155,12 +155,12 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::{response::IntoResponse, routing::get, Router};
 use mockforge_core::{latency::LatencyInjector, LatencyProfile, WsProxyHandler};
+#[cfg(feature = "data-faker")]
+use mockforge_data::provider::register_core_faker_provider;
 use mockforge_observability::get_global_registry;
 use serde_json::Value;
 use tokio::fs;
 use tokio::time::{sleep, Duration};
-#[cfg(feature = "data-faker")]
-use mockforge_data::provider::register_core_faker_provider;
 use tracing::*;
 
 // Re-export AI event generator utilities
@@ -168,8 +168,8 @@ pub use ai_event_generator::{AiEventGenerator, WebSocketAiConfig};
 
 // Re-export tracing utilities
 pub use ws_tracing::{
-    create_ws_connection_span, create_ws_message_span,
-    record_ws_connection_success, record_ws_error, record_ws_message_success,
+    create_ws_connection_span, create_ws_message_span, record_ws_connection_success,
+    record_ws_error, record_ws_message_success,
 };
 
 /// Build the WebSocket router (exposed for tests and embedding)
@@ -458,7 +458,10 @@ async fn handle_socket_with_proxy(socket: WebSocket, proxy: WsProxyHandler, path
 
     let duration = connection_start.elapsed().as_secs_f64();
     registry.record_ws_connection_closed(duration, status);
-    debug!("Proxied WebSocket connection closed (status: {}, duration: {:.2}s)", status, duration);
+    debug!(
+        "Proxied WebSocket connection closed (status: {}, duration: {:.2}s)",
+        status, duration
+    );
 }
 
 #[cfg(test)]

@@ -77,10 +77,10 @@ export function LiveLogsPanel() {
           <h2 className="text-2xl font-bold">Live Logs</h2>
           {getConnectionStatusIndicator()}
         </div>
-        
+
         <div className="flex items-center space-x-4 text-sm text-muted-foreground">
           <span>{formatLogCount()}</span>
-          <button 
+          <button
             onClick={clearLogs}
             className="text-destructive hover:text-destructive/80"
           >
@@ -113,7 +113,7 @@ export function LiveLogsPanel() {
       </div>
 
       {/* Logs List */}
-      <div 
+      <div
         ref={logsContainerRef}
         className="flex-1 overflow-auto"
       >
@@ -124,7 +124,7 @@ export function LiveLogsPanel() {
               <div>
                 <h3 className="text-lg font-semibold">No logs found</h3>
                 <p className="text-muted-foreground">
-                  {isPaused 
+                  {isPaused
                     ? 'Logging is paused. Click "Live" to resume.'
                     : 'Waiting for log entries or adjust your filters.'
                   }

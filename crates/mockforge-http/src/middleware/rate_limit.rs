@@ -4,7 +4,7 @@
 
 use axum::{
     body::Body,
-    extract::ConnectInfo,
+    extract::{ConnectInfo, State},
     http::{Request, StatusCode},
     middleware::Next,
     response::Response,
@@ -17,7 +17,6 @@ use governor::{
 use std::net::SocketAddr;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::warn;
 
 /// Rate limiting configuration

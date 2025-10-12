@@ -7,10 +7,10 @@ use governor::{
     Quota, RateLimiter as GovernorRateLimiter,
 };
 use nonzero_ext::nonzero;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tracing::debug;
 
 /// Rate limiter for controlling request throughput
@@ -18,19 +18,21 @@ use tracing::debug;
 pub struct RateLimiter {
     config: RateLimitConfig,
     global_limiter: Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
-    ip_limiters: Arc<RwLock<HashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>>,
-    endpoint_limiters: Arc<RwLock<HashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>>,
+    ip_limiters: Arc<
+        RwLock<HashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
+    >,
+    endpoint_limiters: Arc<
+        RwLock<HashMap<String, Arc<GovernorRateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>,
+    >,
 }
 
 impl RateLimiter {
     /// Create a new rate limiter
     pub fn new(config: RateLimitConfig) -> Self {
         let quota = Quota::per_second(
-            NonZeroU32::new(config.requests_per_second).unwrap_or(nonzero!(100u32))
+            NonZeroU32::new(config.requests_per_second).unwrap_or(nonzero!(100u32)),
         )
-        .allow_burst(
-            NonZeroU32::new(config.burst_size).unwrap_or(nonzero!(10u32))
-        );
+        .allow_burst(NonZeroU32::new(config.burst_size).unwrap_or(nonzero!(10u32)));
 
         let global_limiter = Arc::new(GovernorRateLimiter::direct(quota));
 
@@ -73,10 +75,11 @@ impl RateLimiter {
                 .entry(ip.to_string())
                 .or_insert_with(|| {
                     let quota = Quota::per_second(
-                        NonZeroU32::new(self.config.requests_per_second).unwrap_or(nonzero!(100u32))
+                        NonZeroU32::new(self.config.requests_per_second)
+                            .unwrap_or(nonzero!(100u32)),
                     )
                     .allow_burst(
-                        NonZeroU32::new(self.config.burst_size).unwrap_or(nonzero!(10u32))
+                        NonZeroU32::new(self.config.burst_size).unwrap_or(nonzero!(10u32)),
                     );
                     Arc::new(GovernorRateLimiter::direct(quota))
                 })
@@ -103,10 +106,11 @@ impl RateLimiter {
                 .entry(endpoint.to_string())
                 .or_insert_with(|| {
                     let quota = Quota::per_second(
-                        NonZeroU32::new(self.config.requests_per_second).unwrap_or(nonzero!(100u32))
+                        NonZeroU32::new(self.config.requests_per_second)
+                            .unwrap_or(nonzero!(100u32)),
                     )
                     .allow_burst(
-                        NonZeroU32::new(self.config.burst_size).unwrap_or(nonzero!(10u32))
+                        NonZeroU32::new(self.config.burst_size).unwrap_or(nonzero!(10u32)),
                     );
                     Arc::new(GovernorRateLimiter::direct(quota))
                 })
@@ -157,7 +161,7 @@ mod tests {
         let config = RateLimitConfig {
             enabled: true,
             requests_per_second: 1,
-            burst_size: 2,  // burst_size is the total capacity, not additional requests
+            burst_size: 2, // burst_size is the total capacity, not additional requests
             per_ip: false,
             per_endpoint: false,
         };
@@ -171,10 +175,7 @@ mod tests {
         assert!(limiter.check_global().is_ok());
 
         // Next request should fail (exceeded rate + burst)
-        assert!(matches!(
-            limiter.check_global(),
-            Err(ChaosError::RateLimitExceeded)
-        ));
+        assert!(matches!(limiter.check_global(), Err(ChaosError::RateLimitExceeded)));
     }
 
     #[test]
@@ -197,7 +198,7 @@ mod tests {
         let config = RateLimitConfig {
             enabled: true,
             requests_per_second: 1,
-            burst_size: 2,  // burst_size is the total capacity, not additional requests
+            burst_size: 2, // burst_size is the total capacity, not additional requests
             per_ip: true,
             per_endpoint: false,
         };
@@ -213,13 +214,7 @@ mod tests {
         assert!(limiter.check_ip("192.168.1.2").is_ok());
 
         // Should fail for each IP independently
-        assert!(matches!(
-            limiter.check_ip("192.168.1.1"),
-            Err(ChaosError::RateLimitExceeded)
-        ));
-        assert!(matches!(
-            limiter.check_ip("192.168.1.2"),
-            Err(ChaosError::RateLimitExceeded)
-        ));
+        assert!(matches!(limiter.check_ip("192.168.1.1"), Err(ChaosError::RateLimitExceeded)));
+        assert!(matches!(limiter.check_ip("192.168.1.2"), Err(ChaosError::RateLimitExceeded)));
     }
 }

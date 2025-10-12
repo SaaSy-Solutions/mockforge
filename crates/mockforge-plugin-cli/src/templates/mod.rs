@@ -34,7 +34,10 @@ impl PluginType {
             "template" => Ok(Self::Template),
             "response" => Ok(Self::Response),
             "datasource" | "data-source" => Ok(Self::DataSource),
-            _ => anyhow::bail!("Unknown plugin type: {}. Valid types: auth, template, response, datasource", s),
+            _ => anyhow::bail!(
+                "Unknown plugin type: {}. Valid types: auth, template, response, datasource",
+                s
+            ),
         }
     }
 

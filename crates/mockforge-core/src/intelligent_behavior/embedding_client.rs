@@ -75,33 +75,26 @@ impl EmbeddingClient {
             "input": text,
         });
 
-        let mut request = self
-            .client
-            .post(&self.endpoint)
-            .header("Content-Type", "application/json");
+        let mut request =
+            self.client.post(&self.endpoint).header("Content-Type", "application/json");
 
         if !api_key.is_empty() {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = request
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| crate::Error::generic(format!("Embedding API request failed: {}", e)))?;
+        let response =
+            request.json(&request_body).send().await.map_err(|e| {
+                crate::Error::generic(format!("Embedding API request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Embedding API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Embedding API error: {}", error_text)));
         }
 
-        let response_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| crate::Error::generic(format!("Failed to parse embedding response: {}", e)))?;
+        let response_json: serde_json::Value = response.json().await.map_err(|e| {
+            crate::Error::generic(format!("Failed to parse embedding response: {}", e))
+        })?;
 
         // Extract embedding vector
         let embedding: Vec<f32> = response_json["data"][0]["embedding"]

@@ -1,6 +1,8 @@
 //! Registry API client
 
-use crate::{RegistryConfig, RegistryEntry, RegistryError, Result, SearchQuery, SearchResults, VersionEntry};
+use crate::{
+    RegistryConfig, RegistryEntry, RegistryError, Result, SearchQuery, SearchResults, VersionEntry,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -33,16 +35,10 @@ impl RegistryClient {
             .map_err(|e| RegistryError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(RegistryError::Network(format!(
-                "Search failed: {}",
-                response.status()
-            )));
+            return Err(RegistryError::Network(format!("Search failed: {}", response.status())));
         }
 
-        let results = response
-            .json()
-            .await
-            .map_err(|e| RegistryError::Network(e.to_string()))?;
+        let results = response.json().await.map_err(|e| RegistryError::Network(e.to_string()))?;
 
         Ok(results)
     }
@@ -68,20 +64,14 @@ impl RegistryClient {
             )));
         }
 
-        let entry = response
-            .json()
-            .await
-            .map_err(|e| RegistryError::Network(e.to_string()))?;
+        let entry = response.json().await.map_err(|e| RegistryError::Network(e.to_string()))?;
 
         Ok(entry)
     }
 
     /// Get specific version of a plugin
     pub async fn get_version(&self, name: &str, version: &str) -> Result<VersionEntry> {
-        let url = format!(
-            "{}/api/v1/plugins/{}/versions/{}",
-            self.config.url, name, version
-        );
+        let url = format!("{}/api/v1/plugins/{}/versions/{}", self.config.url, name, version);
         let response = self
             .client
             .get(&url)
@@ -93,21 +83,14 @@ impl RegistryClient {
             return Err(RegistryError::InvalidVersion(version.to_string()));
         }
 
-        let entry = response
-            .json()
-            .await
-            .map_err(|e| RegistryError::Network(e.to_string()))?;
+        let entry = response.json().await.map_err(|e| RegistryError::Network(e.to_string()))?;
 
         Ok(entry)
     }
 
     /// Publish a new plugin version
     pub async fn publish(&self, manifest: PublishRequest) -> Result<PublishResponse> {
-        let token = self
-            .config
-            .token
-            .as_ref()
-            .ok_or(RegistryError::AuthRequired)?;
+        let token = self.config.token.as_ref().ok_or(RegistryError::AuthRequired)?;
 
         let url = format!("{}/api/v1/plugins/publish", self.config.url);
         let response = self
@@ -128,16 +111,10 @@ impl RegistryClient {
         }
 
         if !response.status().is_success() {
-            return Err(RegistryError::Network(format!(
-                "Publish failed: {}",
-                response.status()
-            )));
+            return Err(RegistryError::Network(format!("Publish failed: {}", response.status())));
         }
 
-        let result = response
-            .json()
-            .await
-            .map_err(|e| RegistryError::Network(e.to_string()))?;
+        let result = response.json().await.map_err(|e| RegistryError::Network(e.to_string()))?;
 
         Ok(result)
     }
@@ -152,32 +129,19 @@ impl RegistryClient {
             .map_err(|e| RegistryError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(RegistryError::Network(format!(
-                "Download failed: {}",
-                response.status()
-            )));
+            return Err(RegistryError::Network(format!("Download failed: {}", response.status())));
         }
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| RegistryError::Network(e.to_string()))?;
+        let bytes = response.bytes().await.map_err(|e| RegistryError::Network(e.to_string()))?;
 
         Ok(bytes.to_vec())
     }
 
     /// Yank a plugin version (remove from index)
     pub async fn yank(&self, name: &str, version: &str) -> Result<()> {
-        let token = self
-            .config
-            .token
-            .as_ref()
-            .ok_or(RegistryError::AuthRequired)?;
+        let token = self.config.token.as_ref().ok_or(RegistryError::AuthRequired)?;
 
-        let url = format!(
-            "{}/api/v1/plugins/{}/versions/{}/yank",
-            self.config.url, name, version
-        );
+        let url = format!("{}/api/v1/plugins/{}/versions/{}/yank", self.config.url, name, version);
         let response = self
             .client
             .delete(&url)
@@ -187,10 +151,7 @@ impl RegistryClient {
             .map_err(|e| RegistryError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(RegistryError::Network(format!(
-                "Yank failed: {}",
-                response.status()
-            )));
+            return Err(RegistryError::Network(format!("Yank failed: {}", response.status())));
         }
 
         Ok(())

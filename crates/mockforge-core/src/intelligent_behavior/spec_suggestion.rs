@@ -167,10 +167,7 @@ impl SpecSuggestionEngine {
     /// Create a new spec suggestion engine
     pub fn new(config: SuggestionConfig) -> Self {
         let llm_client = LlmClient::new(config.llm_config.clone());
-        Self {
-            llm_client,
-            config,
-        }
+        Self { llm_client, config }
     }
 
     /// Generate spec suggestions from input
@@ -287,12 +284,22 @@ Generate {} additional endpoint suggestions beyond what was provided in the inpu
 
         let request_text = request
             .as_ref()
-            .map(|r| format!("Request:\n```json\n{}\n```\n", serde_json::to_string_pretty(r).unwrap_or_default()))
+            .map(|r| {
+                format!(
+                    "Request:\n```json\n{}\n```\n",
+                    serde_json::to_string_pretty(r).unwrap_or_default()
+                )
+            })
             .unwrap_or_default();
 
         let response_text = response
             .as_ref()
-            .map(|r| format!("Response:\n```json\n{}\n```\n", serde_json::to_string_pretty(r).unwrap_or_default()))
+            .map(|r| {
+                format!(
+                    "Response:\n```json\n{}\n```\n",
+                    serde_json::to_string_pretty(r).unwrap_or_default()
+                )
+            })
             .unwrap_or_default();
 
         format!(
@@ -401,35 +408,27 @@ Create a cohesive API design that makes sense for these endpoints and follows RE
             .and_then(|e| e.as_array())
             .ok_or_else(|| crate::Error::generic("No endpoints in LLM response"))?;
 
-        let suggestions: Vec<EndpointSuggestion> = endpoints
-            .iter()
-            .filter_map(|e| self.parse_endpoint_suggestion(e))
-            .collect();
+        let suggestions: Vec<EndpointSuggestion> =
+            endpoints.iter().filter_map(|e| self.parse_endpoint_suggestion(e)).collect();
 
         // Extract specs based on format
-        let openapi_spec = if matches!(
-            self.config.output_format,
-            OutputFormat::OpenAPI | OutputFormat::Both
-        ) {
-            response.get("openapi_spec").cloned()
-        } else {
-            None
-        };
+        let openapi_spec =
+            if matches!(self.config.output_format, OutputFormat::OpenAPI | OutputFormat::Both) {
+                response.get("openapi_spec").cloned()
+            } else {
+                None
+            };
 
-        let mockforge_config = if matches!(
-            self.config.output_format,
-            OutputFormat::MockForge | OutputFormat::Both
-        ) {
-            response.get("mockforge_config").cloned()
-        } else {
-            None
-        };
+        let mockforge_config =
+            if matches!(self.config.output_format, OutputFormat::MockForge | OutputFormat::Both) {
+                response.get("mockforge_config").cloned()
+            } else {
+                None
+            };
 
         // Extract metadata
-        let detected_domain = response
-            .get("detected_domain")
-            .and_then(|d| d.as_str())
-            .map(String::from);
+        let detected_domain =
+            response.get("detected_domain").and_then(|d| d.as_str()).map(String::from);
 
         let metadata = SuggestionMetadata {
             endpoint_count: suggestions.len(),
@@ -450,10 +449,7 @@ Create a cohesive API design that makes sense for these endpoints and follows RE
     fn parse_endpoint_suggestion(&self, endpoint: &Value) -> Option<EndpointSuggestion> {
         let method = endpoint.get("method")?.as_str()?.to_string();
         let path = endpoint.get("path")?.as_str()?.to_string();
-        let description = endpoint
-            .get("description")?
-            .as_str()?
-            .to_string();
+        let description = endpoint.get("description")?.as_str()?.to_string();
         let reasoning = endpoint
             .get("reasoning")
             .and_then(|r| r.as_str())
@@ -463,12 +459,7 @@ Create a cohesive API design that makes sense for these endpoints and follows RE
         let parameters = endpoint
             .get("parameters")
             .and_then(|p| p.as_array())
-            .map(|params| {
-                params
-                    .iter()
-                    .filter_map(|p| self.parse_parameter(p))
-                    .collect()
-            })
+            .map(|params| params.iter().filter_map(|p| self.parse_parameter(p)).collect())
             .unwrap_or_default();
 
         let response_schema = endpoint.get("response_schema").cloned();
@@ -490,10 +481,7 @@ Create a cohesive API design that makes sense for these endpoints and follows RE
             location: param.get("location")?.as_str()?.to_string(),
             data_type: param.get("data_type")?.as_str()?.to_string(),
             required: param.get("required")?.as_bool()?,
-            description: param
-                .get("description")
-                .and_then(|d| d.as_str())
-                .map(String::from),
+            description: param.get("description").and_then(|d| d.as_str()).map(String::from),
         })
     }
 }
@@ -504,18 +492,9 @@ mod tests {
 
     #[test]
     fn test_output_format_from_str() {
-        assert_eq!(
-            "openapi".parse::<OutputFormat>().unwrap(),
-            OutputFormat::OpenAPI
-        );
-        assert_eq!(
-            "mockforge".parse::<OutputFormat>().unwrap(),
-            OutputFormat::MockForge
-        );
-        assert_eq!(
-            "both".parse::<OutputFormat>().unwrap(),
-            OutputFormat::Both
-        );
+        assert_eq!("openapi".parse::<OutputFormat>().unwrap(), OutputFormat::OpenAPI);
+        assert_eq!("mockforge".parse::<OutputFormat>().unwrap(), OutputFormat::MockForge);
+        assert_eq!("both".parse::<OutputFormat>().unwrap(), OutputFormat::Both);
         assert!("invalid".parse::<OutputFormat>().is_err());
     }
 

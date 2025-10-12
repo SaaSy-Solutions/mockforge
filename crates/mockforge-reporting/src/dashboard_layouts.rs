@@ -3,7 +3,7 @@
 //! Allows users to create, save, and share custom dashboard configurations
 //! with different widget arrangements and data sources.
 
-use crate::{Result, ReportingError};
+use crate::{ReportingError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -196,9 +196,7 @@ impl DashboardLayoutManager {
         let file_path = self.get_layout_path(layout_id);
 
         if !Path::new(&file_path).exists() {
-            return Err(ReportingError::Analysis(
-                format!("Layout not found: {}", layout_id)
-            ));
+            return Err(ReportingError::Analysis(format!("Layout not found: {}", layout_id)));
         }
 
         let json = fs::read_to_string(file_path)?;
@@ -243,14 +241,17 @@ impl DashboardLayoutManager {
             fs::remove_file(file_path)?;
             Ok(())
         } else {
-            Err(ReportingError::Analysis(
-                format!("Layout not found: {}", layout_id)
-            ))
+            Err(ReportingError::Analysis(format!("Layout not found: {}", layout_id)))
         }
     }
 
     /// Clone a dashboard layout with a new ID
-    pub fn clone_layout(&self, source_id: &str, new_name: &str, new_author: &str) -> Result<DashboardLayout> {
+    pub fn clone_layout(
+        &self,
+        source_id: &str,
+        new_name: &str,
+        new_author: &str,
+    ) -> Result<DashboardLayout> {
         let mut layout = self.load_layout(source_id)?;
 
         // Update with new information
@@ -380,7 +381,12 @@ impl DashboardTemplates {
                 id: "active-scenarios".to_string(),
                 widget_type: WidgetType::Counter,
                 title: "Active Scenarios".to_string(),
-                position: WidgetPosition { x: 0, y: 0, width: 3, height: 2 },
+                position: WidgetPosition {
+                    x: 0,
+                    y: 0,
+                    width: 3,
+                    height: 2,
+                },
                 data_source: DataSource {
                     source_type: DataSourceType::ScenarioExecutions,
                     query: "count(active_scenarios)".to_string(),
@@ -397,7 +403,12 @@ impl DashboardTemplates {
                 id: "error-rate".to_string(),
                 widget_type: WidgetType::LineChart,
                 title: "Error Rate".to_string(),
-                position: WidgetPosition { x: 3, y: 0, width: 6, height: 4 },
+                position: WidgetPosition {
+                    x: 3,
+                    y: 0,
+                    width: 6,
+                    height: 4,
+                },
                 data_source: DataSource {
                     source_type: DataSourceType::ChaosMetrics,
                     query: "error_rate".to_string(),
@@ -414,7 +425,12 @@ impl DashboardTemplates {
                 id: "latency-heatmap".to_string(),
                 widget_type: WidgetType::Heatmap,
                 title: "Latency Distribution".to_string(),
-                position: WidgetPosition { x: 0, y: 4, width: 12, height: 4 },
+                position: WidgetPosition {
+                    x: 0,
+                    y: 4,
+                    width: 12,
+                    height: 4,
+                },
                 data_source: DataSource {
                     source_type: DataSourceType::OpenTelemetry,
                     query: "histogram_quantile(0.95, latency)".to_string(),
@@ -543,10 +559,10 @@ mod tests {
     #[test]
     fn test_layout_manager_save_and_load() {
         let temp_dir = tempdir().unwrap();
-        let manager = DashboardLayoutManager::new(temp_dir.path().to_str().unwrap().to_string()).unwrap();
+        let manager =
+            DashboardLayoutManager::new(temp_dir.path().to_str().unwrap().to_string()).unwrap();
 
-        let layout = DashboardLayoutBuilder::new("Test", "author")
-            .build();
+        let layout = DashboardLayoutBuilder::new("Test", "author").build();
 
         // Save
         manager.save_layout(&layout).unwrap();

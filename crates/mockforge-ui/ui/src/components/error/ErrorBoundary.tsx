@@ -75,7 +75,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-6 inline-flex">
                 <StatusIcon status="error" size="3xl" />
               </div>
-              
+
               <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-3">
                 Something went wrong
               </h2>

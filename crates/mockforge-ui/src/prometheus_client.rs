@@ -51,10 +51,7 @@ impl PrometheusClient {
     pub fn new(prometheus_url: String) -> Self {
         Self {
             base_url: prometheus_url,
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap(),
+            client: reqwest::Client::builder().timeout(Duration::from_secs(10)).build().unwrap(),
             cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cache_ttl: Duration::from_secs(10), // Cache for 10 seconds
         }
@@ -64,10 +61,7 @@ impl PrometheusClient {
     pub fn with_cache_ttl(prometheus_url: String, cache_ttl: Duration) -> Self {
         Self {
             base_url: prometheus_url,
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap(),
+            client: reqwest::Client::builder().timeout(Duration::from_secs(10)).build().unwrap(),
             cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cache_ttl,
         }
@@ -107,10 +101,8 @@ impl PrometheusClient {
             anyhow::bail!("Prometheus query failed: {} - {}", status, body);
         }
 
-        let result: PrometheusResponse = response
-            .json()
-            .await
-            .context("Failed to parse Prometheus response")?;
+        let result: PrometheusResponse =
+            response.json().await.context("Failed to parse Prometheus response")?;
 
         // Cache the result
         {
@@ -172,10 +164,8 @@ impl PrometheusClient {
             anyhow::bail!("Prometheus range query failed: {} - {}", status, body);
         }
 
-        let result: PrometheusResponse = response
-            .json()
-            .await
-            .context("Failed to parse Prometheus response")?;
+        let result: PrometheusResponse =
+            response.json().await.context("Failed to parse Prometheus response")?;
 
         // Cache the result
         {
@@ -216,13 +206,7 @@ impl PrometheusClient {
             .result
             .iter()
             .filter_map(|r| {
-                let label = r
-                    .metric
-                    .as_object()?
-                    .values()
-                    .next()?
-                    .as_str()?
-                    .to_string();
+                let label = r.metric.as_object()?.values().next()?.as_str()?.to_string();
                 let value: f64 = r.value.as_ref()?.1.parse().ok()?;
                 Some((label, value))
             })
@@ -230,9 +214,7 @@ impl PrometheusClient {
     }
 
     /// Extract time series data from range query
-    pub fn extract_time_series(
-        response: &PrometheusResponse,
-    ) -> Vec<(String, Vec<(i64, f64)>)> {
+    pub fn extract_time_series(response: &PrometheusResponse) -> Vec<(String, Vec<(i64, f64)>)> {
         response
             .data
             .result

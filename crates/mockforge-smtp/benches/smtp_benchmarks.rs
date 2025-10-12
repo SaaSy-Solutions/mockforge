@@ -9,9 +9,7 @@ use tokio::runtime::Runtime;
 
 /// Helper to start SMTP server on a random port
 async fn start_test_server() -> (SmtpServer, u16) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("Failed to bind");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("Failed to bind");
     let port = listener.local_addr().unwrap().port();
     drop(listener);
 
@@ -61,10 +59,7 @@ fn bench_connection_greeting(c: &mut Criterion) {
             let (reader, _writer) = stream.into_split();
             let mut reader = BufReader::new(reader);
             let mut greeting = String::new();
-            reader
-                .read_line(&mut greeting)
-                .await
-                .expect("Failed to read greeting");
+            reader.read_line(&mut greeting).await.expect("Failed to read greeting");
 
             black_box(greeting);
         });
@@ -97,10 +92,7 @@ fn bench_full_conversation(c: &mut Criterion) {
             response.clear();
 
             // EHLO
-            writer
-                .write_all(b"EHLO client.example.com\r\n")
-                .await
-                .unwrap();
+            writer.write_all(b"EHLO client.example.com\r\n").await.unwrap();
             loop {
                 let mut line = String::new();
                 reader.read_line(&mut line).await.unwrap();
@@ -110,18 +102,12 @@ fn bench_full_conversation(c: &mut Criterion) {
             }
 
             // MAIL FROM
-            writer
-                .write_all(b"MAIL FROM:<sender@example.com>\r\n")
-                .await
-                .unwrap();
+            writer.write_all(b"MAIL FROM:<sender@example.com>\r\n").await.unwrap();
             response.clear();
             reader.read_line(&mut response).await.unwrap();
 
             // RCPT TO
-            writer
-                .write_all(b"RCPT TO:<recipient@example.com>\r\n")
-                .await
-                .unwrap();
+            writer.write_all(b"RCPT TO:<recipient@example.com>\r\n").await.unwrap();
             response.clear();
             reader.read_line(&mut response).await.unwrap();
 
@@ -177,10 +163,7 @@ fn bench_command_processing(c: &mut Criterion) {
                 response.clear();
 
                 // Send command
-                writer
-                    .write_all(format!("{}\r\n", cmd).as_bytes())
-                    .await
-                    .unwrap();
+                writer.write_all(format!("{}\r\n", cmd).as_bytes()).await.unwrap();
                 reader.read_line(&mut response).await.unwrap();
 
                 black_box(response);
@@ -193,7 +176,7 @@ fn bench_command_processing(c: &mut Criterion) {
 
 /// Benchmark fixture matching performance
 fn bench_fixture_matching(c: &mut Criterion) {
-    use mockforge_smtp::{MatchCriteria, SmtpFixture, SmtpResponse, BehaviorConfig, StorageConfig};
+    use mockforge_smtp::{BehaviorConfig, MatchCriteria, SmtpFixture, SmtpResponse, StorageConfig};
     use std::path::PathBuf;
 
     let rt = Runtime::new().unwrap();
@@ -232,9 +215,7 @@ fn bench_fixture_matching(c: &mut Criterion) {
         std::fs::write(&fixture_path, serde_yaml::to_string(&fixture).unwrap()).unwrap();
     }
 
-    registry
-        .load_fixtures(temp_dir.path())
-        .expect("Failed to load fixtures");
+    registry.load_fixtures(temp_dir.path()).expect("Failed to load fixtures");
 
     let mut group = c.benchmark_group("fixture_matching");
     group.throughput(Throughput::Elements(1));
@@ -314,9 +295,7 @@ fn bench_mailbox_operations(c: &mut Criterion) {
 
     group.bench_function("get_email_by_id", |b| {
         b.iter(|| {
-            let email = registry
-                .get_email_by_id("test-50")
-                .expect("Failed to get email");
+            let email = registry.get_email_by_id("test-50").expect("Failed to get email");
             black_box(email);
         });
     });
@@ -360,10 +339,7 @@ fn bench_concurrent_connections(c: &mut Criterion) {
                             response.clear();
 
                             // EHLO
-                            writer
-                                .write_all(b"EHLO client.example.com\r\n")
-                                .await
-                                .unwrap();
+                            writer.write_all(b"EHLO client.example.com\r\n").await.unwrap();
                             loop {
                                 let mut line = String::new();
                                 reader.read_line(&mut line).await.unwrap();

@@ -1,13 +1,10 @@
 //! Scenario orchestration for composing and chaining chaos scenarios
 
-use crate::{
-    config::ChaosConfig,
-    scenarios::ChaosScenario,
-};
+use crate::{config::ChaosConfig, scenarios::ChaosScenario};
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, info, warn};
@@ -239,13 +236,7 @@ impl ScenarioOrchestrator {
 
         // Spawn orchestration task
         tokio::spawn(async move {
-            Self::orchestration_task(
-                orchestrated,
-                status_arc,
-                config_arc,
-                &mut control_rx,
-            )
-            .await;
+            Self::orchestration_task(orchestrated, status_arc, config_arc, &mut control_rx).await;
         });
 
         Ok(())
@@ -422,10 +413,7 @@ impl ScenarioOrchestrator {
         }
 
         // Determine duration
-        let duration = step
-            .duration_seconds
-            .or(Some(step.scenario.duration_seconds))
-            .unwrap_or(0);
+        let duration = step.duration_seconds.or(Some(step.scenario.duration_seconds)).unwrap_or(0);
 
         if duration > 0 {
             debug!("Running step '{}' for {}s", step.name, duration);
@@ -525,9 +513,7 @@ mod tests {
         let step1 = ScenarioStep::new("step1", scenario1);
         let step2 = ScenarioStep::new("step2", scenario2);
 
-        let orchestrated = OrchestratedScenario::new("test")
-            .add_step(step1)
-            .add_step(step2);
+        let orchestrated = OrchestratedScenario::new("test").add_step(step1).add_step(step2);
 
         assert_eq!(orchestrated.steps.len(), 2);
     }

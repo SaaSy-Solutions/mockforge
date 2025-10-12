@@ -2,9 +2,9 @@
 
 use crate::scenario_recorder::{ChaosEvent, ChaosEventType, RecordedScenario};
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, info, warn};
@@ -25,9 +25,7 @@ impl ReplaySpeed {
     pub fn calculate_delay(&self, original_delay_ms: u64) -> u64 {
         match self {
             ReplaySpeed::RealTime => original_delay_ms,
-            ReplaySpeed::Custom(multiplier) => {
-                ((original_delay_ms as f64) / multiplier) as u64
-            }
+            ReplaySpeed::Custom(multiplier) => ((original_delay_ms as f64) / multiplier) as u64,
             ReplaySpeed::Fast => 0,
         }
     }
@@ -146,13 +144,7 @@ impl ScenarioReplayEngine {
 
         // Spawn replay task
         tokio::spawn(async move {
-            Self::replay_task(
-                recorded,
-                options,
-                status_arc,
-                &mut control_rx,
-            )
-            .await;
+            Self::replay_task(recorded, options, status_arc, &mut control_rx).await;
         });
 
         Ok(())
@@ -245,12 +237,7 @@ impl ScenarioReplayEngine {
                     s.progress = (index + 1) as f64 / total_events as f64;
                 });
 
-                debug!(
-                    "Replayed event {}/{}: {:?}",
-                    index + 1,
-                    total_events,
-                    event.event_type
-                );
+                debug!("Replayed event {}/{}: {:?}", index + 1, total_events, event.event_type);
             }
 
             // Check if should loop
@@ -276,24 +263,24 @@ impl ScenarioReplayEngine {
                 debug!(
                     "Replaying latency injection: {}ms{}",
                     delay_ms,
-                    endpoint
-                        .as_ref()
-                        .map(|e| format!(" on {}", e))
-                        .unwrap_or_default()
+                    endpoint.as_ref().map(|e| format!(" on {}", e)).unwrap_or_default()
                 );
                 sleep(std::time::Duration::from_millis(*delay_ms)).await;
             }
-            ChaosEventType::FaultInjection { fault_type, endpoint } => {
+            ChaosEventType::FaultInjection {
+                fault_type,
+                endpoint,
+            } => {
                 debug!(
                     "Replaying fault injection: {}{}",
                     fault_type,
-                    endpoint
-                        .as_ref()
-                        .map(|e| format!(" on {}", e))
-                        .unwrap_or_default()
+                    endpoint.as_ref().map(|e| format!(" on {}", e)).unwrap_or_default()
                 );
             }
-            ChaosEventType::RateLimitExceeded { client_ip, endpoint } => {
+            ChaosEventType::RateLimitExceeded {
+                client_ip,
+                endpoint,
+            } => {
                 debug!(
                     "Replaying rate limit exceeded: client={:?}, endpoint={:?}",
                     client_ip, endpoint
@@ -302,20 +289,18 @@ impl ScenarioReplayEngine {
             ChaosEventType::TrafficShaping { action, bytes } => {
                 debug!("Replaying traffic shaping: {} ({} bytes)", action, bytes);
             }
-            ChaosEventType::ProtocolEvent { protocol, event, details } => {
-                debug!(
-                    "Replaying protocol event: {} - {} ({:?})",
-                    protocol, event, details
-                );
+            ChaosEventType::ProtocolEvent {
+                protocol,
+                event,
+                details,
+            } => {
+                debug!("Replaying protocol event: {} - {} ({:?})", protocol, event, details);
             }
             ChaosEventType::ScenarioTransition {
                 from_scenario,
                 to_scenario,
             } => {
-                debug!(
-                    "Replaying scenario transition: {:?} -> {}",
-                    from_scenario, to_scenario
-                );
+                debug!("Replaying scenario transition: {:?} -> {}", from_scenario, to_scenario);
             }
         }
     }
@@ -405,8 +390,6 @@ impl Default for ScenarioReplayEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     #[tokio::test]
     async fn test_replay_speed_calculation() {

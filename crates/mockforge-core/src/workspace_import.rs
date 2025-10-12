@@ -261,7 +261,11 @@ fn determine_folder_path(route_path: &str, config: &WorkspaceImportConfig) -> St
     }
 
     // Split path into segments
-    let segments: Vec<&str> = route_path.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let segments: Vec<&str> = route_path
+        .trim_start_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
 
     // Handle empty segments (root path)
     if segments.is_empty() {

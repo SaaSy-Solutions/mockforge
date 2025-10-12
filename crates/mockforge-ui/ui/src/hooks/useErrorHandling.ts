@@ -67,7 +67,7 @@ export function useErrorHandling(maxRetries = 3) {
         // Default retry behavior: invalidate all queries
         await queryClient.invalidateQueries();
       }
-      
+
       // Clear error on successful retry
       setErrorState({
         error: null,
@@ -92,7 +92,7 @@ export function useErrorHandling(maxRetries = 3) {
   }, []);
 
   const isNetworkError = useCallback((error: Error) => {
-    return error.message.includes('fetch') || 
+    return error.message.includes('fetch') ||
            error.message.includes('network') ||
            error.message.includes('Failed to load');
   }, []);
@@ -126,7 +126,7 @@ export function useApiErrorHandling() {
 
   const handleApiError = useCallback((error: unknown, operation: string) => {
     let errorObj: Error;
-    
+
     if (error instanceof Error) {
       errorObj = error;
     } else if (typeof error === 'string') {
@@ -169,17 +169,17 @@ export function setupGlobalErrorHandlers() {
   if (typeof window !== 'undefined') {
     window.addEventListener('unhandledrejection', (event) => {
       logger.error('Unhandled promise rejection',event.reason);
-      
+
       // Prevent the default browser behavior
       event.preventDefault();
-      
+
       // In production, you might want to send this to an error tracking service
       // logErrorToService(new Error(event.reason), { operation: 'unhandled_rejection' });
     });
 
     window.addEventListener('error', (event) => {
       logger.error('Global error',event.error);
-      
+
       // In production, you might want to send this to an error tracking service
       // logErrorToService(event.error, { operation: 'global_error' });
     });

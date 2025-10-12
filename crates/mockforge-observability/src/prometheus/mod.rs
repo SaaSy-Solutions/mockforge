@@ -7,11 +7,11 @@
 //! - Plugin execution metrics
 //! - System resource metrics
 
-mod metrics;
 mod exporter;
+mod metrics;
 
-pub use metrics::{MetricsRegistry, get_global_registry};
-pub use exporter::{prometheus_router, metrics_handler};
+pub use exporter::{metrics_handler, prometheus_router};
+pub use metrics::{get_global_registry, MetricsRegistry};
 
 // Re-export prometheus types for users who need to access metrics directly
 pub use prometheus;

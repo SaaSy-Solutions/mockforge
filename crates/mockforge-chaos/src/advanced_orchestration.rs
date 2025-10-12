@@ -5,11 +5,11 @@
 
 use crate::scenario_orchestrator::{OrchestratedScenario, ScenarioStep};
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use thiserror::Error;
 
 /// Orchestration errors
@@ -36,51 +36,25 @@ pub enum OrchestrationError {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Condition {
     /// Variable equals value
-    Equals {
-        variable: String,
-        value: JsonValue,
-    },
+    Equals { variable: String, value: JsonValue },
     /// Variable not equals value
-    NotEquals {
-        variable: String,
-        value: JsonValue,
-    },
+    NotEquals { variable: String, value: JsonValue },
     /// Variable greater than value
-    GreaterThan {
-        variable: String,
-        value: f64,
-    },
+    GreaterThan { variable: String, value: f64 },
     /// Variable less than value
-    LessThan {
-        variable: String,
-        value: f64,
-    },
+    LessThan { variable: String, value: f64 },
     /// Variable greater than or equal to value
-    GreaterThanOrEqual {
-        variable: String,
-        value: f64,
-    },
+    GreaterThanOrEqual { variable: String, value: f64 },
     /// Variable less than or equal to value
-    LessThanOrEqual {
-        variable: String,
-        value: f64,
-    },
+    LessThanOrEqual { variable: String, value: f64 },
     /// Variable exists
-    Exists {
-        variable: String,
-    },
+    Exists { variable: String },
     /// AND condition
-    And {
-        conditions: Vec<Condition>,
-    },
+    And { conditions: Vec<Condition> },
     /// OR condition
-    Or {
-        conditions: Vec<Condition>,
-    },
+    Or { conditions: Vec<Condition> },
     /// NOT condition
-    Not {
-        condition: Box<Condition>,
-    },
+    Not { condition: Box<Condition> },
     /// Previous step succeeded
     PreviousStepSucceeded,
     /// Previous step failed
@@ -122,9 +96,10 @@ impl Condition {
                 if let Some(num) = var_value.as_f64() {
                     Ok(num > *value)
                 } else {
-                    Err(OrchestrationError::ConditionFailed(
-                        format!("Variable {} is not a number", variable),
-                    ))
+                    Err(OrchestrationError::ConditionFailed(format!(
+                        "Variable {} is not a number",
+                        variable
+                    )))
                 }
             }
             Condition::LessThan { variable, value } => {
@@ -132,9 +107,10 @@ impl Condition {
                 if let Some(num) = var_value.as_f64() {
                     Ok(num < *value)
                 } else {
-                    Err(OrchestrationError::ConditionFailed(
-                        format!("Variable {} is not a number", variable),
-                    ))
+                    Err(OrchestrationError::ConditionFailed(format!(
+                        "Variable {} is not a number",
+                        variable
+                    )))
                 }
             }
             Condition::GreaterThanOrEqual { variable, value } => {
@@ -142,9 +118,10 @@ impl Condition {
                 if let Some(num) = var_value.as_f64() {
                     Ok(num >= *value)
                 } else {
-                    Err(OrchestrationError::ConditionFailed(
-                        format!("Variable {} is not a number", variable),
-                    ))
+                    Err(OrchestrationError::ConditionFailed(format!(
+                        "Variable {} is not a number",
+                        variable
+                    )))
                 }
             }
             Condition::LessThanOrEqual { variable, value } => {
@@ -152,9 +129,10 @@ impl Condition {
                 if let Some(num) = var_value.as_f64() {
                     Ok(num <= *value)
                 } else {
-                    Err(OrchestrationError::ConditionFailed(
-                        format!("Variable {} is not a number", variable),
-                    ))
+                    Err(OrchestrationError::ConditionFailed(format!(
+                        "Variable {} is not a number",
+                        variable
+                    )))
                 }
             }
             Condition::Exists { variable } => Ok(context.variables.contains_key(variable)),
@@ -315,24 +293,13 @@ impl Hook {
             HookAction::HttpRequest { url, method, body } => {
                 // In production, this would make actual HTTP requests
                 // For now, just log
-                tracing::info!(
-                    "[Hook: {}] HTTP {} {} (body: {:?})",
-                    self.name,
-                    method,
-                    url,
-                    body
-                );
+                tracing::info!("[Hook: {}] HTTP {} {} (body: {:?})", self.name, method, url, body);
                 Ok(())
             }
             HookAction::Command { command, args } => {
                 // In production, this would execute commands
                 // For now, just log
-                tracing::info!(
-                    "[Hook: {}] Execute: {} {:?}",
-                    self.name,
-                    command,
-                    args
-                );
+                tracing::info!("[Hook: {}] Execute: {} {:?}", self.name, command, args);
                 Ok(())
             }
             HookAction::RecordMetric { name, value } => {
@@ -353,11 +320,7 @@ pub enum Assertion {
         expected: JsonValue,
     },
     /// Metric within range
-    MetricInRange {
-        metric: String,
-        min: f64,
-        max: f64,
-    },
+    MetricInRange { metric: String, min: f64, max: f64 },
     /// Step completed successfully
     StepSucceeded { step_name: String },
     /// Step failed
@@ -668,7 +631,8 @@ impl ExecutionReport {
     /// Finalize the report
     pub fn finalize(mut self, context: &ExecutionContext) -> Self {
         self.end_time = Utc::now();
-        self.total_duration_seconds = (self.end_time - self.start_time).num_milliseconds() as f64 / 1000.0;
+        self.total_duration_seconds =
+            (self.end_time - self.start_time).num_milliseconds() as f64 / 1000.0;
         self.final_variables = context.variables.clone();
         self.final_metrics = context.metrics.clone();
         self.step_results = context.step_results.values().cloned().collect();
@@ -865,10 +829,7 @@ mod tests {
         context.set_variable("test".to_string(), JsonValue::String("value".to_string()));
         context.record_metric("latency".to_string(), 100.0);
 
-        assert_eq!(
-            context.get_variable("test").unwrap(),
-            &JsonValue::String("value".to_string())
-        );
+        assert_eq!(context.get_variable("test").unwrap(), &JsonValue::String("value".to_string()));
         assert_eq!(*context.metrics.get("latency").unwrap(), 100.0);
     }
 
@@ -876,9 +837,7 @@ mod tests {
     fn test_orchestration_library() {
         let library = OrchestrationLibrary::new();
 
-        let orch = AdvancedOrchestratedScenario::from_base(
-            OrchestratedScenario::new("test")
-        );
+        let orch = AdvancedOrchestratedScenario::from_base(OrchestratedScenario::new("test"));
 
         library.store("test".to_string(), orch.clone());
 

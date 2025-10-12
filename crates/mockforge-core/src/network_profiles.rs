@@ -3,7 +3,7 @@
 //! This module provides user-friendly presets that package latency, bandwidth, and
 //! packet loss settings into common network scenarios like "3G", "Slow 2G", "Satellite", etc.
 
-use crate::latency::{LatencyDistribution, LatencyProfile};
+use crate::latency::LatencyProfile;
 use crate::traffic_shaping::{BandwidthConfig, BurstLossConfig, TrafficShapingConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -80,8 +80,8 @@ impl NetworkProfileCatalog {
         self.add_profile(Self::mobile_edge());
 
         // Satellite connections
-        self.add_profile(Self::satellite_leo());  // Low Earth Orbit (like Starlink)
-        self.add_profile(Self::satellite_geo());  // Geostationary (traditional satellite)
+        self.add_profile(Self::satellite_leo()); // Low Earth Orbit (like Starlink)
+        self.add_profile(Self::satellite_geo()); // Geostationary (traditional satellite)
 
         // Impaired networks
         self.add_profile(Self::congested_network());
@@ -171,10 +171,10 @@ impl NetworkProfileCatalog {
                 ),
                 burst_loss: BurstLossConfig {
                     enabled: true,
-                    burst_probability: 0.05,  // 5% chance of burst
-                    burst_duration_ms: 2000,  // 2 second bursts
+                    burst_probability: 0.05,     // 5% chance of burst
+                    burst_duration_ms: 2000,     // 2 second bursts
                     loss_rate_during_burst: 0.1, // 10% loss during burst
-                    recovery_time_ms: 30000,  // 30 second recovery
+                    recovery_time_ms: 30000,     // 30 second recovery
                     ..Default::default()
                 },
             },
@@ -346,7 +346,7 @@ impl NetworkProfileCatalog {
                 ),
                 burst_loss: BurstLossConfig {
                     enabled: true,
-                    burst_probability: 0.3,  // High probability of loss bursts
+                    burst_probability: 0.3, // High probability of loss bursts
                     burst_duration_ms: 2000,
                     loss_rate_during_burst: 0.5, // 50% loss during burst
                     recovery_time_ms: 8000,
@@ -392,8 +392,8 @@ impl NetworkProfileCatalog {
                 ),
                 burst_loss: BurstLossConfig {
                     enabled: true,
-                    burst_probability: 0.4,  // Very frequent drops
-                    burst_duration_ms: 5000, // Long outages
+                    burst_probability: 0.4,      // Very frequent drops
+                    burst_duration_ms: 5000,     // Long outages
                     loss_rate_during_burst: 0.8, // 80% loss during burst
                     recovery_time_ms: 10000,
                     ..Default::default()
@@ -406,7 +406,8 @@ impl NetworkProfileCatalog {
     fn extremely_poor() -> NetworkProfile {
         NetworkProfile {
             name: "extremely_poor".to_string(),
-            description: "Extremely poor network (1000ms+ latency, <50 Kbps, high loss)".to_string(),
+            description: "Extremely poor network (1000ms+ latency, <50 Kbps, high loss)"
+                .to_string(),
             latency: LatencyProfile::with_pareto_distribution(1000, 1.5)
                 .with_min_ms(800)
                 .with_max_ms(3000),

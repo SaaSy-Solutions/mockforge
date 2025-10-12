@@ -169,8 +169,8 @@
 
 pub mod ai_response;
 pub mod cache;
-pub mod chaos_utilities;
 pub mod chain_execution;
+pub mod chaos_utilities;
 pub mod collection_export;
 pub mod conditions;
 pub mod config;
@@ -285,6 +285,7 @@ pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 
 /// Core configuration for MockForge
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct Config {
     /// Enable latency simulation
     pub latency_enabled: bool,

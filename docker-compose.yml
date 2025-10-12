@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"   # HTTP server
-      - "3001:3001"   # WebSocket server
+      - "8000:3000"   # HTTP server (mapped to 8000 to avoid conflicts)
+      - "8001:3001"   # WebSocket server (mapped to 8001 to avoid conflicts)
       - "50051:50051" # gRPC server
       - "9080:9080"   # Admin UI
     volumes:

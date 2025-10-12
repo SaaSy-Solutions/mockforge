@@ -3,9 +3,9 @@
 //! Uses Bayesian optimization and historical data to recommend optimal
 //! chaos parameters that balance effectiveness and system stability.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Historical orchestration run
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,8 +22,8 @@ pub struct OrchestrationRun {
 /// Run metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunMetrics {
-    pub chaos_effectiveness: f64,  // How much chaos was actually induced (0-1)
-    pub system_stability: f64,      // How stable the system remained (0-1)
+    pub chaos_effectiveness: f64, // How much chaos was actually induced (0-1)
+    pub system_stability: f64,    // How stable the system remained (0-1)
     pub error_rate: f64,
     pub recovery_time_ms: u64,
     pub failures_detected: u32,
@@ -54,11 +54,11 @@ pub struct ExpectedImpact {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum OptimizationObjective {
-    MaxChaos,           // Maximize chaos (for stress testing)
-    Balanced,           // Balance chaos and stability
-    SafeTesting,        // Minimize risk while still effective
-    QuickRecovery,      // Optimize for fast recovery
-    MaxDetection,       // Maximize failure detection
+    MaxChaos,      // Maximize chaos (for stress testing)
+    Balanced,      // Balance chaos and stability
+    SafeTesting,   // Minimize risk while still effective
+    QuickRecovery, // Optimize for fast recovery
+    MaxDetection,  // Maximize failure detection
 }
 
 /// Parameter bounds
@@ -94,26 +94,38 @@ impl Default for OptimizerConfig {
         let mut parameter_bounds = HashMap::new();
 
         // Common parameter bounds
-        parameter_bounds.insert("latency_ms".to_string(), ParameterBounds {
-            min: 0.0,
-            max: 5000.0,
-            step: Some(10.0),
-        });
-        parameter_bounds.insert("error_rate".to_string(), ParameterBounds {
-            min: 0.0,
-            max: 1.0,
-            step: Some(0.01),
-        });
-        parameter_bounds.insert("packet_loss".to_string(), ParameterBounds {
-            min: 0.0,
-            max: 1.0,
-            step: Some(0.01),
-        });
-        parameter_bounds.insert("cpu_load".to_string(), ParameterBounds {
-            min: 0.0,
-            max: 1.0,
-            step: Some(0.05),
-        });
+        parameter_bounds.insert(
+            "latency_ms".to_string(),
+            ParameterBounds {
+                min: 0.0,
+                max: 5000.0,
+                step: Some(10.0),
+            },
+        );
+        parameter_bounds.insert(
+            "error_rate".to_string(),
+            ParameterBounds {
+                min: 0.0,
+                max: 1.0,
+                step: Some(0.01),
+            },
+        );
+        parameter_bounds.insert(
+            "packet_loss".to_string(),
+            ParameterBounds {
+                min: 0.0,
+                max: 1.0,
+                step: Some(0.01),
+            },
+        );
+        parameter_bounds.insert(
+            "cpu_load".to_string(),
+            ParameterBounds {
+                min: 0.0,
+                max: 1.0,
+                step: Some(0.05),
+            },
+        );
 
         Self {
             objective: OptimizationObjective::Balanced,
@@ -179,7 +191,8 @@ impl ParameterOptimizer {
 
         // Sort by expected impact
         recommendations.sort_by(|a, b| {
-            b.expected_impact.overall_score_delta
+            b.expected_impact
+                .overall_score_delta
                 .partial_cmp(&a.expected_impact.overall_score_delta)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
@@ -188,9 +201,13 @@ impl ParameterOptimizer {
     }
 
     /// Optimize a single parameter
-    fn optimize_parameter(&self, param_name: &str) -> Result<Option<OptimizationRecommendation>, String> {
+    fn optimize_parameter(
+        &self,
+        param_name: &str,
+    ) -> Result<Option<OptimizationRecommendation>, String> {
         // Collect all runs that used this parameter
-        let relevant_runs: Vec<_> = self.historical_runs
+        let relevant_runs: Vec<_> = self
+            .historical_runs
             .iter()
             .filter(|run| run.parameters.contains_key(param_name))
             .collect();
@@ -200,7 +217,9 @@ impl ParameterOptimizer {
         }
 
         // Get parameter bounds
-        let bounds = self.config.parameter_bounds
+        let bounds = self
+            .config
+            .parameter_bounds
             .get(param_name)
             .ok_or_else(|| format!("No bounds defined for parameter '{}'", param_name))?;
 
@@ -222,7 +241,8 @@ impl ParameterOptimizer {
         let optimal_value = self.find_optimal_value(&value_scores, bounds)?;
 
         // Get current average value
-        let current_value = value_scores.iter().map(|(v, _)| v).sum::<f64>() / value_scores.len() as f64;
+        let current_value =
+            value_scores.iter().map(|(v, _)| v).sum::<f64>() / value_scores.len() as f64;
 
         // Calculate confidence based on data density
         let confidence = self.calculate_confidence(&value_scores, optimal_value);
@@ -232,7 +252,8 @@ impl ParameterOptimizer {
         }
 
         // Estimate expected impact
-        let expected_impact = self.estimate_impact(param_name, current_value, optimal_value, &relevant_runs)?;
+        let expected_impact =
+            self.estimate_impact(param_name, current_value, optimal_value, &relevant_runs)?;
 
         // Generate reasoning
         let reasoning = self.generate_reasoning(
@@ -262,8 +283,8 @@ impl ParameterOptimizer {
         let stability_score = run.metrics.system_stability;
         let recovery_score = 1.0 - (run.metrics.recovery_time_ms as f64 / 10000.0).min(1.0);
         let detection_score = if run.metrics.failures_detected + run.metrics.false_positives > 0 {
-            run.metrics.failures_detected as f64 /
-                (run.metrics.failures_detected + run.metrics.false_positives) as f64
+            run.metrics.failures_detected as f64
+                / (run.metrics.failures_detected + run.metrics.false_positives) as f64
         } else {
             0.5
         };
@@ -282,10 +303,10 @@ impl ParameterOptimizer {
             OptimizationObjective::MaxDetection => (0.2, 0.2, 0.1, 0.5),
         };
 
-        chaos_score * chaos_w +
-        stability_score * stability_w +
-        recovery_score * recovery_w +
-        detection_score * detection_w
+        chaos_score * chaos_w
+            + stability_score * stability_w
+            + recovery_score * recovery_w
+            + detection_score * detection_w
     }
 
     /// Find optimal parameter value using expected improvement
@@ -309,8 +330,9 @@ impl ParameterOptimizer {
         let mean = explored_values.iter().sum::<f64>() / explored_values.len() as f64;
 
         // If best value is at extremes and we haven't explored much, suggest moving toward center
-        let optimal = if (best_value - bounds.min).abs() < range * 0.1 ||
-                         (best_value - bounds.max).abs() < range * 0.1 {
+        let optimal = if (best_value - bounds.min).abs() < range * 0.1
+            || (best_value - bounds.max).abs() < range * 0.1
+        {
             best_value * (1.0 - exploration) + mean * exploration
         } else {
             best_value
@@ -359,7 +381,8 @@ impl ParameterOptimizer {
         // 3. Score variance (lower is better)
         let scores: Vec<f64> = value_scores.iter().map(|(_, s)| *s).collect();
         let mean_score = scores.iter().sum::<f64>() / scores.len() as f64;
-        let variance = scores.iter().map(|s| (s - mean_score).powi(2)).sum::<f64>() / scores.len() as f64;
+        let variance =
+            scores.iter().map(|s| (s - mean_score).powi(2)).sum::<f64>() / scores.len() as f64;
         let consistency_confidence = if variance < 0.01 {
             0.9
         } else if variance < 0.05 {
@@ -380,38 +403,40 @@ impl ParameterOptimizer {
         runs: &[&OrchestrationRun],
     ) -> Result<ExpectedImpact, String> {
         // Find runs close to current and optimal values
-        let current_runs: Vec<_> = runs.iter()
-            .filter(|r| {
-                r.parameters.values().any(|&v| (v - current_value).abs() < 10.0)
-            })
+        let current_runs: Vec<_> = runs
+            .iter()
+            .filter(|r| r.parameters.values().any(|&v| (v - current_value).abs() < 10.0))
             .collect();
 
-        let optimal_runs: Vec<_> = runs.iter()
-            .filter(|r| {
-                r.parameters.values().any(|&v| (v - optimal_value).abs() < 10.0)
-            })
+        let optimal_runs: Vec<_> = runs
+            .iter()
+            .filter(|r| r.parameters.values().any(|&v| (v - optimal_value).abs() < 10.0))
             .collect();
 
         let current_avg_chaos = if !current_runs.is_empty() {
-            current_runs.iter().map(|r| r.metrics.chaos_effectiveness).sum::<f64>() / current_runs.len() as f64
+            current_runs.iter().map(|r| r.metrics.chaos_effectiveness).sum::<f64>()
+                / current_runs.len() as f64
         } else {
             0.5
         };
 
         let optimal_avg_chaos = if !optimal_runs.is_empty() {
-            optimal_runs.iter().map(|r| r.metrics.chaos_effectiveness).sum::<f64>() / optimal_runs.len() as f64
+            optimal_runs.iter().map(|r| r.metrics.chaos_effectiveness).sum::<f64>()
+                / optimal_runs.len() as f64
         } else {
             0.5
         };
 
         let current_avg_stability = if !current_runs.is_empty() {
-            current_runs.iter().map(|r| r.metrics.system_stability).sum::<f64>() / current_runs.len() as f64
+            current_runs.iter().map(|r| r.metrics.system_stability).sum::<f64>()
+                / current_runs.len() as f64
         } else {
             0.5
         };
 
         let optimal_avg_stability = if !optimal_runs.is_empty() {
-            optimal_runs.iter().map(|r| r.metrics.system_stability).sum::<f64>() / optimal_runs.len() as f64
+            optimal_runs.iter().map(|r| r.metrics.system_stability).sum::<f64>()
+                / optimal_runs.len() as f64
         } else {
             0.5
         };
@@ -420,10 +445,10 @@ impl ParameterOptimizer {
         let stability_delta = optimal_avg_stability - current_avg_stability;
 
         // Calculate overall score delta
-        let current_score = current_avg_chaos * self.config.weights.chaos_effectiveness +
-                           current_avg_stability * self.config.weights.system_stability;
-        let optimal_score = optimal_avg_chaos * self.config.weights.chaos_effectiveness +
-                           optimal_avg_stability * self.config.weights.system_stability;
+        let current_score = current_avg_chaos * self.config.weights.chaos_effectiveness
+            + current_avg_stability * self.config.weights.system_stability;
+        let optimal_score = optimal_avg_chaos * self.config.weights.chaos_effectiveness
+            + optimal_avg_stability * self.config.weights.system_stability;
 
         Ok(ExpectedImpact {
             chaos_effectiveness_delta: chaos_delta,

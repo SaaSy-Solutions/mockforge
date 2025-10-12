@@ -1,12 +1,9 @@
 //! Health check endpoints for Kubernetes and cloud deployments
 
-use axum::{
-    extract::State,
-    response::Json,
-};
+use axum::{extract::State, response::Json};
+use chrono;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono;
 
 use crate::handlers::AdminState;
 
@@ -39,10 +36,7 @@ pub struct HealthCheck {
 /// Liveness probe - Is the application running?
 /// Returns 200 if the application is alive, even if degraded
 pub async fn liveness_probe(State(state): State<AdminState>) -> Json<HealthResponse> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
 
@@ -60,10 +54,7 @@ pub async fn liveness_probe(State(state): State<AdminState>) -> Json<HealthRespo
 /// Readiness probe - Is the application ready to serve traffic?
 /// Returns 200 only if all critical services are ready
 pub async fn readiness_probe(State(state): State<AdminState>) -> Json<HealthResponse> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     let mut checks = vec![];
     let mut overall_status = HealthStatus::Healthy;
@@ -131,10 +122,7 @@ pub async fn readiness_probe(State(state): State<AdminState>) -> Json<HealthResp
 /// Startup probe - Has the application completed initialization?
 /// Returns 200 when the application is fully started
 pub async fn startup_probe(State(state): State<AdminState>) -> Json<HealthResponse> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     // For now, consider started if admin UI is running
     let status = if state.api_enabled {
@@ -208,10 +196,7 @@ pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthRe
     });
 
     // Calculate overall duration
-    let duration = SystemTime::now()
-        .duration_since(start)
-        .unwrap()
-        .as_millis() as u64;
+    let duration = SystemTime::now().duration_since(start).unwrap().as_millis() as u64;
 
     let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
 

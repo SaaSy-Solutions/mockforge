@@ -1,6 +1,8 @@
 //! Show plugin information command
 
-use crate::utils::{current_dir, find_cargo_toml, find_manifest, get_plugin_id, get_plugin_version, read_manifest};
+use crate::utils::{
+    current_dir, find_cargo_toml, find_manifest, get_plugin_id, get_plugin_version, read_manifest,
+};
 use anyhow::Result;
 use colored::*;
 use std::path::Path;

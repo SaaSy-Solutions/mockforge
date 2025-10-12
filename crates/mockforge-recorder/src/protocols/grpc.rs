@@ -13,9 +13,7 @@ pub async fn record_grpc_request(
     method: &str,
     metadata: &HashMap<String, String>,
     message: Option<&[u8]>,
-    client_ip: Option<&str>,
-    trace_id: Option<&str>,
-    span_id: Option<&str>,
+    context: &crate::models::RequestContext,
 ) -> Result<String, crate::RecorderError> {
     let request_id = Uuid::new_v4().to_string();
     let full_method = format!("{}/{}", service, method);
@@ -38,9 +36,9 @@ pub async fn record_grpc_request(
         headers: serde_json::to_string(&metadata)?,
         body: body_str,
         body_encoding,
-        client_ip: client_ip.map(|s| s.to_string()),
-        trace_id: trace_id.map(|s| s.to_string()),
-        span_id: span_id.map(|s| s.to_string()),
+        client_ip: context.client_ip.clone(),
+        trace_id: context.trace_id.clone(),
+        span_id: context.span_id.clone(),
         duration_ms: None,
         status_code: None,
         tags: None,
@@ -99,26 +97,31 @@ mod tests {
         let db = RecorderDatabase::new_in_memory().await.unwrap();
         let recorder = Recorder::new(db);
 
-        let metadata = HashMap::from([
-            ("content-type".to_string(), "application/grpc".to_string()),
-        ]);
+        let metadata =
+            HashMap::from([("content-type".to_string(), "application/grpc".to_string())]);
 
+        let context = crate::models::RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = record_grpc_request(
             &recorder,
             "helloworld.Greeter",
             "SayHello",
             &metadata,
             Some(b"\x00\x00\x00\x00\x05hello"),
-            Some("127.0.0.1"),
-            None,
-            None,
+            &context,
         )
         .await
         .unwrap();
 
-        record_grpc_response(&recorder, &request_id, 0, &metadata, Some(b"\x00\x00\x00\x00\x05world"), 42)
-            .await
-            .unwrap();
+        record_grpc_response(
+            &recorder,
+            &request_id,
+            0,
+            &metadata,
+            Some(b"\x00\x00\x00\x00\x05world"),
+            42,
+        )
+        .await
+        .unwrap();
 
         // Verify it was recorded
         let exchange = recorder.database().get_exchange(&request_id).await.unwrap();
@@ -126,9 +129,6 @@ mod tests {
 
         let exchange = exchange.unwrap();
         assert_eq!(exchange.request.protocol, Protocol::Grpc);
-        assert_eq!(
-            exchange.request.method,
-            "helloworld.Greeter/SayHello"
-        );
+        assert_eq!(exchange.request.method, "helloworld.Greeter/SayHello");
     }
 }

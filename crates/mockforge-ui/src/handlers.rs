@@ -12,7 +12,10 @@
 use axum::{
     extract::{Query, State},
     http::{self, StatusCode},
-    response::{Html, IntoResponse, Json, sse::{Event, Sse}},
+    response::{
+        sse::{Event, Sse},
+        Html, IntoResponse, Json,
+    },
 };
 use chrono::Utc;
 use futures_util::stream::{self, Stream};
@@ -720,9 +723,7 @@ pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'stati
 
 /// Get dashboard data
 pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<DashboardData>> {
-    let uptime = Utc::now()
-        .signed_duration_since(state.start_time)
-        .num_seconds() as u64;
+    let uptime = Utc::now().signed_duration_since(state.start_time).num_seconds() as u64;
 
     // Get system metrics from state
     let system_metrics = state.get_system_metrics().await;
@@ -1027,7 +1028,11 @@ pub async fn logs_sse(
         if let Some(global_logger) = mockforge_core::get_global_logger() {
             let centralized_logs = global_logger.get_recent_logs(Some(RECENT_LOGS_LIMIT)).await;
 
-            tracing::debug!("SSE: Checking logs - total logs: {}, seen logs: {}", centralized_logs.len(), seen_ids.len());
+            tracing::debug!(
+                "SSE: Checking logs - total logs: {}, seen logs: {}",
+                centralized_logs.len(),
+                seen_ids.len()
+            );
 
             // Filter for recent logs within TTL
             let now = chrono::Utc::now();
@@ -1065,18 +1070,14 @@ pub async fn logs_sse(
                 tracing::info!("SSE: Sending {} new logs to client", new_logs.len());
 
                 let event_data = serde_json::to_string(&new_logs).unwrap_or_default();
-                let event = Ok(Event::default()
-                    .event("new_logs")
-                    .data(event_data));
+                let event = Ok(Event::default().event("new_logs").data(event_data));
 
                 return Some((event, seen_ids));
             }
         }
 
         // Send keep-alive
-        let event = Ok(Event::default()
-            .event("keep_alive")
-            .data(""));
+        let event = Ok(Event::default().event("keep_alive").data(""));
         Some((event, seen_ids))
     });
 
@@ -1373,12 +1374,15 @@ async fn get_parent_process_id(pid: u32) -> Result<u32> {
 
             let fields: Vec<&str> = content.split_whitespace().collect();
             if fields.len() > 3 {
-                fields[3].parse::<u32>()
+                fields[3]
+                    .parse::<u32>()
                     .map_err(|e| Error::generic(format!("Failed to parse PPID: {}", e)))
             } else {
                 Err(Error::generic("Insufficient fields in /proc/pid/stat".to_string()))
             }
-        }).await {
+        })
+        .await
+        {
             if let Ok(ppid) = ppid {
                 return Ok(ppid);
             }
@@ -2048,7 +2052,11 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
     let delete_result = tokio::task::spawn_blocking(move || {
         if file_path_clone.exists() {
             std::fs::remove_file(&file_path_clone).map_err(|e| {
-                Error::generic(format!("Failed to delete fixture file {}: {}", file_path_clone.display(), e))
+                Error::generic(format!(
+                    "Failed to delete fixture file {}: {}",
+                    file_path_clone.display(),
+                    e
+                ))
             })
         } else {
             Err(Error::generic(format!("Fixture file not found: {}", file_path_clone.display())))
@@ -2163,7 +2171,8 @@ async fn cleanup_empty_directories(file_path: &std::path::Path) {
                 }
             }
         }
-    }).await;
+    })
+    .await;
 }
 
 /// Download a fixture file
@@ -2175,31 +2184,35 @@ pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> 
             return (
                 http::StatusCode::BAD_REQUEST,
                 [(http::header::CONTENT_TYPE, "application/json")],
-                r#"{"error": "Missing fixture ID parameter"}"#
-            ).into_response();
+                r#"{"error": "Missing fixture ID parameter"}"#,
+            )
+                .into_response();
         }
     };
 
     // Find and read the fixture file
     match download_fixture_by_id(fixture_id).await {
-        Ok((content, file_name)) => {
-            (
-                http::StatusCode::OK,
-                [
-                    (http::header::CONTENT_TYPE, "application/json".to_string()),
-                    (http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", file_name)),
-                ],
-                content
-            ).into_response()
-        }
+        Ok((content, file_name)) => (
+            http::StatusCode::OK,
+            [
+                (http::header::CONTENT_TYPE, "application/json".to_string()),
+                (
+                    http::header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}\"", file_name),
+                ),
+            ],
+            content,
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!("Failed to download fixture {}: {}", fixture_id, e);
             let error_response = format!(r#"{{"error": "Failed to download fixture: {}"}}"#, e);
             (
                 http::StatusCode::NOT_FOUND,
                 [(http::header::CONTENT_TYPE, "application/json".to_string())],
-                error_response
-            ).into_response()
+                error_response,
+            )
+                .into_response()
         }
     }
 }
@@ -2281,9 +2294,9 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
     let old_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
 
     // Get the parent directory and construct new path
-    let parent = old_path.parent().ok_or_else(|| {
-        Error::generic("Could not determine parent directory".to_string())
-    })?;
+    let parent = old_path
+        .parent()
+        .ok_or_else(|| Error::generic("Could not determine parent directory".to_string()))?;
 
     let new_path = parent.join(&new_name);
 
@@ -2299,9 +2312,8 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
     let old_path_clone = old_path.clone();
     let new_path_clone = new_path.clone();
     tokio::task::spawn_blocking(move || {
-        std::fs::rename(&old_path_clone, &new_path_clone).map_err(|e| {
-            Error::generic(format!("Failed to rename fixture file: {}", e))
-        })
+        std::fs::rename(&old_path_clone, &new_path_clone)
+            .map_err(|e| Error::generic(format!("Failed to rename fixture file: {}", e)))
     })
     .await
     .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
@@ -2389,15 +2401,13 @@ async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> 
     tokio::task::spawn_blocking(move || {
         // Create parent directories if they don't exist
         if let Some(parent) = new_full_path_clone.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                Error::generic(format!("Failed to create target directory: {}", e))
-            })?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Error::generic(format!("Failed to create target directory: {}", e)))?;
         }
 
         // Move the file
-        std::fs::rename(&old_path_clone, &new_full_path_clone).map_err(|e| {
-            Error::generic(format!("Failed to move fixture file: {}", e))
-        })
+        std::fs::rename(&old_path_clone, &new_full_path_clone)
+            .map_err(|e| Error::generic(format!("Failed to move fixture file: {}", e)))
     })
     .await
     .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
@@ -2592,8 +2602,9 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
         }
 
         // Write the content to the file
-        std::fs::write(&path_clone, &content_clone)
-            .map_err(|e| Error::generic(format!("Failed to write file {}: {}", path_clone.display(), e)))?;
+        std::fs::write(&path_clone, &content_clone).map_err(|e| {
+            Error::generic(format!("Failed to write file {}: {}", path_clone.display(), e))
+        })?;
 
         // Verify the file was written correctly
         let written_content = std::fs::read_to_string(&path_clone).map_err(|e| {
@@ -3678,17 +3689,15 @@ pub async fn get_environments(
     axum::extract::Path(_workspace_id): axum::extract::Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     // Return a default global environment
-    let environments = vec![
-        serde_json::json!({
-            "id": "global",
-            "name": "Global",
-            "description": "Global environment variables",
-            "variable_count": 0,
-            "is_global": true,
-            "active": true,
-            "order": 0
-        })
-    ];
+    let environments = vec![serde_json::json!({
+        "id": "global",
+        "name": "Global",
+        "description": "Global environment variables",
+        "variable_count": 0,
+        "is_global": true,
+        "active": true,
+        "order": 0
+    })];
 
     Json(ApiResponse::success(serde_json::json!({
         "environments": environments,
@@ -3935,14 +3944,7 @@ mod tests {
     #[test]
     fn test_admin_state_new() {
         let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
-        let state = AdminState::new(
-            Some(http_addr),
-            None,
-            None,
-            None,
-            true,
-            8080,
-        );
+        let state = AdminState::new(Some(http_addr), None, None, None, true, 8080);
 
         assert_eq!(state.http_server_addr, Some(http_addr));
         assert!(state.api_enabled);

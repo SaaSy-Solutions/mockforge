@@ -5,10 +5,10 @@
 
 use crate::recommendations::{Recommendation, RecommendationCategory, RecommendationSeverity};
 use chrono::{DateTime, Duration, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use uuid::Uuid;
 
 /// Auto-remediation configuration
@@ -224,7 +224,10 @@ impl RemediationEngine {
     }
 
     /// Process a recommendation for auto-remediation
-    pub fn process_recommendation(&self, recommendation: &Recommendation) -> Result<String, String> {
+    pub fn process_recommendation(
+        &self,
+        recommendation: &Recommendation,
+    ) -> Result<String, String> {
         let config = self.config.read().clone();
 
         if !config.enabled {
@@ -270,7 +273,11 @@ impl RemediationEngine {
     }
 
     /// Create a remediation action from recommendation
-    fn create_action(&self, recommendation: &Recommendation, risk_assessment: RiskAssessment) -> RemediationAction {
+    fn create_action(
+        &self,
+        recommendation: &Recommendation,
+        risk_assessment: RiskAssessment,
+    ) -> RemediationAction {
         let config_changes = self.extract_config_changes(recommendation);
         let rollback_data = self.create_rollback_data(&config_changes);
 
@@ -283,7 +290,10 @@ impl RemediationEngine {
             completed_at: None,
             config_changes,
             rollback_data: Some(rollback_data),
-            logs: vec![format!("Action created from recommendation: {}", recommendation.title)],
+            logs: vec![format!(
+                "Action created from recommendation: {}",
+                recommendation.title
+            )],
             success: false,
             error: None,
             retry_count: 0,
@@ -405,7 +415,12 @@ impl RemediationEngine {
     }
 
     /// Queue action for approval
-    fn queue_for_approval(&self, action_id: String, recommendation: Recommendation, risk: RiskAssessment) {
+    fn queue_for_approval(
+        &self,
+        action_id: String,
+        recommendation: Recommendation,
+        risk: RiskAssessment,
+    ) {
         let mut changes = HashMap::new();
         changes.insert("example".to_string(), recommendation.example.clone().unwrap_or_default());
 
@@ -479,8 +494,7 @@ impl RemediationEngine {
         // Get action
         let action = {
             let actions = self.actions.read();
-            actions.get(action_id).cloned()
-                .ok_or_else(|| "Action not found".to_string())?
+            actions.get(action_id).cloned().ok_or_else(|| "Action not found".to_string())?
         };
 
         if config.dry_run {
@@ -497,9 +511,8 @@ impl RemediationEngine {
         }
 
         // Apply changes (in real implementation, this would modify actual config)
-        let applied_changes: Vec<String> = action.config_changes.iter()
-            .map(|(k, v)| format!("{} = {}", k, v))
-            .collect();
+        let applied_changes: Vec<String> =
+            action.config_changes.iter().map(|(k, v)| format!("{} = {}", k, v)).collect();
 
         self.add_action_log(action_id, &format!("Applied changes: {:?}", applied_changes));
 
@@ -530,16 +543,15 @@ impl RemediationEngine {
     pub fn rollback_action(&self, action_id: &str) -> Result<(), String> {
         let action = {
             let actions = self.actions.read();
-            actions.get(action_id).cloned()
-                .ok_or_else(|| "Action not found".to_string())?
+            actions.get(action_id).cloned().ok_or_else(|| "Action not found".to_string())?
         };
 
         if action.status != RemediationStatus::Applied {
             return Err("Can only rollback applied actions".to_string());
         }
 
-        let rollback_data = action.rollback_data
-            .ok_or_else(|| "No rollback data available".to_string())?;
+        let rollback_data =
+            action.rollback_data.ok_or_else(|| "No rollback data available".to_string())?;
 
         self.add_action_log(action_id, "Rolling back changes");
 
@@ -593,7 +605,8 @@ impl RemediationEngine {
 
         // Latency improvement (weight: 0.2)
         if before.avg_latency_ms > 0.0 {
-            let latency_improvement = (before.avg_latency_ms - after.avg_latency_ms) / before.avg_latency_ms;
+            let latency_improvement =
+                (before.avg_latency_ms - after.avg_latency_ms) / before.avg_latency_ms;
             score += latency_improvement * 0.2;
             weight_total += 0.2;
         }
@@ -636,8 +649,16 @@ impl RemediationEngine {
     /// Get all active actions
     pub fn get_active_actions(&self) -> Vec<RemediationAction> {
         let actions = self.actions.read();
-        actions.values()
-            .filter(|a| matches!(a.status, RemediationStatus::Pending | RemediationStatus::Applying | RemediationStatus::Applied))
+        actions
+            .values()
+            .filter(|a| {
+                matches!(
+                    a.status,
+                    RemediationStatus::Pending
+                        | RemediationStatus::Applying
+                        | RemediationStatus::Applied
+                )
+            })
             .cloned()
             .collect()
     }
@@ -654,18 +675,23 @@ impl RemediationEngine {
         let history = self.action_history.read();
 
         let total_actions = actions.len() + history.len();
-        let successful = actions.values().filter(|a| a.success).count() +
-                        history.iter().filter(|a| a.success).count();
-        let failed = actions.values().filter(|a| a.status == RemediationStatus::Failed).count() +
-                    history.iter().filter(|a| a.status == RemediationStatus::Failed).count();
-        let pending_approval = actions.values().filter(|a| a.status == RemediationStatus::AwaitingApproval).count();
-        let rolled_back = history.iter().filter(|a| a.status == RemediationStatus::RolledBack).count();
+        let successful = actions.values().filter(|a| a.success).count()
+            + history.iter().filter(|a| a.success).count();
+        let failed = actions.values().filter(|a| a.status == RemediationStatus::Failed).count()
+            + history.iter().filter(|a| a.status == RemediationStatus::Failed).count();
+        let pending_approval = actions
+            .values()
+            .filter(|a| a.status == RemediationStatus::AwaitingApproval)
+            .count();
+        let rolled_back =
+            history.iter().filter(|a| a.status == RemediationStatus::RolledBack).count();
 
         let effectiveness_metrics = self.effectiveness_metrics.read();
         let avg_improvement = if effectiveness_metrics.is_empty() {
             0.0
         } else {
-            effectiveness_metrics.values().map(|m| m.improvement_score).sum::<f64>() / effectiveness_metrics.len() as f64
+            effectiveness_metrics.values().map(|m| m.improvement_score).sum::<f64>()
+                / effectiveness_metrics.len() as f64
         };
 
         RemediationStats {
@@ -686,14 +712,15 @@ impl RemediationEngine {
         let cooldown_threshold = Utc::now() - Duration::minutes(config.cooldown_minutes);
 
         !actions.values().any(|a| {
-            a.status == RemediationStatus::Applied &&
-            a.completed_at.is_some_and(|t| t > cooldown_threshold)
+            a.status == RemediationStatus::Applied
+                && a.completed_at.is_some_and(|t| t > cooldown_threshold)
         })
     }
 
     fn check_concurrent_limit(&self, config: &RemediationConfig) -> bool {
         let actions = self.actions.read();
-        let active_count = actions.values()
+        let active_count = actions
+            .values()
             .filter(|a| matches!(a.status, RemediationStatus::Applying))
             .count();
 
@@ -710,7 +737,9 @@ impl RemediationEngine {
     fn add_action_log(&self, action_id: &str, message: &str) {
         let mut actions = self.actions.write();
         if let Some(action) = actions.get_mut(action_id) {
-            action.logs.push(format!("[{}] {}", Utc::now().format("%Y-%m-%d %H:%M:%S"), message));
+            action
+                .logs
+                .push(format!("[{}] {}", Utc::now().format("%Y-%m-%d %H:%M:%S"), message));
         }
     }
 

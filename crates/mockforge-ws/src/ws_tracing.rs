@@ -18,11 +18,7 @@ pub fn create_ws_connection_span(path: &str) -> BoxedSpan {
 }
 
 /// Create a span for a WebSocket message
-pub fn create_ws_message_span(
-    direction: &str,
-    message_type: &str,
-    size: usize,
-) -> BoxedSpan {
+pub fn create_ws_message_span(direction: &str, message_type: &str, size: usize) -> BoxedSpan {
     create_request_span(
         Protocol::WebSocket,
         &format!("WS Message {}", direction),
@@ -58,11 +54,7 @@ pub fn record_ws_connection_success(
 }
 
 /// Record WebSocket connection error
-pub fn record_ws_error(
-    span: &mut BoxedSpan,
-    error_message: &str,
-    duration_ms: u64,
-) {
+pub fn record_ws_error(span: &mut BoxedSpan, error_message: &str, duration_ms: u64) {
     span.set_attribute(KeyValue::new("ws.duration_ms", duration_ms as i64));
     record_error(span, error_message);
 
@@ -74,21 +66,17 @@ pub fn record_ws_error(
 }
 
 /// Record WebSocket message success
-pub fn record_ws_message_success(
-    span: &mut BoxedSpan,
-    processing_time_us: u64,
-) {
-    let attributes = vec![
-        KeyValue::new("ws.processing_time_us", processing_time_us as i64),
-    ];
+pub fn record_ws_message_success(span: &mut BoxedSpan, processing_time_us: u64) {
+    let attributes = vec![KeyValue::new(
+        "ws.processing_time_us",
+        processing_time_us as i64,
+    )];
 
     record_success(span, attributes);
 }
 
 /// Extract trace context from WebSocket headers
-pub fn extract_ws_trace_context(
-    headers: &HashMap<String, String>,
-) -> opentelemetry::Context {
+pub fn extract_ws_trace_context(headers: &HashMap<String, String>) -> opentelemetry::Context {
     mockforge_tracing::extract_trace_context(headers)
 }
 

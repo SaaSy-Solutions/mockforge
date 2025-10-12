@@ -61,10 +61,7 @@ impl ResponseGenerator {
 
         let expanded_prompt = expand_prompt_template(prompt_template, context);
 
-        tracing::info!(
-            "AI response generation requested with prompt: {}",
-            expanded_prompt
-        );
+        tracing::info!("AI response generation requested with prompt: {}", expanded_prompt);
 
         // Use the provided generator if available
         if let Some(gen) = generator {
@@ -114,7 +111,12 @@ impl ResponseGenerator {
                     ReferenceOr::Reference { reference } => {
                         // Resolve the reference
                         if let Some(resolved_response) = spec.get_response(reference) {
-                            Self::generate_from_response(spec, resolved_response, content_type, expand_tokens)
+                            Self::generate_from_response(
+                                spec,
+                                resolved_response,
+                                content_type,
+                                expand_tokens,
+                            )
                         } else {
                             // Reference not found, return empty object
                             Ok(Value::Object(serde_json::Map::new()))
@@ -262,7 +264,7 @@ impl ResponseGenerator {
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => Value::Number(42.into()),
             openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => {
-                Value::Number(serde_json::Number::from_f64(3.14).unwrap())
+                Value::Number(serde_json::Number::from_f64(std::f64::consts::PI).unwrap())
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {

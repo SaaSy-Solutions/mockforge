@@ -106,9 +106,7 @@ pub struct ResilienceApiState {
 }
 
 /// Get all circuit breaker states
-async fn get_all_circuit_breakers(
-    State(state): State<ResilienceApiState>,
-) -> impl IntoResponse {
+async fn get_all_circuit_breakers(State(state): State<ResilienceApiState>) -> impl IntoResponse {
     let states = state.circuit_breaker_manager.get_all_states().await;
     let mut responses = Vec::new();
 

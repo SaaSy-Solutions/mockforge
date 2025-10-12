@@ -5,10 +5,10 @@
 
 use crate::scenario_orchestrator::OrchestratedScenario;
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -311,10 +311,8 @@ impl DistributedCoordinator {
         let nodes_guard = nodes.read();
 
         // Find active nodes
-        let active_nodes: Vec<_> = nodes_guard
-            .values()
-            .filter(|n| n.status == NodeStatus::Active)
-            .collect();
+        let active_nodes: Vec<_> =
+            nodes_guard.values().filter(|n| n.status == NodeStatus::Active).collect();
 
         if active_nodes.is_empty() {
             warn!("No active nodes for leader election");
@@ -322,20 +320,14 @@ impl DistributedCoordinator {
         }
 
         // Simple election: node with lowest ID becomes leader
-        let leader = active_nodes
-            .iter()
-            .min_by(|a, b| a.id.cmp(&b.id))
-            .unwrap();
+        let leader = active_nodes.iter().min_by(|a, b| a.id.cmp(&b.id)).unwrap();
 
         let mut state = leader_state.write();
         state.leader_id = Some(leader.id.clone());
         state.term += 1;
         state.elected_at = Some(Utc::now());
 
-        info!(
-            "Leader elected: {} (term {})",
-            leader.id, state.term
-        );
+        info!("Leader elected: {} (term {})", leader.id, state.term);
     }
 
     /// Check node health
@@ -380,11 +372,7 @@ impl DistributedCoordinator {
     /// Get active nodes
     pub fn get_active_nodes(&self) -> Vec<Node> {
         let nodes = self.nodes.read();
-        nodes
-            .values()
-            .filter(|n| n.status == NodeStatus::Active)
-            .cloned()
-            .collect()
+        nodes.values().filter(|n| n.status == NodeStatus::Active).cloned().collect()
     }
 
     /// Get task status

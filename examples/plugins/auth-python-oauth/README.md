@@ -237,7 +237,7 @@ artillery quick --count 100 --num 10 http://localhost:8080/plugin/authenticate
 ### Best Practices
 
 1. **Secret Management**:
-   - Use Kubernetes secrets or HashiCorp Vault
+   - Use Kubernetes secrets or HashCorp Vault
    - Never hardcode credentials
    - Rotate secrets regularly
 

@@ -51,15 +51,17 @@ run_test_section() {
 
 # Main function
 main() {
-    local base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local project_root="$(dirname "$base_dir")"
+    local base_dir="scripts"
+    local project_root="."
     local test_scripts_dir="$base_dir/automated-tests"
 
     log_info "Starting MockForge automated testing"
-    log_info "Project root: $project_root"
     log_info "Test scripts directory: $test_scripts_dir"
 
-    cd "$project_root"
+    cd "$project_root" || {
+        log_error "Failed to change to project root directory"
+        exit 1
+    }
 
     # Create test scripts directory if it doesn't exist
     mkdir -p "$test_scripts_dir"

@@ -41,11 +41,7 @@ pub async fn recording_middleware(
     let headers: HashMap<String, String> = req
         .headers()
         .iter()
-        .filter_map(|(k, v)| {
-            v.to_str()
-                .ok()
-                .map(|s| (k.as_str().to_string(), s.to_string()))
-        })
+        .filter_map(|(k, v)| v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string())))
         .collect();
 
     // Extract body (need to consume and recreate the request)
@@ -60,6 +56,11 @@ pub async fn recording_middleware(
 
     // Record the request
     let start = Instant::now();
+    let context = crate::models::RequestContext::new(
+        Some(&addr.ip().to_string()),
+        trace_id.as_deref(),
+        span_id.as_deref(),
+    );
     let request_id = match recorder
         .record_http_request(
             &method,
@@ -71,9 +72,7 @@ pub async fn recording_middleware(
             } else {
                 Some(&body_bytes)
             },
-            Some(&addr.ip().to_string()),
-            trace_id.as_deref(),
-            span_id.as_deref(),
+            &context,
         )
         .await
     {
@@ -101,11 +100,7 @@ pub async fn recording_middleware(
     let response_headers: HashMap<String, String> = parts
         .headers
         .iter()
-        .filter_map(|(k, v)| {
-            v.to_str()
-                .ok()
-                .map(|s| (k.as_str().to_string(), s.to_string()))
-        })
+        .filter_map(|(k, v)| v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string())))
         .collect();
 
     // Extract response body

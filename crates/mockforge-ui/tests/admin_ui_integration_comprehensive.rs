@@ -16,6 +16,7 @@ fn create_test_router() -> axum::Router {
         Some("127.0.0.1:4000".parse().unwrap()),
         true,
         9080,
+        "http://localhost:9090".to_string(),
     )
 }
 
@@ -31,10 +32,7 @@ async fn test_health_liveness_probe() {
         .await
         .unwrap();
 
-    assert!(
-        response.status().is_success(),
-        "Liveness probe should return success"
-    );
+    assert!(response.status().is_success(), "Liveness probe should return success");
 }
 
 #[tokio::test]
@@ -45,10 +43,7 @@ async fn test_health_readiness_probe() {
         .await
         .unwrap();
 
-    assert!(
-        response.status().is_success(),
-        "Readiness probe should return success"
-    );
+    assert!(response.status().is_success(), "Readiness probe should return success");
 }
 
 #[tokio::test]
@@ -59,10 +54,7 @@ async fn test_health_startup_probe() {
         .await
         .unwrap();
 
-    assert!(
-        response.status().is_success(),
-        "Startup probe should return success"
-    );
+    assert!(response.status().is_success(), "Startup probe should return success");
 }
 
 #[tokio::test]
@@ -147,7 +139,12 @@ async fn test_traffic_shaping_config_update() {
 async fn test_restart_status_endpoint() {
     let app = create_test_router();
     let response = app
-        .oneshot(Request::builder().uri("/__mockforge/restart/status").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/__mockforge/restart/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -173,7 +170,12 @@ async fn test_plugins_list_endpoint() {
 async fn test_plugin_status_endpoint() {
     let app = create_test_router();
     let response = app
-        .oneshot(Request::builder().uri("/__mockforge/plugins/status").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/__mockforge/plugins/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -228,7 +230,12 @@ async fn test_workspace_create_endpoint() {
 async fn test_environments_list_endpoint() {
     let app = create_test_router();
     let response = app
-        .oneshot(Request::builder().uri("/__mockforge/workspaces/test-ws/environments").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/__mockforge/workspaces/test-ws/environments")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -252,7 +259,8 @@ async fn test_chains_list_endpoint() {
     // This is expected behavior - we're just testing that the route exists
     assert!(
         response.status().is_success() || response.status().is_server_error(),
-        "Chain endpoint should exist (status: {})", response.status()
+        "Chain endpoint should exist (status: {})",
+        response.status()
     );
 }
 
@@ -359,17 +367,13 @@ async fn test_spa_fallback_for_unknown_routes() {
     ];
 
     for route in spa_routes {
-        let response = app.clone()
+        let response = app
+            .clone()
             .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         // Should return 200 (SPA fallback), not 404
-        assert_eq!(
-            response.status().as_u16(),
-            200,
-            "Route {} should fallback to SPA",
-            route
-        );
+        assert_eq!(response.status().as_u16(), 200, "Route {} should fallback to SPA", route);
     }
 }

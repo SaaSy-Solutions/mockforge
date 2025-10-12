@@ -155,16 +155,10 @@ mod tests {
             ("connection".to_string(), "Upgrade".to_string()),
         ]);
 
-        let connection_id = record_ws_connection(
-            &recorder,
-            "/ws/chat",
-            &headers,
-            Some("127.0.0.1"),
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let connection_id =
+            record_ws_connection(&recorder, "/ws/chat", &headers, Some("127.0.0.1"), None, None)
+                .await
+                .unwrap();
 
         // Verify it was recorded
         let exchange = recorder.database().get_exchange(&connection_id).await.unwrap();

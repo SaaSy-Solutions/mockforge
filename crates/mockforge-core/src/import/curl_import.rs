@@ -150,8 +150,8 @@ fn parse_curl_command(command: &str) -> Result<ParsedCurlCommand, String> {
     }
 
     // Extract headers from -H flags (handle both quoted and unquoted)
-    let header_regex =
-        Regex::new(r#"-H\s+(?:["']([^"']+)["']|([^\s]+(?:\s+[^\s-]+)*))"#).map_err(|e| format!("Regex error: {}", e))?;
+    let header_regex = Regex::new(r#"-H\s+(?:["']([^"']+)["']|([^\s]+(?:\s+[^\s-]+)*))"#)
+        .map_err(|e| format!("Regex error: {}", e))?;
 
     for captures in header_regex.captures_iter(command) {
         let header_str = if let Some(quoted_match) = captures.get(1) {
@@ -161,7 +161,7 @@ fn parse_curl_command(command: &str) -> Result<ParsedCurlCommand, String> {
         } else {
             continue;
         };
-        
+
         if let Some(colon_pos) = header_str.find(':') {
             let key = header_str[..colon_pos].trim();
             let value = header_str[colon_pos + 1..].trim();
@@ -171,8 +171,9 @@ fn parse_curl_command(command: &str) -> Result<ParsedCurlCommand, String> {
 
     // Extract body from -d or --data flags (handle both quoted and unquoted)
     // For quoted strings, capture everything between matching quotes (handling escaped quotes)
-    let body_regex = Regex::new(r#"(?:-d|--data)\s+(?:'([^']*)'|"([^"]*)"|([^\s]+(?:\s+[^\s-]+)*))"#)
-        .map_err(|e| format!("Regex error: {}", e))?;
+    let body_regex =
+        Regex::new(r#"(?:-d|--data)\s+(?:'([^']*)'|"([^"]*)"|([^\s]+(?:\s+[^\s-]+)*))"#)
+            .map_err(|e| format!("Regex error: {}", e))?;
 
     if let Some(captures) = body_regex.captures(command) {
         let body_str = if let Some(single_quoted_match) = captures.get(1) {
@@ -184,7 +185,7 @@ fn parse_curl_command(command: &str) -> Result<ParsedCurlCommand, String> {
         } else {
             ""
         };
-        
+
         if !body_str.is_empty() {
             body = Some(body_str.to_string());
         }

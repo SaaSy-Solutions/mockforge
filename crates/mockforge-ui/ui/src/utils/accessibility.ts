@@ -104,7 +104,7 @@ export function trapFocus(container: Element, event: KeyboardEvent) {
 export function getContrastRatio(color1: string, color2: string): number {
   const rgb1 = hexToRgb(color1);
   const rgb2 = hexToRgb(color2);
-  
+
   if (!rgb1 || !rgb2) return 0;
 
   const l1 = getRelativeLuminance(rgb1);
@@ -169,14 +169,14 @@ export function isHighContrastMode(): boolean {
   testElement.style.borderColor = 'rgb(31, 41, 59)'; // A specific color
   testElement.style.position = 'absolute';
   testElement.style.top = '-999px';
-  
+
   document.body.appendChild(testElement);
-  
+
   const computedBorderColor = window.getComputedStyle(testElement).borderColor;
   const isHighContrast = computedBorderColor !== 'rgb(31, 41, 59)';
-  
+
   document.body.removeChild(testElement);
-  
+
   return isHighContrast;
 }
 
@@ -223,7 +223,7 @@ export class LiveRegionManager {
 
   announce(message: string, priority: 'polite' | 'assertive' = 'polite') {
     const region = priority === 'assertive' ? this.assertiveRegion : this.politeRegion;
-    
+
     if (region) {
       // Clear first, then set message
       region.textContent = '';

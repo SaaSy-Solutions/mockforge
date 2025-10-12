@@ -59,9 +59,9 @@ impl LlmClient {
         self.ensure_initialized().await?;
 
         let engine = self.rag_engine.read().await;
-        let provider = engine.as_ref().ok_or_else(|| {
-            crate::Error::generic("LLM provider not initialized")
-        })?;
+        let provider = engine
+            .as_ref()
+            .ok_or_else(|| crate::Error::generic("LLM provider not initialized"))?;
 
         // Build messages
         let messages = vec![
@@ -77,11 +77,7 @@ impl LlmClient {
 
         // Generate response
         let response_text = provider
-            .generate_chat(
-                messages,
-                request.temperature,
-                request.max_tokens,
-            )
+            .generate_chat(messages, request.temperature, request.max_tokens)
             .await?;
 
         // Try to parse as JSON
@@ -194,16 +190,12 @@ impl LlmProvider for OpenAIProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", error_text)));
         }
 
-        let response_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| crate::Error::generic(format!("Failed to parse OpenAI response: {}", e)))?;
+        let response_json: serde_json::Value = response.json().await.map_err(|e| {
+            crate::Error::generic(format!("Failed to parse OpenAI response: {}", e))
+        })?;
 
         // Extract content from response
         let content = response_json["choices"][0]["message"]["content"]
@@ -271,16 +263,12 @@ impl LlmProvider for OllamaProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Ollama API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Ollama API error: {}", error_text)));
         }
 
-        let response_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| crate::Error::generic(format!("Failed to parse Ollama response: {}", e)))?;
+        let response_json: serde_json::Value = response.json().await.map_err(|e| {
+            crate::Error::generic(format!("Failed to parse Ollama response: {}", e))
+        })?;
 
         // Extract content from response
         let content = response_json["message"]["content"]
@@ -331,10 +319,8 @@ impl LlmProvider for AnthropicProvider {
         max_tokens: usize,
     ) -> Result<String> {
         // Separate system message from other messages
-        let system_message = messages
-            .iter()
-            .find(|m| m.role == "system")
-            .map(|m| m.content.clone());
+        let system_message =
+            messages.iter().find(|m| m.role == "system").map(|m| m.content.clone());
 
         let chat_messages: Vec<_> = messages
             .iter()
@@ -371,16 +357,12 @@ impl LlmProvider for AnthropicProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Anthropic API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Anthropic API error: {}", error_text)));
         }
 
-        let response_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| crate::Error::generic(format!("Failed to parse Anthropic response: {}", e)))?;
+        let response_json: serde_json::Value = response.json().await.map_err(|e| {
+            crate::Error::generic(format!("Failed to parse Anthropic response: {}", e))
+        })?;
 
         // Extract content from response
         let content = response_json["content"][0]["text"]
@@ -402,10 +384,9 @@ struct OpenAICompatibleProvider {
 
 impl OpenAICompatibleProvider {
     fn new(config: &BehaviorModelConfig) -> Result<Self> {
-        let endpoint = config
-            .api_endpoint
-            .clone()
-            .ok_or_else(|| crate::Error::generic("API endpoint required for OpenAI-compatible provider"))?;
+        let endpoint = config.api_endpoint.clone().ok_or_else(|| {
+            crate::Error::generic("API endpoint required for OpenAI-compatible provider")
+        })?;
 
         Ok(Self {
             client: reqwest::Client::new(),
@@ -436,10 +417,8 @@ impl LlmProvider for OpenAICompatibleProvider {
             "max_tokens": max_tokens,
         });
 
-        let mut request = self
-            .client
-            .post(&self.endpoint)
-            .header("Content-Type", "application/json");
+        let mut request =
+            self.client.post(&self.endpoint).header("Content-Type", "application/json");
 
         if let Some(api_key) = &self.api_key {
             request = request.header("Authorization", format!("Bearer {}", api_key));

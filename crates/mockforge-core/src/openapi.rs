@@ -86,9 +86,11 @@ mod tests {
             "openapi": "3.0.0",
             "info": {"title": "Test", "version": "1.0.0"},
             "paths": {}
-        })).unwrap();
+        }))
+        .unwrap();
 
-        let op = OpenApiOperation::from_operation("PUT", "/resource".to_string(), &operation, &spec);
+        let op =
+            OpenApiOperation::from_operation("PUT", "/resource".to_string(), &operation, &spec);
 
         assert_eq!(op.method, "PUT");
         assert_eq!(op.path, "/resource");

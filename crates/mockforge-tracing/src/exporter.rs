@@ -64,9 +64,7 @@ impl JaegerExporter {
     /// Validate configuration
     pub fn validate(&self) -> Result<(), ExporterError> {
         if self.endpoint.is_empty() {
-            return Err(ExporterError::InvalidEndpoint(
-                "Endpoint cannot be empty".to_string(),
-            ));
+            return Err(ExporterError::InvalidEndpoint("Endpoint cannot be empty".to_string()));
         }
 
         if self.max_batch_size == 0 {
@@ -161,9 +159,7 @@ impl OtlpExporter {
     /// Validate configuration
     pub fn validate(&self) -> Result<(), ExporterError> {
         if self.endpoint.is_empty() {
-            return Err(ExporterError::InvalidEndpoint(
-                "Endpoint cannot be empty".to_string(),
-            ));
+            return Err(ExporterError::InvalidEndpoint("Endpoint cannot be empty".to_string()));
         }
 
         // Validate URL format

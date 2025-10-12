@@ -102,7 +102,7 @@ const applyLogFilter = (logs: RequestLog[], filter: LogFilter): RequestLog[] => 
   // Filter by path pattern (search)
   if (filter.path_pattern) {
     const pattern = filter.path_pattern.toLowerCase();
-    filtered = filtered.filter(log => 
+    filtered = filtered.filter(log =>
       log.path.toLowerCase().includes(pattern) ||
       log.method.toLowerCase().includes(pattern) ||
       (log.error_message && log.error_message.toLowerCase().includes(pattern))
@@ -145,7 +145,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   addLog: (log) => {
     const state = get();
     if (state.isPaused) return;
-    
+
     const newLogs = [...state.logs, log];
     const filteredLogs = applyLogFilter(newLogs, state.filter);
     set({ logs: newLogs, filteredLogs });

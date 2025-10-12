@@ -1,10 +1,10 @@
 //! Email notification system for chaos orchestration results
 
-use crate::{Result, ReportingError};
 use crate::pdf::ExecutionReport;
-use lettre::{Message, SmtpTransport, Transport};
+use crate::{ReportingError, Result};
 use lettre::message::{header, Attachment, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -38,10 +38,7 @@ pub struct EmailNotifier {
 impl EmailNotifier {
     /// Create a new email notifier
     pub fn new(config: EmailConfig) -> Result<Self> {
-        let creds = Credentials::new(
-            config.username.clone(),
-            config.password.clone(),
-        );
+        let creds = Credentials::new(config.username.clone(), config.password.clone());
 
         let transport = SmtpTransport::relay(&config.smtp_host)
             .map_err(|e| ReportingError::Email(e.to_string()))?
@@ -57,14 +54,17 @@ impl EmailNotifier {
         let from = format!("{} <{}>", self.config.from_name, self.config.from_address);
 
         let mut message_builder = Message::builder()
-            .from(from.parse().map_err(|e| ReportingError::Email(format!("Invalid from address: {}", e)))?)
+            .from(
+                from.parse()
+                    .map_err(|e| ReportingError::Email(format!("Invalid from address: {}", e)))?,
+            )
             .subject(&email_report.subject);
 
         // Add recipients
         for recipient in &email_report.recipients {
-            message_builder = message_builder.to(
-                recipient.parse().map_err(|e| ReportingError::Email(format!("Invalid recipient: {}", e)))?
-            );
+            message_builder = message_builder.to(recipient
+                .parse()
+                .map_err(|e| ReportingError::Email(format!("Invalid recipient: {}", e)))?);
         }
 
         // Build multipart message
@@ -72,30 +72,26 @@ impl EmailNotifier {
             .singlepart(
                 SinglePart::builder()
                     .header(header::ContentType::TEXT_PLAIN)
-                    .body(email_report.text_body.clone())
+                    .body(email_report.text_body.clone()),
             )
             .singlepart(
                 SinglePart::builder()
                     .header(header::ContentType::TEXT_HTML)
-                    .body(email_report.html_body.clone())
+                    .body(email_report.html_body.clone()),
             );
 
         // Add PDF attachment if provided
         if let Some(ref pdf_data) = email_report.pdf_attachment {
             let attachment = Attachment::new("report.pdf".to_string())
                 .body(pdf_data.clone(), "application/pdf".parse().unwrap());
-            multipart = MultiPart::mixed()
-                .multipart(multipart)
-                .singlepart(attachment);
+            multipart = MultiPart::mixed().multipart(multipart).singlepart(attachment);
         }
 
         let email = message_builder
             .multipart(multipart)
             .map_err(|e| ReportingError::Email(e.to_string()))?;
 
-        self.transport
-            .send(&email)
-            .map_err(|e| ReportingError::Email(e.to_string()))?;
+        self.transport.send(&email).map_err(|e| ReportingError::Email(e.to_string()))?;
 
         Ok(())
     }
@@ -107,11 +103,8 @@ impl EmailNotifier {
         recipients: Vec<String>,
         include_pdf: bool,
     ) -> Result<()> {
-        let subject = format!(
-            "Chaos Test Report: {} - {}",
-            report.orchestration_name,
-            report.status
-        );
+        let subject =
+            format!("Chaos Test Report: {} - {}", report.orchestration_name, report.status);
 
         let html_body = self.generate_html_report(report);
         let text_body = self.generate_text_report(report);
@@ -207,7 +200,11 @@ impl EmailNotifier {
 </html>
 "#,
             report.orchestration_name,
-            if report.failed_steps == 0 { "success" } else { "failure" },
+            if report.failed_steps == 0 {
+                "success"
+            } else {
+                "failure"
+            },
             report.status,
             report.duration_seconds,
             report.start_time.format("%Y-%m-%d %H:%M:%S UTC"),
@@ -228,7 +225,9 @@ impl EmailNotifier {
             return String::new();
         }
 
-        let mut html = String::from("<h2>Failures</h2><table><tr><th>Step</th><th>Error</th><th>Time</th></tr>");
+        let mut html = String::from(
+            "<h2>Failures</h2><table><tr><th>Step</th><th>Error</th><th>Time</th></tr>",
+        );
 
         for failure in failures {
             html.push_str(&format!(
@@ -298,7 +297,7 @@ impl EmailNotifier {
 
     /// Generate PDF attachment
     fn generate_pdf_attachment(&self, report: &ExecutionReport) -> Result<Vec<u8>> {
-        use crate::pdf::{PdfReportGenerator, PdfConfig};
+        use crate::pdf::{PdfConfig, PdfReportGenerator};
 
         let config = PdfConfig::default();
         let generator = PdfReportGenerator::new(config);

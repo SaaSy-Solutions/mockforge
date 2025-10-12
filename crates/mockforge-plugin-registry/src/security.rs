@@ -156,11 +156,6 @@ impl SecurityScanner {
         Self { config }
     }
 
-    /// Create scanner with default config
-    pub fn default() -> Self {
-        Self::new(ScannerConfig::default())
-    }
-
     /// Scan a plugin package
     pub async fn scan_plugin(&self, package_path: &Path) -> Result<ScanResult> {
         let start_time = std::time::Instant::now();
@@ -220,9 +215,14 @@ impl SecurityScanner {
         // Examples: ClamAV, VirusTotal API, etc.
 
         // Placeholder: Check for suspicious file names
-        let _suspicious_patterns = vec![
-            "backdoor", "keylogger", "trojan", "ransomware",
-            "cryptominer", "rootkit", "exploit",
+        let _suspicious_patterns = [
+            "backdoor",
+            "keylogger",
+            "trojan",
+            "ransomware",
+            "cryptominer",
+            "rootkit",
+            "exploit",
         ];
 
         // This would scan actual files
@@ -301,6 +301,12 @@ impl SecurityScanner {
         } else {
             ScanStatus::Pass
         }
+    }
+}
+
+impl Default for SecurityScanner {
+    fn default() -> Self {
+        Self::new(ScannerConfig::default())
     }
 }
 

@@ -9,6 +9,7 @@ pub struct LoggingMiddleware {
     /// Middleware name
     name: String,
     /// Whether to log request bodies
+    #[allow(dead_code)]
     log_bodies: bool,
 }
 
@@ -31,9 +32,7 @@ impl ProtocolMiddleware for LoggingMiddleware {
     async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()> {
         // Add timestamp to request metadata
         let timestamp = chrono::Utc::now().to_rfc3339();
-        request
-            .metadata
-            .insert("x-mockforge-request-time".to_string(), timestamp);
+        request.metadata.insert("x-mockforge-request-time".to_string(), timestamp);
 
         // Store start time for duration calculation
         request.metadata.insert(
@@ -106,7 +105,11 @@ impl ProtocolMiddleware for LoggingMiddleware {
             Protocol::GraphQL => crate::create_http_log_entry(
                 "GraphQL",
                 &request.path,
-                if response.status.is_success() { 200 } else { 400 },
+                if response.status.is_success() {
+                    200
+                } else {
+                    400
+                },
                 duration_ms as u64,
                 request.client_ip.clone(),
                 request.metadata.get("user-agent").cloned(),

@@ -112,7 +112,7 @@ impl DockerComposeGenerator {
         );
 
         // Generate service configurations
-        for (idx, service_spec) in services.iter().enumerate() {
+        for service_spec in services.iter() {
             let service_name = format!("mockforge-{}", service_spec.name);
 
             let mut environment = HashMap::new();
@@ -120,10 +120,8 @@ impl DockerComposeGenerator {
             environment.insert("MOCKFORGE_PORT".to_string(), service_spec.port.to_string());
 
             if let Some(spec_path) = &service_spec.spec_path {
-                environment.insert(
-                    "MOCKFORGE_OPENAPI_SPEC".to_string(),
-                    format!("/specs/{}", spec_path),
-                );
+                environment
+                    .insert("MOCKFORGE_OPENAPI_SPEC".to_string(), format!("/specs/{}", spec_path));
             }
 
             let volumes = vec![
@@ -134,10 +132,8 @@ impl DockerComposeGenerator {
             ];
 
             if let Some(config_path) = &service_spec.config_path {
-                environment.insert(
-                    "MOCKFORGE_CONFIG".to_string(),
-                    format!("/configs/{}", config_path),
-                );
+                environment
+                    .insert("MOCKFORGE_CONFIG".to_string(), format!("/configs/{}", config_path));
             }
 
             let service_config = ServiceConfig {
@@ -185,10 +181,8 @@ impl DockerComposeGenerator {
         for (service, deps) in dependencies {
             let service_key = format!("mockforge-{}", service);
             if let Some(service_config) = config.services.get_mut(&service_key) {
-                let formatted_deps: Vec<String> = deps
-                    .iter()
-                    .map(|d| format!("mockforge-{}", d))
-                    .collect();
+                let formatted_deps: Vec<String> =
+                    deps.iter().map(|d| format!("mockforge-{}", d)).collect();
                 service_config.depends_on = Some(formatted_deps);
             }
         }
@@ -225,10 +219,8 @@ impl DockerComposeGenerator {
             let mut environment = HashMap::new();
             environment.insert("RUST_LOG".to_string(), "info".to_string());
             environment.insert("MOCKFORGE_PORT".to_string(), port.to_string());
-            environment.insert(
-                "MOCKFORGE_OPENAPI_SPEC".to_string(),
-                format!("/specs/{}.yaml", name),
-            );
+            environment
+                .insert("MOCKFORGE_OPENAPI_SPEC".to_string(), format!("/specs/{}.yaml", name));
 
             services.insert(
                 service_name.clone(),
@@ -324,10 +316,7 @@ mod tests {
         // Check that api depends on auth
         let api_service = config.services.get("mockforge-api").unwrap();
         assert!(api_service.depends_on.is_some());
-        assert_eq!(
-            api_service.depends_on.as_ref().unwrap()[0],
-            "mockforge-auth"
-        );
+        assert_eq!(api_service.depends_on.as_ref().unwrap()[0], "mockforge-auth");
     }
 
     #[test]

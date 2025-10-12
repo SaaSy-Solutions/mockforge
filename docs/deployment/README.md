@@ -6,7 +6,7 @@ Comprehensive guides for deploying MockForge on various cloud platforms and cont
 
 - **[AWS Deployment](aws.md)** - Amazon Web Services (ECS, EKS, App Runner, EC2)
 - **[GCP Deployment](gcp.md)** - Google Cloud Platform (Cloud Run, GKE, Compute Engine)
-- **[Azure Deployment](azure.md)** - Microsoft Azure (Container Apps, ACI, AKS, VMs)
+- **[Azure Deployment](azure.md)** - Microsoft Azure (Container Apps, ACPI, ASK, VMs)
 - **[DigitalOcean Deployment](digitalocean.md)** - DigitalOcean (App Platform, DOKS, Droplets)
 
 ## Platform Comparison
@@ -26,7 +26,7 @@ Comprehensive guides for deploying MockForge on various cloud platforms and cont
 |----------|---------|---------|----------|
 | **DigitalOcean** | DOKS | $84/mo | Affordable managed K8s |
 | **AWS** | EKS | $183/mo | Enterprise AWS deployments |
-| **Azure** | AKS | $228/mo | Enterprise Azure deployments |
+| **Azure** | ASK | $228/mo | Enterprise Azure deployments |
 | **Google Cloud** | GKE | $168-240/mo | Advanced GKE features |
 
 ### Virtual Machines (Traditional)
@@ -97,7 +97,7 @@ helm install mockforge ./helm/mockforge
 
 - [AWS EKS](aws.md#aws-eks-kubernetes)
 - [Google GKE](gcp.md#google-kubernetes-engine-gke)
-- [Azure AKS](azure.md#azure-kubernetes-service-aks)
+- [Azure ASK](azure.md#azure-kubernetes-service-ask)
 - [DigitalOcean DOKS](digitalocean.md#digitalocean-kubernetes-doks)
 
 ### Helm Chart Documentation

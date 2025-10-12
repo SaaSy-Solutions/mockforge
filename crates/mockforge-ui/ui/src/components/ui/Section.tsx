@@ -8,13 +8,13 @@ interface SectionProps extends React.HTMLAttributes<HTMLDivElement> {
   actions?: React.ReactNode;
 }
 
-export function Section({ 
-  title, 
-  subtitle, 
-  actions, 
-  children, 
+export function Section({
+  title,
+  subtitle,
+  actions,
+  children,
   className,
-  ...props 
+  ...props
 }: SectionProps) {
   return (
     <div className={cn("section-gap", className)} {...props}>

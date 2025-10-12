@@ -69,9 +69,7 @@ impl Recorder {
         query_params: Option<&str>,
         headers: &std::collections::HashMap<String, String>,
         body: Option<&[u8]>,
-        client_ip: Option<&str>,
-        trace_id: Option<&str>,
-        span_id: Option<&str>,
+        context: &crate::models::RequestContext,
     ) -> Result<String> {
         let request_id = Uuid::new_v4().to_string();
 
@@ -87,9 +85,9 @@ impl Recorder {
             headers: serde_json::to_string(&headers)?,
             body: body_str,
             body_encoding,
-            client_ip: client_ip.map(|s| s.to_string()),
-            trace_id: trace_id.map(|s| s.to_string()),
-            span_id: span_id.map(|s| s.to_string()),
+            client_ip: context.client_ip.clone(),
+            trace_id: context.trace_id.clone(),
+            span_id: context.span_id.clone(),
             duration_ms: None,
             status_code: None,
             tags: None,
@@ -156,10 +154,8 @@ fn encode_body(body: Option<&[u8]>) -> (Option<String>, String) {
                 (Some(text.to_string()), "utf8".to_string())
             } else {
                 // Binary data, encode as base64
-                let encoded = base64::Engine::encode(
-                    &base64::engine::general_purpose::STANDARD,
-                    bytes,
-                );
+                let encoded =
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes);
                 (Some(encoded), "base64".to_string())
             }
         }
@@ -202,21 +198,14 @@ mod tests {
         let db = RecorderDatabase::new_in_memory().await.unwrap();
         let recorder = Recorder::new(db);
 
-        let headers = std::collections::HashMap::from([
-            ("content-type".to_string(), "application/json".to_string()),
-        ]);
+        let headers = std::collections::HashMap::from([(
+            "content-type".to_string(),
+            "application/json".to_string(),
+        )]);
 
+        let context = RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = recorder
-            .record_http_request(
-                "GET",
-                "/api/test",
-                Some("foo=bar"),
-                &headers,
-                None,
-                Some("127.0.0.1"),
-                None,
-                None,
-            )
+            .record_http_request("GET", "/api/test", Some("foo=bar"), &headers, None, &context)
             .await
             .unwrap();
 

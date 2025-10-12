@@ -66,7 +66,7 @@ impl Default for LoggingConfig {
 ///
 /// init_logging(config).expect("Failed to initialize logging");
 /// ```
-pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Parse log level
     let _log_level = parse_log_level(&config.level)?;
 
@@ -188,7 +188,7 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
 pub fn init_logging_with_otel<L, S>(
     _config: LoggingConfig,
     _otel_layer: L,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
     L: tracing_subscriber::Layer<S> + Send + Sync + 'static,
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
@@ -205,7 +205,7 @@ where
 }
 
 /// Parse log level from string
-fn parse_log_level(level: &str) -> Result<Level, Box<dyn std::error::Error>> {
+fn parse_log_level(level: &str) -> Result<Level, Box<dyn std::error::Error + Send + Sync>> {
     match level.to_lowercase().as_str() {
         "trace" => Ok(Level::TRACE),
         "debug" => Ok(Level::DEBUG),
@@ -263,10 +263,7 @@ mod tests {
         use std::time::SystemTime;
 
         // Create a unique test log file path
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
         let test_dir = PathBuf::from("/tmp/mockforge-test-logs");
         fs::create_dir_all(&test_dir).ok();
         let log_file = test_dir.join(format!("test-{}.log", timestamp));

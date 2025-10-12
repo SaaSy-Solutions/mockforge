@@ -37,20 +37,22 @@ grpc:
 
 # Admin UI configuration
 admin:
-  enabled: false
-  port: 9080
-  host: "127.0.0.1"
-  auth_required: false
-  username: null
-  password: null
-  # Optional: mount Admin UI under HTTP server instead of separate port
-  # When set (e.g., "/admin"), the Admin UI will be available at
-  #   http://<http-host>:<http-port><mount_path>/
-  # and APIs at
-  #   <mount_path>/__mockforge/*
-  mount_path: null
-  # Toggle Admin API endpoints under __mockforge
-  api_enabled: true
+   enabled: false
+   port: 9080
+   host: "127.0.0.1"
+   api_enabled: true
+   auth_required: false
+   username: null
+   password: null
+   prometheus_url: "http://localhost:9090"
+   # Optional: mount Admin UI under HTTP server instead of separate port
+   # When set (e.g., "/admin"), the Admin UI will be available at
+   #   http://<http-host>:<http-port><mount_path>/
+   # and APIs at
+   #   <mount_path>/__mockforge/*
+   mount_path: null
+   # Toggle Admin API endpoints under __mockforge
+   # api_enabled: true  # Already defined above
 
 # Core MockForge configuration
 core:

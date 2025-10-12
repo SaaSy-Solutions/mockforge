@@ -2,7 +2,6 @@
 ///
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
-
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -137,10 +136,7 @@ async fn update_mock(
 ) -> Result<Json<MockConfig>, StatusCode> {
     let mut mocks = state.mocks.write().await;
 
-    let position = mocks
-        .iter()
-        .position(|m| m.id == id)
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let position = mocks.iter().position(|m| m.id == id).ok_or(StatusCode::NOT_FOUND)?;
 
     info!("Updating mock: {}", id);
     mocks[position] = updated_mock.clone();
@@ -154,10 +150,7 @@ async fn delete_mock(
 ) -> Result<StatusCode, StatusCode> {
     let mut mocks = state.mocks.write().await;
 
-    let position = mocks
-        .iter()
-        .position(|m| m.id == id)
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let position = mocks.iter().position(|m| m.id == id).ok_or(StatusCode::NOT_FOUND)?;
 
     info!("Deleting mock: {}", id);
     mocks.remove(position);
@@ -212,7 +205,8 @@ async fn export_mocks(
 ) -> Result<(StatusCode, String), StatusCode> {
     let mocks = state.mocks.read().await;
 
-    let format = params.get("format")
+    let format = params
+        .get("format")
         .and_then(|f| match f.as_str() {
             "yaml" | "yml" => Some(ExportFormat::Yaml),
             _ => Some(ExportFormat::Json),
@@ -220,16 +214,12 @@ async fn export_mocks(
         .unwrap_or(ExportFormat::Json);
 
     match format {
-        ExportFormat::Json => {
-            serde_json::to_string_pretty(&*mocks)
-                .map(|json| (StatusCode::OK, json))
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        }
-        ExportFormat::Yaml => {
-            serde_yaml::to_string(&*mocks)
-                .map(|yaml| (StatusCode::OK, yaml))
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        ExportFormat::Json => serde_json::to_string_pretty(&*mocks)
+            .map(|json| (StatusCode::OK, json))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR),
+        ExportFormat::Yaml => serde_yaml::to_string(&*mocks)
+            .map(|yaml| (StatusCode::OK, yaml))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
@@ -239,7 +229,8 @@ async fn import_mocks(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: String,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let format = params.get("format")
+    let format = params
+        .get("format")
         .and_then(|f| match f.as_str() {
             "yaml" | "yml" => Some(ExportFormat::Yaml),
             _ => Some(ExportFormat::Json),
@@ -247,18 +238,14 @@ async fn import_mocks(
         .unwrap_or(ExportFormat::Json);
 
     let imported_mocks: Vec<MockConfig> = match format {
-        ExportFormat::Json => serde_json::from_str(&body)
-            .map_err(|_| StatusCode::BAD_REQUEST)?,
-        ExportFormat::Yaml => serde_yaml::from_str(&body)
-            .map_err(|_| StatusCode::BAD_REQUEST)?,
+        ExportFormat::Json => serde_json::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?,
+        ExportFormat::Yaml => serde_yaml::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?,
     };
 
     let mut mocks = state.mocks.write().await;
 
     // Determine import strategy
-    let merge = params.get("merge")
-        .map(|v| v == "true")
-        .unwrap_or(false);
+    let merge = params.get("merge").map(|v| v == "true").unwrap_or(false);
 
     if merge {
         // Merge: add new mocks, update existing ones by ID

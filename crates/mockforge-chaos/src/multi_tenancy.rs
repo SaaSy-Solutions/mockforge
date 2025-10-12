@@ -3,12 +3,12 @@
 //! Provides isolation and resource management for multiple tenants in MockForge.
 //! Supports tenant-specific configurations, quotas, and access controls.
 
+use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use thiserror::Error;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// Multi-tenancy errors
@@ -524,7 +524,7 @@ impl TenantManager {
 
         if new_plan <= tenant.plan {
             return Err(MultiTenancyError::InvalidConfig(
-                "New plan must be higher than current plan".to_string()
+                "New plan must be higher than current plan".to_string(),
             ));
         }
 

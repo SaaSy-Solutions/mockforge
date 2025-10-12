@@ -659,15 +659,13 @@ mod tests {
 
     #[test]
     fn test_to_enhanced_422_json() {
-        let errors = vec![
-            ValidationError::new(
-                "/name".to_string(),
-                "string".to_string(),
-                "number".to_string(),
-                "type_mismatch",
-            )
-            .with_message("Type mismatch: expected string, found number".to_string()),
-        ];
+        let errors = vec![ValidationError::new(
+            "/name".to_string(),
+            "string".to_string(),
+            "number".to_string(),
+            "type_mismatch",
+        )
+        .with_message("Type mismatch: expected string, found number".to_string())];
 
         let result = to_enhanced_422_json(errors);
         assert_eq!(result["error"], "Schema validation failed");

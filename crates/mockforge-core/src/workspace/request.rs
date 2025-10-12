@@ -3,7 +3,7 @@
 //! This module provides functionality for processing mock requests,
 //! including request matching, response generation, and request execution.
 
-use crate::cache::{Cache, ResponseCache, CachedResponse};
+use crate::cache::{Cache, CachedResponse, ResponseCache};
 use crate::performance::PerformanceMonitor;
 use crate::templating::TemplateEngine;
 use crate::workspace::core::{EntityId, Folder, MockRequest, MockResponse, Workspace};
@@ -250,6 +250,7 @@ impl RequestProcessor {
     }
 
     /// Recursive function to match path segments with wildcards
+    #[allow(clippy::only_used_in_recursion)]
     fn match_segments(
         &self,
         pattern_parts: &[&str],
@@ -373,14 +374,12 @@ impl RequestProcessor {
         }
 
         // Find the request
-        let request = self
-            .find_request_in_workspace(workspace, request_id)
-            .ok_or_else(|| {
-                if self.optimizations_enabled {
-                    self.performance_monitor.record_error();
-                }
-                format!("Request with ID {} not found", request_id)
-            })?;
+        let request = self.find_request_in_workspace(workspace, request_id).ok_or_else(|| {
+            if self.optimizations_enabled {
+                self.performance_monitor.record_error();
+            }
+            format!("Request with ID {} not found", request_id)
+        })?;
 
         let start_time = std::time::Instant::now();
 
@@ -396,14 +395,12 @@ impl RequestProcessor {
         }
 
         // Get active response
-        let response = request
-            .active_response()
-            .ok_or_else(|| {
-                if self.optimizations_enabled {
-                    self.performance_monitor.record_error();
-                }
-                Error::generic("No active response found for request")
-            })?;
+        let response = request.active_response().ok_or_else(|| {
+            if self.optimizations_enabled {
+                self.performance_monitor.record_error();
+            }
+            Error::generic("No active response found for request")
+        })?;
 
         // Apply variable substitution
         let processed_response = self.process_response(response, context).await?;
@@ -412,7 +409,8 @@ impl RequestProcessor {
 
         // Cache the response if optimizations are enabled
         if self.optimizations_enabled && !cache_key.is_empty() {
-            let cached_response = self.convert_mock_response_to_cached_response(&processed_response);
+            let cached_response =
+                self.convert_mock_response_to_cached_response(&processed_response);
             self.response_cache.cache_response(cache_key, cached_response).await;
         }
 
@@ -450,6 +448,7 @@ impl RequestProcessor {
     }
 
     /// Find request in folder hierarchy (mutable)
+    #[allow(clippy::only_used_in_recursion)]
     fn find_request_in_folders_mut<'a>(
         &self,
         folders: &'a mut [Folder],
@@ -488,6 +487,7 @@ impl RequestProcessor {
     }
 
     /// Find request in folder hierarchy (immutable)
+    #[allow(clippy::only_used_in_recursion)]
     fn find_request_in_folders<'a>(
         &self,
         folders: &'a [Folder],
@@ -675,6 +675,8 @@ impl RequestProcessor {
     }
 
     /// Collect metrics from folder requests
+    #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::too_many_arguments)]
     fn collect_folder_request_metrics(
         &self,
         folders: &[Folder],
@@ -811,7 +813,11 @@ impl RequestProcessor {
     // Performance optimization helper methods
 
     /// Generate cache key for response caching
-    fn generate_response_cache_key(&self, request_id: &EntityId, context: &RequestExecutionContext) -> String {
+    fn generate_response_cache_key(
+        &self,
+        request_id: &EntityId,
+        context: &RequestExecutionContext,
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 

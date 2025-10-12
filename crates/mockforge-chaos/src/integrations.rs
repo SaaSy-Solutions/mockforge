@@ -295,10 +295,7 @@ impl JiraIntegration {
             "body": comment
         });
 
-        let url = format!(
-            "{}/rest/api/2/issue/{}/comment",
-            self.config.url, ticket_key
-        );
+        let url = format!("{}/rest/api/2/issue/{}/comment", self.config.url, ticket_key);
 
         self.client
             .post(&url)
@@ -338,10 +335,7 @@ impl PagerDutyIntegration {
 
         let dedup_key = format!(
             "{}-{}",
-            self.config
-                .dedup_key_prefix
-                .as_deref()
-                .unwrap_or("mockforge"),
+            self.config.dedup_key_prefix.as_deref().unwrap_or("mockforge"),
             notification.timestamp.timestamp()
         );
 
@@ -447,10 +441,7 @@ impl GrafanaIntegration {
             .context("Failed to create Grafana dashboard")?;
 
         let result: serde_json::Value = response.json().await?;
-        let uid = result["uid"]
-            .as_str()
-            .context("Failed to get dashboard UID")?
-            .to_string();
+        let uid = result["uid"].as_str().context("Failed to get dashboard UID")?.to_string();
 
         Ok(uid)
     }

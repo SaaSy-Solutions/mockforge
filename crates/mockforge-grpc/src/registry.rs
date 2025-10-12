@@ -7,7 +7,10 @@ use crate::dynamic::proto_parser::{ProtoMethod, ProtoParser, ProtoService};
 use mockforge_core::protocol_abstraction::{
     Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
 };
-use mockforge_core::{ProtocolValidationError as ValidationError, ProtocolValidationResult as ValidationResult, Result};
+use mockforge_core::{
+    ProtocolValidationError as ValidationError, ProtocolValidationResult as ValidationResult,
+    Result,
+};
 use prost_reflect::MessageDescriptor;
 use std::collections::HashMap;
 
@@ -25,8 +28,9 @@ impl GrpcProtoRegistry {
     /// Create a new gRPC registry from proto directory
     pub async fn from_directory(proto_dir: &str) -> Result<Self> {
         let mut parser = ProtoParser::new();
-        parser.parse_directory(proto_dir).await
-            .map_err(|e| mockforge_core::Error::validation(format!("Failed to parse proto directory: {}", e)))?;
+        parser.parse_directory(proto_dir).await.map_err(|e| {
+            mockforge_core::Error::validation(format!("Failed to parse proto directory: {}", e))
+        })?;
 
         let services: Vec<ProtoService> = parser.services().values().cloned().collect();
         let operations = Self::extract_operations_from_services(&services);
@@ -109,20 +113,29 @@ impl GrpcProtoRegistry {
                 prost_reflect::Kind::Double | prost_reflect::Kind::Float => {
                     serde_json::json!(99.99)
                 }
-                prost_reflect::Kind::Int32 | prost_reflect::Kind::Int64 |
-                prost_reflect::Kind::Uint32 | prost_reflect::Kind::Uint64 |
-                prost_reflect::Kind::Sint32 | prost_reflect::Kind::Sint64 |
-                prost_reflect::Kind::Fixed32 | prost_reflect::Kind::Fixed64 |
-                prost_reflect::Kind::Sfixed32 | prost_reflect::Kind::Sfixed64 => {
+                prost_reflect::Kind::Int32
+                | prost_reflect::Kind::Int64
+                | prost_reflect::Kind::Uint32
+                | prost_reflect::Kind::Uint64
+                | prost_reflect::Kind::Sint32
+                | prost_reflect::Kind::Sint64
+                | prost_reflect::Kind::Fixed32
+                | prost_reflect::Kind::Fixed64
+                | prost_reflect::Kind::Sfixed32
+                | prost_reflect::Kind::Sfixed64 => {
                     serde_json::json!(42)
                 }
                 prost_reflect::Kind::Bool => serde_json::json!(true),
                 prost_reflect::Kind::String => {
                     // Generate based on field name
                     match field_name.to_lowercase().as_str() {
-                        "id" => serde_json::json!(mockforge_core::templating::expand_str("{{uuid}}")),
+                        "id" => {
+                            serde_json::json!(mockforge_core::templating::expand_str("{{uuid}}"))
+                        }
                         "name" | "title" => serde_json::json!(format!("Mock {}", field_name)),
-                        "email" => serde_json::json!(mockforge_core::templating::expand_str("{{faker.email}}")),
+                        "email" => serde_json::json!(mockforge_core::templating::expand_str(
+                            "{{faker.email}}"
+                        )),
                         _ => serde_json::json!(format!("mock_{}", field_name)),
                     }
                 }
@@ -163,25 +176,27 @@ impl SpecRegistry for GrpcProtoRegistry {
         if let Some(_op) = self.find_operation(&request.operation, &request.path) {
             Ok(ValidationResult::success())
         } else {
-            Ok(ValidationResult::failure(vec![
-                ValidationError {
-                    message: format!("Unknown gRPC operation: {}", request.operation),
-                    path: Some(request.path.clone()),
-                    code: Some("UNKNOWN_RPC".to_string()),
-                },
-            ]))
+            Ok(ValidationResult::failure(vec![ValidationError {
+                message: format!("Unknown gRPC operation: {}", request.operation),
+                path: Some(request.path.clone()),
+                code: Some("UNKNOWN_RPC".to_string()),
+            }]))
         }
     }
 
     fn generate_mock_response(&self, request: &ProtocolRequest) -> Result<ProtocolResponse> {
         // Find the operation
-        let operation = self.find_operation(&request.operation, &request.path)
-            .ok_or_else(|| mockforge_core::Error::validation(
-                format!("Unknown operation: {}", request.operation)
-            ))?;
+        let operation =
+            self.find_operation(&request.operation, &request.path).ok_or_else(|| {
+                mockforge_core::Error::validation(format!(
+                    "Unknown operation: {}",
+                    request.operation
+                ))
+            })?;
 
         // Get output type
-        let output_type = operation.output_schema
+        let output_type = operation
+            .output_schema
             .as_ref()
             .ok_or_else(|| mockforge_core::Error::validation("No output schema defined"))?;
 
@@ -256,22 +271,18 @@ mod tests {
 
     #[test]
     fn test_extract_operations_from_services() {
-        let services = vec![
-            ProtoService {
-                name: "test.Service".to_string(),
-                package: "test".to_string(),
-                short_name: "Service".to_string(),
-                methods: vec![
-                    ProtoMethod {
-                        name: "GetUser".to_string(),
-                        input_type: "GetUserRequest".to_string(),
-                        output_type: "GetUserResponse".to_string(),
-                        client_streaming: false,
-                        server_streaming: false,
-                    },
-                ],
-            },
-        ];
+        let services = vec![ProtoService {
+            name: "test.Service".to_string(),
+            package: "test".to_string(),
+            short_name: "Service".to_string(),
+            methods: vec![ProtoMethod {
+                name: "GetUser".to_string(),
+                input_type: "GetUserRequest".to_string(),
+                output_type: "GetUserResponse".to_string(),
+                client_streaming: false,
+                server_streaming: false,
+            }],
+        }];
 
         let operations = GrpcProtoRegistry::extract_operations_from_services(&services);
         assert_eq!(operations.len(), 1);

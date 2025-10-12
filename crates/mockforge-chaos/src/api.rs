@@ -1,16 +1,21 @@
 //! Management API for chaos engineering
 
 use crate::{
-    ab_testing::{ABTestingEngine, ABTestConfig, VariantResults, TestConclusion},
+    ab_testing::{ABTestConfig, ABTestingEngine, TestConclusion, VariantResults},
     analytics::{ChaosAnalytics, TimeBucket},
-    auto_remediation::{RemediationEngine, RemediationConfig},
-    config::{BulkheadConfig, ChaosConfig, CircuitBreakerConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig, TrafficShapingConfig},
-    recommendations::{RecommendationCategory, RecommendationEngine, RecommendationSeverity, Recommendation},
-    scenarios::{PredefinedScenarios, ScenarioEngine, ChaosScenario},
+    auto_remediation::{RemediationConfig, RemediationEngine},
+    config::{
+        BulkheadConfig, ChaosConfig, CircuitBreakerConfig, FaultInjectionConfig, LatencyConfig,
+        RateLimitConfig, TrafficShapingConfig,
+    },
+    recommendations::{
+        Recommendation, RecommendationCategory, RecommendationEngine, RecommendationSeverity,
+    },
     scenario_orchestrator::{OrchestratedScenario, ScenarioOrchestrator},
     scenario_recorder::{RecordedScenario, ScenarioRecorder},
     scenario_replay::{ReplayOptions, ReplaySpeed, ScenarioReplayEngine},
-    scenario_scheduler::{ScheduleType, ScheduledScenario, ScenarioScheduler},
+    scenario_scheduler::{ScenarioScheduler, ScheduleType, ScheduledScenario},
+    scenarios::{ChaosScenario, PredefinedScenarios, ScenarioEngine},
 };
 use axum::{
     extract::{Path, State},
@@ -47,7 +52,8 @@ pub fn create_chaos_api_router(config: ChaosConfig) -> (Router, Arc<RwLock<Chaos
     let analytics = Arc::new(ChaosAnalytics::new());
     let recommendation_engine = Arc::new(RecommendationEngine::new());
     let remediation_engine = Arc::new(RemediationEngine::new());
-    let ab_testing_engine = Arc::new(tokio::sync::RwLock::new(ABTestingEngine::new(analytics.clone())));
+    let ab_testing_engine =
+        Arc::new(tokio::sync::RwLock::new(ABTestingEngine::new(analytics.clone())));
     let recorder = Arc::new(ScenarioRecorder::new());
     let replay_engine = Arc::new(tokio::sync::RwLock::new(ScenarioReplayEngine::new()));
     let scheduler = Arc::new(tokio::sync::RwLock::new(ScenarioScheduler::new()));
@@ -309,22 +315,26 @@ async fn list_predefined_scenarios() -> Json<Vec<PredefinedScenarioInfo>> {
     Json(vec![
         PredefinedScenarioInfo {
             name: "network_degradation".to_string(),
-            description: "Simulates degraded network conditions with high latency and packet loss".to_string(),
+            description: "Simulates degraded network conditions with high latency and packet loss"
+                .to_string(),
             tags: vec!["network".to_string(), "latency".to_string()],
         },
         PredefinedScenarioInfo {
             name: "service_instability".to_string(),
-            description: "Simulates an unstable service with random errors and timeouts".to_string(),
+            description: "Simulates an unstable service with random errors and timeouts"
+                .to_string(),
             tags: vec!["service".to_string(), "errors".to_string()],
         },
         PredefinedScenarioInfo {
             name: "cascading_failure".to_string(),
-            description: "Simulates a cascading failure with multiple simultaneous issues".to_string(),
+            description: "Simulates a cascading failure with multiple simultaneous issues"
+                .to_string(),
             tags: vec!["critical".to_string(), "cascading".to_string()],
         },
         PredefinedScenarioInfo {
             name: "peak_traffic".to_string(),
-            description: "Simulates peak traffic conditions with aggressive rate limiting".to_string(),
+            description: "Simulates peak traffic conditions with aggressive rate limiting"
+                .to_string(),
             tags: vec!["traffic".to_string(), "load".to_string()],
         },
         PredefinedScenarioInfo {
@@ -410,7 +420,8 @@ async fn inject_grpc_status_codes(
     let mut config = state.config.write().await;
 
     // Add gRPC-specific HTTP error codes that map to the requested gRPC status codes
-    let mut http_errors = config.fault_injection
+    let mut http_errors = config
+        .fault_injection
         .as_ref()
         .map(|f| f.http_errors.clone())
         .unwrap_or_default();
@@ -469,7 +480,8 @@ async fn inject_websocket_close_codes(
 ) -> Json<StatusResponse> {
     let mut config = state.config.write().await;
 
-    let mut http_errors = config.fault_injection
+    let mut http_errors = config
+        .fault_injection
         .as_ref()
         .map(|f| f.http_errors.clone())
         .unwrap_or_default();
@@ -540,7 +552,8 @@ async fn inject_graphql_error_codes(
 ) -> Json<StatusResponse> {
     let mut config = state.config.write().await;
 
-    let mut http_errors = config.fault_injection
+    let mut http_errors = config
+        .fault_injection
         .as_ref()
         .map(|f| f.http_errors.clone())
         .unwrap_or_default();
@@ -601,7 +614,10 @@ async fn toggle_graphql_resolver_latency(
 
     info!("GraphQL resolver latency {}", if req.enabled { "enabled" } else { "disabled" });
     Json(StatusResponse {
-        message: format!("GraphQL resolver latency {}", if req.enabled { "enabled" } else { "disabled" }),
+        message: format!(
+            "GraphQL resolver latency {}",
+            if req.enabled { "enabled" } else { "disabled" }
+        ),
     })
 }
 
@@ -677,7 +693,9 @@ async fn start_recording(
             active_scenarios
                 .into_iter()
                 .find(|s| s.name == req.scenario_name)
-                .ok_or_else(|| ChaosApiError::NotFound(format!("Scenario '{}' not found", req.scenario_name)))?
+                .ok_or_else(|| {
+                    ChaosApiError::NotFound(format!("Scenario '{}' not found", req.scenario_name))
+                })?
         }
     };
 
@@ -694,7 +712,9 @@ async fn start_recording(
 }
 
 /// Stop recording
-async fn stop_recording(State(state): State<ChaosApiState>) -> Result<Json<StatusResponse>, ChaosApiError> {
+async fn stop_recording(
+    State(state): State<ChaosApiState>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
     match state.recorder.stop_recording() {
         Ok(recording) => {
             info!(
@@ -740,7 +760,7 @@ async fn export_recording(
     // Check if there's a current recording first
     if state.recorder.get_current_recording().is_some() {
         return Err(ChaosApiError::NotFound(
-            "Cannot export while recording is in progress. Stop recording first.".to_string()
+            "Cannot export while recording is in progress. Stop recording first.".to_string(),
         ));
     }
 
@@ -809,7 +829,9 @@ async fn start_replay(
 }
 
 /// Pause replay
-async fn pause_replay(State(state): State<ChaosApiState>) -> Result<Json<StatusResponse>, ChaosApiError> {
+async fn pause_replay(
+    State(state): State<ChaosApiState>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
     let replay_engine = state.replay_engine.read().await;
     match replay_engine.pause().await {
         Ok(_) => {
@@ -823,7 +845,9 @@ async fn pause_replay(State(state): State<ChaosApiState>) -> Result<Json<StatusR
 }
 
 /// Resume replay
-async fn resume_replay(State(state): State<ChaosApiState>) -> Result<Json<StatusResponse>, ChaosApiError> {
+async fn resume_replay(
+    State(state): State<ChaosApiState>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
     let replay_engine = state.replay_engine.read().await;
     match replay_engine.resume().await {
         Ok(_) => {
@@ -837,7 +861,9 @@ async fn resume_replay(State(state): State<ChaosApiState>) -> Result<Json<Status
 }
 
 /// Stop replay
-async fn stop_replay(State(state): State<ChaosApiState>) -> Result<Json<StatusResponse>, ChaosApiError> {
+async fn stop_replay(
+    State(state): State<ChaosApiState>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
     let replay_engine = state.replay_engine.read().await;
     match replay_engine.stop().await {
         Ok(_) => {
@@ -892,7 +918,9 @@ async fn start_orchestration(
 
     // Start the orchestration
     let mut orchestrator = state.orchestrator.write().await;
-    orchestrator.execute(orchestrated.clone()).await
+    orchestrator
+        .execute(orchestrated.clone())
+        .await
         .map_err(|e| ChaosApiError::NotFound(format!("Failed to start orchestration: {}", e)))?;
 
     info!("Started orchestration '{}'", req.name);
@@ -921,7 +949,9 @@ async fn stop_orchestration(State(state): State<ChaosApiState>) -> Json<StatusRe
 }
 
 /// Get orchestration status
-async fn orchestration_status(State(state): State<ChaosApiState>) -> Json<OrchestrationStatusResponse> {
+async fn orchestration_status(
+    State(state): State<ChaosApiState>,
+) -> Json<OrchestrationStatusResponse> {
     let orchestrator = state.orchestrator.read().await;
 
     if let Some(status) = orchestrator.get_status() {
@@ -952,14 +982,19 @@ async fn import_orchestration(
         OrchestratedScenario::from_yaml(&req.content)
             .map_err(|e| ChaosApiError::NotFound(format!("Invalid YAML: {}", e)))?
     } else {
-        return Err(ChaosApiError::NotFound("Unsupported format. Use 'json' or 'yaml'".to_string()));
+        return Err(ChaosApiError::NotFound(
+            "Unsupported format. Use 'json' or 'yaml'".to_string(),
+        ));
     };
 
     info!("Imported orchestration: {}", orchestrated.name);
 
     Ok(Json(StatusResponse {
-        message: format!("Orchestration '{}' imported successfully ({} steps)",
-            orchestrated.name, orchestrated.steps.len()),
+        message: format!(
+            "Orchestration '{}' imported successfully ({} steps)",
+            orchestrated.name,
+            orchestrated.steps.len()
+        ),
     }))
 }
 
@@ -1189,7 +1224,9 @@ struct ScheduleSummary {
 // AI-powered recommendation handlers
 
 /// Get all recommendations
-async fn get_recommendations(State(state): State<ChaosApiState>) -> Json<Vec<crate::recommendations::Recommendation>> {
+async fn get_recommendations(
+    State(state): State<ChaosApiState>,
+) -> Json<Vec<crate::recommendations::Recommendation>> {
     Json(state.recommendation_engine.get_recommendations())
 }
 
@@ -1208,7 +1245,15 @@ async fn analyze_and_recommend(State(state): State<ChaosApiState>) -> Json<Analy
 
     Json(AnalyzeResponse {
         total_recommendations: recommendations.len(),
-        high_priority: recommendations.iter().filter(|r| matches!(r.severity, RecommendationSeverity::High | RecommendationSeverity::Critical)).count(),
+        high_priority: recommendations
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.severity,
+                    RecommendationSeverity::High | RecommendationSeverity::Critical
+                )
+            })
+            .count(),
         recommendations,
     })
 }
@@ -1358,7 +1403,9 @@ async fn rollback_remediation(
 }
 
 /// Get all remediation actions
-async fn get_remediation_actions(State(state): State<ChaosApiState>) -> Json<Vec<crate::auto_remediation::RemediationAction>> {
+async fn get_remediation_actions(
+    State(state): State<ChaosApiState>,
+) -> Json<Vec<crate::auto_remediation::RemediationAction>> {
     Json(state.remediation_engine.get_active_actions())
 }
 
@@ -1374,7 +1421,9 @@ async fn get_remediation_action(
 }
 
 /// Get approval queue
-async fn get_approval_queue(State(state): State<ChaosApiState>) -> Json<Vec<crate::auto_remediation::ApprovalRequest>> {
+async fn get_approval_queue(
+    State(state): State<ChaosApiState>,
+) -> Json<Vec<crate::auto_remediation::ApprovalRequest>> {
     Json(state.remediation_engine.get_approval_queue())
 }
 
@@ -1390,7 +1439,9 @@ async fn get_remediation_effectiveness(
 }
 
 /// Get remediation statistics
-async fn get_remediation_stats(State(state): State<ChaosApiState>) -> Json<crate::auto_remediation::RemediationStats> {
+async fn get_remediation_stats(
+    State(state): State<ChaosApiState>,
+) -> Json<crate::auto_remediation::RemediationStats> {
     Json(state.remediation_engine.get_stats())
 }
 
@@ -1516,7 +1567,9 @@ async fn delete_ab_test(
 }
 
 /// Get A/B test statistics
-async fn get_ab_test_stats(State(state): State<ChaosApiState>) -> Json<crate::ab_testing::ABTestStats> {
+async fn get_ab_test_stats(
+    State(state): State<ChaosApiState>,
+) -> Json<crate::ab_testing::ABTestStats> {
     let engine = state.ab_testing_engine.read().await;
     Json(engine.get_stats())
 }

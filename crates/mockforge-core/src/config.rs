@@ -91,6 +91,7 @@ impl Default for AuthConfig {
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ServerConfig {
     /// HTTP server configuration
     pub http: HttpConfig,
@@ -113,7 +114,6 @@ pub struct ServerConfig {
     /// Observability configuration (metrics, tracing)
     pub observability: ObservabilityConfig,
     /// Multi-tenant workspace configuration
-    #[serde(default)]
     pub multi_tenant: crate::multi_tenant::MultiTenantConfig,
 }
 
@@ -385,6 +385,7 @@ impl Default for DataConfig {
 
 /// RAG configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RagConfig {
     /// Enable RAG by default
     pub enabled: bool,
@@ -463,8 +464,7 @@ impl Default for RagConfig {
 }
 
 /// Observability configuration for metrics and distributed tracing
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ObservabilityConfig {
     /// Prometheus metrics configuration
     pub prometheus: PrometheusConfig,
@@ -475,7 +475,6 @@ pub struct ObservabilityConfig {
     /// Chaos engineering configuration
     pub chaos: Option<ChaosEngConfig>,
 }
-
 
 /// Prometheus metrics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -577,8 +576,7 @@ impl Default for RecorderConfig {
 }
 
 /// Chaos engineering configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChaosEngConfig {
     /// Enable chaos engineering
     pub enabled: bool,
@@ -593,7 +591,6 @@ pub struct ChaosEngConfig {
     /// Predefined scenario to use
     pub scenario: Option<String>,
 }
-
 
 /// Latency injection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

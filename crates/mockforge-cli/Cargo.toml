@@ -49,6 +49,7 @@ hyper = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.8"
 hex = { workspace = true }
+colored = "2.2"
 
 [dev-dependencies]
 assert_cmd = "2.0"

@@ -3,18 +3,18 @@
 //! This crate provides distributed tracing capabilities across all MockForge protocols
 //! (HTTP, gRPC, WebSocket, GraphQL) using OpenTelemetry and Jaeger.
 
-pub mod tracer;
 pub mod context;
 pub mod exporter;
+pub mod tracer;
 
-pub use tracer::{init_tracer, TracingConfig, shutdown_tracer};
 pub use context::{
-    extract_trace_context, inject_trace_context, TraceContext,
-    extract_from_axum_headers, inject_into_axum_headers,
+    extract_from_axum_headers, extract_trace_context, inject_into_axum_headers,
+    inject_trace_context, TraceContext,
 };
 pub use exporter::{
-    ExporterType, JaegerExporter, OtlpExporter, OtlpProtocol, OtlpCompression, ExporterError,
+    ExporterError, ExporterType, JaegerExporter, OtlpCompression, OtlpExporter, OtlpProtocol,
 };
+pub use tracer::{init_tracer, shutdown_tracer, TracingConfig};
 
 use opentelemetry::global::BoxedSpan;
 use opentelemetry::trace::{Span, SpanKind, Status, Tracer};

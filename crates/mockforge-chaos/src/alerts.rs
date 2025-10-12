@@ -2,10 +2,10 @@
 
 use crate::analytics::MetricsBucket;
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tracing::{debug, info, warn};
 
 /// Alert severity level
@@ -47,10 +47,7 @@ pub enum AlertType {
         threshold: usize,
     },
     /// Chaos impact high
-    HighImpact {
-        severity_score: f64,
-        threshold: f64,
-    },
+    HighImpact { severity_score: f64, threshold: f64 },
     /// Custom alert
     Custom {
         message: String,
@@ -144,10 +141,7 @@ pub enum AlertRuleType {
         window_minutes: i64,
     },
     /// Alert on chaos impact score
-    ImpactThreshold {
-        threshold: f64,
-        window_minutes: i64,
-    },
+    ImpactThreshold { threshold: f64, window_minutes: i64 },
 }
 
 impl AlertRule {
@@ -195,8 +189,8 @@ impl AlertRule {
                 }
             }
             AlertRuleType::LatencyThreshold { threshold_ms, .. } => {
-                let avg_latency: f64 = metrics.iter().map(|m| m.avg_latency_ms).sum::<f64>()
-                    / metrics.len() as f64;
+                let avg_latency: f64 =
+                    metrics.iter().map(|m| m.avg_latency_ms).sum::<f64>() / metrics.len() as f64;
 
                 if avg_latency > *threshold_ms as f64 {
                     Some(Alert::new(
@@ -235,8 +229,7 @@ impl AlertRule {
                 }
             }
             AlertRuleType::RateLimitThreshold { threshold, .. } => {
-                let total_violations: usize =
-                    metrics.iter().map(|m| m.rate_limit_violations).sum();
+                let total_violations: usize = metrics.iter().map(|m| m.rate_limit_violations).sum();
                 let violations_per_minute = total_violations / metrics.len().max(1);
 
                 if violations_per_minute > *threshold {
@@ -283,7 +276,7 @@ impl AlertRule {
                     None
                 }
             }
-            AlertRuleType::ImpactThreshold {  .. } => {
+            AlertRuleType::ImpactThreshold { .. } => {
                 // This would need ChaosImpact from analytics
                 // For now, return None - would be implemented with full integration
                 None

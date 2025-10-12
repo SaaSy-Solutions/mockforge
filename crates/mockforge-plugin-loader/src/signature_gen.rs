@@ -25,9 +25,7 @@ pub fn sign_plugin_ed25519(
     // Read manifest
     let manifest_file = plugin_dir.join("plugin.toml");
     if !manifest_file.exists() {
-        return Err(PluginLoaderError::security(
-            "Plugin manifest (plugin.toml) not found",
-        ));
+        return Err(PluginLoaderError::security("Plugin manifest (plugin.toml) not found"));
     }
 
     let manifest_content = fs::read(&manifest_file).map_err(|e| {
@@ -95,13 +93,11 @@ pub fn save_keypair(
     let private_key_file = output_dir.join(format!("{}.private.key", key_name));
     let public_key_file = output_dir.join(format!("{}.public.key", key_name));
 
-    fs::write(&private_key_file, hex::encode(private_key)).map_err(|e| {
-        PluginLoaderError::fs(format!("Failed to write private key: {}", e))
-    })?;
+    fs::write(&private_key_file, hex::encode(private_key))
+        .map_err(|e| PluginLoaderError::fs(format!("Failed to write private key: {}", e)))?;
 
-    fs::write(&public_key_file, hex::encode(public_key)).map_err(|e| {
-        PluginLoaderError::fs(format!("Failed to write public key: {}", e))
-    })?;
+    fs::write(&public_key_file, hex::encode(public_key))
+        .map_err(|e| PluginLoaderError::fs(format!("Failed to write public key: {}", e)))?;
 
     Ok(())
 }
@@ -136,23 +132,13 @@ mod tests {
         let (private_key, public_key) = generate_ed25519_keypair().unwrap();
 
         // Save keys
-        save_keypair(
-            &private_key,
-            &public_key,
-            temp_dir.path(),
-            "test-key",
-        )
-        .unwrap();
+        save_keypair(&private_key, &public_key, temp_dir.path(), "test-key").unwrap();
 
         // Load keys
-        let loaded_private = load_key_from_file(
-            &temp_dir.path().join("test-key.private.key"),
-        )
-        .unwrap();
-        let loaded_public = load_key_from_file(
-            &temp_dir.path().join("test-key.public.key"),
-        )
-        .unwrap();
+        let loaded_private =
+            load_key_from_file(&temp_dir.path().join("test-key.private.key")).unwrap();
+        let loaded_public =
+            load_key_from_file(&temp_dir.path().join("test-key.public.key")).unwrap();
 
         assert_eq!(private_key, loaded_private);
         assert_eq!(public_key, loaded_public);
@@ -175,11 +161,7 @@ author = "Test Author"
         fs::write(temp_dir.path().join("plugin.toml"), manifest_content).unwrap();
 
         // Sign the plugin
-        let result = sign_plugin_ed25519(
-            temp_dir.path(),
-            "test-key",
-            &private_key,
-        );
+        let result = sign_plugin_ed25519(temp_dir.path(), "test-key", &private_key);
         assert!(result.is_ok());
 
         // Check that signature file was created

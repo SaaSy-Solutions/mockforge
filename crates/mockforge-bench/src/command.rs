@@ -8,8 +8,7 @@ use crate::request_gen::RequestGenerator;
 use crate::scenarios::LoadScenario;
 use crate::spec_parser::SpecParser;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::PathBuf;
 
 /// Bench command configuration
 pub struct BenchCommand {
@@ -45,7 +44,9 @@ impl BenchCommand {
         // Validate k6 installation
         if !K6Executor::is_k6_installed() {
             TerminalReporter::print_error("k6 is not installed");
-            TerminalReporter::print_warning("Install k6 from: https://k6.io/docs/get-started/installation/");
+            TerminalReporter::print_warning(
+                "Install k6 from: https://k6.io/docs/get-started/installation/",
+            );
             return Err(BenchError::K6NotFound);
         }
 
@@ -81,8 +82,8 @@ impl BenchCommand {
 
         // Generate k6 script
         TerminalReporter::print_progress("Generating k6 load test script...");
-        let scenario = LoadScenario::from_str(&self.scenario)
-            .map_err(|e| BenchError::InvalidScenario(e))?;
+        let scenario =
+            LoadScenario::from_str(&self.scenario).map_err(|e| BenchError::InvalidScenario(e))?;
 
         let k6_config = K6Config {
             target_url: self.target.clone(),
@@ -109,10 +110,7 @@ impl BenchCommand {
 
         std::fs::create_dir_all(script_path.parent().unwrap())?;
         std::fs::write(&script_path, script)?;
-        TerminalReporter::print_success(&format!(
-            "Script written to: {}",
-            script_path.display()
-        ));
+        TerminalReporter::print_success(&format!("Script written to: {}", script_path.display()));
 
         // If generate-only mode, exit here
         if self.generate_only {
@@ -127,9 +125,7 @@ impl BenchCommand {
 
         std::fs::create_dir_all(&self.output)?;
 
-        let results = executor
-            .execute(&script_path, Some(&self.output), self.verbose)
-            .await?;
+        let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
         // Print results
         let duration_secs = Self::parse_duration(&self.duration)?;

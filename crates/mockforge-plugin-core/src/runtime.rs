@@ -13,7 +13,10 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 use tracing;
-use wasmtime::{Config, Engine, Linker, Module, PoolingAllocationConfig, ResourceLimiter, Store, StoreLimits, StoreLimitsBuilder};
+use wasmtime::{
+    Config, Engine, Linker, Module, PoolingAllocationConfig, ResourceLimiter, Store, StoreLimits,
+    StoreLimitsBuilder,
+};
 use wasmtime_wasi::p2::WasiCtxBuilder;
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 use wasmtime_wasi::{DirPerms, FilePerms};
@@ -81,10 +84,10 @@ impl PluginRuntime {
     ) -> Result<()> {
         // Security: Validate plugin path is within allowed directories
         self.validate_plugin_path(wasm_path)?;
-        
+
         // Security: Check file size limits
         self.validate_file_size(wasm_path)?;
-        
+
         // Validate plugin capabilities against runtime limits
         let plugin_capabilities = PluginCapabilities::from_strings(&manifest.capabilities);
         self.validate_capabilities(&plugin_capabilities)?;
@@ -100,7 +103,7 @@ impl PluginRuntime {
 
         // Security: Validate module against declared capabilities
         ModuleValidator::validate_module(&module, &plugin_capabilities)?;
-        
+
         // Security: Check for dangerous imports/exports
         self.validate_module_security(&module)?;
 
@@ -212,39 +215,42 @@ impl PluginRuntime {
 
     /// Security: Validate plugin path is within allowed directories
     fn validate_plugin_path(&self, wasm_path: &Path) -> Result<()> {
-        let canonicalized = wasm_path.canonicalize()
+        let canonicalized = wasm_path
+            .canonicalize()
             .map_err(|e| PluginError::security(format!("Invalid plugin path: {}", e)))?;
-        
+
         // Check if path is within allowed plugin directories
         if self.config.allowed_fs_paths.is_empty() {
             return Err(PluginError::security("No allowed plugin paths configured"));
         }
-        
+
         for allowed_path in &self.config.allowed_fs_paths {
             if canonicalized.starts_with(allowed_path) {
                 return Ok(());
             }
         }
-        
+
         Err(PluginError::security(format!(
-            "Plugin path {} is not within allowed directories", 
+            "Plugin path {} is not within allowed directories",
             canonicalized.display()
         )))
     }
 
     /// Security: Check file size limits
     fn validate_file_size(&self, wasm_path: &Path) -> Result<()> {
-        let metadata = std::fs::metadata(wasm_path)
-            .map_err(|e| PluginError::security(format!("Cannot read plugin file metadata: {}", e)))?;
-        
+        let metadata = std::fs::metadata(wasm_path).map_err(|e| {
+            PluginError::security(format!("Cannot read plugin file metadata: {}", e))
+        })?;
+
         const MAX_PLUGIN_SIZE: u64 = 50 * 1024 * 1024; // 50MB limit
         if metadata.len() > MAX_PLUGIN_SIZE {
             return Err(PluginError::security(format!(
                 "Plugin file size {} exceeds maximum allowed size {}",
-                metadata.len(), MAX_PLUGIN_SIZE
+                metadata.len(),
+                MAX_PLUGIN_SIZE
             )));
         }
-        
+
         Ok(())
     }
 
@@ -260,7 +266,8 @@ impl PluginRuntime {
         for cap in &manifest.capabilities {
             if dangerous_caps.contains(&cap.as_str()) {
                 return Err(PluginError::security(format!(
-                    "Dangerous capability not allowed: {}", cap
+                    "Dangerous capability not allowed: {}",
+                    cap
                 )));
             }
         }
@@ -294,7 +301,8 @@ impl PluginRuntime {
                         "memory" | "table" => continue,
                         name if name.starts_with("__") => {
                             return Err(PluginError::security(format!(
-                                "Dangerous import function: {}", name
+                                "Dangerous import function: {}",
+                                name
                             )));
                         }
                         _ => continue,
@@ -306,7 +314,8 @@ impl PluginRuntime {
                 }
                 module_name => {
                     return Err(PluginError::security(format!(
-                        "Dangerous import module: {}", module_name
+                        "Dangerous import module: {}",
+                        module_name
                     )));
                 }
             }
@@ -315,14 +324,15 @@ impl PluginRuntime {
         // Check exports for required functions
         let mut has_init = false;
         let mut has_process = false;
-        
+
         for export in module.exports() {
             match export.name() {
                 "init" => has_init = true,
                 "process" => has_process = true,
                 name if name.starts_with("_") => {
                     return Err(PluginError::security(format!(
-                        "Private export function not allowed: {}", name
+                        "Private export function not allowed: {}",
+                        name
                     )));
                 }
                 _ => continue,
@@ -330,9 +340,7 @@ impl PluginRuntime {
         }
 
         if !has_init || !has_process {
-            return Err(PluginError::security(
-                "Plugin must export 'init' and 'process' functions"
-            ));
+            return Err(PluginError::security("Plugin must export 'init' and 'process' functions"));
         }
 
         Ok(())
@@ -449,9 +457,9 @@ impl PluginInstance {
         // Create execution limits from config
         let limits = ExecutionLimits {
             memory_limit: config.max_memory_per_plugin,
-            cpu_time_limit: config.max_execution_time_ms as u64 * 1_000_000, // Convert ms to ns
-            wall_time_limit: config.max_execution_time_ms as u64 * 2 * 1_000_000, // 2x for wall time
-            fuel_limit: (config.max_execution_time_ms as u64 * 1_000), // ~1K fuel per ms
+            cpu_time_limit: config.max_execution_time_ms * 1_000_000, // Convert ms to ns
+            wall_time_limit: config.max_execution_time_ms * 2 * 1_000_000, // 2x for wall time
+            fuel_limit: (config.max_execution_time_ms * 1_000),       // ~1K fuel per ms
         };
 
         // Build store limits for memory enforcement
@@ -491,7 +499,8 @@ impl PluginInstance {
         store.limiter(|ctx| &mut ctx.limits);
 
         // Configure fuel for CPU time limiting
-        store.set_fuel(limits.fuel_limit)
+        store
+            .set_fuel(limits.fuel_limit)
             .map_err(|e| PluginError::wasm(format!("Failed to set fuel limit: {}", e)))?;
 
         // Set epoch deadline for wall clock timeout
@@ -541,7 +550,8 @@ impl PluginInstance {
         self.metrics.total_executions += 1;
 
         // Reset fuel before execution to prevent fuel starvation
-        self.store.set_fuel(self.limits.fuel_limit)
+        self.store
+            .set_fuel(self.limits.fuel_limit)
             .map_err(|e| PluginError::execution(format!("Failed to reset fuel: {}", e)))?;
 
         // Reset epoch deadline for this execution
@@ -610,10 +620,7 @@ impl PluginInstance {
     async fn call_plugin_function(&mut self, function_name: &str, input: &str) -> Result<Vec<u8>> {
         // Get the exported function from the WASM instance
         let func = self.instance.get_func(&mut self.store, function_name).ok_or_else(|| {
-            PluginError::execution(format!(
-                "Function '{}' not found in WASM module",
-                function_name
-            ))
+            PluginError::execution(format!("Function '{}' not found in WASM module", function_name))
         })?;
 
         // Allocate memory in the WASM store for the input string
@@ -881,10 +888,7 @@ impl ModuleValidator {
         ];
 
         if !allowed_functions.contains(&field_name) {
-            return Err(PluginError::security(format!(
-                "Disallowed WASI function: {}",
-                field_name
-            )));
+            return Err(PluginError::security(format!("Disallowed WASI function: {}", field_name)));
         }
 
         Ok(())
@@ -900,10 +904,7 @@ impl ModuleValidator {
         ];
 
         if !allowed_functions.contains(&field_name) {
-            return Err(PluginError::security(format!(
-                "Disallowed host function: {}",
-                field_name
-            )));
+            return Err(PluginError::security(format!("Disallowed host function: {}", field_name)));
         }
 
         Ok(())
@@ -1001,11 +1002,9 @@ pub enum ValueType {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
-        assert!(true);
     }
 }

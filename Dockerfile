@@ -1,11 +1,12 @@
 # Multi-stage Docker build for MockForge
 # Stage 1: Build the Rust application
-FROM rust:1.75-slim AS builder
+FROM rust:1.90-slim AS builder
 
 # Install required dependencies for building
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
@@ -14,18 +15,22 @@ WORKDIR /app
 # Copy the workspace configuration files
 COPY Cargo.toml Cargo.lock ./
 
+# Remove test_openapi_demo from workspace members for Docker build
+RUN sed -i '/"test_openapi_demo"/d' Cargo.toml
+
 # Copy the crates directory
 COPY crates/ ./crates/
 
 # Copy any other necessary files
 COPY examples/ ./examples/
+COPY proto/ ./proto/
 COPY config.example.yaml ./
 
 # Build the application in release mode
 RUN cargo build --release --package mockforge-cli
 
 # Stage 2: Create the runtime image
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -40,10 +45,11 @@ RUN groupadd -r mockforge && useradd -r -g mockforge mockforge
 WORKDIR /app
 
 # Copy the built binary from the builder stage
-COPY --from=builder /app/target/release/mockforge-cli /usr/local/bin/mockforge-cli
+COPY --from=builder /app/target/release/mockforge /usr/local/bin/mockforge
 
 # Copy example files and configuration
 COPY --from=builder /app/examples/ ./examples/
+COPY --from=builder /app/proto/ ./proto/
 COPY --from=builder /app/config.example.yaml ./
 
 # Create directories for fixtures and other data
@@ -64,4 +70,4 @@ ENV MOCKFORGE_FAILURES_ENABLED=false
 ENV MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 
 # Default command
-CMD ["mockforge-cli", "serve", "--admin"]
+CMD ["mockforge", "serve", "--admin"]

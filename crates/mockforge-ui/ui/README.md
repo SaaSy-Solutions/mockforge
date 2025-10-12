@@ -14,7 +14,7 @@ Admin UI v2 is a complete rewrite of the MockForge admin interface using modern 
 
 ### 🔐 **Secure Authentication**
 - JWT-based authentication with role-based access control
-- Admin and Viewer roles with appropriate permissions  
+- Admin and Viewer roles with appropriate permissions
 - Session persistence and automatic token refresh
 
 ### 🎛️ **Service Management**

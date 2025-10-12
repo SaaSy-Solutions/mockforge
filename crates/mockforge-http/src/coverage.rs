@@ -3,7 +3,6 @@
 ///! This module provides API coverage tracking functionality, allowing users to see
 ///! which endpoints from their OpenAPI spec have been exercised during testing.
 ///! This is analogous to code coverage but for API surface area.
-
 use axum::{
     extract::{Query, State},
     response::Json,
@@ -163,14 +162,12 @@ pub async fn calculate_coverage(routes: &[RouteInfo]) -> CoverageReport {
 }
 
 /// Extract path-based metrics from Prometheus metric families
-fn extract_path_metrics(
-    metric_families: &[MetricFamily],
-) -> HashMap<String, HashMap<u16, u64>> {
+fn extract_path_metrics(metric_families: &[MetricFamily]) -> HashMap<String, HashMap<u16, u64>> {
     let mut path_metrics: HashMap<String, HashMap<u16, u64>> = HashMap::new();
 
     // Find the requests_by_path_total metric
     for mf in metric_families {
-        if mf.get_name() == "mockforge_requests_by_path_total" {
+        if mf.name() == "mockforge_requests_by_path_total" {
             for metric in mf.get_metric() {
                 let mut path = String::new();
                 let mut method = String::new();
@@ -178,23 +175,20 @@ fn extract_path_metrics(
 
                 // Extract labels
                 for label_pair in metric.get_label() {
-                    match label_pair.get_name() {
-                        "path" => path = label_pair.get_value().to_string(),
-                        "method" => method = label_pair.get_value().to_string(),
+                    match label_pair.name() {
+                        "path" => path = label_pair.value().to_string(),
+                        "method" => method = label_pair.value().to_string(),
                         "status" => {
-                            status = label_pair.get_value().parse().unwrap_or(0);
+                            status = label_pair.value().parse().unwrap_or(0);
                         }
                         _ => {}
                     }
                 }
 
                 let key = format!("{} {}", method, path);
-                let count = metric.get_counter().get_value() as u64;
+                let count = metric.get_counter().value.unwrap_or(0.0) as u64;
 
-                path_metrics
-                    .entry(key)
-                    .or_insert_with(HashMap::new)
-                    .insert(status, count);
+                path_metrics.entry(key).or_insert_with(HashMap::new).insert(status, count);
             }
         }
     }
@@ -203,28 +197,25 @@ fn extract_path_metrics(
 }
 
 /// Get average latency for a specific route
-fn get_average_latency(
-    metric_families: &[MetricFamily],
-    path: &str,
-    method: &str,
-) -> Option<f64> {
+fn get_average_latency(metric_families: &[MetricFamily], path: &str, method: &str) -> Option<f64> {
     for mf in metric_families {
-        if mf.get_name() == "mockforge_average_latency_by_path_seconds" {
+        if mf.name() == "mockforge_average_latency_by_path_seconds" {
             for metric in mf.get_metric() {
                 let mut metric_path = String::new();
                 let mut metric_method = String::new();
 
                 for label_pair in metric.get_label() {
-                    match label_pair.get_name() {
-                        "path" => metric_path = label_pair.get_value().to_string(),
-                        "method" => metric_method = label_pair.get_value().to_string(),
+                    match label_pair.name() {
+                        "path" => metric_path = label_pair.value().to_string(),
+                        "method" => metric_method = label_pair.value().to_string(),
                         _ => {}
                     }
                 }
 
                 if metric_path == path && metric_method == method {
-                    let value = metric.get_gauge().get_value();
-                    return if value > 0.0 { Some(value) } else { None };
+                    if let Some(value) = metric.get_gauge().value {
+                        return if value > 0.0 { Some(value) } else { None };
+                    }
                 }
             }
         }
@@ -313,12 +304,12 @@ mod tests {
     fn test_normalize_path() {
         assert_eq!(normalize_path("/users/{id}"), "/users/:id");
         assert_eq!(normalize_path("/users/123"), "/users/:id");
-        assert_eq!(
-            normalize_path("/users/550e8400-e29b-41d4-a716-446655440000"),
-            "/users/:id"
-        );
+        assert_eq!(normalize_path("/users/550e8400-e29b-41d4-a716-446655440000"), "/users/:id");
         assert_eq!(normalize_path("/users/list"), "/users/list");
-        assert_eq!(normalize_path("/api/v1/users/{id}/posts/{postId}"), "/api/v1/users/:id/posts/:id");
+        assert_eq!(
+            normalize_path("/api/v1/users/{id}/posts/{postId}"),
+            "/api/v1/users/:id/posts/:id"
+        );
     }
 
     #[test]

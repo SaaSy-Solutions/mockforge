@@ -81,19 +81,19 @@ pub struct PodSelector {
 /// Network delay configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkDelay {
-    pub latency: String,        // e.g., "100ms", "1s"
+    pub latency: String, // e.g., "100ms", "1s"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub correlation: Option<String>,  // "0" to "100"
+    pub correlation: Option<String>, // "0" to "100"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub jitter: Option<String>,       // e.g., "10ms"
+    pub jitter: Option<String>, // e.g., "10ms"
 }
 
 /// Network loss configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkLoss {
-    pub loss: String,           // "0" to "100" (percentage)
+    pub loss: String, // "0" to "100" (percentage)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub correlation: Option<String>,  // "0" to "100"
+    pub correlation: Option<String>, // "0" to "100"
 }
 
 /// Stress test configuration
@@ -102,7 +102,7 @@ pub struct StressConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_workers: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_load: Option<u32>,      // Percentage
+    pub cpu_load: Option<u32>, // Percentage
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_workers: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -113,16 +113,16 @@ pub struct StressConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Duration {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration: Option<String>,    // e.g., "30s", "5m"
+    pub duration: Option<String>, // e.g., "30s", "5m"
 }
 
 /// Chaos experiment specification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentSpec {
     pub selector: PodSelector,
-    pub mode: String,               // "one", "all", "fixed", "fixed-percent", "random-max-percent"
+    pub mode: String, // "one", "all", "fixed", "fixed-percent", "random-max-percent"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,      // For "fixed" or "fixed-percent" mode
+    pub value: Option<String>, // For "fixed" or "fixed-percent" mode
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<String>,
 
@@ -163,7 +163,7 @@ pub struct ExperimentMetadata {
 /// Experiment status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentStatus {
-    pub phase: String,              // "Running", "Finished", "Paused", "Failed"
+    pub phase: String, // "Running", "Finished", "Paused", "Failed"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -216,9 +216,10 @@ impl ChaosMeshClient {
             metadata: ExperimentMetadata {
                 name: name.to_string(),
                 namespace: self.namespace.clone(),
-                labels: Some(HashMap::from([
-                    ("app.kubernetes.io/managed-by".to_string(), "mockforge".to_string()),
-                ])),
+                labels: Some(HashMap::from([(
+                    "app.kubernetes.io/managed-by".to_string(),
+                    "mockforge".to_string(),
+                )])),
                 annotations: None,
             },
             spec: ExperimentSpec {
@@ -252,9 +253,10 @@ impl ChaosMeshClient {
             metadata: ExperimentMetadata {
                 name: name.to_string(),
                 namespace: self.namespace.clone(),
-                labels: Some(HashMap::from([
-                    ("app.kubernetes.io/managed-by".to_string(), "mockforge".to_string()),
-                ])),
+                labels: Some(HashMap::from([(
+                    "app.kubernetes.io/managed-by".to_string(),
+                    "mockforge".to_string(),
+                )])),
                 annotations: None,
             },
             spec: ExperimentSpec {
@@ -291,9 +293,10 @@ impl ChaosMeshClient {
             metadata: ExperimentMetadata {
                 name: name.to_string(),
                 namespace: self.namespace.clone(),
-                labels: Some(HashMap::from([
-                    ("app.kubernetes.io/managed-by".to_string(), "mockforge".to_string()),
-                ])),
+                labels: Some(HashMap::from([(
+                    "app.kubernetes.io/managed-by".to_string(),
+                    "mockforge".to_string(),
+                )])),
                 annotations: None,
             },
             spec: ExperimentSpec {
@@ -329,9 +332,10 @@ impl ChaosMeshClient {
             metadata: ExperimentMetadata {
                 name: name.to_string(),
                 namespace: self.namespace.clone(),
-                labels: Some(HashMap::from([
-                    ("app.kubernetes.io/managed-by".to_string(), "mockforge".to_string()),
-                ])),
+                labels: Some(HashMap::from([(
+                    "app.kubernetes.io/managed-by".to_string(),
+                    "mockforge".to_string(),
+                )])),
                 annotations: None,
             },
             spec: ExperimentSpec {
@@ -351,7 +355,10 @@ impl ChaosMeshClient {
     }
 
     /// Create an experiment
-    async fn create_experiment(&self, experiment: &ChaosMeshExperiment) -> Result<ChaosMeshExperiment> {
+    async fn create_experiment(
+        &self,
+        experiment: &ChaosMeshExperiment,
+    ) -> Result<ChaosMeshExperiment> {
         let url = format!(
             "{}/apis/chaos-mesh.org/v1alpha1/namespaces/{}/{}s",
             self.api_url,
@@ -359,11 +366,7 @@ impl ChaosMeshClient {
             experiment.kind.to_lowercase()
         );
 
-        let response = self.client
-            .post(&url)
-            .json(experiment)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(experiment).send().await?;
 
         if !response.status().is_success() {
             let error = response.text().await?;
@@ -446,7 +449,13 @@ impl ChaosMeshClient {
         experiment_type: &ExperimentType,
         name: &str,
     ) -> Result<()> {
-        self.update_experiment_annotation(experiment_type, name, "experiment.chaos-mesh.org/pause", "true").await
+        self.update_experiment_annotation(
+            experiment_type,
+            name,
+            "experiment.chaos-mesh.org/pause",
+            "true",
+        )
+        .await
     }
 
     /// Resume a paused experiment
@@ -455,7 +464,13 @@ impl ChaosMeshClient {
         experiment_type: &ExperimentType,
         name: &str,
     ) -> Result<()> {
-        self.update_experiment_annotation(experiment_type, name, "experiment.chaos-mesh.org/pause", "false").await
+        self.update_experiment_annotation(
+            experiment_type,
+            name,
+            "experiment.chaos-mesh.org/pause",
+            "false",
+        )
+        .await
     }
 
     /// Update experiment annotation
@@ -491,7 +506,8 @@ impl ChaosMeshClient {
             }
         });
 
-        let response = self.client
+        let response = self
+            .client
             .patch(&url)
             .header("Content-Type", "application/merge-patch+json")
             .json(&patch)
@@ -553,9 +569,7 @@ mod tests {
     fn test_experiment_serialization() {
         let selector = PodSelector {
             namespaces: vec!["default".to_string()],
-            label_selectors: Some(HashMap::from([
-                ("app".to_string(), "test".to_string()),
-            ])),
+            label_selectors: Some(HashMap::from([("app".to_string(), "test".to_string())])),
             annotation_selectors: None,
             field_selectors: None,
             pod_phase_selectors: None,

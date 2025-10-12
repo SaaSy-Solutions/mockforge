@@ -9,15 +9,13 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Validation mode for requests and responses
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, Default)]
 pub enum ValidationMode {
     Disabled,
     #[default]
     Warn,
     Enforce,
 }
-
 
 /// Validation options for OpenAPI route validation
 #[derive(Debug, Clone)]

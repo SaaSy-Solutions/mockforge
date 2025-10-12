@@ -3,35 +3,35 @@
 //! Records all API requests and responses for analysis, replay, and debugging.
 //! Provides a queryable SQLite database of all interactions.
 
-pub mod database;
-pub mod models;
-pub mod recorder;
-pub mod query;
-pub mod replay;
-pub mod har_export;
-pub mod middleware;
-pub mod protocols;
 pub mod api;
+pub mod database;
 pub mod diff;
-pub mod test_generation;
+pub mod har_export;
 pub mod integration_testing;
+pub mod middleware;
+pub mod models;
+pub mod protocols;
+pub mod query;
+pub mod recorder;
+pub mod replay;
+pub mod test_generation;
 
-pub use database::RecorderDatabase;
-pub use models::{RecordedRequest, RecordedResponse, Protocol};
-pub use recorder::Recorder;
-pub use query::{QueryFilter, QueryResult};
-pub use replay::ReplayEngine;
-pub use har_export::export_to_har;
-pub use middleware::recording_middleware;
 pub use api::create_api_router;
+pub use database::RecorderDatabase;
 pub use diff::{ComparisonResult, Difference, DifferenceType, ResponseComparator};
-pub use test_generation::{
-    TestGenerator, TestGenerationConfig, TestFormat, TestGenerationResult,
-    GeneratedTest, LlmConfig, TestSuiteMetadata,
-};
+pub use har_export::export_to_har;
 pub use integration_testing::{
-    IntegrationWorkflow, IntegrationTestGenerator, WorkflowStep, WorkflowSetup,
-    StepRequest, StepValidation, VariableExtraction, StepCondition,
+    IntegrationTestGenerator, IntegrationWorkflow, StepCondition, StepRequest, StepValidation,
+    VariableExtraction, WorkflowSetup, WorkflowStep,
+};
+pub use middleware::recording_middleware;
+pub use models::{Protocol, RecordedRequest, RecordedResponse};
+pub use query::{QueryFilter, QueryResult};
+pub use recorder::Recorder;
+pub use replay::ReplayEngine;
+pub use test_generation::{
+    GeneratedTest, LlmConfig, TestFormat, TestGenerationConfig, TestGenerationResult,
+    TestGenerator, TestSuiteMetadata,
 };
 
 use thiserror::Error;

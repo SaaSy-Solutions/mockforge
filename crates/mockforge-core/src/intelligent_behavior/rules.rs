@@ -147,9 +147,7 @@ impl StateMachine {
 
     /// Check if a transition is allowed
     pub fn can_transition(&self, from: &str, to: &str) -> bool {
-        self.transitions.iter().any(|t| {
-            t.from_state == from && t.to_state == to
-        })
+        self.transitions.iter().any(|t| t.from_state == from && t.to_state == to)
     }
 
     /// Get next possible states from current state
@@ -163,10 +161,8 @@ impl StateMachine {
 
     /// Select next state based on probabilities
     pub fn select_next_state(&self, current: &str) -> Option<String> {
-        let candidates: Vec<&StateTransition> = self.transitions
-            .iter()
-            .filter(|t| t.from_state == current)
-            .collect();
+        let candidates: Vec<&StateTransition> =
+            self.transitions.iter().filter(|t| t.from_state == current).collect();
 
         if candidates.is_empty() {
             return None;
@@ -332,7 +328,11 @@ mod tests {
     fn test_state_machine_next_states() {
         let machine = StateMachine::new(
             "order",
-            vec!["pending".to_string(), "processing".to_string(), "cancelled".to_string()],
+            vec![
+                "pending".to_string(),
+                "processing".to_string(),
+                "cancelled".to_string(),
+            ],
             "pending",
         )
         .add_transition(StateTransition::new("pending", "processing"))
@@ -367,14 +367,12 @@ mod tests {
 
     #[test]
     fn test_state_transition_probability() {
-        let transition = StateTransition::new("pending", "processing")
-            .with_probability(0.75);
+        let transition = StateTransition::new("pending", "processing").with_probability(0.75);
 
         assert_eq!(transition.probability, 0.75);
 
         // Test clamping
-        let transition_clamped = StateTransition::new("a", "b")
-            .with_probability(1.5);
+        let transition_clamped = StateTransition::new("a", "b").with_probability(1.5);
         assert_eq!(transition_clamped.probability, 1.0);
     }
 }

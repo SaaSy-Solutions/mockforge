@@ -3,7 +3,6 @@
 //! This module provides the StatefulAiContext which maintains conversation-like
 //! state across multiple API requests.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -64,10 +63,7 @@ impl StatefulAiContext {
         response: Option<serde_json::Value>,
     ) -> Result<()> {
         let interaction = InteractionRecord::new(
-            method,
-            path,
-            request,
-            200, // Default status
+            method, path, request, 200, // Default status
             response,
         );
 
@@ -197,12 +193,15 @@ mod tests {
         let config = IntelligentBehaviorConfig::default();
         let mut context = StatefulAiContext::new("test_session", config);
 
-        context.record_interaction(
-            "POST",
-            "/api/users",
-            Some(serde_json::json!({"name": "Alice"})),
-            Some(serde_json::json!({"id": "user_1", "name": "Alice"})),
-        ).await.unwrap();
+        context
+            .record_interaction(
+                "POST",
+                "/api/users",
+                Some(serde_json::json!({"name": "Alice"})),
+                Some(serde_json::json!({"id": "user_1", "name": "Alice"})),
+            )
+            .await
+            .unwrap();
 
         let history = context.get_history().await;
         assert_eq!(history.len(), 1);
@@ -220,14 +219,8 @@ mod tests {
         context.set_value("logged_in", serde_json::json!(true)).await;
 
         // Get values
-        assert_eq!(
-            context.get_value("user_id").await,
-            Some(serde_json::json!("user_123"))
-        );
-        assert_eq!(
-            context.get_value("logged_in").await,
-            Some(serde_json::json!(true))
-        );
+        assert_eq!(context.get_value("user_id").await, Some(serde_json::json!("user_123")));
+        assert_eq!(context.get_value("logged_in").await, Some(serde_json::json!(true)));
 
         // Remove value
         let removed = context.remove_value("logged_in").await;
@@ -242,12 +235,15 @@ mod tests {
 
         context.set_value("user_id", serde_json::json!("user_1")).await;
 
-        context.record_interaction(
-            "POST",
-            "/api/login",
-            Some(serde_json::json!({"email": "test@example.com"})),
-            Some(serde_json::json!({"token": "abc123"})),
-        ).await.unwrap();
+        context
+            .record_interaction(
+                "POST",
+                "/api/login",
+                Some(serde_json::json!({"email": "test@example.com"})),
+                Some(serde_json::json!({"token": "abc123"})),
+            )
+            .await
+            .unwrap();
 
         let summary = context.build_context_summary().await;
 

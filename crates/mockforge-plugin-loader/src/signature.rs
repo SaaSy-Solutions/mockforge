@@ -103,9 +103,7 @@ impl<'a> SignatureVerifier<'a> {
                 tracing::warn!("No signature file found, but unsigned plugins are allowed");
                 return Ok(());
             }
-            return Err(PluginLoaderError::security(
-                "No signature file found (plugin.sig)",
-            ));
+            return Err(PluginLoaderError::security("No signature file found (plugin.sig)"));
         }
 
         // Read and parse signature file
@@ -132,23 +130,17 @@ impl<'a> SignatureVerifier<'a> {
         }
 
         // Get public key data
-        let public_key_bytes = self
-            .config
-            .key_data
-            .get(&signature.key_id)
-            .ok_or_else(|| {
-                PluginLoaderError::security(format!(
-                    "Public key data not found for key_id '{}'",
-                    signature.key_id
-                ))
-            })?;
+        let public_key_bytes = self.config.key_data.get(&signature.key_id).ok_or_else(|| {
+            PluginLoaderError::security(format!(
+                "Public key data not found for key_id '{}'",
+                signature.key_id
+            ))
+        })?;
 
         // Compute hash of plugin manifest
         let manifest_file = plugin_dir.join("plugin.toml");
         if !manifest_file.exists() {
-            return Err(PluginLoaderError::security(
-                "Plugin manifest (plugin.toml) not found",
-            ));
+            return Err(PluginLoaderError::security("Plugin manifest (plugin.toml) not found"));
         }
 
         let manifest_content = fs::read(&manifest_file).map_err(|e| {
@@ -176,19 +168,16 @@ impl<'a> SignatureVerifier<'a> {
         })?;
 
         // Verify signature
-        let public_key =
-            signature::UnparsedPublicKey::new(signature.algorithm.to_ring_algorithm(), public_key_bytes);
-
-        public_key
-            .verify(&manifest_content, &signature_bytes)
-            .map_err(|_| {
-                PluginLoaderError::security("Signature verification failed. Invalid signature.")
-            })?;
-
-        tracing::info!(
-            "Plugin signature verified successfully with key '{}'",
-            signature.key_id
+        let public_key = signature::UnparsedPublicKey::new(
+            signature.algorithm.to_ring_algorithm(),
+            public_key_bytes,
         );
+
+        public_key.verify(&manifest_content, &signature_bytes).map_err(|_| {
+            PluginLoaderError::security("Signature verification failed. Invalid signature.")
+        })?;
+
+        tracing::info!("Plugin signature verified successfully with key '{}'", signature.key_id);
         Ok(())
     }
 }
@@ -251,9 +240,6 @@ mod tests {
         // No signature file and unsigned not allowed
         let result = verifier.verify_plugin_signature(temp_dir.path());
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            PluginLoaderError::SecurityViolation { .. }
-        ));
+        assert!(matches!(result.unwrap_err(), PluginLoaderError::SecurityViolation { .. }));
     }
 }

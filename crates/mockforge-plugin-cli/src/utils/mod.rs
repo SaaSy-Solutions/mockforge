@@ -118,12 +118,10 @@ pub fn ensure_dir(path: &Path) -> Result<()> {
 /// Convert a string to a valid Rust identifier
 #[allow(dead_code)]
 pub fn to_rust_identifier(s: &str) -> String {
-    s.replace(['-', ' '], "_")
-        .to_lowercase()
+    s.replace(['-', ' '], "_").to_lowercase()
 }
 
 /// Convert a string to kebab-case
 pub fn to_kebab_case(s: &str) -> String {
-    s.replace(['_', ' '], "-")
-        .to_lowercase()
+    s.replace(['_', ' '], "-").to_lowercase()
 }

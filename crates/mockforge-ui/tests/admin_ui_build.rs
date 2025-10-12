@@ -47,7 +47,10 @@ async fn test_admin_ui_build_and_serve() {
 
         // Verify index.html content
         let html_content = fs::read_to_string(&index_html).unwrap();
-        assert!(html_content.to_lowercase().contains("<!doctype html>"), "index.html should be valid HTML");
+        assert!(
+            html_content.to_lowercase().contains("<!doctype html>"),
+            "index.html should be valid HTML"
+        );
         assert!(html_content.contains("<html"), "index.html should contain html tag");
         assert!(html_content.contains("<head>"), "index.html should contain head tag");
         assert!(html_content.contains("<body>"), "index.html should contain body tag");
@@ -80,7 +83,15 @@ async fn test_admin_ui_build_and_serve() {
 /// Test that the admin UI serves correctly when built assets exist
 #[tokio::test]
 async fn test_admin_ui_serves_built_assets() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test that main HTML page serves
     let response = app
@@ -98,7 +109,10 @@ async fn test_admin_ui_serves_built_assets() {
     let html_content = String::from_utf8(body_bytes.to_vec()).unwrap();
 
     // Basic HTML structure checks
-    assert!(html_content.to_lowercase().contains("<!doctype html>"), "HTML should have DOCTYPE");
+    assert!(
+        html_content.to_lowercase().contains("<!doctype html>"),
+        "HTML should have DOCTYPE"
+    );
     assert!(html_content.contains("<html"), "HTML should have html tag");
     assert!(html_content.contains("<head>"), "HTML should have head tag");
     assert!(html_content.contains("<body>"), "HTML should have body tag");
@@ -110,7 +124,15 @@ async fn test_admin_ui_serves_built_assets() {
     );
 
     // Test CSS asset serving
-    let app2 = create_admin_router(None, None, None, None, true, 9080);
+    let app2 = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
     let css_response = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
@@ -131,7 +153,15 @@ async fn test_admin_ui_serves_built_assets() {
     }
 
     // Test JavaScript asset serving
-    let app3 = create_admin_router(None, None, None, None, true, 9080);
+    let app3 = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
     let js_response = app3
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
@@ -210,7 +240,15 @@ async fn test_ui_handles_missing_assets() {
     // This test verifies that the server doesn't crash when UI assets are missing
     // and provides reasonable fallbacks
 
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test main page
     let response = app
@@ -231,7 +269,15 @@ async fn test_ui_handles_missing_assets() {
     }
 
     // Test CSS endpoint
-    let app2 = create_admin_router(None, None, None, None, true, 9080);
+    let app2 = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
     let css_response = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
         .await
@@ -245,7 +291,15 @@ async fn test_ui_handles_missing_assets() {
     );
 
     // Test JS endpoint
-    let app3 = create_admin_router(None, None, None, None, true, 9080);
+    let app3 = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
     let js_response = app3
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
         .await
@@ -303,7 +357,15 @@ async fn test_ui_build_process() {
 /// Test that the UI serves proper security headers
 #[tokio::test]
 async fn test_ui_security_headers() {
-    let app = create_admin_router(None, None, None, None, true, 9080);
+    let app = create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     let response = app
         .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())

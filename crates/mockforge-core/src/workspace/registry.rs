@@ -388,6 +388,7 @@ impl WorkspaceRegistry {
     }
 
     /// Search for requests in folder hierarchy
+    #[allow(clippy::only_used_in_recursion)]
     fn search_requests_in_folders<'a>(
         &self,
         folders: &'a [Folder],
@@ -435,6 +436,7 @@ impl WorkspaceRegistry {
     }
 
     /// Get requests by tag in folder hierarchy
+    #[allow(clippy::only_used_in_recursion)]
     fn get_requests_by_tag_in_folders<'a>(
         &self,
         folders: &'a [Folder],

@@ -22,6 +22,5 @@ mod tests {
         let _ = std::marker::PhantomData::<PluginManifest>;
         let _ = std::marker::PhantomData::<ManifestLoader>;
         let _ = std::marker::PhantomData::<ConfigSchema>;
-        assert!(true);
     }
 }

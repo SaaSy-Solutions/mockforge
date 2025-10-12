@@ -1,8 +1,4 @@
-use axum::{
-    body::Body,
-    http::Request,
-    Router,
-};
+use axum::{body::Body, http::Request, Router};
 use mockforge_core::openapi_routes::*;
 use serde_json::json;
 
@@ -152,9 +148,6 @@ async fn test_mock_route_generation() {
 
 #[tokio::test]
 async fn test_validate_request_middleware() {
-    
-    
-
     // Create a simple OpenAPI spec for testing
     let spec_json = json!({
         "openapi": "3.0.0",
@@ -216,14 +209,11 @@ async fn test_middleware_integration() {
     let registry = create_registry_from_json(spec_json).unwrap();
 
     // Create router with middleware by composing routers
-    let base_router = Router::new()
-        .route("/test", get(|| async { "Hello, World!" }));
-    
-    let app = create_router_with_error_handling(
-        create_router_with_logging(
-            create_router_with_validation(base_router, registry)
-        )
-    );
+    let base_router = Router::new().route("/test", get(|| async { "Hello, World!" }));
+
+    let app = create_router_with_error_handling(create_router_with_logging(
+        create_router_with_validation(base_router, registry),
+    ));
 
     // Start server on a random port
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

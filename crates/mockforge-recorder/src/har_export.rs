@@ -1,7 +1,7 @@
 //! HAR (HTTP Archive) export functionality
 
 use crate::{models::*, Result};
-use har::{Har, v1_2};
+use har::{v1_2, Har};
 use std::collections::HashMap;
 
 /// Export recorded exchanges to HAR format
@@ -29,7 +29,9 @@ pub fn export_to_har(exchanges: &[RecordedExchange]) -> Result<Har> {
         comment: None,
     };
 
-    Ok(Har { log: har::Spec::V1_2(log) })
+    Ok(Har {
+        log: har::Spec::V1_2(log),
+    })
 }
 
 /// Create a HAR entry from a recorded exchange
@@ -79,7 +81,8 @@ fn create_har_entry(exchange: &RecordedExchange) -> Result<v1_2::Entries> {
 
     // Build response if available
     let har_response = if let Some(response) = &exchange.response {
-        let response_headers_map: HashMap<String, String> = serde_json::from_str(&response.headers)?;
+        let response_headers_map: HashMap<String, String> =
+            serde_json::from_str(&response.headers)?;
 
         let response_headers: Vec<v1_2::Headers> = response_headers_map
             .iter()

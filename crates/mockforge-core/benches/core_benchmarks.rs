@@ -13,9 +13,9 @@
 //! providing meaningful memory usage insights.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use mockforge_core::openapi_routes::create_registry_from_json;
 use mockforge_core::templating::expand_str;
 use mockforge_core::validation::validate_json_schema;
-use mockforge_core::openapi_routes::create_registry_from_json;
 use serde_json::json;
 
 /// Benchmark template rendering with different payload sizes
@@ -25,9 +25,7 @@ fn bench_template_rendering(c: &mut Criterion) {
     // Simple template
     group.bench_function("simple", |b| {
         let template = "Hello {{name}}!";
-        b.iter(|| {
-            expand_str(black_box(template))
-        });
+        b.iter(|| expand_str(black_box(template)));
     });
 
     // Complex template with multiple variables
@@ -38,17 +36,13 @@ fn bench_template_rendering(c: &mut Criterion) {
             Age: {{user.age}}
             Address: {{user.address.street}}, {{user.address.city}}
         "#;
-        b.iter(|| {
-            expand_str(black_box(template))
-        });
+        b.iter(|| expand_str(black_box(template)));
     });
 
     // Template with arrays
     group.bench_function("arrays", |b| {
         let template = "{{#each items}}{{name}}: {{price}}\n{{/each}}";
-        b.iter(|| {
-            expand_str(black_box(template))
-        });
+        b.iter(|| expand_str(black_box(template)));
     });
 
     group.finish();
@@ -158,27 +152,30 @@ fn bench_openapi_parsing(c: &mut Criterion) {
     let mut paths = serde_json::Map::new();
     for i in 0..10 {
         let path = format!("/resource{}", i);
-        paths.insert(path, json!({
-            "get": {
-                "summary": format!("Get resource {}", i),
-                "responses": {
-                    "200": {
-                        "description": "Success",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "integer"},
-                                        "name": {"type": "string"}
+        paths.insert(
+            path,
+            json!({
+                "get": {
+                    "summary": format!("Get resource {}", i),
+                    "responses": {
+                        "200": {
+                            "description": "Success",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "integer"},
+                                            "name": {"type": "string"}
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }));
+            }),
+        );
     }
 
     let medium_spec = json!({
@@ -202,7 +199,7 @@ fn bench_openapi_parsing(c: &mut Criterion) {
 
 /// Benchmark data generation
 fn bench_data_generation(c: &mut Criterion) {
-    use mockforge_data::{DataGenerator, DataConfig, SchemaDefinition};
+    use mockforge_data::{DataConfig, DataGenerator, SchemaDefinition};
     use serde_json::json;
 
     let mut group = c.benchmark_group("data_generation");
@@ -215,7 +212,8 @@ fn bench_data_generation(c: &mut Criterion) {
             "email": {"type": "string"},
             "id": {"type": "string"}
         }
-    })).unwrap();
+    }))
+    .unwrap();
 
     let config = DataConfig {
         rows: 1,
@@ -360,7 +358,7 @@ fn bench_memory_usage(c: &mut Criterion) {
             |spec| {
                 let result = create_registry_from_json(black_box(spec));
                 black_box(result)
-            }
+            },
         );
     });
 
@@ -383,7 +381,7 @@ fn bench_memory_usage(c: &mut Criterion) {
             |template| {
                 let result = expand_str(black_box(&template));
                 black_box(result)
-            }
+            },
         );
     });
 
@@ -431,7 +429,7 @@ fn bench_memory_usage(c: &mut Criterion) {
             |(schema, data)| {
                 let result = validate_json_schema(black_box(&data), black_box(&schema));
                 black_box(result)
-            }
+            },
         );
     });
 

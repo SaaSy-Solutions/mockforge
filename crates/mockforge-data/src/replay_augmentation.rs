@@ -353,11 +353,7 @@ impl ReplayAugmentationEngine {
         self.scenario_state.events_generated += 1;
         self.scenario_state.last_event = Some(data.clone());
 
-        Ok(GeneratedEvent::new(
-            self.config.event_type.clone(),
-            data,
-            self.sequence,
-        ))
+        Ok(GeneratedEvent::new(self.config.event_type.clone(), data, self.sequence))
     }
 
     /// Generate static event (fallback)
@@ -385,7 +381,8 @@ impl ReplayAugmentationEngine {
 
             // Merge enhancement with base event
             if let (Some(base_obj), Some(enhancement_obj)) =
-                (base_event.as_object_mut(), enhancement_json.as_object()) {
+                (base_event.as_object_mut(), enhancement_json.as_object())
+            {
                 for (key, value) in enhancement_obj {
                     base_obj.insert(key.clone(), value.clone());
                 }
@@ -399,9 +396,10 @@ impl ReplayAugmentationEngine {
 
     /// Generate fully LLM-generated event
     async fn generate_llm_event(&mut self, index: usize) -> Result<Value> {
-        let rag_engine = self.rag_engine.as_ref().ok_or_else(|| {
-            Error::generic("RAG engine not initialized for generated mode")
-        })?;
+        let rag_engine = self
+            .rag_engine
+            .as_ref()
+            .ok_or_else(|| Error::generic("RAG engine not initialized for generated mode"))?;
 
         let narrative = self.config.narrative.as_ref().unwrap();
         let prompt = self.build_generation_prompt(narrative, index)?;
@@ -444,10 +442,8 @@ impl ReplayAugmentationEngine {
 
     /// Build generation prompt
     fn build_generation_prompt(&self, narrative: &str, index: usize) -> Result<String> {
-        let mut prompt = format!(
-            "Generate realistic event data for this scenario:\n\n{}\n\n",
-            narrative
-        );
+        let mut prompt =
+            format!("Generate realistic event data for this scenario:\n\n{}\n\n", narrative);
 
         prompt.push_str(&format!("Event type: {}\n", self.config.event_type));
         prompt.push_str(&format!("Event #{}\n\n", index + 1));
@@ -497,9 +493,8 @@ impl ReplayAugmentationEngine {
         };
 
         // Parse JSON
-        serde_json::from_str(json_str).map_err(|e| {
-            Error::generic(format!("Failed to parse LLM response as JSON: {}", e))
-        })
+        serde_json::from_str(json_str)
+            .map_err(|e| Error::generic(format!("Failed to parse LLM response as JSON: {}", e)))
     }
 
     /// Evaluate condition (simplified)

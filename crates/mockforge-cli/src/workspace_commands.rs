@@ -155,7 +155,9 @@ pub enum WorkspaceCommands {
     },
 }
 
-pub async fn handle_workspace_command(command: WorkspaceCommands) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn handle_workspace_command(
+    command: WorkspaceCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
         WorkspaceCommands::List { admin_url, format } => {
             list_workspaces(&admin_url, &format).await?;
@@ -200,7 +202,8 @@ pub async fn handle_workspace_command(command: WorkspaceCommands) -> Result<(), 
             description,
             admin_url,
         } => {
-            update_workspace(&admin_url, &workspace_id, name.as_deref(), description.as_deref()).await?;
+            update_workspace(&admin_url, &workspace_id, name.as_deref(), description.as_deref())
+                .await?;
         }
         WorkspaceCommands::Stats {
             workspace_id,
@@ -214,7 +217,10 @@ pub async fn handle_workspace_command(command: WorkspaceCommands) -> Result<(), 
     Ok(())
 }
 
-async fn list_workspaces(admin_url: &str, format: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn list_workspaces(
+    admin_url: &str,
+    format: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("{}/__mockforge/workspaces", admin_url);
     let client = reqwest::Client::new();
 
@@ -259,11 +265,7 @@ async fn list_workspaces(admin_url: &str, format: &str) -> Result<(), Box<dyn st
             let total_requests = stats["total_requests"].as_u64().unwrap_or(0);
             let active_routes = stats["active_routes"].as_u64().unwrap_or(0);
 
-            let enabled_str = if enabled {
-                "Yes".green()
-            } else {
-                "No".red()
-            };
+            let enabled_str = if enabled { "Yes".green() } else { "No".red() };
 
             println!(
                 "{:<20} {:<30} {:<10} {:<10} {:<15}",
@@ -284,7 +286,7 @@ async fn create_workspace(
     workspace_id: &str,
     name: &str,
     description: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("{}/__mockforge/workspaces", admin_url);
     let client = reqwest::Client::new();
 
@@ -303,11 +305,7 @@ async fn create_workspace(
         return Err(format!("Failed to create workspace: {}", error_msg).into());
     }
 
-    println!(
-        "{} Workspace '{}' created successfully",
-        "✓".green(),
-        workspace_id.cyan()
-    );
+    println!("{} Workspace '{}' created successfully", "✓".green(), workspace_id.cyan());
 
     Ok(())
 }
@@ -316,7 +314,7 @@ async fn get_workspace_info(
     admin_url: &str,
     workspace_id: &str,
     format: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("{}/__mockforge/workspaces/{}", admin_url, workspace_id);
     let client = reqwest::Client::new();
 
@@ -346,19 +344,27 @@ async fn get_workspace_info(
         }
 
         let enabled = data["enabled"].as_bool().unwrap_or(false);
-        let enabled_str = if enabled {
-            "Yes".green()
-        } else {
-            "No".red()
-        };
+        let enabled_str = if enabled { "Yes".green() } else { "No".red() };
         println!("  {:<20} {}", "Enabled:".bold(), enabled_str);
 
         println!();
         println!("{}", "Statistics:".bold());
         if let Some(stats) = data.get("stats") {
-            println!("  {:<20} {}", "Total Requests:".bold(), stats["total_requests"].as_u64().unwrap_or(0));
-            println!("  {:<20} {}", "Active Routes:".bold(), stats["active_routes"].as_u64().unwrap_or(0));
-            println!("  {:<20} {:.2} ms", "Avg Response Time:".bold(), stats["avg_response_time_ms"].as_f64().unwrap_or(0.0));
+            println!(
+                "  {:<20} {}",
+                "Total Requests:".bold(),
+                stats["total_requests"].as_u64().unwrap_or(0)
+            );
+            println!(
+                "  {:<20} {}",
+                "Active Routes:".bold(),
+                stats["active_routes"].as_u64().unwrap_or(0)
+            );
+            println!(
+                "  {:<20} {:.2} ms",
+                "Avg Response Time:".bold(),
+                stats["avg_response_time_ms"].as_f64().unwrap_or(0.0)
+            );
         }
     }
 
@@ -369,12 +375,9 @@ async fn delete_workspace(
     admin_url: &str,
     workspace_id: &str,
     skip_confirm: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if !skip_confirm {
-        print!(
-            "Are you sure you want to delete workspace '{}'? (y/N): ",
-            workspace_id.cyan()
-        );
+        print!("Are you sure you want to delete workspace '{}'? (y/N): ", workspace_id.cyan());
         use std::io::{self, Write};
         io::stdout().flush()?;
 
@@ -399,11 +402,7 @@ async fn delete_workspace(
         return Err(format!("Failed to delete workspace: {}", error_msg).into());
     }
 
-    println!(
-        "{} Workspace '{}' deleted successfully",
-        "✓".green(),
-        workspace_id.cyan()
-    );
+    println!("{} Workspace '{}' deleted successfully", "✓".green(), workspace_id.cyan());
 
     Ok(())
 }
@@ -412,7 +411,7 @@ async fn update_workspace_enabled(
     admin_url: &str,
     workspace_id: &str,
     enabled: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("{}/__mockforge/workspaces/{}", admin_url, workspace_id);
     let client = reqwest::Client::new();
 
@@ -430,12 +429,7 @@ async fn update_workspace_enabled(
     }
 
     let status = if enabled { "enabled" } else { "disabled" };
-    println!(
-        "{} Workspace '{}' {} successfully",
-        "✓".green(),
-        workspace_id.cyan(),
-        status
-    );
+    println!("{} Workspace '{}' {} successfully", "✓".green(), workspace_id.cyan(), status);
 
     Ok(())
 }
@@ -445,7 +439,7 @@ async fn update_workspace(
     workspace_id: &str,
     name: Option<&str>,
     description: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("{}/__mockforge/workspaces/{}", admin_url, workspace_id);
     let client = reqwest::Client::new();
 
@@ -468,11 +462,7 @@ async fn update_workspace(
         return Err(format!("Failed to update workspace: {}", error_msg).into());
     }
 
-    println!(
-        "{} Workspace '{}' updated successfully",
-        "✓".green(),
-        workspace_id.cyan()
-    );
+    println!("{} Workspace '{}' updated successfully", "✓".green(), workspace_id.cyan());
 
     Ok(())
 }
@@ -481,7 +471,7 @@ async fn get_workspace_stats(
     admin_url: &str,
     workspace_id: &str,
     format: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("{}/__mockforge/workspaces/{}/stats", admin_url, workspace_id);
     let client = reqwest::Client::new();
 
@@ -503,9 +493,21 @@ async fn get_workspace_stats(
     if let Some(data) = body.get("data") {
         println!("{}", format!("Statistics for workspace '{}':", workspace_id).bold());
         println!();
-        println!("  {:<25} {}", "Total Requests:".bold(), data["total_requests"].as_u64().unwrap_or(0));
-        println!("  {:<25} {}", "Active Routes:".bold(), data["active_routes"].as_u64().unwrap_or(0));
-        println!("  {:<25} {:.2} ms", "Avg Response Time:".bold(), data["avg_response_time_ms"].as_f64().unwrap_or(0.0));
+        println!(
+            "  {:<25} {}",
+            "Total Requests:".bold(),
+            data["total_requests"].as_u64().unwrap_or(0)
+        );
+        println!(
+            "  {:<25} {}",
+            "Active Routes:".bold(),
+            data["active_routes"].as_u64().unwrap_or(0)
+        );
+        println!(
+            "  {:<25} {:.2} ms",
+            "Avg Response Time:".bold(),
+            data["avg_response_time_ms"].as_f64().unwrap_or(0.0)
+        );
 
         if let Some(last_request) = data["last_request_at"].as_str() {
             println!("  {:<25} {}", "Last Request:".bold(), last_request);

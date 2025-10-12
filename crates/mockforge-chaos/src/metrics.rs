@@ -146,37 +146,27 @@ impl ChaosMetrics {
 
     /// Record fault injection
     pub fn record_fault(&self, fault_type: &str, endpoint: &str) {
-        self.faults_injected_total
-            .with_label_values(&[fault_type, endpoint])
-            .inc();
+        self.faults_injected_total.with_label_values(&[fault_type, endpoint]).inc();
     }
 
     /// Record latency injection
     pub fn record_latency(&self, endpoint: &str, latency_ms: f64) {
-        self.latency_injected
-            .with_label_values(&[endpoint])
-            .observe(latency_ms);
+        self.latency_injected.with_label_values(&[endpoint]).observe(latency_ms);
     }
 
     /// Record rate limit violation
     pub fn record_rate_limit_violation(&self, endpoint: &str) {
-        self.rate_limit_violations_total
-            .with_label_values(&[endpoint])
-            .inc();
+        self.rate_limit_violations_total.with_label_values(&[endpoint]).inc();
     }
 
     /// Update circuit breaker state
     pub fn update_circuit_breaker_state(&self, circuit_name: &str, state: f64) {
-        self.circuit_breaker_state
-            .with_label_values(&[circuit_name])
-            .set(state);
+        self.circuit_breaker_state.with_label_values(&[circuit_name]).set(state);
     }
 
     /// Update bulkhead concurrent requests
     pub fn update_bulkhead_concurrent(&self, bulkhead_name: &str, count: f64) {
-        self.bulkhead_concurrent
-            .with_label_values(&[bulkhead_name])
-            .set(count);
+        self.bulkhead_concurrent.with_label_values(&[bulkhead_name]).set(count);
     }
 
     /// Record orchestration step duration
@@ -196,13 +186,9 @@ impl ChaosMetrics {
     /// Update active orchestrations
     pub fn update_active_orchestrations(&self, orchestration: &str, active: bool) {
         if active {
-            self.active_orchestrations
-                .with_label_values(&[orchestration])
-                .inc();
+            self.active_orchestrations.with_label_values(&[orchestration]).inc();
         } else {
-            self.active_orchestrations
-                .with_label_values(&[orchestration])
-                .dec();
+            self.active_orchestrations.with_label_values(&[orchestration]).dec();
         }
     }
 
@@ -222,16 +208,12 @@ impl ChaosMetrics {
 
     /// Update recommendations count
     pub fn update_recommendations(&self, category: &str, severity: &str, count: f64) {
-        self.recommendations_total
-            .with_label_values(&[category, severity])
-            .set(count);
+        self.recommendations_total.with_label_values(&[category, severity]).set(count);
     }
 
     /// Update chaos impact score
     pub fn update_impact_score(&self, time_window: &str, score: f64) {
-        self.chaos_impact_score
-            .with_label_values(&[time_window])
-            .set(score);
+        self.chaos_impact_score.with_label_values(&[time_window]).set(score);
     }
 }
 
@@ -242,9 +224,8 @@ impl Default for ChaosMetrics {
 }
 
 /// Global metrics instance
-pub static CHAOS_METRICS: Lazy<ChaosMetrics> = Lazy::new(|| {
-    ChaosMetrics::new().expect("Failed to initialize chaos metrics")
-});
+pub static CHAOS_METRICS: Lazy<ChaosMetrics> =
+    Lazy::new(|| ChaosMetrics::new().expect("Failed to initialize chaos metrics"));
 
 /// Get the default Prometheus registry
 pub fn registry() -> &'static Registry {

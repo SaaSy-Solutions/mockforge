@@ -4,7 +4,7 @@
 //! across service boundaries.
 
 use opentelemetry::propagation::{Extractor, Injector};
-use opentelemetry::trace::{TraceContextExt, TraceId, SpanId};
+use opentelemetry::trace::{SpanId, TraceContextExt, TraceId};
 use opentelemetry::{global, Context};
 use std::collections::HashMap;
 
@@ -78,9 +78,7 @@ impl<'a> Injector for HeaderInjector<'a> {
 }
 
 /// Extract trace context from Axum HTTP headers
-pub fn extract_from_axum_headers(
-    headers: &axum::http::HeaderMap,
-) -> Context {
+pub fn extract_from_axum_headers(headers: &axum::http::HeaderMap) -> Context {
     let mut header_map = HashMap::new();
     for (key, value) in headers.iter() {
         if let Ok(value_str) = value.to_str() {
@@ -91,10 +89,7 @@ pub fn extract_from_axum_headers(
 }
 
 /// Inject trace context into Axum HTTP headers
-pub fn inject_into_axum_headers(
-    ctx: &Context,
-    headers: &mut axum::http::HeaderMap,
-) {
+pub fn inject_into_axum_headers(ctx: &Context, headers: &mut axum::http::HeaderMap) {
     let mut header_map = HashMap::new();
     inject_trace_context(ctx, &mut header_map);
 

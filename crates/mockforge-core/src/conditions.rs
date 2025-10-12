@@ -281,7 +281,11 @@ fn evaluate_xpath_simple(node: &Node, xpath: &str) -> bool {
 
     // Handle descendant-or-self axis: //element (check this FIRST before stripping //)
     if let Some(element_name) = xpath.strip_prefix("//") {
-        println!("Debug - Checking descendant-or-self for element '{}' on node '{}'", element_name, node.tag_name().name());
+        println!(
+            "Debug - Checking descendant-or-self for element '{}' on node '{}'",
+            element_name,
+            node.tag_name().name()
+        );
         if node.tag_name().name() == element_name {
             println!("Debug - Found match: {} == {}", node.tag_name().name(), element_name);
             return true;

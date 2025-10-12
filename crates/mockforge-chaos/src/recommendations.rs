@@ -5,10 +5,10 @@
 
 use crate::analytics::{ChaosImpact, MetricsBucket};
 use chrono::{DateTime, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// Recommendation category
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -234,11 +234,8 @@ impl RecommendationEngine {
             .collect();
 
         // Sort by score (highest first)
-        filtered.sort_by(|a, b| {
-            b.score()
-                .partial_cmp(&a.score())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        filtered
+            .sort_by(|a, b| b.score().partial_cmp(&a.score()).unwrap_or(std::cmp::Ordering::Equal));
 
         // Limit to max recommendations
         filtered.truncate(self.config.max_recommendations);
@@ -397,9 +394,9 @@ impl RecommendationEngine {
 
         let first_avg_faults: f64 = first_half.iter().map(|b| b.total_faults).sum::<usize>() as f64
             / first_half.len() as f64;
-        let second_avg_faults: f64 =
-            second_half.iter().map(|b| b.total_faults).sum::<usize>() as f64
-                / second_half.len() as f64;
+        let second_avg_faults: f64 = second_half.iter().map(|b| b.total_faults).sum::<usize>()
+            as f64
+            / second_half.len() as f64;
 
         if second_avg_faults > first_avg_faults * 1.5 {
             patterns.push(ChaosPattern {
@@ -431,19 +428,12 @@ impl RecommendationEngine {
         if impact.severity_score > 0.7 {
             weaknesses.push(SystemWeakness {
                 weakness_type: "low_resilience".to_string(),
-                endpoints: impact
-                    .top_affected_endpoints
-                    .iter()
-                    .map(|(ep, _)| ep.clone())
-                    .collect(),
+                endpoints: impact.top_affected_endpoints.iter().map(|(ep, _)| ep.clone()).collect(),
                 severity: impact.severity_score,
                 evidence: {
                     let mut map = HashMap::new();
                     map.insert("severity_score".to_string(), impact.severity_score);
-                    map.insert(
-                        "degradation_percent".to_string(),
-                        impact.avg_degradation_percent,
-                    );
+                    map.insert("degradation_percent".to_string(), impact.avg_degradation_percent);
                     map
                 },
             });
@@ -478,10 +468,8 @@ impl RecommendationEngine {
 
     /// Detect insufficient fault coverage
     fn detect_insufficient_fault_coverage(&self, buckets: &[MetricsBucket]) -> bool {
-        let fault_types: std::collections::HashSet<_> = buckets
-            .iter()
-            .flat_map(|b| b.faults_by_type.keys())
-            .collect();
+        let fault_types: std::collections::HashSet<_> =
+            buckets.iter().flat_map(|b| b.faults_by_type.keys()).collect();
 
         // Expect at least 3 different fault types for good coverage
         fault_types.len() < 3
@@ -645,9 +633,7 @@ impl RecommendationEngine {
             action: "Implement circuit breaker and bulkhead patterns. \
                      Test with cascading failure scenarios."
                 .to_string(),
-            example: Some(
-                "mockforge serve --chaos --chaos-scenario cascading_failure".to_string(),
-            ),
+            example: Some("mockforge serve --chaos --chaos-scenario cascading_failure".to_string()),
             affected_endpoints: pattern.affected.clone(),
             metrics: {
                 let mut map = HashMap::new();
@@ -660,7 +646,10 @@ impl RecommendationEngine {
     }
 
     /// Generate recommendations from weaknesses
-    fn recommendations_from_weaknesses(&self, weaknesses: &[SystemWeakness]) -> Vec<Recommendation> {
+    fn recommendations_from_weaknesses(
+        &self,
+        weaknesses: &[SystemWeakness],
+    ) -> Vec<Recommendation> {
         weaknesses
             .iter()
             .filter_map(|weakness| self.weakness_to_recommendation(weakness))
@@ -768,10 +757,8 @@ impl RecommendationEngine {
         let mut recs = Vec::new();
 
         // Check protocol coverage
-        let protocols_tested: std::collections::HashSet<_> = buckets
-            .iter()
-            .flat_map(|b| b.protocol_events.keys())
-            .collect();
+        let protocols_tested: std::collections::HashSet<_> =
+            buckets.iter().flat_map(|b| b.protocol_events.keys()).collect();
 
         if protocols_tested.is_empty() || protocols_tested.len() < 2 {
             recs.push(Recommendation {
@@ -888,7 +875,7 @@ impl Default for RecommendationEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use std::collections::HashMap;
 
     #[test]

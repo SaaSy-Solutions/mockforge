@@ -7,9 +7,9 @@ use crate::{
     scenario_replay::ReplayStatus,
 };
 use chrono::{DateTime, Duration, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tracing::{debug, info};
 
@@ -33,13 +33,9 @@ pub enum DashboardUpdate {
         progress: Option<f64>,
     },
     /// Orchestration status
-    OrchestrationStatus {
-        status: Option<OrchestrationStatus>,
-    },
+    OrchestrationStatus { status: Option<OrchestrationStatus> },
     /// Replay status
-    ReplayStatus {
-        status: Option<ReplayStatus>,
-    },
+    ReplayStatus { status: Option<ReplayStatus> },
     /// Impact analysis update
     ImpactUpdate { impact: ChaosImpact },
     /// Schedule update
@@ -107,10 +103,7 @@ impl DashboardStats {
     }
 
     /// Calculate stats from analytics
-    pub fn from_analytics(
-        analytics: &ChaosAnalytics,
-        alert_manager: &AlertManager,
-    ) -> Self {
+    pub fn from_analytics(analytics: &ChaosAnalytics, alert_manager: &AlertManager) -> Self {
         let now = Utc::now();
         let one_hour_ago = now - Duration::hours(1);
         let one_day_ago = now - Duration::days(1);
@@ -124,8 +117,7 @@ impl DashboardStats {
         let events_last_day: usize = day_metrics.iter().map(|m| m.total_events).sum();
 
         let avg_latency_ms = if !hour_metrics.is_empty() {
-            hour_metrics.iter().map(|m| m.avg_latency_ms).sum::<f64>()
-                / hour_metrics.len() as f64
+            hour_metrics.iter().map(|m| m.avg_latency_ms).sum::<f64>() / hour_metrics.len() as f64
         } else {
             0.0
         };
@@ -145,9 +137,9 @@ impl DashboardStats {
             avg_latency_ms,
             faults_last_hour,
             active_alerts,
-            scheduled_scenarios: 0, // Would be populated from scheduler
+            scheduled_scenarios: 0,   // Would be populated from scheduler
             active_orchestrations: 0, // Would be populated from orchestrator
-            active_replays: 0, // Would be populated from replay engine
+            active_replays: 0,        // Would be populated from replay engine
             current_impact_score: impact.severity_score,
             top_endpoints: impact.top_affected_endpoints,
         }
@@ -168,10 +160,7 @@ pub struct DashboardManager {
 
 impl DashboardManager {
     /// Create a new dashboard manager
-    pub fn new(
-        analytics: Arc<ChaosAnalytics>,
-        alert_manager: Arc<AlertManager>,
-    ) -> Self {
+    pub fn new(analytics: Arc<ChaosAnalytics>, alert_manager: Arc<AlertManager>) -> Self {
         let (update_tx, _) = broadcast::channel(100);
 
         Self {
@@ -255,11 +244,7 @@ impl DashboardManager {
     }
 
     /// Get impact analysis
-    pub fn get_impact_analysis(
-        &self,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> ChaosImpact {
+    pub fn get_impact_analysis(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> ChaosImpact {
         self.analytics.get_impact_analysis(start, end, TimeBucket::Minute)
     }
 
@@ -280,7 +265,8 @@ impl DashboardManager {
         let update_tx = self.update_tx.clone();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_seconds));
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(interval_seconds));
 
             loop {
                 interval.tick().await;
@@ -328,20 +314,16 @@ pub struct DashboardQuery {
 impl DashboardQuery {
     /// Parse start time
     pub fn parse_start(&self) -> Option<DateTime<Utc>> {
-        self.start.as_ref().and_then(|s| {
-            DateTime::parse_from_rfc3339(s)
-                .ok()
-                .map(|dt| dt.with_timezone(&Utc))
-        })
+        self.start
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc)))
     }
 
     /// Parse end time
     pub fn parse_end(&self) -> Option<DateTime<Utc>> {
-        self.end.as_ref().and_then(|s| {
-            DateTime::parse_from_rfc3339(s)
-                .ok()
-                .map(|dt| dt.with_timezone(&Utc))
-        })
+        self.end
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc)))
     }
 
     /// Parse bucket size

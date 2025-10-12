@@ -354,7 +354,7 @@ For production deployments on cloud platforms, see our comprehensive cloud deplo
 
 - **[AWS Deployment Guide](docs/deployment/aws.md)** - ECS, EKS, App Runner, EC2
 - **[Google Cloud Guide](docs/deployment/gcp.md)** - Cloud Run, GKE, Compute Engine
-- **[Azure Guide](docs/deployment/azure.md)** - Container Apps, ACI, AKS, VMs
+- **[Azure Guide](docs/deployment/azure.md)** - Container Apps, ACPI, ASK, VMs
 - **[DigitalOcean Guide](docs/deployment/digitalocean.md)** - App Platform, DOKS, Droplets
 
 ### Quick Cloud Recommendations

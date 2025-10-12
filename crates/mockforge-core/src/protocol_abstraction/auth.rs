@@ -5,9 +5,9 @@ use crate::config::AuthConfig;
 use crate::Result;
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
 
 /// JWT Claims
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -64,8 +64,8 @@ impl AuthMiddleware {
         // Try Authorization header first (works for HTTP, GraphQL, WebSocket)
         if let Some(auth_header) = request.metadata.get("authorization") {
             // Handle "Bearer <token>" format
-            if auth_header.starts_with("Bearer ") {
-                return Some(auth_header[7..].to_string());
+            if let Some(token) = auth_header.strip_prefix("Bearer ") {
+                return Some(token.to_string());
             }
             return Some(auth_header.clone());
         }
@@ -80,8 +80,8 @@ impl AuthMiddleware {
         // For gRPC, try metadata
         if request.protocol == Protocol::Grpc {
             if let Some(token) = request.metadata.get("grpc-metadata-authorization") {
-                if token.starts_with("Bearer ") {
-                    return Some(token[7..].to_string());
+                if let Some(stripped) = token.strip_prefix("Bearer ") {
+                    return Some(stripped.to_string());
                 }
                 return Some(token.clone());
             }
@@ -134,8 +134,10 @@ impl AuthMiddleware {
 
                 // Cache the token
                 let expires_at = if let Some(exp) = claims.exp {
-                    let exp_instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(exp as u64);
-                    std::time::Instant::now() + exp_instant.elapsed().unwrap_or(std::time::Duration::from_secs(300))
+                    let exp_instant =
+                        std::time::UNIX_EPOCH + std::time::Duration::from_secs(exp as u64);
+                    std::time::Instant::now()
+                        + exp_instant.elapsed().unwrap_or(std::time::Duration::from_secs(300))
                 } else {
                     std::time::Instant::now() + std::time::Duration::from_secs(300)
                 };

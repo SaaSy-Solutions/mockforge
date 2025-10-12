@@ -2,7 +2,6 @@
 ///
 /// Provides real-time notifications when mocks are created, updated, or deleted.
 /// Used by developer tools like VS Code extension for live synchronization.
-
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -29,20 +28,14 @@ pub enum MockEvent {
         timestamp: String,
     },
     /// Mock was deleted
-    MockDeleted {
-        id: String,
-        timestamp: String,
-    },
+    MockDeleted { id: String, timestamp: String },
     /// Server statistics changed
     StatsUpdated {
         stats: super::management::ServerStats,
         timestamp: String,
     },
     /// Connection established confirmation
-    Connected {
-        message: String,
-        timestamp: String,
-    },
+    Connected { message: String, timestamp: String },
 }
 
 impl MockEvent {
@@ -96,7 +89,10 @@ impl WsManagementState {
     }
 
     /// Broadcast an event to all connected clients
-    pub fn broadcast(&self, event: MockEvent) -> Result<usize, broadcast::error::SendError<MockEvent>> {
+    pub fn broadcast(
+        &self,
+        event: MockEvent,
+    ) -> Result<usize, broadcast::error::SendError<MockEvent>> {
         self.tx.send(event)
     }
 }
@@ -108,7 +104,10 @@ impl Default for WsManagementState {
 }
 
 /// WebSocket upgrade handler
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<WsManagementState>) -> impl IntoResponse {
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<WsManagementState>,
+) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
@@ -170,9 +169,7 @@ async fn handle_socket(socket: WebSocket, state: WsManagementState) {
 
 /// Build the WebSocket management router
 pub fn ws_management_router(state: WsManagementState) -> Router {
-    Router::new()
-        .route("/", get(ws_handler))
-        .with_state(state)
+    Router::new().route("/", get(ws_handler)).with_state(state)
 }
 
 #[cfg(test)]

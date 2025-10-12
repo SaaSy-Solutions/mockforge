@@ -45,15 +45,13 @@ pub struct OpenApiRouteRegistry {
     options: ValidationOptions,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub enum ValidationMode {
     Disabled,
     #[default]
     Warn,
     Enforce,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {
@@ -222,17 +220,17 @@ impl OpenApiRouteRegistry {
                 // Headers: only capture those declared on this operation
                 let mut header_map = Map::new();
                 for p_ref in &operation.parameters {
-                    if let Some(p) = p_ref.as_item() {
-                        if let openapiv3::Parameter::Header { parameter_data, .. } = p {
-                            let name_lc = parameter_data.name.to_ascii_lowercase();
-                            if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
-                                if let Some(val) = headers.get(hn) {
-                                    if let Ok(s) = val.to_str() {
-                                        header_map.insert(
-                                            parameter_data.name.clone(),
-                                            Value::String(s.to_string()),
-                                        );
-                                    }
+                    if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
+                        p_ref.as_item()
+                    {
+                        let name_lc = parameter_data.name.to_ascii_lowercase();
+                        if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                            if let Some(val) = headers.get(hn) {
+                                if let Ok(s) = val.to_str() {
+                                    header_map.insert(
+                                        parameter_data.name.clone(),
+                                        Value::String(s.to_string()),
+                                    );
                                 }
                             }
                         }
@@ -484,17 +482,17 @@ impl OpenApiRouteRegistry {
                 // Headers: only capture those declared on this operation
                 let mut header_map = Map::new();
                 for p_ref in &operation.parameters {
-                    if let Some(p) = p_ref.as_item() {
-                        if let openapiv3::Parameter::Header { parameter_data, .. } = p {
-                            let name_lc = parameter_data.name.to_ascii_lowercase();
-                            if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
-                                if let Some(val) = headers.get(hn) {
-                                    if let Ok(s) = val.to_str() {
-                                        header_map.insert(
-                                            parameter_data.name.clone(),
-                                            Value::String(s.to_string()),
-                                        );
-                                    }
+                    if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
+                        p_ref.as_item()
+                    {
+                        let name_lc = parameter_data.name.to_ascii_lowercase();
+                        if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                            if let Some(val) = headers.get(hn) {
+                                if let Ok(s) = val.to_str() {
+                                    header_map.insert(
+                                        parameter_data.name.clone(),
+                                        Value::String(s.to_string()),
+                                    );
                                 }
                             }
                         }
@@ -714,8 +712,15 @@ impl OpenApiRouteRegistry {
                         openapiv3::ReferenceOr::Item(rb) => Some(rb),
                         openapiv3::ReferenceOr::Reference { reference } => {
                             // Try to resolve request body reference through spec
-                            self.spec.spec.components.as_ref()
-                                .and_then(|components| components.request_bodies.get(reference.trim_start_matches("#/components/requestBodies/")))
+                            self.spec
+                                .spec
+                                .components
+                                .as_ref()
+                                .and_then(|components| {
+                                    components.request_bodies.get(
+                                        reference.trim_start_matches("#/components/requestBodies/"),
+                                    )
+                                })
                                 .and_then(|rb_ref| rb_ref.as_item())
                         }
                     };
@@ -723,41 +728,51 @@ impl OpenApiRouteRegistry {
                     if let Some(rb) = request_body {
                         if let Some(content) = rb.content.get("application/json") {
                             if let Some(schema_ref) = &content.schema {
-                            // Resolve schema reference and validate
-                            match schema_ref {
-                                openapiv3::ReferenceOr::Item(schema) => {
-                                    // Direct schema - validate immediately
-                                    if let Err(validation_error) =
-                                        OpenApiSchema::new(schema.clone()).validate(value)
-                                    {
-                                        let error_msg = validation_error.to_string();
-                                        errors.push(format!("body validation failed: {}", error_msg));
-                                        if aggregate {
-                                            details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
-                                        }
-                                    }
-                                }
-                                openapiv3::ReferenceOr::Reference { reference } => {
-                                    // Referenced schema - resolve and validate
-                                    if let Some(resolved_schema_ref) = self.spec.get_schema(reference) {
+                                // Resolve schema reference and validate
+                                match schema_ref {
+                                    openapiv3::ReferenceOr::Item(schema) => {
+                                        // Direct schema - validate immediately
                                         if let Err(validation_error) =
-                                            OpenApiSchema::new(resolved_schema_ref.schema.clone()).validate(value)
+                                            OpenApiSchema::new(schema.clone()).validate(value)
                                         {
                                             let error_msg = validation_error.to_string();
-                                            errors.push(format!("body validation failed: {}", error_msg));
+                                            errors.push(format!(
+                                                "body validation failed: {}",
+                                                error_msg
+                                            ));
                                             if aggregate {
                                                 details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
                                             }
                                         }
-                                    } else {
-                                        // Schema reference couldn't be resolved
-                                        errors.push(format!("body validation failed: could not resolve schema reference {}", reference));
-                                        if aggregate {
-                                            details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve schema reference"}));
+                                    }
+                                    openapiv3::ReferenceOr::Reference { reference } => {
+                                        // Referenced schema - resolve and validate
+                                        if let Some(resolved_schema_ref) =
+                                            self.spec.get_schema(reference)
+                                        {
+                                            if let Err(validation_error) = OpenApiSchema::new(
+                                                resolved_schema_ref.schema.clone(),
+                                            )
+                                            .validate(value)
+                                            {
+                                                let error_msg = validation_error.to_string();
+                                                errors.push(format!(
+                                                    "body validation failed: {}",
+                                                    error_msg
+                                                ));
+                                                if aggregate {
+                                                    details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
+                                                }
+                                            }
+                                        } else {
+                                            // Schema reference couldn't be resolved
+                                            errors.push(format!("body validation failed: could not resolve schema reference {}", reference));
+                                            if aggregate {
+                                                details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve schema reference"}));
+                                            }
                                         }
                                     }
                                 }
-                            }
                             }
                         }
                     } else {
@@ -790,7 +805,11 @@ impl OpenApiRouteRegistry {
                                 &mut details,
                             );
                         }
-                        openapiv3::Parameter::Query { parameter_data, style, .. } => {
+                        openapiv3::Parameter::Query {
+                            parameter_data,
+                            style,
+                            ..
+                        } => {
                             // For query deepObject, reconstruct value from key-likes: name[prop]
                             let deep_value = None; // Simplified for now
                             let style_str = match style {
@@ -937,7 +956,6 @@ impl OpenApiRouteRegistry {
         // Axum v0.7+ uses {param} format, same as OpenAPI
         openapi_path.to_string()
     }
-
 }
 
 // Note: templating helpers are now in core::templating (shared across modules)
@@ -963,9 +981,7 @@ pub fn get_last_validation_error() -> Option<serde_json::Value> {
 
 /// Get recent validation errors (most recent last)
 pub fn get_validation_errors() -> Vec<serde_json::Value> {
-    LAST_ERRORS.lock()
-        .map(|q| q.iter().cloned().collect())
-        .unwrap_or_default()
+    LAST_ERRORS.lock().map(|q| q.iter().cloned().collect()).unwrap_or_default()
 }
 
 /// Coerce a parameter `value` into the expected JSON type per `schema` where reasonable.
@@ -977,7 +993,9 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
     match value {
         Value::String(s) => {
             // Check if schema expects an array and we have a comma-separated string
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) = &schema.schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
+                &schema.schema_kind
+            {
                 if s.contains(',') {
                     // Split comma-separated string into array
                     let parts: Vec<&str> = s.split(',').map(|s| s.trim()).collect();
@@ -988,7 +1006,8 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                         if let Some(items_schema) = &array_type.items {
                             if let Some(items_schema_obj) = items_schema.as_item() {
                                 let part_value = Value::String(part.to_string());
-                                let coerced_part = coerce_value_for_schema(&part_value, items_schema_obj);
+                                let coerced_part =
+                                    coerce_value_for_schema(&part_value, items_schema_obj);
                                 array_values.push(coerced_part);
                             } else {
                                 // If items schema is a reference or not available, keep as string
@@ -1051,12 +1070,14 @@ fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str
     match value {
         Value::String(s) => {
             // Check if schema expects an array and we have a delimited string
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) = &schema.schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
+                &schema.schema_kind
+            {
                 let delimiter = match style {
                     Some("spaceDelimited") => " ",
                     Some("pipeDelimited") => "|",
                     Some("form") | None => ",", // Default to form style (comma-separated)
-                    _ => ",", // Fallback to comma
+                    _ => ",",                   // Fallback to comma
                 };
 
                 if s.contains(delimiter) {
@@ -1069,7 +1090,8 @@ fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str
                         if let Some(items_schema) = &array_type.items {
                             if let Some(items_schema_obj) = items_schema.as_item() {
                                 let part_value = Value::String(part.to_string());
-                                let coerced_part = coerce_by_style(&part_value, items_schema_obj, style);
+                                let coerced_part =
+                                    coerce_by_style(&part_value, items_schema_obj, style);
                                 array_values.push(coerced_part);
                             } else {
                                 // If items schema is a reference or not available, keep as string
@@ -1126,6 +1148,7 @@ fn build_deep_object(name: &str, params: &Map<String, Value>) -> Option<Value> {
 
 /// Generate an enhanced 422 response with detailed schema validation errors
 /// This function provides comprehensive error information using the new schema diff utility
+#[allow(clippy::too_many_arguments)]
 fn generate_enhanced_422_response(
     validator: &OpenApiRouteRegistry,
     path_template: &str,
@@ -1271,6 +1294,7 @@ fn validate_parameter(
 }
 
 /// Helper function to validate a parameter with deep object support
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter_with_deep_object(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
@@ -1286,7 +1310,7 @@ fn validate_parameter_with_deep_object(
             if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
                 if let Some(schema) = s.as_item() {
                     let coerced = coerce_by_style(v, schema, style); // Use the actual style
-                                                                            // Validate the coerced value against the schema
+                                                                     // Validate the coerced value against the schema
                     if let Err(validation_error) =
                         OpenApiSchema::new(schema.clone()).validate(&coerced)
                     {

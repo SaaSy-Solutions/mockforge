@@ -1,8 +1,8 @@
 //! CSV export for reports and metrics
 
-use crate::Result;
 use crate::comparison::ComparisonReport;
 use crate::pdf::{ExecutionReport, ReportMetrics};
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -188,11 +188,7 @@ impl CsvExporter {
     }
 
     /// Export regressions to CSV
-    pub fn export_regressions(
-        &self,
-        report: &ComparisonReport,
-        output_path: &str,
-    ) -> Result<()> {
+    pub fn export_regressions(&self, report: &ComparisonReport, output_path: &str) -> Result<()> {
         let mut file = File::create(output_path)?;
 
         // Write header
@@ -221,11 +217,7 @@ impl CsvExporter {
     }
 
     /// Export improvements to CSV
-    pub fn export_improvements(
-        &self,
-        report: &ComparisonReport,
-        output_path: &str,
-    ) -> Result<()> {
+    pub fn export_improvements(&self, report: &ComparisonReport, output_path: &str) -> Result<()> {
         let mut file = File::create(output_path)?;
 
         // Write header

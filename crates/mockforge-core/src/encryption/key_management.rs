@@ -122,7 +122,10 @@ impl FileKeyStorage {
         tokio::task::spawn_blocking(move || {
             if !base_path.exists() {
                 std::fs::create_dir_all(&base_path).map_err(|e| {
-                    EncryptionError::generic(format!("Failed to create key storage directory: {}", e))
+                    EncryptionError::generic(format!(
+                        "Failed to create key storage directory: {}",
+                        e
+                    ))
                 })
             } else {
                 Ok(())
@@ -133,15 +136,20 @@ impl FileKeyStorage {
     }
 
     /// Store a key asynchronously (non-blocking)
-    pub async fn store_key_async(&mut self, key_id: &KeyId, encrypted_key: &[u8]) -> EncryptionResult<()> {
+    pub async fn store_key_async(
+        &mut self,
+        key_id: &KeyId,
+        encrypted_key: &[u8],
+    ) -> EncryptionResult<()> {
         self.ensure_base_dir_async().await?;
         let file_path = self.key_file_path(key_id);
         let key_id = key_id.clone();
         let encrypted_key = encrypted_key.to_vec();
 
         tokio::task::spawn_blocking(move || {
-            std::fs::write(&file_path, encrypted_key)
-                .map_err(|e| EncryptionError::generic(format!("Failed to store key {}: {}", key_id, e)))
+            std::fs::write(&file_path, encrypted_key).map_err(|e| {
+                EncryptionError::generic(format!("Failed to store key {}: {}", key_id, e))
+            })
         })
         .await
         .map_err(|e| EncryptionError::generic(format!("Task join error: {}", e)))?
@@ -164,13 +172,11 @@ impl FileKeyStorage {
         let file_path = self.key_file_path(key_id);
         let key_id = key_id.clone();
 
-        tokio::task::spawn_blocking(move || {
-            match std::fs::remove_file(&file_path) {
-                Ok(()) => Ok(()),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(e) => {
-                    Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e)))
-                }
+        tokio::task::spawn_blocking(move || match std::fs::remove_file(&file_path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => {
+                Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e)))
             }
         })
         .await

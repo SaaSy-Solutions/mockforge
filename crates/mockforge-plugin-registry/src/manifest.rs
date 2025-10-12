@@ -1,6 +1,6 @@
 //! Plugin manifest validation for registry
 
-use crate::{Result, RegistryError};
+use crate::{RegistryError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -8,9 +8,7 @@ use std::collections::HashMap;
 pub fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
     // Check required fields
     if manifest.name.is_empty() {
-        return Err(RegistryError::InvalidManifest(
-            "Plugin name cannot be empty".to_string(),
-        ));
+        return Err(RegistryError::InvalidManifest("Plugin name cannot be empty".to_string()));
     }
 
     if !is_valid_plugin_name(&manifest.name) {
@@ -20,9 +18,7 @@ pub fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
     }
 
     if manifest.version.is_empty() {
-        return Err(RegistryError::InvalidManifest(
-            "Version cannot be empty".to_string(),
-        ));
+        return Err(RegistryError::InvalidManifest("Version cannot be empty".to_string()));
     }
 
     if !is_valid_semver(&manifest.version) {
@@ -32,9 +28,7 @@ pub fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
     }
 
     if manifest.description.is_empty() {
-        return Err(RegistryError::InvalidManifest(
-            "Description cannot be empty".to_string(),
-        ));
+        return Err(RegistryError::InvalidManifest("Description cannot be empty".to_string()));
     }
 
     if manifest.description.len() > 500 {
@@ -44,23 +38,17 @@ pub fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
     }
 
     if manifest.license.is_empty() {
-        return Err(RegistryError::InvalidManifest(
-            "License cannot be empty".to_string(),
-        ));
+        return Err(RegistryError::InvalidManifest("License cannot be empty".to_string()));
     }
 
     // Check author
     if manifest.author.name.is_empty() {
-        return Err(RegistryError::InvalidManifest(
-            "Author name cannot be empty".to_string(),
-        ));
+        return Err(RegistryError::InvalidManifest("Author name cannot be empty".to_string()));
     }
 
     // Check tags
     if manifest.tags.len() > 10 {
-        return Err(RegistryError::InvalidManifest(
-            "Maximum 10 tags allowed".to_string(),
-        ));
+        return Err(RegistryError::InvalidManifest("Maximum 10 tags allowed".to_string()));
     }
 
     for tag in &manifest.tags {
@@ -80,8 +68,7 @@ fn is_valid_plugin_name(name: &str) -> bool {
         return false;
     }
 
-    name.chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// Check if version is valid semver

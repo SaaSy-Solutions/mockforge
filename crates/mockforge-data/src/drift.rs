@@ -105,11 +105,10 @@ impl DriftRule {
         }
 
         if self.strategy == DriftStrategy::StateMachine
-            && (self.states.is_none() || self.transitions.is_none()) {
-                return Err(Error::generic(
-                    "State machine strategy requires states and transitions",
-                ));
-            }
+            && (self.states.is_none() || self.transitions.is_none())
+        {
+            return Err(Error::generic("State machine strategy requires states and transitions"));
+        }
 
         Ok(())
     }
@@ -267,7 +266,12 @@ impl DataDriftEngine {
     }
 
     /// Apply a single drift rule
-    fn apply_rule(&self, rule: &DriftRule, current: Value, state: &mut DriftState) -> Result<Value> {
+    fn apply_rule(
+        &self,
+        rule: &DriftRule,
+        current: Value,
+        state: &mut DriftState,
+    ) -> Result<Value> {
         use rand::Rng;
 
         match &rule.strategy {
@@ -401,15 +405,9 @@ pub mod scenarios {
         );
         transitions.insert(
             "processing".to_string(),
-            vec![
-                ("shipped".to_string(), 0.9),
-                ("cancelled".to_string(), 0.1),
-            ],
+            vec![("shipped".to_string(), 0.9), ("cancelled".to_string(), 0.1)],
         );
-        transitions.insert(
-            "shipped".to_string(),
-            vec![("delivered".to_string(), 1.0)],
-        );
+        transitions.insert("shipped".to_string(), vec![("delivered".to_string(), 1.0)]);
         transitions.insert("delivered".to_string(), vec![]);
         transitions.insert("cancelled".to_string(), vec![]);
 
@@ -484,10 +482,7 @@ mod tests {
     #[test]
     fn test_drift_config_builder() {
         let rule = DriftRule::new("field".to_string(), DriftStrategy::Linear);
-        let config = DataDriftConfig::new()
-            .with_rule(rule)
-            .with_request_based(10)
-            .with_seed(42);
+        let config = DataDriftConfig::new().with_rule(rule).with_request_based(10).with_seed(42);
 
         assert_eq!(config.rules.len(), 1);
         assert!(config.request_based);

@@ -197,10 +197,20 @@ impl<K: Hash + Eq + Clone, V: Clone> Cache<K, V> {
     }
 
     /// Cleanup expired entries (internal)
-    async fn cleanup_expired(&self, storage: &mut HashMap<K, CacheEntry<V>>, stats: &mut CacheStats) {
+    async fn cleanup_expired(
+        &self,
+        storage: &mut HashMap<K, CacheEntry<V>>,
+        stats: &mut CacheStats,
+    ) {
         let expired_keys: Vec<K> = storage
             .iter()
-            .filter_map(|(k, v)| if v.is_expired() { Some(k.clone()) } else { None })
+            .filter_map(|(k, v)| {
+                if v.is_expired() {
+                    Some(k.clone())
+                } else {
+                    None
+                }
+            })
             .collect();
 
         for key in expired_keys {
@@ -245,7 +255,12 @@ impl ResponseCache {
     }
 
     /// Generate cache key from request parameters
-    pub fn generate_key(method: &str, path: &str, query: &str, headers: &HashMap<String, String>) -> String {
+    pub fn generate_key(
+        method: &str,
+        path: &str,
+        query: &str,
+        headers: &HashMap<String, String>,
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::Hasher;
 
@@ -253,7 +268,7 @@ impl ResponseCache {
         hasher.write(method.as_bytes());
         hasher.write(path.as_bytes());
         hasher.write(query.as_bytes());
-        
+
         // Include relevant headers in cache key
         let mut sorted_headers: Vec<_> = headers.iter().collect();
         sorted_headers.sort_by_key(|(k, _)| *k);
@@ -333,14 +348,14 @@ mod tests {
     #[tokio::test]
     async fn test_basic_cache_operations() {
         let cache = Cache::new(3);
-        
+
         cache.insert("key1".to_string(), "value1".to_string(), None).await;
         cache.insert("key2".to_string(), "value2".to_string(), None).await;
-        
+
         assert_eq!(cache.get(&"key1".to_string()).await, Some("value1".to_string()));
         assert_eq!(cache.get(&"key2".to_string()).await, Some("value2".to_string()));
         assert_eq!(cache.get(&"key3".to_string()).await, None);
-        
+
         assert_eq!(cache.len().await, 2);
         assert!(!cache.is_empty().await);
     }
@@ -348,10 +363,10 @@ mod tests {
     #[tokio::test]
     async fn test_ttl_expiration() {
         let cache = Cache::with_ttl(10, Duration::from_millis(50));
-        
+
         cache.insert("key1".to_string(), "value1".to_string(), None).await;
         assert_eq!(cache.get(&"key1".to_string()).await, Some("value1".to_string()));
-        
+
         sleep(Duration::from_millis(60)).await;
         assert_eq!(cache.get(&"key1".to_string()).await, None);
     }
@@ -359,16 +374,16 @@ mod tests {
     #[tokio::test]
     async fn test_lru_eviction() {
         let cache = Cache::new(2);
-        
+
         cache.insert("key1".to_string(), "value1".to_string(), None).await;
         cache.insert("key2".to_string(), "value2".to_string(), None).await;
-        
+
         // Access key1 to make it more recently used
         cache.get(&"key1".to_string()).await;
-        
+
         // Insert key3, should evict key2 (least recently used)
         cache.insert("key3".to_string(), "value3".to_string(), None).await;
-        
+
         assert_eq!(cache.get(&"key1".to_string()).await, Some("value1".to_string()));
         assert_eq!(cache.get(&"key2".to_string()).await, None);
         assert_eq!(cache.get(&"key3".to_string()).await, Some("value3".to_string()));
@@ -377,11 +392,11 @@ mod tests {
     #[tokio::test]
     async fn test_cache_stats() {
         let cache = Cache::new(10);
-        
+
         cache.insert("key1".to_string(), "value1".to_string(), None).await;
         cache.get(&"key1".to_string()).await; // Hit
         cache.get(&"key2".to_string()).await; // Miss
-        
+
         let stats = cache.stats().await;
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.misses, 1);
@@ -391,20 +406,20 @@ mod tests {
     #[tokio::test]
     async fn test_response_cache() {
         let response_cache = ResponseCache::new(100, Duration::from_secs(300));
-        
+
         let headers = HashMap::new();
         let key = ResponseCache::generate_key("GET", "/api/users", "", &headers);
-        
+
         let response = CachedResponse {
             status_code: 200,
             headers: HashMap::new(),
             body: "test response".to_string(),
             content_type: Some("application/json".to_string()),
         };
-        
+
         response_cache.cache_response(key.clone(), response.clone()).await;
         let cached = response_cache.get_response(&key).await;
-        
+
         assert!(cached.is_some());
         assert_eq!(cached.unwrap().body, "test response");
     }

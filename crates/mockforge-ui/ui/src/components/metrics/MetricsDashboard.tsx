@@ -30,7 +30,7 @@ export function MetricsDashboard() {
     const now = new Date();
     const diff = now.getTime() - lastUpdated.getTime();
     const seconds = Math.floor(diff / 1000);
-    
+
     if (seconds < 60) return `${seconds}s ago`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
@@ -42,11 +42,11 @@ export function MetricsDashboard() {
     const totalRequests = failureMetrics.reduce((sum, metric) => sum + (metric.total_requests || 0), 0);
     const totalFailures = failureMetrics.reduce((sum, metric) => sum + (metric.failure_count || 0), 0);
     const overallErrorRate = totalRequests > 0 ? totalFailures / totalRequests : 0;
-    
-    const avgP50 = latencyMetrics.length > 0 
+
+    const avgP50 = latencyMetrics.length > 0
       ? Math.round(latencyMetrics.reduce((sum, metric) => sum + (metric.p50 || 0), 0) / latencyMetrics.length)
       : 0;
-    
+
     const avgP95 = latencyMetrics.length > 0
       ? Math.round(latencyMetrics.reduce((sum, metric) => sum + (metric.p95 || 0), 0) / latencyMetrics.length)
       : 0;
@@ -72,13 +72,13 @@ export function MetricsDashboard() {
             Real-time performance monitoring and failure analysis
           </p>
         </div>
-        
+
         <div className="flex items-center space-x-4">
           <div className="text-sm text-muted-foreground">
             Last updated: {formatLastUpdated()}
           </div>
-          <Button 
-            onClick={refreshMetrics} 
+          <Button
+            onClick={refreshMetrics}
             disabled={isLoading}
             size="sm"
           >
@@ -135,11 +135,11 @@ export function MetricsDashboard() {
             const slaP95 = 500; // 500ms SLA
             const slaErrorRate = 0.05; // 5% error rate SLA
             const failureMetric = failureMetrics.find(f => f.service === metric.service);
-            
+
             const p95Status = (metric.p95 || 0) <= slaP95;
             const errorRateStatus = failureMetric ? (failureMetric.error_rate || 0) <= slaErrorRate : true;
             const overallStatus = p95Status && errorRateStatus;
-            
+
             return (
               <div key={metric.service} className="flex items-center justify-between p-3 border rounded">
                 <div className="flex items-center space-x-3">

@@ -7,9 +7,7 @@ use std::process::Command;
 fn test_cli_binary_exists() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.arg("--help");
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("MockForge"));
+    cmd.assert().success().stdout(predicate::str::contains("MockForge"));
 }
 
 /// Test version flag
@@ -17,9 +15,7 @@ fn test_cli_binary_exists() {
 fn test_version_flag() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.arg("--version");
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("mockforge"));
+    cmd.assert().success().stdout(predicate::str::contains("mockforge"));
 }
 
 /// Test help shows available commands
@@ -39,9 +35,7 @@ fn test_help_shows_commands() {
 fn test_data_help() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["data", "--help"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("template"));
+    cmd.assert().success().stdout(predicate::str::contains("template"));
 }
 
 /// Test serve subcommand help
@@ -61,9 +55,7 @@ fn test_serve_help() {
 fn test_admin_help() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["admin", "--help"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("port"));
+    cmd.assert().success().stdout(predicate::str::contains("port"));
 }
 
 /// Test invalid command shows error
@@ -81,8 +73,7 @@ fn test_invalid_command() {
 fn test_data_template_invalid() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["data", "template", "nonexistent"]);
-    cmd.assert()
-        .failure();
+    cmd.assert().failure();
 }
 
 /// Test data template with valid template
@@ -90,8 +81,7 @@ fn test_data_template_invalid() {
 fn test_data_template_user() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["data", "template", "user", "--rows", "1"]);
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 /// Test serve help contains expected options
@@ -110,8 +100,7 @@ fn test_serve_options() {
 fn test_admin_custom_port() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["admin", "--port", "9999", "--help"]);
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 /// Test sync help
@@ -119,9 +108,7 @@ fn test_admin_custom_port() {
 fn test_sync_help() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["sync", "--help"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("workspace-dir"));
+    cmd.assert().success().stdout(predicate::str::contains("workspace-dir"));
 }
 
 /// Test data template with different formats
@@ -129,8 +116,7 @@ fn test_sync_help() {
 fn test_data_template_formats() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["data", "template", "user", "--rows", "1", "--format", "csv"]);
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 /// Test serve with invalid port argument validation
@@ -138,8 +124,7 @@ fn test_data_template_formats() {
 fn test_serve_port_validation() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["serve", "--http-port", "abc"]);
-    cmd.assert()
-        .failure();
+    cmd.assert().failure();
 }
 
 /// Test data template help
@@ -147,9 +132,7 @@ fn test_serve_port_validation() {
 fn test_data_template_help() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["data", "template", "--help"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("template"));
+    cmd.assert().success().stdout(predicate::str::contains("template"));
 }
 
 /// Test admin command starts successfully
@@ -157,9 +140,7 @@ fn test_data_template_help() {
 fn test_admin_startup() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["admin", "--help"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Admin UI"));
+    cmd.assert().success().stdout(predicate::str::contains("Admin UI"));
 }
 
 /// Test that all main commands can show help
@@ -169,8 +150,7 @@ fn test_all_commands_help() {
     for command in commands {
         let mut cmd = Command::cargo_bin("mockforge").unwrap();
         cmd.args([command, "--help"]);
-        cmd.assert()
-            .success();
+        cmd.assert().success();
     }
 }
 
@@ -179,9 +159,7 @@ fn test_all_commands_help() {
 fn test_version_output_format() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.arg("--version");
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("mockforge"));
+    cmd.assert().success().stdout(predicate::str::contains("mockforge"));
 }
 
 /// Test that invalid commands show proper error

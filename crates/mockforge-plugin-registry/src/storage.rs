@@ -36,11 +36,7 @@ impl RegistryStorage {
 
     /// Get plugin entry with specific version
     pub fn get_version(&self, name: &str, version: &str) -> Option<&VersionEntry> {
-        self.index
-            .get(name)?
-            .versions
-            .iter()
-            .find(|v| v.version == version)
+        self.index.get(name)?.versions.iter().find(|v| v.version == version)
     }
 
     /// Add or update plugin entry
@@ -79,10 +75,8 @@ impl RegistryStorage {
                 }
 
                 // Filter by tags
-                if !tags.is_empty() {
-                    if !tags.iter().any(|tag| entry.tags.contains(tag)) {
-                        return false;
-                    }
+                if !tags.is_empty() && !tags.iter().any(|tag| entry.tags.contains(tag)) {
+                    return false;
                 }
 
                 true

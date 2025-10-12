@@ -3,9 +3,9 @@
 //! Provides a marketplace for sharing and discovering chaos orchestration templates
 //! with ratings, categories, and version management.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Orchestration template
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,10 +158,10 @@ impl TemplateMarketplace {
                 }
 
                 // Tags filter
-                if !filters.tags.is_empty()
-                    && !filters.tags.iter().any(|tag| t.tags.contains(tag)) {
-                        return false;
-                    }
+                if !filters.tags.is_empty() && !filters.tags.iter().any(|tag| t.tags.contains(tag))
+                {
+                    return false;
+                }
 
                 // Min rating filter
                 if let Some(min_rating) = filters.min_rating {
@@ -206,9 +206,7 @@ impl TemplateMarketplace {
             }
             TemplateSortBy::TopRated => {
                 results.sort_by(|a, b| {
-                    b.stats.rating
-                        .partial_cmp(&a.stats.rating)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    b.stats.rating.partial_cmp(&a.stats.rating).unwrap_or(std::cmp::Ordering::Equal)
                 });
             }
             TemplateSortBy::MostDownloaded => {
@@ -220,15 +218,14 @@ impl TemplateMarketplace {
         }
 
         // Apply pagination
-        results
-            .into_iter()
-            .skip(filters.offset)
-            .take(filters.limit)
-            .collect()
+        results.into_iter().skip(filters.offset).take(filters.limit).collect()
     }
 
     /// Download a template
-    pub fn download_template(&mut self, template_id: &str) -> Result<OrchestrationTemplate, String> {
+    pub fn download_template(
+        &mut self,
+        template_id: &str,
+    ) -> Result<OrchestrationTemplate, String> {
         if let Some(template) = self.templates.get_mut(template_id) {
             template.stats.downloads += 1;
             Ok(template.clone())
@@ -272,10 +269,7 @@ impl TemplateMarketplace {
         }
 
         // Add review
-        self.reviews
-            .entry(review.template_id.clone())
-            .or_default()
-            .push(review.clone());
+        self.reviews.entry(review.template_id.clone()).or_default().push(review.clone());
 
         // Update template rating
         self.update_template_rating(&review.template_id)?;
@@ -304,15 +298,13 @@ impl TemplateMarketplace {
 
     /// Get reviews for a template
     pub fn get_reviews(&self, template_id: &str) -> Vec<TemplateReview> {
-        self.reviews
-            .get(template_id)
-            .cloned()
-            .unwrap_or_default()
+        self.reviews.get(template_id).cloned().unwrap_or_default()
     }
 
     /// Get popular templates
     pub fn get_popular_templates(&self, limit: usize) -> Vec<OrchestrationTemplate> {
-        let mut templates: Vec<_> = self.templates.values().filter(|t| t.published).cloned().collect();
+        let mut templates: Vec<_> =
+            self.templates.values().filter(|t| t.published).cloned().collect();
 
         templates.sort_by(|a, b| {
             let score_a = a.stats.downloads + a.stats.stars * 2;

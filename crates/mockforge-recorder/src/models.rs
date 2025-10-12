@@ -36,6 +36,28 @@ impl std::fmt::Display for Protocol {
     }
 }
 
+/// Tracing context for requests (OpenTelemetry)
+#[derive(Debug, Clone, Default)]
+pub struct RequestContext {
+    /// Client IP address
+    pub client_ip: Option<String>,
+    /// Trace ID (from OpenTelemetry)
+    pub trace_id: Option<String>,
+    /// Span ID (from OpenTelemetry)
+    pub span_id: Option<String>,
+}
+
+impl RequestContext {
+    /// Create a new request context
+    pub fn new(client_ip: Option<&str>, trace_id: Option<&str>, span_id: Option<&str>) -> Self {
+        Self {
+            client_ip: client_ip.map(|s| s.to_string()),
+            trace_id: trace_id.map(|s| s.to_string()),
+            span_id: span_id.map(|s| s.to_string()),
+        }
+    }
+}
+
 /// Recorded HTTP/API request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordedRequest {

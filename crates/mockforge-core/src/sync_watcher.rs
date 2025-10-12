@@ -387,7 +387,9 @@ impl SyncWatcher {
             );
         } else {
             debug!("Content in {} is not a recognized format, skipping", path.display());
-            return Err(Error::generic("File is not a recognized format (expected MockRequest YAML)".to_string()));
+            return Err(Error::generic(
+                "File is not a recognized format (expected MockRequest YAML)".to_string(),
+            ));
         }
 
         Ok(())

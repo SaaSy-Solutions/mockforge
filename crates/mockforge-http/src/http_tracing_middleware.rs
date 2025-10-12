@@ -73,7 +73,11 @@ pub async fn http_tracing_middleware(
     if status_code >= 400 {
         record_error(
             &mut span,
-            &format!("HTTP {}: {}", status_code, response.status().canonical_reason().unwrap_or("Unknown")),
+            &format!(
+                "HTTP {}: {}",
+                status_code,
+                response.status().canonical_reason().unwrap_or("Unknown")
+            ),
         );
     } else {
         record_success(&mut span, attributes);
@@ -125,10 +129,7 @@ mod tests {
             .route("/test", axum::routing::get(test_handler))
             .layer(middleware::from_fn(http_tracing_middleware));
 
-        let request = Request::builder()
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -152,10 +153,7 @@ mod tests {
         // Send request with existing trace context
         let request = Request::builder()
             .uri("/test")
-            .header(
-                "traceparent",
-                "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
-            )
+            .header("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
             .body(Body::empty())
             .unwrap();
 
@@ -163,10 +161,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Verify trace context was propagated
-        let traceparent = response
-            .headers()
-            .get("traceparent")
-            .and_then(|v| v.to_str().ok());
+        let traceparent = response.headers().get("traceparent").and_then(|v| v.to_str().ok());
 
         assert!(traceparent.is_some());
         // Trace ID should be preserved

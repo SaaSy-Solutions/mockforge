@@ -24,9 +24,9 @@ use crate::{
     trace_collector::TraceCollector,
 };
 use mockforge_recorder::Recorder;
+use parking_lot::RwLock;
 use printpdf::*;
 use std::collections::HashMap;
-use parking_lot::RwLock;
 
 /// Generate a basic SVG flamegraph
 fn generate_basic_flamegraph(trace_id: &str, stats: &FlamegraphStatsResponse) -> String {
@@ -61,7 +61,10 @@ fn generate_basic_flamegraph(trace_id: &str, stats: &FlamegraphStatsResponse) ->
 }
 
 /// Generate flamegraph SVG from actual trace data
-fn generate_flamegraph_from_trace(trace_id: &str, traces: &[crate::trace_collector::CollectedTrace]) -> String {
+fn generate_flamegraph_from_trace(
+    trace_id: &str,
+    traces: &[crate::trace_collector::CollectedTrace],
+) -> String {
     use std::collections::HashMap;
 
     let width = 1200;
@@ -74,7 +77,10 @@ fn generate_flamegraph_from_trace(trace_id: &str, traces: &[crate::trace_collect
         <rect width="100%" height="100%" fill="white"/>
         <text x="10" y="20" font-family="monospace" font-size="12">Flamegraph for trace: {}</text>
         <text x="10" y="35" font-family="monospace" font-size="10">Total spans: {}</text>"#,
-        width, height, trace_id, traces.len()
+        width,
+        height,
+        trace_id,
+        traces.len()
     );
 
     // Build span hierarchy
@@ -95,16 +101,20 @@ fn generate_flamegraph_from_trace(trace_id: &str, traces: &[crate::trace_collect
     root_spans.sort_by_key(|s| s.start_time.clone());
 
     // Calculate total time range
-    let min_start = traces.iter()
-        .map(|t| if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&t.start_time) {
-            dt.timestamp_micros() as u64
-        } else {
-            0
+    let min_start = traces
+        .iter()
+        .map(|t| {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&t.start_time) {
+                dt.timestamp_micros() as u64
+            } else {
+                0
+            }
         })
         .min()
         .unwrap_or(0);
 
-    let max_end = traces.iter()
+    let max_end = traces
+        .iter()
         .map(|t| {
             if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&t.start_time) {
                 dt.timestamp_micros() as u64 + t.duration_ms * 1000
@@ -132,8 +142,11 @@ fn generate_flamegraph_from_trace(trace_id: &str, traces: &[crate::trace_collect
                 span.start_time.parse().unwrap_or(0)
             };
 
-            let x = ((start_us.saturating_sub(min_start)) as f64 / total_duration as f64 * (width - 40) as f64) as u32 + 20;
-            let bar_width = ((span.duration_ms * 1000) as f64 / total_duration as f64 * (width - 40) as f64) as u32;
+            let x = ((start_us.saturating_sub(min_start)) as f64 / total_duration as f64
+                * (width - 40) as f64) as u32
+                + 20;
+            let bar_width = ((span.duration_ms * 1000) as f64 / total_duration as f64
+                * (width - 40) as f64) as u32;
 
             if bar_width > 0 {
                 let color = format!("#{:x}", (level * 50 + 100) % 256);
@@ -266,7 +279,8 @@ fn find_hottest_path(traces: &[crate::trace_collector::CollectedTrace]) -> Vec<S
 /// Generate basic HTML content for PDF report
 /// Generate CSV content for scenario comparison
 fn generate_csv_content(scenario_names: &[String], include_comparison: bool) -> String {
-    let mut csv = String::from("Scenario,Total Requests,Success Rate,Avg Latency (ms),Error Rate\n");
+    let mut csv =
+        String::from("Scenario,Total Requests,Success Rate,Avg Latency (ms),Error Rate\n");
 
     for scenario in scenario_names {
         // Mock data - in real implementation, would fetch actual metrics
@@ -277,8 +291,14 @@ fn generate_csv_content(scenario_names: &[String], include_comparison: bool) -> 
             _ => (1000, 95.0, 150.0, 5.0),
         };
 
-        csv.push_str(&format!("{},{},{:.1},{:.1},{:.1}\n",
-            scenario, requests, success_rate, avg_latency, 100.0 - success_rate));
+        csv.push_str(&format!(
+            "{},{},{:.1},{:.1},{:.1}\n",
+            scenario,
+            requests,
+            success_rate,
+            avg_latency,
+            100.0 - success_rate
+        ));
     }
 
     if include_comparison && scenario_names.len() > 1 {
@@ -341,10 +361,22 @@ struct ScenarioMetrics {
 
 fn get_scenario_metrics(scenario: &str) -> ScenarioMetrics {
     match scenario {
-        "network_degradation" => ScenarioMetrics { success_rate: 92.5, avg_latency: 250.0 },
-        "service_instability" => ScenarioMetrics { success_rate: 88.0, avg_latency: 180.0 },
-        "cascading_failure" => ScenarioMetrics { success_rate: 85.0, avg_latency: 320.0 },
-        _ => ScenarioMetrics { success_rate: 95.0, avg_latency: 150.0 },
+        "network_degradation" => ScenarioMetrics {
+            success_rate: 92.5,
+            avg_latency: 250.0,
+        },
+        "service_instability" => ScenarioMetrics {
+            success_rate: 88.0,
+            avg_latency: 180.0,
+        },
+        "cascading_failure" => ScenarioMetrics {
+            success_rate: 85.0,
+            avg_latency: 320.0,
+        },
+        _ => ScenarioMetrics {
+            success_rate: 95.0,
+            avg_latency: 150.0,
+        },
     }
 }
 
@@ -357,18 +389,24 @@ pub struct SimpleDashboardLayoutManager {
 impl SimpleDashboardLayoutManager {
     pub fn new() -> Self {
         let mut layouts = HashMap::new();
-        layouts.insert("chaos-overview".to_string(), DashboardLayoutSummary {
-            id: "chaos-overview".to_string(),
-            name: "Chaos Engineering Overview".to_string(),
-            description: Some("Real-time overview of chaos engineering activities".to_string()),
-            widget_count: 3,
-        });
-        layouts.insert("service-perf".to_string(), DashboardLayoutSummary {
-            id: "service-perf".to_string(),
-            name: "Service Performance".to_string(),
-            description: Some("Detailed service performance metrics".to_string()),
-            widget_count: 2,
-        });
+        layouts.insert(
+            "chaos-overview".to_string(),
+            DashboardLayoutSummary {
+                id: "chaos-overview".to_string(),
+                name: "Chaos Engineering Overview".to_string(),
+                description: Some("Real-time overview of chaos engineering activities".to_string()),
+                widget_count: 3,
+            },
+        );
+        layouts.insert(
+            "service-perf".to_string(),
+            DashboardLayoutSummary {
+                id: "service-perf".to_string(),
+                name: "Service Performance".to_string(),
+                description: Some("Detailed service performance metrics".to_string()),
+                widget_count: 2,
+            },
+        );
 
         Self {
             layouts: Arc::new(RwLock::new(layouts)),
@@ -500,10 +538,7 @@ async fn websocket_handler(
     ws.on_upgrade(|socket| handle_websocket(socket, state))
 }
 
-async fn handle_websocket(
-    mut socket: axum::extract::ws::WebSocket,
-    state: ObservabilityState,
-) {
+async fn handle_websocket(mut socket: axum::extract::ws::WebSocket, state: ObservabilityState) {
     use axum::extract::ws::Message;
 
     let mut rx = state.dashboard.subscribe();
@@ -606,7 +641,9 @@ async fn get_chaos_status(State(state): State<ObservabilityState>) -> Json<Chaos
     let active_scenarios = state.scenario_engine.get_active_scenarios();
     let is_enabled = !active_scenarios.is_empty();
     let active_scenario = active_scenarios.first().map(|s| s.name.clone());
-    let current_config = active_scenarios.first().map(|s| serde_json::to_value(&s.chaos_config).unwrap_or_default());
+    let current_config = active_scenarios
+        .first()
+        .map(|s| serde_json::to_value(&s.chaos_config).unwrap_or_default());
 
     Json(ChaosStatus {
         is_enabled,
@@ -698,13 +735,16 @@ struct RecordingInfo {
 
 async fn list_recordings(State(state): State<ObservabilityState>) -> Json<RecordingsResponse> {
     let recordings = state.recorder.get_recordings();
-    let scenarios = recordings.into_iter().map(|r| RecordingInfo {
-        name: r.scenario.name,
-        started_at: r.recording_started.to_rfc3339(),
-        ended_at: r.recording_ended.map(|t| t.to_rfc3339()),
-        total_events: r.events.len(),
-        duration_ms: r.total_duration_ms,
-    }).collect();
+    let scenarios = recordings
+        .into_iter()
+        .map(|r| RecordingInfo {
+            name: r.scenario.name,
+            started_at: r.recording_started.to_rfc3339(),
+            ended_at: r.recording_ended.map(|t| t.to_rfc3339()),
+            total_events: r.events.len(),
+            duration_ms: r.total_duration_ms,
+        })
+        .collect();
 
     Json(RecordingsResponse { scenarios })
 }
@@ -727,16 +767,24 @@ async fn export_recording(
         let filepath = format!("/tmp/{}", filename);
 
         let result = match req.format.as_str() {
-            "json" | "yaml" => recording.save_to_file(&filepath).map(|_| format!("/exports/{}", filename)),
+            "json" | "yaml" => {
+                recording.save_to_file(&filepath).map(|_| format!("/exports/{}", filename))
+            }
             _ => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Unsupported format")),
         };
 
         match result {
             Ok(path) => Json(ApiResponse::<String>::success(path)).into_response(),
-            Err(e) => Json(ApiResponse::<String>::error(format!("Export failed: {}", e))).into_response(),
+            Err(e) => {
+                Json(ApiResponse::<String>::error(format!("Export failed: {}", e))).into_response()
+            }
         }
     } else {
-        Json(ApiResponse::<String>::error(format!("Recording '{}' not found", req.scenario_name))).into_response()
+        Json(ApiResponse::<String>::error(format!(
+            "Recording '{}' not found",
+            req.scenario_name
+        )))
+        .into_response()
     }
 }
 
@@ -828,23 +876,23 @@ async fn search_requests(
     // Check if recorder is available
     let Some(recorder) = &state.request_recorder else {
         // Fall back to mock data if recorder is not available
-        let mock_requests = vec![
-            RecordedRequest {
-                id: 1,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-                protocol: "http".to_string(),
-                method: "GET".to_string(),
-                path: "/api/test".to_string(),
-                status_code: 200,
-                duration_ms: 150.0,
-                client_ip: Some("127.0.0.1".to_string()),
-                request_headers: serde_json::json!({"user-agent": "test"}),
-                request_body: None,
-                response_headers: serde_json::json!({"content-type": "application/json"}),
-                response_body: Some("{\"status\": \"ok\"}".to_string()),
-            }
-        ];
-        return Json(SearchResponse { requests: mock_requests });
+        let mock_requests = vec![RecordedRequest {
+            id: 1,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            protocol: "http".to_string(),
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            status_code: 200,
+            duration_ms: 150.0,
+            client_ip: Some("127.0.0.1".to_string()),
+            request_headers: serde_json::json!({"user-agent": "test"}),
+            request_body: None,
+            response_headers: serde_json::json!({"content-type": "application/json"}),
+            response_body: Some("{\"status\": \"ok\"}".to_string()),
+        }];
+        return Json(SearchResponse {
+            requests: mock_requests,
+        });
     };
 
     use mockforge_recorder::query::{execute_query, QueryFilter};
@@ -873,8 +921,10 @@ async fn search_requests(
     match execute_query(recorder.database(), filter).await {
         Ok(result) => {
             // Convert RecordedExchange to RecordedRequest format
-            let requests: Vec<RecordedRequest> = result.exchanges.into_iter().map(|exchange| {
-                RecordedRequest {
+            let requests: Vec<RecordedRequest> = result
+                .exchanges
+                .into_iter()
+                .map(|exchange| RecordedRequest {
                     id: exchange.request.id.parse().unwrap_or(0),
                     timestamp: exchange.request.timestamp.to_rfc3339(),
                     protocol: exchange.request.protocol.as_str().to_string(),
@@ -883,14 +933,17 @@ async fn search_requests(
                     status_code: exchange.request.status_code.unwrap_or(0) as u16,
                     duration_ms: exchange.request.duration_ms.unwrap_or(0) as f64,
                     client_ip: exchange.request.client_ip,
-                    request_headers: serde_json::from_str(&exchange.request.headers).unwrap_or(serde_json::json!({})),
+                    request_headers: serde_json::from_str(&exchange.request.headers)
+                        .unwrap_or(serde_json::json!({})),
                     request_body: exchange.request.body,
-                    response_headers: exchange.response.as_ref()
+                    response_headers: exchange
+                        .response
+                        .as_ref()
                         .and_then(|r| serde_json::from_str(&r.headers).ok())
                         .unwrap_or(serde_json::json!({})),
                     response_body: exchange.response.as_ref().and_then(|r| r.body.clone()),
-                }
-            }).collect();
+                })
+                .collect();
 
             Json(SearchResponse { requests })
         }
@@ -935,10 +988,8 @@ async fn get_flamegraph(
     // Calculate stats from actual trace data
     let total_spans = collected_traces.len();
     let max_depth = calculate_max_depth(&collected_traces);
-    let total_duration_us = collected_traces.iter()
-        .map(|t| t.duration_ms * 1000)
-        .max()
-        .unwrap_or(0);
+    let total_duration_us =
+        collected_traces.iter().map(|t| t.duration_ms * 1000).max().unwrap_or(0);
     let hottest_path = find_hottest_path(&collected_traces);
 
     let stats = FlamegraphStatsResponse {
@@ -971,7 +1022,9 @@ struct FlamegraphStatsResponse {
 }
 
 /// List dashboard layouts
-async fn list_dashboard_layouts(State(state): State<ObservabilityState>) -> Json<ApiResponse<Vec<DashboardLayoutSummary>>> {
+async fn list_dashboard_layouts(
+    State(state): State<ObservabilityState>,
+) -> Json<ApiResponse<Vec<DashboardLayoutSummary>>> {
     tracing::info!("Listing dashboard layouts");
     let layouts = state.layout_manager.list_layouts();
     Json(ApiResponse::success(layouts))
@@ -1010,7 +1063,6 @@ async fn create_dashboard_layout(
     state.layout_manager.create_layout(layout);
     Json(ApiResponse::success(id))
 }
-
 
 /// Get dashboard layout
 async fn get_dashboard_layout(
@@ -1059,7 +1111,9 @@ async fn delete_dashboard_layout(
 }
 
 /// Get dashboard templates
-async fn get_dashboard_templates(State(state): State<ObservabilityState>) -> Json<ApiResponse<Vec<DashboardLayoutSummary>>> {
+async fn get_dashboard_templates(
+    State(state): State<ObservabilityState>,
+) -> Json<ApiResponse<Vec<DashboardLayoutSummary>>> {
     tracing::info!("Getting dashboard templates");
     // For now, return static templates
     Json(ApiResponse::success(vec![
@@ -1086,7 +1140,11 @@ struct GeneratePdfRequest {
 }
 
 /// Generate a simple PDF report for a chaos scenario
-fn generate_scenario_pdf(scenario_name: &str, include_charts: bool, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn generate_scenario_pdf(
+    scenario_name: &str,
+    include_charts: bool,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let (doc, page1, layer1) = PdfDocument::new(
         &format!("Chaos Engineering Report - {}", scenario_name),
         Mm(210.0), // A4 width
@@ -1139,13 +1197,7 @@ fn generate_scenario_pdf(scenario_name: &str, include_charts: bool, output_path:
     ];
 
     for (label, value) in &metrics {
-        current_layer.use_text(
-            &format!("{}: {}", label, value),
-            10.0,
-            Mm(20.0),
-            Mm(y),
-            &font,
-        );
+        current_layer.use_text(&format!("{}: {}", label, value), 10.0, Mm(20.0), Mm(y), &font);
         y -= 10.0;
     }
 
@@ -1180,12 +1232,11 @@ async fn generate_pdf_report(
 
     // Generate PDF using printpdf directly
     if let Err(e) = generate_scenario_pdf(&req.scenario_name, req.include_charts, &pdf_path) {
-        return Json(ApiResponse::<String>::error(format!("Failed to generate PDF: {}", e))).into_response();
+        return Json(ApiResponse::<String>::error(format!("Failed to generate PDF: {}", e)))
+            .into_response();
     }
 
-    Json(ApiResponse::success(
-        format!("/reports/{}.pdf", req.scenario_name)
-    )).into_response()
+    Json(ApiResponse::success(format!("/reports/{}.pdf", req.scenario_name))).into_response()
 }
 
 /// Generate CSV report
@@ -1205,12 +1256,11 @@ async fn generate_csv_report(
     let csv_path = "/tmp/scenarios_report.csv";
 
     if let Err(e) = std::fs::write(csv_path, csv_content) {
-        return Json(ApiResponse::<String>::error(format!("Failed to generate CSV: {}", e))).into_response();
+        return Json(ApiResponse::<String>::error(format!("Failed to generate CSV: {}", e)))
+            .into_response();
     }
 
-    Json(ApiResponse::success(
-        "/reports/scenarios.csv".to_string()
-    )).into_response()
+    Json(ApiResponse::success("/reports/scenarios.csv".to_string())).into_response()
 }
 
 /// Compare scenarios

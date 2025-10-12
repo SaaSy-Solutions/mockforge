@@ -3,13 +3,13 @@
 //! Provides Git-like version control for orchestration configurations with
 //! branching, diffing, and history tracking.
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
 use chrono::{DateTime, Utc};
-use sha2::{Sha256, Digest};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 
 /// Version control commit
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,8 +174,8 @@ impl VersionControlRepository {
             .join("contents")
             .join(format!("{}.json", content_hash));
 
-        let parent = content_file.parent()
-            .ok_or_else(|| "Invalid content file path".to_string())?;
+        let parent =
+            content_file.parent().ok_or_else(|| "Invalid content file path".to_string())?;
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         let content_str = serde_json::to_string_pretty(content).map_err(|e| e.to_string())?;
         let mut file = fs::File::create(content_file).map_err(|e| e.to_string())?;
@@ -193,7 +193,11 @@ impl VersionControlRepository {
     }
 
     /// Create a new branch
-    pub fn create_branch(&mut self, name: String, from_commit: Option<String>) -> Result<Branch, String> {
+    pub fn create_branch(
+        &mut self,
+        name: String,
+        from_commit: Option<String>,
+    ) -> Result<Branch, String> {
         if self.branches.contains_key(&name) {
             return Err(format!("Branch '{}' already exists", name));
         }
@@ -239,7 +243,10 @@ impl VersionControlRepository {
         let stats = DiffStats {
             additions: changes.iter().filter(|c| c.change_type == DiffChangeType::Added).count(),
             deletions: changes.iter().filter(|c| c.change_type == DiffChangeType::Deleted).count(),
-            modifications: changes.iter().filter(|c| c.change_type == DiffChangeType::Modified).count(),
+            modifications: changes
+                .iter()
+                .filter(|c| c.change_type == DiffChangeType::Modified)
+                .count(),
         };
 
         Ok(Diff {
@@ -275,7 +282,9 @@ impl VersionControlRepository {
 
     /// Get commit content
     pub fn get_commit_content(&self, commit_id: &str) -> Result<serde_json::Value, String> {
-        let commit = self.commits.get(commit_id)
+        let commit = self
+            .commits
+            .get(commit_id)
             .ok_or_else(|| format!("Commit '{}' not found", commit_id))?;
 
         let content_file = Path::new(&self.storage_path)
@@ -448,7 +457,8 @@ mod tests {
         let repo = VersionControlRepository::new(
             "test-orch".to_string(),
             temp_dir.path().to_str().unwrap().to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(repo.current_branch(), "main");
         assert_eq!(repo.list_branches().len(), 1);
@@ -460,19 +470,22 @@ mod tests {
         let mut repo = VersionControlRepository::new(
             "test-orch".to_string(),
             temp_dir.path().to_str().unwrap().to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let content = serde_json::json!({
             "name": "Test Orchestration",
             "steps": []
         });
 
-        let commit = repo.commit(
-            "Test User".to_string(),
-            "test@example.com".to_string(),
-            "Initial orchestration".to_string(),
-            &content,
-        ).unwrap();
+        let commit = repo
+            .commit(
+                "Test User".to_string(),
+                "test@example.com".to_string(),
+                "Initial orchestration".to_string(),
+                &content,
+            )
+            .unwrap();
 
         assert_eq!(commit.author, "Test User");
         assert_eq!(repo.history(None).unwrap().len(), 2); // initial + new commit
@@ -484,7 +497,8 @@ mod tests {
         let mut repo = VersionControlRepository::new(
             "test-orch".to_string(),
             temp_dir.path().to_str().unwrap().to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         repo.create_branch("feature-1".to_string(), None).unwrap();
         assert_eq!(repo.list_branches().len(), 2);
@@ -499,31 +513,36 @@ mod tests {
         let mut repo = VersionControlRepository::new(
             "test-orch".to_string(),
             temp_dir.path().to_str().unwrap().to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let content1 = serde_json::json!({
             "name": "Test Orchestration",
             "steps": []
         });
 
-        let commit1 = repo.commit(
-            "User".to_string(),
-            "user@example.com".to_string(),
-            "First commit".to_string(),
-            &content1,
-        ).unwrap();
+        let commit1 = repo
+            .commit(
+                "User".to_string(),
+                "user@example.com".to_string(),
+                "First commit".to_string(),
+                &content1,
+            )
+            .unwrap();
 
         let content2 = serde_json::json!({
             "name": "Test Orchestration Updated",
             "steps": [{"name": "step1"}]
         });
 
-        let commit2 = repo.commit(
-            "User".to_string(),
-            "user@example.com".to_string(),
-            "Second commit".to_string(),
-            &content2,
-        ).unwrap();
+        let commit2 = repo
+            .commit(
+                "User".to_string(),
+                "user@example.com".to_string(),
+                "Second commit".to_string(),
+                &content2,
+            )
+            .unwrap();
 
         let diff = repo.diff(commit1.id, commit2.id).unwrap();
         assert!(diff.stats.modifications > 0 || diff.stats.additions > 0);

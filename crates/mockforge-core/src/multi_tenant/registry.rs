@@ -3,9 +3,9 @@
 //! This module provides infrastructure for hosting multiple isolated workspaces
 //! in a single MockForge instance, enabling namespace separation and tenant isolation.
 
-use crate::workspace::{EntityId, Workspace};
-use crate::routing::RouteRegistry;
 use crate::request_logger::CentralizedRequestLogger;
+use crate::routing::RouteRegistry;
+use crate::workspace::{EntityId, Workspace};
 use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -131,8 +131,10 @@ impl MultiTenantWorkspaceRegistry {
 
     /// Create with default configuration
     pub fn with_default_workspace(workspace_name: String) -> Self {
-        let mut config = MultiTenantConfig::default();
-        config.default_workspace = "default".to_string();
+        let config = MultiTenantConfig {
+            default_workspace: "default".to_string(),
+            ..Default::default()
+        };
 
         let mut registry = Self::new(config);
 
@@ -144,14 +146,12 @@ impl MultiTenantWorkspaceRegistry {
     }
 
     /// Register a new workspace
-    pub fn register_workspace(
-        &mut self,
-        workspace_id: String,
-        workspace: Workspace,
-    ) -> Result<()> {
+    pub fn register_workspace(&mut self, workspace_id: String, workspace: Workspace) -> Result<()> {
         // Check max workspaces limit
         if let Some(max) = self.config.max_workspaces {
-            let current_count = self.workspaces.read()
+            let current_count = self
+                .workspaces
+                .read()
                 .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?
                 .len();
 
@@ -171,7 +171,8 @@ impl MultiTenantWorkspaceRegistry {
             stats: WorkspaceStats::default(),
         };
 
-        self.workspaces.write()
+        self.workspaces
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?
             .insert(workspace_id, tenant_workspace);
 
@@ -180,7 +181,9 @@ impl MultiTenantWorkspaceRegistry {
 
     /// Get a workspace by ID
     pub fn get_workspace(&self, workspace_id: &str) -> Result<TenantWorkspace> {
-        let workspaces = self.workspaces.read()
+        let workspaces = self
+            .workspaces
+            .read()
             .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?;
 
         workspaces
@@ -195,12 +198,10 @@ impl MultiTenantWorkspaceRegistry {
     }
 
     /// Update workspace
-    pub fn update_workspace(
-        &mut self,
-        workspace_id: &str,
-        workspace: Workspace,
-    ) -> Result<()> {
-        let mut workspaces = self.workspaces.write()
+    pub fn update_workspace(&mut self, workspace_id: &str, workspace: Workspace) -> Result<()> {
+        let mut workspaces = self
+            .workspaces
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
@@ -218,7 +219,8 @@ impl MultiTenantWorkspaceRegistry {
             return Err(Error::generic("Cannot remove default workspace".to_string()));
         }
 
-        self.workspaces.write()
+        self.workspaces
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?
             .remove(workspace_id)
             .ok_or_else(|| Error::generic(format!("Workspace '{}' not found", workspace_id)))?;
@@ -228,13 +230,12 @@ impl MultiTenantWorkspaceRegistry {
 
     /// List all workspaces
     pub fn list_workspaces(&self) -> Result<Vec<(String, TenantWorkspace)>> {
-        let workspaces = self.workspaces.read()
+        let workspaces = self
+            .workspaces
+            .read()
             .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?;
 
-        Ok(workspaces
-            .iter()
-            .map(|(id, ws)| (id.clone(), ws.clone()))
-            .collect())
+        Ok(workspaces.iter().map(|(id, ws)| (id.clone(), ws.clone())).collect())
     }
 
     /// Get workspace by ID or default
@@ -248,7 +249,9 @@ impl MultiTenantWorkspaceRegistry {
 
     /// Update workspace last accessed time
     pub fn touch_workspace(&mut self, workspace_id: &str) -> Result<()> {
-        let mut workspaces = self.workspaces.write()
+        let mut workspaces = self
+            .workspaces
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
@@ -265,7 +268,9 @@ impl MultiTenantWorkspaceRegistry {
         workspace_id: &str,
         response_time_ms: f64,
     ) -> Result<()> {
-        let mut workspaces = self.workspaces.write()
+        let mut workspaces = self
+            .workspaces
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
@@ -285,7 +290,9 @@ impl MultiTenantWorkspaceRegistry {
 
     /// Get workspace count
     pub fn workspace_count(&self) -> Result<usize> {
-        let workspaces = self.workspaces.read()
+        let workspaces = self
+            .workspaces
+            .read()
             .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?;
 
         Ok(workspaces.len())
@@ -293,14 +300,14 @@ impl MultiTenantWorkspaceRegistry {
 
     /// Check if workspace exists
     pub fn workspace_exists(&self, workspace_id: &str) -> bool {
-        self.workspaces.read()
-            .map(|ws| ws.contains_key(workspace_id))
-            .unwrap_or(false)
+        self.workspaces.read().map(|ws| ws.contains_key(workspace_id)).unwrap_or(false)
     }
 
     /// Enable/disable a workspace
     pub fn set_workspace_enabled(&mut self, workspace_id: &str, enabled: bool) -> Result<()> {
-        let mut workspaces = self.workspaces.write()
+        let mut workspaces = self
+            .workspaces
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
@@ -341,11 +348,7 @@ impl MultiTenantWorkspaceRegistry {
         let remaining = remaining.strip_prefix('/').unwrap_or(remaining);
 
         // Get first path segment (workspace ID)
-        remaining
-            .split('/')
-            .next()
-            .filter(|id| !id.is_empty())
-            .map(|id| id.to_string())
+        remaining.split('/').next().filter(|id| !id.is_empty()).map(|id| id.to_string())
     }
 
     /// Strip workspace prefix from path
@@ -405,7 +408,9 @@ impl TenantWorkspace {
     pub fn rebuild_routes(&mut self) -> Result<()> {
         let routes = self.workspace.get_routes();
 
-        let mut registry = self.route_registry.write()
+        let mut registry = self
+            .route_registry
+            .write()
             .map_err(|e| Error::generic(format!("Failed to write route registry: {}", e)))?;
 
         // Clear existing routes
@@ -418,16 +423,15 @@ impl TenantWorkspace {
 
         // Update stats - count total number of routes
         self.stats.active_routes = self.workspace.requests.len()
-            + self.workspace.folders.iter()
-                .map(|f| Self::count_folder_requests(f))
-                .sum::<usize>();
+            + self.workspace.folders.iter().map(Self::count_folder_requests).sum::<usize>();
 
         Ok(())
     }
 
     /// Count requests in a folder recursively
     fn count_folder_requests(folder: &crate::workspace::Folder) -> usize {
-        folder.requests.len() + folder.folders.iter().map(Self::count_folder_requests).sum::<usize>()
+        folder.requests.len()
+            + folder.folders.iter().map(Self::count_folder_requests).sum::<usize>()
     }
 }
 
@@ -471,13 +475,18 @@ mod tests {
         let mut registry = MultiTenantWorkspaceRegistry::new(config);
 
         // Register first workspace
-        registry.register_workspace("ws1".to_string(), Workspace::new("WS1".to_string())).unwrap();
+        registry
+            .register_workspace("ws1".to_string(), Workspace::new("WS1".to_string()))
+            .unwrap();
 
         // Register second workspace
-        registry.register_workspace("ws2".to_string(), Workspace::new("WS2".to_string())).unwrap();
+        registry
+            .register_workspace("ws2".to_string(), Workspace::new("WS2".to_string()))
+            .unwrap();
 
         // Third should fail
-        let result = registry.register_workspace("ws3".to_string(), Workspace::new("WS3".to_string()));
+        let result =
+            registry.register_workspace("ws3".to_string(), Workspace::new("WS3".to_string()));
         assert!(result.is_err());
     }
 
@@ -489,7 +498,8 @@ mod tests {
         let registry = MultiTenantWorkspaceRegistry::new(config);
 
         // Test valid path
-        let workspace_id = registry.extract_workspace_id_from_path("/workspace/project-a/api/users");
+        let workspace_id =
+            registry.extract_workspace_id_from_path("/workspace/project-a/api/users");
         assert_eq!(workspace_id, Some("project-a".to_string()));
 
         // Test path without workspace
@@ -509,7 +519,8 @@ mod tests {
         let registry = MultiTenantWorkspaceRegistry::new(config);
 
         // Test stripping prefix
-        let stripped = registry.strip_workspace_prefix("/workspace/project-a/api/users", "project-a");
+        let stripped =
+            registry.strip_workspace_prefix("/workspace/project-a/api/users", "project-a");
         assert_eq!(stripped, "/api/users");
 
         // Test path without prefix
@@ -551,7 +562,9 @@ mod tests {
 
         let mut registry = MultiTenantWorkspaceRegistry::new(config);
 
-        registry.register_workspace("default".to_string(), Workspace::new("Default".to_string())).unwrap();
+        registry
+            .register_workspace("default".to_string(), Workspace::new("Default".to_string()))
+            .unwrap();
 
         // Try to remove default workspace
         let result = registry.remove_workspace("default");

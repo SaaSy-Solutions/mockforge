@@ -541,29 +541,34 @@ impl PluginValidator {
     /// - MOCKFORGE_DB_KEY_TABLE: table name for keys (default: plugin_keys)
     #[allow(unused)]
     fn load_key_from_database(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        let db_type = std::env::var("MOCKFORGE_DB_TYPE")
-            .map_err(|_| PluginLoaderError::SecurityViolation {
-                violation: "Database key loading requires MOCKFORGE_DB_TYPE environment variable".to_string(),
-            })?;
-        
-        let connection_string = std::env::var("MOCKFORGE_DB_CONNECTION")
-            .map_err(|_| PluginLoaderError::SecurityViolation {
-                violation: "Database key loading requires MOCKFORGE_DB_CONNECTION environment variable".to_string(),
-            })?;
-        
-        let table_name = std::env::var("MOCKFORGE_DB_KEY_TABLE")
-            .unwrap_or_else(|_| "plugin_keys".to_string());
-        
+        let db_type = std::env::var("MOCKFORGE_DB_TYPE").map_err(|_| {
+            PluginLoaderError::SecurityViolation {
+                violation: "Database key loading requires MOCKFORGE_DB_TYPE environment variable"
+                    .to_string(),
+            }
+        })?;
+
+        let connection_string = std::env::var("MOCKFORGE_DB_CONNECTION").map_err(|_| {
+            PluginLoaderError::SecurityViolation {
+                violation:
+                    "Database key loading requires MOCKFORGE_DB_CONNECTION environment variable"
+                        .to_string(),
+            }
+        })?;
+
+        let table_name =
+            std::env::var("MOCKFORGE_DB_KEY_TABLE").unwrap_or_else(|_| "plugin_keys".to_string());
+
         tracing::info!("Database key loading configured: type={}, table={}", db_type, table_name);
         tracing::debug!("Looking up key '{}' in database", key_id);
-        
+
         // Note: This is a stub implementation. A full implementation would:
         // 1. Connect to the database using the appropriate driver
         // 2. Query the table for the key_id
         // 3. Return the key data if found
-        // 
+        //
         // Example query: "SELECT key_data FROM plugin_keys WHERE key_id = $1"
-        
+
         Err(PluginLoaderError::SecurityViolation {
             violation: format!("Database key loading not fully implemented for key '{}'", key_id),
         })
@@ -573,15 +578,17 @@ impl PluginValidator {
     /// Supports multiple KMS providers via environment variables:
     /// - MOCKFORGE_KMS_PROVIDER: aws, vault, azure, gcp
     /// - MOCKFORGE_KMS_REGION: AWS region (for AWS KMS)
-    /// - MOCKFORGE_VAULT_ADDR: HashiCorp Vault address
-    /// - MOCKFORGE_VAULT_TOKEN: HashiCorp Vault token
+    /// - MOCKFORGE_VAULT_ADDR: HashCorp Vault address
+    /// - MOCKFORGE_VAULT_TOKEN: HashCorp Vault token
     #[allow(unused)]
     fn load_key_from_kms(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        let kms_provider = std::env::var("MOCKFORGE_KMS_PROVIDER")
-            .map_err(|_| PluginLoaderError::SecurityViolation {
-                violation: "KMS key loading requires MOCKFORGE_KMS_PROVIDER environment variable".to_string(),
-            })?;
-        
+        let kms_provider = std::env::var("MOCKFORGE_KMS_PROVIDER").map_err(|_| {
+            PluginLoaderError::SecurityViolation {
+                violation: "KMS key loading requires MOCKFORGE_KMS_PROVIDER environment variable"
+                    .to_string(),
+            }
+        })?;
+
         match kms_provider.to_lowercase().as_str() {
             "aws" => self.load_key_from_aws_kms(key_id),
             "vault" => self.load_key_from_vault(key_id),
@@ -589,80 +596,90 @@ impl PluginValidator {
             "gcp" => self.load_key_from_gcp_kms(key_id),
             _ => Err(PluginLoaderError::SecurityViolation {
                 violation: format!("Unsupported KMS provider: {}", kms_provider),
-            })
+            }),
         }
     }
-    
+
     /// Load key from AWS KMS
     fn load_key_from_aws_kms(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        let region = std::env::var("MOCKFORGE_KMS_REGION")
-            .unwrap_or_else(|_| "us-east-1".to_string());
-        
+        let region =
+            std::env::var("MOCKFORGE_KMS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+
         tracing::info!("AWS KMS key loading configured: region={}", region);
         tracing::debug!("Looking up key '{}' in AWS KMS", key_id);
-        
+
         // Note: This is a stub implementation. A full implementation would:
         // 1. Use AWS SDK to connect to KMS
         // 2. Call GetSecretValue or Decrypt with the key_id
         // 3. Return the decrypted key data
-        
+
         Err(PluginLoaderError::SecurityViolation {
             violation: format!("AWS KMS key loading not fully implemented for key '{}'", key_id),
         })
     }
-    
-    /// Load key from HashiCorp Vault
+
+    /// Load key from HashCorp Vault
     fn load_key_from_vault(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        let vault_addr = std::env::var("MOCKFORGE_VAULT_ADDR")
-            .map_err(|_| PluginLoaderError::SecurityViolation {
-                violation: "Vault key loading requires MOCKFORGE_VAULT_ADDR environment variable".to_string(),
-            })?;
-        
-        let _vault_token = std::env::var("MOCKFORGE_VAULT_TOKEN")
-            .map_err(|_| PluginLoaderError::SecurityViolation {
-                violation: "Vault key loading requires MOCKFORGE_VAULT_TOKEN environment variable".to_string(),
-            })?;
-        
-        tracing::info!("HashiCorp Vault key loading configured: addr={}", vault_addr);
+        let vault_addr = std::env::var("MOCKFORGE_VAULT_ADDR").map_err(|_| {
+            PluginLoaderError::SecurityViolation {
+                violation: "Vault key loading requires MOCKFORGE_VAULT_ADDR environment variable"
+                    .to_string(),
+            }
+        })?;
+
+        let _vault_token = std::env::var("MOCKFORGE_VAULT_TOKEN").map_err(|_| {
+            PluginLoaderError::SecurityViolation {
+                violation: "Vault key loading requires MOCKFORGE_VAULT_TOKEN environment variable"
+                    .to_string(),
+            }
+        })?;
+
+        tracing::info!("HashCorp Vault key loading configured: addr={}", vault_addr);
         tracing::debug!("Looking up key '{}' in Vault", key_id);
-        
+
         // Note: This is a stub implementation. A full implementation would:
-        // 1. Use HashiCorp Vault client to connect
+        // 1. Use HashCorp Vault client to connect
         // 2. Read the secret from the configured path
         // 3. Return the key data
-        
+
         Err(PluginLoaderError::SecurityViolation {
             violation: format!("Vault key loading not fully implemented for key '{}'", key_id),
         })
     }
-    
+
     /// Load key from Azure Key Vault
     fn load_key_from_azure_kv(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
         tracing::info!("Azure Key Vault key loading requested");
         tracing::debug!("Looking up key '{}' in Azure Key Vault", key_id);
-        
+
         // Note: This is a stub implementation. A full implementation would:
         // 1. Use Azure SDK to connect to Key Vault
         // 2. Retrieve the secret or key
         // 3. Return the key data
-        
+
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Azure Key Vault loading not fully implemented for key '{}'", key_id),
+            violation: format!(
+                "Azure Key Vault loading not fully implemented for key '{}'",
+                key_id
+            ),
         })
     }
-    
+
     /// Load key from Google Cloud KMS
     fn load_key_from_gcp_kms(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
         tracing::info!("Google Cloud KMS key loading requested");
         tracing::debug!("Looking up key '{}' in GCP KMS", key_id);
-        
+
         // Note: This is a stub implementation. A full implementation would:
         // 1. Use Google Cloud SDK to connect to KMS
         // 2. Decrypt or retrieve the key
         // 3. Return the key data
-        
+
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Google Cloud KMS loading not fully implemented for key '{}'", key_id),
+            violation: format!(
+                "Google Cloud KMS loading not fully implemented for key '{}'",
+                key_id
+            ),
         })
     }
 

@@ -12,10 +12,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 // Pre-compiled regex for path parameter conversion
-static PATH_PARAM_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{([^}]+)\}")
-        .expect("PATH_PARAM_RE regex is valid")
-});
+static PATH_PARAM_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\{([^}]+)\}").expect("PATH_PARAM_RE regex is valid"));
 
 /// Import result for OpenAPI specs
 #[derive(Debug)]
@@ -86,15 +84,17 @@ pub fn import_openapi_spec(
 
     // Process all paths and operations in deterministic order
     let path_operations = spec.all_paths_and_operations();
-    
+
     // Sort paths alphabetically for deterministic ordering
     let mut sorted_paths: Vec<_> = path_operations.iter().collect();
     sorted_paths.sort_by_key(|(path, _)| path.as_str());
 
     for (path, operations) in sorted_paths {
         // Process operations in a specific order for deterministic results
-        let method_order = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE"];
-        
+        let method_order = [
+            "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE",
+        ];
+
         for method in method_order {
             if let Some(operation) = operations.get(method) {
                 match convert_operation_to_route(&spec, method, path, operation, _base_url) {
@@ -132,21 +132,22 @@ fn convert_operation_to_route(
             openapiv3::StatusCode::Code(code) => (200..300).contains(code),
             openapiv3::StatusCode::Range(range) => *range == 2, // 2XX means success
         };
-        
+
         if is_success {
             let status = match status_code {
                 openapiv3::StatusCode::Code(code) => *code,
                 openapiv3::StatusCode::Range(_) => 200, // Default to 200 for 2XX
             };
-            
+
             if (200..300).contains(&status) {
                 response_status = status;
-                
+
                 // Try to resolve the response and extract content
                 if let Some(response) = response_ref.as_item() {
                     // Add default content-type header
-                    response_headers.insert("Content-Type".to_string(), "application/json".to_string());
-                    
+                    response_headers
+                        .insert("Content-Type".to_string(), "application/json".to_string());
+
                     // Try to generate a sample response from schema
                     if let Some(content) = response.content.get("application/json") {
                         if let Some(_schema_ref) = &content.schema {
@@ -198,7 +199,9 @@ fn convert_operation_to_route(
 }
 
 /// Extract request body example from OpenAPI request body reference
-fn extract_request_body_example(request_body_ref: &openapiv3::ReferenceOr<openapiv3::RequestBody>) -> Option<String> {
+fn extract_request_body_example(
+    request_body_ref: &openapiv3::ReferenceOr<openapiv3::RequestBody>,
+) -> Option<String> {
     match request_body_ref {
         openapiv3::ReferenceOr::Item(request_body) => {
             // Look for application/json content type
@@ -209,7 +212,7 @@ fn extract_request_body_example(request_body_ref: &openapiv3::ReferenceOr<openap
                         return Some(example_str);
                     }
                 }
-                
+
                 // If no example, create a simple mock based on schema
                 if let Some(_schema_ref) = &media_type.schema {
                     // For now, just return a simple mock object

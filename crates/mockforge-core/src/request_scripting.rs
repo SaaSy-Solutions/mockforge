@@ -301,10 +301,9 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
         rquickjs::Type::Int => {
             js_value.as_int().map(|i| Value::Number(serde_json::Number::from(i)))
         }
-        rquickjs::Type::Float => js_value
-            .as_number()
-            .and_then(serde_json::Number::from_f64)
-            .map(Value::Number),
+        rquickjs::Type::Float => {
+            js_value.as_number().and_then(serde_json::Number::from_f64).map(Value::Number)
+        }
         rquickjs::Type::Bool => js_value.as_bool().map(Value::Bool),
         rquickjs::Type::Object | rquickjs::Type::Array => {
             // For complex types, try to serialize to JSON string

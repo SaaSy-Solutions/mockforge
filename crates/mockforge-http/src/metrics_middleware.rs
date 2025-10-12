@@ -31,10 +31,7 @@ pub async fn collect_http_metrics(
     let start_time = Instant::now();
     let method = req.method().to_string();
     let uri_path = req.uri().path().to_string();
-    let path = matched_path
-        .as_ref()
-        .map(|mp| mp.as_str().to_string())
-        .unwrap_or(uri_path);
+    let path = matched_path.as_ref().map(|mp| mp.as_str().to_string()).unwrap_or(uri_path);
 
     // Get metrics registry
     let registry = get_global_registry();
@@ -104,10 +101,7 @@ mod tests {
             .route("/test", axum::routing::get(test_handler))
             .layer(middleware::from_fn(collect_http_metrics));
 
-        let request = Request::builder()
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -123,10 +117,7 @@ mod tests {
             .route("/error", axum::routing::get(error_handler))
             .layer(middleware::from_fn(collect_http_metrics));
 
-        let request = Request::builder()
-            .uri("/error")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/error").body(Body::empty()).unwrap();
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);

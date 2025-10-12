@@ -1,10 +1,10 @@
+use axum::serve;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use mockforge_core::encryption::init_key_store;
 use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
 use mockforge_data;
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
-use axum::serve;
 use mockforge_grpc;
 use mockforge_http;
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
@@ -90,7 +90,11 @@ enum Commands {
         tracing_environment: String,
 
         /// Jaeger endpoint for trace export
-        #[arg(long, default_value = "http://localhost:14268/api/traces", help_heading = "Tracing")]
+        #[arg(
+            long,
+            default_value = "http://localhost:14268/api/traces",
+            help_heading = "Tracing"
+        )]
         jaeger_endpoint: String,
 
         /// Tracing sampling rate (0.0 to 1.0)
@@ -102,7 +106,11 @@ enum Commands {
         recorder: bool,
 
         /// Recorder database file path
-        #[arg(long, default_value = "./mockforge-recordings.db", help_heading = "API Flight Recorder")]
+        #[arg(
+            long,
+            default_value = "./mockforge-recordings.db",
+            help_heading = "API Flight Recorder"
+        )]
         recorder_db: String,
 
         /// Disable recorder management API
@@ -182,11 +190,19 @@ enum Commands {
         chaos_websocket_close_codes: Option<String>,
 
         /// WebSocket chaos: message drop probability (0.0-1.0)
-        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket")]
+        #[arg(
+            long,
+            default_value = "0.05",
+            help_heading = "Chaos Engineering - WebSocket"
+        )]
         chaos_websocket_message_drop_probability: f64,
 
         /// WebSocket chaos: message corruption probability (0.0-1.0)
-        #[arg(long, default_value = "0.05", help_heading = "Chaos Engineering - WebSocket")]
+        #[arg(
+            long,
+            default_value = "0.05",
+            help_heading = "Chaos Engineering - WebSocket"
+        )]
         chaos_websocket_message_corruption_probability: f64,
 
         /// Enable GraphQL-specific chaos engineering
@@ -198,7 +214,11 @@ enum Commands {
         chaos_graphql_error_codes: Option<String>,
 
         /// GraphQL chaos: partial data probability (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - GraphQL")]
+        #[arg(
+            long,
+            default_value = "0.1",
+            help_heading = "Chaos Engineering - GraphQL"
+        )]
         chaos_graphql_partial_data_probability: f64,
 
         /// GraphQL chaos: enable resolver-level latency injection
@@ -274,19 +294,35 @@ enum Commands {
         chaos_random: bool,
 
         /// Random chaos: error injection rate (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - Random")]
+        #[arg(
+            long,
+            default_value = "0.1",
+            help_heading = "Chaos Engineering - Random"
+        )]
         chaos_random_error_rate: f64,
 
         /// Random chaos: delay injection rate (0.0-1.0)
-        #[arg(long, default_value = "0.3", help_heading = "Chaos Engineering - Random")]
+        #[arg(
+            long,
+            default_value = "0.3",
+            help_heading = "Chaos Engineering - Random"
+        )]
         chaos_random_delay_rate: f64,
 
         /// Random chaos: minimum delay in milliseconds
-        #[arg(long, default_value = "100", help_heading = "Chaos Engineering - Random")]
+        #[arg(
+            long,
+            default_value = "100",
+            help_heading = "Chaos Engineering - Random"
+        )]
         chaos_random_min_delay: u64,
 
         /// Random chaos: maximum delay in milliseconds
-        #[arg(long, default_value = "2000", help_heading = "Chaos Engineering - Random")]
+        #[arg(
+            long,
+            default_value = "2000",
+            help_heading = "Chaos Engineering - Random"
+        )]
         chaos_random_max_delay: u64,
 
         /// Enable AI-powered features
@@ -1025,7 +1061,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             workspace_commands::handle_workspace_command(workspace_command).await?;
         }
 
-        Commands::Orchestrate { orchestrate_command } => {
+        Commands::Orchestrate {
+            orchestrate_command,
+        } => {
             handle_orchestrate(orchestrate_command).await?;
         }
 
@@ -1072,7 +1110,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 validate_headers,
                 validate_timing,
                 max_duration_ms,
-            ).await?;
+            )
+            .await?;
         }
 
         Commands::Suggest {
@@ -1104,7 +1143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 llm_api_key,
                 temperature,
                 print_json,
-            ).await?;
+            )
+            .await?;
         }
 
         Commands::Bench {
@@ -1296,10 +1336,7 @@ async fn build_server_config_from_cli(
         if chaos_http_errors.is_some() {
             let http_errors = chaos_http_errors
                 .map(|errors| {
-                    errors
-                        .split(',')
-                        .filter_map(|s| s.trim().parse::<u16>().ok())
-                        .collect()
+                    errors.split(',').filter_map(|s| s.trim().parse::<u16>().ok()).collect()
                 })
                 .unwrap_or_default();
 
@@ -1380,7 +1417,8 @@ async fn validate_serve_config(
                 "Configuration file not found: {}\n\n\
                  Hint: Check that the path is correct and the file exists.",
                 config.display()
-            ).into());
+            )
+            .into());
         }
 
         // Try to read the file to ensure it's accessible
@@ -1391,7 +1429,8 @@ async fn validate_serve_config(
                  Hint: Check file permissions and ensure the file is readable.",
                 config.display(),
                 e
-            ).into());
+            )
+            .into());
         }
     }
 
@@ -1402,7 +1441,8 @@ async fn validate_serve_config(
                 "OpenAPI spec file not found: {}\n\n\
                  Hint: Check that the path is correct and the file exists.",
                 spec.display()
-            ).into());
+            )
+            .into());
         }
 
         // Try to read the file to ensure it's accessible
@@ -1413,7 +1453,8 @@ async fn validate_serve_config(
                  Hint: Check file permissions and ensure the file is readable.",
                 spec.display(),
                 e
-            ).into());
+            )
+            .into());
         }
     }
 
@@ -1438,7 +1479,8 @@ async fn validate_serve_config(
         }
         error_msg.push_str("\nPossible solutions:\n");
         error_msg.push_str("  1. Stop the process using these ports\n");
-        error_msg.push_str("  2. Use different ports with flags like --http-port, --ws-port, etc.\n");
+        error_msg
+            .push_str("  2. Use different ports with flags like --http-port, --ws-port, etc.\n");
         error_msg.push_str("  3. Find the process using the port with: lsof -i :<port> or netstat -tulpn | grep <port>\n");
 
         return Err(error_msg.into());
@@ -1451,7 +1493,7 @@ async fn validate_serve_config(
 fn initialize_opentelemetry_tracing(
     otel_config: &mockforge_core::config::OpenTelemetryConfig,
     logging_config: &mockforge_observability::LoggingConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use mockforge_tracing::{init_tracer, TracingConfig};
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -1471,7 +1513,8 @@ fn initialize_opentelemetry_tracing(
     let tracer = init_tracer(tracing_config)?;
 
     // Create OpenTelemetry layer
-    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+    let otel_layer =
+        tracing_opentelemetry::layer::<tracing_subscriber::Registry>().with_tracer(tracer);
 
     // Initialize logging with OpenTelemetry layer
     mockforge_observability::init_logging_with_otel(logging_config.clone(), otel_layer)?;
@@ -1711,7 +1754,10 @@ async fn handle_serve(
 
     if config.core.traffic_shaping_enabled {
         println!("🚦 Traffic shaping enabled");
-        println!("   Bandwidth limit: {} bytes/sec", config.core.traffic_shaping.bandwidth.max_bytes_per_sec);
+        println!(
+            "   Bandwidth limit: {} bytes/sec",
+            config.core.traffic_shaping.bandwidth.max_bytes_per_sec
+        );
     }
 
     // Set AI environment variables if configured
@@ -1727,14 +1773,14 @@ async fn handle_serve(
     init_key_store();
 
     // Build HTTP router with OpenAPI spec, chain support, multi-tenant, and traffic shaping if enabled
-    let multi_tenant_config = if config.server.multi_tenant.enabled {
-        Some(config.server.multi_tenant.clone())
+    let multi_tenant_config = if config.multi_tenant.enabled {
+        Some(config.multi_tenant.clone())
     } else {
         None
     };
 
     let http_app = if config.core.traffic_shaping_enabled {
-        use mockforge_core::{TrafficShaper};
+        use mockforge_core::TrafficShaper;
         let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
         mockforge_http::build_router_with_traffic_shaping_and_multi_tenant(
             config.http.openapi_spec.clone(),
@@ -1845,12 +1891,16 @@ async fn handle_serve(
             println!("📧 SMTP server listening on {}:{}", smtp_config.host, smtp_config.port);
 
             // Create registry and load fixtures
-            let mut registry = SmtpSpecRegistry::with_mailbox_size(smtp_config.max_mailbox_messages);
+            let mut registry =
+                SmtpSpecRegistry::with_mailbox_size(smtp_config.max_mailbox_messages);
 
             if let Some(fixtures_dir) = &smtp_config.fixtures_dir {
                 if fixtures_dir.exists() {
                     if let Err(e) = registry.load_fixtures(fixtures_dir) {
-                        eprintln!("⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}", fixtures_dir, e);
+                        eprintln!(
+                            "⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}",
+                            fixtures_dir, e
+                        );
                     } else {
                         println!("   Loaded SMTP fixtures from {:?}", fixtures_dir);
                     }
@@ -1859,7 +1909,19 @@ async fn handle_serve(
                 }
             }
 
-            let server = SmtpServer::new(smtp_config, Arc::new(registry));
+            // Convert core SmtpConfig to mockforge_smtp::SmtpConfig
+            let smtp_server_config = mockforge_smtp::SmtpConfig {
+                port: smtp_config.port,
+                host: smtp_config.host.clone(),
+                hostname: smtp_config.hostname.clone(),
+                fixtures_dir: smtp_config.fixtures_dir.clone(),
+                timeout_secs: smtp_config.timeout_secs,
+                max_connections: smtp_config.max_connections,
+                enable_mailbox: smtp_config.enable_mailbox,
+                max_mailbox_messages: smtp_config.max_mailbox_messages,
+            };
+
+            let server = SmtpServer::new(smtp_server_config, Arc::new(registry));
 
             tokio::select! {
                 result = server.start() => {
@@ -1912,10 +1974,14 @@ async fn handle_serve(
         let metrics_registry = metrics_registry.clone();
         let metrics_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
-            println!("📊 Prometheus metrics server listening on http://0.0.0.0:{}/metrics", metrics_port);
+            println!(
+                "📊 Prometheus metrics server listening on http://0.0.0.0:{}/metrics",
+                metrics_port
+            );
             let app = prometheus_router(metrics_registry);
             let addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
-            let listener = TcpListener::bind(addr).await
+            let listener = TcpListener::bind(addr)
+                .await
                 .map_err(|e| format!("Failed to bind metrics server to {}: {}", addr, e))?;
             tokio::select! {
                 result = serve(listener, app) => {
@@ -2154,10 +2220,11 @@ async fn handle_admin(
 
     // Start the admin UI server
     let addr = format!("127.0.0.1:{}", port).parse()?;
-    let prometheus_url = std::env::var("PROMETHEUS_URL")
-        .unwrap_or_else(|_| "http://localhost:9090".to_string());
+    let prometheus_url =
+        std::env::var("PROMETHEUS_URL").unwrap_or_else(|_| "http://localhost:9090".to_string());
     mockforge_ui::start_admin_server(
-        addr, None, // http_server_addr
+        addr,
+        None, // http_server_addr
         None, // ws_server_addr
         None, // grpc_server_addr
         None, // graphql_server_addr
@@ -2481,12 +2548,19 @@ http:
   host: "0.0.0.0"
   openapi_spec: "./examples/openapi.json"
   cors_enabled: true
+  request_timeout_secs: 30
   request_validation: "enforce"
+  aggregate_validation_errors: true
+  validate_responses: false
+  response_template_expand: false
+  validation_overrides: {}
+  skip_admin_validation: true
 
 # WebSocket Server
 websocket:
   port: 3001
   host: "0.0.0.0"
+  connection_timeout_secs: 300
 
 # gRPC Server
 grpc:
@@ -2499,6 +2573,8 @@ admin:
   port: 9080
   host: "127.0.0.1"
   api_enabled: true
+  auth_required: false
+  prometheus_url: "http://localhost:9090"
 
 # Core Features
 core:
@@ -2512,6 +2588,8 @@ observability:
   prometheus:
     enabled: true
     port: 9090
+    host: "0.0.0.0"
+    path: "/metrics"
   opentelemetry: null
   recorder: null
   chaos: null
@@ -2520,6 +2598,8 @@ observability:
 data:
   default_rows: 100
   default_format: "json"
+  locale: "en"
+  templates: {}
   rag:
     enabled: false
     provider: "openai"
@@ -2528,6 +2608,8 @@ data:
 logging:
   level: "info"
   json_format: false
+  max_file_size_mb: 10
+  max_files: 5
 "#;
         fs::write(&config_path, config_content)?;
         println!("✅ Created mockforge.yaml");
@@ -2710,7 +2792,10 @@ async fn handle_config_validate(
                     println!("   ✓ OpenAPI spec: {}", spec_path);
                 }
             } else {
-                warnings.push("No OpenAPI spec configured. HTTP endpoints will need to be defined manually.".to_string());
+                warnings.push(
+                    "No OpenAPI spec configured. HTTP endpoints will need to be defined manually."
+                        .to_string(),
+                );
             }
 
             // Validate request validation mode
@@ -2727,7 +2812,9 @@ async fn handle_config_validate(
                 if let Some(ref jwt) = auth.jwt {
                     if let Some(ref secret) = jwt.secret {
                         if secret.is_empty() {
-                            errors.push("HTTP JWT auth is configured but secret is empty".to_string());
+                            errors.push(
+                                "HTTP JWT auth is configured but secret is empty".to_string(),
+                            );
                         }
                     } else if jwt.rsa_public_key.is_none() && jwt.ecdsa_public_key.is_none() {
                         errors.push("HTTP JWT auth requires at least one key (secret, rsa_public_key, or ecdsa_public_key)".to_string());
@@ -2735,7 +2822,10 @@ async fn handle_config_validate(
                 }
                 if let Some(ref basic) = auth.basic_auth {
                     if basic.credentials.is_empty() {
-                        warnings.push("HTTP Basic auth is configured but no credentials are defined".to_string());
+                        warnings.push(
+                            "HTTP Basic auth is configured but no credentials are defined"
+                                .to_string(),
+                        );
                     }
                 }
             }
@@ -2764,7 +2854,10 @@ async fn handle_config_validate(
                 if config.chaining.global_timeout_secs == 0 {
                     warnings.push("Chaining global timeout is 0 (no timeout)".to_string());
                 }
-                println!("   ✓ Request chaining: enabled (max length: {})", config.chaining.max_chain_length);
+                println!(
+                    "   ✓ Request chaining: enabled (max length: {})",
+                    config.chaining.max_chain_length
+                );
             }
 
             // Validate admin UI configuration
@@ -2780,11 +2873,15 @@ async fn handle_config_validate(
                 }
                 if config.admin.auth_required {
                     if config.admin.username.is_none() || config.admin.password.is_none() {
-                        errors.push("Admin UI auth is required but username/password not configured".to_string());
+                        errors.push(
+                            "Admin UI auth is required but username/password not configured"
+                                .to_string(),
+                        );
                     }
                 }
             } else {
-                warnings.push("Admin UI is disabled. Enable with 'admin.enabled: true'.".to_string());
+                warnings
+                    .push("Admin UI is disabled. Enable with 'admin.enabled: true'.".to_string());
             }
 
             // Validate observability
@@ -2832,8 +2929,10 @@ async fn handle_config_validate(
             }
 
             if config.observability.prometheus.enabled {
-                println!("   Prometheus metrics: http://{}:{}/metrics",
-                    config.http.host, config.observability.prometheus.port);
+                println!(
+                    "   Prometheus metrics: http://{}:{}/metrics",
+                    config.http.host, config.observability.prometheus.port
+                );
             }
 
             if !warnings.is_empty() {
@@ -2872,7 +2971,10 @@ fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
             let line_num = start + idx + 1;
             if line_num == line {
                 message.push_str(&format!("  > {} | {}\n", line_num, line_content));
-                message.push_str(&format!("  {}^\n", " ".repeat(column + 5 + line_num.to_string().len())));
+                message.push_str(&format!(
+                    "  {}^\n",
+                    " ".repeat(column + 5 + line_num.to_string().len())
+                ));
             } else {
                 message.push_str(&format!("    {} | {}\n", line_num, line_content));
             }
@@ -2916,7 +3018,8 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
         let line_num = start + idx + 1;
         if line_num == line {
             message.push_str(&format!("  > {} | {}\n", line_num, line_content));
-            message.push_str(&format!("  {}^\n", " ".repeat(column + 5 + line_num.to_string().len())));
+            message
+                .push_str(&format!("  {}^\n", " ".repeat(column + 5 + line_num.to_string().len())));
         } else {
             message.push_str(&format!("    {} | {}\n", line_num, line_content));
         }
@@ -2927,11 +3030,17 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
     // Add helpful suggestions
     let error_str = error.to_string();
     if error_str.contains("trailing comma") {
-        message.push_str("\n💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n");
+        message.push_str(
+            "\n💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n",
+        );
     } else if error_str.contains("expected") {
-        message.push_str("\n💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n");
+        message.push_str(
+            "\n💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n",
+        );
     } else if error_str.contains("duplicate field") {
-        message.push_str("\n💡 Tip: You have a duplicate key. Each key must be unique within its object.\n");
+        message.push_str(
+            "\n💡 Tip: You have a duplicate key. Each key must be unique within its object.\n",
+        );
     }
 
     message
@@ -2940,7 +3049,12 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
 /// Discover configuration file in current directory and parents
 fn discover_config_file() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let current_dir = std::env::current_dir()?;
-    let config_names = vec!["mockforge.yaml", "mockforge.yml", ".mockforge.yaml", ".mockforge.yml"];
+    let config_names = vec![
+        "mockforge.yaml",
+        "mockforge.yml",
+        ".mockforge.yaml",
+        ".mockforge.yml",
+    ];
 
     // Check current directory
     for name in &config_names {
@@ -3026,11 +3140,10 @@ async fn handle_test_ai(
             let mut current_data: serde_json::Value = serde_json::from_str(&data_content)?;
 
             // Create a simple drift configuration
-            use mockforge_data::DataDriftConfig;
             use mockforge_data::drift::{DriftRule, DriftStrategy};
+            use mockforge_data::DataDriftConfig;
 
-            let rule = DriftRule::new("value".to_string(), DriftStrategy::Linear)
-                .with_rate(1.0);
+            let rule = DriftRule::new("value".to_string(), DriftStrategy::Linear).with_rate(1.0);
             let drift_config = DataDriftConfig::new().with_rule(rule);
 
             let engine = mockforge_data::DataDriftEngine::new(drift_config)?;
@@ -3134,8 +3247,8 @@ async fn handle_generate_tests(
     max_duration_ms: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use mockforge_recorder::{
-        TestGenerator, TestGenerationConfig, TestFormat, QueryFilter, RecorderDatabase, Protocol,
-        LlmConfig,
+        LlmConfig, Protocol, QueryFilter, RecorderDatabase, TestFormat, TestGenerationConfig,
+        TestGenerator,
     };
 
     println!("🧪 Generating tests from recorded API interactions");
@@ -3164,14 +3277,12 @@ async fn handle_generate_tests(
     };
 
     // Parse protocol filter
-    let protocol_filter = protocol.as_ref().and_then(|p| {
-        match p.to_lowercase().as_str() {
-            "http" => Some(Protocol::Http),
-            "grpc" => Some(Protocol::Grpc),
-            "websocket" => Some(Protocol::WebSocket),
-            "graphql" => Some(Protocol::GraphQL),
-            _ => None,
-        }
+    let protocol_filter = protocol.as_ref().and_then(|p| match p.to_lowercase().as_str() {
+        "http" => Some(Protocol::Http),
+        "grpc" => Some(Protocol::Grpc),
+        "websocket" => Some(Protocol::WebSocket),
+        "graphql" => Some(Protocol::GraphQL),
+        _ => None,
     });
 
     // Create LLM config if AI descriptions enabled
@@ -3276,7 +3387,10 @@ async fn handle_generate_tests(
     println!("\n📊 Test Summary:");
     for (i, test) in result.tests.iter().enumerate() {
         println!("   {}. {} - {} {}", i + 1, test.name, test.method, test.endpoint);
-        if ai_descriptions && !test.description.is_empty() && test.description != format!("Test {} {}", test.method, test.endpoint) {
+        if ai_descriptions
+            && !test.description.is_empty()
+            && test.description != format!("Test {} {}", test.method, test.endpoint)
+        {
             println!("      Description: {}", test.description);
         }
     }
@@ -3286,7 +3400,9 @@ async fn handle_generate_tests(
     Ok(())
 }
 
-async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_orchestrate(
+    command: OrchestrateCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
         OrchestrateCommands::Start { file, base_url } => {
             println!("🚀 Starting chaos orchestration from: {}", file.display());
@@ -3339,7 +3455,10 @@ async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn 
                 if status["is_running"].as_bool().unwrap_or(false) {
                     println!("✅ Orchestration is running");
                     println!("   Name: {}", status["name"].as_str().unwrap_or("Unknown"));
-                    println!("   Progress: {:.1}%", status["progress"].as_f64().unwrap_or(0.0) * 100.0);
+                    println!(
+                        "   Progress: {:.1}%",
+                        status["progress"].as_f64().unwrap_or(0.0) * 100.0
+                    );
                 } else {
                     println!("⏸️  No orchestration currently running");
                 }
@@ -3411,7 +3530,10 @@ async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn 
                         Some(steps) => {
                             if let Some(steps_arr) = steps.as_array() {
                                 if steps_arr.is_empty() {
-                                    warnings.push("Steps array is empty - orchestration won't do anything".to_string());
+                                    warnings.push(
+                                        "Steps array is empty - orchestration won't do anything"
+                                            .to_string(),
+                                    );
                                 }
 
                                 // Validate each step
@@ -3425,20 +3547,32 @@ async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn 
 
                                     // Check step name
                                     if step.get("name").is_none() {
-                                        errors.push(format!("Step #{} is missing 'name' field", step_num));
+                                        errors.push(format!(
+                                            "Step #{} is missing 'name' field",
+                                            step_num
+                                        ));
                                     }
 
                                     // Check scenario
                                     match step.get("scenario") {
                                         None => {
-                                            errors.push(format!("Step #{} is missing 'scenario' field", step_num));
+                                            errors.push(format!(
+                                                "Step #{} is missing 'scenario' field",
+                                                step_num
+                                            ));
                                         }
                                         Some(scenario) => {
                                             if scenario.get("name").is_none() {
-                                                errors.push(format!("Step #{} scenario is missing 'name' field", step_num));
+                                                errors.push(format!(
+                                                    "Step #{} scenario is missing 'name' field",
+                                                    step_num
+                                                ));
                                             }
                                             if scenario.get("config").is_none() {
-                                                errors.push(format!("Step #{} scenario is missing 'config' field", step_num));
+                                                errors.push(format!(
+                                                    "Step #{} scenario is missing 'config' field",
+                                                    step_num
+                                                ));
                                             }
                                         }
                                     }
@@ -3447,13 +3581,19 @@ async fn handle_orchestrate(command: OrchestrateCommands) -> Result<(), Box<dyn 
                                     if step.get("duration_seconds").is_none() {
                                         warnings.push(format!("Step #{} is missing 'duration_seconds' - using default", step_num));
                                     } else if !step["duration_seconds"].is_number() {
-                                        errors.push(format!("Step #{} 'duration_seconds' must be a number", step_num));
+                                        errors.push(format!(
+                                            "Step #{} 'duration_seconds' must be a number",
+                                            step_num
+                                        ));
                                     }
 
                                     // Check delay
                                     if let Some(delay) = step.get("delay_before_seconds") {
                                         if !delay.is_number() {
-                                            errors.push(format!("Step #{} 'delay_before_seconds' must be a number", step_num));
+                                            errors.push(format!(
+                                                "Step #{} 'delay_before_seconds' must be a number",
+                                                step_num
+                                            ));
                                         }
                                     }
                                 }
@@ -3579,7 +3719,8 @@ max_iterations: 1
 tags:
   - example
   - test
-".to_string()
+"
+                .to_string()
             };
 
             std::fs::write(&output, template)?;
@@ -3608,14 +3749,12 @@ async fn handle_suggest(
     print_json: bool,
 ) -> anyhow::Result<()> {
     use mockforge_core::intelligent_behavior::{
-        SpecSuggestionEngine, SuggestionConfig, SuggestionInput, OutputFormat,
-        config::BehaviorModelConfig,
+        config::BehaviorModelConfig, OutputFormat, SpecSuggestionEngine, SuggestionConfig,
+        SuggestionInput,
     };
 
     // Determine output format
-    let output_format = format
-        .parse::<OutputFormat>()
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    let output_format = format.parse::<OutputFormat>().map_err(|e| anyhow::anyhow!("{}", e))?;
 
     // Build LLM config
     let default_model = match llm_provider.to_lowercase().as_str() {
@@ -3673,10 +3812,7 @@ async fn handle_suggest(
             SuggestionInput::PartialSpec { spec: json_value }
         } else if let Some(paths_array) = json_value.get("paths").and_then(|v| v.as_array()) {
             // List of paths
-            let paths = paths_array
-                .iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect();
+            let paths = paths_array.iter().filter_map(|v| v.as_str().map(String::from)).collect();
             SuggestionInput::Paths { paths }
         } else {
             return Err(anyhow::anyhow!(
@@ -3721,7 +3857,11 @@ async fn handle_suggest(
             if !suggestion.parameters.is_empty() {
                 println!("   Parameters:");
                 for param in &suggestion.parameters {
-                    let req = if param.required { "required" } else { "optional" };
+                    let req = if param.required {
+                        "required"
+                    } else {
+                        "optional"
+                    };
                     println!(
                         "     - {} ({}): {} [{}]",
                         param.name, param.location, param.data_type, req

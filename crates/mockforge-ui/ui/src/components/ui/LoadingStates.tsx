@@ -51,12 +51,12 @@ interface LoadingStateProps {
   className?: string;
 }
 
-export function LoadingState({ 
-  title = 'Loading...', 
+export function LoadingState({
+  title = 'Loading...',
   description,
   variant = 'spinner',
   size = 'md',
-  className 
+  className
 }: LoadingStateProps) {
   const sizeClasses = {
     sm: 'py-8',
@@ -111,7 +111,7 @@ interface EmptyStateProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export function EmptyState({ 
+export function EmptyState({
   icon,
   title,
   description,
@@ -135,7 +135,7 @@ export function EmptyState({
 
   return (
     <div className={cn(
-      'flex flex-col items-center justify-center text-center', 
+      'flex flex-col items-center justify-center text-center',
       sizeClasses[size],
       className
     )}>
@@ -173,7 +173,7 @@ interface ErrorStateProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export function ErrorState({ 
+export function ErrorState({
   title = 'Something went wrong',
   description,
   error,
@@ -226,7 +226,7 @@ export function ErrorState({
   );
 }
 
-// Success state component  
+// Success state component
 interface SuccessStateProps {
   title: string;
   description?: string;
@@ -238,7 +238,7 @@ interface SuccessStateProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export function SuccessState({ 
+export function SuccessState({
   title,
   description,
   action,

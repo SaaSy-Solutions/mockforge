@@ -163,7 +163,7 @@ export function getPriorityColors(priority: keyof typeof semanticColors.priority
 // Color utility for trend indicators
 export function getTrendColor(direction: 'up' | 'down' | 'neutral', isPositive: boolean = true) {
   if (direction === 'neutral') return 'text-secondary';
-  
+
   const isGood = (direction === 'up' && isPositive) || (direction === 'down' && !isPositive);
   return isGood ? 'text-success' : 'text-danger';
 }

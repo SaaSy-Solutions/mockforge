@@ -75,5 +75,3 @@ export function ServicesPage() {
     </div>
   );
 }
-
-

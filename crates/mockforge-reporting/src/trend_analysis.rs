@@ -1,9 +1,9 @@
 //! Trend analysis for orchestration metrics over time
 
-use crate::{Result, ReportingError};
 use crate::pdf::ExecutionReport;
+use crate::{ReportingError, Result};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 
 /// Trend direction
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,9 +98,8 @@ impl TrendAnalyzer {
         let values: Vec<f64> = data_points.iter().map(|dp| dp.value).collect();
         let average_value = values.iter().sum::<f64>() / values.len() as f64;
 
-        let variance = values.iter()
-            .map(|v| (v - average_value).powi(2))
-            .sum::<f64>() / values.len() as f64;
+        let variance =
+            values.iter().map(|v| (v - average_value).powi(2)).sum::<f64>() / values.len() as f64;
         let std_deviation = variance.sqrt();
 
         // Calculate trend
@@ -155,12 +154,18 @@ impl TrendAnalyzer {
                 "failed_requests" => report.metrics.failed_requests as f64,
                 "success_rate" => {
                     if report.metrics.total_requests > 0 {
-                        report.metrics.successful_requests as f64 / report.metrics.total_requests as f64
+                        report.metrics.successful_requests as f64
+                            / report.metrics.total_requests as f64
                     } else {
                         0.0
                     }
                 }
-                _ => return Err(ReportingError::Analysis(format!("Unknown metric: {}", metric_name))),
+                _ => {
+                    return Err(ReportingError::Analysis(format!(
+                        "Unknown metric: {}",
+                        metric_name
+                    )))
+                }
             };
 
             data_points.push(DataPoint {
@@ -185,10 +190,9 @@ impl TrendAnalyzer {
         let n = data_points.len() as f64;
 
         // Convert timestamps to x values (days since first point)
-        let x_values: Vec<f64> = data_points.iter()
-            .map(|dp| {
-                (dp.timestamp - data_points[0].timestamp).num_seconds() as f64 / 86400.0
-            })
+        let x_values: Vec<f64> = data_points
+            .iter()
+            .map(|dp| (dp.timestamp - data_points[0].timestamp).num_seconds() as f64 / 86400.0)
             .collect();
 
         let y_values: Vec<f64> = data_points.iter().map(|dp| dp.value).collect();
@@ -204,7 +208,9 @@ impl TrendAnalyzer {
         // Calculate R-squared
         let mean_y = sum_y / n;
         let ss_tot: f64 = y_values.iter().map(|y| (y - mean_y).powi(2)).sum();
-        let ss_res: f64 = x_values.iter().zip(&y_values)
+        let ss_res: f64 = x_values
+            .iter()
+            .zip(&y_values)
             .map(|(x, y)| {
                 let predicted = slope * x + intercept;
                 (y - predicted).powi(2)
@@ -257,11 +263,7 @@ impl TrendAnalyzer {
             let z_score = ((point.value - mean) / std_dev).abs();
 
             if z_score > threshold {
-                let severity = if z_score > 3.0 {
-                    "high"
-                } else {
-                    "medium"
-                };
+                let severity = if z_score > 3.0 { "high" } else { "medium" };
 
                 anomalies.push(AnomalyPoint {
                     timestamp: point.timestamp,
@@ -292,16 +294,15 @@ impl TrendAnalyzer {
 
         for i in 1..=periods {
             let future_timestamp = last_timestamp + Duration::days(i as i64);
-            let days_from_start = (future_timestamp - first_timestamp).num_seconds() as f64 / 86400.0;
+            let days_from_start =
+                (future_timestamp - first_timestamp).num_seconds() as f64 / 86400.0;
 
             let predicted_value = regression.slope * days_from_start + regression.intercept;
 
             // Simple confidence interval (±2 std errors)
             let std_error = 0.1; // Simplified - should be calculated from residuals
-            let confidence_interval = (
-                predicted_value - 2.0 * std_error,
-                predicted_value + 2.0 * std_error,
-            );
+            let confidence_interval =
+                (predicted_value - 2.0 * std_error, predicted_value + 2.0 * std_error);
 
             forecast.push(ForecastPoint {
                 timestamp: future_timestamp,

@@ -426,7 +426,9 @@ mod tests {
         let mut faker = EnhancedFaker::new();
         let color = faker.color();
 
-        let valid_colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white"];
+        let valid_colors = [
+            "red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white",
+        ];
         assert!(valid_colors.contains(&color.as_str()));
     }
 

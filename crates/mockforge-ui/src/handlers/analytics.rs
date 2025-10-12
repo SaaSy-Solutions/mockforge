@@ -133,7 +133,8 @@ pub async fn get_summary(
     };
 
     // Error rate
-    let error_rate_query = "(sum(rate(mockforge_errors_total[5m])) / sum(rate(mockforge_requests_total[5m]))) * 100";
+    let error_rate_query =
+        "(sum(rate(mockforge_errors_total[5m])) / sum(rate(mockforge_requests_total[5m]))) * 100";
     let error_rate = match state.prometheus_client.query(error_rate_query).await {
         Ok(response) => PrometheusClient::extract_single_value(&response).unwrap_or(0.0),
         Err(e) => {
@@ -174,11 +175,7 @@ pub async fn get_requests(
 
     let query = "sum by (protocol) (rate(mockforge_requests_total[5m]))";
 
-    match state
-        .prometheus_client
-        .query_range(query, start, end, &step)
-        .await
-    {
+    match state.prometheus_client.query_range(query, start, end, &step).await {
         Ok(response) => {
             let time_series = PrometheusClient::extract_time_series(&response);
 
@@ -213,10 +210,7 @@ pub async fn get_endpoints(
     State(state): State<AnalyticsState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Vec<EndpointMetrics>>>, StatusCode> {
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(10);
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
 
     debug!("Fetching top {} endpoints", limit);
 
@@ -232,21 +226,12 @@ pub async fn get_endpoints(
 
             for result in &response.data.result {
                 if let Some(metric) = result.metric.as_object() {
-                    let path = metric
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let method = metric
-                        .get("method")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let request_rate: f64 = result
-                        .value
-                        .as_ref()
-                        .and_then(|(_, v)| v.parse().ok())
-                        .unwrap_or(0.0);
+                    let path =
+                        metric.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let method =
+                        metric.get("method").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let request_rate: f64 =
+                        result.value.as_ref().and_then(|(_, v)| v.parse().ok()).unwrap_or(0.0);
 
                     // Query average latency for this endpoint
                     let avg_latency_query = format!(

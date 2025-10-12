@@ -3,12 +3,12 @@
 use crate::{
     diff::ComparisonResult,
     har_export::export_to_har,
+    integration_testing::{IntegrationTestGenerator, IntegrationWorkflow, WorkflowSetup},
     models::RecordedExchange,
     query::{execute_query, QueryFilter, QueryResult},
     recorder::Recorder,
     replay::ReplayEngine,
-    test_generation::{TestGenerator, TestGenerationConfig, TestFormat, LlmConfig},
-    integration_testing::{IntegrationWorkflow, IntegrationTestGenerator, WorkflowSetup},
+    test_generation::{LlmConfig, TestFormat, TestGenerationConfig, TestGenerator},
 };
 use axum::{
     extract::{Path, Query, State},
@@ -147,12 +147,7 @@ async fn export_har(
     let har = export_to_har(&result.exchanges)?;
     let har_json = serde_json::to_string_pretty(&har)?;
 
-    Ok((
-        StatusCode::OK,
-        [("content-type", "application/json")],
-        har_json,
-    )
-        .into_response())
+    Ok((StatusCode::OK, [("content-type", "application/json")], har_json).into_response())
 }
 
 /// Get recording status
@@ -209,12 +204,9 @@ async fn compare_responses(
 ) -> Result<Json<ComparisonResult>, ApiError> {
     let engine = ReplayEngine::new((**state.recorder.database()).clone());
 
-    let result = engine.compare_responses(
-        &id,
-        payload.body.as_bytes(),
-        payload.status_code,
-        &payload.headers,
-    ).await?;
+    let result = engine
+        .compare_responses(&id, payload.body.as_bytes(), payload.status_code, &payload.headers)
+        .await?;
 
     Ok(Json(result))
 }

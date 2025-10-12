@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use super::cache::{ResponseCache, generate_cache_key};
+use super::cache::{generate_cache_key, ResponseCache};
 use super::config::BehaviorModelConfig;
 use super::context::StatefulAiContext;
 use super::llm_client::LlmClient;
@@ -38,7 +38,12 @@ impl BehaviorModel {
         // Note: Cache config should be in PerformanceConfig
         let cache = Some(Arc::new(ResponseCache::new(300))); // 5 minutes default
 
-        Self { config, rules, llm_client, cache }
+        Self {
+            config,
+            rules,
+            llm_client,
+            cache,
+        }
     }
 
     /// Generate a response based on request context and session state
@@ -93,8 +98,8 @@ impl BehaviorModel {
         context: &StatefulAiContext,
     ) -> Result<()> {
         let state = context.get_state().await;
-        let eval_context = EvaluationContext::new(method, path)
-            .with_session_state(state.state.clone());
+        let _eval_context =
+            EvaluationContext::new(method, path).with_session_state(state.state.clone());
 
         // Sort rules by priority (highest first)
         let mut rules = self.rules.consistency_rules.clone();
@@ -106,8 +111,9 @@ impl BehaviorModel {
                 match &rule.action {
                     super::rules::RuleAction::RequireAuth { message } => {
                         // Check if user is authenticated
-                        if !state.state.contains_key("auth_token") &&
-                           !state.state.contains_key("user_id") {
+                        if !state.state.contains_key("auth_token")
+                            && !state.state.contains_key("user_id")
+                        {
                             return Err(crate::Error::generic(message.clone()));
                         }
                     }
@@ -148,7 +154,7 @@ impl BehaviorModel {
 
         // Add context summary
         let context_summary = context.build_context_summary().await;
-        prompt.push_str("\n");
+        prompt.push('\n');
         prompt.push_str(&context_summary);
 
         // Add schemas
@@ -173,12 +179,9 @@ impl BehaviorModel {
         tracing::debug!("Generating LLM response with prompt ({} chars)", prompt.len());
 
         // Create LLM generation request
-        let request = LlmGenerationRequest::new(
-            self.rules.system_prompt.clone(),
-            prompt,
-        )
-        .with_temperature(self.config.temperature)
-        .with_max_tokens(self.config.max_tokens);
+        let request = LlmGenerationRequest::new(self.rules.system_prompt.clone(), prompt)
+            .with_temperature(self.config.temperature)
+            .with_max_tokens(self.config.max_tokens);
 
         // Generate response using LLM client
         self.llm_client.generate(&request).await
@@ -197,8 +200,8 @@ impl BehaviorModel {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::config::IntelligentBehaviorConfig;
+    use super::*;
 
     #[tokio::test]
     async fn test_behavior_model_creation() {
@@ -210,18 +213,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_response() {
+        // Skip test if no OpenAI API key is available
+        if std::env::var("OPENAI_API_KEY").is_err() {
+            eprintln!("Skipping test_generate_response: OPENAI_API_KEY not set");
+            return;
+        }
+
         let config = BehaviorModelConfig::default();
         let model = BehaviorModel::new(config);
 
         let ai_config = IntelligentBehaviorConfig::default();
         let context = StatefulAiContext::new("test_session", ai_config);
 
-        let response = model.generate_response(
-            "GET",
-            "/api/users",
-            None,
-            &context,
-        ).await.unwrap();
+        let response = model.generate_response("GET", "/api/users", None, &context).await.unwrap();
 
         assert!(response.is_object());
     }

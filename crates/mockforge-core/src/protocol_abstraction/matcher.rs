@@ -8,7 +8,7 @@ use std::hash::{Hash, Hasher};
 pub struct SimpleRequestMatcher;
 
 impl RequestMatcher for SimpleRequestMatcher {
-    fn match_score(&self, request: &ProtocolRequest) -> f64 {
+    fn match_score(&self, _request: &ProtocolRequest) -> f64 {
         // Base score: operation and path must match exactly
         1.0
     }

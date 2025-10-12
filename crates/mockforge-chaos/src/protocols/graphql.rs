@@ -1,8 +1,8 @@
 //! GraphQL chaos engineering
 
 use crate::{
-    config::ChaosConfig, fault::FaultInjector, latency::LatencyInjector,
-    rate_limit::RateLimiter, traffic_shaping::TrafficShaper, ChaosError, Result,
+    config::ChaosConfig, fault::FaultInjector, latency::LatencyInjector, rate_limit::RateLimiter,
+    traffic_shaping::TrafficShaper, ChaosError, Result,
 };
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -33,21 +33,17 @@ pub struct GraphQLChaos {
 impl GraphQLChaos {
     /// Create new GraphQL chaos handler
     pub fn new(config: ChaosConfig) -> Self {
-        let latency_injector = Arc::new(LatencyInjector::new(
-            config.latency.clone().unwrap_or_default(),
-        ));
+        let latency_injector =
+            Arc::new(LatencyInjector::new(config.latency.clone().unwrap_or_default()));
 
-        let fault_injector = Arc::new(FaultInjector::new(
-            config.fault_injection.clone().unwrap_or_default(),
-        ));
+        let fault_injector =
+            Arc::new(FaultInjector::new(config.fault_injection.clone().unwrap_or_default()));
 
-        let rate_limiter = Arc::new(RateLimiter::new(
-            config.rate_limit.clone().unwrap_or_default(),
-        ));
+        let rate_limiter =
+            Arc::new(RateLimiter::new(config.rate_limit.clone().unwrap_or_default()));
 
-        let traffic_shaper = Arc::new(TrafficShaper::new(
-            config.traffic_shaping.clone().unwrap_or_default(),
-        ));
+        let traffic_shaper =
+            Arc::new(TrafficShaper::new(config.traffic_shaping.clone().unwrap_or_default()));
 
         Self {
             latency_injector,
@@ -69,14 +65,8 @@ impl GraphQLChaos {
             return Ok(());
         }
 
-        let endpoint = format!(
-            "/graphql/{}",
-            operation_name.unwrap_or("anonymous")
-        );
-        debug!(
-            "Applying GraphQL chaos for: {} {}",
-            operation_type, endpoint
-        );
+        let endpoint = format!("/graphql/{}", operation_name.unwrap_or("anonymous"));
+        debug!("Applying GraphQL chaos for: {} {}", operation_type, endpoint);
 
         // Check rate limits
         if let Err(e) = self.rate_limiter.check(client_ip, Some(&endpoint)) {
@@ -142,7 +132,9 @@ impl GraphQLChaos {
 
     /// Check if should inject GraphQL error
     pub fn should_inject_error(&self) -> Option<String> {
-        self.fault_injector.get_http_error_status().map(|_http_code| "Internal server error".to_string())
+        self.fault_injector
+            .get_http_error_status()
+            .map(|_http_code| "Internal server error".to_string())
     }
 
     /// Check if should return partial data

@@ -345,7 +345,7 @@ swaks --to recipient@example.com \
 
 ### SMTP Features
 
-- ✅ RFC 5321 compliant (HELO, EHLO, MAIL, RCPT, DATA, QUIT, RSET, NOOP, HELP)
+- ✅ RFC 5321 compliant (HELLO, EHLO, MAIL, RCPT, DATA, QUIT, RSET, NOOP, HELP)
 - ✅ Fixture-based email matching (regex patterns for recipients, senders, subjects)
 - ✅ In-memory mailbox with size limits
 - ✅ Auto-reply configuration with templates
@@ -1141,7 +1141,7 @@ You can control request/response validation via CLI, environment, or config.
     - `{{randInt 10 99}}`, `{{rand.int -5 5}}`
     - `{{faker.uuid}}`, `{{faker.email}}`, `{{faker.name}}`, `{{faker.address}}`, `{{faker.phone}}`, `{{faker.company}}`, `{{faker.url}}`, `{{faker.ip}}`, `{{faker.color}}`, `{{faker.word}}`, `{{faker.sentence}}`, `{{faker.paragraph}}`
   - Determinism: set `MOCKFORGE_FAKE_TOKENS=false` to disable faker token expansion (uuid/now/rand tokens still expand).
-  
+
  - `MOCKFORGE_VALIDATION_STATUS=400|422` (default: 400)
    - Status code returned on request validation failure in enforce mode.
 

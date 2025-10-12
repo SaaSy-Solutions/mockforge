@@ -1,6 +1,10 @@
 //! Replay functionality for recorded requests
 
-use crate::{database::RecorderDatabase, diff::{ResponseComparator, ComparisonResult}, Result};
+use crate::{
+    database::RecorderDatabase,
+    diff::{ComparisonResult, ResponseComparator},
+    Result,
+};
 use std::collections::HashMap;
 
 /// Replay engine for executing recorded requests
@@ -22,7 +26,10 @@ impl ReplayEngine {
             Some(exchange) => Ok(ReplayResult {
                 request_id: request_id.to_string(),
                 success: true,
-                message: format!("Replayed {} {} request", exchange.request.protocol, exchange.request.method),
+                message: format!(
+                    "Replayed {} {} request",
+                    exchange.request.protocol, exchange.request.method
+                ),
                 original_status: exchange.response.map(|r| r.status_code),
                 replay_status: None,
             }),
@@ -65,9 +72,9 @@ impl ReplayEngine {
 
         match exchange {
             Some(exchange) => {
-                let response = exchange.response.ok_or_else(||
+                let response = exchange.response.ok_or_else(|| {
                     crate::RecorderError::NotFound(format!("No response for {}", request_id))
-                )?;
+                })?;
 
                 // Parse original headers from JSON string
                 let original_headers = response.headers_map();

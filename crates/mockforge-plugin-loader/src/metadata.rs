@@ -74,14 +74,9 @@ impl MetadataStore {
     /// Initialize the metadata store (create directory if needed)
     pub async fn init(&self) -> LoaderResult<()> {
         if !self.metadata_dir.exists() {
-            fs::create_dir_all(&self.metadata_dir)
-                .await
-                .map_err(|e| {
-                    PluginLoaderError::fs(format!(
-                        "Failed to create metadata directory: {}",
-                        e
-                    ))
-                })?;
+            fs::create_dir_all(&self.metadata_dir).await.map_err(|e| {
+                PluginLoaderError::fs(format!("Failed to create metadata directory: {}", e))
+            })?;
         }
         Ok(())
     }
@@ -118,9 +113,9 @@ impl MetadataStore {
 
     /// Load a single metadata file
     async fn load_metadata_file(&self, path: &Path) -> LoaderResult<PluginMetadata> {
-        let content = fs::read_to_string(path).await.map_err(|e| {
-            PluginLoaderError::fs(format!("Failed to read metadata file: {}", e))
-        })?;
+        let content = fs::read_to_string(path)
+            .await
+            .map_err(|e| PluginLoaderError::fs(format!("Failed to read metadata file: {}", e)))?;
 
         let metadata: PluginMetadata = serde_json::from_str(&content).map_err(|e| {
             PluginLoaderError::load(format!("Failed to parse metadata JSON: {}", e))
@@ -134,13 +129,12 @@ impl MetadataStore {
         self.init().await?;
 
         let file_path = self.metadata_file_path(&metadata.plugin_id);
-        let json = serde_json::to_string_pretty(&metadata).map_err(|e| {
-            PluginLoaderError::load(format!("Failed to serialize metadata: {}", e))
-        })?;
+        let json = serde_json::to_string_pretty(&metadata)
+            .map_err(|e| PluginLoaderError::load(format!("Failed to serialize metadata: {}", e)))?;
 
-        fs::write(&file_path, json).await.map_err(|e| {
-            PluginLoaderError::fs(format!("Failed to write metadata file: {}", e))
-        })?;
+        fs::write(&file_path, json)
+            .await
+            .map_err(|e| PluginLoaderError::fs(format!("Failed to write metadata file: {}", e)))?;
 
         // Update cache
         self.cache.insert(metadata.plugin_id.clone(), metadata);
@@ -185,8 +179,7 @@ impl MetadataStore {
 
     /// Get the file path for a plugin's metadata
     fn metadata_file_path(&self, plugin_id: &PluginId) -> PathBuf {
-        self.metadata_dir
-            .join(format!("{}.json", plugin_id.as_str()))
+        self.metadata_dir.join(format!("{}.json", plugin_id.as_str()))
     }
 }
 
@@ -296,21 +289,19 @@ impl<'de> Deserialize<'de> for PluginSource {
                     }
                     "registry" => {
                         let name = name.ok_or_else(|| de::Error::missing_field("name"))?;
-                        let version =
-                            version.ok_or_else(|| de::Error::missing_field("version"))?;
+                        let version = version.ok_or_else(|| de::Error::missing_field("version"))?;
                         Ok(PluginSource::Registry { name, version })
                     }
-                    _ => Err(de::Error::custom(format!(
-                        "Unknown source type: {}",
-                        source_type
-                    ))),
+                    _ => Err(de::Error::custom(format!("Unknown source type: {}", source_type))),
                 }
             }
         }
 
         deserializer.deserialize_struct(
             "PluginSource",
-            &["type", "path", "url", "checksum", "source", "name", "version"],
+            &[
+                "type", "path", "url", "checksum", "source", "name", "version",
+            ],
             PluginSourceVisitor,
         )
     }

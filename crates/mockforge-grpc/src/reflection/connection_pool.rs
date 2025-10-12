@@ -65,7 +65,6 @@ impl Clone for ConnectionPool {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

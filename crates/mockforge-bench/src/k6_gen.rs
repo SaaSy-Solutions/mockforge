@@ -2,7 +2,7 @@
 
 use crate::error::{BenchError, Result};
 use crate::request_gen::RequestTemplate;
-use crate::scenarios::{LoadScenario, Stage};
+use crate::scenarios::LoadScenario;
 use handlebars::Handlebars;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -47,10 +47,10 @@ impl K6ScriptGenerator {
 
     /// Build the template data for rendering
     fn build_template_data(&self) -> Result<Value> {
-        let stages = self.config.scenario.generate_stages(
-            self.config.duration_secs,
-            self.config.max_vus,
-        );
+        let stages = self
+            .config
+            .scenario
+            .generate_stages(self.config.duration_secs, self.config.max_vus);
 
         let operations = self
             .templates

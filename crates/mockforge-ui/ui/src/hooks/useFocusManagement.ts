@@ -61,7 +61,7 @@ export function useFocusManagement({
     if (elements.length === 0) return false;
 
     let targetIndex = index;
-    
+
     if (loop) {
       if (targetIndex < 0) {
         targetIndex = elements.length - 1;
@@ -177,7 +177,7 @@ export function useFocusManagement({
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
-      
+
       // Restore focus when component unmounts
       if (restoreFocus && previouslyFocusedElementRef.current) {
         previouslyFocusedElementRef.current.focus();
@@ -294,7 +294,7 @@ export function useFocusAnnouncement() {
 
   const announce = useCallback((message: string, priority: 'polite' | 'assertive' = 'polite') => {
     setAnnouncement(message);
-    
+
     if (announcementRef.current) {
       announcementRef.current.setAttribute('aria-live', priority);
     }

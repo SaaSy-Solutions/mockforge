@@ -1,8 +1,8 @@
-# HashiCorp Vault Integration
+# HashCorp Vault Integration
 
 ## Overview
 
-MockForge integrates with HashiCorp Vault for secure secret management. This document describes the setup and usage of Vault integration.
+MockForge integrates with HashCorp Vault for secure secret management. This document describes the setup and usage of Vault integration.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ MockForge supports two methods for Vault integration:
 
 ## Prerequisites
 
-- HashiCorp Vault installed in the cluster or accessible externally
+- HashCorp Vault installed in the cluster or accessible externally
 - Vault Agent Injector installed (for sidecar method)
 - External Secrets Operator installed (for ESO method)
 - Kubernetes authentication method enabled in Vault
@@ -23,7 +23,7 @@ MockForge supports two methods for Vault integration:
 ### 1. Deploy Vault (if not already installed)
 
 ```bash
-# Add HashiCorp Helm repo
+# Add HashCorp Helm repo
 helm repo add hashicorp https://helm.releases.hashicorp.com
 helm repo update
 

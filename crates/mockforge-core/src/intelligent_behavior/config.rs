@@ -3,11 +3,11 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::types::BehaviorRules;
 use super::session::SessionTracking;
+use super::types::BehaviorRules;
 
 /// Configuration for the Intelligent Mock Behavior system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IntelligentBehaviorConfig {
     /// Enable intelligent behavior
     #[serde(default)]
@@ -18,6 +18,7 @@ pub struct IntelligentBehaviorConfig {
     pub session_tracking: SessionTracking,
 
     /// Behavior model configuration
+    #[serde(default)]
     pub behavior_model: BehaviorModelConfig,
 
     /// Vector store configuration
@@ -27,18 +28,6 @@ pub struct IntelligentBehaviorConfig {
     /// Performance settings
     #[serde(default)]
     pub performance: PerformanceConfig,
-}
-
-impl Default for IntelligentBehaviorConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            session_tracking: SessionTracking::default(),
-            behavior_model: BehaviorModelConfig::default(),
-            vector_store: VectorStoreConfig::default(),
-            performance: PerformanceConfig::default(),
-        }
-    }
 }
 
 /// Behavior model configuration

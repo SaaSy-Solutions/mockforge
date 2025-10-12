@@ -13,7 +13,7 @@
 - ✅ `src/server.rs` - SMTP protocol server implementation
 
 #### Key Features Implemented:
-- ✅ **RFC 5321 Compliance**: Basic SMTP command support (HELO, EHLO, MAIL, RCPT, DATA, QUIT, RSET, NOOP)
+- ✅ **RFC 5321 Compliance**: Basic SMTP command support (HELLO, EHLO, MAIL, RCPT, DATA, QUIT, RSET, NOOP)
 - ✅ **Fixture-Based Matching**: Regex pattern matching for recipients, senders, and subjects
 - ✅ **In-Memory Mailbox**: Store received emails with size limits
 - ✅ **Protocol Abstraction Integration**: Full SpecRegistry trait implementation
@@ -146,7 +146,7 @@ result = async {
 - ✅ Mailbox storage and retrieval
 - ✅ Mailbox size limits (FIFO behavior)
 - ✅ Protocol commands (NOOP, HELP, RSET)
-- ✅ HELO vs EHLO comparison
+- ✅ HELLO vs EHLO comparison
 - ✅ Invalid command error handling
 
 **Test Template**:
@@ -473,7 +473,7 @@ The SMTP POC is **100% COMPLETE** ✅ and successfully validates the protocol ex
 - Fixture matching with regex patterns
 - Mailbox storage and retrieval with FIFO
 - Protocol commands (NOOP, HELP, RSET)
-- HELO vs EHLO comparison
+- HELLO vs EHLO comparison
 - Invalid command error handling
 
 **Compilation**: Clean (warnings only in mockforge-core, not SMTP)

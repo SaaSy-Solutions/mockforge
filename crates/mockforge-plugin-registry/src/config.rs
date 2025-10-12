@@ -13,8 +13,8 @@ pub async fn load_config() -> Result<RegistryConfig> {
     }
 
     let contents = fs::read_to_string(&config_path).await?;
-    let config: RegistryConfig = toml::from_str(&contents)
-        .map_err(|e| crate::RegistryError::Storage(e.to_string()))?;
+    let config: RegistryConfig =
+        toml::from_str(&contents).map_err(|e| crate::RegistryError::Storage(e.to_string()))?;
 
     Ok(config)
 }
@@ -27,8 +27,8 @@ pub async fn save_config(config: &RegistryConfig) -> Result<()> {
         fs::create_dir_all(parent).await?;
     }
 
-    let contents = toml::to_string_pretty(config)
-        .map_err(|e| crate::RegistryError::Storage(e.to_string()))?;
+    let contents =
+        toml::to_string_pretty(config).map_err(|e| crate::RegistryError::Storage(e.to_string()))?;
 
     fs::write(&config_path, contents).await?;
 
@@ -37,9 +37,7 @@ pub async fn save_config(config: &RegistryConfig) -> Result<()> {
 
 /// Get configuration file path
 fn get_config_path() -> PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("mockforge");
+    let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("mockforge");
 
     config_dir.join("registry.toml")
 }

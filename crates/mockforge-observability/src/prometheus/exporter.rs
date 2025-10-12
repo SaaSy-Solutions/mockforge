@@ -25,12 +25,10 @@ pub async fn metrics_handler(
     let metric_families = registry.registry().gather();
 
     let mut buffer = Vec::new();
-    encoder
-        .encode(&metric_families, &mut buffer)
-        .map_err(|e| {
-            error!("Failed to encode metrics: {}", e);
-            MetricsError::EncodingError(e.to_string())
-        })?;
+    encoder.encode(&metric_families, &mut buffer).map_err(|e| {
+        error!("Failed to encode metrics: {}", e);
+        MetricsError::EncodingError(e.to_string())
+    })?;
 
     let body = String::from_utf8(buffer).map_err(|e| {
         error!("Failed to convert metrics to UTF-8: {}", e);

@@ -201,8 +201,7 @@ mod tests {
 
     #[test]
     fn test_route_with_priority() {
-        let route = Route::new(HttpMethod::POST, "/api/users".to_string())
-            .with_priority(10);
+        let route = Route::new(HttpMethod::POST, "/api/users".to_string()).with_priority(10);
         assert_eq!(route.priority, 10);
     }
 
@@ -243,9 +242,15 @@ mod tests {
     fn test_add_multiple_http_routes() {
         let mut registry = RouteRegistry::new();
 
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/posts".to_string())).unwrap();
-        registry.add_http_route(Route::new(HttpMethod::POST, "/api/users".to_string())).unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string()))
+            .unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/posts".to_string()))
+            .unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::POST, "/api/users".to_string()))
+            .unwrap();
 
         assert_eq!(registry.get_http_routes(&HttpMethod::GET).len(), 2);
         assert_eq!(registry.get_http_routes(&HttpMethod::POST).len(), 1);
@@ -282,9 +287,18 @@ mod tests {
     fn test_clear() {
         let mut registry = RouteRegistry::new();
 
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
-        registry.add_ws_route(Route::new(HttpMethod::GET, "/ws/chat".to_string())).unwrap();
-        registry.add_grpc_route("Service".to_string(), Route::new(HttpMethod::POST, "Method".to_string())).unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string()))
+            .unwrap();
+        registry
+            .add_ws_route(Route::new(HttpMethod::GET, "/ws/chat".to_string()))
+            .unwrap();
+        registry
+            .add_grpc_route(
+                "Service".to_string(),
+                Route::new(HttpMethod::POST, "Method".to_string()),
+            )
+            .unwrap();
 
         assert!(!registry.get_http_routes(&HttpMethod::GET).is_empty());
         assert!(!registry.get_ws_routes().is_empty());
@@ -299,7 +313,9 @@ mod tests {
     #[test]
     fn test_find_http_routes_exact_match() {
         let mut registry = RouteRegistry::new();
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string()))
+            .unwrap();
 
         let found = registry.find_http_routes(&HttpMethod::GET, "/api/users");
         assert_eq!(found.len(), 1);
@@ -309,7 +325,9 @@ mod tests {
     #[test]
     fn test_find_http_routes_no_match() {
         let mut registry = RouteRegistry::new();
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string())).unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/users".to_string()))
+            .unwrap();
 
         let found = registry.find_http_routes(&HttpMethod::GET, "/api/posts");
         assert_eq!(found.len(), 0);
@@ -318,7 +336,9 @@ mod tests {
     #[test]
     fn test_find_http_routes_wildcard_match() {
         let mut registry = RouteRegistry::new();
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/*/details".to_string())).unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/*/details".to_string()))
+            .unwrap();
 
         let found = registry.find_http_routes(&HttpMethod::GET, "/api/users/details");
         assert_eq!(found.len(), 1);
@@ -330,7 +350,9 @@ mod tests {
     #[test]
     fn test_find_http_routes_wildcard_no_match_different_length() {
         let mut registry = RouteRegistry::new();
-        registry.add_http_route(Route::new(HttpMethod::GET, "/api/*/details".to_string())).unwrap();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/api/*/details".to_string()))
+            .unwrap();
 
         let found = registry.find_http_routes(&HttpMethod::GET, "/api/users");
         assert_eq!(found.len(), 0);
@@ -339,7 +361,9 @@ mod tests {
     #[test]
     fn test_find_ws_routes() {
         let mut registry = RouteRegistry::new();
-        registry.add_ws_route(Route::new(HttpMethod::GET, "/ws/chat".to_string())).unwrap();
+        registry
+            .add_ws_route(Route::new(HttpMethod::GET, "/ws/chat".to_string()))
+            .unwrap();
 
         let found = registry.find_ws_routes("/ws/chat");
         assert_eq!(found.len(), 1);
@@ -360,8 +384,12 @@ mod tests {
     #[test]
     fn test_find_grpc_routes() {
         let mut registry = RouteRegistry::new();
-        registry.add_grpc_route("UserService".to_string(),
-            Route::new(HttpMethod::POST, "GetUser".to_string())).unwrap();
+        registry
+            .add_grpc_route(
+                "UserService".to_string(),
+                Route::new(HttpMethod::POST, "GetUser".to_string()),
+            )
+            .unwrap();
 
         let found = registry.find_grpc_routes("UserService", "GetUser");
         assert_eq!(found.len(), 1);
@@ -372,8 +400,12 @@ mod tests {
         let mut registry = RouteRegistry::new();
         // Wildcard pattern matching requires exact segment count
         // For gRPC method names, we'd typically use exact matches
-        registry.add_grpc_route("UserService".to_string(),
-            Route::new(HttpMethod::POST, "GetUser".to_string())).unwrap();
+        registry
+            .add_grpc_route(
+                "UserService".to_string(),
+                Route::new(HttpMethod::POST, "GetUser".to_string()),
+            )
+            .unwrap();
 
         let found = registry.find_grpc_routes("UserService", "GetUser");
         assert_eq!(found.len(), 1);

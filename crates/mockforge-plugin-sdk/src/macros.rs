@@ -163,7 +163,6 @@ macro_rules! mock_context {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_macro_compilation() {

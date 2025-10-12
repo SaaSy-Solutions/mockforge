@@ -3,9 +3,9 @@
 //! Analyzes historical orchestration execution data to automatically generate
 //! meaningful assertions based on observed patterns and anomalies.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Historical execution data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,16 +145,28 @@ impl AssertionGenerator {
             }
 
             // Generate duration assertions
-            assertions.extend(self.generate_duration_assertions(&orch_id, &step_id, &data_points)?);
+            assertions.extend(self.generate_duration_assertions(
+                &orch_id,
+                &step_id,
+                &data_points,
+            )?);
 
             // Generate success rate assertions
-            assertions.extend(self.generate_success_rate_assertions(&orch_id, &step_id, &data_points)?);
+            assertions.extend(self.generate_success_rate_assertions(
+                &orch_id,
+                &step_id,
+                &data_points,
+            )?);
 
             // Generate metric assertions
             assertions.extend(self.generate_metric_assertions(&orch_id, &step_id, &data_points)?);
 
             // Generate error rate assertions
-            assertions.extend(self.generate_error_rate_assertions(&orch_id, &step_id, &data_points)?);
+            assertions.extend(self.generate_error_rate_assertions(
+                &orch_id,
+                &step_id,
+                &data_points,
+            )?);
         }
 
         Ok(assertions)
@@ -359,11 +371,7 @@ impl AssertionGenerator {
         let min = sorted[0];
         let max = sorted[sorted.len() - 1];
 
-        let variance = sorted
-            .iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>()
-            / sorted.len() as f64;
+        let variance = sorted.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / sorted.len() as f64;
         let std_dev = variance.sqrt();
 
         let p95_idx = ((sorted.len() as f64) * 0.95) as usize;

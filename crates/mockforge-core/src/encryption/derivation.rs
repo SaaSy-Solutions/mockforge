@@ -78,7 +78,10 @@ impl KeyDerivationManager {
     /// Derive a master key from a password (async version using spawn_blocking)
     ///
     /// This method offloads the CPU-intensive Argon2 computation to a blocking thread pool.
-    pub async fn derive_master_key_async(&self, password: String) -> EncryptionResult<EncryptionKey> {
+    pub async fn derive_master_key_async(
+        &self,
+        password: String,
+    ) -> EncryptionResult<EncryptionKey> {
         let params = self.default_argon2_params.clone();
         tokio::task::spawn_blocking(move || {
             let manager = Self::new();
@@ -228,7 +231,9 @@ impl KeyDerivationManager {
     ) -> EncryptionResult<bool> {
         let params = self.default_argon2_params.clone();
         tokio::task::spawn_blocking(move || {
-            let manager = KeyDerivationManager { default_argon2_params: params };
+            let manager = KeyDerivationManager {
+                default_argon2_params: params,
+            };
             let derived_key = manager.derive_master_key(&password)?;
             Ok(derived_key.as_bytes() == expected_key.as_bytes())
         })

@@ -14,9 +14,7 @@ pub async fn record_graphql_request(
     query: &str,
     variables: Option<&str>,
     headers: &HashMap<String, String>,
-    client_ip: Option<&str>,
-    trace_id: Option<&str>,
-    span_id: Option<&str>,
+    context: &crate::models::RequestContext,
 ) -> Result<String, crate::RecorderError> {
     let request_id = Uuid::new_v4().to_string();
 
@@ -53,9 +51,9 @@ pub async fn record_graphql_request(
         headers: serde_json::to_string(&headers)?,
         body: Some(body_str),
         body_encoding: "utf8".to_string(),
-        client_ip: client_ip.map(|s| s.to_string()),
-        trace_id: trace_id.map(|s| s.to_string()),
-        span_id: span_id.map(|s| s.to_string()),
+        client_ip: context.client_ip.clone(),
+        trace_id: context.trace_id.clone(),
+        span_id: context.span_id.clone(),
         duration_ms: None,
         status_code: None,
         tags: Some(serde_json::to_string(&tags)?),
@@ -155,14 +153,12 @@ mod tests {
         let db = RecorderDatabase::new_in_memory().await.unwrap();
         let recorder = Recorder::new(db);
 
-        let headers = HashMap::from([(
-            "content-type".to_string(),
-            "application/json".to_string(),
-        )]);
+        let headers = HashMap::from([("content-type".to_string(), "application/json".to_string())]);
 
         let query = "query GetUser($id: ID!) { user(id: $id) { id name email } }";
         let variables = r#"{"id": "123"}"#;
 
+        let context = crate::models::RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = record_graphql_request(
             &recorder,
             "query",
@@ -170,14 +166,13 @@ mod tests {
             query,
             Some(variables),
             &headers,
-            Some("127.0.0.1"),
-            None,
-            None,
+            &context,
         )
         .await
         .unwrap();
 
-        let response_json = r#"{"data": {"user": {"id": "123", "name": "John", "email": "john@example.com"}}}"#;
+        let response_json =
+            r#"{"data": {"user": {"id": "123", "name": "John", "email": "john@example.com"}}}"#;
 
         record_graphql_response(&recorder, &request_id, response_json, false, 42)
             .await
@@ -197,13 +192,12 @@ mod tests {
         let db = RecorderDatabase::new_in_memory().await.unwrap();
         let recorder = Recorder::new(db);
 
-        let headers = HashMap::from([(
-            "content-type".to_string(),
-            "application/json".to_string(),
-        )]);
+        let headers = HashMap::from([("content-type".to_string(), "application/json".to_string())]);
 
-        let mutation = "mutation CreateUser($input: UserInput!) { createUser(input: $input) { id name } }";
+        let mutation =
+            "mutation CreateUser($input: UserInput!) { createUser(input: $input) { id name } }";
 
+        let context = crate::models::RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = record_graphql_request(
             &recorder,
             "mutation",
@@ -211,9 +205,7 @@ mod tests {
             mutation,
             None,
             &headers,
-            Some("127.0.0.1"),
-            None,
-            None,
+            &context,
         )
         .await
         .unwrap();

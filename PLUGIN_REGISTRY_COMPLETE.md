@@ -470,4 +470,3 @@ sqlx migrate info  # Check migration status
 **Status**: ✅ **READY TO SHIP**
 
 🚀 **Let's launch the marketplace!** 🚀
-

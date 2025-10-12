@@ -91,12 +91,14 @@ impl InteractionRecord {
 
     /// Generate a textual summary of this interaction for embedding
     pub fn summary(&self) -> String {
-        let request_body = self.request
+        let request_body = self
+            .request
             .as_ref()
             .map(|r| serde_json::to_string(r).unwrap_or_default())
             .unwrap_or_default();
 
-        let response_body = self.response
+        let response_body = self
+            .response
             .as_ref()
             .map(|r| serde_json::to_string(r).unwrap_or_default())
             .unwrap_or_default();
@@ -139,7 +141,9 @@ pub struct BehaviorRules {
 impl Default for BehaviorRules {
     fn default() -> Self {
         Self {
-            system_prompt: "You are simulating a realistic REST API. Maintain consistency across requests.".to_string(),
+            system_prompt:
+                "You are simulating a realistic REST API. Maintain consistency across requests."
+                    .to_string(),
             schemas: HashMap::new(),
             consistency_rules: Vec::new(),
             state_transitions: HashMap::new(),
@@ -375,19 +379,16 @@ mod tests {
 
     #[test]
     fn test_llm_generation_request() {
-        let request = LlmGenerationRequest::new(
-            "You are a helpful API",
-            "Generate user data",
-        )
-        .with_temperature(0.8)
-        .with_max_tokens(512)
-        .with_schema(json!({
-            "type": "object",
-            "properties": {
-                "id": {"type": "string"},
-                "name": {"type": "string"}
-            }
-        }));
+        let request = LlmGenerationRequest::new("You are a helpful API", "Generate user data")
+            .with_temperature(0.8)
+            .with_max_tokens(512)
+            .with_schema(json!({
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "name": {"type": "string"}
+                }
+            }));
 
         assert_eq!(request.temperature, 0.8);
         assert_eq!(request.max_tokens, 512);

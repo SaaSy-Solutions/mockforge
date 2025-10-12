@@ -167,7 +167,6 @@ pub fn start_with_config(
 mod tests {
     use super::*;
     use crate::prometheus::MetricsRegistry;
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_system_metrics_collection() {

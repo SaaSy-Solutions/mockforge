@@ -49,7 +49,10 @@ impl PluginSource {
         // Check for URL
         if input.starts_with("http://") || input.starts_with("https://") {
             // Check if it's a Git repository URL
-            if input.contains(".git") || input.contains("github.com") || input.contains("gitlab.com") {
+            if input.contains(".git")
+                || input.contains("github.com")
+                || input.contains("gitlab.com")
+            {
                 let source = GitPluginSource::parse(input)?;
                 return Ok(PluginSource::Git(source));
             }
@@ -184,9 +187,7 @@ impl PluginInstaller {
                 let checksum_ref = checksum.as_deref().or(options.expected_checksum.as_deref());
                 self.remote_loader.download_with_checksum(url, checksum_ref).await?
             }
-            PluginSource::Git(git_source) => {
-                self.git_loader.clone_from_git(git_source).await?
-            }
+            PluginSource::Git(git_source) => self.git_loader.clone_from_git(git_source).await?,
             PluginSource::Registry { name, version } => {
                 return Err(PluginLoaderError::load(format!(
                     "Registry plugin installation not yet implemented: {}@{}",
@@ -260,22 +261,15 @@ impl PluginInstaller {
         // Get plugin metadata to find original source
         let metadata = {
             let store = self.metadata_store.read().await;
-            store
-                .get(plugin_id)
-                .cloned()
-                .ok_or_else(|| {
-                    PluginLoaderError::load(format!(
-                        "No installation metadata found for plugin {}. Cannot update.",
-                        plugin_id
-                    ))
-                })?
+            store.get(plugin_id).cloned().ok_or_else(|| {
+                PluginLoaderError::load(format!(
+                    "No installation metadata found for plugin {}. Cannot update.",
+                    plugin_id
+                ))
+            })?
         };
 
-        tracing::info!(
-            "Updating plugin {} from source: {}",
-            plugin_id,
-            metadata.source
-        );
+        tracing::info!("Updating plugin {} from source: {}", plugin_id, metadata.source);
 
         // Unload the plugin first
         if self.loader.get_plugin(plugin_id).await.is_some() {

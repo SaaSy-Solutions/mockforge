@@ -121,9 +121,7 @@ impl TimeSeries {
     pub fn predict_linear(&self, steps: usize) -> Vec<f64> {
         if let Some((slope, intercept)) = self.linear_trend() {
             let current_x = self.data.len() as f64;
-            (0..steps)
-                .map(|i| slope * (current_x + i as f64) + intercept)
-                .collect()
+            (0..steps).map(|i| slope * (current_x + i as f64) + intercept).collect()
         } else {
             vec![]
         }
@@ -334,12 +332,14 @@ impl PredictiveRemediationEngine {
                 RemediationAction::EnableCircuitBreaker,
                 RemediationAction::RestartService,
             ],
-            MetricType::Latency => vec![
-                RemediationAction::ClearCache,
-                RemediationAction::ScaleUp(2),
-            ],
+            MetricType::Latency => {
+                vec![RemediationAction::ClearCache, RemediationAction::ScaleUp(2)]
+            }
             MetricType::CpuUsage | MetricType::MemoryUsage => {
-                vec![RemediationAction::ScaleUp(2), RemediationAction::RestrictTraffic]
+                vec![
+                    RemediationAction::ScaleUp(2),
+                    RemediationAction::RestrictTraffic,
+                ]
             }
             MetricType::FailureCount => vec![
                 RemediationAction::RollbackDeployment,

@@ -19,10 +19,7 @@ pub async fn create_plugin_project(
     let plugin_type = PluginType::from_str(plugin_type_str)?;
 
     // Extract plugin name from path if a path was provided
-    let plugin_name = Path::new(name)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(name);
+    let plugin_name = Path::new(name).file_name().and_then(|n| n.to_str()).unwrap_or(name);
 
     // Determine output directory
     let plugin_id = to_kebab_case(plugin_name);
@@ -100,10 +97,7 @@ fn init_git_repo(dir: &Path) -> Result<()> {
     }
 
     // Create initial commit
-    let _ = Command::new("git")
-        .args(["add", "."])
-        .current_dir(dir)
-        .status();
+    let _ = Command::new("git").args(["add", "."]).current_dir(dir).status();
 
     let _ = Command::new("git")
         .args(["commit", "-m", "Initial commit"])

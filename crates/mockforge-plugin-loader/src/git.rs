@@ -259,7 +259,11 @@ impl GitPluginLoader {
     }
 
     /// Update an existing repository
-    async fn update_repository(&self, repo_path: &Path, source: &GitPluginSource) -> LoaderResult<()> {
+    async fn update_repository(
+        &self,
+        repo_path: &Path,
+        source: &GitPluginSource,
+    ) -> LoaderResult<()> {
         tracing::info!("Updating repository at: {}", repo_path.display());
 
         let repo = Repository::open(repo_path)
@@ -315,11 +319,9 @@ impl GitPluginLoader {
     /// Checkout a specific branch
     fn checkout_branch(&self, repo: &Repository, branch: &str) -> LoaderResult<()> {
         let refname = format!("refs/remotes/origin/{}", branch);
-        let obj = repo
-            .revparse_single(&refname)
-            .map_err(|e| {
-                PluginLoaderError::load(format!("Failed to find branch '{}': {}", branch, e))
-            })?;
+        let obj = repo.revparse_single(&refname).map_err(|e| {
+            PluginLoaderError::load(format!("Failed to find branch '{}': {}", branch, e))
+        })?;
 
         repo.checkout_tree(&obj, None)
             .map_err(|e| PluginLoaderError::load(format!("Failed to checkout branch: {}", e)))?;
@@ -336,11 +338,9 @@ impl GitPluginLoader {
 
     /// Checkout a specific commit
     fn checkout_commit(&self, repo: &Repository, commit: &str) -> LoaderResult<()> {
-        let obj = repo
-            .revparse_single(commit)
-            .map_err(|e| {
-                PluginLoaderError::load(format!("Failed to find commit '{}': {}", commit, e))
-            })?;
+        let obj = repo.revparse_single(commit).map_err(|e| {
+            PluginLoaderError::load(format!("Failed to find commit '{}': {}", commit, e))
+        })?;
 
         repo.checkout_tree(&obj, None)
             .map_err(|e| PluginLoaderError::load(format!("Failed to checkout commit: {}", e)))?;
@@ -416,9 +416,9 @@ impl GitPluginLoader {
             .map_err(|e| PluginLoaderError::load(format!("Failed to get submodules: {}", e)))?
             .iter_mut()
             .try_for_each(|submodule| {
-                submodule
-                    .update(true, None)
-                    .map_err(|e| PluginLoaderError::load(format!("Failed to update submodule: {}", e)))
+                submodule.update(true, None).map_err(|e| {
+                    PluginLoaderError::load(format!("Failed to update submodule: {}", e))
+                })
             })?;
 
         Ok(())
@@ -438,16 +438,12 @@ impl GitPluginLoader {
     /// Clear the Git repository cache
     pub async fn clear_cache(&self) -> LoaderResult<()> {
         if self.config.cache_dir.exists() {
-            tokio::fs::remove_dir_all(&self.config.cache_dir)
-                .await
-                .map_err(|e| {
-                    PluginLoaderError::fs(format!("Failed to clear cache directory: {}", e))
-                })?;
-            tokio::fs::create_dir_all(&self.config.cache_dir)
-                .await
-                .map_err(|e| {
-                    PluginLoaderError::fs(format!("Failed to recreate cache directory: {}", e))
-                })?;
+            tokio::fs::remove_dir_all(&self.config.cache_dir).await.map_err(|e| {
+                PluginLoaderError::fs(format!("Failed to clear cache directory: {}", e))
+            })?;
+            tokio::fs::create_dir_all(&self.config.cache_dir).await.map_err(|e| {
+                PluginLoaderError::fs(format!("Failed to recreate cache directory: {}", e))
+            })?;
         }
         Ok(())
     }
@@ -563,7 +559,8 @@ mod tests {
         assert_eq!(source.subdirectory, None);
 
         // URL with branch and subdirectory
-        let source = GitPluginSource::parse("https://github.com/user/repo#main:plugins/auth").unwrap();
+        let source =
+            GitPluginSource::parse("https://github.com/user/repo#main:plugins/auth").unwrap();
         assert_eq!(source.url, "https://github.com/user/repo");
         assert_eq!(source.git_ref, GitRef::Branch("main".to_string()));
         assert_eq!(source.subdirectory, Some("plugins/auth".to_string()));

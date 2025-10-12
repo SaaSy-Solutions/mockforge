@@ -42,10 +42,7 @@ pub fn record_grpc_success(
 
     record_success(span, attributes);
 
-    debug!(
-        duration_ms = duration_ms,
-        "gRPC method completed successfully"
-    );
+    debug!(duration_ms = duration_ms, "gRPC method completed successfully");
 }
 
 /// Record gRPC method error
@@ -69,9 +66,7 @@ pub fn record_grpc_error(
 }
 
 /// Extract trace context from gRPC metadata
-pub fn extract_grpc_trace_context(
-    metadata: &HashMap<String, String>,
-) -> opentelemetry::Context {
+pub fn extract_grpc_trace_context(metadata: &HashMap<String, String>) -> opentelemetry::Context {
     mockforge_tracing::extract_trace_context(metadata)
 }
 

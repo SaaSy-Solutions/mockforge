@@ -4,7 +4,15 @@ use tower::ServiceExt; // for `oneshot`
 #[tokio::test]
 async fn serves_root_and_assets_and_health() {
     // admin router at root
-    let app = mockforge_ui::create_admin_router(None, None, None, None, true, 9080);
+    let app = mockforge_ui::create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // /
     let res = app
@@ -42,7 +50,15 @@ async fn serves_root_and_assets_and_health() {
 #[tokio::test]
 async fn works_under_mount_prefix() {
     // router nested under /admin
-    let sub = mockforge_ui::create_admin_router(None, None, None, None, true, 9080);
+    let sub = mockforge_ui::create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
     let app = axum::Router::new().nest("/admin", sub);
 
     // /admin (nested root)
@@ -81,7 +97,15 @@ async fn works_under_mount_prefix() {
 #[tokio::test]
 async fn test_api_endpoints() {
     // admin router with API enabled
-    let app = mockforge_ui::create_admin_router(None, None, None, None, true, 9080);
+    let app = mockforge_ui::create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test all the new API endpoints
     let endpoints = vec![
@@ -107,7 +131,15 @@ async fn test_api_endpoints() {
 #[tokio::test]
 async fn test_post_endpoints() {
     // admin router with API enabled
-    let app = mockforge_ui::create_admin_router(None, None, None, None, true, 9080);
+    let app = mockforge_ui::create_admin_router(
+        None,
+        None,
+        None,
+        None,
+        true,
+        9080,
+        "http://localhost:9090".to_string(),
+    );
 
     // Test POST endpoints
     let post_endpoints = vec![

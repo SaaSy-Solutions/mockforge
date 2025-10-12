@@ -12,7 +12,7 @@
 use async_trait::async_trait;
 use mockforge_plugin_core::{
     AuthRequest, AuthResponse, DataQuery, DataResult, PluginContext, PluginError, PluginId,
-    ResponseData, ResponseRequest, ResolutionContext,
+    ResolutionContext, ResponseData, ResponseRequest,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -162,18 +162,12 @@ impl RuntimeAdapterFactory {
         wasm_bytes: Vec<u8>,
     ) -> Result<Box<dyn RuntimeAdapter>, PluginError> {
         match runtime_type {
-            RuntimeType::Rust => {
-                Ok(Box::new(RustAdapter::new(plugin_id, wasm_bytes)?))
-            }
-            RuntimeType::TinyGo => {
-                Ok(Box::new(TinyGoAdapter::new(plugin_id, wasm_bytes)?))
-            }
+            RuntimeType::Rust => Ok(Box::new(RustAdapter::new(plugin_id, wasm_bytes)?)),
+            RuntimeType::TinyGo => Ok(Box::new(TinyGoAdapter::new(plugin_id, wasm_bytes)?)),
             RuntimeType::AssemblyScript => {
                 Ok(Box::new(AssemblyScriptAdapter::new(plugin_id, wasm_bytes)?))
             }
-            RuntimeType::Remote(config) => {
-                Ok(Box::new(RemoteAdapter::new(plugin_id, config)?))
-            }
+            RuntimeType::Remote(config) => Ok(Box::new(RemoteAdapter::new(plugin_id, config)?)),
         }
     }
 }
@@ -227,15 +221,17 @@ impl RustAdapter {
         let input_len = input_bytes.len() as i32;
 
         // Get memory and alloc function
-        let memory = runtime
-            .instance
-            .get_memory(&mut runtime.store, "memory")
-            .ok_or_else(|| PluginError::execution("WASM module must export 'memory'".to_string()))?;
+        let memory =
+            runtime.instance.get_memory(&mut runtime.store, "memory").ok_or_else(|| {
+                PluginError::execution("WASM module must export 'memory'".to_string())
+            })?;
 
         let alloc_func = runtime
             .instance
             .get_typed_func::<i32, i32>(&mut runtime.store, "alloc")
-            .map_err(|e| PluginError::execution(format!("Failed to get alloc function: {}", e)))?;
+            .map_err(|e| {
+            PluginError::execution(format!("Failed to get alloc function: {}", e))
+        })?;
 
         // Allocate memory for input
         let input_ptr = alloc_func
@@ -255,10 +251,12 @@ impl RustAdapter {
                 PluginError::execution(format!("Function '{}' not found: {}", function_name, e))
             })?;
 
-        let (output_ptr, output_len) = plugin_func
-            .call(&mut runtime.store, (input_ptr, input_len))
-            .map_err(|e| {
-                PluginError::execution(format!("Failed to call function '{}': {}", function_name, e))
+        let (output_ptr, output_len) =
+            plugin_func.call(&mut runtime.store, (input_ptr, input_len)).map_err(|e| {
+                PluginError::execution(format!(
+                    "Failed to call function '{}': {}",
+                    function_name, e
+                ))
             })?;
 
         // Read output from WASM memory
@@ -268,9 +266,8 @@ impl RustAdapter {
             .map_err(|e| PluginError::execution(format!("Failed to read output: {}", e)))?;
 
         // Deallocate memory if dealloc function exists
-        if let Ok(dealloc_func) = runtime
-            .instance
-            .get_typed_func::<(i32, i32), ()>(&mut runtime.store, "dealloc")
+        if let Ok(dealloc_func) =
+            runtime.instance.get_typed_func::<(i32, i32), ()>(&mut runtime.store, "dealloc")
         {
             let _ = dealloc_func.call(&mut runtime.store, (input_ptr, input_len));
             let _ = dealloc_func.call(&mut runtime.store, (output_ptr, output_len));
@@ -296,10 +293,7 @@ impl RuntimeAdapter for RustAdapter {
         tracing::info!("Initializing Rust plugin: {}", self.plugin_id);
 
         // Create WASI context
-        let wasi_ctx = WasiCtxBuilder::new()
-            .inherit_stderr()
-            .inherit_stdout()
-            .build();
+        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
 
         // Create store
         let mut store = Store::new(&self.engine, wasi_ctx);
@@ -422,8 +416,9 @@ pub struct TinyGoAdapter {
 impl TinyGoAdapter {
     pub fn new(plugin_id: PluginId, wasm_bytes: Vec<u8>) -> Result<Self, PluginError> {
         let engine = Arc::new(Engine::default());
-        let module = Module::from_binary(&engine, &wasm_bytes)
-            .map_err(|e| PluginError::execution(format!("Failed to load TinyGo WASM module: {}", e)))?;
+        let module = Module::from_binary(&engine, &wasm_bytes).map_err(|e| {
+            PluginError::execution(format!("Failed to load TinyGo WASM module: {}", e))
+        })?;
 
         Ok(Self {
             plugin_id,
@@ -452,16 +447,21 @@ impl TinyGoAdapter {
         let input_len = input_bytes.len() as i32;
 
         // Get memory (TinyGo always exports memory)
-        let memory = runtime
-            .instance
-            .get_memory(&mut runtime.store, "memory")
-            .ok_or_else(|| PluginError::execution("TinyGo WASM module must export 'memory'".to_string()))?;
+        let memory =
+            runtime.instance.get_memory(&mut runtime.store, "memory").ok_or_else(|| {
+                PluginError::execution("TinyGo WASM module must export 'memory'".to_string())
+            })?;
 
         // TinyGo uses malloc instead of alloc
         let malloc_func = runtime
             .instance
             .get_typed_func::<i32, i32>(&mut runtime.store, "malloc")
-            .map_err(|e| PluginError::execution(format!("Failed to get malloc function (TinyGo specific): {}", e)))?;
+            .map_err(|e| {
+                PluginError::execution(format!(
+                    "Failed to get malloc function (TinyGo specific): {}",
+                    e
+                ))
+            })?;
 
         // Allocate memory for input
         let input_ptr = malloc_func
@@ -481,10 +481,12 @@ impl TinyGoAdapter {
                 PluginError::execution(format!("Function '{}' not found: {}", function_name, e))
             })?;
 
-        let (output_ptr, output_len) = plugin_func
-            .call(&mut runtime.store, (input_ptr, input_len))
-            .map_err(|e| {
-                PluginError::execution(format!("Failed to call function '{}': {}", function_name, e))
+        let (output_ptr, output_len) =
+            plugin_func.call(&mut runtime.store, (input_ptr, input_len)).map_err(|e| {
+                PluginError::execution(format!(
+                    "Failed to call function '{}': {}",
+                    function_name, e
+                ))
             })?;
 
         // Read output from WASM memory
@@ -494,9 +496,8 @@ impl TinyGoAdapter {
             .map_err(|e| PluginError::execution(format!("Failed to read output: {}", e)))?;
 
         // TinyGo uses free instead of dealloc
-        if let Ok(free_func) = runtime
-            .instance
-            .get_typed_func::<i32, ()>(&mut runtime.store, "free")
+        if let Ok(free_func) =
+            runtime.instance.get_typed_func::<i32, ()>(&mut runtime.store, "free")
         {
             let _ = free_func.call(&mut runtime.store, input_ptr);
             let _ = free_func.call(&mut runtime.store, output_ptr);
@@ -523,10 +524,7 @@ impl RuntimeAdapter for TinyGoAdapter {
         tracing::info!("Initializing TinyGo plugin: {}", self.plugin_id);
 
         // Create WASI context (TinyGo supports WASI)
-        let wasi_ctx = WasiCtxBuilder::new()
-            .inherit_stderr()
-            .inherit_stdout()
-            .build();
+        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
 
         // Create store
         let mut store = Store::new(&self.engine, wasi_ctx);
@@ -538,9 +536,9 @@ impl RuntimeAdapter for TinyGoAdapter {
         // For now, we'll use the basic linker
 
         // Instantiate the module
-        let instance = linker
-            .instantiate(&mut store, &self.module)
-            .map_err(|e| PluginError::execution(format!("Failed to instantiate TinyGo module: {}", e)))?;
+        let instance = linker.instantiate(&mut store, &self.module).map_err(|e| {
+            PluginError::execution(format!("Failed to instantiate TinyGo module: {}", e))
+        })?;
 
         // Store the runtime
         let mut runtime_guard = self.runtime.lock().unwrap();
@@ -650,8 +648,9 @@ pub struct AssemblyScriptAdapter {
 impl AssemblyScriptAdapter {
     pub fn new(plugin_id: PluginId, wasm_bytes: Vec<u8>) -> Result<Self, PluginError> {
         let engine = Arc::new(Engine::default());
-        let module = Module::from_binary(&engine, &wasm_bytes)
-            .map_err(|e| PluginError::execution(format!("Failed to load AssemblyScript WASM module: {}", e)))?;
+        let module = Module::from_binary(&engine, &wasm_bytes).map_err(|e| {
+            PluginError::execution(format!("Failed to load AssemblyScript WASM module: {}", e))
+        })?;
 
         Ok(Self {
             plugin_id,
@@ -680,10 +679,12 @@ impl AssemblyScriptAdapter {
         let input_len = input_bytes.len() as i32;
 
         // Get memory
-        let memory = runtime
-            .instance
-            .get_memory(&mut runtime.store, "memory")
-            .ok_or_else(|| PluginError::execution("AssemblyScript WASM module must export 'memory'".to_string()))?;
+        let memory =
+            runtime.instance.get_memory(&mut runtime.store, "memory").ok_or_else(|| {
+                PluginError::execution(
+                    "AssemblyScript WASM module must export 'memory'".to_string(),
+                )
+            })?;
 
         // AssemblyScript uses __new for allocation
         // Signature: __new(size: usize, id: u32) -> usize
@@ -691,7 +692,12 @@ impl AssemblyScriptAdapter {
         let new_func = runtime
             .instance
             .get_typed_func::<(i32, i32), i32>(&mut runtime.store, "__new")
-            .map_err(|e| PluginError::execution(format!("Failed to get __new function (AssemblyScript specific): {}", e)))?;
+            .map_err(|e| {
+                PluginError::execution(format!(
+                    "Failed to get __new function (AssemblyScript specific): {}",
+                    e
+                ))
+            })?;
 
         // Allocate memory for input (id=1 for string type)
         let input_ptr = new_func
@@ -699,9 +705,8 @@ impl AssemblyScriptAdapter {
             .map_err(|e| PluginError::execution(format!("Failed to allocate memory: {}", e)))?;
 
         // Pin the allocated memory to prevent GC
-        if let Ok(pin_func) = runtime
-            .instance
-            .get_typed_func::<i32, i32>(&mut runtime.store, "__pin")
+        if let Ok(pin_func) =
+            runtime.instance.get_typed_func::<i32, i32>(&mut runtime.store, "__pin")
         {
             let _ = pin_func.call(&mut runtime.store, input_ptr);
         }
@@ -719,10 +724,12 @@ impl AssemblyScriptAdapter {
                 PluginError::execution(format!("Function '{}' not found: {}", function_name, e))
             })?;
 
-        let (output_ptr, output_len) = plugin_func
-            .call(&mut runtime.store, (input_ptr, input_len))
-            .map_err(|e| {
-                PluginError::execution(format!("Failed to call function '{}': {}", function_name, e))
+        let (output_ptr, output_len) =
+            plugin_func.call(&mut runtime.store, (input_ptr, input_len)).map_err(|e| {
+                PluginError::execution(format!(
+                    "Failed to call function '{}': {}",
+                    function_name, e
+                ))
             })?;
 
         // Read output from WASM memory
@@ -732,9 +739,8 @@ impl AssemblyScriptAdapter {
             .map_err(|e| PluginError::execution(format!("Failed to read output: {}", e)))?;
 
         // Unpin the allocated memory
-        if let Ok(unpin_func) = runtime
-            .instance
-            .get_typed_func::<i32, ()>(&mut runtime.store, "__unpin")
+        if let Ok(unpin_func) =
+            runtime.instance.get_typed_func::<i32, ()>(&mut runtime.store, "__unpin")
         {
             let _ = unpin_func.call(&mut runtime.store, input_ptr);
             let _ = unpin_func.call(&mut runtime.store, output_ptr);
@@ -759,10 +765,7 @@ impl RuntimeAdapter for AssemblyScriptAdapter {
         tracing::info!("Initializing AssemblyScript plugin: {}", self.plugin_id);
 
         // Create WASI context (AssemblyScript may use WASI features)
-        let wasi_ctx = WasiCtxBuilder::new()
-            .inherit_stderr()
-            .inherit_stdout()
-            .build();
+        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
 
         // Create store
         let mut store = Store::new(&self.engine, wasi_ctx);
@@ -774,9 +777,9 @@ impl RuntimeAdapter for AssemblyScriptAdapter {
         // They use standard WASM with memory management functions
 
         // Instantiate the module
-        let instance = linker
-            .instantiate(&mut store, &self.module)
-            .map_err(|e| PluginError::execution(format!("Failed to instantiate AssemblyScript module: {}", e)))?;
+        let instance = linker.instantiate(&mut store, &self.module).map_err(|e| {
+            PluginError::execution(format!("Failed to instantiate AssemblyScript module: {}", e))
+        })?;
 
         // Store the runtime
         let mut runtime_guard = self.runtime.lock().unwrap();
@@ -1047,7 +1050,10 @@ impl RuntimeAdapter for RemoteAdapter {
         let mut metrics = HashMap::new();
         metrics.insert("plugin_id".to_string(), serde_json::json!(self.plugin_id.as_str()));
         metrics.insert("endpoint".to_string(), serde_json::json!(self.config.endpoint));
-        metrics.insert("protocol".to_string(), serde_json::json!(format!("{:?}", self.config.protocol)));
+        metrics.insert(
+            "protocol".to_string(),
+            serde_json::json!(format!("{:?}", self.config.protocol)),
+        );
         metrics
     }
 }

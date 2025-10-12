@@ -517,7 +517,6 @@ impl RequestProcessor {
 mod tests {
     use super::*;
     use axum::http::HeaderMap;
-    
 
     #[test]
     fn test_error_to_status_code() {

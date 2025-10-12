@@ -4,8 +4,8 @@ This guide covers deploying MockForge on Microsoft Azure using various services.
 
 ## Table of Contents
 
-- [Azure Container Instances (ACI)](#azure-container-instances-aci)
-- [Azure Kubernetes Service (AKS)](#azure-kubernetes-service-aks)
+- [Azure Container Instances (ACPI)](#azure-container-instances-acpi)
+- [Azure Kubernetes Service (ASK)](#azure-kubernetes-service-ask)
 - [Azure Container Apps](#azure-container-apps-recommended)
 - [Azure Virtual Machines](#azure-virtual-machines)
 - [Cost Estimation](#cost-estimation)
@@ -167,7 +167,7 @@ az deployment group create \
   --template-file template.json
 ```
 
-## Azure Container Instances (ACI)
+## Azure Container Instances (ACPI)
 
 For simple single-container deployments.
 
@@ -201,7 +201,7 @@ az container show \
 
 ### Using YAML Deployment
 
-Create `aci-deployment.yaml`:
+Create `acpi-deployment.yaml`:
 
 ```yaml
 apiVersion: '2019-12-01'
@@ -247,17 +247,17 @@ Deploy with:
 ```bash
 az container create \
   --resource-group mockforge-rg \
-  --file aci-deployment.yaml
+  --file acpi-deployment.yaml
 ```
 
-## Azure Kubernetes Service (AKS)
+## Azure Kubernetes Service (ASK)
 
 For production workloads requiring orchestration.
 
-### Step 1: Create AKS Cluster
+### Step 1: Create ASK Cluster
 
 ```bash
-az aks create \
+az ask create \
   --resource-group mockforge-rg \
   --name mockforge-cluster \
   --node-count 3 \
@@ -273,7 +273,7 @@ az aks create \
 ### Step 2: Get Credentials
 
 ```bash
-az aks get-credentials \
+az ask get-credentials \
   --resource-group mockforge-rg \
   --name mockforge-cluster
 ```
@@ -297,7 +297,7 @@ helm install mockforge mockforge/mockforge
 
 ```bash
 # Install AGIC
-az aks enable-addons \
+az ask enable-addons \
   --resource-group mockforge-rg \
   --name mockforge-cluster \
   --addons ingress-appgw \
@@ -407,8 +407,8 @@ docker tag ghcr.io/saasy-solutions/mockforge:latest \
 
 docker push mockforgeacr.azurecr.io/mockforge:latest
 
-# Grant AKS access to ACR
-az aks update \
+# Grant ASK access to ACR
+az ask update \
   --resource-group mockforge-rg \
   --name mockforge-cluster \
   --attach-acr mockforgeacr
@@ -425,7 +425,7 @@ az aks update \
 - **Compute:** ~$0.0000125/vCPU-second, ~$0.0000014/GB-second
 - **Estimated:** ~$45/month
 
-### AKS (3 nodes, Standard_D2s_v3)
+### ASK (3 nodes, Standard_D2s_v3)
 - **Cluster management:** Free
 - **Worker nodes:** ~$70/month per node = $210/month
 - **Load balancer:** ~$18/month
@@ -502,7 +502,7 @@ az container logs \
   --follow
 ```
 
-### Debug AKS pods
+### Debug ASK pods
 
 ```bash
 kubectl get pods -l app.kubernetes.io/name=mockforge

@@ -166,7 +166,7 @@ lettre = "0.11"          # Email building/sending (for client)
 
 ```rust
 // src/lib.rs
-use mockforge_core::protocol_abstration::{Protocol, ProtocolRequest, ProtocolResponse};
+use mockforge_core::protocol_abstraction::{Protocol, ProtocolRequest, ProtocolResponse};
 
 pub struct SmtpServer {
     config: SmtpConfig,

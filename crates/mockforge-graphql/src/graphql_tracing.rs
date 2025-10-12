@@ -63,26 +63,16 @@ pub fn record_graphql_error(
     span.set_attribute(KeyValue::new("graphql.error.message", error_message.to_string()));
 
     if let Some(path) = error_path {
-        span.set_attribute(KeyValue::new(
-            "graphql.error.path",
-            format!("{:?}", path),
-        ));
+        span.set_attribute(KeyValue::new("graphql.error.path", format!("{:?}", path)));
     }
 
     record_error(span, error_message);
 
-    debug!(
-        error_message = error_message,
-        duration_ms = duration_ms,
-        "GraphQL query failed"
-    );
+    debug!(error_message = error_message, duration_ms = duration_ms, "GraphQL query failed");
 }
 
 /// Create a span for a specific field resolver
-pub fn create_resolver_span(
-    parent_type: &str,
-    field_name: &str,
-) -> BoxedSpan {
+pub fn create_resolver_span(parent_type: &str, field_name: &str) -> BoxedSpan {
     create_request_span(
         Protocol::GraphQL,
         &format!("Resolve {}.{}", parent_type, field_name),
@@ -94,29 +84,22 @@ pub fn create_resolver_span(
 }
 
 /// Record resolver success
-pub fn record_resolver_success(
-    span: &mut BoxedSpan,
-    duration_us: u64,
-) {
-    let attributes = vec![
-        KeyValue::new("graphql.resolver.duration_us", duration_us as i64),
-    ];
+pub fn record_resolver_success(span: &mut BoxedSpan, duration_us: u64) {
+    let attributes = vec![KeyValue::new(
+        "graphql.resolver.duration_us",
+        duration_us as i64,
+    )];
 
     record_success(span, attributes);
 }
 
 /// Record resolver error
-pub fn record_resolver_error(
-    span: &mut BoxedSpan,
-    error_message: &str,
-) {
+pub fn record_resolver_error(span: &mut BoxedSpan, error_message: &str) {
     record_error(span, error_message);
 }
 
 /// Extract trace context from GraphQL request headers
-pub fn extract_graphql_trace_context(
-    headers: &HashMap<String, String>,
-) -> opentelemetry::Context {
+pub fn extract_graphql_trace_context(headers: &HashMap<String, String>) -> opentelemetry::Context {
     mockforge_tracing::extract_trace_context(headers)
 }
 

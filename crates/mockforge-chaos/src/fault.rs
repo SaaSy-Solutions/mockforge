@@ -47,7 +47,8 @@ impl FaultInjector {
         if !self.config.http_errors.is_empty()
             && rng.random::<f64>() < self.config.http_error_probability
         {
-            let error_code = self.config.http_errors[rng.random_range(0..self.config.http_errors.len())];
+            let error_code =
+                self.config.http_errors[rng.random_range(0..self.config.http_errors.len())];
             debug!("Injecting HTTP error: {}", error_code);
             return Some(FaultType::HttpError(error_code));
         }

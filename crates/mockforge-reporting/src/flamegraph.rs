@@ -3,7 +3,7 @@
 //! Generates flamegraph visualizations from distributed traces to help identify
 //! performance bottlenecks and understand call hierarchies.
 
-use crate::{Result, ReportingError};
+use crate::{ReportingError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -86,9 +86,7 @@ impl FlamegraphGenerator {
         }
 
         if root_spans.is_empty() {
-            return Err(ReportingError::Analysis(
-                "No root spans found in trace".to_string(),
-            ));
+            return Err(ReportingError::Analysis("No root spans found in trace".to_string()));
         }
 
         // Use first root span as the trace root
@@ -293,11 +291,7 @@ impl FlamegraphGenerator {
             }
 
             // Follow the child with the longest duration
-            current = current
-                .children
-                .iter()
-                .max_by_key(|child| child.span.duration_us)
-                .unwrap();
+            current = current.children.iter().max_by_key(|child| child.span.duration_us).unwrap();
         }
 
         path

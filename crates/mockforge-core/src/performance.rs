@@ -53,10 +53,10 @@ impl PerformanceMetrics {
     /// Record a request processing duration
     pub async fn record_request_duration(&self, duration: Duration) {
         self.request_count.fetch_add(1, Ordering::Relaxed);
-        
+
         let mut durations = self.request_durations.write().await;
         durations.push(duration);
-        
+
         // Keep only the last 1000 durations to prevent unbounded growth
         if durations.len() > 1000 {
             let drain_count = durations.len() - 1000;
@@ -119,7 +119,7 @@ impl PerformanceMetrics {
             let p50_idx = sorted_durations.len() / 2;
             let p95_idx = (sorted_durations.len() * 95) / 100;
             let p99_idx = (sorted_durations.len() * 99) / 100;
-            
+
             (
                 sorted_durations.get(p50_idx).copied(),
                 sorted_durations.get(p95_idx).copied(),
@@ -131,7 +131,8 @@ impl PerformanceMetrics {
 
         let avg_duration = if !sorted_durations.is_empty() {
             Some(Duration::from_nanos(
-                sorted_durations.iter().map(|d| d.as_nanos() as u64).sum::<u64>() / sorted_durations.len() as u64
+                sorted_durations.iter().map(|d| d.as_nanos() as u64).sum::<u64>()
+                    / sorted_durations.len() as u64,
             ))
         } else {
             None
@@ -233,7 +234,7 @@ impl Drop for PerformanceGuard {
     fn drop(&mut self) {
         let duration = self.start_time.elapsed();
         self.metrics.decrement_active_requests();
-        
+
         // Record duration asynchronously
         let metrics = self.metrics.clone();
         let name = self.name.clone();
@@ -351,7 +352,7 @@ mod tests {
     #[tokio::test]
     async fn test_performance_metrics() {
         let metrics = PerformanceMetrics::new();
-        
+
         // Record some sample data
         metrics.record_request_duration(Duration::from_millis(100)).await;
         metrics.record_request_duration(Duration::from_millis(200)).await;
@@ -361,7 +362,7 @@ mod tests {
         metrics.update_memory_usage(1024);
 
         let summary = metrics.get_summary().await;
-        
+
         assert_eq!(summary.total_requests, 2);
         assert_eq!(summary.cache_hits, 1);
         assert_eq!(summary.cache_misses, 1);
@@ -373,15 +374,15 @@ mod tests {
     #[tokio::test]
     async fn test_performance_guard() {
         let monitor = PerformanceMonitor::new();
-        
+
         {
             let _guard = monitor.start_tracking();
             sleep(Duration::from_millis(10)).await;
         }
-        
+
         // Give time for async drop to complete
         sleep(Duration::from_millis(50)).await;
-        
+
         let summary = monitor.get_summary().await;
         assert_eq!(summary.total_requests, 1);
         assert_eq!(summary.active_requests, 0);
@@ -390,13 +391,13 @@ mod tests {
     #[tokio::test]
     async fn test_disabled_monitor() {
         let monitor = PerformanceMonitor::disabled();
-        
+
         assert!(!monitor.is_enabled());
         assert!(monitor.start_tracking().is_none());
-        
+
         monitor.record_cache_hit();
         monitor.record_error();
-        
+
         let summary = monitor.get_summary().await;
         assert_eq!(summary.total_requests, 0);
         assert_eq!(summary.cache_hits, 0);

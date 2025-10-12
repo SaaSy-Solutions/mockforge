@@ -58,14 +58,14 @@ pub mod spec_suggestion;
 pub mod types;
 
 // Re-export main types
+pub use behavior::BehaviorModel;
 pub use config::IntelligentBehaviorConfig;
 pub use context::StatefulAiContext;
-pub use behavior::BehaviorModel;
 pub use memory::VectorMemoryStore;
 pub use rules::{ConsistencyRule, RuleAction, StateMachine, StateTransition};
 pub use session::{SessionManager, SessionTracking};
 pub use spec_suggestion::{
-    SpecSuggestionEngine, SuggestionConfig, SuggestionInput, SuggestionResult,
-    OutputFormat, EndpointSuggestion, ParameterInfo, SuggestionMetadata,
+    EndpointSuggestion, OutputFormat, ParameterInfo, SpecSuggestionEngine, SuggestionConfig,
+    SuggestionInput, SuggestionMetadata, SuggestionResult,
 };
-pub use types::{InteractionRecord, BehaviorRules};
+pub use types::{BehaviorRules, InteractionRecord};

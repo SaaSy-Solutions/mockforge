@@ -28,9 +28,7 @@ pub fn init_time_travel_manager(manager: Arc<TimeTravelManager>) {
 
 /// Get the global time travel manager
 fn get_time_travel_manager() -> Option<Arc<TimeTravelManager>> {
-    TIME_TRAVEL_MANAGER
-        .get()
-        .and_then(|cell| cell.read().unwrap().clone())
+    TIME_TRAVEL_MANAGER.get().and_then(|cell| cell.read().unwrap().clone())
 }
 
 /// Request to enable time travel at a specific time
@@ -104,9 +102,7 @@ pub async fn get_time_travel_status() -> impl IntoResponse {
 }
 
 /// Enable time travel
-pub async fn enable_time_travel(
-    Json(req): Json<EnableTimeTravelRequest>,
-) -> impl IntoResponse {
+pub async fn enable_time_travel(Json(req): Json<EnableTimeTravelRequest>) -> impl IntoResponse {
     match get_time_travel_manager() {
         Some(manager) => {
             let time = req.time.unwrap_or_else(Utc::now);
@@ -241,9 +237,7 @@ pub async fn reset_time_travel() -> impl IntoResponse {
 }
 
 /// Schedule a response
-pub async fn schedule_response(
-    Json(req): Json<ScheduleResponseRequest>,
-) -> impl IntoResponse {
+pub async fn schedule_response(Json(req): Json<ScheduleResponseRequest>) -> impl IntoResponse {
     match get_time_travel_manager() {
         Some(manager) => {
             // Parse trigger time (ISO 8601 or relative like "+1h")
@@ -384,9 +378,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
         return Err("No unit specified (use s, m, h, or d)".to_string());
     };
 
-    let amount: i64 = num_str
-        .parse()
-        .map_err(|e| format!("Invalid number: {}", e))?;
+    let amount: i64 = num_str.parse().map_err(|e| format!("Invalid number: {}", e))?;
 
     match unit {
         "s" => Ok(Duration::seconds(amount)),
@@ -398,10 +390,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 }
 
 /// Parse a trigger time (ISO 8601 or relative like "+1h")
-fn parse_trigger_time(
-    s: &str,
-    clock: Arc<VirtualClock>,
-) -> Result<DateTime<Utc>, String> {
+fn parse_trigger_time(s: &str, clock: Arc<VirtualClock>) -> Result<DateTime<Utc>, String> {
     let s = s.trim();
 
     // Check if it's a relative time (starts with + or -)

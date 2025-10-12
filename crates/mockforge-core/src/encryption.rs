@@ -192,7 +192,8 @@ impl EncryptionKey {
             .hash_password(password.as_bytes(), &salt_string)
             .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?;
 
-        let key_bytes = hash.hash
+        let key_bytes = hash
+            .hash
             .ok_or_else(|| EncryptionError::KeyDerivation("Failed to derive key hash".to_string()))?
             .as_bytes()
             .to_vec();
@@ -1411,7 +1412,7 @@ mod tests {
 
         // Test utility functions - check if key exists (encryption enabled)
         assert!(workspace_manager.has_workspace_key(workspace_id));
-        
+
         // Verify key is accessible from a different manager instance
         let another_manager = WorkspaceKeyManager::new();
         assert!(another_manager.has_workspace_key(workspace_id));

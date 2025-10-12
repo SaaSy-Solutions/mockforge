@@ -239,11 +239,8 @@ mod tests {
 
     #[test]
     fn test_ai_response_config_is_active() {
-        let config = AiResponseConfig::new(
-            true,
-            AiResponseMode::Intelligent,
-            "Test prompt".to_string(),
-        );
+        let config =
+            AiResponseConfig::new(true, AiResponseMode::Intelligent, "Test prompt".to_string());
         assert!(config.is_active());
 
         let config_disabled = AiResponseConfig {
@@ -284,8 +281,7 @@ mod tests {
             "message": "Hello",
             "user": "Alice"
         });
-        let context = RequestContext::new("POST".to_string(), "/chat".to_string())
-            .with_body(body);
+        let context = RequestContext::new("POST".to_string(), "/chat".to_string()).with_body(body);
 
         let template = "User {{body.user}} says: {{body.message}}";
         let expanded = expand_prompt_template(template, &context);
@@ -325,8 +321,8 @@ mod tests {
         let mut headers = HashMap::new();
         headers.insert("user-agent".to_string(), json!("TestClient/1.0"));
 
-        let context = RequestContext::new("GET".to_string(), "/api".to_string())
-            .with_headers(headers);
+        let context =
+            RequestContext::new("GET".to_string(), "/api".to_string()).with_headers(headers);
 
         let template = "Request from {{headers.user-agent}}";
         let expanded = expand_prompt_template(template, &context);

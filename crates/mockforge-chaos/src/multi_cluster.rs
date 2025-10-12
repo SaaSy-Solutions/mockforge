@@ -2,9 +2,9 @@
 //!
 //! Execute chaos orchestrations across multiple Kubernetes clusters simultaneously.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Multi-cluster orchestration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,10 +32,10 @@ pub struct ClusterTarget {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncMode {
-    Parallel,      // Execute on all clusters simultaneously
-    Sequential,    // Execute one cluster at a time
-    Rolling,       // Rolling execution with configurable window
-    Canary,        // Execute on canary cluster first, then others
+    Parallel,   // Execute on all clusters simultaneously
+    Sequential, // Execute one cluster at a time
+    Rolling,    // Rolling execution with configurable window
+    Canary,     // Execute on canary cluster first, then others
 }
 
 /// Failover policy
@@ -114,7 +114,8 @@ impl MultiClusterOrchestrator {
 
     /// Execute a multi-cluster orchestration
     pub async fn execute(&mut self, name: &str) -> Result<MultiClusterStatus, String> {
-        let orchestration = self.orchestrations
+        let orchestration = self
+            .orchestrations
             .get(name)
             .ok_or_else(|| format!("Orchestration '{}' not found", name))?
             .clone();
@@ -258,10 +259,8 @@ impl MultiClusterOrchestrator {
     ) -> Result<(), String> {
         // Rolling execution with window size of 1-2 clusters at a time
         let window_size = 2;
-        let mut enabled_clusters: Vec<_> = orchestration.clusters
-            .iter()
-            .filter(|c| c.enabled)
-            .collect();
+        let mut enabled_clusters: Vec<_> =
+            orchestration.clusters.iter().filter(|c| c.enabled).collect();
 
         enabled_clusters.sort_by_key(|c| c.priority);
 
@@ -273,7 +272,8 @@ impl MultiClusterOrchestrator {
                         status.successful_clusters += 1;
                     }
                     Err(e) => {
-                        if let Some(cluster_status) = status.cluster_statuses.get_mut(&cluster.name) {
+                        if let Some(cluster_status) = status.cluster_statuses.get_mut(&cluster.name)
+                        {
                             cluster_status.status = ExecutionStatus::Failed;
                             cluster_status.error = Some(e.clone());
                         }
@@ -300,10 +300,8 @@ impl MultiClusterOrchestrator {
         status: &mut MultiClusterStatus,
     ) -> Result<(), String> {
         // Find canary cluster (highest priority)
-        let mut enabled_clusters: Vec<_> = orchestration.clusters
-            .iter()
-            .filter(|c| c.enabled)
-            .collect();
+        let mut enabled_clusters: Vec<_> =
+            orchestration.clusters.iter().filter(|c| c.enabled).collect();
 
         enabled_clusters.sort_by_key(|c| std::cmp::Reverse(c.priority));
 
@@ -411,16 +409,14 @@ mod tests {
         let orch = MultiClusterOrchestration {
             name: "test-orch".to_string(),
             description: Some("Test".to_string()),
-            clusters: vec![
-                ClusterTarget {
-                    name: "cluster-1".to_string(),
-                    context: "kind-cluster-1".to_string(),
-                    namespace: "default".to_string(),
-                    region: Some("us-east-1".to_string()),
-                    priority: 1,
-                    enabled: true,
-                },
-            ],
+            clusters: vec![ClusterTarget {
+                name: "cluster-1".to_string(),
+                context: "kind-cluster-1".to_string(),
+                namespace: "default".to_string(),
+                region: Some("us-east-1".to_string()),
+                priority: 1,
+                enabled: true,
+            }],
             synchronization: SyncMode::Parallel,
             orchestration: serde_json::json!({}),
             failover_policy: FailoverPolicy {

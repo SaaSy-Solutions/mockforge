@@ -2,8 +2,8 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    Gauge, GaugeVec, HistogramOpts, HistogramVec, IntCounter,
-    IntCounterVec, IntGauge, IntGaugeVec, Opts, Registry,
+    Gauge, GaugeVec, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Opts, Registry,
 };
 use std::sync::Arc;
 use tracing::debug;
@@ -80,13 +80,10 @@ impl MetricsRegistry {
         .expect("Failed to create requests_total metric");
 
         let requests_duration_seconds = HistogramVec::new(
-            HistogramOpts::new(
-                "mockforge_request_duration_seconds",
-                "Request duration in seconds",
-            )
-            .buckets(vec![
-                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-            ]),
+            HistogramOpts::new("mockforge_request_duration_seconds", "Request duration in seconds")
+                .buckets(vec![
+                    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+                ]),
             &["protocol", "method"],
         )
         .expect("Failed to create requests_duration_seconds metric");
@@ -118,10 +115,7 @@ impl MetricsRegistry {
 
         // Plugin metrics
         let plugin_executions_total = IntCounterVec::new(
-            Opts::new(
-                "mockforge_plugin_executions_total",
-                "Total number of plugin executions",
-            ),
+            Opts::new("mockforge_plugin_executions_total", "Total number of plugin executions"),
             &["plugin_name", "status"],
         )
         .expect("Failed to create plugin_executions_total metric");
@@ -137,10 +131,7 @@ impl MetricsRegistry {
         .expect("Failed to create plugin_execution_duration_seconds metric");
 
         let plugin_errors_total = IntCounterVec::new(
-            Opts::new(
-                "mockforge_plugin_errors_total",
-                "Total number of plugin errors",
-            ),
+            Opts::new("mockforge_plugin_errors_total", "Total number of plugin errors"),
             &["plugin_name", "error_type"],
         )
         .expect("Failed to create plugin_errors_total metric");
@@ -209,10 +200,7 @@ impl MetricsRegistry {
         .expect("Failed to create workspace_active_routes metric");
 
         let workspace_errors_total = IntCounterVec::new(
-            Opts::new(
-                "mockforge_workspace_errors_total",
-                "Total number of errors by workspace",
-            ),
+            Opts::new("mockforge_workspace_errors_total", "Total number of errors by workspace"),
             &["workspace_id", "error_type"],
         )
         .expect("Failed to create workspace_errors_total metric");
@@ -252,24 +240,18 @@ impl MetricsRegistry {
         )
         .expect("Failed to create ws_messages_received metric");
 
-        let ws_errors_total = IntCounter::new(
-            "mockforge_ws_errors_total",
-            "Total number of WebSocket errors",
-        )
-        .expect("Failed to create ws_errors_total metric");
+        let ws_errors_total =
+            IntCounter::new("mockforge_ws_errors_total", "Total number of WebSocket errors")
+                .expect("Failed to create ws_errors_total metric");
 
         // SMTP metrics
-        let smtp_connections_active = IntGauge::new(
-            "mockforge_smtp_connections_active",
-            "Number of active SMTP connections",
-        )
-        .expect("Failed to create smtp_connections_active metric");
+        let smtp_connections_active =
+            IntGauge::new("mockforge_smtp_connections_active", "Number of active SMTP connections")
+                .expect("Failed to create smtp_connections_active metric");
 
-        let smtp_connections_total = IntCounter::new(
-            "mockforge_smtp_connections_total",
-            "Total number of SMTP connections",
-        )
-        .expect("Failed to create smtp_connections_total metric");
+        let smtp_connections_total =
+            IntCounter::new("mockforge_smtp_connections_total", "Total number of SMTP connections")
+                .expect("Failed to create smtp_connections_total metric");
 
         let smtp_messages_received_total = IntCounter::new(
             "mockforge_smtp_messages_received_total",
@@ -284,10 +266,7 @@ impl MetricsRegistry {
         .expect("Failed to create smtp_messages_stored_total metric");
 
         let smtp_errors_total = IntCounterVec::new(
-            Opts::new(
-                "mockforge_smtp_errors_total",
-                "Total number of SMTP errors by type",
-            ),
+            Opts::new("mockforge_smtp_errors_total", "Total number of SMTP errors by type"),
             &["error_type"],
         )
         .expect("Failed to create smtp_errors_total metric");
@@ -297,17 +276,14 @@ impl MetricsRegistry {
             Gauge::new("mockforge_memory_usage_bytes", "Memory usage in bytes")
                 .expect("Failed to create memory_usage_bytes metric");
 
-        let cpu_usage_percent =
-            Gauge::new("mockforge_cpu_usage_percent", "CPU usage percentage")
-                .expect("Failed to create cpu_usage_percent metric");
+        let cpu_usage_percent = Gauge::new("mockforge_cpu_usage_percent", "CPU usage percentage")
+            .expect("Failed to create cpu_usage_percent metric");
 
-        let thread_count =
-            Gauge::new("mockforge_thread_count", "Number of active threads")
-                .expect("Failed to create thread_count metric");
+        let thread_count = Gauge::new("mockforge_thread_count", "Number of active threads")
+            .expect("Failed to create thread_count metric");
 
-        let uptime_seconds =
-            Gauge::new("mockforge_uptime_seconds", "Server uptime in seconds")
-                .expect("Failed to create uptime_seconds metric");
+        let uptime_seconds = Gauge::new("mockforge_uptime_seconds", "Server uptime in seconds")
+            .expect("Failed to create uptime_seconds metric");
 
         // Scenario metrics
         let active_scenario_mode = IntGauge::new(
@@ -472,9 +448,7 @@ impl MetricsRegistry {
     /// Record an HTTP request
     pub fn record_http_request(&self, method: &str, status: u16, duration_seconds: f64) {
         let status_str = status.to_string();
-        self.requests_total
-            .with_label_values(&["http", method, &status_str])
-            .inc();
+        self.requests_total.with_label_values(&["http", method, &status_str]).inc();
         self.requests_duration_seconds
             .with_label_values(&["http", method])
             .observe(duration_seconds);
@@ -482,9 +456,7 @@ impl MetricsRegistry {
 
     /// Record a gRPC request
     pub fn record_grpc_request(&self, method: &str, status: &str, duration_seconds: f64) {
-        self.requests_total
-            .with_label_values(&["grpc", method, status])
-            .inc();
+        self.requests_total.with_label_values(&["grpc", method, status]).inc();
         self.requests_duration_seconds
             .with_label_values(&["grpc", method])
             .observe(duration_seconds);
@@ -512,16 +484,9 @@ impl MetricsRegistry {
     }
 
     /// Record a plugin execution
-    pub fn record_plugin_execution(
-        &self,
-        plugin_name: &str,
-        success: bool,
-        duration_seconds: f64,
-    ) {
+    pub fn record_plugin_execution(&self, plugin_name: &str, success: bool, duration_seconds: f64) {
         let status = if success { "success" } else { "failure" };
-        self.plugin_executions_total
-            .with_label_values(&[plugin_name, status])
-            .inc();
+        self.plugin_executions_total.with_label_values(&[plugin_name, status]).inc();
         self.plugin_execution_duration_seconds
             .with_label_values(&[plugin_name])
             .observe(duration_seconds);
@@ -539,9 +504,7 @@ impl MetricsRegistry {
 
     /// Record an error
     pub fn record_error(&self, protocol: &str, error_type: &str) {
-        self.errors_total
-            .with_label_values(&[protocol, error_type])
-            .inc();
+        self.errors_total.with_label_values(&[protocol, error_type]).inc();
     }
 
     /// Update memory usage
@@ -578,17 +541,17 @@ impl MetricsRegistry {
 
         // Record by path
         self.requests_by_path_total
-            .with_label_values(&[&normalized_path, method, &status_str])
+            .with_label_values(&[normalized_path.as_str(), method, status_str.as_str()])
             .inc();
         self.request_duration_by_path_seconds
-            .with_label_values(&[&normalized_path, method])
+            .with_label_values(&[normalized_path.as_str(), method])
             .observe(duration_seconds);
 
         // Update average latency (simple moving average approximation)
         // Note: For production use, consider using a proper moving average or quantiles
         let current = self
             .average_latency_by_path_seconds
-            .with_label_values(&[&normalized_path, method])
+            .with_label_values(&[normalized_path.as_str(), method])
             .get();
         let new_avg = if current == 0.0 {
             duration_seconds
@@ -596,7 +559,7 @@ impl MetricsRegistry {
             (current * 0.95) + (duration_seconds * 0.05)
         };
         self.average_latency_by_path_seconds
-            .with_label_values(&[&normalized_path, method])
+            .with_label_values(&[normalized_path.as_str(), method])
             .set(new_avg);
 
         // Also record in the general metrics
@@ -645,9 +608,7 @@ impl MetricsRegistry {
 
     /// Record an SMTP error
     pub fn record_smtp_error(&self, error_type: &str) {
-        self.smtp_errors_total
-            .with_label_values(&[error_type])
-            .inc();
+        self.smtp_errors_total.with_label_values(&[error_type]).inc();
     }
 
     /// Update thread count
@@ -681,30 +642,22 @@ impl MetricsRegistry {
 
     /// Update workspace active routes count
     pub fn update_workspace_active_routes(&self, workspace_id: &str, count: i64) {
-        self.workspace_active_routes
-            .with_label_values(&[workspace_id])
-            .set(count);
+        self.workspace_active_routes.with_label_values(&[workspace_id]).set(count);
     }
 
     /// Record a workspace error
     pub fn record_workspace_error(&self, workspace_id: &str, error_type: &str) {
-        self.workspace_errors_total
-            .with_label_values(&[workspace_id, error_type])
-            .inc();
+        self.workspace_errors_total.with_label_values(&[workspace_id, error_type]).inc();
     }
 
     /// Increment workspace active routes
     pub fn increment_workspace_routes(&self, workspace_id: &str) {
-        self.workspace_active_routes
-            .with_label_values(&[workspace_id])
-            .inc();
+        self.workspace_active_routes.with_label_values(&[workspace_id]).inc();
     }
 
     /// Decrement workspace active routes
     pub fn decrement_workspace_routes(&self, workspace_id: &str) {
-        self.workspace_active_routes
-            .with_label_values(&[workspace_id])
-            .dec();
+        self.workspace_active_routes.with_label_values(&[workspace_id]).dec();
     }
 }
 
@@ -716,16 +669,11 @@ fn normalize_path(path: &str) -> String {
     let mut segments: Vec<&str> = path.split('/').collect();
 
     for segment in &mut segments {
-        // Replace UUIDs
-        if is_uuid(segment) {
-            *segment = ":id";
-        }
-        // Replace numeric IDs
-        else if segment.parse::<i64>().is_ok() {
-            *segment = ":id";
-        }
-        // Replace hex strings (common in some APIs)
-        else if segment.len() > 8 && segment.chars().all(|c| c.is_ascii_hexdigit()) {
+        // Replace UUIDs, numeric IDs, or hex strings with :id placeholder
+        if is_uuid(segment)
+            || segment.parse::<i64>().is_ok()
+            || (segment.len() > 8 && segment.chars().all(|c| c.is_ascii_hexdigit()))
+        {
             *segment = ":id";
         }
     }
@@ -804,10 +752,7 @@ mod tests {
             normalize_path("/api/users/550e8400-e29b-41d4-a716-446655440000"),
             "/api/users/:id"
         );
-        assert_eq!(
-            normalize_path("/api/users/abc123def456"),
-            "/api/users/:id"
-        );
+        assert_eq!(normalize_path("/api/users/abc123def456"), "/api/users/:id");
         assert_eq!(normalize_path("/api/users/list"), "/api/users/list");
     }
 

@@ -430,12 +430,12 @@ persistence:
   size: 50Gi
 ```
 
-### Azure (AKS)
+### Azure (ASK)
 
-#### 1. Create AKS Cluster
+#### 1. Create ASK Cluster
 
 ```bash
-az aks create \
+az ask create \
   --resource-group mockforge-rg \
   --name mockforge-cluster \
   --node-count 3 \
@@ -446,7 +446,7 @@ az aks create \
 #### 2. Configure kubectl
 
 ```bash
-az aks get-credentials --resource-group mockforge-rg --name mockforge-cluster
+az ask get-credentials --resource-group mockforge-rg --name mockforge-cluster
 ```
 
 #### 3. Deploy MockForge
@@ -563,10 +563,10 @@ gcloud container clusters update mockforge-cluster \
   --zone us-central1-a
 ```
 
-#### AKS
+#### ASK
 
 ```bash
-az aks update \
+az ask update \
   --resource-group mockforge-rg \
   --name mockforge-cluster \
   --enable-cluster-autoscaler \
@@ -843,7 +843,7 @@ kubectl set resources deployment mockforge -n mockforge --limits=memory=1Gi
 - [Helm Documentation](https://helm.sh/docs/)
 - [AWS EKS Documentation](https://docs.aws.amazon.com/eks/)
 - [GCP GKE Documentation](https://cloud.google.com/kubernetes-engine/docs)
-- [Azure AKS Documentation](https://docs.microsoft.com/en-us/azure/aks/)
+- [Azure ASK Documentation](https://docs.microsoft.com/en-us/azure/aks/)
 - [MockForge Documentation](https://docs.mockforge.dev)
 
 ---

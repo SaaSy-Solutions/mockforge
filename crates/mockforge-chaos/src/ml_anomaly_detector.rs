@@ -3,9 +3,9 @@
 //! Detects anomalies in execution metrics using statistical methods and
 //! machine learning techniques like Isolation Forest and time-series analysis.
 
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
 
 /// Metric baseline for anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,11 +50,11 @@ pub enum AnomalySeverity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AnomalyType {
-    StatisticalOutlier,     // Value outside normal statistical bounds
-    TrendAnomaly,           // Unexpected trend change
-    SeasonalAnomaly,        // Deviation from seasonal pattern
-    ContextualAnomaly,      // Unusual given context
-    CollectiveAnomaly,      // Pattern across multiple metrics
+    StatisticalOutlier, // Value outside normal statistical bounds
+    TrendAnomaly,       // Unexpected trend change
+    SeasonalAnomaly,    // Deviation from seasonal pattern
+    ContextualAnomaly,  // Unusual given context
+    CollectiveAnomaly,  // Pattern across multiple metrics
 }
 
 /// Time-series data point
@@ -114,15 +114,13 @@ impl AnomalyDetector {
 
     /// Add time-series data point
     pub fn add_data_point(&mut self, metric_name: String, point: TimeSeriesPoint) {
-        self.time_series_data
-            .entry(metric_name)
-            .or_default()
-            .push(point);
+        self.time_series_data.entry(metric_name).or_default().push(point);
     }
 
     /// Update baseline for a metric
     pub fn update_baseline(&mut self, metric_name: &str) -> Result<MetricBaseline, String> {
-        let data = self.time_series_data
+        let data = self
+            .time_series_data
             .get(metric_name)
             .ok_or_else(|| format!("No data for metric '{}'", metric_name))?;
 
@@ -150,10 +148,8 @@ impl AnomalyDetector {
         let sum: f64 = sorted.iter().sum();
         let mean = sum / sorted.len() as f64;
 
-        let variance: f64 = sorted
-            .iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / sorted.len() as f64;
+        let variance: f64 =
+            sorted.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / sorted.len() as f64;
         let std_dev = variance.sqrt();
 
         let median = sorted[sorted.len() / 2];
@@ -241,15 +237,13 @@ impl AnomalyDetector {
         metric_name: &str,
         lookback_hours: i64,
     ) -> Result<Vec<Anomaly>, String> {
-        let data = self.time_series_data
+        let data = self
+            .time_series_data
             .get(metric_name)
             .ok_or_else(|| format!("No data for metric '{}'", metric_name))?;
 
         let cutoff = Utc::now() - Duration::hours(lookback_hours);
-        let recent_data: Vec<_> = data
-            .iter()
-            .filter(|p| p.timestamp > cutoff)
-            .collect();
+        let recent_data: Vec<_> = data.iter().filter(|p| p.timestamp > cutoff).collect();
 
         if recent_data.is_empty() {
             return Ok(Vec::new());
@@ -259,11 +253,9 @@ impl AnomalyDetector {
 
         // 1. Statistical outliers
         for point in &recent_data {
-            if let Some(anomaly) = self.detect_value_anomaly(
-                metric_name,
-                point.value,
-                point.metadata.clone(),
-            ) {
+            if let Some(anomaly) =
+                self.detect_value_anomaly(metric_name, point.value, point.metadata.clone())
+            {
                 anomalies.push(anomaly);
             }
         }
@@ -323,7 +315,11 @@ impl AnomalyDetector {
                 context.insert("change_pct".to_string(), format!("{:.1}%", change_pct * 100.0));
 
                 anomalies.push(Anomaly {
-                    id: format!("trend_anomaly_{}_{}", metric_name, data[i].timestamp.timestamp_millis()),
+                    id: format!(
+                        "trend_anomaly_{}_{}",
+                        metric_name,
+                        data[i].timestamp.timestamp_millis()
+                    ),
                     metric_name: metric_name.to_string(),
                     observed_value: curr_avg,
                     expected_range: (prev_avg * 0.8, prev_avg * 1.2),
@@ -371,10 +367,11 @@ impl AnomalyDetector {
         for metric_name in metric_names {
             if let Some(data) = self.time_series_data.get(metric_name) {
                 for point in data.iter().filter(|p| p.timestamp > cutoff) {
-                    if self.detect_value_anomaly(metric_name, point.value, HashMap::new()).is_some() {
+                    if self.detect_value_anomaly(metric_name, point.value, HashMap::new()).is_some()
+                    {
                         // Round to nearest minute for grouping
-                        let timestamp_rounded = point.timestamp
-                            - Duration::seconds(point.timestamp.timestamp() % 60);
+                        let timestamp_rounded =
+                            point.timestamp - Duration::seconds(point.timestamp.timestamp() % 60);
 
                         *anomaly_counts.entry(timestamp_rounded).or_insert(0) += 1;
                         anomalous_metrics

@@ -25,9 +25,8 @@ file_system = false
 network = false
 "#;
 
-    fs::write(dir.path().join("plugin.toml"), manifest_content).map_err(|e| {
-        PluginLoaderError::fs(format!("Failed to write manifest: {}", e))
-    })?;
+    fs::write(dir.path().join("plugin.toml"), manifest_content)
+        .map_err(|e| PluginLoaderError::fs(format!("Failed to write manifest: {}", e)))?;
 
     Ok(())
 }

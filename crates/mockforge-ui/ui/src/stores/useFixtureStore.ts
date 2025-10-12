@@ -34,7 +34,7 @@ const mockFixtures: FixtureInfo[] = [
     },
     {
       "id": 2,
-      "name": "Jane Smith", 
+      "name": "Jane Smith",
       "email": "jane@example.com",
       "active": true
     }
@@ -185,25 +185,25 @@ export const useFixtureStore = create<FixtureStore>((set, get) => ({
   fixtures: mockFixtures,
   selectedFixture: null,
   diffHistory: [],
-  
+
   setFixtures: (fixtures) => set({ fixtures }),
-  
+
   selectFixture: (fixture) => set({ selectedFixture: fixture }),
-  
+
   clearSelection: () => set({ selectedFixture: null }),
-  
+
   updateFixture: (fixtureId, content) => set((state) => {
     const fixture = state.fixtures.find(f => f.id === fixtureId);
     if (!fixture) return state;
 
     // Generate diff for history
     const diff = get().generateDiff(fixtureId, content);
-    
-    const updatedFixtures = state.fixtures.map(f => 
-      f.id === fixtureId 
-        ? { 
-            ...f, 
-            content, 
+
+    const updatedFixtures = state.fixtures.map(f =>
+      f.id === fixtureId
+        ? {
+            ...f,
+            content,
             version: String((parseInt(f.version || '1')) + 1),
             size_bytes: new Blob([content]).size,
             last_modified: new Date().toISOString(),
@@ -211,7 +211,7 @@ export const useFixtureStore = create<FixtureStore>((set, get) => ({
         : f
     );
 
-    const updatedSelected = state.selectedFixture?.id === fixtureId 
+    const updatedSelected = state.selectedFixture?.id === fixtureId
       ? updatedFixtures.find(f => f.id === fixtureId) || null
       : state.selectedFixture;
 
@@ -221,46 +221,46 @@ export const useFixtureStore = create<FixtureStore>((set, get) => ({
       diffHistory: diff.changes.length > 0 ? [diff, ...state.diffHistory.slice(0, 9)] : state.diffHistory,
     };
   }),
-  
+
   renameFixture: (fixtureId, newName) => set((state) => ({
-    fixtures: state.fixtures.map(f => 
-      f.id === fixtureId 
-        ? { 
-            ...f, 
+    fixtures: state.fixtures.map(f =>
+      f.id === fixtureId
+        ? {
+            ...f,
             name: newName,
             last_modified: new Date().toISOString(),
           }
         : f
     ),
-    selectedFixture: state.selectedFixture?.id === fixtureId 
+    selectedFixture: state.selectedFixture?.id === fixtureId
       ? { ...state.selectedFixture, name: newName, last_modified: new Date().toISOString() }
       : state.selectedFixture,
   })),
-  
+
   moveFixture: (fixtureId, newPath) => set((state) => ({
-    fixtures: state.fixtures.map(f => 
-      f.id === fixtureId 
-        ? { 
-            ...f, 
+    fixtures: state.fixtures.map(f =>
+      f.id === fixtureId
+        ? {
+            ...f,
             path: newPath,
             last_modified: new Date().toISOString(),
           }
         : f
     ),
-    selectedFixture: state.selectedFixture?.id === fixtureId 
+    selectedFixture: state.selectedFixture?.id === fixtureId
       ? { ...state.selectedFixture, path: newPath, last_modified: new Date().toISOString() }
       : state.selectedFixture,
   })),
-  
+
   deleteFixture: (fixtureId) => set((state) => ({
     fixtures: state.fixtures.filter(f => f.id !== fixtureId),
     selectedFixture: state.selectedFixture?.id === fixtureId ? null : state.selectedFixture,
   })),
-  
+
   addFixture: (fixture) => set((state) => ({
     fixtures: [...state.fixtures, fixture],
   })),
-  
+
   generateDiff: (fixtureId, newContent) => {
     const state = get();
     const fixture = state.fixtures.find(f => f.id === fixtureId);
@@ -269,7 +269,7 @@ export const useFixtureStore = create<FixtureStore>((set, get) => ({
     }
 
     const changes = generateTextDiff(String(fixture.content), String(newContent));
-    
+
     return {
       id: `${fixtureId}-${Date.now()}`,
       name: fixture.name,

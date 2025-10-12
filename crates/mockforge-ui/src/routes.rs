@@ -1,15 +1,14 @@
 //! Route definitions for the admin UI
 
-
 use axum::{
     routing::{delete, get, post},
     Router,
 };
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
+use crate::handlers::analytics::AnalyticsState;
 use crate::handlers::AdminState;
 use crate::handlers::*;
-use crate::handlers::analytics::AnalyticsState;
 use crate::time_travel_handlers;
 use mockforge_core::{get_global_logger, init_global_logger};
 

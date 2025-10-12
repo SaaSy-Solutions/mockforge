@@ -236,7 +236,11 @@ impl GraphQLResponsePlugin {
                 match self.config.mock_data_complexity.as_str() {
                     "simple" => serde_json::json!("mock_value"),
                     "medium" => {
-                        serde_json::json!(format!("mock_{}_{}", field_name, rng.random_range(1..100)))
+                        serde_json::json!(format!(
+                            "mock_{}_{}",
+                            field_name,
+                            rng.random_range(1..100)
+                        ))
                     }
                     "complex" => {
                         // Generate more complex mock data
@@ -264,7 +268,7 @@ impl GraphQLResponsePlugin {
         let fields = self.parse_graphql_query(query);
 
         if fields.is_empty() {
-            // Default response for unparseable queries
+            // Default response for unparsable queries
             return serde_json::json!({
                 "data": {
                     "message": "Mock GraphQL response generated",
@@ -428,11 +432,11 @@ impl ResponsePlugin for GraphQLResponsePlugin {
 
 /// Plugin factory function
 #[no_mangle]
-pub extern "C" fn create_response_plugin(
+pub unsafe extern "C" fn create_response_plugin(
     config_json: *const u8,
     config_len: usize,
 ) -> *mut GraphQLResponsePlugin {
-    let config_bytes = unsafe { std::slice::from_raw_parts(config_json, config_len) };
+    let config_bytes = std::slice::from_raw_parts(config_json, config_len);
 
     let config_str = match std::str::from_utf8(config_bytes) {
         Ok(s) => s,
@@ -450,11 +454,9 @@ pub extern "C" fn create_response_plugin(
 
 /// Plugin cleanup function
 #[no_mangle]
-pub extern "C" fn destroy_response_plugin(plugin: *mut GraphQLResponsePlugin) {
+pub unsafe extern "C" fn destroy_response_plugin(plugin: *mut GraphQLResponsePlugin) {
     if !plugin.is_null() {
-        unsafe {
-            let _ = Box::from_raw(plugin);
-        }
+        let _ = Box::from_raw(plugin);
     }
 }
 
@@ -577,10 +579,8 @@ mod tests {
         });
         let body_bytes = serde_json::to_vec(&body).unwrap();
 
-        let context = PluginContext::new(
-            PluginId::new("graphql-response"),
-            PluginVersion::new(1, 0, 0)
-        );
+        let context =
+            PluginContext::new(PluginId::new("graphql-response"), PluginVersion::new(1, 0, 0));
 
         let request = mockforge_plugin_core::ResponseRequest {
             method: Method::POST,

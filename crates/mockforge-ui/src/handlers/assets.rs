@@ -5,7 +5,7 @@
 
 use axum::{
     http::{self},
-    response::{IntoResponse, Redirect, Html},
+    response::{Html, IntoResponse, Redirect},
 };
 
 /// Serve the main admin HTML page

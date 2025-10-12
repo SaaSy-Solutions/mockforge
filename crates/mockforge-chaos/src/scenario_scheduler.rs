@@ -2,10 +2,10 @@
 
 use crate::scenarios::ChaosScenario;
 use chrono::{DateTime, Duration, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 use tracing::{debug, info, warn};
@@ -15,13 +15,9 @@ use tracing::{debug, info, warn};
 #[serde(tag = "type")]
 pub enum ScheduleType {
     /// Run once at a specific time
-    Once {
-        at: DateTime<Utc>,
-    },
+    Once { at: DateTime<Utc> },
     /// Run after a delay
-    Delayed {
-        delay_seconds: u64,
-    },
+    Delayed { delay_seconds: u64 },
     /// Run periodically with interval
     Periodic {
         interval_seconds: u64,
@@ -62,11 +58,7 @@ pub struct ScheduledScenario {
 
 impl ScheduledScenario {
     /// Create a new scheduled scenario
-    pub fn new(
-        id: impl Into<String>,
-        scenario: ChaosScenario,
-        schedule: ScheduleType,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, scenario: ChaosScenario, schedule: ScheduleType) -> Self {
         let mut scheduled = Self {
             id: id.into(),
             scenario,
@@ -269,8 +261,7 @@ impl ScenarioScheduler {
         schedules: Arc<RwLock<HashMap<String, ScheduledScenario>>>,
         mut rx: mpsc::Receiver<ScheduledScenario>,
         callback: F,
-    )
-    where
+    ) where
         F: Fn(ScheduledScenario),
     {
         let mut interval = interval(std::time::Duration::from_secs(1));
@@ -340,9 +331,7 @@ impl ScenarioScheduler {
         if let Some(scheduled) = scheduled {
             let execution_tx = self.execution_tx.read();
             if let Some(tx) = execution_tx.as_ref() {
-                tx.send(scheduled)
-                    .await
-                    .map_err(|e| format!("Failed to trigger: {}", e))?;
+                tx.send(scheduled).await.map_err(|e| format!("Failed to trigger: {}", e))?;
                 Ok(())
             } else {
                 Err("Scheduler not started".to_string())

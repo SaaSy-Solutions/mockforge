@@ -10,7 +10,7 @@ export interface SSEHookOptions {
    * Whether to automatically connect when the hook is mounted
    */
   autoConnect?: boolean;
-  
+
   /**
    * Retry configuration
    */
@@ -26,27 +26,27 @@ export interface SSEHookReturn<T = unknown> {
    * Latest data received from SSE
    */
   data: T | null;
-  
+
   /**
    * Connection state
    */
   readyState: number;
-  
+
   /**
    * Error if any occurred
    */
   error: Event | null;
-  
+
   /**
    * Manually connect to SSE
    */
   connect: () => void;
-  
+
   /**
    * Manually disconnect from SSE
    */
   disconnect: () => void;
-  
+
   /**
    * Whether the connection is open
    */
@@ -64,14 +64,14 @@ export function useSSE<T = unknown>(
     autoConnect = true,
     retry = { enabled: true, maxAttempts: 3, delay: 1000 }
   } = options;
-  
+
   const [data, setData] = useState<T | null>(null);
   const [readyState, setReadyState] = useState<number>(EventSource.CLOSED);
   const [error, setError] = useState<Event | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryAttemptsRef = useRef(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
       if (import.meta.env.DEV) {
@@ -185,7 +185,7 @@ export function useSSE<T = unknown>(
       setReadyState(EventSource.CLOSED);
     }
   }, [url, disconnect, retry.enabled, retry.maxAttempts, retry.delay]);
-  
+
   // Auto-connect on mount
   useEffect(() => {
     if (autoConnect) {
@@ -199,9 +199,9 @@ export function useSSE<T = unknown>(
 
   // Update connection when URL changes - removed to prevent reconnection loops
   // The connection is already handled by the mount effect above
-  
+
   const isConnected = readyState === EventSource.OPEN;
-  
+
   return {
     data,
     readyState,

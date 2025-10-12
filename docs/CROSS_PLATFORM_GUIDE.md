@@ -7,7 +7,7 @@ MockForge is built in Rust and designed to work seamlessly across Linux, macOS, 
 MockForge is officially tested and supported on:
 
 - **Linux** (Ubuntu 20.04+, Debian 10+, RHEL 8+, and other distributions)
-- **macOS** (macOS 11 Big Sur and later)
+- **macOS** (macOS 11 Big Sure and later)
 - **Windows** (Windows 10, Windows 11, Windows Server 2019+)
 
 All platforms receive the same features and functionality, with automatic CI/CD testing ensuring consistent behavior.

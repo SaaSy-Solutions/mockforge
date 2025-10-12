@@ -111,11 +111,9 @@ impl ChainExecutionEngine {
         }
 
         // Merge custom variables from request
-        if let Some(vars) = variables {
-            if let serde_json::Value::Object(map) = vars {
-                for (key, value) in map {
-                    execution_context.templating.chain_context.set_variable(key, value);
-                }
+        if let Some(serde_json::Value::Object(map)) = variables {
+            for (key, value) in map {
+                execution_context.templating.chain_context.set_variable(key, value);
             }
         }
 
@@ -413,6 +411,7 @@ impl ChainExecutionEngine {
     }
 
     /// Utility function for topological sort
+    #[allow(clippy::only_used_in_recursion)]
     fn topo_sort_util(
         &self,
         node: &str,
@@ -564,16 +563,16 @@ mod tests {
         graph.insert("D".to_string(), vec!["B".to_string(), "C".to_string()]);
 
         let topo_order = engine.topological_sort(&graph).unwrap();
-        
+
         // Verify this is a valid topological ordering
         // D should come before B and C (its dependencies)
-        // B should come before A (its dependency)  
+        // B should come before A (its dependency)
         // C should come before A (its dependency)
         let d_pos = topo_order.iter().position(|x| x == "D").unwrap();
         let b_pos = topo_order.iter().position(|x| x == "B").unwrap();
         let c_pos = topo_order.iter().position(|x| x == "C").unwrap();
         let a_pos = topo_order.iter().position(|x| x == "A").unwrap();
-        
+
         assert!(d_pos < b_pos, "D should come before B");
         assert!(d_pos < c_pos, "D should come before C");
         assert!(b_pos < a_pos, "B should come before A");

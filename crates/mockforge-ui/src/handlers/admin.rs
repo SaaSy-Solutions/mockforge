@@ -248,14 +248,7 @@ mod tests {
     use super::*;
 
     fn create_test_state() -> super::AdminState {
-        super::AdminState::new(
-            None,
-            None,
-            None,
-            None,
-            false,
-            8080,
-        )
+        super::AdminState::new(None, None, None, None, false, 8080)
     }
 
     #[tokio::test]

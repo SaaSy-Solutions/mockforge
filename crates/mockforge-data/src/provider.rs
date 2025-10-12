@@ -137,7 +137,9 @@ mod tests {
         let provider = DataFakerProvider::new();
         let color = provider.color();
 
-        let valid_colors = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white"];
+        let valid_colors = [
+            "red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white",
+        ];
         assert!(valid_colors.contains(&color.as_str()));
     }
 

@@ -4,10 +4,7 @@ use crate::{RegistryEntry, SearchQuery, SearchResults, SortOrder};
 use std::cmp::Ordering as CmpOrdering;
 
 /// Search and sort plugins
-pub fn search_plugins(
-    entries: &[&RegistryEntry],
-    query: &SearchQuery,
-) -> SearchResults {
+pub fn search_plugins(entries: &[&RegistryEntry], query: &SearchQuery) -> SearchResults {
     let mut results: Vec<RegistryEntry> = entries
         .iter()
         .filter(|entry| filter_entry(entry, query))
@@ -58,20 +55,15 @@ fn filter_entry(entry: &RegistryEntry, query: &SearchQuery) -> bool {
     }
 
     // Filter by tags
-    if !query.tags.is_empty() {
-        if !query.tags.iter().any(|tag| entry.tags.contains(tag)) {
-            return false;
-        }
+    if !query.tags.is_empty() && !query.tags.iter().any(|tag| entry.tags.contains(tag)) {
+        return false;
     }
 
     true
 }
 
 /// Check if categories match
-fn matches_category(
-    entry_cat: &crate::PluginCategory,
-    query_cat: &crate::PluginCategory,
-) -> bool {
+fn matches_category(entry_cat: &crate::PluginCategory, query_cat: &crate::PluginCategory) -> bool {
     std::mem::discriminant(entry_cat) == std::mem::discriminant(query_cat)
 }
 
@@ -85,10 +77,7 @@ fn sort_results(results: &mut [RegistryEntry], sort: &SortOrder) {
             score_b.partial_cmp(&score_a).unwrap_or(CmpOrdering::Equal)
         }
         SortOrder::Downloads => b.downloads.cmp(&a.downloads),
-        SortOrder::Rating => b
-            .rating
-            .partial_cmp(&a.rating)
-            .unwrap_or(CmpOrdering::Equal),
+        SortOrder::Rating => b.rating.partial_cmp(&a.rating).unwrap_or(CmpOrdering::Equal),
         SortOrder::Recent => b.updated_at.cmp(&a.updated_at),
         SortOrder::Name => a.name.cmp(&b.name),
     });
@@ -149,12 +138,17 @@ mod tests {
         let entry = create_test_entry("auth-jwt", 100, 4.0);
         let entry_ref = &entry;
 
-        let mut query = SearchQuery::default();
-        query.query = Some("auth".to_string());
+        let query = SearchQuery {
+            query: Some("auth".to_string()),
+            ..Default::default()
+        };
 
         assert!(filter_entry(entry_ref, &query));
 
-        query.query = Some("template".to_string());
+        let query = SearchQuery {
+            query: Some("template".to_string()),
+            ..Default::default()
+        };
         assert!(!filter_entry(entry_ref, &query));
     }
 }

@@ -70,7 +70,10 @@ pub struct DistributedCircuitState {
 
 #[cfg(feature = "distributed")]
 impl DistributedCircuitState {
-    pub async fn new(redis_url: &str, key_prefix: impl Into<String>) -> Result<Self, redis::RedisError> {
+    pub async fn new(
+        redis_url: &str,
+        key_prefix: impl Into<String>,
+    ) -> Result<Self, redis::RedisError> {
         let client = RedisClient::open(redis_url)?;
         let conn = ConnectionManager::new(client).await?;
         Ok(Self {
@@ -83,7 +86,11 @@ impl DistributedCircuitState {
         format!("{}:circuit:{}", self.key_prefix, endpoint)
     }
 
-    pub async fn save_state(&mut self, endpoint: &str, snapshot: &CircuitBreakerSnapshot) -> Result<(), redis::RedisError> {
+    pub async fn save_state(
+        &mut self,
+        endpoint: &str,
+        snapshot: &CircuitBreakerSnapshot,
+    ) -> Result<(), redis::RedisError> {
         let key = self.key(endpoint).await;
         let data = bincode::serialize(snapshot).unwrap_or_default();
         self.redis.set_ex(&key, data, 3600).await
@@ -179,7 +186,10 @@ impl CircuitBreaker {
 
     /// Enable distributed state via Redis
     #[cfg(feature = "distributed")]
-    pub async fn with_distributed_state(mut self, redis_url: &str) -> Result<Self, redis::RedisError> {
+    pub async fn with_distributed_state(
+        mut self,
+        redis_url: &str,
+    ) -> Result<Self, redis::RedisError> {
         let dist_state = DistributedCircuitState::new(redis_url, "mockforge").await?;
         self.distributed_state = Some(Arc::new(RwLock::new(dist_state)));
         Ok(self)
@@ -194,8 +204,7 @@ impl CircuitBreaker {
     pub async fn save_state(&self) -> std::io::Result<()> {
         if let Some(path) = &self.persistence_path {
             let snapshot = self.create_snapshot().await;
-            let data = bincode::serialize(&snapshot)
-                .map_err(std::io::Error::other)?;
+            let data = bincode::serialize(&snapshot).map_err(std::io::Error::other)?;
             tokio::fs::write(path, data).await?;
             debug!("Circuit breaker state saved to {:?}", path);
         }
@@ -228,8 +237,8 @@ impl CircuitBreaker {
         if let Some(path) = &self.persistence_path {
             if path.exists() {
                 let data = tokio::fs::read(path).await?;
-                let snapshot: CircuitBreakerSnapshot = bincode::deserialize(&data)
-                    .map_err(std::io::Error::other)?;
+                let snapshot: CircuitBreakerSnapshot =
+                    bincode::deserialize(&data).map_err(std::io::Error::other)?;
                 self.restore_from_snapshot(snapshot).await;
                 info!("Circuit breaker state loaded from {:?}", path);
             }
@@ -242,9 +251,7 @@ impl CircuitBreaker {
     async fn create_snapshot(&self) -> CircuitBreakerSnapshot {
         let state = *self.state.read().await;
         let last_change = self.last_state_change.read().await;
-        let last_state_change = last_change.map(|instant| {
-            SystemTime::now() - instant.elapsed()
-        });
+        let last_state_change = last_change.map(|instant| SystemTime::now() - instant.elapsed());
 
         CircuitBreakerSnapshot {
             state,
@@ -262,7 +269,8 @@ impl CircuitBreaker {
     async fn restore_from_snapshot(&self, snapshot: CircuitBreakerSnapshot) {
         *self.state.write().await = snapshot.state;
         self.consecutive_failures.store(snapshot.consecutive_failures, Ordering::SeqCst);
-        self.consecutive_successes.store(snapshot.consecutive_successes, Ordering::SeqCst);
+        self.consecutive_successes
+            .store(snapshot.consecutive_successes, Ordering::SeqCst);
         self.total_requests.store(snapshot.total_requests, Ordering::SeqCst);
         self.successful_requests.store(snapshot.successful_requests, Ordering::SeqCst);
         self.failed_requests.store(snapshot.failed_requests, Ordering::SeqCst);
@@ -314,8 +322,11 @@ impl CircuitBreaker {
                 let current = self.half_open_requests.load(Ordering::SeqCst);
                 if current < config.half_open_max_requests as usize {
                     self.half_open_requests.fetch_add(1, Ordering::SeqCst);
-                    debug!("Circuit breaker: Request allowed in half-open state ({}/{})",
-                        current + 1, config.half_open_max_requests);
+                    debug!(
+                        "Circuit breaker: Request allowed in half-open state ({}/{})",
+                        current + 1,
+                        config.half_open_max_requests
+                    );
                     true
                 } else {
                     self.rejected_requests.fetch_add(1, Ordering::SeqCst);
@@ -587,8 +598,11 @@ impl Bulkhead {
         // Check if we can accept immediately
         if active < config.max_concurrent_requests as usize {
             self.active_requests.fetch_add(1, Ordering::SeqCst);
-            debug!("Bulkhead: Request accepted ({}/{})",
-                active + 1, config.max_concurrent_requests);
+            debug!(
+                "Bulkhead: Request accepted ({}/{})",
+                active + 1,
+                config.max_concurrent_requests
+            );
             return Ok(BulkheadGuard::new(self.clone(), true));
         }
 
@@ -602,15 +616,13 @@ impl Bulkhead {
         let queued = self.queued_requests.load(Ordering::SeqCst);
         if queued >= config.max_queue_size as usize {
             self.rejected_requests.fetch_add(1, Ordering::SeqCst);
-            warn!("Bulkhead: Request rejected (queue full: {}/{})",
-                queued, config.max_queue_size);
+            warn!("Bulkhead: Request rejected (queue full: {}/{})", queued, config.max_queue_size);
             return Err(BulkheadError::Rejected);
         }
 
         // Queue the request
         self.queued_requests.fetch_add(1, Ordering::SeqCst);
-        debug!("Bulkhead: Request queued ({}/{})",
-            queued + 1, config.max_queue_size);
+        debug!("Bulkhead: Request queued ({}/{})", queued + 1, config.max_queue_size);
 
         let timeout = Duration::from_millis(config.queue_timeout_ms);
         drop(config);
@@ -940,44 +952,47 @@ pub struct CircuitBreakerMetrics {
 impl CircuitBreakerMetrics {
     pub fn new(registry: &Registry, endpoint: &str) -> Result<Self, prometheus::Error> {
         let state_gauge = IntGauge::with_opts(
-            Opts::new("circuit_breaker_state", "Circuit breaker state (0=Closed, 1=Open, 2=HalfOpen)")
-                .const_label("endpoint", endpoint)
+            Opts::new(
+                "circuit_breaker_state",
+                "Circuit breaker state (0=Closed, 1=Open, 2=HalfOpen)",
+            )
+            .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(state_gauge.clone()))?;
 
         let total_requests = Counter::with_opts(
             Opts::new("circuit_breaker_requests_total", "Total requests through circuit breaker")
-                .const_label("endpoint", endpoint)
+                .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(total_requests.clone()))?;
 
         let successful_requests = Counter::with_opts(
             Opts::new("circuit_breaker_requests_successful", "Successful requests")
-                .const_label("endpoint", endpoint)
+                .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(successful_requests.clone()))?;
 
         let failed_requests = Counter::with_opts(
             Opts::new("circuit_breaker_requests_failed", "Failed requests")
-                .const_label("endpoint", endpoint)
+                .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(failed_requests.clone()))?;
 
         let rejected_requests = Counter::with_opts(
             Opts::new("circuit_breaker_requests_rejected", "Rejected requests")
-                .const_label("endpoint", endpoint)
+                .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(rejected_requests.clone()))?;
 
         let state_transitions = Counter::with_opts(
             Opts::new("circuit_breaker_state_transitions", "Circuit breaker state transitions")
-                .const_label("endpoint", endpoint)
+                .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(state_transitions.clone()))?;
 
         let request_duration = Histogram::with_opts(
             HistogramOpts::new("circuit_breaker_request_duration_seconds", "Request duration")
-                .const_label("endpoint", endpoint)
+                .const_label("endpoint", endpoint),
         )?;
         registry.register(Box::new(request_duration.clone()))?;
 
@@ -1016,37 +1031,36 @@ impl BulkheadMetrics {
     pub fn new(registry: &Registry, service: &str) -> Result<Self, prometheus::Error> {
         let active_requests = IntGauge::with_opts(
             Opts::new("bulkhead_active_requests", "Active requests")
-                .const_label("service", service)
+                .const_label("service", service),
         )?;
         registry.register(Box::new(active_requests.clone()))?;
 
         let queued_requests = IntGauge::with_opts(
             Opts::new("bulkhead_queued_requests", "Queued requests")
-                .const_label("service", service)
+                .const_label("service", service),
         )?;
         registry.register(Box::new(queued_requests.clone()))?;
 
         let total_requests = Counter::with_opts(
-            Opts::new("bulkhead_requests_total", "Total requests")
-                .const_label("service", service)
+            Opts::new("bulkhead_requests_total", "Total requests").const_label("service", service),
         )?;
         registry.register(Box::new(total_requests.clone()))?;
 
         let rejected_requests = Counter::with_opts(
             Opts::new("bulkhead_requests_rejected", "Rejected requests")
-                .const_label("service", service)
+                .const_label("service", service),
         )?;
         registry.register(Box::new(rejected_requests.clone()))?;
 
         let timeout_requests = Counter::with_opts(
             Opts::new("bulkhead_requests_timeout", "Timeout requests")
-                .const_label("service", service)
+                .const_label("service", service),
         )?;
         registry.register(Box::new(timeout_requests.clone()))?;
 
         let queue_duration = Histogram::with_opts(
             HistogramOpts::new("bulkhead_queue_duration_seconds", "Time spent in queue")
-                .const_label("service", service)
+                .const_label("service", service),
         )?;
         registry.register(Box::new(queue_duration.clone()))?;
 
@@ -1076,7 +1090,12 @@ pub struct DynamicThresholdAdjuster {
 }
 
 impl DynamicThresholdAdjuster {
-    pub fn new(window_size: Duration, min_threshold: u64, max_threshold: u64, target_error_rate: f64) -> Self {
+    pub fn new(
+        window_size: Duration,
+        min_threshold: u64,
+        max_threshold: u64,
+        target_error_rate: f64,
+    ) -> Self {
         Self {
             window_size,
             history: Arc::new(RwLock::new(Vec::new())),
@@ -1172,12 +1191,7 @@ impl CircuitBreakerManager {
         }
 
         // Create threshold adjuster
-        let adjuster = Arc::new(DynamicThresholdAdjuster::new(
-            Duration::from_secs(60),
-            2,
-            20,
-            0.1,
-        ));
+        let adjuster = Arc::new(DynamicThresholdAdjuster::new(Duration::from_secs(60), 2, 20, 0.1));
         let mut adjusters = self.threshold_adjusters.write().await;
         adjusters.insert(endpoint.to_string(), adjuster);
 
@@ -1212,7 +1226,8 @@ impl CircuitBreakerManager {
             // Get breaker and current config
             if let Some(breaker) = self.breakers.read().await.get(endpoint) {
                 let current_config = breaker.config().await;
-                let new_threshold = adjuster.calculate_threshold(current_config.failure_threshold).await;
+                let new_threshold =
+                    adjuster.calculate_threshold(current_config.failure_threshold).await;
 
                 if new_threshold != current_config.failure_threshold {
                     let mut new_config = current_config;
@@ -1319,12 +1334,25 @@ impl Clone for BulkheadManager {
 /// Health check protocol
 #[derive(Clone)]
 pub enum HealthCheckProtocol {
-    Http { url: String },
-    Https { url: String },
-    Tcp { host: String, port: u16 },
-    Grpc { endpoint: String },
-    WebSocket { url: String },
-    Custom { checker: Arc<dyn CustomHealthChecker> },
+    Http {
+        url: String,
+    },
+    Https {
+        url: String,
+    },
+    Tcp {
+        host: String,
+        port: u16,
+    },
+    Grpc {
+        endpoint: String,
+    },
+    WebSocket {
+        url: String,
+    },
+    Custom {
+        checker: Arc<dyn CustomHealthChecker>,
+    },
 }
 
 impl std::fmt::Debug for HealthCheckProtocol {
@@ -1332,8 +1360,12 @@ impl std::fmt::Debug for HealthCheckProtocol {
         match self {
             HealthCheckProtocol::Http { url } => write!(f, "Http {{ url: {:?} }}", url),
             HealthCheckProtocol::Https { url } => write!(f, "Https {{ url: {:?} }}", url),
-            HealthCheckProtocol::Tcp { host, port } => write!(f, "Tcp {{ host: {:?}, port: {} }}", host, port),
-            HealthCheckProtocol::Grpc { endpoint } => write!(f, "Grpc {{ endpoint: {:?} }}", endpoint),
+            HealthCheckProtocol::Tcp { host, port } => {
+                write!(f, "Tcp {{ host: {:?}, port: {} }}", host, port)
+            }
+            HealthCheckProtocol::Grpc { endpoint } => {
+                write!(f, "Grpc {{ endpoint: {:?} }}", endpoint)
+            }
             HealthCheckProtocol::WebSocket { url } => write!(f, "WebSocket {{ url: {:?} }}", url),
             HealthCheckProtocol::Custom { .. } => write!(f, "Custom {{ checker: <custom> }}"),
         }
@@ -1380,14 +1412,13 @@ impl HealthCheckIntegration {
             }
             HealthCheckProtocol::Tcp { host, port } => {
                 use tokio::net::TcpStream;
-                TcpStream::connect(format!("{}:{}", host, port))
-                    .await
-                    .is_ok()
+                TcpStream::connect(format!("{}:{}", host, port)).await.is_ok()
             }
             HealthCheckProtocol::Grpc { endpoint } => {
                 // Basic gRPC health check - could be enhanced with grpc-health-probe
                 let client = reqwest::Client::new();
-                match client.post(format!("{}/grpc.health.v1.Health/Check", endpoint))
+                match client
+                    .post(format!("{}/grpc.health.v1.Health/Check", endpoint))
                     .timeout(Duration::from_secs(5))
                     .send()
                     .await
@@ -1401,9 +1432,7 @@ impl HealthCheckIntegration {
                 use tokio_tungstenite::connect_async;
                 connect_async(url).await.is_ok()
             }
-            HealthCheckProtocol::Custom { checker } => {
-                checker.check().await
-            }
+            HealthCheckProtocol::Custom { checker } => checker.check().await,
         }
     }
 
@@ -1525,15 +1554,22 @@ impl CircuitBreakerAlertHandler {
                                 let mut map = HashMap::new();
                                 map.insert("endpoint".to_string(), change.endpoint.clone());
                                 map.insert("reason".to_string(), change.reason.clone());
-                                map.insert("timestamp".to_string(), format!("{:?}", change.timestamp));
+                                map.insert(
+                                    "timestamp".to_string(),
+                                    format!("{:?}", change.timestamp),
+                                );
                                 map
                             },
                         },
-                        format!("Circuit breaker for endpoint '{}' has opened: {}",
-                            change.endpoint, change.reason),
+                        format!(
+                            "Circuit breaker for endpoint '{}' has opened: {}",
+                            change.endpoint, change.reason
+                        ),
                     );
                     alert_manager.fire_alert(alert);
-                } else if change.new_state == CircuitState::Closed && change.old_state == CircuitState::Open {
+                } else if change.new_state == CircuitState::Closed
+                    && change.old_state == CircuitState::Open
+                {
                     // Resolve alert when circuit closes after being open
                     info!("Circuit breaker for '{}' recovered and closed", change.endpoint);
                 }
@@ -1556,9 +1592,9 @@ pub struct SLOConfig {
 impl Default for SLOConfig {
     fn default() -> Self {
         Self {
-            target_success_rate: 0.99, // 99% success rate
+            target_success_rate: 0.99,                 // 99% success rate
             window_duration: Duration::from_secs(300), // 5 minutes
-            error_budget_percent: 1.0, // 1% error budget
+            error_budget_percent: 1.0,                 // 1% error budget
         }
     }
 }
@@ -1631,7 +1667,8 @@ impl SLOCircuitBreakerIntegration {
     /// Get or create SLO tracker for endpoint
     pub async fn get_tracker(&self, endpoint: &str, config: SLOConfig) -> Arc<SLOTracker> {
         let mut trackers = self.slo_trackers.write().await;
-        trackers.entry(endpoint.to_string())
+        trackers
+            .entry(endpoint.to_string())
             .or_insert_with(|| Arc::new(SLOTracker::new(config)))
             .clone()
     }
@@ -1833,10 +1870,7 @@ mod tests {
         let _guard2 = bulkhead.try_acquire().await.unwrap();
 
         // Third should be rejected
-        assert!(matches!(
-            bulkhead.try_acquire().await,
-            Err(BulkheadError::Rejected)
-        ));
+        assert!(matches!(bulkhead.try_acquire().await, Err(BulkheadError::Rejected)));
 
         // Drop one guard
         drop(_guard1);
@@ -1860,9 +1894,7 @@ mod tests {
 
         // Spawn tasks that will queue
         let bulkhead_clone = bulkhead.clone();
-        let handle = tokio::spawn(async move {
-            bulkhead_clone.try_acquire().await
-        });
+        let handle = tokio::spawn(async move { bulkhead_clone.try_acquire().await });
 
         // Small delay to ensure queuing
         tokio::time::sleep(Duration::from_millis(50)).await;

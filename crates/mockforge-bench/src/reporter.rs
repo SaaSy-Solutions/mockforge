@@ -14,15 +14,10 @@ impl TerminalReporter {
         println!("{}\n", "=".repeat(60).bright_green());
 
         println!("{}", "Summary:".bold());
-        println!(
-            "  Total Requests:       {}",
-            results.total_requests.to_string().cyan()
-        );
+        println!("  Total Requests:       {}", results.total_requests.to_string().cyan());
         println!(
             "  Successful:           {} ({}%)",
-            (results.total_requests - results.failed_requests)
-                .to_string()
-                .green(),
+            (results.total_requests - results.failed_requests).to_string().green(),
             format!("{:.2}", results.success_rate()).green()
         );
         println!(
@@ -32,18 +27,9 @@ impl TerminalReporter {
         );
 
         println!("\n{}", "Response Times:".bold());
-        println!(
-            "  Avg:                  {}ms",
-            format!("{:.2}", results.avg_duration_ms).cyan()
-        );
-        println!(
-            "  p95:                  {}ms",
-            format!("{:.2}", results.p95_duration_ms).cyan()
-        );
-        println!(
-            "  p99:                  {}ms",
-            format!("{:.2}", results.p99_duration_ms).cyan()
-        );
+        println!("  Avg:                  {}ms", format!("{:.2}", results.avg_duration_ms).cyan());
+        println!("  p95:                  {}ms", format!("{:.2}", results.p95_duration_ms).cyan());
+        println!("  p99:                  {}ms", format!("{:.2}", results.p99_duration_ms).cyan());
 
         println!(
             "\n  Throughput:           {} req/s",
@@ -61,27 +47,14 @@ impl TerminalReporter {
         scenario: &str,
         duration_secs: u64,
     ) {
-        println!(
-            "\n{}\n",
-            "MockForge Bench - Load Testing Mode"
-                .bright_green()
-                .bold()
-        );
+        println!("\n{}\n", "MockForge Bench - Load Testing Mode".bright_green().bold());
         println!("{}", "─".repeat(60).bright_black());
 
         println!("{}: {}", "Specification".bold(), spec_file.cyan());
         println!("{}: {}", "Target".bold(), target.cyan());
-        println!(
-            "{}: {} endpoints",
-            "Operations".bold(),
-            num_operations.to_string().cyan()
-        );
+        println!("{}: {} endpoints", "Operations".bold(), num_operations.to_string().cyan());
         println!("{}: {}", "Scenario".bold(), scenario.cyan());
-        println!(
-            "{}: {}s",
-            "Duration".bold(),
-            duration_secs.to_string().cyan()
-        );
+        println!("{}: {}s", "Duration".bold(), duration_secs.to_string().cyan());
 
         println!("{}\n", "─".repeat(60).bright_black());
     }

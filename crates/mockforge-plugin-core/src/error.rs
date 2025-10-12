@@ -10,21 +10,21 @@ pub enum PluginError {
     #[error("Plugin loading error: {message}")]
     LoadError {
         /// Error message describing what went wrong
-        message: String
+        message: String,
     },
 
     /// Plugin execution failed
     #[error("Plugin execution error: {message}")]
     ExecutionError {
         /// Error message describing the execution failure
-        message: String
+        message: String,
     },
 
     /// Plugin violated security constraints
     #[error("Security violation: {violation}")]
     SecurityViolation {
         /// Description of the security violation
-        violation: String
+        violation: String,
     },
 
     /// Plugin exceeded resource limits
@@ -44,42 +44,42 @@ pub enum PluginError {
         /// The configuration field that is invalid
         field: String,
         /// Error message describing the configuration issue
-        message: String
+        message: String,
     },
 
     /// Plugin is incompatible with current system
     #[error("Plugin compatibility error: {reason}")]
     CompatibilityError {
         /// Reason for the compatibility error
-        reason: String
+        reason: String,
     },
 
     /// Plugin communication failed
     #[error("Plugin communication error: {message}")]
     CommunicationError {
         /// Error message describing the communication failure
-        message: String
+        message: String,
     },
 
     /// Plugin timed out
     #[error("Plugin execution timeout: {timeout_ms}ms exceeded")]
     TimeoutError {
         /// Timeout duration in milliseconds
-        timeout_ms: u64
+        timeout_ms: u64,
     },
 
     /// WebAssembly runtime error
     #[error("WebAssembly runtime error: {message}")]
     WasmError {
         /// Error message from the WASM runtime
-        message: String
+        message: String,
     },
 
     /// Plugin manifest is invalid
     #[error("Invalid plugin manifest: {message}")]
     InvalidManifest {
         /// Error message describing the manifest issue
-        message: String
+        message: String,
     },
 
     /// Plugin dependency not found or incompatible
@@ -88,14 +88,14 @@ pub enum PluginError {
         /// The dependency that caused the error
         dependency: String,
         /// Error message describing the dependency issue
-        message: String
+        message: String,
     },
 
     /// Generic plugin system error
     #[error("Plugin system error: {message}")]
     SystemError {
         /// Error message describing the system error
-        message: String
+        message: String,
     },
 }
 
@@ -204,11 +204,9 @@ impl PluginError {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
-        assert!(true);
     }
 }

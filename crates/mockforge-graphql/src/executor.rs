@@ -129,7 +129,6 @@ async fn graphql_playground() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_graphql_executor_new() {

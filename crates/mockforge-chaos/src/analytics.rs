@@ -2,10 +2,10 @@
 
 use crate::scenario_recorder::{ChaosEvent, ChaosEventType};
 use chrono::{DateTime, Duration, Utc};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// Time bucket for aggregated metrics
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -111,7 +111,10 @@ impl MetricsBucket {
                     *self.affected_endpoints.entry(ep.clone()).or_insert(0) += 1;
                 }
             }
-            ChaosEventType::FaultInjection { fault_type, endpoint } => {
+            ChaosEventType::FaultInjection {
+                fault_type,
+                endpoint,
+            } => {
                 self.total_faults += 1;
                 *self.faults_by_type.entry(fault_type.clone()).or_insert(0) += 1;
 
@@ -350,7 +353,10 @@ impl ChaosAnalytics {
     }
 
     /// Cleanup old buckets
-    fn cleanup_old_buckets(&self, buckets: &mut HashMap<(DateTime<Utc>, TimeBucket), MetricsBucket>) {
+    fn cleanup_old_buckets(
+        &self,
+        buckets: &mut HashMap<(DateTime<Utc>, TimeBucket), MetricsBucket>,
+    ) {
         if buckets.len() <= self.max_buckets {
             return;
         }

@@ -8,7 +8,7 @@ interface MetricsStore {
   selectedService: string | null;
   isLoading: boolean;
   lastUpdated: Date | null;
-  
+
   setLatencyMetrics: (metrics: LatencyMetrics[]) => void;
   setFailureMetrics: (metrics: FailureMetrics[]) => void;
   setSelectedService: (_service: string | null) => void;
@@ -19,17 +19,17 @@ interface MetricsStore {
 // Mock data generators
 const generateLatencyHistogram = (_service: string): HistogramBucket[] => {
   const ranges = [
-    '0-50ms', '50-100ms', '100-200ms', '200-500ms', 
+    '0-50ms', '50-100ms', '100-200ms', '200-500ms',
     '500ms-1s', '1s-2s', '2s-5s', '5s+'
   ];
-  
+
   return ranges.map((range, index) => {
     // Simulate realistic distribution - most requests fast, fewer slow
     let count;
     if (index < 3) count = Math.floor(Math.random() * 500) + 200; // Fast requests
     else if (index < 5) count = Math.floor(Math.random() * 100) + 50; // Medium requests
     else count = Math.floor(Math.random() * 20) + 5; // Slow requests
-    
+
     const total = 1000;
     return {
       range,
@@ -76,7 +76,7 @@ const generateLatencyMetrics = (): LatencyMetrics[] => {
 const generateFailureMetrics = (): FailureMetrics[] => {
   const services = [
     'user-service',
-    'order-service', 
+    'order-service',
     'payment-service',
     'inventory-grpc',
     'notification-service',
@@ -86,15 +86,15 @@ const generateFailureMetrics = (): FailureMetrics[] => {
     const totalRequests = Math.floor(Math.random() * 5000) + 1000;
     const failureCount = Math.floor(Math.random() * totalRequests * 0.1); // 0-10% failure rate
     const successCount = totalRequests - failureCount;
-    
+
     // Generate realistic status code distribution
     const statusCodes: Record<number, number> = {};
-    
+
     // Success codes
     statusCodes[200] = Math.floor(successCount * 0.8);
     statusCodes[201] = Math.floor(successCount * 0.15);
     statusCodes[204] = successCount - statusCodes[200] - statusCodes[201];
-    
+
     // Error codes
     if (failureCount > 0) {
       statusCodes[400] = Math.floor(failureCount * 0.3);
@@ -143,14 +143,14 @@ export const useMetricsStore = create<MetricsStore>((set, _get) => ({
 
   refreshMetrics: async () => {
     set({ isLoading: true });
-    
+
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // Generate new mock data to simulate real-time updates
     const newLatencyMetrics = generateLatencyMetrics();
     const newFailureMetrics = generateFailureMetrics();
-    
+
     set({
       latencyMetrics: newLatencyMetrics,
       failureMetrics: newFailureMetrics,
@@ -167,7 +167,7 @@ setInterval(() => {
     // Silently update metrics without showing loading state
     const newLatencyMetrics = generateLatencyMetrics();
     const newFailureMetrics = generateFailureMetrics();
-    
+
     store.setLatencyMetrics(newLatencyMetrics);
     store.setFailureMetrics(newFailureMetrics);
   }

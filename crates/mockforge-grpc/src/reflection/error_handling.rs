@@ -123,7 +123,6 @@ pub async fn simulate_latency(latency_ms: u64) {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_module_compiles() {

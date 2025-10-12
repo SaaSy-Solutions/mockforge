@@ -1,8 +1,8 @@
 //! Protocol-specific chaos engineering modules
 
+pub mod graphql;
 pub mod grpc;
 pub mod websocket;
-pub mod graphql;
 
 use crate::{ChaosConfig, Result};
 use async_trait::async_trait;

@@ -104,9 +104,8 @@ impl VirtualClock {
             let baseline = self.baseline_real_time.read().unwrap();
             if let Some(baseline_real) = *baseline {
                 let elapsed_real = Utc::now() - baseline_real;
-                let elapsed_scaled = Duration::milliseconds(
-                    (elapsed_real.num_milliseconds() as f64 * scale) as i64
-                );
+                let elapsed_scaled =
+                    Duration::milliseconds((elapsed_real.num_milliseconds() as f64 * scale) as i64);
                 return virtual_time + elapsed_scaled;
             }
 
@@ -311,20 +310,14 @@ impl ResponseScheduler {
         };
 
         let mut scheduled = self.scheduled.write().unwrap();
-        scheduled
-            .entry(response.trigger_time)
-            .or_insert_with(Vec::new)
-            .push(response.clone());
+        scheduled.entry(response.trigger_time).or_default().push(response.clone());
 
         if let Some(name) = &response.name {
             let mut named = self.named_schedules.write().unwrap();
             named.insert(name.clone(), id.clone());
         }
 
-        info!(
-            "Scheduled response {} for {}",
-            id, response.trigger_time
-        );
+        info!("Scheduled response {} for {}", id, response.trigger_time);
         Ok(id)
     }
 
@@ -335,10 +328,8 @@ impl ResponseScheduler {
         let mut due = Vec::new();
 
         // Get all times up to now
-        let times_to_process: Vec<DateTime<Utc>> = scheduled
-            .range(..=now)
-            .map(|(time, _)| *time)
-            .collect();
+        let times_to_process: Vec<DateTime<Utc>> =
+            scheduled.range(..=now).map(|(time, _)| *time).collect();
 
         for time in times_to_process {
             if let Some(responses) = scheduled.remove(&time) {
@@ -366,10 +357,7 @@ impl ResponseScheduler {
                                 }
                             }
 
-                            scheduled
-                                .entry(next_time)
-                                .or_insert_with(Vec::new)
-                                .push(next_response);
+                            scheduled.entry(next_time).or_default().push(next_response);
                         }
                     }
                 }
@@ -409,10 +397,7 @@ impl ResponseScheduler {
     /// Get all scheduled responses
     pub fn list_scheduled(&self) -> Vec<ScheduledResponse> {
         let scheduled = self.scheduled.read().unwrap();
-        scheduled
-            .values()
-            .flat_map(|v| v.iter().cloned())
-            .collect()
+        scheduled.values().flat_map(|v| v.iter().cloned()).collect()
     }
 
     /// Get count of scheduled responses

@@ -3,10 +3,10 @@
 //! Provides integration with GitOps tools like Flux and ArgoCD for
 //! managing chaos orchestrations declaratively.
 
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// GitOps repository configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,7 +138,10 @@ impl GitOpsManager {
     }
 
     /// Calculate changes between current and desired state
-    fn calculate_changes(&self, _manifests: &[OrchestrationManifest]) -> Result<Vec<GitOpsChange>, String> {
+    fn calculate_changes(
+        &self,
+        _manifests: &[OrchestrationManifest],
+    ) -> Result<Vec<GitOpsChange>, String> {
         // Compare manifests with currently deployed orchestrations
         // Return list of changes (create, update, delete)
         Ok(Vec::new())
@@ -166,7 +169,10 @@ impl GitOpsManager {
     }
 
     /// Prune orchestrations that are no longer in Git
-    async fn prune_removed_orchestrations(&mut self, current_manifests: &[OrchestrationManifest]) -> Result<(), String> {
+    async fn prune_removed_orchestrations(
+        &mut self,
+        current_manifests: &[OrchestrationManifest],
+    ) -> Result<(), String> {
         let current_names: Vec<String> = current_manifests
             .iter()
             .map(|m| m.file_path.to_string_lossy().to_string())
@@ -208,7 +214,8 @@ impl GitOpsManager {
                 }
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(self.config.sync_interval_seconds)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(self.config.sync_interval_seconds))
+                .await;
         }
     }
 }
@@ -265,11 +272,19 @@ pub mod flux {
 
     impl FluxKustomization {
         /// Create a new Flux Kustomization for MockForge orchestrations
-        pub fn new_for_orchestrations(name: String, namespace: String, git_repo: String, path: String) -> Self {
+        pub fn new_for_orchestrations(
+            name: String,
+            namespace: String,
+            git_repo: String,
+            path: String,
+        ) -> Self {
             Self {
                 api_version: "kustomize.toolkit.fluxcd.io/v1".to_string(),
                 kind: "Kustomization".to_string(),
-                metadata: FluxMetadata { name: name.clone(), namespace },
+                metadata: FluxMetadata {
+                    name: name.clone(),
+                    namespace,
+                },
                 spec: FluxSpec {
                     interval: "5m".to_string(),
                     path,
@@ -356,7 +371,10 @@ pub mod argocd {
             Self {
                 api_version: "argoproj.io/v1alpha1".to_string(),
                 kind: "Application".to_string(),
-                metadata: ArgoMetadata { name: name.clone(), namespace: namespace.clone() },
+                metadata: ArgoMetadata {
+                    name: name.clone(),
+                    namespace: namespace.clone(),
+                },
                 spec: ArgoSpec {
                     project: "default".to_string(),
                     source: ArgoSource {

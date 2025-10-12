@@ -22,13 +22,13 @@ interface FixtureTreeProps {
   selectedFixtureId?: string;
 }
 
-export function FixtureTree({ 
-  fixtures, 
-  onSelectFixture, 
-  onRenameFixture, 
-  onMoveFixture, 
+export function FixtureTree({
+  fixtures,
+  onSelectFixture,
+  onRenameFixture,
+  onMoveFixture,
   onDeleteFixture,
-  selectedFixtureId 
+  selectedFixtureId
 }: FixtureTreeProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function FixtureTree({
       for (let i = 0; i < pathParts.length - 1; i++) {
         const part = pathParts[i];
         currentPath = currentPath ? `${currentPath}/${part}` : part;
-        
+
         let folder = folderMap.get(currentPath);
         if (!folder) {
           folder = {
@@ -62,7 +62,7 @@ export function FixtureTree({
           folderMap.set(currentPath, folder);
           currentLevel.push(folder);
         }
-        
+
         currentLevel = folder.children!;
       }
 
@@ -161,7 +161,7 @@ export function FixtureTree({
           {node.type === 'file' && (
             <span className="text-muted-foreground">📄</span>
           )}
-          
+
           {isRenaming ? (
             <div className="flex items-center space-x-1 flex-1">
               <Input
@@ -213,7 +213,7 @@ export function FixtureTree({
             </>
           )}
         </div>
-        
+
         {node.type === 'folder' && isExpanded && node.children && (
           <div>
             {node.children.map(child => renderNode(child, depth + 1))}

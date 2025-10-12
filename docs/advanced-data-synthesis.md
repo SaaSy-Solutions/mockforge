@@ -7,7 +7,7 @@ MockForge provides sophisticated data synthesis capabilities that go far beyond 
 The advanced data synthesis system consists of four main components:
 
 1. **SmartMockGenerator** - Intelligent field-based mock data generation
-2. **Schema Graph Extraction** - Relationship discovery from protobuf schemas  
+2. **Schema Graph Extraction** - Relationship discovery from protobuf schemas
 3. **RAG-Driven Synthesis** - Domain-aware data generation using Retrieval-Augmented Generation
 4. **Validation Framework** - Cross-endpoint consistency and integrity validation
 
@@ -69,7 +69,7 @@ let config = SmartMockConfig {
 The generator automatically infers appropriate data types based on field names:
 
 - **Email fields**: `email`, `email_address` → realistic email addresses
-- **Phone fields**: `phone`, `mobile`, `phone_number` → formatted phone numbers  
+- **Phone fields**: `phone`, `mobile`, `phone_number` → formatted phone numbers
 - **ID fields**: `id`, `user_id`, `order_id` → sequential or UUID-based IDs
 - **Name fields**: `name`, `first_name`, `last_name` → realistic names
 - **Date/Time fields**: `created_at`, `updated_at`, `timestamp` → ISO timestamps
@@ -93,7 +93,7 @@ let schema_graph = extractor.extract_from_proto(&descriptor_pool)?;
 for relationship in &schema_graph.relationships {
     println!("Found relationship: {} -> {} via {}",
         relationship.from_entity,
-        relationship.to_entity, 
+        relationship.to_entity,
         relationship.field_name
     );
 }
@@ -284,7 +284,7 @@ for warning in &result.warnings {
 
 // Get validation statistics
 let stats = validator.get_statistics();
-println!("Validated {} entities across {} types", 
+println!("Validated {} entities across {} types",
     stats.total_entities, stats.entity_type_count);
 ```
 
@@ -307,20 +307,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         SmartMockConfig::default(),
         42
     );
-    
+
     // 2. Extract schema relationships
     let extractor = ProtoSchemaGraphExtractor::new();
     let schema_graph = extractor.extract_from_proto(&descriptor_pool)?;
-    
+
     // 3. Setup RAG synthesizer
     let rag_config = RagSynthesisConfig::default();
     let mut rag_synthesizer = RagDataSynthesizer::new(rag_config);
     rag_synthesizer.set_schema_graph(schema_graph.clone());
-    
+
     // 4. Setup validation framework
     let mut validator = ValidationFramework::new(ValidationConfig::default());
     validator.set_schema_graph(schema_graph);
-    
+
     // 5. Generate coherent test data
     let user_entity = GeneratedEntity {
         entity_type: "User".to_string(),
@@ -333,7 +333,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         endpoint: "/users".to_string(),
         generated_at: SystemTime::now(),
     };
-    
+
     let order_entity = GeneratedEntity {
         entity_type: "Order".to_string(),
         primary_key: Some("order_1".to_string()),
@@ -345,20 +345,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         endpoint: "/orders".to_string(),
         generated_at: SystemTime::now(),
     };
-    
+
     // 6. Register and validate
     validator.register_entity(user_entity)?;
     validator.register_entity(order_entity)?;
-    
+
     let result = validator.validate_all_entities();
-    
+
     if result.is_valid {
         println!("✅ Generated coherent test data with {} entities",
             validator.get_statistics().total_entities);
     } else {
         println!("❌ Validation failed: {:?}", result.errors);
     }
-    
+
     Ok(())
 }
 ```

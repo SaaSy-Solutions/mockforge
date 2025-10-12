@@ -1,6 +1,6 @@
 //! Request template generation from OpenAPI operations
 
-use crate::error::{BenchError, Result};
+use crate::error::Result;
 use crate::spec_parser::ApiOperation;
 use openapiv3::{
     MediaType, Parameter, ParameterData, ParameterSchemaOrContent, ReferenceOr, RequestBody,
@@ -29,11 +29,8 @@ impl RequestTemplate {
         }
 
         if !self.query_params.is_empty() {
-            let query_string: Vec<String> = self
-                .query_params
-                .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
-                .collect();
+            let query_string: Vec<String> =
+                self.query_params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
             path = format!("{}?{}", path, query_string.join("&"));
         }
 
@@ -91,7 +88,7 @@ impl RequestGenerator {
             Parameter::Query { parameter_data, .. } => ("query", parameter_data),
             Parameter::Path { parameter_data, .. } => ("path", parameter_data),
             Parameter::Header { parameter_data, .. } => ("header", parameter_data),
-            Parameter::Cookie { parameter_data, .. } => return Ok(()), // Skip cookies for now
+            Parameter::Cookie { .. } => return Ok(()), // Skip cookies for now
         };
 
         let value = Self::generate_param_value(param_data)?;
@@ -185,7 +182,7 @@ impl RequestGenerator {
             }
             SchemaKind::Type(Type::Array(arr)) => {
                 if let Some(items) = &arr.items {
-                    if let ReferenceOr::Item(item_schema) = items.as_ref() {
+                    if let ReferenceOr::Item(item_schema) = items {
                         return json!([Self::generate_json_from_schema(item_schema)]);
                     }
                 }
@@ -194,7 +191,7 @@ impl RequestGenerator {
             SchemaKind::Type(Type::String(_)) => Self::generate_string_value(schema),
             SchemaKind::Type(Type::Number(_)) => json!(42.0),
             SchemaKind::Type(Type::Integer(_)) => json!(42),
-            SchemaKind::Type(Type::Boolean {}) => json!(true),
+            SchemaKind::Type(Type::Boolean(_)) => json!(true),
             _ => json!(null),
         }
     }
@@ -215,7 +212,7 @@ impl RequestGenerator {
             SchemaKind::Type(Type::String(_)) => "test-value".to_string(),
             SchemaKind::Type(Type::Number(_)) => "42.0".to_string(),
             SchemaKind::Type(Type::Integer(_)) => "42".to_string(),
-            SchemaKind::Type(Type::Boolean {}) => "true".to_string(),
+            SchemaKind::Type(Type::Boolean(_)) => "true".to_string(),
             _ => "test-value".to_string(),
         }
     }
