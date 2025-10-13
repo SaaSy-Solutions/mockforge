@@ -37,7 +37,7 @@ regex.workspace = true
 # WebAssembly runtime for plugin execution
 wasmtime = "34.0"
 wasmtime-wasi = "34.0"
-wasmparser = "0.226"
+wasmparser = "0.239"
 
 # Plugin communication
 wit-bindgen = "0.46"

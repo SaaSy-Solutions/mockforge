@@ -4225,7 +4225,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
- "wasmparser 0.226.0",
+ "wasmparser 0.239.0",
  "wasmtime",
  "wasmtime-wasi",
  "wiremock",
@@ -8512,19 +8512,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.226.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc28600dcb2ba68d7e5f1c3ba4195c2bddc918c0243fd702d0b6dbd05689b681"
-dependencies = [
- "bitflags 2.9.4",
- "hashbrown 0.15.5",
- "indexmap 2.11.4",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.233.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b51cb03afce7964bbfce46602d6cb358726f36430b6ba084ac6020d8ce5bc102"
@@ -8546,6 +8533,7 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap 2.11.4",
  "semver",
+ "serde",
 ]
 
 [[package]]
