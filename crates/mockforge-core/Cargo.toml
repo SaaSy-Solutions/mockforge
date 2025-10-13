@@ -53,7 +53,7 @@ axum = { workspace = true }
 json-patch = "4.0.0"
 jsonptr = "0.7.1"
 jsonpath = "0.1"
-roxmltree = "0.20"
+roxmltree = "0.21"
 globwalk = "0.9.1"
 tempfile = "3.10"
 prost = "0.14"

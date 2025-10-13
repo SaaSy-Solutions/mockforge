@@ -37,7 +37,7 @@ hex = { workspace = true }
 rand = { workspace = true }
 json-patch = { workspace = true }
 jsonpath = "0.1"
-roxmltree = "0.20"
+roxmltree = "0.21"
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 itertools = { workspace = true }
