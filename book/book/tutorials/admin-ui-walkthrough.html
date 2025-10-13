@@ -1,0 +1,543 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Admin UI Walkthrough - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/tutorials/admin-ui-walkthrough.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="admin-ui-walkthrough"><a class="header" href="#admin-ui-walkthrough">Admin UI Walkthrough</a></h1>
+<p><strong>Goal</strong>: Use MockForge’s Admin UI to visually manage your mock server, view live logs, and configure settings without editing files.</p>
+<p><strong>Time</strong>: 5 minutes</p>
+<h2 id="what-youll-learn"><a class="header" href="#what-youll-learn">What You’ll Learn</a></h2>
+<ul>
+<li>Access the Admin UI</li>
+<li>View real-time request logs</li>
+<li>Monitor server metrics</li>
+<li>Manage fixtures with drag-and-drop</li>
+<li>Configure latency and fault injection</li>
+<li>Search and filter logs</li>
+</ul>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li>MockForge installed and running</li>
+<li>A basic understanding of MockForge concepts</li>
+</ul>
+<h2 id="step-1-start-mockforge-with-admin-ui"><a class="header" href="#step-1-start-mockforge-with-admin-ui">Step 1: Start MockForge with Admin UI</a></h2>
+<p>You can run the Admin UI in two modes:</p>
+<h3 id="standalone-mode-separate-port"><a class="header" href="#standalone-mode-separate-port">Standalone Mode (Separate Port)</a></h3>
+<pre><code class="language-bash">mockforge serve --admin --admin-port 9080 --http-port 3000
+</code></pre>
+<p>Access at: <strong>http://localhost:9080</strong></p>
+<h3 id="embedded-mode-under-http-server"><a class="header" href="#embedded-mode-under-http-server">Embedded Mode (Under HTTP Server)</a></h3>
+<pre><code class="language-bash">mockforge serve --admin-embed --admin-mount-path /admin --http-port 3000
+</code></pre>
+<p>Access at: <strong>http://localhost:3000/admin</strong></p>
+<p>For this tutorial, we’ll use standalone mode for simplicity.</p>
+<h2 id="step-2-access-the-dashboard"><a class="header" href="#step-2-access-the-dashboard">Step 2: Access the Dashboard</a></h2>
+<p>Open your browser and navigate to <strong>http://localhost:9080</strong>.</p>
+<p>You’ll see the <strong>Dashboard</strong> with:</p>
+<h3 id="server-status-section"><a class="header" href="#server-status-section">Server Status Section</a></h3>
+<ul>
+<li><strong>HTTP Server</strong>: Running on port 3000</li>
+<li><strong>WebSocket Server</strong>: Status and port</li>
+<li><strong>gRPC Server</strong>: Status and port</li>
+<li><strong>Uptime</strong>: How long the server has been running</li>
+</ul>
+<h3 id="quick-stats"><a class="header" href="#quick-stats">Quick Stats</a></h3>
+<ul>
+<li><strong>Total Requests</strong>: Request counter</li>
+<li><strong>Active Connections</strong>: Current open connections</li>
+<li><strong>Average Response Time</strong>: Performance metrics</li>
+<li><strong>Error Rate</strong>: Failed requests percentage</li>
+</ul>
+<h3 id="recent-activity"><a class="header" href="#recent-activity">Recent Activity</a></h3>
+<ul>
+<li>Last 10 requests with timestamps, methods, paths, and status codes</li>
+</ul>
+<h2 id="step-3-view-live-logs"><a class="header" href="#step-3-view-live-logs">Step 3: View Live Logs</a></h2>
+<p>Click on the <strong>“Logs”</strong> tab in the navigation.</p>
+<h3 id="features"><a class="header" href="#features">Features:</a></h3>
+<ul>
+<li><strong>Real-time updates</strong>: Logs stream via Server-Sent Events (SSE)</li>
+<li><strong>Color-coded levels</strong>: INFO (blue), WARN (yellow), ERROR (red)</li>
+<li><strong>Request details</strong>: Method, path, status code, response time</li>
+<li><strong>Search</strong>: Filter logs by keyword</li>
+<li><strong>Auto-scroll</strong>: Automatically scroll to newest logs</li>
+</ul>
+<h3 id="try-it"><a class="header" href="#try-it">Try It:</a></h3>
+<ol>
+<li>Keep the logs tab open</li>
+<li>In another terminal, send a request:
+<pre><code class="language-bash">curl http://localhost:3000/users
+</code></pre>
+</li>
+<li>Watch the log appear instantly in the UI!</li>
+</ol>
+<h3 id="log-search"><a class="header" href="#log-search">Log Search</a></h3>
+<p>Use the search box to filter:</p>
+<ul>
+<li>Search by path: <code>/users</code></li>
+<li>Search by method: <code>POST</code></li>
+<li>Search by status: <code>404</code></li>
+<li>Search by error message: <code>validation failed</code></li>
+</ul>
+<h2 id="step-4-explore-metrics"><a class="header" href="#step-4-explore-metrics">Step 4: Explore Metrics</a></h2>
+<p>Click on the <strong>“Metrics”</strong> tab.</p>
+<h3 id="available-metrics"><a class="header" href="#available-metrics">Available Metrics:</a></h3>
+<ul>
+<li><strong>Request Rate</strong>: Requests per second over time</li>
+<li><strong>Response Times</strong>: P50, P95, P99 latencies</li>
+<li><strong>Status Code Distribution</strong>: 2xx, 4xx, 5xx breakdown</li>
+<li><strong>Endpoint Performance</strong>: Slowest endpoints</li>
+<li><strong>Error Trends</strong>: Error rates over time</li>
+</ul>
+<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases:</a></h3>
+<ul>
+<li><strong>Performance testing</strong>: Monitor response times under load</li>
+<li><strong>Debugging</strong>: Identify which endpoints are failing</li>
+<li><strong>Capacity planning</strong>: See throughput limits</li>
+</ul>
+<h2 id="step-5-manage-fixtures"><a class="header" href="#step-5-manage-fixtures">Step 5: Manage Fixtures</a></h2>
+<p>Click on the <strong>“Fixtures”</strong> tab.</p>
+<h3 id="what-are-fixtures"><a class="header" href="#what-are-fixtures">What are Fixtures?</a></h3>
+<p>Fixtures are saved mock scenarios - collections of requests and expected responses for testing.</p>
+<h3 id="tree-view-interface"><a class="header" href="#tree-view-interface">Tree View Interface:</a></h3>
+<pre><code>📁 Fixtures
+  📁 User Management
+    ✅ Create User - Happy Path
+    ✅ Create User - Validation Error
+    ✅ Get User - Not Found
+  📁 Order Processing
+    ✅ Create Order
+    ✅ Update Order Status
+</code></pre>
+<h3 id="actions"><a class="header" href="#actions">Actions:</a></h3>
+<ol>
+<li><strong>Drag and Drop</strong>: Reorganize fixtures into folders</li>
+<li><strong>Run Fixture</strong>: Test a specific scenario</li>
+<li><strong>Run Folder</strong>: Execute all fixtures in a folder</li>
+<li><strong>Export</strong>: Download fixtures as JSON</li>
+<li><strong>Import</strong>: Upload fixture collections</li>
+</ol>
+<h3 id="try-it-1"><a class="header" href="#try-it-1">Try It:</a></h3>
+<ol>
+<li>Click <strong>“New Fixture”</strong></li>
+<li>Name it: “Test User Creation”</li>
+<li>Configure:
+<ul>
+<li><strong>Method</strong>: POST</li>
+<li><strong>Path</strong>: <code>/users</code></li>
+<li><strong>Expected Status</strong>: 201</li>
+<li><strong>Request Body</strong>:
+<pre><code class="language-json">{"name": "Test User", "email": "test@example.com"}
+</code></pre>
+</li>
+</ul>
+</li>
+<li>Click <strong>“Save”</strong></li>
+<li>Click <strong>“Run”</strong> to test it</li>
+</ol>
+<h2 id="step-6-configure-latency-simulation"><a class="header" href="#step-6-configure-latency-simulation">Step 6: Configure Latency Simulation</a></h2>
+<p>Click on the <strong>“Configuration”</strong> tab, then <strong>“Latency”</strong>.</p>
+<h3 id="latency-profiles"><a class="header" href="#latency-profiles">Latency Profiles:</a></h3>
+<p>MockForge can simulate various network conditions:</p>
+<div class="table-wrapper"><table><thead><tr><th>Profile</th><th>Description</th><th>Latency</th></tr></thead><tbody>
+<tr><td><strong>None</strong></td><td>No artificial delay</td><td>0ms</td></tr>
+<tr><td><strong>Fast</strong></td><td>Local network</td><td>10-30ms</td></tr>
+<tr><td><strong>Normal</strong></td><td>Good internet</td><td>50-150ms</td></tr>
+<tr><td><strong>Slow</strong></td><td>Poor connection</td><td>300-800ms</td></tr>
+<tr><td><strong>Very Slow</strong></td><td>Bad mobile</td><td>1000-3000ms</td></tr>
+</tbody></table>
+</div>
+<h3 id="configure"><a class="header" href="#configure">Configure:</a></h3>
+<ol>
+<li>Select <strong>“Slow”</strong> profile</li>
+<li>Click <strong>“Apply”</strong></li>
+<li>Test an endpoint:
+<pre><code class="language-bash">time curl http://localhost:3000/users
+</code></pre>
+</li>
+<li>Notice the delay!</li>
+</ol>
+<h3 id="per-endpoint-latency"><a class="header" href="#per-endpoint-latency">Per-Endpoint Latency:</a></h3>
+<p>You can also configure latency for specific endpoints:</p>
+<pre><code class="language-yaml"># In your config file
+http:
+  latency:
+    enabled: true
+    default_profile: normal
+    endpoint_overrides:
+      "POST /orders": slow       # Simulate slow order processing
+      "GET /products": fast      # Fast product catalog
+</code></pre>
+<h2 id="step-7-enable-fault-injection"><a class="header" href="#step-7-enable-fault-injection">Step 7: Enable Fault Injection</a></h2>
+<p>Still in the <strong>“Configuration”</strong> tab, click <strong>“Fault Injection”</strong>.</p>
+<h3 id="fault-types"><a class="header" href="#fault-types">Fault Types:</a></h3>
+<ul>
+<li><strong>Random Failures</strong>: Randomly return 500 errors</li>
+<li><strong>Timeouts</strong>: Simulate request timeouts</li>
+<li><strong>Malformed Responses</strong>: Return invalid JSON</li>
+<li><strong>Connection Drops</strong>: Close connections unexpectedly</li>
+</ul>
+<h3 id="configure-1"><a class="header" href="#configure-1">Configure:</a></h3>
+<ol>
+<li><strong>Enable Fault Injection</strong>: Toggle ON</li>
+<li><strong>Error Rate</strong>: Set to 20% (1 in 5 requests fails)</li>
+<li><strong>Fault Type</strong>: Select “Random Failures”</li>
+<li>Click <strong>“Apply”</strong></li>
+</ol>
+<h3 id="test-it"><a class="header" href="#test-it">Test It:</a></h3>
+<pre><code class="language-bash"># Run this multiple times - some will fail!
+for i in {1..10}; do
+  curl http://localhost:3000/users
+  echo ""
+done
+</code></pre>
+<p>You’ll see some requests return 500 errors, simulating an unreliable backend.</p>
+<h2 id="step-8-search-across-services"><a class="header" href="#step-8-search-across-services">Step 8: Search Across Services</a></h2>
+<p>Click on the <strong>“Search”</strong> tab.</p>
+<h3 id="full-text-search"><a class="header" href="#full-text-search">Full-Text Search:</a></h3>
+<p>Search across:</p>
+<ul>
+<li>Service names</li>
+<li>Endpoint paths</li>
+<li>Request/response bodies</li>
+<li>Log messages</li>
+<li>Configuration values</li>
+</ul>
+<h3 id="try-it-2"><a class="header" href="#try-it-2">Try It:</a></h3>
+<ol>
+<li>Search for <code>users</code> - finds all user-related endpoints</li>
+<li>Search for <code>POST</code> - finds all POST endpoints</li>
+<li>Search for <code>validation</code> - finds validation errors in logs</li>
+</ol>
+<h2 id="step-9-proxy-configuration-advanced"><a class="header" href="#step-9-proxy-configuration-advanced">Step 9: Proxy Configuration (Advanced)</a></h2>
+<p>Click <strong>“Configuration”</strong> → <strong>“Proxy”</strong>.</p>
+<h3 id="hybrid-mode"><a class="header" href="#hybrid-mode">Hybrid Mode:</a></h3>
+<p>MockForge can act as a proxy, forwarding unknown requests to a real backend:</p>
+<ol>
+<li><strong>Enable Proxy</strong>: Toggle ON</li>
+<li><strong>Target URL</strong>: <code>https://api.example.com</code></li>
+<li><strong>Fallback Mode</strong>: “Forward unknown requests”</li>
+<li>Click <strong>“Apply”</strong></li>
+</ol>
+<p>Now:</p>
+<ul>
+<li>Mocked endpoints return mock data</li>
+<li>Unknown endpoints are forwarded to the real API</li>
+<li>Perfect for gradual migration!</li>
+</ul>
+<h2 id="common-workflows"><a class="header" href="#common-workflows">Common Workflows</a></h2>
+<h3 id="workflow-1-debug-a-failing-test"><a class="header" href="#workflow-1-debug-a-failing-test">Workflow 1: Debug a Failing Test</a></h3>
+<ol>
+<li>Open <strong>Logs</strong> tab</li>
+<li>Enable <strong>“Error Only”</strong> filter</li>
+<li>Run your failing test</li>
+<li>Find the error in real-time</li>
+<li>Copy the request details</li>
+<li>Fix your test or mock configuration</li>
+</ol>
+<h3 id="workflow-2-create-test-fixtures"><a class="header" href="#workflow-2-create-test-fixtures">Workflow 2: Create Test Fixtures</a></h3>
+<ol>
+<li>Run your application manually (e.g., click through the UI)</li>
+<li>Admin UI captures all requests in <strong>Logs</strong></li>
+<li>Click <strong>“Save as Fixture”</strong> on interesting requests</li>
+<li>Organize fixtures into folders</li>
+<li>Run fixtures as smoke tests before deployment</li>
+</ol>
+<h3 id="workflow-3-performance-testing"><a class="header" href="#workflow-3-performance-testing">Workflow 3: Performance Testing</a></h3>
+<ol>
+<li>Clear metrics (<strong>Metrics</strong> → <strong>“Reset”</strong>)</li>
+<li>Run load test against MockForge</li>
+<li>Monitor <strong>Metrics</strong> tab in real-time</li>
+<li>Identify performance bottlenecks</li>
+<li>Adjust mock configuration for better performance</li>
+</ol>
+<h3 id="workflow-4-demo-preparation"><a class="header" href="#workflow-4-demo-preparation">Workflow 4: Demo Preparation</a></h3>
+<ol>
+<li><strong>Fixtures</strong>: Create realistic demo scenarios</li>
+<li><strong>Latency</strong>: Set to “Fast” for smooth demos</li>
+<li><strong>Fault Injection</strong>: Disable to prevent unexpected errors</li>
+<li><strong>Logs</strong>: Keep open to show real-time activity</li>
+</ol>
+<h2 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Shortcut</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>Ctrl+K</code></td><td>Open search</td></tr>
+<tr><td><code>Ctrl+L</code></td><td>Jump to logs</td></tr>
+<tr><td><code>Ctrl+M</code></td><td>Jump to metrics</td></tr>
+<tr><td><code>Ctrl+R</code></td><td>Refresh dashboard</td></tr>
+<tr><td><code>Esc</code></td><td>Close modals</td></tr>
+</tbody></table>
+</div>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<p><strong>Admin UI not loading?</strong></p>
+<ul>
+<li>Check that the admin port (9080) isn’t blocked</li>
+<li>Verify MockForge is running with <code>--admin</code> flag</li>
+<li>Check browser console for JavaScript errors</li>
+</ul>
+<p><strong>Logs not updating?</strong></p>
+<ul>
+<li>Ensure Server-Sent Events (SSE) aren’t blocked by your browser or proxy</li>
+<li>Try refreshing the page</li>
+<li>Check that <code>/__mockforge/logs</code> endpoint is accessible</li>
+</ul>
+<p><strong>Fixtures not saving?</strong></p>
+<ul>
+<li>Verify you have write permissions to the MockForge data directory</li>
+<li>Check disk space availability</li>
+<li>Review logs for error messages</li>
+</ul>
+<h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
+<ul>
+<li><a href="../user-guide/http-mocking/custom-responses.html">Custom Response Configuration</a> - Build advanced mock responses</li>
+<li><a href="../user-guide/security.html">Security Features</a> - Add authentication to Admin UI (v1.1+)</li>
+<li><a href="../user-guide/sync.html">Workspace Sync</a> - Share fixtures with your team</li>
+<li><a href="../user-guide/plugins.html">Plugin System</a> - Extend Admin UI functionality</li>
+</ul>
+<hr />
+<p><strong>Pro Tip</strong>: Use browser bookmarks for quick access:</p>
+<ul>
+<li><code>http://localhost:9080/</code> - Dashboard</li>
+<li><code>http://localhost:9080/?tab=logs</code> - Jump directly to logs</li>
+<li><code>http://localhost:9080/?tab=metrics</code> - Jump directly to metrics</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tutorials/mock-openapi-spec.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tutorials/add-custom-plugin.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tutorials/mock-openapi-spec.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tutorials/add-custom-plugin.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

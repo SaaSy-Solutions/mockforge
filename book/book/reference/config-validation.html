@@ -1,0 +1,556 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Configuration Validation - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/reference/config-validation.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="configuration-validation-guide"><a class="header" href="#configuration-validation-guide">Configuration Validation Guide</a></h1>
+<p>MockForge provides configuration validation to help you catch errors before starting the server. This guide explains how to validate your configuration and troubleshoot common issues.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="initialize-a-new-configuration"><a class="header" href="#initialize-a-new-configuration">Initialize a New Configuration</a></h3>
+<pre><code class="language-bash"># Create a new project with template configuration
+mockforge init my-project
+
+# Or initialize in current directory
+mockforge init .
+</code></pre>
+<p>This creates:</p>
+<ul>
+<li><code>mockforge.yaml</code> - Main configuration file</li>
+<li><code>examples/</code> - Example OpenAPI spec and data files (unless <code>--no-examples</code> is used)</li>
+</ul>
+<h3 id="validate-configuration"><a class="header" href="#validate-configuration">Validate Configuration</a></h3>
+<pre><code class="language-bash"># Validate the current directory's config
+mockforge config validate
+
+# Validate a specific config file
+mockforge config validate --config ./my-config.yaml
+
+# Auto-discover config in parent directories
+mockforge config validate
+</code></pre>
+<h2 id="what-gets-validated"><a class="header" href="#what-gets-validated">What Gets Validated</a></h2>
+<p>MockForge’s <code>config validate</code> command currently performs these checks:</p>
+<h3 id="1-file-existence"><a class="header" href="#1-file-existence">1. File Existence</a></h3>
+<ul>
+<li>Checks if the config file exists</li>
+<li>Auto-discovers <code>mockforge.yaml</code> or <code>mockforge.yml</code> in current and parent directories</li>
+</ul>
+<h3 id="2-yaml-syntax"><a class="header" href="#2-yaml-syntax">2. YAML Syntax</a></h3>
+<ul>
+<li>Validates YAML syntax and structure</li>
+<li>Reports parsing errors with line numbers</li>
+</ul>
+<h3 id="3-basic-structure"><a class="header" href="#3-basic-structure">3. Basic Structure</a></h3>
+<ul>
+<li>Counts HTTP endpoints</li>
+<li>Counts request chains</li>
+<li>Warns about missing sections (HTTP, admin, WebSocket, gRPC)</li>
+</ul>
+<h3 id="4-summary-report"><a class="header" href="#4-summary-report">4. Summary Report</a></h3>
+<pre><code>✅ Configuration is valid
+
+📊 Summary:
+   Found 5 HTTP endpoints
+   Found 2 chains
+
+⚠️  Warnings:
+   - No WebSocket configuration found
+</code></pre>
+<h2 id="manual-validation-checklist"><a class="header" href="#manual-validation-checklist">Manual Validation Checklist</a></h2>
+<p>Since validation is currently basic, here’s a manual checklist for comprehensive validation:</p>
+<h3 id="required-fields"><a class="header" href="#required-fields">Required Fields</a></h3>
+<h4 id="http-configuration"><a class="header" href="#http-configuration">HTTP Configuration</a></h4>
+<pre><code class="language-yaml">http:
+  port: 3000              # ✅ Required
+  host: "0.0.0.0"        # ✅ Required
+</code></pre>
+<h4 id="admin-configuration"><a class="header" href="#admin-configuration">Admin Configuration</a></h4>
+<pre><code class="language-yaml">admin:
+  enabled: true           # ✅ Required if using admin UI
+  port: 9080             # ✅ Required in standalone mode
+</code></pre>
+<h3 id="common-mistakes"><a class="header" href="#common-mistakes">Common Mistakes</a></h3>
+<h4 id="1-invalid-port-numbers"><a class="header" href="#1-invalid-port-numbers">1. Invalid Port Numbers</a></h4>
+<pre><code class="language-yaml"># ❌ Wrong - port must be 1-65535
+http:
+  port: 70000
+
+# ✅ Correct
+http:
+  port: 3000
+</code></pre>
+<h4 id="2-invalid-file-paths"><a class="header" href="#2-invalid-file-paths">2. Invalid File Paths</a></h4>
+<pre><code class="language-yaml"># ❌ Wrong - file doesn't exist
+http:
+  openapi_spec: "./nonexistent.json"
+
+# ✅ Correct - verify file exists
+http:
+  openapi_spec: "./examples/openapi.json"
+</code></pre>
+<p>Test the path:</p>
+<pre><code class="language-bash">ls -la ./examples/openapi.json
+</code></pre>
+<h4 id="3-invalid-validation-mode"><a class="header" href="#3-invalid-validation-mode">3. Invalid Validation Mode</a></h4>
+<pre><code class="language-yaml"># ❌ Wrong - invalid mode
+validation:
+  mode: "strict"
+
+# ✅ Correct - must be: off, warn, or enforce
+validation:
+  mode: "enforce"
+</code></pre>
+<h4 id="4-invalid-latency-configuration"><a class="header" href="#4-invalid-latency-configuration">4. Invalid Latency Configuration</a></h4>
+<pre><code class="language-yaml"># ❌ Wrong - base_ms is too high
+core:
+  default_latency:
+    base_ms: 100000
+
+# ✅ Correct - reasonable latency
+core:
+  default_latency:
+    base_ms: 100
+    jitter_ms: 50
+</code></pre>
+<h4 id="5-missing-required-fields-in-routes"><a class="header" href="#5-missing-required-fields-in-routes">5. Missing Required Fields in Routes</a></h4>
+<pre><code class="language-yaml"># ❌ Wrong - missing response status
+http:
+  routes:
+    - path: /test
+      method: GET
+      response:
+        body: "test"
+
+# ✅ Correct - include status code
+http:
+  routes:
+    - path: /test
+      method: GET
+      response:
+        status: 200
+        body: "test"
+</code></pre>
+<h4 id="6-invalid-environment-variable-names"><a class="header" href="#6-invalid-environment-variable-names">6. Invalid Environment Variable Names</a></h4>
+<pre><code class="language-bash"># ❌ Wrong - incorrect prefix
+export MOCK_FORGE_HTTP_PORT=3000
+
+# ✅ Correct - use MOCKFORGE_ prefix
+export MOCKFORGE_HTTP_PORT=3000
+</code></pre>
+<h4 id="7-conflicting-mount-path-configuration"><a class="header" href="#7-conflicting-mount-path-configuration">7. Conflicting Mount Path Configuration</a></h4>
+<pre><code class="language-yaml"># ❌ Wrong - both standalone and embedded
+admin:
+  enabled: true
+  port: 9080
+  mount_path: "/admin"    # Conflicts with standalone mode
+
+# ✅ Correct - choose one mode
+admin:
+  enabled: true
+  mount_path: "/admin"    # Embedded under HTTP server
+  # OR
+  port: 9080              # Standalone mode (no mount_path)
+</code></pre>
+<h4 id="8-advanced-validation-configuration"><a class="header" href="#8-advanced-validation-configuration">8. Advanced Validation Configuration</a></h4>
+<pre><code class="language-yaml"># ✅ Complete validation configuration
+validation:
+  mode: enforce                    # off | warn | enforce
+  aggregate_errors: true          # Combine multiple errors
+  validate_responses: false       # Validate response payloads
+  status_code: 400                # Error status code (400 or 422)
+  skip_admin_validation: true     # Skip validation for admin routes
+
+  # Per-route overrides
+  overrides:
+    "GET /health": "off"          # Disable validation for health checks
+    "POST /api/users": "warn"     # Warning mode for user creation
+    "/api/internal/**": "off"     # Disable for internal endpoints
+</code></pre>
+<h2 id="validation-tools"><a class="header" href="#validation-tools">Validation Tools</a></h2>
+<h3 id="1-yaml-syntax-validator"><a class="header" href="#1-yaml-syntax-validator">1. YAML Syntax Validator</a></h3>
+<p>Use <code>yamllint</code> for syntax validation:</p>
+<pre><code class="language-bash"># Install yamllint
+pip install yamllint
+
+# Validate YAML syntax
+yamllint mockforge.yaml
+</code></pre>
+<h3 id="2-json-schema-validation-future"><a class="header" href="#2-json-schema-validation-future">2. JSON Schema Validation (Future)</a></h3>
+<p>MockForge doesn’t currently provide JSON Schema validation, but you can use the template as a reference:</p>
+<pre><code class="language-bash"># Copy the complete template
+cp config.template.yaml mockforge.yaml
+
+# Edit with your settings, keeping structure intact
+</code></pre>
+<h3 id="3-test-your-configuration"><a class="header" href="#3-test-your-configuration">3. Test Your Configuration</a></h3>
+<p>The best validation is starting the server:</p>
+<pre><code class="language-bash"># Try to start the server
+mockforge serve --config mockforge.yaml
+
+# Check for error messages in logs
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="error-configuration-file-not-found"><a class="header" href="#error-configuration-file-not-found">Error: “Configuration file not found”</a></h3>
+<p><strong>Cause</strong>: Config file doesn’t exist or isn’t in expected location</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="language-bash"># Check current directory
+ls -la mockforge.yaml
+
+# Create from template
+mockforge init .
+
+# Or specify path explicitly
+mockforge serve --config /path/to/config.yaml
+</code></pre>
+<h3 id="error-invalid-yaml-syntax"><a class="header" href="#error-invalid-yaml-syntax">Error: “Invalid YAML syntax”</a></h3>
+<p><strong>Cause</strong>: YAML parsing error (usually indentation or quotes)</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="language-bash"># Use yamllint to find the exact error
+yamllint mockforge.yaml
+
+# Common fixes:
+# - Fix indentation (use 2 spaces, not tabs)
+# - Quote strings with special characters
+# - Match opening/closing brackets and braces
+</code></pre>
+<h3 id="warning-no-http-configuration-found"><a class="header" href="#warning-no-http-configuration-found">Warning: “No HTTP configuration found”</a></h3>
+<p><strong>Cause</strong>: Missing <code>http:</code> section</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="language-yaml"># Add minimal HTTP config
+http:
+  port: 3000
+  host: "0.0.0.0"
+</code></pre>
+<h3 id="error-port-already-in-use"><a class="header" href="#error-port-already-in-use">Error: “Port already in use”</a></h3>
+<p><strong>Cause</strong>: Another process is using the configured port</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="language-bash"># Find what's using the port
+lsof -i :3000
+
+# Kill the process or change the port
+# Change port in config:
+http:
+  port: 3001  # Use different port
+</code></pre>
+<h3 id="openapi-spec-not-loading"><a class="header" href="#openapi-spec-not-loading">OpenAPI Spec Not Loading</a></h3>
+<p><strong>Cause</strong>: File path is incorrect or spec is invalid</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="language-bash"># Verify file exists
+ls -la examples/openapi.json
+
+# Validate OpenAPI spec at https://editor.swagger.io/
+# Or use swagger-cli:
+npm install -g @apidevtools/swagger-cli
+swagger-cli validate examples/openapi.json
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-use-version-control"><a class="header" href="#1-use-version-control">1. Use Version Control</a></h3>
+<pre><code class="language-bash"># Track your config in Git
+git add mockforge.yaml
+git commit -m "Add MockForge configuration"
+</code></pre>
+<h3 id="2-environment-specific-configs"><a class="header" href="#2-environment-specific-configs">2. Environment-Specific Configs</a></h3>
+<pre><code class="language-bash"># Create configs for different environments
+mockforge.dev.yaml      # Development
+mockforge.test.yaml     # Testing
+mockforge.prod.yaml     # Production
+
+# Use with:
+mockforge serve --config mockforge.dev.yaml
+</code></pre>
+<h3 id="3-document-custom-settings"><a class="header" href="#3-document-custom-settings">3. Document Custom Settings</a></h3>
+<pre><code class="language-yaml">http:
+  port: 3000
+
+  # Custom validation override for legacy endpoint
+  # TODO: Remove when v2 API is live
+  validation_overrides:
+    "POST /legacy/users": "off"
+</code></pre>
+<h3 id="4-start-simple-add-complexity"><a class="header" href="#4-start-simple-add-complexity">4. Start Simple, Add Complexity</a></h3>
+<pre><code class="language-yaml"># Start with minimal config
+http:
+  port: 3000
+  openapi_spec: "./api.json"
+
+admin:
+  enabled: true
+
+# Add features incrementally:
+# 1. Template expansion
+# 2. Latency simulation
+# 3. Failure injection
+# 4. Custom plugins
+</code></pre>
+<h3 id="5-use-the-complete-template"><a class="header" href="#5-use-the-complete-template">5. Use the Complete Template</a></h3>
+<pre><code class="language-bash"># Copy the complete annotated template
+cp config.template.yaml mockforge.yaml
+
+# Remove sections you don't need
+# Keep comments for reference
+</code></pre>
+<h2 id="complete-configuration-template"><a class="header" href="#complete-configuration-template">Complete Configuration Template</a></h2>
+<p>See the <a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml">complete annotated configuration template</a> for all available options with documentation.</p>
+<h2 id="validation-roadmap"><a class="header" href="#validation-roadmap">Validation Roadmap</a></h2>
+<p>Future versions of MockForge will include:</p>
+<ul>
+<li><strong>JSON Schema Validation</strong>: Full schema validation for all fields</li>
+<li><strong>Field Type Checking</strong>: Validate types, ranges, and formats</li>
+<li><strong>Cross-Field Validation</strong>: Check for conflicts between settings</li>
+<li><strong>External Resource Validation</strong>: Verify files, URLs, and connections</li>
+<li><strong>Deprecation Warnings</strong>: Warn about deprecated options</li>
+<li><strong>Migration Assistance</strong>: Auto-migrate old configs to new formats</li>
+</ul>
+<p>Track progress: <a href="https://github.com/SaaSy-Solutions/mockforge/issues">MockForge Issue #XXX</a></p>
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<p><strong>Configuration not working as expected?</strong></p>
+<ol>
+<li>Run <code>mockforge config validate</code> first</li>
+<li>Check the <a href="config-schema.html">Configuration Schema Reference</a></li>
+<li>Review <a href="https://github.com/SaaSy-Solutions/mockforge/tree/main/examples">example configurations</a></li>
+<li>Ask on <a href="https://github.com/SaaSy-Solutions/mockforge/discussions">GitHub Discussions</a></li>
+<li>Report bugs at <a href="https://github.com/SaaSy-Solutions/mockforge/issues">GitHub Issues</a></li>
+</ol>
+<hr />
+<p><strong>Pro Tip</strong>: Keep a backup of your working configuration before making significant changes. Use <code>cp mockforge.yaml mockforge.yaml.backup</code> before editing.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/config-schema.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/formats.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/config-schema.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/formats.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

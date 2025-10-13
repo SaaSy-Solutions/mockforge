@@ -1,2 +1,31 @@
 /* Custom CSS styles for MockForge documentation */
 /* Add your custom styles here */
+
+/* Mermaid diagram styling */
+.mermaid {
+    text-align: center;
+    margin: 1rem 0;
+    padding: 1rem;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    background-color: #f8f9fa;
+}
+
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Dark theme support for Mermaid */
+body[data-theme="ayu"] .mermaid,
+body[data-theme="coal"] .mermaid,
+body[data-theme="navy"] .mermaid {
+    background-color: #1a1a1a;
+    border-color: #333;
+}
+
+body[data-theme="ayu"] .mermaid svg text,
+body[data-theme="coal"] .mermaid svg text,
+body[data-theme="navy"] .mermaid svg text {
+    fill: #e6e6e6 !important;
+}

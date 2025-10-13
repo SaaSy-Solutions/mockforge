@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Rust API - MockForge Documentation</title>
+        <title>Overview - MockForge Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -148,7 +148,7 @@
                         <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/api/rust.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/tutorials/README.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -182,235 +182,116 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="rust-api-reference"><a class="header" href="#rust-api-reference">Rust API Reference</a></h1>
-<p>MockForge provides comprehensive Rust libraries for programmatic usage and extension. This reference covers the main crates and their APIs.</p>
-<h2 id="crate-overview"><a class="header" href="#crate-overview">Crate Overview</a></h2>
-<p>MockForge consists of several interconnected crates:</p>
+                        <h1 id="tutorials"><a class="header" href="#tutorials">Tutorials</a></h1>
+<p>Welcome to the MockForge tutorials! These step-by-step guides walk you through common workflows and real-world scenarios.</p>
+<p>Each tutorial is designed to be completed in 5-10 minutes and focuses on a specific goal.</p>
+<h2 id="getting-started-tutorials"><a class="header" href="#getting-started-tutorials">Getting Started Tutorials</a></h2>
+<h3 id="your-first-mock-api-in-5-minutes"><a class="header" href="#your-first-mock-api-in-5-minutes"><a href="../getting-started/five-minute-api.html">Your First Mock API in 5 Minutes</a></a></h3>
+<p><strong>Time</strong>: 5 minutes | <strong>Level</strong>: Beginner</p>
+<p>The fastest way to get started with MockForge. Create a simple REST API from scratch and test it.</p>
+<p><strong>You’ll learn:</strong></p>
 <ul>
-<li><strong><code>mockforge-cli</code></strong>: Command-line interface and main executable</li>
-<li><strong><code>mockforge-core</code></strong>: Core functionality shared across protocols</li>
-<li><strong><code>mockforge-http</code></strong>: HTTP REST API mocking</li>
-<li><strong><code>mockforge-grpc</code></strong>: gRPC service mocking</li>
-<li><strong><code>mockforge-ui</code></strong>: Web-based admin interface</li>
+<li>Basic YAML configuration</li>
+<li>Template variables</li>
+<li>Starting the server</li>
+<li>Testing endpoints</li>
 </ul>
-<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
-<p>Add MockForge to your <code>Cargo.toml</code>:</p>
-<pre><code class="language-toml">[dependencies]
-mockforge-core = "0.1"
-mockforge-http = "0.1"
-mockforge-grpc = "0.1"
-</code></pre>
-<p>For development or testing, you might want to use path dependencies:</p>
-<pre><code class="language-toml">[dependencies]
-mockforge-core = { path = "../mockforge/crates/mockforge-core" }
-mockforge-http = { path = "../mockforge/crates/mockforge-http" }
-mockforge-grpc = { path = "../mockforge/crates/mockforge-grpc" }
-</code></pre>
-<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
-<h3 id="configuration-system"><a class="header" href="#configuration-system">Configuration System</a></h3>
-<p>MockForge uses a hierarchical configuration system that can be built programmatically:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use mockforge_core::config::MockForgeConfig;
-
-let config = MockForgeConfig {
-    server: ServerConfig {
-        http_port: Some(3000),
-        ws_port: Some(3001),
-        grpc_port: Some(50051),
-    },
-    validation: ValidationConfig {
-        mode: ValidationMode::Enforce,
-        aggregate_errors: false,
-    },
-    response: ResponseConfig {
-        template_expand: true,
-    },
-    ..Default::default()
-};
-<span class="boring">}</span></code></pre></pre>
-<h3 id="template-system"><a class="header" href="#template-system">Template System</a></h3>
-<p>MockForge includes a powerful template engine for dynamic content generation:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use mockforge_core::template::{TemplateEngine, Context};
-
-let engine = TemplateEngine::new();
-let context = Context::new()
-    .with_value("user_id", "12345")
-    .with_value("timestamp", "2025-09-12T10:00:00Z");
-
-let result = engine.render("User {{user_id}} logged in at {{timestamp}}", &amp;context)?;
-assert_eq!(result, "User 12345 logged in at 2025-09-12T10:00:00Z");
-<span class="boring">}</span></code></pre></pre>
-<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
-<p>MockForge uses the <code>anyhow</code> crate for error handling:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use anyhow::{Result, Context};
-
-fn start_server(config: &amp;Config) -&gt; Result&lt;()&gt; {
-    let server = HttpServer::new(config)
-        .context("Failed to create HTTP server")?;
-
-    server.start()
-        .context("Failed to start server")?;
-
-    Ok(())
-}
-<span class="boring">}</span></code></pre></pre>
-<h2 id="http-api"><a class="header" href="#http-api">HTTP API</a></h2>
-<h3 id="basic-http-server"><a class="header" href="#basic-http-server">Basic HTTP Server</a></h3>
-<pre><pre class="playground"><code class="language-rust">use mockforge_http::{HttpServer, HttpConfig};
-use mockforge_core::config::ServerConfig;
-
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    // Create HTTP configuration
-    let http_config = HttpConfig {
-        spec_path: Some("api-spec.yaml".to_string()),
-        validation_mode: ValidationMode::Warn,
-        template_expand: true,
-    };
-
-    // Start HTTP server
-    let mut server = HttpServer::new(http_config);
-    server.start(([127, 0, 0, 1], 3000)).await?;
-
-    println!("HTTP server running on http://localhost:3000");
-    Ok(())
-}</code></pre></pre>
-<h3 id="custom-route-handlers"><a class="header" href="#custom-route-handlers">Custom Route Handlers</a></h3>
-<pre><pre class="playground"><code class="language-rust">use mockforge_http::{HttpServer, RouteHandler};
-use warp::{Filter, Reply};
-
-struct CustomHandler;
-
-impl RouteHandler for CustomHandler {
-    fn handle(&amp;self, path: &amp;str, method: &amp;str) -&gt; Option&lt;Box&lt;dyn Reply&gt;&gt; {
-        if path == "/custom" &amp;&amp; method == "GET" {
-            Some(Box::new(warp::reply::json(&amp;serde_json::json!({
-                "message": "Custom response",
-                "timestamp": chrono::Utc::now()
-            }))))
-        } else {
-            None
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let handler = CustomHandler;
-    let server = HttpServer::with_handler(handler);
-    server.start(([127, 0, 0, 1], 3000)).await?;
-    Ok(())
-}</code></pre></pre>
-<h2 id="grpc-api"><a class="header" href="#grpc-api">gRPC API</a></h2>
-<h3 id="basic-grpc-server"><a class="header" href="#basic-grpc-server">Basic gRPC Server</a></h3>
-<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::{GrpcServer, GrpcConfig};
-use std::path::Path;
-
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    // Configure proto discovery
-    let config = GrpcConfig {
-        proto_dir: Path::new("proto/"),
-        enable_reflection: true,
-        ..Default::default()
-    };
-
-    // Start gRPC server
-    let server = GrpcServer::new(config);
-    server.start("127.0.0.1:50051").await?;
-
-    println!("gRPC server running on 127.0.0.1:50051");
-    Ok(())
-}</code></pre></pre>
-<h3 id="custom-service-implementation"><a class="header" href="#custom-service-implementation">Custom Service Implementation</a></h3>
-<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::{ServiceRegistry, ServiceImplementation};
-use prost::Message;
-use tonic::{Request, Response, Status};
-
-// Generated from proto file
-mod greeter {
-    include!("generated/greeter.rs");
-}
-
-pub struct GreeterService;
-
-#[tonic::async_trait]
-impl greeter::greeter_server::Greeter for GreeterService {
-    async fn say_hello(
-        &amp;self,
-        request: Request&lt;greeter::HelloRequest&gt;,
-    ) -&gt; Result&lt;Response&lt;greeter::HelloReply&gt;, Status&gt; {
-        let name = request.into_inner().name;
-
-        let reply = greeter::HelloReply {
-            message: format!("Hello, {}!", name),
-            timestamp: Some(prost_types::Timestamp::from(std::time::SystemTime::now())),
-        };
-
-        Ok(Response::new(reply))
-    }
-}
-
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let service = GreeterService {};
-    let server = GrpcServer::with_service(service);
-    server.start("127.0.0.1:50051").await?;
-    Ok(())
-}</code></pre></pre>
-<h2 id="websocket-api"><a class="header" href="#websocket-api">WebSocket API</a></h2>
-<h3 id="basic-websocket-server"><a class="header" href="#basic-websocket-server">Basic WebSocket Server</a></h3>
-<pre><pre class="playground"><code class="language-rust">use mockforge_ws::{WebSocketServer, WebSocketConfig};
-
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let config = WebSocketConfig {
-        port: 3001,
-        replay_file: Some("ws-replay.jsonl".to_string()),
-        ..Default::default()
-    };
-
-    let server = WebSocketServer::new(config);
-    server.start().await?;
-
-    println!("WebSocket server running on ws://localhost:3001");
-    Ok(())
-}</code></pre></pre>
-<h3 id="custom-message-handler"><a class="header" href="#custom-message-handler">Custom Message Handler</a></h3>
-<pre><pre class="playground"><code class="language-rust">use mockforge_ws::{WebSocketServer, MessageHandler};
-use futures_util::{SinkExt, StreamExt};
-
-struct EchoHandler;
-
-impl MessageHandler for EchoHandler {
-    async fn handle_message(&amp;self, message: String) -&gt; String {
-        format!("Echo: {}", message)
-    }
-}
-
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
-    let handler = EchoHandler {};
-    let server = WebSocketServer::with_handler(handler);
-    server.start().await?;
-    Ok(())
-}</code></pre></pre>
-<p>This Rust API reference provides the foundation for programmatic usage of MockForge. For protocol-specific details, see the <a href="rust/http.html">HTTP</a>, <a href="rust/grpc.html">gRPC</a>, and <a href="rust/ws.html">WebSocket</a> API documentation.</p>
+<p><strong>Perfect for</strong>: First-time users who want to see MockForge in action immediately.</p>
+<hr />
+<h2 id="common-workflow-tutorials"><a class="header" href="#common-workflow-tutorials">Common Workflow Tutorials</a></h2>
+<h3 id="mock-a-rest-api-from-an-openapi-spec"><a class="header" href="#mock-a-rest-api-from-an-openapi-spec"><a href="mock-openapi-spec.html">Mock a REST API from an OpenAPI Spec</a></a></h3>
+<p><strong>Time</strong>: 3 minutes | <strong>Level</strong>: Beginner</p>
+<p>Automatically generate mock endpoints from your OpenAPI/Swagger specification.</p>
+<p><strong>You’ll learn:</strong></p>
+<ul>
+<li>Loading OpenAPI specs</li>
+<li>Auto-generated responses</li>
+<li>Request validation</li>
+<li>Overriding specific endpoints</li>
+</ul>
+<p><strong>Perfect for</strong>: Teams with existing API documentation who want instant mocks.</p>
+<hr />
+<h3 id="admin-ui-walkthrough"><a class="header" href="#admin-ui-walkthrough"><a href="admin-ui-walkthrough.html">Admin UI Walkthrough</a></a></h3>
+<p><strong>Time</strong>: 5 minutes | <strong>Level</strong>: Beginner</p>
+<p>Discover MockForge’s visual interface for managing your mock server without editing config files.</p>
+<p><strong>You’ll learn:</strong></p>
+<ul>
+<li>Dashboard navigation</li>
+<li>Live request logs</li>
+<li>Fixture management</li>
+<li>Latency and fault simulation</li>
+<li>Full-text search</li>
+</ul>
+<p><strong>Perfect for</strong>: Visual learners and teams who prefer UI over CLI.</p>
+<hr />
+<h3 id="add-a-custom-plugin"><a class="header" href="#add-a-custom-plugin"><a href="add-custom-plugin.html">Add a Custom Plugin</a></a></h3>
+<p><strong>Time</strong>: 10 minutes | <strong>Level</strong>: Intermediate</p>
+<p>Extend MockForge with plugins for custom authentication, data generation, or business logic.</p>
+<p><strong>You’ll learn:</strong></p>
+<ul>
+<li>Installing pre-built plugins</li>
+<li>Using plugins in configs</li>
+<li>Creating your own plugin</li>
+<li>Plugin security and permissions</li>
+</ul>
+<p><strong>Perfect for</strong>: Developers who need custom functionality beyond built-in features.</p>
+<hr />
+<h2 id="scenario-based-tutorials"><a class="header" href="#scenario-based-tutorials">Scenario-Based Tutorials</a></h2>
+<h3 id="coming-soon"><a class="header" href="#coming-soon">Coming Soon</a></h3>
+<p>We’re working on tutorials for these common scenarios:</p>
+<ul>
+<li><strong>Frontend Development Workflow</strong>: Set up mocks for a React/Vue/Angular app</li>
+<li><strong>Microservices Testing</strong>: Mock a multi-service architecture</li>
+<li><strong>Team Collaboration</strong>: Share mocks with Git and workspace sync</li>
+<li><strong>CI/CD Integration</strong>: Use MockForge in automated testing pipelines</li>
+<li><strong>Performance Testing</strong>: Simulate load and measure application behavior</li>
+<li><strong>WebSocket Real-Time Apps</strong>: Mock chat, notifications, and live updates</li>
+<li><strong>gRPC Service Development</strong>: Work with Protocol Buffers and streaming</li>
+</ul>
+<p>Want to see a specific tutorial? <a href="https://github.com/SaaSy-Solutions/mockforge/issues">Open an issue</a> with your suggestion!</p>
+<hr />
+<h2 id="tutorial-format"><a class="header" href="#tutorial-format">Tutorial Format</a></h2>
+<p>Each tutorial follows this structure:</p>
+<ol>
+<li><strong>Goal</strong>: What you’ll accomplish</li>
+<li><strong>Time</strong>: How long it takes</li>
+<li><strong>Prerequisites</strong>: What you need before starting</li>
+<li><strong>Step-by-step instructions</strong>: Clear, numbered steps</li>
+<li><strong>Code examples</strong>: Ready-to-use configurations</li>
+<li><strong>Troubleshooting</strong>: Common issues and solutions</li>
+<li><strong>What’s next</strong>: Related guides and advanced topics</li>
+</ol>
+<h2 id="how-to-use-these-tutorials"><a class="header" href="#how-to-use-these-tutorials">How to Use These Tutorials</a></h2>
+<h3 id="for-beginners"><a class="header" href="#for-beginners">For Beginners</a></h3>
+<p>Start with <strong>“Your First Mock API in 5 Minutes”</strong>, then move to <strong>“Mock a REST API from an OpenAPI Spec”</strong> if you have existing API documentation.</p>
+<h3 id="for-teams"><a class="header" href="#for-teams">For Teams</a></h3>
+<p>Have team members complete <strong>“Admin UI Walkthrough”</strong> to get comfortable with the visual interface, then explore <strong>“Team Collaboration”</strong> (coming soon) for multi-user workflows.</p>
+<h3 id="for-developers"><a class="header" href="#for-developers">For Developers</a></h3>
+<p>Jump straight to <strong>“Add a Custom Plugin”</strong> if you need advanced customization, or start with the basic tutorials to understand core concepts first.</p>
+<h2 id="contributing-tutorials"><a class="header" href="#contributing-tutorials">Contributing Tutorials</a></h2>
+<p>Found a tutorial helpful? Have ideas for new ones? We welcome contributions!</p>
+<p>See our <a href="../contributing/setup.html">Contributing Guide</a> for details on how to submit tutorial ideas or write your own.</p>
+<hr />
+<h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Tutorial</th><th>Time</th><th>Level</th><th>Tags</th></tr></thead><tbody>
+<tr><td><a href="../getting-started/five-minute-api.html">Your First Mock API</a></td><td>5 min</td><td>Beginner</td><td>Getting Started, HTTP, Basic</td></tr>
+<tr><td><a href="mock-openapi-spec.html">Mock OpenAPI Spec</a></td><td>3 min</td><td>Beginner</td><td>HTTP, OpenAPI, Validation</td></tr>
+<tr><td><a href="admin-ui-walkthrough.html">Admin UI Walkthrough</a></td><td>5 min</td><td>Beginner</td><td>Admin UI, Monitoring, Visual</td></tr>
+<tr><td><a href="add-custom-plugin.html">Add Custom Plugin</a></td><td>10 min</td><td>Intermediate</td><td>Plugins, Extension, WASM</td></tr>
+</tbody></table>
+</div>
+<hr />
+<p><strong>Ready to start?</strong> Pick a tutorial above and follow along. Each one is designed to give you hands-on experience with MockForge’s powerful features.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../api/admin-ui-rest.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../getting-started/concepts.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../api/rust/http.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tutorials/mock-openapi-spec.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -420,11 +301,11 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../api/admin-ui-rest.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../getting-started/concepts.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../api/rust/http.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tutorials/mock-openapi-spec.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

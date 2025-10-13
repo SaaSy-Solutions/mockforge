@@ -184,6 +184,33 @@
                     <main>
                         <h1 id="configuration-files"><a class="header" href="#configuration-files">Configuration Files</a></h1>
 <p>MockForge supports comprehensive configuration through YAML files as an alternative to environment variables. This page documents the configuration file format, options, and usage.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="initialize-a-new-configuration"><a class="header" href="#initialize-a-new-configuration">Initialize a New Configuration</a></h3>
+<pre><code class="language-bash"># Create a new project with template configuration
+mockforge init my-project
+
+# Or initialize in current directory
+mockforge init .
+</code></pre>
+<p>This creates a <code>mockforge.yaml</code> file with sensible defaults and example configurations.</p>
+<h3 id="validate-your-configuration"><a class="header" href="#validate-your-configuration">Validate Your Configuration</a></h3>
+<pre><code class="language-bash"># Validate configuration file
+mockforge config validate
+
+# Validate specific file
+mockforge config validate --config my-config.yaml
+</code></pre>
+<p>See the <a href="../reference/config-validation.html">Configuration Validation Guide</a> for detailed validation instructions.</p>
+<h2 id="complete-configuration-template"><a class="header" href="#complete-configuration-template">Complete Configuration Template</a></h2>
+<p>For a <strong>fully documented configuration template</strong> with all available options, see:
+<strong><a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml">config.template.yaml</a></strong></p>
+<p>This template includes:</p>
+<ul>
+<li>Every configuration option with inline comments</li>
+<li>Default values and valid ranges</li>
+<li>Example configurations for common scenarios</li>
+<li>Links to detailed documentation</li>
+</ul>
 <h2 id="configuration-file-location"><a class="header" href="#configuration-file-location">Configuration File Location</a></h2>
 <p>MockForge looks for configuration files in the following order:</p>
 <ol>
@@ -258,7 +285,7 @@ data:
 </code></pre>
 <h3 id="openapi-integration"><a class="header" href="#openapi-integration">OpenAPI Integration</a></h3>
 <pre><code class="language-yaml">http:
-  openapi_spec: "path/to/spec.json"  # Path to OpenAPI specification
+  openapi_spec: "path/to/spec.json"  # OpenAPI spec file for HTTP server
   # Alternative: use URL
   openapi_spec: "https://example.com/api-spec.yaml"
 </code></pre>

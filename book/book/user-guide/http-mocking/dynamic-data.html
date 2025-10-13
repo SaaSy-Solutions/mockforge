@@ -183,6 +183,604 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="dynamic-data"><a class="header" href="#dynamic-data">Dynamic Data</a></h1>
+<p>MockForge provides powerful dynamic data generation capabilities through its templating system and faker integration. This guide covers generating realistic, varied responses for comprehensive API testing and development.</p>
+<h2 id="template-expansion-basics"><a class="header" href="#template-expansion-basics">Template Expansion Basics</a></h2>
+<p>MockForge uses a lightweight templating system with <code>{{token}}</code> syntax to inject dynamic values into responses.</p>
+<h3 id="enabling-templates"><a class="header" href="#enabling-templates">Enabling Templates</a></h3>
+<p>Templates are disabled by default for security. Enable them using:</p>
+<pre><code class="language-bash"># Environment variable
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
+
+# Configuration file
+http:
+  response_template_expand: true
+</code></pre>
+<h3 id="basic-template-syntax"><a class="header" href="#basic-template-syntax">Basic Template Syntax</a></h3>
+<pre><code class="language-yaml">paths:
+  /users:
+    get:
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                users:
+                  - id: "{{uuid}}"
+                    name: "{{faker.name}}"
+                    email: "{{faker.email}}"
+                    created_at: "{{now}}"
+</code></pre>
+<h2 id="time-based-templates"><a class="header" href="#time-based-templates">Time-Based Templates</a></h2>
+<p>Generate timestamps and time offsets for realistic temporal data.</p>
+<h3 id="current-time"><a class="header" href="#current-time">Current Time</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          current_time: "{{now}}"
+          server_timestamp: "{{now}}"
+</code></pre>
+<h3 id="time-offsets"><a class="header" href="#time-offsets">Time Offsets</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          created_at: "{{now-7d}}"
+          expires_at: "{{now+1h}}"
+          last_login: "{{now-30m}}"
+          scheduled_for: "{{now+2h}}"
+</code></pre>
+<p><strong>Supported units:</strong></p>
+<ul>
+<li><code>s</code> - seconds</li>
+<li><code>m</code> - minutes</li>
+<li><code>h</code> - hours</li>
+<li><code>d</code> - days</li>
+</ul>
+<h2 id="random-data-generation"><a class="header" href="#random-data-generation">Random Data Generation</a></h2>
+<p>Generate random values for varied test data.</p>
+<h3 id="random-integers"><a class="header" href="#random-integers">Random Integers</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          user_count: "{{randInt 1 100}}"
+          age: "{{randInt 18 80}}"
+          score: "{{randInt -10 10}}"
+</code></pre>
+<h3 id="random-floats"><a class="header" href="#random-floats">Random Floats</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          price: "{{randFloat 9.99 999.99}}"
+          rating: "{{randFloat 1.0 5.0}}"
+          percentage: "{{randFloat 0.0 100.0}}"
+</code></pre>
+<h2 id="uuid-generation"><a class="header" href="#uuid-generation">UUID Generation</a></h2>
+<p>Generate unique identifiers for entities.</p>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          id: "{{uuid}}"
+          order_id: "{{uuid}}"
+          transaction_id: "{{uuid}}"
+</code></pre>
+<h2 id="faker-data-generation"><a class="header" href="#faker-data-generation">Faker Data Generation</a></h2>
+<p>Generate realistic fake data using the Faker library.</p>
+<h3 id="basic-faker-functions"><a class="header" href="#basic-faker-functions">Basic Faker Functions</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          user:
+            id: "{{uuid}}"
+            name: "{{faker.name}}"
+            email: "{{faker.email}}"
+            created_at: "{{now}}"
+</code></pre>
+<h3 id="extended-faker-functions"><a class="header" href="#extended-faker-functions">Extended Faker Functions</a></h3>
+<p>When the <code>data-faker</code> feature is enabled, additional functions are available:</p>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          user:
+            name: "{{faker.name}}"
+            email: "{{faker.email}}"
+            phone: "{{faker.phone}}"
+            address: "{{faker.address}}"
+            company: "{{faker.company}}"
+          product:
+            name: "{{faker.word}}"
+            description: "{{faker.sentence}}"
+            color: "{{faker.color}}"
+            url: "{{faker.url}}"
+            ip_address: "{{faker.ip}}"
+</code></pre>
+<h3 id="disabling-faker"><a class="header" href="#disabling-faker">Disabling Faker</a></h3>
+<p>For deterministic testing, disable faker tokens:</p>
+<pre><code class="language-bash">MOCKFORGE_FAKE_TOKENS=false mockforge serve --spec api-spec.json
+</code></pre>
+<h2 id="request-data-access"><a class="header" href="#request-data-access">Request Data Access</a></h2>
+<p>Access data from incoming requests to create dynamic responses.</p>
+<h3 id="path-parameters"><a class="header" href="#path-parameters">Path Parameters</a></h3>
+<pre><code class="language-yaml">paths:
+  /users/{userId}:
+    get:
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                id: "{{request.path.userId}}"
+                name: "User {{request.path.userId}}"
+                retrieved_at: "{{now}}"
+</code></pre>
+<h3 id="query-parameters"><a class="header" href="#query-parameters">Query Parameters</a></h3>
+<pre><code class="language-yaml">paths:
+  /users:
+    get:
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [brief, detailed]
+      responses:
+        '200':
+          content:
+            application/json:
+              example: |
+                {{#if (eq request.query.format 'detailed')}}
+                {
+                  "users": [
+                    {
+                      "id": "{{uuid}}",
+                      "name": "{{faker.name}}",
+                      "email": "{{faker.email}}",
+                      "profile": {
+                        "bio": "{{faker.sentence}}",
+                        "location": "{{faker.address}}"
+                      }
+                    }
+                  ],
+                  "limit": {{request.query.limit}},
+                  "format": "{{request.query.format}}"
+                }
+                {{else}}
+                {
+                  "users": [
+                    {
+                      "id": "{{uuid}}",
+                      "name": "{{faker.name}}",
+                      "email": "{{faker.email}}"
+                    }
+                  ],
+                  "limit": {{request.query.limit}}
+                }
+                {{/if}}
+</code></pre>
+<h3 id="request-body-access"><a class="header" href="#request-body-access">Request Body Access</a></h3>
+<pre><code class="language-yaml">paths:
+  /users:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '201':
+          content:
+            application/json:
+              example:
+                id: "{{uuid}}"
+                name: "{{request.body.name}}"
+                email: "{{request.body.email}}"
+                created_at: "{{now}}"
+                welcome_message: "Welcome {{request.body.name}}!"
+</code></pre>
+<h3 id="headers-access"><a class="header" href="#headers-access">Headers Access</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          user_agent: "{{request.header.User-Agent}}"
+          api_version: "{{request.header.X-API-Version}}"
+          authorization: "{{request.header.Authorization}}"
+</code></pre>
+<h2 id="conditional-templates"><a class="header" href="#conditional-templates">Conditional Templates</a></h2>
+<p>Use Handlebars-style conditionals for complex logic.</p>
+<h3 id="basic-conditionals"><a class="header" href="#basic-conditionals">Basic Conditionals</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example: |
+          {{#if (eq request.query.format 'detailed')}}
+          {
+            "data": {
+              "id": "{{uuid}}",
+              "name": "{{faker.name}}",
+              "details": {
+                "bio": "{{faker.paragraph}}",
+                "stats": {
+                  "login_count": {{randInt 1 1000}},
+                  "last_active": "{{now-1d}}"
+                }
+              }
+            }
+          }
+          {{else}}
+          {
+            "data": {
+              "id": "{{uuid}}",
+              "name": "{{faker.name}}"
+            }
+          }
+          {{/if}}
+</code></pre>
+<h3 id="multiple-conditions"><a class="header" href="#multiple-conditions">Multiple Conditions</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example: |
+          {{#if (eq request.query.type 'admin')}}
+          {
+            "user": {
+              "id": "{{uuid}}",
+              "name": "{{faker.name}}",
+              "role": "admin",
+              "permissions": ["read", "write", "delete", "admin"]
+            }
+          }
+          {{else if (eq request.query.type 'premium')}}
+          {
+            "user": {
+              "id": "{{uuid}}",
+              "name": "{{faker.name}}",
+              "role": "premium",
+              "permissions": ["read", "write"]
+            }
+          }
+          {{else}}
+          {
+            "user": {
+              "id": "{{uuid}}",
+              "name": "{{faker.name}}",
+              "role": "basic",
+              "permissions": ["read"]
+            }
+          }
+          {{/if}}
+</code></pre>
+<h2 id="data-generation-templates"><a class="header" href="#data-generation-templates">Data Generation Templates</a></h2>
+<p>MockForge includes built-in data generation templates for common entities.</p>
+<h3 id="user-template"><a class="header" href="#user-template">User Template</a></h3>
+<pre><code class="language-bash"># Generate user data
+mockforge data template user --rows 10 --format json
+
+# Output:
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "john.doe@example.com",
+    "name": "John Doe",
+    "created_at": "2024-01-15T10:30:00Z",
+    "active": true
+  }
+]
+</code></pre>
+<h3 id="product-template"><a class="header" href="#product-template">Product Template</a></h3>
+<pre><code class="language-bash"># Generate product data
+mockforge data template product --rows 5 --format csv
+
+# Output:
+id,name,description,price,category,in_stock
+550e8400-e29b-41d4-a716-446655440001,Wireless Headphones,High-quality wireless headphones with noise cancellation,199.99,Electronics,true
+</code></pre>
+<h3 id="order-template"><a class="header" href="#order-template">Order Template</a></h3>
+<pre><code class="language-bash"># Generate order data with relationships
+mockforge data template order --rows 3 --format json --rag
+
+# Output:
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440002",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "total_amount": 299.97,
+    "status": "completed",
+    "created_at": "2024-01-16T14:20:00Z"
+  }
+]
+</code></pre>
+<h2 id="advanced-templating-features"><a class="header" href="#advanced-templating-features">Advanced Templating Features</a></h2>
+<h3 id="encryption-functions"><a class="header" href="#encryption-functions">Encryption Functions</a></h3>
+<p>Secure sensitive data in responses:</p>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          user:
+            id: "{{uuid}}"
+            name: "{{encrypt 'user_name' faker.name}}"
+            email: "{{encrypt 'user_email' faker.email}}"
+            ssn: "{{encrypt 'sensitive' '123-45-6789'}}"
+</code></pre>
+<h3 id="decryption"><a class="header" href="#decryption">Decryption</a></h3>
+<p>Access encrypted data:</p>
+<pre><code class="language-yaml"># In templates that need to decrypt
+decrypted_name: "{{decrypt 'user_name' request.body.encrypted_name}}"
+</code></pre>
+<h3 id="file-system-access"><a class="header" href="#file-system-access">File System Access</a></h3>
+<p>Read external files for dynamic content:</p>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          config: "{{fs.readFile 'config.json'}}"
+          template: "{{fs.readFile 'templates/welcome.html'}}"
+</code></pre>
+<h2 id="request-chaining-context"><a class="header" href="#request-chaining-context">Request Chaining Context</a></h2>
+<p>Access data from previous requests in chained scenarios.</p>
+<h3 id="chain-variables"><a class="header" href="#chain-variables">Chain Variables</a></h3>
+<pre><code class="language-yaml"># In chained request templates
+responses:
+  '200':
+    content:
+      application/json:
+        example:
+          previous_request_id: "{{chain.request_id}}"
+          previous_user_id: "{{chain.user.id}}"
+          session_token: "{{chain.auth.token}}"
+</code></pre>
+<h2 id="custom-template-plugins"><a class="header" href="#custom-template-plugins">Custom Template Plugins</a></h2>
+<p>Extend templating with custom functions via plugins.</p>
+<h3 id="template-plugin-example"><a class="header" href="#template-plugin-example">Template Plugin Example</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::*;
+
+pub struct BusinessTemplatePlugin;
+
+impl TemplatePlugin for BusinessTemplatePlugin {
+    fn execute_function(
+        &amp;mut self,
+        function_name: &amp;str,
+        args: &amp;[TemplateArg],
+        _context: &amp;PluginContext,
+    ) -&gt; PluginResult&lt;String&gt; {
+        match function_name {
+            "business_id" =&gt; {
+                let id = format!("BIZ-{:010}", rand::random::&lt;u32&gt;());
+                PluginResult::success(id, 0)
+            }
+            "department" =&gt; {
+                let depts = ["Engineering", "Sales", "Marketing", "HR"];
+                let dept = depts[rand::random::&lt;usize&gt;() % depts.len()];
+                PluginResult::success(dept.to_string(), 0)
+            }
+            "salary" =&gt; {
+                let salary = rand::random::&lt;u32&gt;() % 150000 + 50000;
+                PluginResult::success(salary.to_string(), 0)
+            }
+            _ =&gt; PluginResult::failure(
+                format!("Unknown function: {}", function_name),
+                0
+            )
+        }
+    }
+
+    fn get_available_functions(&amp;self) -&gt; Vec&lt;TemplateFunction&gt; {
+        vec![
+            TemplateFunction {
+                name: "business_id".to_string(),
+                description: "Generate business ID".to_string(),
+                args: vec![],
+                return_type: "string".to_string(),
+            },
+            TemplateFunction {
+                name: "department".to_string(),
+                description: "Generate department name".to_string(),
+                args: vec![],
+                return_type: "string".to_string(),
+            },
+            TemplateFunction {
+                name: "salary".to_string(),
+                description: "Generate salary amount".to_string(),
+                args: vec![],
+                return_type: "string".to_string(),
+            },
+        ]
+    }
+
+    fn get_capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities::default()
+    }
+
+    fn health_check(&amp;self) -&gt; PluginHealth {
+        PluginHealth::healthy("Business template plugin healthy".to_string(), PluginMetrics::default())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="using-custom-templates"><a class="header" href="#using-custom-templates">Using Custom Templates</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          employee:
+            id: "{{business_id}}"
+            name: "{{faker.name}}"
+            department: "{{department}}"
+            salary: "{{salary}}"
+            hire_date: "{{now-1y}}"
+</code></pre>
+<h2 id="configuration-and-security"><a class="header" href="#configuration-and-security">Configuration and Security</a></h2>
+<h3 id="template-security-settings"><a class="header" href="#template-security-settings">Template Security Settings</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+http:
+  response_template_expand: true
+  template_security:
+    allow_file_access: false
+    allow_encryption: true
+    max_template_depth: 10
+    timeout_ms: 5000
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># Enable template expansion
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+
+# Disable faker for deterministic tests
+MOCKFORGE_FAKE_TOKENS=false
+
+# Set validation status for template errors
+MOCKFORGE_VALIDATION_STATUS=422
+
+# Control template execution timeout
+MOCKFORGE_TEMPLATE_TIMEOUT_MS=5000
+</code></pre>
+<h2 id="testing-with-dynamic-data"><a class="header" href="#testing-with-dynamic-data">Testing with Dynamic Data</a></h2>
+<h3 id="manual-testing"><a class="header" href="#manual-testing">Manual Testing</a></h3>
+<pre><code class="language-bash"># Test template expansion
+curl http://localhost:3000/users
+
+# Test with query parameters
+curl "http://localhost:3000/users?format=detailed&amp;limit=5"
+
+# Test path parameters
+curl http://localhost:3000/users/123
+
+# Test POST with body access
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test User", "email": "test@example.com"}'
+</code></pre>
+<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-dynamic-data.sh
+
+BASE_URL="http://localhost:3000"
+
+echo "Testing dynamic data generation..."
+
+# Test basic templates
+USER_RESPONSE=$(curl -s $BASE_URL/users)
+echo "User response with templates:"
+echo $USER_RESPONSE | jq '.'
+
+# Test conditional templates
+DETAILED_RESPONSE=$(curl -s "$BASE_URL/users?format=detailed")
+echo "Detailed format response:"
+echo $DETAILED_RESPONSE | jq '.'
+
+BASIC_RESPONSE=$(curl -s "$BASE_URL/users?format=basic")
+echo "Basic format response:"
+echo $BASIC_RESPONSE | jq '.'
+
+# Test faker data
+PRODUCT_RESPONSE=$(curl -s $BASE_URL/products)
+echo "Product response with faker data:"
+echo $PRODUCT_RESPONSE | jq '.'
+
+echo "Dynamic data tests completed!"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="template-usage"><a class="header" href="#template-usage">Template Usage</a></h3>
+<ol>
+<li><strong>Enable Selectively</strong>: Only enable template expansion where needed for security</li>
+<li><strong>Validate Input</strong>: Sanitize request data used in templates</li>
+<li><strong>Test Thoroughly</strong>: Test template expansion with various inputs</li>
+<li><strong>Monitor Performance</strong>: Templates add processing overhead</li>
+</ol>
+<h3 id="data-generation"><a class="header" href="#data-generation">Data Generation</a></h3>
+<ol>
+<li><strong>Use Appropriate Faker</strong>: Choose faker functions that match your domain</li>
+<li><strong>Maintain Consistency</strong>: Use consistent data patterns across endpoints</li>
+<li><strong>Consider Relationships</strong>: Generate related data that makes sense together</li>
+<li><strong>Balance Realism</strong>: Generate realistic but not sensitive data</li>
+</ol>
+<h3 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h3>
+<ol>
+<li><strong>Input Sanitization</strong>: Never trust request data in templates</li>
+<li><strong>File Access</strong>: Disable file system access in production if not needed</li>
+<li><strong>Encryption</strong>: Use encryption functions for sensitive data</li>
+<li><strong>Rate Limiting</strong>: Consider rate limiting for expensive template operations</li>
+</ol>
+<h3 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h3>
+<ol>
+<li><strong>Cache Static Parts</strong>: Cache template parsing for frequently used templates</li>
+<li><strong>Limit Complexity</strong>: Avoid deeply nested conditionals and complex logic</li>
+<li><strong>Profile Execution</strong>: Monitor template execution time and optimize slow functions</li>
+<li><strong>Use Appropriate Timeouts</strong>: Set reasonable timeouts for template execution</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="template-not-expanding"><a class="header" href="#template-not-expanding">Template Not Expanding</a></h3>
+<p><strong>Problem</strong>: Templates appear as literal text in responses</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Enable template expansion
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
+
+# Check configuration
+# Ensure response_template_expand: true in config
+</code></pre>
+<h3 id="faker-functions-not-working"><a class="header" href="#faker-functions-not-working">Faker Functions Not Working</a></h3>
+<p><strong>Problem</strong>: Faker functions return empty or error values</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Ensure faker is enabled
+MOCKFORGE_FAKE_TOKENS=true mockforge serve --spec api-spec.json
+
+# Check if data-faker feature is enabled
+# For extended faker functions, ensure the feature is compiled in
+</code></pre>
+<h3 id="request-data-access-issues"><a class="header" href="#request-data-access-issues">Request Data Access Issues</a></h3>
+<p><strong>Problem</strong>: <code>request.*</code> variables are empty or undefined</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Verify request format (JSON for body access)</li>
+<li>Check parameter names match exactly</li>
+<li>Ensure path/query parameters are properly defined in OpenAPI spec</li>
+</ul>
+<h3 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h3>
+<p><strong>Problem</strong>: Template expansion is slow</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Simplify template logic</li>
+<li>Cache frequently used values</li>
+<li>Use static responses where dynamic data isn’t needed</li>
+<li>Profile and optimize custom template functions</li>
+</ul>
+<p>For basic HTTP mocking features, see the <a href="../http-mocking.html">HTTP Mocking guide</a>. For custom response generation, see the <a href="custom-responses.html">Custom Responses guide</a>.</p>
 
                     </main>
 

@@ -1,0 +1,789 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Admin UI REST API - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/api/admin-ui-rest.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="admin-ui-rest-api"><a class="header" href="#admin-ui-rest-api">Admin UI REST API</a></h1>
+<p>This document provides comprehensive documentation for the MockForge Admin UI REST API endpoints.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The MockForge Admin UI provides a web-based interface for managing and monitoring MockForge servers. The API is organized around the following main areas:</p>
+<ul>
+<li><strong>Dashboard</strong>: System overview and real-time metrics</li>
+<li><strong>Server Management</strong>: Control and monitor server instances</li>
+<li><strong>Configuration</strong>: Update latency, faults, proxy, and validation settings</li>
+<li><strong>Logging</strong>: View and filter request logs</li>
+<li><strong>Metrics</strong>: Performance monitoring and analytics</li>
+<li><strong>Fixtures</strong>: Manage mock data and fixtures</li>
+<li><strong>Environment</strong>: Environment variable management</li>
+</ul>
+<h2 id="base-url"><a class="header" href="#base-url">Base URL</a></h2>
+<p>All API endpoints are prefixed with <code>/__mockforge</code> to avoid conflicts with user-defined routes.</p>
+<h2 id="authentication"><a class="header" href="#authentication">Authentication</a></h2>
+<p>Currently, the API does not implement authentication. In production deployments, consider adding authentication middleware.</p>
+<h2 id="response-format"><a class="header" href="#response-format">Response Format</a></h2>
+<p>All API responses follow a consistent format:</p>
+<pre><code class="language-json">{
+  "success": boolean,
+  "data": object | array | null,
+  "error": string | null,
+  "timestamp": string
+}
+</code></pre>
+<h3 id="success-response"><a class="header" href="#success-response">Success Response</a></h3>
+<pre><code class="language-json">{
+  "success": true,
+  "data": { ... },
+  "error": null,
+  "timestamp": "2025-09-17T10:30:00Z"
+}
+</code></pre>
+<h3 id="error-response"><a class="header" href="#error-response">Error Response</a></h3>
+<pre><code class="language-json">{
+  "success": false,
+  "data": null,
+  "error": "Error message",
+  "timestamp": "2025-09-17T10:30:00Z"
+}
+</code></pre>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="dashboard"><a class="header" href="#dashboard">Dashboard</a></h3>
+<h4 id="get-__mockforgedashboard"><a class="header" href="#get-__mockforgedashboard">GET <code>/__mockforge/dashboard</code></a></h4>
+<p>Get comprehensive dashboard data including system information, server status, routes, and recent logs.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "system": {
+      "version": "0.1.0",
+      "uptime_seconds": 3600,
+      "memory_usage_mb": 128,
+      "cpu_usage_percent": 15.5,
+      "active_threads": 8,
+      "total_routes": 25,
+      "total_fixtures": 150
+    },
+    "servers": [
+      {
+        "server_type": "HTTP",
+        "address": "127.0.0.1:3000",
+        "running": true,
+        "start_time": "2025-09-17T09:30:00Z",
+        "uptime_seconds": 3600,
+        "active_connections": 5,
+        "total_requests": 1250
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/users",
+        "priority": 0,
+        "has_fixtures": true,
+        "latency_ms": 45,
+        "request_count": 125,
+        "last_request": "2025-09-17T10:25:00Z",
+        "error_count": 2
+      }
+    ],
+    "recent_logs": [
+      {
+        "id": "log_1",
+        "timestamp": "2025-09-17T10:29:00Z",
+        "method": "GET",
+        "path": "/api/users",
+        "status_code": 200,
+        "response_time_ms": 45,
+        "client_ip": "127.0.0.1",
+        "user_agent": "test-agent",
+        "headers": {},
+        "response_size_bytes": 1024,
+        "error_message": null
+      }
+    ],
+    "latency_profile": {
+      "name": "default",
+      "base_ms": 50,
+      "jitter_ms": 20,
+      "tag_overrides": {}
+    },
+    "fault_config": {
+      "enabled": false,
+      "failure_rate": 0.0,
+      "status_codes": [500],
+      "active_failures": 0
+    },
+    "proxy_config": {
+      "enabled": false,
+      "upstream_url": null,
+      "timeout_seconds": 30,
+      "requests_proxied": 0
+    }
+  }
+}
+</code></pre>
+<h3 id="health-check"><a class="header" href="#health-check">Health Check</a></h3>
+<h4 id="get-__mockforgehealth"><a class="header" href="#get-__mockforgehealth">GET <code>/__mockforge/health</code></a></h4>
+<p>Get system health status.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "status": "healthy",
+  "services": {
+    "http": "healthy",
+    "websocket": "healthy",
+    "grpc": "healthy"
+  },
+  "last_check": "2025-09-17T10:30:00Z",
+  "issues": []
+}
+</code></pre>
+<h3 id="server-management"><a class="header" href="#server-management">Server Management</a></h3>
+<h4 id="get-__mockforgeserver-info"><a class="header" href="#get-__mockforgeserver-info">GET <code>/__mockforge/server-info</code></a></h4>
+<p>Get information about server addresses and configuration.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "http_server": "127.0.0.1:3000",
+    "ws_server": "127.0.0.1:3001",
+    "grpc_server": "127.0.0.1:50051"
+  }
+}
+</code></pre>
+<h4 id="post-__mockforgeserversrestart"><a class="header" href="#post-__mockforgeserversrestart">POST <code>/__mockforge/servers/restart</code></a></h4>
+<p>Initiate server restart.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "reason": "Manual restart requested"
+}
+</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "message": "Server restart initiated. Please wait for completion."
+  }
+}
+</code></pre>
+<h4 id="get-__mockforgeserversrestartstatus"><a class="header" href="#get-__mockforgeserversrestartstatus">GET <code>/__mockforge/servers/restart/status</code></a></h4>
+<p>Get restart status.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "in_progress": false,
+    "initiated_at": null,
+    "reason": null,
+    "success": null
+  }
+}
+</code></pre>
+<h3 id="routes"><a class="header" href="#routes">Routes</a></h3>
+<h4 id="get-__mockforgeroutes"><a class="header" href="#get-__mockforgeroutes">GET <code>/__mockforge/routes</code></a></h4>
+<p>Get information about configured routes (proxied to HTTP server).</p>
+<h3 id="logs"><a class="header" href="#logs">Logs</a></h3>
+<h4 id="get-__mockforgelogs"><a class="header" href="#get-__mockforgelogs">GET <code>/__mockforge/logs</code></a></h4>
+<p>Get request logs with optional filtering.</p>
+<p><strong>Query Parameters:</strong></p>
+<ul>
+<li><code>method</code> (string): Filter by HTTP method</li>
+<li><code>path</code> (string): Filter by path pattern</li>
+<li><code>status</code> (number): Filter by status code</li>
+<li><code>limit</code> (number): Maximum number of results</li>
+</ul>
+<p><strong>Examples:</strong></p>
+<pre><code>GET /__mockforge/logs?method=GET&amp;limit=50
+GET /__mockforge/logs?path=/api/users&amp;status=200
+</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": [
+    {
+      "id": "log_1",
+      "timestamp": "2025-09-17T10:29:00Z",
+      "method": "GET",
+      "path": "/api/users",
+      "status_code": 200,
+      "response_time_ms": 45,
+      "client_ip": "127.0.0.1",
+      "user_agent": "test-agent",
+      "headers": {},
+      "response_size_bytes": 1024,
+      "error_message": null
+    }
+  ]
+}
+</code></pre>
+<h4 id="post-__mockforgelogsclear"><a class="header" href="#post-__mockforgelogsclear">POST <code>/__mockforge/logs/clear</code></a></h4>
+<p>Clear all request logs.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "message": "Logs cleared"
+  }
+}
+</code></pre>
+<h3 id="metrics"><a class="header" href="#metrics">Metrics</a></h3>
+<h4 id="get-__mockforgemetrics"><a class="header" href="#get-__mockforgemetrics">GET <code>/__mockforge/metrics</code></a></h4>
+<p>Get performance metrics and analytics.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "requests_by_endpoint": {
+      "GET /api/users": 125,
+      "POST /api/users": 45
+    },
+    "response_time_percentiles": {
+      "p50": 45,
+      "p95": 120,
+      "p99": 250
+    },
+    "error_rate_by_endpoint": {
+      "GET /api/users": 0.02,
+      "POST /api/users": 0.0
+    },
+    "memory_usage_over_time": [
+      ["2025-09-17T10:25:00Z", 120],
+      ["2025-09-17T10:26:00Z", 125]
+    ],
+    "cpu_usage_over_time": [
+      ["2025-09-17T10:25:00Z", 12.5],
+      ["2025-09-17T10:26:00Z", 15.2]
+    ]
+  }
+}
+</code></pre>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<h4 id="get-__mockforgeconfig"><a class="header" href="#get-__mockforgeconfig">GET <code>/__mockforge/config</code></a></h4>
+<p>Get current configuration settings.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "latency": {
+      "enabled": true,
+      "base_ms": 50,
+      "jitter_ms": 20,
+      "tag_overrides": {}
+    },
+    "faults": {
+      "enabled": false,
+      "failure_rate": 0.0,
+      "status_codes": [500, 502, 503]
+    },
+    "proxy": {
+      "enabled": false,
+      "upstream_url": null,
+      "timeout_seconds": 30
+    },
+    "validation": {
+      "mode": "enforce",
+      "aggregate_errors": true,
+      "validate_responses": false,
+      "overrides": {}
+    }
+  }
+}
+</code></pre>
+<h4 id="post-__mockforgeconfiglatency"><a class="header" href="#post-__mockforgeconfiglatency">POST <code>/__mockforge/config/latency</code></a></h4>
+<p>Update latency configuration.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "config_type": "latency",
+  "data": {
+    "base_ms": 100,
+    "jitter_ms": 50,
+    "tag_overrides": {
+      "auth": 200
+    }
+  }
+}
+</code></pre>
+<h4 id="post-__mockforgeconfigfaults"><a class="header" href="#post-__mockforgeconfigfaults">POST <code>/__mockforge/config/faults</code></a></h4>
+<p>Update fault injection configuration.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "config_type": "faults",
+  "data": {
+    "enabled": true,
+    "failure_rate": 0.1,
+    "status_codes": [500, 502, 503]
+  }
+}
+</code></pre>
+<h4 id="post-__mockforgeconfigproxy"><a class="header" href="#post-__mockforgeconfigproxy">POST <code>/__mockforge/config/proxy</code></a></h4>
+<p>Update proxy configuration.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "config_type": "proxy",
+  "data": {
+    "enabled": true,
+    "upstream_url": "http://api.example.com",
+    "timeout_seconds": 60
+  }
+}
+</code></pre>
+<h4 id="post-__mockforgevalidation"><a class="header" href="#post-__mockforgevalidation">POST <code>/__mockforge/validation</code></a></h4>
+<p>Update validation settings.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "mode": "warn",
+  "aggregate_errors": false,
+  "validate_responses": true,
+  "overrides": {
+    "GET /health": "off"
+  }
+}
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<h4 id="get-__mockforgeenv"><a class="header" href="#get-__mockforgeenv">GET <code>/__mockforge/env</code></a></h4>
+<p>Get relevant environment variables.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "MOCKFORGE_LATENCY_ENABLED": "true",
+    "MOCKFORGE_HTTP_PORT": "3000",
+    "RUST_LOG": "info"
+  }
+}
+</code></pre>
+<h4 id="post-__mockforgeenv"><a class="header" href="#post-__mockforgeenv">POST <code>/__mockforge/env</code></a></h4>
+<p>Update an environment variable (runtime only).</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "key": "MOCKFORGE_LOG_LEVEL",
+  "value": "debug"
+}
+</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "message": "Environment variable MOCKFORGE_LOG_LEVEL updated to 'debug'. Note: This change is not persisted and will be lost on restart."
+  }
+}
+</code></pre>
+<h3 id="files"><a class="header" href="#files">Files</a></h3>
+<h4 id="post-__mockforgefilescontent"><a class="header" href="#post-__mockforgefilescontent">POST <code>/__mockforge/files/content</code></a></h4>
+<p>Get file content.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "file_path": "config.yaml",
+  "file_type": "yaml"
+}
+</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": "http:\n  request_validation: \"enforce\"\n  aggregate_validation_errors: true\n"
+}
+</code></pre>
+<h4 id="post-__mockforgefilessave"><a class="header" href="#post-__mockforgefilessave">POST <code>/__mockforge/files/save</code></a></h4>
+<p>Save file content.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "file_path": "config.yaml",
+  "content": "http:\n  port: 9080\n"
+}
+</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "message": "File saved successfully"
+  }
+}
+</code></pre>
+<h3 id="fixtures"><a class="header" href="#fixtures">Fixtures</a></h3>
+<h4 id="get-__mockforgefixtures"><a class="header" href="#get-__mockforgefixtures">GET <code>/__mockforge/fixtures</code></a></h4>
+<p>Get all fixtures with metadata.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": [
+    {
+      "id": "fixture_123",
+      "protocol": "http",
+      "method": "GET",
+      "path": "/api/users",
+      "saved_at": "2025-09-17T09:00:00Z",
+      "file_size": 2048,
+      "file_path": "http/get/api_users_123.json",
+      "fingerprint": "abc123",
+      "metadata": { ... }
+    }
+  ]
+}
+</code></pre>
+<h4 id="post-__mockforgefixturesdelete"><a class="header" href="#post-__mockforgefixturesdelete">POST <code>/__mockforge/fixtures/delete</code></a></h4>
+<p>Delete a fixture.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "fixture_id": "fixture_123"
+}
+</code></pre>
+<h4 id="post-__mockforgefixturesdelete-bulk"><a class="header" href="#post-__mockforgefixturesdelete-bulk">POST <code>/__mockforge/fixtures/delete-bulk</code></a></h4>
+<p>Delete multiple fixtures.</p>
+<p><strong>Request Body:</strong></p>
+<pre><code class="language-json">{
+  "fixture_ids": ["fixture_123", "fixture_456"]
+}
+</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "deleted_count": 2,
+    "total_requested": 2,
+    "errors": []
+  }
+}
+</code></pre>
+<h4 id="get-__mockforgefixturesdownloadidfixture_123"><a class="header" href="#get-__mockforgefixturesdownloadidfixture_123">GET <code>/__mockforge/fixtures/download?id=fixture_123</code></a></h4>
+<p>Download a fixture file.</p>
+<p><strong>Response:</strong> Binary file download</p>
+<h3 id="smoke-tests"><a class="header" href="#smoke-tests">Smoke Tests</a></h3>
+<h4 id="get-__mockforgesmoke"><a class="header" href="#get-__mockforgesmoke">GET <code>/__mockforge/smoke</code></a></h4>
+<p>Get smoke test results.</p>
+<h4 id="get-__mockforgesmokerun"><a class="header" href="#get-__mockforgesmokerun">GET <code>/__mockforge/smoke/run</code></a></h4>
+<p>Run smoke tests against fixtures.</p>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "message": "Smoke tests started. Check results in the smoke tests section."
+  }
+}
+</code></pre>
+<h2 id="error-codes"><a class="header" href="#error-codes">Error Codes</a></h2>
+<h3 id="http-status-codes"><a class="header" href="#http-status-codes">HTTP Status Codes</a></h3>
+<ul>
+<li><code>200 OK</code>: Success</li>
+<li><code>400 Bad Request</code>: Invalid request parameters</li>
+<li><code>404 Not Found</code>: Endpoint or resource not found</li>
+<li><code>500 Internal Server Error</code>: Server error</li>
+</ul>
+<h3 id="common-error-messages"><a class="header" href="#common-error-messages">Common Error Messages</a></h3>
+<ul>
+<li><code>"Invalid config type"</code>: Configuration update with invalid type</li>
+<li><code>"Failed to load fixtures"</code>: Error reading fixture files</li>
+<li><code>"Path traversal detected"</code>: Security violation in file paths</li>
+<li><code>"Server restart already in progress"</code>: Attempted restart while one is running</li>
+</ul>
+<h2 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h2>
+<p>Currently, no rate limiting is implemented. Consider adding rate limiting for production deployments.</p>
+<h2 id="cors"><a class="header" href="#cors">CORS</a></h2>
+<p>The API includes CORS middleware allowing cross-origin requests from web applications.</p>
+<h2 id="websocket-support"><a class="header" href="#websocket-support">WebSocket Support</a></h2>
+<p>The admin UI supports real-time updates through WebSocket connections for live monitoring of metrics and logs.</p>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="complete-dashboard-fetch"><a class="header" href="#complete-dashboard-fetch">Complete Dashboard Fetch</a></h3>
+<pre><code class="language-javascript">const response = await fetch('/__mockforge/dashboard');
+const data = await response.json();
+
+if (data.success) {
+  console.log('System uptime:', data.data.system.uptime_seconds);
+  console.log('Active servers:', data.data.servers.length);
+}
+</code></pre>
+<h3 id="update-latency-configuration"><a class="header" href="#update-latency-configuration">Update Latency Configuration</a></h3>
+<pre><code class="language-javascript">const response = await fetch('/__mockforge/config/latency', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    config_type: 'latency',
+    data: {
+      base_ms: 100,
+      jitter_ms: 25
+    }
+  })
+});
+
+const result = await response.json();
+console.log(result.data.message);
+</code></pre>
+<h3 id="filter-logs"><a class="header" href="#filter-logs">Filter Logs</a></h3>
+<pre><code class="language-javascript">const response = await fetch('/__mockforge/logs?method=GET&amp;status=200&amp;limit=100');
+const data = await response.json();
+
+data.data.forEach(log =&gt; {
+  console.log(`${log.method} ${log.path} - ${log.status_code} (${log.response_time_ms}ms)`);
+});
+</code></pre>
+<h2 id="development"><a class="header" href="#development">Development</a></h2>
+<h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
+<pre><code class="language-bash"># Run all tests
+cargo test --package mockforge-ui
+
+# Run integration tests
+cargo test --package mockforge-ui --test integration
+
+# Run smoke tests
+cargo test --package mockforge-ui --test smoke
+</code></pre>
+<h3 id="building-documentation"><a class="header" href="#building-documentation">Building Documentation</a></h3>
+<pre><code class="language-bash"># Generate API documentation
+cargo doc --package mockforge-ui --open
+</code></pre>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<ol>
+<li><strong>Input Validation</strong>: All inputs should be validated</li>
+<li><strong>Path Traversal</strong>: File operations prevent directory traversal</li>
+<li><strong>Rate Limiting</strong>: Consider implementing rate limiting</li>
+<li><strong>Authentication</strong>: Add authentication for production use</li>
+<li><strong>HTTPS</strong>: Use HTTPS in production</li>
+<li><strong>CORS</strong>: Properly configure CORS policies</li>
+</ol>
+<h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
+<p>When adding new API endpoints:</p>
+<ol>
+<li>Follow the established response format</li>
+<li>Add comprehensive error handling</li>
+<li>Include integration tests</li>
+<li>Update this documentation</li>
+<li>Ensure proper CORS and security measures</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../api/cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../api/rust.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../api/cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../api/rust.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

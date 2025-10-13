@@ -420,13 +420,20 @@ cd ../mockforge-cli
 cargo publish
 </code></pre>
 <h4 id="docker-hub"><a class="header" href="#docker-hub">Docker Hub</a></h4>
-<pre><code class="language-bash"># Tag and push Docker images
-docker tag mockforge:$VERSION mockforge/mockforge:$VERSION
-docker tag mockforge:$VERSION mockforge/mockforge:latest
+<blockquote>
+<p><strong>Note</strong>: Docker Hub publishing is planned for future releases. The organization and repository need to be set up first.</p>
+</blockquote>
+<p>Once Docker Hub is configured, use these commands:</p>
+<pre><code class="language-bash"># Build the Docker image with version tag
+docker build -t saasy-solutions/mockforge:$VERSION .
+docker tag saasy-solutions/mockforge:$VERSION saasy-solutions/mockforge:latest
 
-docker push mockforge/mockforge:$VERSION
-docker push mockforge/mockforge:latest
+# Push to Docker Hub (requires authentication)
+docker login
+docker push saasy-solutions/mockforge:$VERSION
+docker push saasy-solutions/mockforge:latest
 </code></pre>
+<p>For now, users should build the Docker image locally as documented in the <a href="../getting-started/installation.html#method-2-docker-containerized">Installation Guide</a>.</p>
 <h3 id="3-homebrew-macos"><a class="header" href="#3-homebrew-macos">3. Homebrew (macOS)</a></h3>
 <pre><code class="language-ruby"># Formula/mockforge.rb
 class Mockforge &lt; Formula

@@ -625,6 +625,107 @@ docker run -p 3001:3000 -p 3002:3001 mockforge
 </code></pre>
 </li>
 </ol>
+<h3 id="port-already-in-use"><a class="header" href="#port-already-in-use">Port Already in Use</a></h3>
+<p><strong>Symptoms</strong>: Container fails to start with “address already in use” error</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Check what's using the ports
+netstat -tlnp | grep :3000
+# Or on macOS:
+lsof -i :3000
+
+# Use different ports
+docker run -p 3001:3000 -p 3002:3001 mockforge
+
+# Or in docker-compose.yml
+services:
+  mockforge:
+    ports:
+      - "3001:3000"  # Map host 3001 to container 3000
+      - "3002:3001"  # Map host 3002 to container 3001
+</code></pre>
+<h3 id="permission-issues"><a class="header" href="#permission-issues">Permission Issues</a></h3>
+<p><strong>Symptoms</strong>: Container can’t read/write mounted volumes</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Fix volume permissions (Linux)
+sudo chown -R 1000:1000 fixtures/
+sudo chown -R 1000:1000 logs/
+
+# Or run container as your user
+docker run --user $(id -u):$(id -g) \
+  -v $(pwd)/fixtures:/app/fixtures \
+  mockforge
+
+# macOS typically doesn't need permission fixes
+</code></pre>
+<h3 id="build-issues"><a class="header" href="#build-issues">Build Issues</a></h3>
+<p><strong>Symptoms</strong>: Docker build fails or takes too long</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Clear Docker cache
+docker system prune -a
+
+# Rebuild without cache
+docker build --no-cache -t mockforge .
+
+# Check disk space
+df -h
+
+# Remove unused images
+docker image prune -a
+</code></pre>
+<h3 id="container-performance-issues"><a class="header" href="#container-performance-issues">Container Performance Issues</a></h3>
+<p><strong>Symptoms</strong>: Slow response times in Docker</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>
+<p><strong>Increase resources</strong> (Docker Desktop):</p>
+<ul>
+<li>Settings → Resources → Memory: Increase to 4GB+</li>
+<li>Settings → Resources → CPUs: Increase to 2+</li>
+</ul>
+</li>
+<li>
+<p><strong>Reduce logging verbosity</strong>:</p>
+<pre><code class="language-bash">docker run -e RUST_LOG=info mockforge
+# Instead of RUST_LOG=debug
+</code></pre>
+</li>
+<li>
+<p><strong>Use Docker volumes instead of bind mounts</strong> for better performance:</p>
+<pre><code class="language-yaml">volumes:
+  - mockforge-data:/app/data  # Named volume (faster)
+  # Instead of:
+  # - ./data:/app/data       # Bind mount (slower on macOS/Windows)
+</code></pre>
+</li>
+</ol>
+<h3 id="networking-issues"><a class="header" href="#networking-issues">Networking Issues</a></h3>
+<p><strong>Symptoms</strong>: Can’t connect to MockForge from other containers</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Use Docker network
+docker network create mockforge-net
+
+docker run --network mockforge-net --name mockforge \
+  -p 3000:3000 mockforge
+
+# Other containers on same network can access via:
+# http://mockforge:3000
+</code></pre>
+<p>In <code>docker-compose.yml</code>:</p>
+<pre><code class="language-yaml">services:
+  mockforge:
+    networks:
+      - app-network
+
+  frontend:
+    environment:
+      API_URL: http://mockforge:3000
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+</code></pre>
 <h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
 <h3 id="log-analysis"><a class="header" href="#log-analysis">Log Analysis</a></h3>
 <pre><code class="language-bash"># Extract error patterns

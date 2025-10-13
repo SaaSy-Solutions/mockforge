@@ -34,7 +34,6 @@
 - [Security & Encryption](user-guide/security.md)
 - [Directory Synchronization](user-guide/sync.md)
 - [Admin UI](user-guide/admin-ui.md)
-- [Admin UI v2](user-guide/admin-ui-v2.md)
 
 ## Configuration
 

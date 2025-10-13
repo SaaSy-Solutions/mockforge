@@ -209,8 +209,12 @@
 <li>CI/CD pipelines</li>
 <li>Systems without Rust installed</li>
 </ul>
-<h3 id="pull-from-docker-hub"><a class="header" href="#pull-from-docker-hub">Pull from Docker Hub</a></h3>
-<pre><code class="language-bash">docker pull SaaSy-Solutions/mockforge
+<h3 id="build-docker-image"><a class="header" href="#build-docker-image">Build Docker image</a></h3>
+<p>Since pre-built images are not yet published to Docker Hub, build the image locally:</p>
+<pre><code class="language-bash"># Clone and build
+git clone https://github.com/SaaSy-Solutions/mockforge.git
+cd mockforge
+docker build -t mockforge .
 </code></pre>
 <h3 id="run-with-basic-configuration"><a class="header" href="#run-with-basic-configuration">Run with basic configuration</a></h3>
 <pre><code class="language-bash">docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
@@ -218,7 +222,13 @@
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   mockforge
 </code></pre>
-<h3 id="build-from-source"><a class="header" href="#build-from-source">Build from source</a></h3>
+<h3 id="alternative-docker-compose"><a class="header" href="#alternative-docker-compose">Alternative: Docker Compose</a></h3>
+<p>For a complete setup with all services:</p>
+<pre><code class="language-bash">git clone https://github.com/SaaSy-Solutions/mockforge.git
+cd mockforge
+docker-compose up
+</code></pre>
+<h3 id="build-from-source-without-docker"><a class="header" href="#build-from-source-without-docker">Build from source (without Docker)</a></h3>
 <pre><code class="language-bash">git clone https://github.com/SaaSy-Solutions/mockforge.git
 cd mockforge
 docker build -t mockforge .
@@ -284,7 +294,7 @@ mockforge serve --http-port 3001 --ws-port 3002 --admin-port 8081
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../getting-started/quick-start.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../getting-started/five-minute-api.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -298,7 +308,7 @@ mockforge serve --http-port 3001 --ws-port 3002 --admin-port 8081
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../getting-started/quick-start.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../getting-started/five-minute-api.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

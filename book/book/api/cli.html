@@ -206,7 +206,7 @@
 </ul>
 <p><strong>API Specification:</strong></p>
 <ul>
-<li><code>--spec &lt;PATH&gt;</code>: Path to OpenAPI specification file (JSON or YAML format)</li>
+<li><code>--spec &lt;PATH&gt;</code>: OpenAPI spec file for HTTP server (JSON or YAML format)</li>
 </ul>
 <p><strong>Configuration:</strong></p>
 <ul>
@@ -277,11 +277,126 @@
   --validation enforce \
   --admin-standalone
 </code></pre>
+<h3 id="init---initialize-new-project"><a class="header" href="#init---initialize-new-project"><code>init</code> - Initialize New Project</a></h3>
+<p>Create a new MockForge project with a template configuration file.</p>
+<pre><code class="language-bash">mockforge-cli init [OPTIONS] &lt;NAME&gt;
+</code></pre>
+<h4 id="arguments"><a class="header" href="#arguments">Arguments</a></h4>
+<ul>
+<li><code>&lt;NAME&gt;</code>: Project name or directory path
+<ul>
+<li>Use <code>.</code> to initialize in the current directory</li>
+<li>Use a project name to create a new directory</li>
+</ul>
+</li>
+</ul>
+<h4 id="options"><a class="header" href="#options">Options</a></h4>
+<ul>
+<li><code>--no-examples</code>: Skip creating example files (only create <code>mockforge.yaml</code>)</li>
+</ul>
+<h4 id="examples-1"><a class="header" href="#examples-1">Examples</a></h4>
+<pre><code class="language-bash"># Create a new project in a new directory
+mockforge-cli init my-mock-api
+
+# Initialize in the current directory
+mockforge-cli init .
+
+# Initialize without examples
+mockforge-cli init my-project --no-examples
+</code></pre>
+<h4 id="what-gets-created"><a class="header" href="#what-gets-created">What Gets Created</a></h4>
+<ol>
+<li>
+<p><strong>mockforge.yaml</strong>: Main configuration file with:</p>
+<ul>
+<li>HTTP, WebSocket, gRPC server configurations</li>
+<li>Admin UI settings</li>
+<li>Core features (latency, failures, overrides)</li>
+<li>Observability configuration</li>
+<li>Data generation settings</li>
+<li>Logging configuration</li>
+</ul>
+</li>
+<li>
+<p><strong>examples/</strong> directory (unless <code>--no-examples</code>):</p>
+<ul>
+<li><code>openapi.json</code>: Sample OpenAPI specification</li>
+<li>Example data files</li>
+</ul>
+</li>
+</ol>
+<h4 id="see-also"><a class="header" href="#see-also">See Also</a></h4>
+<ul>
+<li><a href="../configuration/files.html">Configuration Files Guide</a></li>
+<li><a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml">Complete Config Template</a></li>
+</ul>
+<hr />
+<h3 id="config---configuration-management"><a class="header" href="#config---configuration-management"><code>config</code> - Configuration Management</a></h3>
+<p>Validate and manage MockForge configuration files.</p>
+<pre><code class="language-bash">mockforge-cli config &lt;SUBCOMMAND&gt;
+</code></pre>
+<h4 id="subcommands"><a class="header" href="#subcommands">Subcommands</a></h4>
+<h5 id="validate---validate-configuration-file"><a class="header" href="#validate---validate-configuration-file"><code>validate</code> - Validate Configuration File</a></h5>
+<p>Validate a MockForge configuration file for syntax and structure errors.</p>
+<pre><code class="language-bash">mockforge-cli config validate [OPTIONS]
+</code></pre>
+<p><strong>Options:</strong></p>
+<ul>
+<li><code>--config &lt;PATH&gt;</code>: Path to config file to validate
+<ul>
+<li>If omitted, auto-discovers <code>mockforge.yaml</code> or <code>mockforge.yml</code> in current and parent directories</li>
+</ul>
+</li>
+</ul>
+<p><strong>What Gets Validated:</strong></p>
+<ul>
+<li>YAML syntax and structure</li>
+<li>File existence</li>
+<li>HTTP endpoints count</li>
+<li>Request chains count</li>
+<li>Missing sections (warnings)</li>
+</ul>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Validate config in current directory
+mockforge-cli config validate
+
+# Validate specific config file
+mockforge-cli config validate --config my-config.yaml
+
+# Validate before starting server
+mockforge-cli config validate &amp;&amp; mockforge-cli serve
+</code></pre>
+<p><strong>Output Example:</strong></p>
+<pre><code>🔍 Validating MockForge configuration...
+📄 Checking configuration file: mockforge.yaml
+✅ Configuration is valid
+
+📊 Summary:
+   Found 5 HTTP endpoints
+   Found 2 chains
+
+⚠️  Warnings:
+   - No WebSocket configuration found
+</code></pre>
+<p><strong>Common Issues:</strong></p>
+<ul>
+<li><strong>Invalid YAML syntax</strong>: Fix indentation, quotes, or structure</li>
+<li><strong>File not found</strong>: Check path or run <code>mockforge init</code></li>
+<li><strong>Missing sections</strong>: Add HTTP, admin, or other required sections</li>
+</ul>
+<p><strong>Note</strong>: Current validation is basic (syntax, structure, counts). For comprehensive field validation, see the <a href="../reference/config-validation.html">Configuration Validation Guide</a>.</p>
+<h4 id="see-also-1"><a class="header" href="#see-also-1">See Also</a></h4>
+<ul>
+<li><a href="../reference/config-validation.html">Configuration Validation Guide</a></li>
+<li><a href="../reference/config-schema.html">Configuration Schema Reference</a></li>
+<li><a href="../reference/troubleshooting.html">Troubleshooting Guide</a></li>
+</ul>
+<hr />
 <h3 id="data---generate-synthetic-data"><a class="header" href="#data---generate-synthetic-data"><code>data</code> - Generate Synthetic Data</a></h3>
 <p>Generate synthetic test data using various templates and schemas.</p>
 <pre><code class="language-bash">mockforge-cli data &lt;SUBCOMMAND&gt;
 </code></pre>
-<h4 id="subcommands"><a class="header" href="#subcommands">Subcommands</a></h4>
+<h4 id="subcommands-1"><a class="header" href="#subcommands-1">Subcommands</a></h4>
 <h5 id="template---generate-from-built-in-templates"><a class="header" href="#template---generate-from-built-in-templates"><code>template</code> - Generate from Built-in Templates</a></h5>
 <p>Generate data using MockForge’s built-in data generation templates.</p>
 <pre><code class="language-bash">mockforge-cli data template [OPTIONS]
@@ -351,16 +466,176 @@ mockforge-cli data open-api --endpoint /users --method post api-spec.yaml
 <p>Start the Admin UI as a standalone server without the main mock servers.</p>
 <pre><code class="language-bash">mockforge-cli admin [OPTIONS]
 </code></pre>
-<h4 id="options"><a class="header" href="#options">Options</a></h4>
+<h4 id="options-1"><a class="header" href="#options-1">Options</a></h4>
 <ul>
 <li><code>--port &lt;PORT&gt;</code>: Server port (default: 9080)</li>
 </ul>
-<h4 id="examples-1"><a class="header" href="#examples-1">Examples</a></h4>
+<h4 id="examples-2"><a class="header" href="#examples-2">Examples</a></h4>
 <pre><code class="language-bash"># Start admin UI on default port
 mockforge-cli admin
 
 # Start admin UI on custom port
 mockforge-cli admin --port 9090
+</code></pre>
+<h3 id="sync---workspace-synchronization-daemon"><a class="header" href="#sync---workspace-synchronization-daemon"><code>sync</code> - Workspace Synchronization Daemon</a></h3>
+<p>Start a background daemon that monitors a workspace directory for file changes and automatically syncs them to MockForge workspaces.</p>
+<pre><code class="language-bash">mockforge-cli sync [OPTIONS]
+</code></pre>
+<h4 id="options-2"><a class="header" href="#options-2">Options</a></h4>
+<p><strong>Required:</strong></p>
+<ul>
+<li><code>--workspace-dir &lt;PATH&gt;</code> or <code>-w &lt;PATH&gt;</code>: Workspace directory to monitor for changes</li>
+</ul>
+<p><strong>Optional:</strong></p>
+<ul>
+<li><code>--config &lt;PATH&gt;</code> or <code>-c &lt;PATH&gt;</code>: Configuration file path for sync settings</li>
+</ul>
+<h4 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h4>
+<p>The sync daemon provides bidirectional synchronization between workspace files and MockForge’s internal workspace storage:</p>
+<ol>
+<li><strong>File Monitoring</strong>: Watches for <code>.yaml</code> and <code>.yml</code> files in the workspace directory</li>
+<li><strong>Automatic Import</strong>: When files are created or modified, they’re automatically imported into the workspace</li>
+<li><strong>Real-time Updates</strong>: Changes are detected and processed immediately</li>
+<li><strong>Visual Feedback</strong>: Clear console output shows what’s happening in real-time</li>
+</ol>
+<p><strong>File Requirements:</strong></p>
+<ul>
+<li>Only <code>.yaml</code> and <code>.yml</code> files are monitored</li>
+<li>Hidden files (starting with <code>.</code>) are ignored</li>
+<li>Files must be valid MockRequest YAML format</li>
+</ul>
+<p><strong>What You’ll See:</strong></p>
+<ul>
+<li>File creation notifications with import status</li>
+<li>File modification notifications with update status</li>
+<li>File deletion notifications (files are not auto-deleted from workspace)</li>
+<li>Error messages if imports fail</li>
+<li>Real-time feedback for all sync operations</li>
+</ul>
+<h4 id="examples-3"><a class="header" href="#examples-3">Examples</a></h4>
+<p><strong>Basic Usage:</strong></p>
+<pre><code class="language-bash"># Start sync daemon for a workspace directory
+mockforge-cli sync --workspace-dir ./my-workspace
+
+# Use short form
+mockforge-cli sync -w ./my-workspace
+
+# With custom config
+mockforge-cli sync --workspace-dir /path/to/workspace --config sync-config.yaml
+</code></pre>
+<p><strong>Git Integration:</strong></p>
+<pre><code class="language-bash"># Monitor a Git repository directory
+mockforge-cli sync --workspace-dir /path/to/git/repo/workspaces
+
+# Changes you make in Git will automatically sync to MockForge
+# Perfect for team collaboration via Git
+</code></pre>
+<p><strong>Development Workflow:</strong></p>
+<pre><code class="language-bash"># 1. Start the sync daemon in one terminal
+mockforge-cli sync --workspace-dir ./workspaces
+
+# 2. In another terminal, edit workspace files
+vim ./workspaces/my-request.yaml
+
+# 3. Save the file - it will automatically import to MockForge
+# You'll see output like:
+#   🔄 Detected 1 file change in workspace 'default'
+#     📝 Modified: my-request.yaml
+#        ✅ Successfully updated
+</code></pre>
+<h4 id="example-output"><a class="header" href="#example-output">Example Output</a></h4>
+<p>When you start the sync daemon, you’ll see:</p>
+<pre><code>🔄 Starting MockForge Sync Daemon...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Workspace directory: ./my-workspace
+
+ℹ️  What the sync daemon does:
+   • Monitors the workspace directory for .yaml/.yml file changes
+   • Automatically imports new or modified request files
+   • Syncs changes bidirectionally between files and workspace
+   • Skips hidden files (starting with .)
+
+🔍 Monitoring for file changes...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Sync daemon started successfully!
+💡 Press Ctrl+C to stop
+
+📂 Monitoring workspace 'default' in directory: ./my-workspace
+</code></pre>
+<p>When files change, you’ll see:</p>
+<pre><code>🔄 Detected 1 file change in workspace 'default'
+  ➕ Created: new-endpoint.yaml
+     ✅ Successfully imported
+
+🔄 Detected 2 file changes in workspace 'default'
+  📝 Modified: user-api.yaml
+     ✅ Successfully updated
+  🗑️  Deleted: old-endpoint.yaml
+     ℹ️  Auto-deletion from workspace is disabled
+</code></pre>
+<p>If errors occur:</p>
+<pre><code>🔄 Detected 1 file change in workspace 'default'
+  📝 Modified: invalid-file.yaml
+     ⚠️  Failed to import: File is not a recognized format (expected MockRequest YAML)
+</code></pre>
+<h4 id="stopping-the-daemon"><a class="header" href="#stopping-the-daemon">Stopping the Daemon</a></h4>
+<p>Press <code>Ctrl+C</code> to gracefully stop the sync daemon:</p>
+<pre><code>^C
+🛑 Received shutdown signal
+⏹️  Stopped monitoring workspace 'default' in directory: ./my-workspace
+👋 Sync daemon stopped
+</code></pre>
+<h4 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h4>
+<p><strong>Version Control:</strong></p>
+<pre><code class="language-bash"># Use sync with Git for team collaboration
+cd /path/to/git/repo
+mockforge-cli sync --workspace-dir ./workspaces
+
+# Team members can push/pull changes
+# The sync daemon will automatically import updates
+</code></pre>
+<p><strong>Development Workflow:</strong></p>
+<pre><code class="language-bash"># Keep sync daemon running during development
+# Edit files in your favorite editor
+# Changes automatically sync to MockForge
+# Perfect for file-based workflows
+</code></pre>
+<p><strong>Directory Organization:</strong></p>
+<pre><code class="language-bash"># Organize workspace files in subdirectories
+workspaces/
+├── api-v1/
+│   ├── users.yaml
+│   └── products.yaml
+├── api-v2/
+│   └── users.yaml
+└── internal/
+    └── admin.yaml
+
+# All .yaml files will be monitored
+mockforge-cli sync --workspace-dir ./workspaces
+</code></pre>
+<h4 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h4>
+<p><strong>Files not importing:</strong></p>
+<ul>
+<li>Ensure files have <code>.yaml</code> or <code>.yml</code> extension</li>
+<li>Check that files are valid MockRequest YAML format</li>
+<li>Look for error messages in the console output</li>
+<li>Verify files are not hidden (don’t start with <code>.</code>)</li>
+</ul>
+<p><strong>Permission errors:</strong></p>
+<ul>
+<li>Ensure MockForge has read access to the workspace directory</li>
+<li>Check file permissions: <code>ls -la workspace-dir/</code></li>
+</ul>
+<p><strong>Changes not detected:</strong></p>
+<ul>
+<li>The sync daemon uses filesystem notifications</li>
+<li>Some network filesystems may not support change notifications</li>
+<li>Try editing the file locally rather than over a network mount</li>
+</ul>
+<p><strong>Enable debug logging:</strong></p>
+<pre><code class="language-bash">RUST_LOG=mockforge_core::sync_watcher=debug mockforge-cli sync --workspace-dir ./workspace
 </code></pre>
 <h2 id="configuration-file-format"><a class="header" href="#configuration-file-format">Configuration File Format</a></h2>
 <p>MockForge supports YAML configuration files that can be used instead of command-line options.</p>
@@ -425,6 +700,9 @@ export MOCKFORGE_GRPC_PORT=50051
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
 export MOCKFORGE_ADMIN_PORT=9080
+export MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
+export MOCKFORGE_ADMIN_SESSION_TIMEOUT=86400
+export MOCKFORGE_ADMIN_AUTH_ENABLED=true
 
 # Validation
 export MOCKFORGE_VALIDATION_MODE=enforce
@@ -436,6 +714,29 @@ export MOCKFORGE_GRPC_REFLECTION_ENABLED=true
 
 # WebSocket settings
 export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
+
+# Plugin system
+export MOCKFORGE_PLUGINS_ENABLED=true
+export MOCKFORGE_PLUGINS_DIRECTORY=~/.mockforge/plugins
+export MOCKFORGE_PLUGIN_MEMORY_LIMIT=64
+export MOCKFORGE_PLUGIN_CPU_LIMIT=10
+export MOCKFORGE_PLUGIN_TIMEOUT=5000
+
+# Encryption
+export MOCKFORGE_ENCRYPTION_ENABLED=true
+export MOCKFORGE_ENCRYPTION_ALGORITHM=aes-256-gcm
+export MOCKFORGE_KEY_STORE_PATH=~/.mockforge/keys
+
+# Synchronization
+export MOCKFORGE_SYNC_ENABLED=true
+export MOCKFORGE_SYNC_DIRECTORY=./workspace-sync
+export MOCKFORGE_SYNC_MODE=bidirectional
+export MOCKFORGE_SYNC_WATCH=true
+
+# Data generation
+export MOCKFORGE_DATA_RAG_ENABLED=true
+export MOCKFORGE_DATA_RAG_PROVIDER=openai
+export MOCKFORGE_DATA_RAG_API_KEY=your-api-key
 </code></pre>
 <h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
 <p>MockForge uses standard exit codes:</p>
@@ -476,7 +777,7 @@ logging:
 <li>Template expansion</li>
 <li>Validation errors</li>
 </ul>
-<h2 id="examples-2"><a class="header" href="#examples-2">Examples</a></h2>
+<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
 <h3 id="complete-development-setup"><a class="header" href="#complete-development-setup">Complete Development Setup</a></h3>
 <pre><code class="language-bash"># Start all servers with admin UI
 mockforge-cli serve \
@@ -530,7 +831,7 @@ docker run --rm -v $(pwd)/examples:/examples \
   mockforge \
   serve --spec /examples/openapi-demo.json --http-port 3000
 </code></pre>
-<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
 <h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
 <p><strong>Server won’t start:</strong></p>
 <pre><code class="language-bash"># Check if ports are available
@@ -583,7 +884,7 @@ grpcurl -plaintext localhost:50051 list
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../api/rust.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../api/admin-ui-rest.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -597,7 +898,7 @@ grpcurl -plaintext localhost:50051 list
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../api/rust.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../api/admin-ui-rest.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

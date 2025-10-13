@@ -195,18 +195,61 @@
 <li><strong>Protocol Agnostic</strong>: Unified approach across different protocols</li>
 </ul>
 <h2 id="high-level-architecture"><a class="header" href="#high-level-architecture">High-Level Architecture</a></h2>
-<pre><code class="language-text">             +------------------+
-             |     CLI / UI     |
-             +--------+---------+
-                      |
-         +------------+------------+
-         |    Core Engine (axum)   |
-         +------------+------------+
-                      |
-   +----------+-------+---------+-----------+
-   |          |                 |           |
- HTTP Mock  WS Mock          gRPC Mock   Data Gen
-(axum)    (tokio-ws)         (tonic)     (faker+RAG)
+<pre><code class="language-mermaid">graph TB
+    subgraph "User Interfaces"
+        CLI[CLI mockforge-cli]
+        UI[Admin UI v2]
+    end
+
+    subgraph "Core Engine"
+        Router[Route Registry]
+        Templates[Template Engine]
+        Validator[Schema Validator]
+        Latency[Latency Injector]
+        Failure[Failure Injector]
+        Logger[Request Logger]
+        Plugins[Plugin System]
+    end
+
+    subgraph "Protocol Handlers"
+        HTTP[HTTP Server&lt;br/&gt;axum]
+        WS[WebSocket Server&lt;br/&gt;tokio-ws]
+        GRPC[gRPC Server&lt;br/&gt;tonic]
+    end
+
+    subgraph "Data Layer"
+        DataGen[Data Generator&lt;br/&gt;faker + RAG]
+        Workspace[Workspace Manager]
+        Encryption[Encryption Engine]
+    end
+
+    CLI --&gt; Router
+    UI --&gt; Router
+
+    Router --&gt; HTTP
+    Router --&gt; WS
+    Router --&gt; GRPC
+
+    HTTP --&gt; Templates
+    WS --&gt; Templates
+    GRPC --&gt; Templates
+
+    Templates --&gt; Validator
+    Validator --&gt; Latency
+    Latency --&gt; Failure
+    Failure --&gt; Logger
+
+    Templates --&gt; DataGen
+    Templates --&gt; Plugins
+
+    Router --&gt; Workspace
+    Workspace --&gt; Encryption
+
+    style CLI fill:#e1f5ff
+    style UI fill:#e1f5ff
+    style Router fill:#ffe1e1
+    style Templates fill:#ffe1e1
+    style DataGen fill:#e1ffe1
 </code></pre>
 <h2 id="crate-structure"><a class="header" href="#crate-structure">Crate Structure</a></h2>
 <p>MockForge is organized as a Cargo workspace with the following crates:</p>
@@ -295,6 +338,54 @@
 <li><strong>Logging</strong>: Request/response logging</li>
 <li><strong>Response Delivery</strong>: Protocol-specific response sending</li>
 </ol>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Client
+    participant Server as Protocol Server&lt;br/&gt;(HTTP/WS/gRPC)
+    participant Router as Route Registry
+    participant Validator
+    participant Templates
+    participant Latency
+    participant Failure
+    participant Handler
+    participant Logger
+
+    Client-&gt;&gt;Server: Incoming Request
+    Server-&gt;&gt;Router: Match Route
+    Router-&gt;&gt;Router: Find Handler
+
+    alt Route Found
+        Router-&gt;&gt;Validator: Validate Request
+
+        alt Validation Enabled
+            Validator-&gt;&gt;Validator: Check Schema
+            alt Valid
+                Validator-&gt;&gt;Templates: Process Request
+            else Invalid
+                Validator--&gt;&gt;Server: Validation Error
+                Server--&gt;&gt;Client: 400 Bad Request
+            end
+        else Validation Disabled
+            Validator-&gt;&gt;Templates: Process Request
+        end
+
+        Templates-&gt;&gt;Templates: Render Template
+        Templates-&gt;&gt;Handler: Generate Response
+        Handler-&gt;&gt;Latency: Apply Delays
+        Latency-&gt;&gt;Failure: Check Failure Rules
+
+        alt Should Fail
+            Failure--&gt;&gt;Server: Simulated Error
+            Server--&gt;&gt;Client: Error Response
+        else Success
+            Failure-&gt;&gt;Logger: Log Request/Response
+            Logger--&gt;&gt;Server: Response Data
+            Server--&gt;&gt;Client: Success Response
+        end
+    else Route Not Found
+        Router--&gt;&gt;Server: No Match
+        Server--&gt;&gt;Client: 404 Not Found
+    end
+</code></pre>
 <h3 id="route-registry-system"><a class="header" href="#route-registry-system">Route Registry System</a></h3>
 <p>The core routing system provides unified route management:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -331,6 +422,76 @@ impl TemplateEngine {
 <li><code>randInt</code>: Random integers</li>
 <li><code>request</code>: Access request data</li>
 <li><code>faker</code>: Synthetic data generation</li>
+</ul>
+<h3 id="plugin-system-architecture"><a class="header" href="#plugin-system-architecture">Plugin System Architecture</a></h3>
+<p>MockForge uses a WebAssembly-based plugin system for extensibility:</p>
+<pre><code class="language-mermaid">graph TB
+    subgraph "Plugin Lifecycle"
+        Load[Load Plugin WASM]
+        Init[Initialize Plugin]
+        Register[Register Hooks]
+        Execute[Execute Plugin]
+        Cleanup[Cleanup Resources]
+    end
+
+    subgraph "Plugin Types"
+        Auth[Authentication&lt;br/&gt;JWT, OAuth2, etc.]
+        Response[Response Generators&lt;br/&gt;GraphQL, Custom Data]
+        DataSource[Data Sources&lt;br/&gt;CSV, Database, API]
+        Template[Template Extensions&lt;br/&gt;Custom Functions]
+    end
+
+    subgraph "Security Sandbox"
+        Isolate[WASM Isolation]
+        Limits[Resource Limits&lt;br/&gt;Memory, CPU, Time]
+        Perms[Permission System]
+    end
+
+    subgraph "Core Integration"
+        Loader[Plugin Loader]
+        Registry[Plugin Registry]
+        API[Plugin API]
+    end
+
+    Load --&gt; Init
+    Init --&gt; Register
+    Register --&gt; Execute
+    Execute --&gt; Cleanup
+
+    Auth --&gt; Loader
+    Response --&gt; Loader
+    DataSource --&gt; Loader
+    Template --&gt; Loader
+
+    Loader --&gt; Registry
+    Registry --&gt; API
+
+    API --&gt; Isolate
+    Isolate --&gt; Limits
+    Limits --&gt; Perms
+
+    style Auth fill:#e1f5ff
+    style Response fill:#e1f5ff
+    style DataSource fill:#e1f5ff
+    style Template fill:#e1f5ff
+    style Isolate fill:#ffe1e1
+    style Limits fill:#ffe1e1
+    style Perms fill:#ffe1e1
+</code></pre>
+<p><strong>Plugin Hook Points:</strong></p>
+<ol>
+<li><strong>Request Interceptors</strong>: Modify incoming requests</li>
+<li><strong>Response Generators</strong>: Create custom response data</li>
+<li><strong>Template Helpers</strong>: Add custom template functions</li>
+<li><strong>Authentication Providers</strong>: Implement auth schemes</li>
+<li><strong>Data Source Connectors</strong>: Connect to external data sources</li>
+</ol>
+<p><strong>Security Model:</strong></p>
+<ul>
+<li>WASM sandboxing isolates plugin execution</li>
+<li>Resource limits prevent DoS attacks</li>
+<li>Permission system controls plugin capabilities</li>
+<li>Plugin signature verification (planned)</li>
 </ul>
 <p>This architecture provides a solid foundation for API mocking while maintaining extensibility, performance, and developer experience. The modular design allows for independent evolution of each protocol implementation while sharing common infrastructure.</p>
 

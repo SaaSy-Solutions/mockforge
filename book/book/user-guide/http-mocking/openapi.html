@@ -183,6 +183,411 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="openapi-integration"><a class="header" href="#openapi-integration">OpenAPI Integration</a></h1>
+<p>MockForge provides advanced OpenAPI integration capabilities beyond basic spec loading and response generation. This guide covers sophisticated features for enterprise-grade API mocking.</p>
+<h2 id="advanced-request-validation"><a class="header" href="#advanced-request-validation">Advanced Request Validation</a></h2>
+<p>MockForge supports comprehensive request validation against OpenAPI schemas with multiple validation modes and granular control.</p>
+<h3 id="validation-modes"><a class="header" href="#validation-modes">Validation Modes</a></h3>
+<pre><code class="language-bash"># Disable validation completely
+MOCKFORGE_REQUEST_VALIDATION=off mockforge serve --spec api-spec.json
+
+# Log warnings but allow invalid requests
+MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec api-spec.json
+
+# Reject invalid requests (default)
+MOCKFORGE_REQUEST_VALIDATION=enforce mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="response-validation"><a class="header" href="#response-validation">Response Validation</a></h3>
+<p>Enable validation of generated responses against OpenAPI schemas:</p>
+<pre><code class="language-bash"># Validate responses against schemas
+MOCKFORGE_RESPONSE_VALIDATION=true mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="custom-validation-status-codes"><a class="header" href="#custom-validation-status-codes">Custom Validation Status Codes</a></h3>
+<p>Configure HTTP status codes for validation failures:</p>
+<pre><code class="language-bash"># Use 422 Unprocessable Entity for validation errors
+MOCKFORGE_VALIDATION_STATUS=422 mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="validation-overrides"><a class="header" href="#validation-overrides">Validation Overrides</a></h3>
+<p>Skip validation for specific routes:</p>
+<pre><code class="language-yaml">validation:
+  mode: enforce
+  overrides:
+    "GET /health": "off"
+    "POST /webhooks/*": "warn"
+</code></pre>
+<h3 id="aggregated-error-reporting"><a class="header" href="#aggregated-error-reporting">Aggregated Error Reporting</a></h3>
+<p>Control how validation errors are reported:</p>
+<pre><code class="language-bash"># Report all validation errors at once
+MOCKFORGE_AGGREGATE_ERRORS=true mockforge serve --spec api-spec.json
+
+# Stop at first validation error
+MOCKFORGE_AGGREGATE_ERRORS=false mockforge serve --spec api-spec.json
+</code></pre>
+<h2 id="security-scheme-validation"><a class="header" href="#security-scheme-validation">Security Scheme Validation</a></h2>
+<p>MockForge validates authentication and authorization requirements defined in your OpenAPI spec.</p>
+<h3 id="supported-security-schemes"><a class="header" href="#supported-security-schemes">Supported Security Schemes</a></h3>
+<ul>
+<li><strong>HTTP Basic Authentication</strong>: Validates <code>Authorization: Basic &lt;credentials&gt;</code> headers</li>
+<li><strong>Bearer Tokens</strong>: Validates <code>Authorization: Bearer &lt;token&gt;</code> headers</li>
+<li><strong>API Keys</strong>: Supports header and query parameter API keys</li>
+<li><strong>OAuth2</strong>: Basic OAuth2 flow validation</li>
+</ul>
+<h3 id="security-validation-example"><a class="header" href="#security-validation-example">Security Validation Example</a></h3>
+<pre><code class="language-yaml">openapi: 3.0.0
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - bearerAuth: []
+  - apiKey: []
+
+paths:
+  /protected:
+    get:
+      security:
+        - bearerAuth: []
+</code></pre>
+<pre><code class="language-bash"># Test with valid Bearer token
+curl -H "Authorization: Bearer eyJ0eXAi..." http://localhost:3000/protected
+
+# Test with API key
+curl -H "X-API-Key: your-api-key" http://localhost:3000/protected
+</code></pre>
+<h2 id="schema-resolution-and-references"><a class="header" href="#schema-resolution-and-references">Schema Resolution and References</a></h2>
+<p>MockForge fully supports OpenAPI schema references (<code>$ref</code>) for reusable components.</p>
+<h3 id="component-references"><a class="header" href="#component-references">Component References</a></h3>
+<pre><code class="language-yaml">components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+
+    UserProfile:
+      type: object
+      properties:
+        bio:
+          type: string
+        avatar:
+          type: string
+          format: uri
+
+  responses:
+    UserResponse:
+      description: User data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/User'
+
+paths:
+  /users/{id}:
+    get:
+      responses:
+        '200':
+          $ref: '#/components/responses/UserResponse'
+</code></pre>
+<h3 id="request-body-references"><a class="header" href="#request-body-references">Request Body References</a></h3>
+<pre><code class="language-yaml">components:
+  requestBodies:
+    UserCreate:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - name
+              - email
+            properties:
+              name:
+                type: string
+              email:
+                type: string
+                format: email
+
+paths:
+  /users:
+    post:
+      requestBody:
+        $ref: '#/components/requestBodies/UserCreate'
+</code></pre>
+<h2 id="multiple-openapi-specifications"><a class="header" href="#multiple-openapi-specifications">Multiple OpenAPI Specifications</a></h2>
+<p>MockForge can serve multiple OpenAPI specifications simultaneously with path-based routing.</p>
+<h3 id="configuration-for-multiple-specs"><a class="header" href="#configuration-for-multiple-specs">Configuration for Multiple Specs</a></h3>
+<pre><code class="language-yaml">server:
+  http_port: 3000
+
+specs:
+  - name: user-api
+    path: /api/v1
+    spec: user-api.json
+  - name: admin-api
+    path: /api/admin
+    spec: admin-api.json
+</code></pre>
+<h3 id="base-path-routing"><a class="header" href="#base-path-routing">Base Path Routing</a></h3>
+<pre><code class="language-bash"># Routes to user-api.json endpoints
+curl http://localhost:3000/api/v1/users
+
+# Routes to admin-api.json endpoints
+curl http://localhost:3000/api/admin/users
+</code></pre>
+<h2 id="advanced-routing-and-matching"><a class="header" href="#advanced-routing-and-matching">Advanced Routing and Matching</a></h2>
+<p>MockForge provides sophisticated request matching beyond simple path/method combinations.</p>
+<h3 id="path-parameter-constraints"><a class="header" href="#path-parameter-constraints">Path Parameter Constraints</a></h3>
+<pre><code class="language-yaml">paths:
+  /users/{id}:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+</code></pre>
+<h3 id="query-parameter-matching"><a class="header" href="#query-parameter-matching">Query Parameter Matching</a></h3>
+<pre><code class="language-yaml">paths:
+  /users:
+    get:
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, pending]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+</code></pre>
+<h3 id="header-based-routing"><a class="header" href="#header-based-routing">Header-Based Routing</a></h3>
+<pre><code class="language-yaml">paths:
+  /api/v1/users:
+    get:
+      parameters:
+        - name: X-API-Version
+          in: header
+          schema:
+            type: string
+            enum: [v1, v2]
+</code></pre>
+<h2 id="template-expansion-in-responses"><a class="header" href="#template-expansion-in-responses">Template Expansion in Responses</a></h2>
+<p>Advanced template features for dynamic response generation.</p>
+<h3 id="advanced-template-functions"><a class="header" href="#advanced-template-functions">Advanced Template Functions</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example:
+          id: "{{uuid}}"
+          createdAt: "{{now}}"
+          expiresAt: "{{now+1h}}"
+          lastModified: "{{now-30m}}"
+          randomValue: "{{randInt 1 100}}"
+          randomFloat: "{{randFloat 0.0 5.0}}"
+          userAgent: "{{request.header.User-Agent}}"
+          apiVersion: "{{request.header.X-API-Version}}"
+          userId: "{{request.path.id}}"
+          searchQuery: "{{request.query.q}}"
+</code></pre>
+<h3 id="conditional-templates"><a class="header" href="#conditional-templates">Conditional Templates</a></h3>
+<pre><code class="language-yaml">responses:
+  '200':
+    content:
+      application/json:
+        example: |
+          {{#if (eq request.query.format 'detailed')}}
+          {
+            "id": "{{uuid}}",
+            "name": "Detailed User",
+            "profile": {
+              "bio": "User biography",
+              "preferences": {}
+            }
+          }
+          {{else}}
+          {
+            "id": "{{uuid}}",
+            "name": "Basic User"
+          }
+          {{/if}}
+</code></pre>
+<h3 id="template-security"><a class="header" href="#template-security">Template Security</a></h3>
+<p>Enable template expansion only when needed:</p>
+<pre><code class="language-bash"># Enable template expansion
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
+</code></pre>
+<h2 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h2>
+<p>Strategies for handling large OpenAPI specifications efficiently.</p>
+<h3 id="lazy-loading"><a class="header" href="#lazy-loading">Lazy Loading</a></h3>
+<p>MockForge loads and parses OpenAPI specs on startup but generates routes lazily:</p>
+<pre><code class="language-bash"># Monitor startup performance
+time mockforge serve --spec large-api.json
+</code></pre>
+<h3 id="route-caching"><a class="header" href="#route-caching">Route Caching</a></h3>
+<p>Generated routes are cached in memory for optimal performance:</p>
+<pre><code class="language-bash"># Check memory usage with large specs
+MOCKFORGE_LOG_LEVEL=debug mockforge serve --spec large-api.json
+</code></pre>
+<h3 id="validation-performance"><a class="header" href="#validation-performance">Validation Performance</a></h3>
+<p>Disable expensive validations in high-throughput scenarios:</p>
+<pre><code class="language-bash"># Disable response validation for better performance
+MOCKFORGE_RESPONSE_VALIDATION=false mockforge serve --spec api-spec.json
+</code></pre>
+<h2 id="custom-validation-options"><a class="header" href="#custom-validation-options">Custom Validation Options</a></h2>
+<p>Fine-tune validation behavior for your specific needs.</p>
+<h3 id="validation-configuration"><a class="header" href="#validation-configuration">Validation Configuration</a></h3>
+<pre><code class="language-yaml">validation:
+  mode: enforce
+  aggregate_errors: true
+  validate_responses: false
+  status_code: 422
+  overrides:
+    "GET /health": "off"
+    "POST /webhooks/*": "warn"
+  admin_skip_prefixes:
+    - "/admin"
+    - "/internal"
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># Validation mode
+MOCKFORGE_REQUEST_VALIDATION=enforce
+
+# Error aggregation
+MOCKFORGE_AGGREGATE_ERRORS=true
+
+# Response validation
+MOCKFORGE_RESPONSE_VALIDATION=false
+
+# Custom status code
+MOCKFORGE_VALIDATION_STATUS=422
+
+# Template expansion
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+</code></pre>
+<h2 id="openapi-extensions"><a class="header" href="#openapi-extensions">OpenAPI Extensions</a></h2>
+<p>MockForge supports OpenAPI extensions (<code>x-</code> prefixed properties) for custom behavior.</p>
+<h3 id="custom-extensions"><a class="header" href="#custom-extensions">Custom Extensions</a></h3>
+<pre><code class="language-yaml">paths:
+  /users:
+    get:
+      x-mockforge-delay: 1000  # Add 1 second delay
+      x-mockforge-failure-rate: 0.1  # 10% failure rate
+      responses:
+        '200':
+          x-mockforge-template: true  # Enable template expansion
+</code></pre>
+<h3 id="vendor-extensions"><a class="header" href="#vendor-extensions">Vendor Extensions</a></h3>
+<pre><code class="language-yaml">info:
+  x-mockforge-config:
+    enable_cors: true
+    default_response_format: json
+
+paths:
+  /api/users:
+    x-vendor-custom-behavior: enabled
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<p>Common issues and solutions for advanced OpenAPI integration.</p>
+<h3 id="validation-errors"><a class="header" href="#validation-errors">Validation Errors</a></h3>
+<p><strong>Problem</strong>: Requests are rejected with validation errors</p>
+<pre><code class="language-json">{
+  "error": "request validation failed",
+  "status": 422,
+  "details": [
+    {
+      "path": "body.name",
+      "code": "required",
+      "message": "Missing required field: name"
+    }
+  ]
+}
+</code></pre>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Switch to warning mode
+MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec api-spec.json
+
+# Disable validation for specific routes
+# Add to config.yaml:
+validation:
+  overrides:
+    "POST /users": "off"
+</code></pre>
+<h3 id="schema-reference-issues"><a class="header" href="#schema-reference-issues">Schema Reference Issues</a></h3>
+<p><strong>Problem</strong>: <code>$ref</code> references not resolving correctly</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Ensure component names match exactly</li>
+<li>Check that referenced components exist</li>
+<li>Validate your OpenAPI spec with external tools</li>
+</ul>
+<h3 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h3>
+<p><strong>Problem</strong>: Slow startup or high memory usage with large specs</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Disable non-essential features
+MOCKFORGE_RESPONSE_VALIDATION=false
+MOCKFORGE_AGGREGATE_ERRORS=false
+
+# Monitor with debug logging
+MOCKFORGE_LOG_LEVEL=debug mockforge serve --spec api-spec.json
+</code></pre>
+<h3 id="security-validation-failures"><a class="header" href="#security-validation-failures">Security Validation Failures</a></h3>
+<p><strong>Problem</strong>: Authentication requests failing</p>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Verify security scheme definitions</li>
+<li>Check header formats (e.g., <code>Bearer </code> prefix)</li>
+<li>Ensure global security requirements are met</li>
+</ul>
+<h3 id="template-expansion-issues"><a class="header" href="#template-expansion-issues">Template Expansion Issues</a></h3>
+<p><strong>Problem</strong>: Templates not expanding in responses</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Enable template expansion
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.json
+
+# Check template syntax
+# Use {{variable}} format, not ${variable}
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="specification-management"><a class="header" href="#specification-management">Specification Management</a></h3>
+<ol>
+<li><strong>Version Control</strong>: Keep OpenAPI specs in version control alongside mock configurations</li>
+<li><strong>Validation</strong>: Use external validators to ensure spec correctness</li>
+<li><strong>Documentation</strong>: Include comprehensive examples and descriptions</li>
+<li><strong>Modularity</strong>: Use components and references for maintainable specs</li>
+</ol>
+<h3 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h3>
+<ol>
+<li><strong>Selective Validation</strong>: Disable validation for high-traffic endpoints</li>
+<li><strong>Template Usage</strong>: Only enable templates when dynamic data is needed</li>
+<li><strong>Caching</strong>: Leverage MockForge’s built-in route caching</li>
+<li><strong>Monitoring</strong>: Monitor memory usage and response times</li>
+</ol>
+<h3 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h3>
+<ol>
+<li><strong>Validation Modes</strong>: Use appropriate validation levels for different environments</li>
+<li><strong>Template Security</strong>: Be cautious with user-controlled template input</li>
+<li><strong>Authentication</strong>: Properly configure security schemes for protected endpoints</li>
+<li><strong>Overrides</strong>: Use validation overrides judiciously</li>
+</ol>
+<p>For basic OpenAPI integration features, see the <a href="../http-mocking.html">HTTP Mocking guide</a>. For dynamic data generation, see the <a href="dynamic-data.html">Dynamic Data guide</a>.</p>
 
                     </main>
 

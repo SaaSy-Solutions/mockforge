@@ -183,6 +183,722 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="custom-responses"><a class="header" href="#custom-responses">Custom Responses</a></h1>
+<p>MockForge provides multiple powerful ways to create custom HTTP responses beyond basic OpenAPI schema generation. This guide covers advanced response customization techniques including plugins, overrides, and dynamic generation.</p>
+<h2 id="response-override-rules"><a class="header" href="#response-override-rules">Response Override Rules</a></h2>
+<p>Override rules allow you to modify OpenAPI-generated responses using JSON patches without changing the original specification.</p>
+<h3 id="basic-override-configuration"><a class="header" href="#basic-override-configuration">Basic Override Configuration</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+http:
+  openapi_spec: api-spec.json
+  response_template_expand: true
+
+# Override specific endpoints
+overrides:
+  - targets: ["path:/users"]
+    patch:
+      - op: replace
+        path: "/responses/200/content/application~1json/example"
+        value:
+          users:
+            - id: "{{uuid}}"
+              name: "John Doe"
+              email: "john@example.com"
+            - id: "{{uuid}}"
+              name: "Jane Smith"
+              email: "jane@example.com"
+
+  - targets: ["operation:getUser"]
+    patch:
+      - op: add
+        path: "/responses/200/content/application~1json/example/profile"
+        value:
+          avatar: "https://example.com/avatar.jpg"
+          bio: "User biography"
+</code></pre>
+<h3 id="override-targeting"><a class="header" href="#override-targeting">Override Targeting</a></h3>
+<p>Target specific operations using different selectors:</p>
+<pre><code class="language-yaml">overrides:
+  # By operation ID
+  - targets: ["operation:listUsers", "operation:createUser"]
+    patch: [...]
+
+  # By path pattern
+  - targets: ["path:/users/*"]
+    patch: [...]
+
+  # By tag
+  - targets: ["tag:Users"]
+    patch: [...]
+
+  # By regex
+  - targets: ["regex:^/api/v[0-9]+/users$"]
+    patch: [...]
+</code></pre>
+<h3 id="patch-operations"><a class="header" href="#patch-operations">Patch Operations</a></h3>
+<p>Supported JSON patch operations:</p>
+<pre><code class="language-yaml">overrides:
+  - targets: ["path:/users"]
+    patch:
+      # Add new fields
+      - op: add
+        path: "/responses/200/content/application~1json/example/metadata"
+        value:
+          total: 100
+          page: 1
+
+      # Replace existing values
+      - op: replace
+        path: "/responses/200/content/application~1json/example/users/0/name"
+        value: "Updated Name"
+
+      # Remove fields
+      - op: remove
+        path: "/responses/200/content/application~1json/example/users/1/email"
+
+      # Copy values
+      - op: copy
+        from: "/responses/200/content/application~1json/example/users/0/id"
+        path: "/responses/200/content/application~1json/example/primaryUserId"
+
+      # Move values
+      - op: move
+        from: "/responses/200/content/application~1json/example/temp"
+        path: "/responses/200/content/application~1json/example/permanent"
+</code></pre>
+<h3 id="conditional-overrides"><a class="header" href="#conditional-overrides">Conditional Overrides</a></h3>
+<p>Apply overrides based on request conditions:</p>
+<pre><code class="language-yaml">overrides:
+  - targets: ["path:/users"]
+    when: "request.query.format == 'detailed'"
+    patch:
+      - op: add
+        path: "/responses/200/content/application~1json/example/users/0/profile"
+        value:
+          bio: "Detailed user profile"
+          preferences: {}
+
+  - targets: ["path:/users"]
+    when: "request.header.X-API-Version == 'v2'"
+    patch:
+      - op: add
+        path: "/responses/200/content/application~1json/example/apiVersion"
+        value: "v2"
+</code></pre>
+<h3 id="override-modes"><a class="header" href="#override-modes">Override Modes</a></h3>
+<p>Control how patches are applied:</p>
+<pre><code class="language-yaml">overrides:
+  # Replace mode (default) - complete replacement
+  - targets: ["path:/users"]
+    mode: replace
+    patch: [...]
+
+  # Merge mode - deep merge objects and arrays
+  - targets: ["path:/users"]
+    mode: merge
+    patch:
+      - op: add
+        path: "/responses/200/content/application~1json/example"
+        value:
+          additionalField: "value"
+</code></pre>
+<h2 id="response-plugins"><a class="header" href="#response-plugins">Response Plugins</a></h2>
+<p>Create custom response generation logic using MockForge’s plugin system.</p>
+<h3 id="response-generator-plugin"><a class="header" href="#response-generator-plugin">Response Generator Plugin</a></h3>
+<p>Implement the <code>ResponsePlugin</code> trait for complete response control:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::*;
+
+pub struct CustomResponsePlugin;
+
+#[async_trait::async_trait]
+impl ResponsePlugin for CustomResponsePlugin {
+    fn capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities {
+            network: NetworkCapabilities {
+                allow_http_outbound: true,
+                allowed_hosts: vec!["api.example.com".to_string()],
+            },
+            filesystem: FilesystemCapabilities::default(),
+            resources: PluginResources {
+                max_memory_bytes: 50 * 1024 * 1024,
+                max_cpu_time_ms: 5000,
+            },
+            custom: HashMap::new(),
+        }
+    }
+
+    async fn initialize(&amp;self, config: &amp;ResponsePluginConfig) -&gt; Result&lt;()&gt; {
+        // Plugin initialization
+        Ok(())
+    }
+
+    async fn can_handle(
+        &amp;self,
+        _context: &amp;PluginContext,
+        request: &amp;ResponseRequest,
+        _config: &amp;ResponsePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;bool&gt;&gt; {
+        // Check if this plugin should handle the request
+        let should_handle = request.path.starts_with("/api/custom/");
+        Ok(PluginResult::success(should_handle, 0))
+    }
+
+    async fn generate_response(
+        &amp;self,
+        _context: &amp;PluginContext,
+        request: &amp;ResponseRequest,
+        _config: &amp;ResponsePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;ResponseData&gt;&gt; {
+        // Generate custom response
+        match request.path.as_str() {
+            "/api/custom/weather" =&gt; {
+                let weather_data = serde_json::json!({
+                    "temperature": 22,
+                    "condition": "sunny",
+                    "location": request.query_param("location").unwrap_or("Unknown")
+                });
+                Ok(PluginResult::success(
+                    ResponseData::json(200, &amp;weather_data)?,
+                    0
+                ))
+            }
+            "/api/custom/time" =&gt; {
+                let time_data = serde_json::json!({
+                    "current_time": chrono::Utc::now().to_rfc3339(),
+                    "timezone": request.query_param("tz").unwrap_or("UTC")
+                });
+                Ok(PluginResult::success(
+                    ResponseData::json(200, &amp;time_data)?,
+                    0
+                ))
+            }
+            _ =&gt; Ok(PluginResult::success(
+                ResponseData::not_found("Custom endpoint not found"),
+                0
+            ))
+        }
+    }
+
+    fn priority(&amp;self) -&gt; i32 { 100 }
+
+    fn validate_config(&amp;self, _config: &amp;ResponsePluginConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    fn supported_content_types(&amp;self) -&gt; Vec&lt;String&gt; {
+        vec!["application/json".to_string()]
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="plugin-configuration"><a class="header" href="#plugin-configuration">Plugin Configuration</a></h3>
+<p>Configure response plugins in your MockForge setup:</p>
+<pre><code class="language-yaml"># plugin.yaml
+name: custom-response-plugin
+version: "1.0.0"
+type: response
+
+config:
+  enabled: true
+  priority: 100
+  content_types:
+    - "application/json"
+  url_patterns:
+    - "/api/custom/*"
+  methods:
+    - "GET"
+    - "POST"
+  settings:
+    external_api_timeout: 5000
+    cache_enabled: true
+</code></pre>
+<h3 id="response-modifier-plugin"><a class="header" href="#response-modifier-plugin">Response Modifier Plugin</a></h3>
+<p>Modify responses after generation using the <code>ResponseModifierPlugin</code> trait:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::*;
+
+pub struct ResponseModifierPlugin;
+
+#[async_trait::async_trait]
+impl ResponseModifierPlugin for ResponseModifierPlugin {
+    fn capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities::default()
+    }
+
+    async fn initialize(&amp;self, _config: &amp;ResponseModifierConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    async fn should_modify(
+        &amp;self,
+        _context: &amp;PluginContext,
+        _request: &amp;ResponseRequest,
+        response: &amp;ResponseData,
+        _config: &amp;ResponseModifierConfig,
+    ) -&gt; Result&lt;PluginResult&lt;bool&gt;&gt; {
+        // Modify successful JSON responses
+        let should_modify = response.status_code == 200 &amp;&amp;
+                           response.content_type == "application/json";
+        Ok(PluginResult::success(should_modify, 0))
+    }
+
+    async fn modify_response(
+        &amp;self,
+        _context: &amp;PluginContext,
+        _request: &amp;ResponseRequest,
+        mut response: ResponseData,
+        _config: &amp;ResponseModifierConfig,
+    ) -&gt; Result&lt;PluginResult&lt;ResponseData&gt;&gt; {
+        // Add custom headers
+        response.headers.insert(
+            "X-Custom-Header".to_string(),
+            "Modified by plugin".to_string()
+        );
+
+        // Add metadata to JSON responses
+        if let Some(json_str) = response.body_as_string() {
+            if let Ok(mut json_value) = serde_json::from_str::&lt;serde_json::Value&gt;(&amp;json_str) {
+                if let Some(obj) = json_value.as_object_mut() {
+                    obj.insert("_metadata".to_string(), serde_json::json!({
+                        "modified_by": "ResponseModifierPlugin",
+                        "timestamp": chrono::Utc::now().timestamp()
+                    }));
+                }
+
+                let modified_body = serde_json::to_vec(&amp;json_value)
+                    .map_err(|e| PluginError::execution(format!("JSON serialization error: {}", e)))?;
+                response.body = modified_body;
+            }
+        }
+
+        Ok(PluginResult::success(response, 0))
+    }
+
+    fn priority(&amp;self) -&gt; i32 { 50 }
+
+    fn validate_config(&amp;self, _config: &amp;ResponseModifierConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="template-plugins"><a class="header" href="#template-plugins">Template Plugins</a></h2>
+<p>Extend MockForge’s templating system with custom functions.</p>
+<h3 id="custom-template-functions"><a class="header" href="#custom-template-functions">Custom Template Functions</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::*;
+
+pub struct BusinessTemplatePlugin;
+
+impl TemplatePlugin for BusinessTemplatePlugin {
+    fn execute_function(
+        &amp;mut self,
+        function_name: &amp;str,
+        args: &amp;[TemplateArg],
+        _context: &amp;PluginContext,
+    ) -&gt; PluginResult&lt;String&gt; {
+        match function_name {
+            "business_id" =&gt; {
+                // Generate business-specific ID
+                let id = format!("BIZ-{:010}", rand::random::&lt;u32&gt;());
+                PluginResult::success(id, 0)
+            }
+            "department_name" =&gt; {
+                // Generate department name
+                let departments = ["Engineering", "Sales", "Marketing", "HR", "Finance"];
+                let dept = departments[rand::random::&lt;usize&gt;() % departments.len()];
+                PluginResult::success(dept.to_string(), 0)
+            }
+            "employee_data" =&gt; {
+                // Generate complete employee object
+                let employee = serde_json::json!({
+                    "id": format!("EMP-{:06}", rand::random::&lt;u32&gt;() % 1000000),
+                    "name": "{{faker.name}}",
+                    "department": "{{department_name}}",
+                    "salary": rand::random::&lt;u32&gt;() % 50000 + 50000,
+                    "hire_date": "{{faker.date.past 365}}"
+                });
+                PluginResult::success(employee.to_string(), 0)
+            }
+            _ =&gt; PluginResult::failure(
+                format!("Unknown function: {}", function_name),
+                0
+            )
+        }
+    }
+
+    fn get_available_functions(&amp;self) -&gt; Vec&lt;TemplateFunction&gt; {
+        vec![
+            TemplateFunction {
+                name: "business_id".to_string(),
+                description: "Generate a business ID".to_string(),
+                args: vec![],
+                return_type: "string".to_string(),
+            },
+            TemplateFunction {
+                name: "department_name".to_string(),
+                description: "Generate a department name".to_string(),
+                args: vec![],
+                return_type: "string".to_string(),
+            },
+            TemplateFunction {
+                name: "employee_data".to_string(),
+                description: "Generate complete employee data".to_string(),
+                args: vec![],
+                return_type: "json".to_string(),
+            },
+        ]
+    }
+
+    fn get_capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities::default()
+    }
+
+    fn health_check(&amp;self) -&gt; PluginHealth {
+        PluginHealth::healthy("Template plugin healthy".to_string(), PluginMetrics::default())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="using-custom-templates"><a class="header" href="#using-custom-templates">Using Custom Templates</a></h3>
+<pre><code class="language-yaml"># OpenAPI spec with custom templates
+paths:
+  /employees:
+    get:
+      responses:
+        '200':
+          content:
+            application/json:
+              example:
+                employees:
+                  - "{{employee_data}}"
+                  - "{{employee_data}}"
+                business_id: "{{business_id}}"
+</code></pre>
+<h2 id="configuration-based-custom-responses"><a class="header" href="#configuration-based-custom-responses">Configuration-Based Custom Responses</a></h2>
+<p>Define custom responses directly in configuration files.</p>
+<h3 id="route-specific-responses"><a class="header" href="#route-specific-responses">Route-Specific Responses</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+http:
+  port: 3000
+  routes:
+    - path: /api/custom/dashboard
+      method: GET
+      response:
+        status: 200
+        headers:
+          Content-Type: application/json
+          X-Custom-Header: Dashboard-Data
+        body: |
+          {
+            "widgets": [
+              {
+                "id": "sales-chart",
+                "type": "chart",
+                "data": [120, 150, 180, 200, 250]
+              },
+              {
+                "id": "user-stats",
+                "type": "stats",
+                "data": {
+                  "total_users": 15420,
+                  "active_users": 8920,
+                  "new_signups": 245
+                }
+              }
+            ],
+            "last_updated": "{{now}}"
+          }
+
+    - path: /api/custom/report
+      method: POST
+      response:
+        status: 201
+        headers:
+          Location: /api/reports/123
+        body: |
+          {
+            "report_id": "RPT-{{randInt 1000 9999}}",
+            "status": "processing",
+            "estimated_completion": "{{now+5m}}"
+          }
+</code></pre>
+<h3 id="dynamic-route-matching"><a class="header" href="#dynamic-route-matching">Dynamic Route Matching</a></h3>
+<pre><code class="language-yaml">routes:
+  # Path parameters
+  - path: /api/users/{userId}/profile
+    method: GET
+    response:
+      status: 200
+      body: |
+        {
+          "user_id": "{{request.path.userId}}",
+          "name": "{{faker.name}}",
+          "email": "{{faker.email}}",
+          "profile": {
+            "bio": "{{faker.sentence}}",
+            "location": "{{faker.city}}, {{faker.country}}"
+          }
+        }
+
+  # Query parameter conditions
+  - path: /api/search
+    method: GET
+    response:
+      status: 200
+      body: |
+        {{#if (eq request.query.type 'users')}}
+        {
+          "results": [
+            {"id": 1, "name": "John", "type": "user"},
+            {"id": 2, "name": "Jane", "type": "user"}
+          ]
+        }
+        {{else if (eq request.query.type 'posts')}}
+        {
+          "results": [
+            {"id": 1, "title": "Post 1", "type": "post"},
+            {"id": 2, "title": "Post 2", "type": "post"}
+          ]
+        }
+        {{else}}
+        {
+          "results": [],
+          "message": "No results found for type: {{request.query.type}}"
+        }
+        {{/if}}
+</code></pre>
+<h2 id="error-response-customization"><a class="header" href="#error-response-customization">Error Response Customization</a></h2>
+<p>Create sophisticated error responses for different scenarios.</p>
+<h3 id="structured-error-responses"><a class="header" href="#structured-error-responses">Structured Error Responses</a></h3>
+<pre><code class="language-yaml">routes:
+  - path: /api/users/{userId}
+    method: GET
+    response:
+      status: 404
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "error": {
+            "code": "USER_NOT_FOUND",
+            "message": "User with ID {{request.path.userId}} not found",
+            "details": {
+              "user_id": "{{request.path.userId}}",
+              "requested_at": "{{now}}",
+              "request_id": "{{uuid}}"
+            },
+            "suggestions": [
+              "Check if the user ID is correct",
+              "Verify the user exists in the system",
+              "Try searching by email instead"
+            ]
+          }
+        }
+
+  - path: /api/orders
+    method: POST
+    response:
+      status: 422
+      body: |
+        {
+          "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Request validation failed",
+            "validation_errors": [
+              {
+                "field": "customer_email",
+                "code": "invalid_format",
+                "message": "Email format is invalid"
+              },
+              {
+                "field": "order_items",
+                "code": "min_items",
+                "message": "At least one order item is required"
+              }
+            ]
+          }
+        }
+</code></pre>
+<h3 id="conditional-error-responses"><a class="header" href="#conditional-error-responses">Conditional Error Responses</a></h3>
+<pre><code class="language-yaml">routes:
+  - path: /api/payments
+    method: POST
+    response:
+      status: 402
+      condition: "request.header.X-Test-Mode == 'insufficient_funds'"
+      body: |
+        {
+          "error": "INSUFFICIENT_FUNDS",
+          "message": "Payment failed due to insufficient funds",
+          "details": {
+            "available_balance": 50.00,
+            "requested_amount": 100.00,
+            "currency": "USD"
+          }
+        }
+
+  - path: /api/payments
+    method: POST
+    response:
+      status: 500
+      condition: "request.header.X-Test-Mode == 'server_error'"
+      body: |
+        {
+          "error": "INTERNAL_SERVER_ERROR",
+          "message": "An unexpected error occurred while processing payment",
+          "reference_id": "ERR-{{randInt 100000 999999}}",
+          "timestamp": "{{now}}"
+        }
+</code></pre>
+<h2 id="advanced-response-features"><a class="header" href="#advanced-response-features">Advanced Response Features</a></h2>
+<h3 id="response-delays-and-latency"><a class="header" href="#response-delays-and-latency">Response Delays and Latency</a></h3>
+<pre><code class="language-yaml">routes:
+  - path: /api/slow-endpoint
+    method: GET
+    response:
+      status: 200
+      delay_ms: 2000  # 2 second delay
+      body: |
+        {
+          "message": "This response was delayed",
+          "timestamp": "{{now}}"
+        }
+
+  - path: /api/variable-delay
+    method: GET
+    response:
+      status: 200
+      delay_ms: "{{randInt 100 5000}}"  # Random delay between 100ms-5s
+      body: |
+        {
+          "message": "Random delay applied",
+          "delay_applied_ms": "{{_delay_ms}}"
+        }
+</code></pre>
+<h3 id="response-caching"><a class="header" href="#response-caching">Response Caching</a></h3>
+<pre><code class="language-yaml">routes:
+  - path: /api/cached-data
+    method: GET
+    response:
+      status: 200
+      headers:
+        Cache-Control: max-age=300
+        X-Cache-Status: "{{_cache_hit ? 'HIT' : 'MISS'}}"
+      cache: true
+      cache_ttl_seconds: 300
+      body: |
+        {
+          "data": "This response may be cached",
+          "generated_at": "{{now}}",
+          "cache_expires_at": "{{now+5m}}"
+        }
+</code></pre>
+<h3 id="binary-response-handling"><a class="header" href="#binary-response-handling">Binary Response Handling</a></h3>
+<pre><code class="language-yaml">routes:
+  - path: /api/download/{filename}
+    method: GET
+    response:
+      status: 200
+      headers:
+        Content-Type: application/octet-stream
+        Content-Disposition: attachment; filename="{{request.path.filename}}"
+      body_file: "/path/to/binary/files/{{request.path.filename}}"
+
+  - path: /api/images/{imageId}
+    method: GET
+    response:
+      status: 200
+      headers:
+        Content-Type: image/png
+        Cache-Control: max-age=3600
+      body_base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+</code></pre>
+<h2 id="testing-custom-responses"><a class="header" href="#testing-custom-responses">Testing Custom Responses</a></h2>
+<h3 id="manual-testing"><a class="header" href="#manual-testing">Manual Testing</a></h3>
+<pre><code class="language-bash"># Test custom route
+curl http://localhost:3000/api/custom/dashboard
+
+# Test with parameters
+curl "http://localhost:3000/api/users/123/profile"
+
+# Test error conditions
+curl -H "X-Test-Mode: insufficient_funds" \
+     http://localhost:3000/api/payments \
+     -X POST \
+     -d '{}'
+</code></pre>
+<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-custom-responses.sh
+
+BASE_URL="http://localhost:3000"
+
+echo "Testing custom responses..."
+
+# Test dashboard endpoint
+DASHBOARD_RESPONSE=$(curl -s $BASE_URL/api/custom/dashboard)
+echo "Dashboard response:"
+echo $DASHBOARD_RESPONSE | jq '.'
+
+# Test user profile with path parameter
+USER_RESPONSE=$(curl -s $BASE_URL/api/users/456/profile)
+echo "User profile response:"
+echo $USER_RESPONSE | jq '.'
+
+# Test error responses
+ERROR_RESPONSE=$(curl -s -H "X-Test-Mode: insufficient_funds" \
+                      -X POST \
+                      -d '{}' \
+                      $BASE_URL/api/payments)
+echo "Error response:"
+echo $ERROR_RESPONSE | jq '.'
+
+echo "Custom response tests completed!"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="plugin-development"><a class="header" href="#plugin-development">Plugin Development</a></h3>
+<ol>
+<li><strong>Resource Limits</strong>: Set appropriate memory and CPU limits for plugins</li>
+<li><strong>Error Handling</strong>: Implement proper error handling and logging</li>
+<li><strong>Testing</strong>: Thoroughly test plugins with various inputs</li>
+<li><strong>Documentation</strong>: Document plugin capabilities and configuration options</li>
+</ol>
+<h3 id="override-usage"><a class="header" href="#override-usage">Override Usage</a></h3>
+<ol>
+<li><strong>Selective Application</strong>: Use specific targets to avoid unintended modifications</li>
+<li><strong>Version Control</strong>: Keep override configurations in version control</li>
+<li><strong>Testing</strong>: Test overrides with different request scenarios</li>
+<li><strong>Performance</strong>: Minimize complex conditions and patch operations</li>
+</ol>
+<h3 id="response-design"><a class="header" href="#response-design">Response Design</a></h3>
+<ol>
+<li><strong>Consistency</strong>: Maintain consistent response formats across endpoints</li>
+<li><strong>Error Details</strong>: Provide meaningful error messages and codes</li>
+<li><strong>Metadata</strong>: Include relevant metadata like timestamps and request IDs</li>
+<li><strong>Content Types</strong>: Set appropriate Content-Type headers</li>
+</ol>
+<h3 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h3>
+<ol>
+<li><strong>Input Validation</strong>: Validate all inputs in custom plugins</li>
+<li><strong>Resource Limits</strong>: Prevent resource exhaustion attacks</li>
+<li><strong>Authentication</strong>: Implement proper authentication for sensitive endpoints</li>
+<li><strong>Logging</strong>: Log security-relevant events without exposing sensitive data</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="plugin-issues"><a class="header" href="#plugin-issues">Plugin Issues</a></h3>
+<p><strong>Plugin not loading</strong>: Check plugin configuration and file paths
+<strong>Plugin timeout</strong>: Increase resource limits or optimize plugin code
+<strong>Plugin errors</strong>: Check plugin logs and error messages</p>
+<h3 id="override-problems"><a class="header" href="#override-problems">Override Problems</a></h3>
+<p><strong>Overrides not applying</strong>: Verify target selectors and patch syntax
+<strong>JSON patch errors</strong>: Validate patch operations against JSON structure
+<strong>Condition evaluation</strong>: Test conditional expressions with sample requests</p>
+<h3 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h3>
+<p><strong>Slow responses</strong>: Profile plugin execution and optimize bottlenecks
+<strong>Memory usage</strong>: Monitor plugin memory consumption and adjust limits
+<strong>Template expansion</strong>: Simplify complex templates or use static responses</p>
+<p>For basic HTTP mocking features, see the <a href="../http-mocking.html">HTTP Mocking guide</a>. For advanced templating, see the <a href="dynamic-data.html">Dynamic Data guide</a>.</p>
 
                     </main>
 

@@ -182,7 +182,497 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
+                        <h1 id="frequently-asked-questions-faq"><a class="header" href="#frequently-asked-questions-faq">Frequently Asked Questions (FAQ)</a></h1>
+<p>Quick answers to common questions about MockForge.</p>
+<h2 id="general-questions"><a class="header" href="#general-questions">General Questions</a></h2>
+<h3 id="what-is-mockforge"><a class="header" href="#what-is-mockforge">What is MockForge?</a></h3>
+<p>MockForge is a comprehensive multi-protocol mocking framework for APIs. It allows you to create realistic mock servers for HTTP/REST, gRPC, WebSocket, and GraphQL without writing code. Perfect for frontend development, integration testing, and parallel team development.</p>
+<h3 id="is-mockforge-free"><a class="header" href="#is-mockforge-free">Is MockForge free?</a></h3>
+<p>Yes, MockForge is completely free and open-source under MIT/Apache-2.0 licenses. There are no premium tiers, paid features, or usage limits.</p>
+<h3 id="what-protocols-does-mockforge-support"><a class="header" href="#what-protocols-does-mockforge-support">What protocols does MockForge support?</a></h3>
+<p>MockForge supports:</p>
+<ul>
+<li><strong>HTTP/REST</strong>: OpenAPI/Swagger-based mocking with full validation</li>
+<li><strong>gRPC</strong>: Dynamic service discovery from <code>.proto</code> files with HTTP Bridge</li>
+<li><strong>WebSocket</strong>: Replay mode, interactive mode, and AI event generation</li>
+<li><strong>GraphQL</strong>: Schema-based mocking with automatic resolver generation</li>
+</ul>
+<h3 id="how-does-mockforge-compare-to-wiremock-mockoon-or-mockserver"><a class="header" href="#how-does-mockforge-compare-to-wiremock-mockoon-or-mockserver">How does MockForge compare to WireMock, Mockoon, or MockServer?</a></h3>
+<p>See our <a href="https://github.com/SaaSy-Solutions/mockforge#-why-mockforge">detailed comparison table</a> in the README. Key differentiators:</p>
+<ul>
+<li><strong>Multi-protocol</strong> in a single binary</li>
+<li><strong>AI-powered</strong> mock generation and data drift</li>
+<li><strong>WASM plugin system</strong> for extensibility</li>
+<li><strong>gRPC HTTP Bridge</strong> for REST access to gRPC services</li>
+<li><strong>Built-in encryption</strong> for sensitive data</li>
+<li><strong>Rust performance</strong> with native compilation</li>
+</ul>
+<h3 id="can-i-use-mockforge-in-production"><a class="header" href="#can-i-use-mockforge-in-production">Can I use MockForge in production?</a></h3>
+<p>Yes! MockForge is production-ready with:</p>
+<ul>
+<li>Comprehensive test coverage</li>
+<li>Security audits</li>
+<li>Performance benchmarks</li>
+<li>Docker deployment support</li>
+<li>Observability (Prometheus metrics, tracing)</li>
+</ul>
+<p>However, it’s primarily designed for <strong>development and testing</strong>. For production API mocking, ensure proper security configurations.</p>
+<hr />
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<h3 id="how-do-i-install-mockforge"><a class="header" href="#how-do-i-install-mockforge">How do I install MockForge?</a></h3>
+<p>Three options:</p>
+<pre><code class="language-bash"># 1. From crates.io (requires Rust)
+cargo install mockforge-cli
+
+# 2. From source
+git clone https://github.com/SaaSy-Solutions/mockforge
+cd mockforge &amp;&amp; make setup &amp;&amp; make install
+
+# 3. Using Docker
+docker pull ghcr.io/saasy-solutions/mockforge:latest
+</code></pre>
+<p>See the <a href="../getting-started/installation.html">Installation Guide</a> for details.</p>
+<h3 id="whats-the-fastest-way-to-get-started"><a class="header" href="#whats-the-fastest-way-to-get-started">What’s the fastest way to get started?</a></h3>
+<p>Follow our <strong><a href="../getting-started/five-minute-api.html">5-Minute Tutorial</a></strong>:</p>
+<ol>
+<li><code>cargo install mockforge-cli</code></li>
+<li><code>mockforge init my-project</code></li>
+<li><code>mockforge serve --config mockforge.yaml</code></li>
+<li>Test with <code>curl</code></li>
+</ol>
+<h3 id="do-i-need-to-know-rust-to-use-mockforge"><a class="header" href="#do-i-need-to-know-rust-to-use-mockforge">Do I need to know Rust to use MockForge?</a></h3>
+<p><strong>No.</strong> MockForge is a CLI tool you can use without Rust knowledge. You only need Rust if:</p>
+<ul>
+<li>Building from source</li>
+<li>Developing custom plugins</li>
+<li>Embedding MockForge as a library</li>
+</ul>
+<h3 id="how-do-i-create-my-first-mock-api"><a class="header" href="#how-do-i-create-my-first-mock-api">How do I create my first mock API?</a></h3>
+<pre><code class="language-bash"># 1. Initialize a project
+mockforge init my-api
+
+# 2. Edit the generated mockforge.yaml
+vim mockforge.yaml
+
+# 3. Start the server
+mockforge serve --config mockforge.yaml
+
+# 4. Test it
+curl http://localhost:3000/your-endpoint
+</code></pre>
+<p>Or use an existing OpenAPI spec:</p>
+<pre><code class="language-bash">mockforge serve --spec your-api.json
+</code></pre>
+<hr />
+<h2 id="configuration--setup"><a class="header" href="#configuration--setup">Configuration &amp; Setup</a></h2>
+<h3 id="how-do-i-configure-mockforge"><a class="header" href="#how-do-i-configure-mockforge">How do I configure MockForge?</a></h3>
+<p>Three ways (in order of priority):</p>
+<ol>
+<li><strong>CLI flags</strong>: <code>mockforge serve --http-port 3000</code></li>
+<li><strong>Environment variables</strong>: <code>export MOCKFORGE_HTTP_PORT=3000</code></li>
+<li><strong>Config file</strong>: <code>mockforge serve --config config.yaml</code></li>
+</ol>
+<p>See the <a href="../configuration/files.html">Configuration Guide</a> and <a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml">Complete Config Template</a>.</p>
+<h3 id="where-should-i-put-my-configuration-file"><a class="header" href="#where-should-i-put-my-configuration-file">Where should I put my configuration file?</a></h3>
+<p>MockForge looks for config files in this order:</p>
+<ol>
+<li>Path specified with <code>--config</code></li>
+<li><code>MOCKFORGE_CONFIG_FILE</code> environment variable</li>
+<li><code>./mockforge.yaml</code> or <code>./mockforge.yml</code> in current directory</li>
+<li>Auto-discovered in parent directories</li>
+</ol>
+<h3 id="can-i-use-environment-variables-for-all-settings"><a class="header" href="#can-i-use-environment-variables-for-all-settings">Can I use environment variables for all settings?</a></h3>
+<p>Yes! Every config option can be set via environment variables using the <code>MOCKFORGE_</code> prefix:</p>
+<pre><code class="language-bash">export MOCKFORGE_HTTP_PORT=3000
+export MOCKFORGE_ADMIN_ENABLED=true
+export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+</code></pre>
+<h3 id="how-do-i-validate-my-configuration"><a class="header" href="#how-do-i-validate-my-configuration">How do I validate my configuration?</a></h3>
+<pre><code class="language-bash">mockforge config validate
+mockforge config validate --config my-config.yaml
+</code></pre>
+<p>See the <a href="config-validation.html">Configuration Validation Guide</a>.</p>
+<hr />
+<h2 id="openapi--http-mocking"><a class="header" href="#openapi--http-mocking">OpenAPI &amp; HTTP Mocking</a></h2>
+<h3 id="can-i-use-swaggeropenapi-specs"><a class="header" href="#can-i-use-swaggeropenapi-specs">Can I use Swagger/OpenAPI specs?</a></h3>
+<p>Yes! Both OpenAPI 3.0 and Swagger 2.0 are supported:</p>
+<pre><code class="language-bash">mockforge serve --spec openapi.json
+mockforge serve --spec swagger.yaml
+</code></pre>
+<p>MockForge automatically generates mock endpoints from your specification.</p>
+<h3 id="how-does-request-validation-work"><a class="header" href="#how-does-request-validation-work">How does request validation work?</a></h3>
+<p>Three modes:</p>
+<ul>
+<li><strong><code>off</code></strong>: No validation (accept all requests)</li>
+<li><strong><code>warn</code></strong>: Log validation errors but accept requests</li>
+<li><strong><code>enforce</code></strong>: Reject invalid requests with 400/422</li>
+</ul>
+<pre><code class="language-bash">mockforge serve --validation enforce --spec api.json
+</code></pre>
+<h3 id="why-arent-my-template-variables-working"><a class="header" href="#why-arent-my-template-variables-working">Why aren’t my template variables working?</a></h3>
+<p>Template expansion must be <strong>explicitly enabled</strong>:</p>
+<pre><code class="language-bash"># Via CLI
+mockforge serve --response-template-expand
+
+# Via environment
+export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+
+# Via config
+http:
+  response_template_expand: true
+</code></pre>
+<p>This is a security feature to prevent accidental template processing.</p>
+<h3 id="what-template-variables-are-available"><a class="header" href="#what-template-variables-are-available">What template variables are available?</a></h3>
+<pre><code>{{uuid}}          - Random UUID v4
+{{now}}           - Current timestamp (ISO 8601)
+{{now+2h}}        - Timestamp 2 hours from now
+{{now-30m}}       - Timestamp 30 minutes ago
+{{randInt 1 100}} - Random integer 1-100
+{{rand.float}}    - Random float
+{{faker.email}}   - Fake email address
+{{faker.name}}    - Fake person name
+{{request.body.field}}   - Access request data
+{{request.path.id}}      - Path parameters
+{{request.header.Auth}}  - Request headers
+</code></pre>
+<p>See the <a href="templating.html">Templating Reference</a> for complete details.</p>
+<h3 id="can-i-override-specific-endpoints"><a class="header" href="#can-i-override-specific-endpoints">Can I override specific endpoints?</a></h3>
+<p>Yes! Define custom routes in your config that override OpenAPI spec:</p>
+<pre><code class="language-yaml">http:
+  openapi_spec: api.json
+  routes:
+    - path: /custom/endpoint
+      method: GET
+      response:
+        status: 200
+        body: '{"custom": "response"}'
+</code></pre>
+<hr />
+<h2 id="grpc-mocking"><a class="header" href="#grpc-mocking">gRPC Mocking</a></h2>
+<h3 id="do-i-need-to-compile-my-proto-files"><a class="header" href="#do-i-need-to-compile-my-proto-files">Do I need to compile my proto files?</a></h3>
+<p><strong>No.</strong> MockForge dynamically parses <code>.proto</code> files at runtime. Just:</p>
+<ol>
+<li>Put <code>.proto</code> files in <code>./proto</code> directory</li>
+<li>Start MockForge: <code>mockforge serve --grpc-port 50051</code></li>
+<li>Services are automatically discovered and mocked</li>
+</ol>
+<h3 id="how-do-i-access-grpc-services-via-http"><a class="header" href="#how-do-i-access-grpc-services-via-http">How do I access gRPC services via HTTP?</a></h3>
+<p>Enable the <strong>HTTP Bridge</strong>:</p>
+<pre><code class="language-yaml">grpc:
+  dynamic:
+    enabled: true
+    http_bridge:
+      enabled: true
+      base_path: "/api"
+</code></pre>
+<p>Now access gRPC services as REST APIs:</p>
+<pre><code class="language-bash"># gRPC
+grpcurl -d '{"id": "123"}' localhost:50051 UserService/GetUser
+
+# HTTP (via bridge)
+curl -X POST http://localhost:8080/api/userservice/getuser \
+  -d '{"id": "123"}'
+</code></pre>
+<h3 id="can-i-use-grpc-reflection"><a class="header" href="#can-i-use-grpc-reflection">Can I use gRPC reflection?</a></h3>
+<p>Yes, it’s enabled by default:</p>
+<pre><code class="language-bash"># List services
+grpcurl -plaintext localhost:50051 list
+
+# Describe a service
+grpcurl -plaintext localhost:50051 describe UserService
+</code></pre>
+<h3 id="does-mockforge-support-grpc-streaming"><a class="header" href="#does-mockforge-support-grpc-streaming">Does MockForge support gRPC streaming?</a></h3>
+<p>Yes, all four streaming modes:</p>
+<ul>
+<li>Unary (single request → single response)</li>
+<li>Server streaming (single request → stream of responses)</li>
+<li>Client streaming (stream of requests → single response)</li>
+<li>Bidirectional streaming (stream ↔ stream)</li>
+</ul>
+<hr />
+<h2 id="websocket-mocking"><a class="header" href="#websocket-mocking">WebSocket Mocking</a></h2>
+<h3 id="how-do-i-create-websocket-replay-files"><a class="header" href="#how-do-i-create-websocket-replay-files">How do I create WebSocket replay files?</a></h3>
+<p>Use JSON Lines (JSONL) format:</p>
+<pre><code class="language-json">{"ts":0,"dir":"out","text":"Welcome!","waitFor":"^CLIENT_READY$"}
+{"ts":100,"dir":"out","text":"{{uuid}}"}
+{"ts":200,"dir":"in","text":"ACK"}
+</code></pre>
+<ul>
+<li><code>ts</code>: Milliseconds timestamp</li>
+<li><code>dir</code>: “in” (received) or “out” (sent)</li>
+<li><code>text</code>: Message content (supports templates)</li>
+<li><code>waitFor</code>: Optional regex/JSONPath pattern</li>
+</ul>
+<p>See <a href="../user-guide/websocket-mocking/replay.html">WebSocket Replay Mode</a>.</p>
+<h3 id="can-i-match-json-messages"><a class="header" href="#can-i-match-json-messages">Can I match JSON messages?</a></h3>
+<p>Yes, use JSONPath in <code>waitFor</code>:</p>
+<pre><code class="language-json">{"waitFor": "$.type", "text": "Matched type field"}
+{"waitFor": "$.user.id", "text": "Matched user ID"}
+</code></pre>
+<p>See <a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/examples/README-websocket-jsonpath.md">README-websocket-jsonpath.md</a>.</p>
+<h3 id="whats-ai-event-generation"><a class="header" href="#whats-ai-event-generation">What’s AI event generation?</a></h3>
+<p>Generate realistic WebSocket event streams from narrative descriptions:</p>
+<pre><code class="language-bash">mockforge serve --ws-ai-enabled \
+  --ws-ai-narrative "Simulate 5 minutes of stock trading" \
+  --ws-ai-event-count 20
+</code></pre>
+<p>Perfect for testing real-time features without manually scripting events.</p>
+<hr />
+<h2 id="ai-features"><a class="header" href="#ai-features">AI Features</a></h2>
+<h3 id="do-i-need-an-api-key-for-ai-features"><a class="header" href="#do-i-need-an-api-key-for-ai-features">Do I need an API key for AI features?</a></h3>
+<p>Not necessarily. Three options:</p>
+<ol>
+<li>
+<p><strong>Ollama (Free, Local)</strong>: No API key needed</p>
+<pre><code class="language-bash">ollama pull llama2
+mockforge serve --ai-enabled --rag-provider ollama
+</code></pre>
+</li>
+<li>
+<p><strong>OpenAI (Paid)</strong>: ~$0.01 per 1,000 requests</p>
+<pre><code class="language-bash">export MOCKFORGE_RAG_API_KEY=sk-...
+mockforge serve --ai-enabled --rag-provider openai
+</code></pre>
+</li>
+<li>
+<p><strong>Anthropic, or OpenAI-compatible APIs</strong>: Similar to OpenAI</p>
+</li>
+</ol>
+<h3 id="what-are-ai-features-used-for"><a class="header" href="#what-are-ai-features-used-for">What are AI features used for?</a></h3>
+<ul>
+<li><strong>Intelligent Mock Generation</strong>: Generate responses from natural language prompts</li>
+<li><strong>Data Drift Simulation</strong>: Realistic data evolution (order status, stock levels, etc.)</li>
+<li><strong>AI Event Streams</strong>: Generate WebSocket event sequences from narratives</li>
+</ul>
+<p>See <a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/docs/AI_DRIVEN_MOCKING.md">AI_DRIVEN_MOCKING.md</a>.</p>
+<h3 id="how-much-does-ai-cost"><a class="header" href="#how-much-does-ai-cost">How much does AI cost?</a></h3>
+<ul>
+<li><strong>Ollama</strong>: Free (runs locally)</li>
+<li><strong>OpenAI GPT-3.5</strong>: ~$0.01 per 1,000 requests</li>
+<li><strong>OpenAI GPT-4</strong>: ~$0.10 per 1,000 requests</li>
+<li><strong>Anthropic Claude</strong>: Similar to GPT-4</li>
+</ul>
+<p>Use Ollama for development, OpenAI for production if needed.</p>
+<hr />
+<h2 id="plugins"><a class="header" href="#plugins">Plugins</a></h2>
+<h3 id="how-do-i-install-plugins"><a class="header" href="#how-do-i-install-plugins">How do I install plugins?</a></h3>
+<pre><code class="language-bash"># From URL
+mockforge plugin install https://example.com/plugin.wasm
+
+# From Git with version
+mockforge plugin install https://github.com/user/plugin#v1.0.0
+
+# From local file
+mockforge plugin install ./my-plugin.wasm
+
+# List installed
+mockforge plugin list
+</code></pre>
+<h3 id="can-i-create-custom-plugins"><a class="header" href="#can-i-create-custom-plugins">Can I create custom plugins?</a></h3>
+<p>Yes! Plugins are written in Rust and compiled to WebAssembly:</p>
+<ol>
+<li>Use <code>mockforge-plugin-sdk</code> crate</li>
+<li>Implement plugin traits</li>
+<li>Compile to WASM target</li>
+<li>Install and use</li>
+</ol>
+<p>See the <a href="../user-guide/plugins.html">Plugin Development Guide</a> and <a href="../tutorials/add-custom-plugin.html">Add a Custom Plugin Tutorial</a>.</p>
+<h3 id="are-plugins-sandboxed"><a class="header" href="#are-plugins-sandboxed">Are plugins sandboxed?</a></h3>
+<p>Yes. Plugins run in a <strong>WebAssembly sandbox</strong> with:</p>
+<ul>
+<li>Memory isolation</li>
+<li>CPU/memory limits</li>
+<li>No network access (unless explicitly allowed)</li>
+<li>No file system access (unless explicitly allowed)</li>
+</ul>
+<p>See <a href="../../docs/plugins/security/model.html">Plugin Security Model</a>.</p>
+<hr />
+<h2 id="admin-ui"><a class="header" href="#admin-ui">Admin UI</a></h2>
+<h3 id="how-do-i-access-the-admin-ui"><a class="header" href="#how-do-i-access-the-admin-ui">How do I access the Admin UI?</a></h3>
+<p>Two modes:</p>
+<p><strong>Standalone</strong> (separate port):</p>
+<pre><code class="language-bash">mockforge serve --admin --admin-port 9080
+# Access: http://localhost:9080
+</code></pre>
+<p><strong>Embedded</strong> (under HTTP server):</p>
+<pre><code class="language-bash">mockforge serve --admin-embed --admin-mount-path /admin
+# Access: http://localhost:3000/admin
+</code></pre>
+<h3 id="is-authentication-available"><a class="header" href="#is-authentication-available">Is authentication available?</a></h3>
+<p><strong>Not yet.</strong> Role-based authentication (Admin/Viewer) is planned for v1.1. The frontend UI components are built, but backend JWT/OAuth integration is pending.</p>
+<p>Currently, the Admin UI is accessible without authentication.</p>
+<h3 id="what-can-i-do-in-the-admin-ui"><a class="header" href="#what-can-i-do-in-the-admin-ui">What can I do in the Admin UI?</a></h3>
+<ul>
+<li>View real-time request logs (via Server-Sent Events)</li>
+<li>Monitor performance metrics</li>
+<li>Manage fixtures with drag-and-drop</li>
+<li>Configure latency and fault injection</li>
+<li>Search requests and logs</li>
+<li>View server health and statistics</li>
+</ul>
+<p>See <a href="../tutorials/admin-ui-walkthrough.html">Admin UI Walkthrough</a>.</p>
+<hr />
+<h2 id="deployment"><a class="header" href="#deployment">Deployment</a></h2>
+<h3 id="can-i-run-mockforge-in-docker"><a class="header" href="#can-i-run-mockforge-in-docker">Can I run MockForge in Docker?</a></h3>
+<p>Yes:</p>
+<pre><code class="language-bash"># Using Docker Compose
+docker-compose up
+
+# Using Docker directly
+docker run -p 3000:3000 -p 9080:9080 mockforge
+</code></pre>
+<p>See <a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/DOCKER.md">DOCKER.md</a> for complete documentation.</p>
+<h3 id="how-do-i-deploy-to-kubernetes"><a class="header" href="#how-do-i-deploy-to-kubernetes">How do I deploy to Kubernetes?</a></h3>
+<p>Use the Helm chart or create Deployment/Service manifests:</p>
+<pre><code class="language-bash"># Using Helm (if available)
+helm install mockforge ./charts/mockforge
+
+# Or use kubectl
+kubectl apply -f k8s/deployment.yaml
+</code></pre>
+<h3 id="what-ports-does-mockforge-use"><a class="header" href="#what-ports-does-mockforge-use">What ports does MockForge use?</a></h3>
+<p>Default ports:</p>
+<ul>
+<li><strong>3000</strong>: HTTP server</li>
+<li><strong>3001</strong>: WebSocket server</li>
+<li><strong>50051</strong>: gRPC server</li>
+<li><strong>4000</strong>: GraphQL server</li>
+<li><strong>9080</strong>: Admin UI</li>
+<li><strong>9090</strong>: Prometheus metrics</li>
+</ul>
+<p>All ports are configurable.</p>
+<hr />
+<h2 id="performance--limits"><a class="header" href="#performance--limits">Performance &amp; Limits</a></h2>
+<h3 id="how-many-requests-can-mockforge-handle"><a class="header" href="#how-many-requests-can-mockforge-handle">How many requests can MockForge handle?</a></h3>
+<p>Typical performance (modern hardware):</p>
+<ul>
+<li><strong>HTTP</strong>: 10,000+ req/s</li>
+<li><strong>WebSocket</strong>: 1,000+ concurrent connections</li>
+<li><strong>gRPC</strong>: 5,000+ req/s</li>
+</ul>
+<p>Performance depends on:</p>
+<ul>
+<li>Response complexity</li>
+<li>Template expansion</li>
+<li>Validation enabled</li>
+<li>Hardware specs</li>
+</ul>
+<p>See our <a href="https://github.com/SaaSy-Solutions/mockforge/tree/main/benches">benchmarks</a>.</p>
+<h3 id="does-mockforge-scale-horizontally"><a class="header" href="#does-mockforge-scale-horizontally">Does MockForge scale horizontally?</a></h3>
+<p>Yes. Run multiple instances behind a load balancer:</p>
+<pre><code class="language-bash"># Instance 1
+mockforge serve --http-port 3000
+
+# Instance 2
+mockforge serve --http-port 3001
+
+# Load balancer distributes traffic
+</code></pre>
+<p>For stateless mocking (no shared state), this works great.</p>
+<h3 id="what-are-the-resource-requirements"><a class="header" href="#what-are-the-resource-requirements">What are the resource requirements?</a></h3>
+<p>Minimal:</p>
+<ul>
+<li><strong>Memory</strong>: ~50MB base + ~10MB per 1,000 concurrent connections</li>
+<li><strong>CPU</strong>: 1-2 cores sufficient for most workloads</li>
+<li><strong>Disk</strong>: ~100MB for binary + storage for logs/fixtures</li>
+</ul>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="server-wont-start---port-already-in-use"><a class="header" href="#server-wont-start---port-already-in-use">Server won’t start - port already in use</a></h3>
+<pre><code class="language-bash"># Find what's using the port
+lsof -i :3000
+
+# Use a different port
+mockforge serve --http-port 3001
+</code></pre>
+<h3 id="template-variables-appear-literally-in-responses"><a class="header" href="#template-variables-appear-literally-in-responses">Template variables appear literally in responses</a></h3>
+<p>Enable template expansion:</p>
+<pre><code class="language-bash">mockforge serve --response-template-expand
+</code></pre>
+<h3 id="validation-rejecting-valid-requests"><a class="header" href="#validation-rejecting-valid-requests">Validation rejecting valid requests</a></h3>
+<p>Adjust validation mode:</p>
+<pre><code class="language-bash">mockforge serve --validation warn  # or 'off'
+</code></pre>
+<h3 id="websocket-connection-fails"><a class="header" href="#websocket-connection-fails">WebSocket connection fails</a></h3>
+<p>Check the WebSocket port and replay file:</p>
+<pre><code class="language-bash"># Verify port
+netstat -tlnp | grep :3001
+
+# Check replay file exists
+ls -la ws-replay.jsonl
+</code></pre>
+<h3 id="admin-ui-not-loading"><a class="header" href="#admin-ui-not-loading">Admin UI not loading</a></h3>
+<p>Verify the admin UI is enabled and port is correct:</p>
+<pre><code class="language-bash">mockforge serve --admin --admin-port 9080
+curl http://localhost:9080
+</code></pre>
+<p>For more issues, see the <a href="troubleshooting.html">Troubleshooting Guide</a>.</p>
+<hr />
+<h2 id="development--contributing"><a class="header" href="#development--contributing">Development &amp; Contributing</a></h2>
+<h3 id="can-i-embed-mockforge-in-my-application"><a class="header" href="#can-i-embed-mockforge-in-my-application">Can I embed MockForge in my application?</a></h3>
+<p>Yes! Use MockForge crates as libraries:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_http::build_router;
+use mockforge_core::{ValidationOptions, Config};
+
+let router = build_router(
+    Some("api.json".to_string()),
+    Some(ValidationOptions::enforce()),
+    None,
+).await;
+<span class="boring">}</span></code></pre></pre>
+<p>See the <a href="https://docs.rs/mockforge-core">Rust API Documentation</a>.</p>
+<h3 id="how-do-i-contribute-to-mockforge"><a class="header" href="#how-do-i-contribute-to-mockforge">How do I contribute to MockForge?</a></h3>
+<ol>
+<li>Check <a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></li>
+<li>Look for “good first issue” labels</li>
+<li>Fork, make changes, submit PR</li>
+<li>Ensure tests pass: <code>cargo test</code></li>
+<li>Follow code style: <code>cargo fmt &amp;&amp; cargo clippy</code></li>
+</ol>
+<h3 id="where-can-i-report-bugs"><a class="header" href="#where-can-i-report-bugs">Where can I report bugs?</a></h3>
+<p><a href="https://github.com/SaaSy-Solutions/mockforge/issues">GitHub Issues</a></p>
+<p>Please include:</p>
+<ul>
+<li>MockForge version</li>
+<li>Operating system</li>
+<li>Configuration file (if applicable)</li>
+<li>Steps to reproduce</li>
+<li>Expected vs actual behavior</li>
+<li>Error logs</li>
+</ul>
+<h3 id="is-there-a-community-forum"><a class="header" href="#is-there-a-community-forum">Is there a community forum?</a></h3>
+<ul>
+<li><strong>GitHub Discussions</strong>: <a href="https://github.com/SaaSy-Solutions/mockforge/discussions">Community Forum</a></li>
+<li><strong>GitHub Issues</strong>: <a href="https://github.com/SaaSy-Solutions/mockforge/issues">Bug Reports &amp; Feature Requests</a></li>
+</ul>
+<hr />
+<h2 id="licensing--commercial-use"><a class="header" href="#licensing--commercial-use">Licensing &amp; Commercial Use</a></h2>
+<h3 id="what-license-is-mockforge-under"><a class="header" href="#what-license-is-mockforge-under">What license is MockForge under?</a></h3>
+<p>Dual-licensed: <strong>MIT OR Apache-2.0</strong></p>
+<p>You can choose either license for your use case.</p>
+<h3 id="can-i-use-mockforge-commercially"><a class="header" href="#can-i-use-mockforge-commercially">Can I use MockForge commercially?</a></h3>
+<p><strong>Yes, absolutely.</strong> Both MIT and Apache-2.0 are permissive licenses that allow commercial use without restrictions.</p>
+<h3 id="do-i-need-to-open-source-my-configurations"><a class="header" href="#do-i-need-to-open-source-my-configurations">Do I need to open-source my configurations?</a></h3>
+<p><strong>No.</strong> Your configuration files, mock data, and custom plugins are yours. Only if you modify MockForge source code and distribute it do licensing terms apply.</p>
+<h3 id="can-i-sell-mockforge-based-services"><a class="header" href="#can-i-sell-mockforge-based-services">Can I sell MockForge-based services?</a></h3>
+<p>Yes. You can offer:</p>
+<ul>
+<li>Hosted MockForge instances</li>
+<li>Custom plugins</li>
+<li>Support services</li>
+<li>Training/consulting</li>
+</ul>
+<hr />
+<h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
+<p><strong>Ready to start?</strong> Try our <strong><a href="../getting-started/five-minute-api.html">5-Minute Tutorial</a></strong>!</p>
+<p><strong>Need more help?</strong></p>
+<ul>
+<li><a href="https://docs.mockforge.dev/">Full Documentation</a></li>
+<li><a href="https://github.com/SaaSy-Solutions/mockforge/issues">GitHub Issues</a></li>
+<li><a href="https://github.com/SaaSy-Solutions/mockforge/discussions">Community Discussions</a></li>
+</ul>
 
                     </main>
 

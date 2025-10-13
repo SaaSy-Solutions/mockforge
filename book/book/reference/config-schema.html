@@ -184,6 +184,27 @@
                     <main>
                         <h1 id="configuration-schema"><a class="header" href="#configuration-schema">Configuration Schema</a></h1>
 <p>MockForge supports comprehensive configuration through YAML files. This schema reference documents all available configuration options, their types, defaults, and usage examples.</p>
+<h2 id="complete-configuration-template"><a class="header" href="#complete-configuration-template">Complete Configuration Template</a></h2>
+<p>For a <strong>fully annotated configuration template</strong> with all options documented inline, see:</p>
+<p><strong><a href="https://github.com/SaaSy-Solutions/mockforge/blob/main/config.template.yaml">config.template.yaml</a></strong></p>
+<p>This template includes:</p>
+<ul>
+<li>Every configuration field with inline documentation</li>
+<li>Default values and valid ranges</li>
+<li>Example configurations for common scenarios</li>
+<li>Comments explaining each option’s purpose</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<pre><code class="language-bash"># Initialize a new configuration
+mockforge init my-project
+
+# Validate your configuration
+mockforge config validate
+
+# Start with validated config
+mockforge serve --config mockforge.yaml
+</code></pre>
+<p>See the <a href="config-validation.html">Configuration Validation Guide</a> for validation best practices.</p>
 <h2 id="file-format"><a class="header" href="#file-format">File Format</a></h2>
 <p>Configuration files use YAML format with the following structure:</p>
 <pre><code class="language-yaml"># Top-level configuration sections
@@ -567,7 +588,7 @@ logging:
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/formats.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/config-validation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -581,7 +602,7 @@ logging:
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/formats.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/config-validation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

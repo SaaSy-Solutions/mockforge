@@ -1,0 +1,873 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>GraphQL Mocking - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/graphql-mocking.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="graphql-mocking"><a class="header" href="#graphql-mocking">GraphQL Mocking</a></h1>
+<p>MockForge provides comprehensive GraphQL API mocking capabilities, allowing you to create realistic GraphQL endpoints with schema-driven response generation, introspection support, and custom resolvers.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>MockForge’s GraphQL support includes:</p>
+<ul>
+<li><strong>Schema-Driven Mocking</strong>: Generate responses based on GraphQL schema definitions</li>
+<li><strong>Introspection Support</strong>: Full GraphQL introspection query support</li>
+<li><strong>Custom Resolvers</strong>: Implement custom logic for specific fields</li>
+<li><strong>Query Validation</strong>: Validate incoming GraphQL queries against schema</li>
+<li><strong>Subscription Support</strong>: Mock GraphQL subscriptions with real-time updates</li>
+<li><strong>Schema Stitching</strong>: Combine multiple schemas into unified endpoints</li>
+<li><strong>Performance Simulation</strong>: Configurable latency and complexity limits</li>
+</ul>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<h3 id="basic-setup"><a class="header" href="#basic-setup">Basic Setup</a></h3>
+<p>Enable GraphQL mocking in your MockForge configuration:</p>
+<pre><code class="language-yaml"># config.yaml
+graphql:
+  enabled: true
+  endpoint: "/graphql"
+  schema_file: "schema.graphql"
+  introspection: true
+  playground: true
+  
+server:
+  http_port: 3000
+</code></pre>
+<p>Start MockForge with GraphQL support:</p>
+<pre><code class="language-bash">mockforge serve --config config.yaml
+</code></pre>
+<p>Access your GraphQL endpoint:</p>
+<ul>
+<li><strong>GraphQL Endpoint</strong>: <code>http://localhost:3000/graphql</code></li>
+<li><strong>GraphQL Playground</strong>: <code>http://localhost:3000/graphql/playground</code></li>
+</ul>
+<h3 id="schema-definition"><a class="header" href="#schema-definition">Schema Definition</a></h3>
+<p>Create a GraphQL schema file:</p>
+<pre><code class="language-graphql"># schema.graphql
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  age: Int
+  posts: [Post!]!
+  profile: UserProfile
+}
+
+type Post {
+  id: ID!
+  title: String!
+  content: String!
+  published: Boolean!
+  author: User!
+  createdAt: String!
+  tags: [String!]!
+}
+
+type UserProfile {
+  bio: String
+  website: String
+  location: String
+  avatarUrl: String
+}
+
+type Query {
+  users: [User!]!
+  user(id: ID!): User
+  posts: [Post!]!
+  post(id: ID!): Post
+  searchUsers(query: String!): [User!]!
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  deleteUser(id: ID!): Boolean!
+  createPost(input: CreatePostInput!): Post!
+}
+
+type Subscription {
+  userCreated: User!
+  postPublished: Post!
+  userOnline(userId: ID!): Boolean!
+}
+
+input CreateUserInput {
+  name: String!
+  email: String!
+  age: Int
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+  age: Int
+}
+
+input CreatePostInput {
+  title: String!
+  content: String!
+  authorId: ID!
+  tags: [String!]
+}
+</code></pre>
+<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
+<h3 id="basic-configuration"><a class="header" href="#basic-configuration">Basic Configuration</a></h3>
+<pre><code class="language-yaml">graphql:
+  # Enable GraphQL support
+  enabled: true
+  
+  # GraphQL endpoint path
+  endpoint: "/graphql"
+  
+  # Schema configuration
+  schema_file: "schema.graphql"
+  schema_url: "https://api.example.com/schema"  # Alternative: fetch from URL
+  
+  # Development features
+  introspection: true
+  playground: true
+  playground_endpoint: "/graphql/playground"
+  
+  # Response generation
+  mock_responses: true
+  default_list_length: 5
+  
+  # Validation
+  validate_queries: true
+  max_query_depth: 10
+  max_query_complexity: 1000
+</code></pre>
+<h3 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h3>
+<pre><code class="language-yaml">graphql:
+  # Performance settings
+  performance:
+    enable_query_complexity_analysis: true
+    max_query_depth: 15
+    max_query_complexity: 1000
+    timeout_ms: 30000
+    
+  # Caching
+  caching:
+    enabled: true
+    ttl_seconds: 300
+    max_cache_size: 1000
+    
+  # Custom resolvers
+  resolvers:
+    directory: "./graphql/resolvers"
+    auto_load: true
+    
+  # Subscription settings
+  subscriptions:
+    enabled: true
+    transport: "websocket"
+    heartbeat_interval: 30
+    
+  # Error handling
+  errors:
+    include_stack_trace: true
+    include_extensions: true
+    custom_error_codes: true
+</code></pre>
+<h2 id="response-generation"><a class="header" href="#response-generation">Response Generation</a></h2>
+<h3 id="automatic-response-generation"><a class="header" href="#automatic-response-generation">Automatic Response Generation</a></h3>
+<p>MockForge automatically generates realistic responses based on your schema:</p>
+<pre><code class="language-graphql"># Query
+query GetUsers {
+  users {
+    id
+    name
+    email
+    age
+    posts {
+      title
+      published
+    }
+  }
+}
+</code></pre>
+<pre><code class="language-json">{
+  "data": {
+    "users": [
+      {
+        "id": "1a2b3c4d",
+        "name": "Alice Johnson",
+        "email": "alice.johnson@example.com",
+        "age": 29,
+        "posts": [
+          {
+            "title": "Getting Started with GraphQL",
+            "published": true
+          },
+          {
+            "title": "Advanced Query Techniques",
+            "published": false
+          }
+        ]
+      },
+      {
+        "id": "2b3c4d5e",
+        "name": "Bob Smith",
+        "email": "bob.smith@example.com",
+        "age": 34,
+        "posts": [
+          {
+            "title": "Building Scalable APIs",
+            "published": true
+          }
+        ]
+      }
+    ]
+  }
+}
+</code></pre>
+<h3 id="template-based-responses"><a class="header" href="#template-based-responses">Template-Based Responses</a></h3>
+<p>Use templates for more control over response data:</p>
+<pre><code class="language-yaml"># graphql/responses/user.yaml
+query: "query GetUser($id: ID!)"
+response:
+  data:
+    user:
+      id: "{{args.id}}"
+      name: "{{faker.name.fullName}}"
+      email: "{{faker.internet.email}}"
+      age: "{{randInt 18 65}}"
+      profile:
+        bio: "{{faker.lorem.sentence}}"
+        website: "{{faker.internet.url}}"
+        location: "{{faker.address.city}}, {{faker.address.state}}"
+        avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed={{uuid}}"
+</code></pre>
+<h3 id="custom-field-resolvers"><a class="header" href="#custom-field-resolvers">Custom Field Resolvers</a></h3>
+<p>Create custom resolvers for specific fields:</p>
+<pre><code class="language-javascript">// graphql/resolvers/user.js
+module.exports = {
+  User: {
+    // Custom resolver for posts field
+    posts: (parent, args, context) =&gt; {
+      return context.dataSources.posts.getByAuthorId(parent.id);
+    },
+    
+    // Computed field
+    fullName: (parent) =&gt; {
+      return `${parent.firstName} ${parent.lastName}`;
+    },
+    
+    // Async resolver with external data
+    socialStats: async (parent, args, context) =&gt; {
+      return await context.dataSources.social.getStats(parent.id);
+    }
+  },
+  
+  Query: {
+    // Custom query resolver
+    searchUsers: (parent, args, context) =&gt; {
+      const { query, limit = 10 } = args;
+      return context.dataSources.users.search(query, limit);
+    }
+  },
+  
+  Mutation: {
+    // Custom mutation resolver
+    createUser: (parent, args, context) =&gt; {
+      const { input } = args;
+      const user = {
+        id: uuid(),
+        ...input,
+        createdAt: new Date().toISOString()
+      };
+      
+      context.dataSources.users.create(user);
+      
+      // Trigger subscription
+      context.pubsub.publish('USER_CREATED', { userCreated: user });
+      
+      return user;
+    }
+  }
+};
+</code></pre>
+<h2 id="data-sources"><a class="header" href="#data-sources">Data Sources</a></h2>
+<h3 id="csv-data-source"><a class="header" href="#csv-data-source">CSV Data Source</a></h3>
+<p>Connect GraphQL resolvers to CSV data:</p>
+<pre><code class="language-yaml"># config.yaml
+graphql:
+  data_sources:
+    users:
+      type: "csv"
+      file: "data/users.csv"
+      key_field: "id"
+    
+    posts:
+      type: "csv"
+      file: "data/posts.csv"
+      key_field: "id"
+      relationships:
+        author_id: "users.id"
+</code></pre>
+<pre><code class="language-csv"># data/users.csv
+id,name,email,age
+1,Alice Johnson,alice@example.com,29
+2,Bob Smith,bob@example.com,34
+3,Carol Davis,carol@example.com,27
+</code></pre>
+<h3 id="rest-api-data-source"><a class="header" href="#rest-api-data-source">REST API Data Source</a></h3>
+<p>Fetch data from external REST APIs:</p>
+<pre><code class="language-yaml">graphql:
+  data_sources:
+    users:
+      type: "rest"
+      base_url: "https://jsonplaceholder.typicode.com"
+      endpoints:
+        getAll: "/users"
+        getById: "/users/{id}"
+        create: 
+          method: "POST"
+          url: "/users"
+    
+    posts:
+      type: "rest"
+      base_url: "https://jsonplaceholder.typicode.com"
+      endpoints:
+        getAll: "/posts"
+        getByUserId: "/posts?userId={userId}"
+</code></pre>
+<h3 id="database-data-source"><a class="header" href="#database-data-source">Database Data Source</a></h3>
+<p>Connect to databases for realistic data:</p>
+<pre><code class="language-yaml">graphql:
+  data_sources:
+    database:
+      type: "postgresql"
+      connection_string: "postgresql://user:pass@localhost/mockdb"
+      tables:
+        users:
+          table: "users"
+          key_field: "id"
+        posts:
+          table: "posts"
+          key_field: "id"
+          relationships:
+            author_id: "users.id"
+</code></pre>
+<h2 id="subscriptions"><a class="header" href="#subscriptions">Subscriptions</a></h2>
+<h3 id="websocket-subscriptions"><a class="header" href="#websocket-subscriptions">WebSocket Subscriptions</a></h3>
+<p>Enable real-time GraphQL subscriptions:</p>
+<pre><code class="language-yaml">graphql:
+  subscriptions:
+    enabled: true
+    transport: "websocket"
+    endpoint: "/graphql/ws"
+    heartbeat_interval: 30
+    connection_timeout: 60
+</code></pre>
+<h3 id="subscription-resolvers"><a class="header" href="#subscription-resolvers">Subscription Resolvers</a></h3>
+<pre><code class="language-javascript">// graphql/resolvers/subscriptions.js
+module.exports = {
+  Subscription: {
+    userCreated: {
+      subscribe: (parent, args, context) =&gt; {
+        return context.pubsub.asyncIterator('USER_CREATED');
+      }
+    },
+    
+    postPublished: {
+      subscribe: (parent, args, context) =&gt; {
+        return context.pubsub.asyncIterator('POST_PUBLISHED');
+      }
+    },
+    
+    userOnline: {
+      subscribe: (parent, args, context) =&gt; {
+        const { userId } = args;
+        return context.pubsub.asyncIterator(`USER_ONLINE_${userId}`);
+      }
+    }
+  }
+};
+</code></pre>
+<h3 id="triggering-subscriptions"><a class="header" href="#triggering-subscriptions">Triggering Subscriptions</a></h3>
+<p>Trigger subscriptions from mutations or external events:</p>
+<pre><code class="language-javascript">// In mutation resolver
+createPost: (parent, args, context) =&gt; {
+  const post = createNewPost(args.input);
+  
+  // Trigger subscription
+  context.pubsub.publish('POST_PUBLISHED', { 
+    postPublished: post 
+  });
+  
+  return post;
+}
+</code></pre>
+<h2 id="schema-stitching"><a class="header" href="#schema-stitching">Schema Stitching</a></h2>
+<p>Combine multiple GraphQL schemas:</p>
+<pre><code class="language-yaml">graphql:
+  schema_stitching:
+    enabled: true
+    schemas:
+      - name: "users"
+        file: "schemas/users.graphql"
+        endpoint: "http://users-service/graphql"
+      
+      - name: "posts"
+        file: "schemas/posts.graphql"
+        endpoint: "http://posts-service/graphql"
+      
+      - name: "comments"
+        file: "schemas/comments.graphql"
+        endpoint: "http://comments-service/graphql"
+    
+    # Type extensions for stitching
+    extensions:
+      - |
+        extend type User {
+          posts: [Post]
+        }
+      - |
+        extend type Post {
+          comments: [Comment]
+        }
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="custom-error-responses"><a class="header" href="#custom-error-responses">Custom Error Responses</a></h3>
+<p>Configure custom error handling:</p>
+<pre><code class="language-yaml">graphql:
+  errors:
+    # Include detailed error information
+    include_stack_trace: true
+    include_extensions: true
+    
+    # Custom error codes
+    custom_error_codes:
+      INVALID_INPUT: 400
+      UNAUTHORIZED: 401
+      FORBIDDEN: 403
+      NOT_FOUND: 404
+      RATE_LIMITED: 429
+</code></pre>
+<h3 id="error-response-format"><a class="header" href="#error-response-format">Error Response Format</a></h3>
+<pre><code class="language-json">{
+  "errors": [
+    {
+      "message": "User not found",
+      "locations": [
+        {
+          "line": 2,
+          "column": 3
+        }
+      ],
+      "path": ["user"],
+      "extensions": {
+        "code": "NOT_FOUND",
+        "userId": "invalid-id",
+        "timestamp": "2024-01-01T00:00:00Z"
+      }
+    }
+  ],
+  "data": {
+    "user": null
+  }
+}
+</code></pre>
+<h2 id="performance--optimization"><a class="header" href="#performance--optimization">Performance &amp; Optimization</a></h2>
+<h3 id="query-complexity-analysis"><a class="header" href="#query-complexity-analysis">Query Complexity Analysis</a></h3>
+<p>Prevent expensive queries:</p>
+<pre><code class="language-yaml">graphql:
+  performance:
+    enable_query_complexity_analysis: true
+    max_query_depth: 10
+    max_query_complexity: 1000
+    complexity_scalarCost: 1
+    complexity_objectCost: 2
+    complexity_listFactor: 10
+    complexity_introspectionCost: 100
+</code></pre>
+<h3 id="caching"><a class="header" href="#caching">Caching</a></h3>
+<p>Cache responses for improved performance:</p>
+<pre><code class="language-yaml">graphql:
+  caching:
+    enabled: true
+    ttl_seconds: 300
+    max_cache_size: 1000
+    cache_key_strategy: "query_and_variables"
+    
+    # Cache per resolver
+    resolver_cache:
+      "Query.users": 600  # Cache for 10 minutes
+      "Query.posts": 300  # Cache for 5 minutes
+</code></pre>
+<h3 id="latency-simulation"><a class="header" href="#latency-simulation">Latency Simulation</a></h3>
+<p>Simulate real-world latency:</p>
+<pre><code class="language-yaml">graphql:
+  latency:
+    enabled: true
+    default_delay_ms: 100
+    
+    # Per-field latency
+    field_delays:
+      "Query.users": 200
+      "User.posts": 150
+      "Post.comments": 100
+    
+    # Random latency ranges
+    random_delay:
+      min_ms: 50
+      max_ms: 500
+</code></pre>
+<h2 id="testing--development"><a class="header" href="#testing--development">Testing &amp; Development</a></h2>
+<h3 id="graphql-playground"><a class="header" href="#graphql-playground">GraphQL Playground</a></h3>
+<p>The built-in GraphQL Playground provides:</p>
+<ul>
+<li><strong>Interactive Query Editor</strong>: Write and test GraphQL queries</li>
+<li><strong>Schema Documentation</strong>: Browse your schema structure</li>
+<li><strong>Query Variables</strong>: Test with different variable values</li>
+<li><strong>Response Headers</strong>: View response metadata</li>
+<li><strong>Subscription Testing</strong>: Test real-time subscriptions</li>
+</ul>
+<h3 id="query-examples"><a class="header" href="#query-examples">Query Examples</a></h3>
+<p>Test your GraphQL API with these examples:</p>
+<pre><code class="language-graphql"># Simple query
+query GetAllUsers {
+  users {
+    id
+    name
+    email
+  }
+}
+
+# Query with variables
+query GetUser($userId: ID!) {
+  user(id: $userId) {
+    id
+    name
+    email
+    posts {
+      title
+      published
+    }
+  }
+}
+
+# Mutation
+mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    id
+    name
+    email
+  }
+}
+
+# Subscription
+subscription UserUpdates {
+  userCreated {
+    id
+    name
+    email
+  }
+}
+</code></pre>
+<h3 id="integration-with-http-mocking"><a class="header" href="#integration-with-http-mocking">Integration with HTTP Mocking</a></h3>
+<p>Combine GraphQL with REST API mocking:</p>
+<pre><code class="language-yaml"># config.yaml
+http:
+  enabled: true
+  spec: "openapi.yaml"
+
+graphql:
+  enabled: true
+  schema_file: "schema.graphql"
+  
+# Use REST endpoints in GraphQL resolvers
+graphql:
+  data_sources:
+    rest_api:
+      type: "rest"
+      base_url: "http://localhost:3000"  # MockForge HTTP server
+      endpoints:
+        users: "/api/users"
+        posts: "/api/posts"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="schema-design"><a class="header" href="#schema-design">Schema Design</a></h3>
+<ol>
+<li><strong>Use Descriptive Names</strong>: Choose clear, self-documenting field names</li>
+<li><strong>Follow Conventions</strong>: Use camelCase for fields, PascalCase for types</li>
+<li><strong>Document Your Schema</strong>: Add descriptions to types and fields</li>
+<li><strong>Version Carefully</strong>: Use field deprecation instead of breaking changes</li>
+</ol>
+<h3 id="performance"><a class="header" href="#performance">Performance</a></h3>
+<ol>
+<li><strong>Implement Caching</strong>: Cache expensive resolver operations</li>
+<li><strong>Limit Query Depth</strong>: Prevent deeply nested queries</li>
+<li><strong>Use DataLoaders</strong>: Batch and cache data fetching</li>
+<li><strong>Monitor Complexity</strong>: Track query complexity metrics</li>
+</ol>
+<h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
+<ol>
+<li><strong>Test Query Variations</strong>: Test different query structures and variables</li>
+<li><strong>Validate Error Cases</strong>: Ensure proper error handling</li>
+<li><strong>Test Subscriptions</strong>: Verify real-time functionality</li>
+<li><strong>Performance Testing</strong>: Test with realistic query loads</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<h4 id="schema-loading-errors"><a class="header" href="#schema-loading-errors">Schema Loading Errors</a></h4>
+<pre><code class="language-bash"># Validate GraphQL schema
+mockforge graphql validate --schema schema.graphql
+
+# Check schema syntax
+graphql-schema-linter schema.graphql
+</code></pre>
+<h4 id="resolver-errors"><a class="header" href="#resolver-errors">Resolver Errors</a></h4>
+<pre><code class="language-bash"># Enable debug logging
+RUST_LOG=mockforge_graphql=debug mockforge serve
+
+# Test individual resolvers
+mockforge graphql test-resolver Query.users
+</code></pre>
+<h4 id="subscription-issues"><a class="header" href="#subscription-issues">Subscription Issues</a></h4>
+<pre><code class="language-bash"># Test WebSocket connection
+wscat -c ws://localhost:3000/graphql/ws
+
+# Check subscription resolver
+mockforge graphql test-subscription userCreated
+</code></pre>
+<p>This comprehensive GraphQL support makes MockForge a powerful tool for mocking modern GraphQL APIs with realistic data and behavior.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/grpc-mocking/advanced-data-synthesis.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/websocket-mocking.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/grpc-mocking/advanced-data-synthesis.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/websocket-mocking.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

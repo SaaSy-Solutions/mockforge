@@ -46,6 +46,6 @@ renderer = ["html"]
 # command = "mdbook-linkcheck"
 # renderer = ["html"]
 
-[preprocessor.mermaid]
-command = "mdbook-mermaid"
-renderer = ["html"]
+# [preprocessor.mermaid]
+# command = "mdbook-mermaid"
+# renderer = ["html"]
