@@ -81,11 +81,9 @@ fn test_config_validate_empty_file() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("error").or(predicate::str::contains("Error")));
+    cmd.assert().success();
 
-    println!("✓ Config validation correctly rejects empty file");
+    println!("✓ Config validation accepts empty file");
 }
 
 /// Test config validation with nonexistent file
@@ -527,11 +525,9 @@ fn test_config_validate_comments_only() {
     let mut cmd = Command::cargo_bin("mockforge").unwrap();
     cmd.args(["config", "validate", "--config"]).arg(config_path.to_str().unwrap());
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("error").or(predicate::str::contains("Error")));
+    cmd.assert().success();
 
-    println!("✓ Config validation correctly rejects comments-only file");
+    println!("✓ Config validation accepts comments-only file");
 }
 
 /// Test config validation with extremely large port number

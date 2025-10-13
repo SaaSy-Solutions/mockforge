@@ -1,9 +1,9 @@
 //! Database models
 
 pub mod plugin;
-pub mod user;
 pub mod review;
+pub mod user;
 
 pub use plugin::{Plugin, PluginVersion, PluginWithVersions};
-pub use user::User;
 pub use review::Review;
+pub use user::User;

@@ -35,7 +35,7 @@ impl Review {
             WHERE plugin_id = $1
             ORDER BY helpful_count DESC, created_at DESC
             LIMIT $2 OFFSET $3
-            "#
+            "#,
         )
         .bind(plugin_id)
         .bind(limit)
@@ -59,7 +59,7 @@ impl Review {
             INSERT INTO reviews (plugin_id, user_id, version, rating, title, comment)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
-            "#
+            "#,
         )
         .bind(plugin_id)
         .bind(user_id)
@@ -73,12 +73,10 @@ impl Review {
 
     /// Count reviews for a plugin
     pub async fn count_by_plugin(pool: &sqlx::PgPool, plugin_id: Uuid) -> sqlx::Result<i64> {
-        let (count,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM reviews WHERE plugin_id = $1"
-        )
-        .bind(plugin_id)
-        .fetch_one(pool)
-        .await?;
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM reviews WHERE plugin_id = $1")
+            .bind(plugin_id)
+            .fetch_one(pool)
+            .await?;
 
         Ok(count)
     }

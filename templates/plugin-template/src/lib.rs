@@ -1,6 +1,6 @@
-//! {{plugin_title}}
+//! Plugin Template
 //!
-//! {{plugin_description}}
+//! A template for creating MockForge plugins
 
 use mockforge_plugin_core::*;
 use serde::{Deserialize, Serialize};
@@ -8,11 +8,11 @@ use std::collections::HashMap;
 
 /// Main plugin struct
 #[derive(Debug)]
-pub struct {{plugin_title | snake_case | title_case | replace: " " ""}} {
+pub struct PluginTemplate {
     config: PluginConfig,
 }
 
-impl {{plugin_title | snake_case | title_case | replace: " " ""}} {
+impl PluginTemplate {
     /// Create a new plugin instance
     pub fn new() -> Self {
         Self {
@@ -21,58 +21,9 @@ impl {{plugin_title | snake_case | title_case | replace: " " ""}} {
     }
 }
 
-{% if plugin_type == "auth" %}
-// Authentication Plugin Implementation
-#[async_trait::async_trait]
-impl AuthPlugin for {{plugin_title | snake_case | title_case | replace: " " ""}} {
-    async fn authenticate(
-        &self,
-        context: &PluginContext,
-        credentials: &AuthCredentials,
-    ) -> PluginResult<AuthResult> {
-        // TODO: Implement your authentication logic here
-
-        // Example: Extract token from Bearer credentials
-        let token = match credentials {
-            AuthCredentials::Bearer(token) => token,
-            _ => return PluginResult::failure("Unsupported auth type".to_string(), 0),
-        };
-
-        // TODO: Validate the token (this is just an example)
-        if token == "valid-token" {
-            PluginResult::success(AuthResult::Authenticated {
-                user_id: "user123".to_string(),
-                claims: HashMap::from([
-                    ("role".to_string(), serde_json::json!("user")),
-                ]),
-            })
-        } else {
-            PluginResult::failure("Invalid credentials".to_string(), 0)
-        }
-    }
-
-    fn get_capabilities(&self) -> PluginCapabilities {
-        PluginCapabilities {
-            network: NetworkCapabilities {
-                allow_http_outbound: {{allow_network}},
-                allowed_hosts: vec![],
-            },
-            filesystem: FilesystemCapabilities {
-                allow_read: {{allow_filesystem}},
-                allow_write: false,
-                allowed_paths: vec![],
-            },
-            resources: PluginResources {
-                max_memory_bytes: {{max_memory_mb}} * 1024 * 1024,
-                max_cpu_time_ms: {{max_cpu_time_ms}},
-            },
-        }
-    }
-}
-{% elsif plugin_type == "template" %}
 // Template Plugin Implementation
 #[async_trait::async_trait]
-impl TemplatePlugin for {{plugin_title | snake_case | title_case | replace: " " ""}} {
+impl TemplatePlugin for PluginTemplate {
     async fn execute_function(
         &self,
         function_name: &str,
@@ -86,123 +37,51 @@ impl TemplatePlugin for {{plugin_title | snake_case | title_case | replace: " " 
                     return PluginResult::failure("Missing argument".to_string(), 0);
                 }
 
-                let input = args[0].as_str()
-                    .ok_or_else(|| "Argument must be a string")?;
+                let input = args[0].as_str().ok_or_else(|| "Argument must be a string")?;
 
                 // Example: Convert to uppercase
                 let result = input.to_uppercase();
                 PluginResult::success(serde_json::json!(result))
             }
-            _ => PluginResult::failure(
-                format!("Unknown function: {}", function_name),
-                0
-            ),
+            _ => PluginResult::failure(format!("Unknown function: {}", function_name), 0),
         }
     }
 
     fn get_functions(&self) -> Vec<TemplateFunction> {
-        vec![
-            TemplateFunction {
-                name: "example_function".to_string(),
-                description: "An example template function".to_string(),
-                parameters: vec![
-                    FunctionParameter {
-                        name: "input".to_string(),
-                        param_type: "string".to_string(),
-                        required: true,
-                        description: "Input string".to_string(),
-                    }
-                ],
-                return_type: "string".to_string(),
-            }
-        ]
+        vec![TemplateFunction {
+            name: "example_function".to_string(),
+            description: "An example template function".to_string(),
+            parameters: vec![FunctionParameter {
+                name: "input".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                description: "Input string".to_string(),
+            }],
+            return_type: "string".to_string(),
+        }]
     }
-}
-{% elsif plugin_type == "response" %}
-// Response Plugin Implementation
-#[async_trait::async_trait]
-impl ResponsePlugin for {{plugin_title | snake_case | title_case | replace: " " ""}} {
-    async fn generate_response(
-        &self,
-        context: &PluginContext,
-        config: &ResponsePluginConfig,
-    ) -> PluginResult<serde_json::Value> {
-        // TODO: Implement your response generation logic
 
-        // Access request data
-        let method = &context.method;
-        let path = &context.uri;
-
-        // Example: Generate a simple response
-        let response = serde_json::json!({
-            "message": "Generated by {{plugin_title}}",
-            "method": method,
-            "path": path,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        });
-
-        PluginResult::success(response)
-    }
-}
-{% elsif plugin_type == "datasource" %}
-// Data Source Plugin Implementation
-#[async_trait::async_trait]
-impl DataSourcePlugin for {{plugin_title | snake_case | title_case | replace: " " ""}} {
-    async fn query(
-        &self,
-        query: &str,
-        parameters: &HashMap<String, serde_json::Value>,
-        context: &PluginContext,
-    ) -> PluginResult<DataSet> {
-        // TODO: Implement your data source query logic
-
-        // Example: Return sample data
-        let columns = vec![
-            ColumnInfo {
-                name: "id".to_string(),
-                data_type: "integer".to_string(),
+    fn get_capabilities(&self) -> PluginCapabilities {
+        PluginCapabilities {
+            network: NetworkCapabilities {
+                allow_http_outbound: false,
+                allowed_hosts: vec![],
             },
-            ColumnInfo {
-                name: "name".to_string(),
-                data_type: "string".to_string(),
+            filesystem: FilesystemCapabilities {
+                allow_read: false,
+                allow_write: false,
+                allowed_paths: vec![],
             },
-        ];
-
-        let rows = vec![
-            DataRow::from(vec![
-                serde_json::json!(1),
-                serde_json::json!("Example Row"),
-            ]),
-        ];
-
-        PluginResult::success(DataSet { columns, rows })
-    }
-
-    fn get_schema(&self) -> PluginResult<DataSourceSchema> {
-        // TODO: Define your data source schema
-        PluginResult::success(DataSourceSchema {
-            tables: vec![
-                TableInfo {
-                    name: "example_table".to_string(),
-                    columns: vec![
-                        ColumnInfo {
-                            name: "id".to_string(),
-                            data_type: "integer".to_string(),
-                        },
-                        ColumnInfo {
-                            name: "name".to_string(),
-                            data_type: "string".to_string(),
-                        },
-                    ],
-                }
-            ],
-        })
+            resources: PluginResources {
+                max_memory_bytes: 10 * 1024 * 1024,
+                max_cpu_time_ms: 100,
+            },
+        }
     }
 }
-{% endif %}
 
 // Export the plugin (required)
-mockforge_plugin_core::export_plugin!({{plugin_title | snake_case | title_case | replace: " " ""}});
+mockforge_plugin_core::export_plugin!(PluginTemplate);
 
 #[cfg(test)]
 mod tests {
@@ -210,7 +89,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_plugin_creation() {
-        let plugin = {{plugin_title | snake_case | title_case | replace: " " ""}}::new();
+        let plugin = PluginTemplate::new();
         // Add your tests here
         assert!(true);
     }

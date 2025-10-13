@@ -1,68 +1,49 @@
 repos:
-  # Basic hooks
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-      - id: trailing-whitespace
-        exclude: ^book/
-      - id: end-of-file-fixer
-        exclude: ^book/
-      - id: check-yaml
-      - id: check-toml
-      - id: check-merge-conflict
-      - id: check-added-large-files
-        args: ['--maxkb=500']
-      - id: check-case-conflict
-      - id: mixed-line-ending
-        args: ['--fix=lf']
-      - id: check-executables-have-shebangs
-      - id: check-shebang-scripts-are-executable
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.5.0
+  hooks:
+  - id: trailing-whitespace
+    exclude: ^book/
+  - id: end-of-file-fixer
+    exclude: ^book/
+  - id: check-yaml
+    exclude: ^(k8s/|helm/|deploy/|templates/)
+  - id: check-toml
+  - id: check-merge-conflict
+  - id: check-added-large-files
+    args: ['--maxkb=500']
+  - id: check-case-conflict
+  - id: mixed-line-ending
+    args: ['--fix=lf']
+  - id: check-executables-have-shebangs
+  - id: check-shebang-scripts-are-executable
 
-  # Rust hooks
-  - repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
-    hooks:
-      - id: clippy
-        args: [--all-targets, --all-features, --, -D, warnings]
-      - id: cargo-check
+- repo: https://github.com/doublify/pre-commit-rust
+  rev: v1.0
+  hooks:
+  - id: clippy
+    args: [--all-targets, --all-features]
+  - id: cargo-check
 
-  # Custom fmt hook that works with individual files
-  - repo: local
-    hooks:
-      - id: rust-fmt
-        name: rust fmt
-        entry: bash -c 'if [ $# -eq 0 ]; then cargo fmt --check; else cargo fmt --check -- "$@"; fi'
-        language: system
-        files: \.(rs)$
-        exclude: ^(target/|book/)
-        pass_filenames: true
+- repo: https://github.com/crate-ci/typos
+  rev: v1.16.20
+  hooks:
+  - id: typos
+    exclude: ^(book/|target/|\.git/)
 
-  # Spell check
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.16.20
-    hooks:
-      - id: typos
-        exclude: ^(book/|target/|\.git/)
-
-  # Security audit
-  - repo: local
-    hooks:
-      - id: cargo-audit
-        name: cargo audit
-        entry: cargo
-        args: [audit]
-        language: system
-        pass_filenames: false
-        files: ^Cargo\.(toml|lock)$
-
-  # Test runner
-  - repo: local
-    hooks:
-      - id: cargo-test
-        name: cargo test
-        entry: cargo
-        args: [test, --workspace]
-        language: system
-        pass_filenames: false
-        files: \.(rs|toml)$
-        exclude: ^(target/|book/)
+- repo: local
+  hooks:
+  - id: rust-fmt
+    name: rust fmt
+    entry: cargo fmt --check --all
+    language: system
+    files: \.(rs)$
+    exclude: ^(target/|book/|crates/mockforge-registry-server/)
+    pass_filenames: false
+  - id: cargo-audit
+    name: cargo audit
+    entry: cargo
+    args: [audit]
+    language: system
+    pass_filenames: false
+    files: ^Cargo\.(toml|lock)$

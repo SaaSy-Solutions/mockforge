@@ -38,15 +38,11 @@ pub async fn register(
 
     // Validate input
     if request.username.len() < 3 {
-        return Err(ApiError::InvalidRequest(
-            "Username must be at least 3 characters".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Username must be at least 3 characters".to_string()));
     }
 
     if request.password.len() < 8 {
-        return Err(ApiError::InvalidRequest(
-            "Password must be at least 8 characters".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Password must be at least 8 characters".to_string()));
     }
 
     // Check if user already exists
@@ -55,9 +51,7 @@ pub async fn register(
         .map_err(|e| ApiError::Database(e))?
         .is_some()
     {
-        return Err(ApiError::InvalidRequest(
-            "Email already registered".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Email already registered".to_string()));
     }
 
     if User::find_by_username(pool, &request.username)
@@ -65,14 +59,11 @@ pub async fn register(
         .map_err(|e| ApiError::Database(e))?
         .is_some()
     {
-        return Err(ApiError::InvalidRequest(
-            "Username already taken".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Username already taken".to_string()));
     }
 
     // Hash password
-    let password_hash = hash_password(&request.password)
-        .map_err(|e| ApiError::Internal(e))?;
+    let password_hash = hash_password(&request.password).map_err(|e| ApiError::Internal(e))?;
 
     // Create user
     let user = User::create(pool, &request.username, &request.email, &password_hash)
@@ -107,9 +98,7 @@ pub async fn login(
         .map_err(|e| ApiError::Internal(e))?;
 
     if !valid {
-        return Err(ApiError::InvalidRequest(
-            "Invalid email or password".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Invalid email or password".to_string()));
     }
 
     // Generate JWT token

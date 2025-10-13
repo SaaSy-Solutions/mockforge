@@ -5,8 +5,7 @@ use axum::{
     Json,
 };
 use mockforge_plugin_registry::{
-    AuthorInfo, PluginCategory, RegistryEntry, SearchQuery, SearchResults, SortOrder,
-    VersionEntry,
+    AuthorInfo, PluginCategory, RegistryEntry, SearchQuery, SearchResults, SortOrder, VersionEntry,
 };
 use serde::{Deserialize, Serialize};
 
@@ -63,9 +62,7 @@ pub async fn search_plugins(
     // Convert to registry entries
     let mut entries = Vec::new();
     for plugin in plugins {
-        let tags = Plugin::get_tags(pool, plugin.id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let tags = Plugin::get_tags(pool, plugin.id).await.map_err(|e| ApiError::Database(e))?;
 
         let versions = PluginVersion::get_by_plugin(pool, plugin.id)
             .await
@@ -155,9 +152,7 @@ pub async fn get_plugin(
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
-    let tags = Plugin::get_tags(pool, plugin.id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let tags = Plugin::get_tags(pool, plugin.id).await.map_err(|e| ApiError::Database(e))?;
 
     let versions = PluginVersion::get_by_plugin(pool, plugin.id)
         .await

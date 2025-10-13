@@ -2,7 +2,7 @@
 
 use axum::{
     middleware,
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 
@@ -27,9 +27,15 @@ pub fn create_router() -> Router<AppState> {
     // Authenticated routes (require JWT + rate limiting)
     let auth_routes = Router::new()
         .route("/api/v1/plugins/publish", post(handlers::plugins::publish_plugin))
-        .route("/api/v1/plugins/:name/versions/:version/yank", delete(handlers::plugins::yank_version))
+        .route(
+            "/api/v1/plugins/:name/versions/:version/yank",
+            delete(handlers::plugins::yank_version),
+        )
         .route("/api/v1/plugins/:name/reviews", post(handlers::reviews::submit_review))
-        .route("/api/v1/plugins/:name/reviews/:review_id/vote", post(handlers::reviews::vote_review))
+        .route(
+            "/api/v1/plugins/:name/reviews/:review_id/vote",
+            post(handlers::reviews::vote_review),
+        )
         .layer(middleware::from_fn(auth_middleware))
         .layer(middleware::from_fn(rate_limit_middleware));
 
@@ -41,8 +47,5 @@ pub fn create_router() -> Router<AppState> {
         .layer(middleware::from_fn(rate_limit_middleware));
 
     // Combine all routes
-    Router::new()
-        .merge(public_routes)
-        .merge(auth_routes)
-        .merge(admin_routes)
+    Router::new().merge(public_routes).merge(auth_routes).merge(admin_routes)
 }

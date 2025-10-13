@@ -47,11 +47,12 @@ impl IntoResponse for ApiError {
             ApiError::InvalidVersion(ver) => {
                 (StatusCode::BAD_REQUEST, format!("Invalid version: {}", ver))
             }
-            ApiError::PluginExists(name) => (
-                StatusCode::CONFLICT,
-                format!("Plugin '{}' already exists", name),
-            ),
-            ApiError::AuthRequired => (StatusCode::UNAUTHORIZED, "Authentication required".to_string()),
+            ApiError::PluginExists(name) => {
+                (StatusCode::CONFLICT, format!("Plugin '{}' already exists", name))
+            }
+            ApiError::AuthRequired => {
+                (StatusCode::UNAUTHORIZED, "Authentication required".to_string())
+            }
             ApiError::PermissionDenied => (StatusCode::FORBIDDEN, "Permission denied".to_string()),
             ApiError::InvalidRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             ApiError::Database(e) => {

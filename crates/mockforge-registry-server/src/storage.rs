@@ -70,35 +70,21 @@ impl PluginStorage {
         let url = if let Ok(endpoint) = std::env::var("S3_ENDPOINT") {
             format!("{}/{}/{}", endpoint, self.bucket, key)
         } else {
-            format!(
-                "https://{}.s3.amazonaws.com/{}",
-                self.bucket, key
-            )
+            format!("https://{}.s3.amazonaws.com/{}", self.bucket, key)
         };
 
         Ok(url)
     }
 
     pub async fn download_plugin(&self, key: &str) -> Result<Vec<u8>> {
-        let response = self
-            .client
-            .get_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .send()
-            .await?;
+        let response = self.client.get_object().bucket(&self.bucket).key(key).send().await?;
 
         let bytes = response.body.collect().await?;
         Ok(bytes.to_vec())
     }
 
     pub async fn delete_plugin(&self, key: &str) -> Result<()> {
-        self.client
-            .delete_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .send()
-            .await?;
+        self.client.delete_object().bucket(&self.bucket).key(key).send().await?;
 
         Ok(())
     }

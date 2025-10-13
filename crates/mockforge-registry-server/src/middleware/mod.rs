@@ -28,14 +28,11 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         // Get user_id from request extensions (set by auth_middleware)
-        let user_id_str = parts
-            .extensions
-            .get::<String>()
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+        let user_id_str = parts.extensions.get::<String>().ok_or(StatusCode::UNAUTHORIZED)?;
 
         // Parse UUID
-        let user_id = Uuid::parse_str(user_id_str)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let user_id =
+            Uuid::parse_str(user_id_str).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         Ok(AuthUser(user_id))
     }

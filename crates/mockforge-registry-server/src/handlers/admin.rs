@@ -41,13 +41,11 @@ pub async fn verify_plugin(
         .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
 
     // Check if user is admin
-    let user = sqlx::query_as::<_, (bool,)>(
-        "SELECT is_admin FROM users WHERE id = $1"
-    )
-    .bind(user_uuid)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let user = sqlx::query_as::<_, (bool,)>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
 
     if !user.0 {
         return Err(ApiError::PermissionDenied);
@@ -66,14 +64,12 @@ pub async fn verify_plugin(
         None
     };
 
-    sqlx::query(
-        "UPDATE plugins SET verified_at = $1 WHERE id = $2"
-    )
-    .bind(verified_at)
-    .bind(plugin.id)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    sqlx::query("UPDATE plugins SET verified_at = $1 WHERE id = $2")
+        .bind(verified_at)
+        .bind(plugin.id)
+        .execute(pool)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
 
     let message = if request.verified {
         format!("Plugin '{}' has been verified", name)
@@ -172,13 +168,11 @@ pub async fn get_admin_stats(
         .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
 
     // Check if user is admin
-    let user = sqlx::query_as::<_, (bool,)>(
-        "SELECT is_admin FROM users WHERE id = $1"
-    )
-    .bind(user_uuid)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let user = sqlx::query_as::<_, (bool,)>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
 
     if !user.0 {
         return Err(ApiError::PermissionDenied);
@@ -192,15 +186,13 @@ pub async fn get_admin_stats(
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    let user_count = sqlx::query_as::<_, (i64,)>(
-        "SELECT COUNT(*) FROM users"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let user_count = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM users")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
 
     let review_stats = sqlx::query_as::<_, (i64, f64)>(
-        "SELECT COUNT(*), COALESCE(AVG(rating), 0.0)::float8 FROM reviews"
+        "SELECT COUNT(*), COALESCE(AVG(rating), 0.0)::float8 FROM reviews",
     )
     .fetch_one(pool)
     .await

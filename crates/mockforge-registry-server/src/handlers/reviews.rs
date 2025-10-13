@@ -95,7 +95,7 @@ pub async fn get_reviews(
     let mut reviews_with_users = Vec::new();
     for review in reviews {
         let user = sqlx::query_as::<_, (String, String)>(
-            "SELECT id::text, username FROM users WHERE id = $1"
+            "SELECT id::text, username FROM users WHERE id = $1",
         )
         .bind(review.user_id)
         .fetch_one(pool)
@@ -127,7 +127,7 @@ pub async fn get_reviews(
         SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*)
         FROM reviews
         WHERE plugin_id = $1
-        "#
+        "#,
     )
     .bind(plugin.id)
     .fetch_one(pool)
@@ -138,7 +138,7 @@ pub async fn get_reviews(
 
     // Get rating distribution
     let distribution_rows = sqlx::query_as::<_, (i16, i64)>(
-        "SELECT rating, COUNT(*) FROM reviews WHERE plugin_id = $1 GROUP BY rating"
+        "SELECT rating, COUNT(*) FROM reviews WHERE plugin_id = $1 GROUP BY rating",
     )
     .bind(plugin.id)
     .fetch_all(pool)
@@ -190,16 +190,12 @@ pub async fn submit_review(
 
     // Validate rating
     if request.rating < 1 || request.rating > 5 {
-        return Err(ApiError::InvalidRequest(
-            "Rating must be between 1 and 5".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Rating must be between 1 and 5".to_string()));
     }
 
     // Validate comment length
     if request.comment.len() < 10 {
-        return Err(ApiError::InvalidRequest(
-            "Comment must be at least 10 characters".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Comment must be at least 10 characters".to_string()));
     }
 
     if request.comment.len() > 5000 {
@@ -229,7 +225,7 @@ pub async fn submit_review(
 
     // Check if user already reviewed this plugin
     let existing = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM reviews WHERE plugin_id = $1 AND user_id = $2"
+        "SELECT id FROM reviews WHERE plugin_id = $1 AND user_id = $2",
     )
     .bind(plugin.id)
     .bind(user_uuid)
@@ -262,22 +258,20 @@ pub async fn submit_review(
         SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*)
         FROM reviews
         WHERE plugin_id = $1
-        "#
+        "#,
     )
     .bind(plugin.id)
     .fetch_one(pool)
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    sqlx::query(
-        "UPDATE plugins SET rating_avg = $1, rating_count = $2 WHERE id = $3"
-    )
-    .bind(stats.0)
-    .bind(stats.1 as i32)
-    .bind(plugin.id)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    sqlx::query("UPDATE plugins SET rating_avg = $1, rating_count = $2 WHERE id = $3")
+        .bind(stats.0)
+        .bind(stats.1 as i32)
+        .bind(plugin.id)
+        .execute(pool)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
 
     Ok(Json(SubmitReviewResponse {
         success: true,
@@ -316,10 +310,8 @@ pub async fn vote_review(
         "unhelpful_count"
     };
 
-    let query_str = format!(
-        "UPDATE reviews SET {} = {} + 1 WHERE id = $1 AND plugin_id = $2",
-        field, field
-    );
+    let query_str =
+        format!("UPDATE reviews SET {} = {} + 1 WHERE id = $1 AND plugin_id = $2", field, field);
 
     sqlx::query(&query_str)
         .bind(review_uuid)

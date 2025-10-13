@@ -22,32 +22,29 @@ pub struct User {
 impl User {
     /// Find user by email
     pub async fn find_by_email(pool: &sqlx::PgPool, email: &str) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM users WHERE email = $1"
-        )
-        .bind(email)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE email = $1")
+            .bind(email)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Find user by username
-    pub async fn find_by_username(pool: &sqlx::PgPool, username: &str) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM users WHERE username = $1"
-        )
-        .bind(username)
-        .fetch_optional(pool)
-        .await
+    pub async fn find_by_username(
+        pool: &sqlx::PgPool,
+        username: &str,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE username = $1")
+            .bind(username)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Find user by ID
     pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM users WHERE id = $1"
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Create a new user
@@ -62,7 +59,7 @@ impl User {
             INSERT INTO users (username, email, password_hash)
             VALUES ($1, $2, $3)
             RETURNING *
-            "#
+            "#,
         )
         .bind(username)
         .bind(email)
@@ -72,14 +69,16 @@ impl User {
     }
 
     /// Set API token
-    pub async fn set_api_token(pool: &sqlx::PgPool, user_id: Uuid, token: &str) -> sqlx::Result<()> {
-        sqlx::query(
-            "UPDATE users SET api_token = $1 WHERE id = $2"
-        )
-        .bind(token)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
+    pub async fn set_api_token(
+        pool: &sqlx::PgPool,
+        user_id: Uuid,
+        token: &str,
+    ) -> sqlx::Result<()> {
+        sqlx::query("UPDATE users SET api_token = $1 WHERE id = $2")
+            .bind(token)
+            .bind(user_id)
+            .execute(pool)
+            .await?;
         Ok(())
     }
 }

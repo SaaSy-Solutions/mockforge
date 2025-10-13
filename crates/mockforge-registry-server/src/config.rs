@@ -31,17 +31,12 @@ impl Config {
         dotenvy::dotenv().ok();
 
         let config = Self {
-            port: std::env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
-                .parse()?,
-            database_url: std::env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set"),
-            jwt_secret: std::env::var("JWT_SECRET")
-                .expect("JWT_SECRET must be set"),
+            port: std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()).parse()?,
+            database_url: std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
+            jwt_secret: std::env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
             s3_bucket: std::env::var("S3_BUCKET")
                 .unwrap_or_else(|_| "mockforge-plugins".to_string()),
-            s3_region: std::env::var("S3_REGION")
-                .unwrap_or_else(|_| "us-east-1".to_string()),
+            s3_region: std::env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             s3_endpoint: std::env::var("S3_ENDPOINT").ok(),
             max_plugin_size: std::env::var("MAX_PLUGIN_SIZE")
                 .unwrap_or_else(|_| "52428800".to_string()) // 50MB

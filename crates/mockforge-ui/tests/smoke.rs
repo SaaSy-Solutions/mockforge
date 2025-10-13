@@ -149,7 +149,7 @@ async fn test_post_endpoints() {
             "/__mockforge/files/content",
             r#"{"file_path": "test.yaml", "file_type": "yaml"}"#,
         ),
-        ("/__mockforge/files/save", r#"{"file_path": "test.yaml", "content": "test"}"#),
+        ("/__mockforge/files/save", r#"{"file_path": "test.yaml", "content": "test\n"}"#),
         (
             "/__mockforge/config/latency",
             r#"{"config_type": "latency", "data": {"base_ms": 50}}"#,

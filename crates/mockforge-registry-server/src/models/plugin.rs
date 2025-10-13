@@ -61,7 +61,7 @@ impl Plugin {
             r#"
             SELECT DISTINCT p.*
             FROM plugins p
-            "#
+            "#,
         );
 
         let mut conditions = Vec::new();
@@ -73,7 +73,7 @@ impl Plugin {
                 r#"
                 INNER JOIN plugin_tags pt ON p.id = pt.plugin_id
                 INNER JOIN tags t ON pt.tag_id = t.id
-                "#
+                "#,
             );
             params_count += 1;
             conditions.push(format!("t.name = ANY(${})", params_count));
@@ -84,7 +84,8 @@ impl Plugin {
         // Add search query
         if let Some(_q) = query {
             params_count += 1;
-            conditions.push(format!("p.search_vector @@ plainto_tsquery('english', ${})", params_count));
+            conditions
+                .push(format!("p.search_vector @@ plainto_tsquery('english', ${})", params_count));
         }
 
         // Add category filter
@@ -129,12 +130,10 @@ impl Plugin {
 
     /// Find plugin by name
     pub async fn find_by_name(pool: &sqlx::PgPool, name: &str) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM plugins WHERE name = $1"
-        )
-        .bind(name)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM plugins WHERE name = $1")
+            .bind(name)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Get plugin tags
@@ -145,7 +144,7 @@ impl Plugin {
             FROM tags t
             INNER JOIN plugin_tags pt ON t.id = pt.tag_id
             WHERE pt.plugin_id = $1
-            "#
+            "#,
         )
         .bind(plugin_id)
         .fetch_all(pool)
@@ -174,7 +173,7 @@ impl Plugin {
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
-            "#
+            "#,
         )
         .bind(name)
         .bind(description)
@@ -190,12 +189,10 @@ impl Plugin {
 
     /// Increment download count
     pub async fn increment_downloads(pool: &sqlx::PgPool, plugin_id: Uuid) -> sqlx::Result<()> {
-        sqlx::query(
-            "UPDATE plugins SET downloads_total = downloads_total + 1 WHERE id = $1"
-        )
-        .bind(plugin_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE plugins SET downloads_total = downloads_total + 1 WHERE id = $1")
+            .bind(plugin_id)
+            .execute(pool)
+            .await?;
         Ok(())
     }
 }
@@ -204,7 +201,7 @@ impl PluginVersion {
     /// Get all versions for a plugin
     pub async fn get_by_plugin(pool: &sqlx::PgPool, plugin_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM plugin_versions WHERE plugin_id = $1 ORDER BY published_at DESC"
+            "SELECT * FROM plugin_versions WHERE plugin_id = $1 ORDER BY published_at DESC",
         )
         .bind(plugin_id)
         .fetch_all(pool)
@@ -218,7 +215,7 @@ impl PluginVersion {
         version: &str,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM plugin_versions WHERE plugin_id = $1 AND version = $2"
+            "SELECT * FROM plugin_versions WHERE plugin_id = $1 AND version = $2",
         )
         .bind(plugin_id)
         .bind(version)
@@ -243,7 +240,7 @@ impl PluginVersion {
             )
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
-            "#
+            "#,
         )
         .bind(plugin_id)
         .bind(version)
@@ -257,23 +254,19 @@ impl PluginVersion {
 
     /// Yank a version
     pub async fn yank(pool: &sqlx::PgPool, version_id: Uuid) -> sqlx::Result<()> {
-        sqlx::query(
-            "UPDATE plugin_versions SET yanked = true WHERE id = $1"
-        )
-        .bind(version_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE plugin_versions SET yanked = true WHERE id = $1")
+            .bind(version_id)
+            .execute(pool)
+            .await?;
         Ok(())
     }
 
     /// Increment download count
     pub async fn increment_downloads(pool: &sqlx::PgPool, version_id: Uuid) -> sqlx::Result<()> {
-        sqlx::query(
-            "UPDATE plugin_versions SET downloads = downloads + 1 WHERE id = $1"
-        )
-        .bind(version_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE plugin_versions SET downloads = downloads + 1 WHERE id = $1")
+            .bind(version_id)
+            .execute(pool)
+            .await?;
         Ok(())
     }
 

@@ -1207,8 +1207,7 @@ struct ScheduledScenarioRequest {
     schedule: serde_json::Value,
 }
 
-#[derive(Debug, Deserialize)]
-#[derive(Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ScheduleSummary {
     id: String,
     scenario_name: String,

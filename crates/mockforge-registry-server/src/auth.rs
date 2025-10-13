@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,  // user_id
-    pub exp: usize,   // expiry timestamp
-    pub iat: usize,   // issued at timestamp
+    pub sub: String, // user_id
+    pub exp: usize,  // expiry timestamp
+    pub iat: usize,  // issued at timestamp
 }
 
 pub fn create_token(user_id: &str, secret: &str) -> Result<String> {
@@ -24,22 +24,15 @@ pub fn create_token(user_id: &str, secret: &str) -> Result<String> {
         iat: Utc::now().timestamp() as usize,
     };
 
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes()),
-    )?;
+    let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))?;
 
     Ok(token)
 }
 
 pub fn verify_token(token: &str, secret: &str) -> Result<Claims> {
     let validation = Validation::default();
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    )?;
+    let token_data =
+        decode::<Claims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation)?;
 
     Ok(token_data.claims)
 }
