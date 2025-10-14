@@ -51,6 +51,12 @@ pub struct SmtpConfig {
     pub enable_mailbox: bool,
     /// Maximum mailbox size
     pub max_mailbox_messages: usize,
+    /// Enable STARTTLS support
+    pub enable_starttls: bool,
+    /// Path to TLS certificate file
+    pub tls_cert_path: Option<PathBuf>,
+    /// Path to TLS private key file
+    pub tls_key_path: Option<PathBuf>,
 }
 
 impl Default for SmtpConfig {
@@ -64,6 +70,9 @@ impl Default for SmtpConfig {
             max_connections: 10,
             enable_mailbox: true,
             max_mailbox_messages: 1000,
+            enable_starttls: false,
+            tls_cert_path: None,
+            tls_key_path: None,
         }
     }
 }

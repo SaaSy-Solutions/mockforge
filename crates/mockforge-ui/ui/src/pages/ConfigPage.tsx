@@ -46,7 +46,7 @@ function isValidPort(port: number): boolean {
 }
 
 export function ConfigPage() {
-  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment'>('general');
+  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols'>('general');
   const { activeWorkspace } = useWorkspaceStore();
   const workspaceId = activeWorkspace?.id || 'default-workspace';
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -95,6 +95,18 @@ export function ConfigPage() {
       aggregate_errors: true,
       validate_responses: true,
       overrides: {} as Record<string, string>
+    },
+    protocols: {
+      http: true,
+      graphql: true,
+      grpc: true,
+      websocket: true,
+      smtp: false,
+      mqtt: false,
+      ftp: false,
+      kafka: false,
+      rabbitmq: false,
+      amqp: false
     },
     templateTest: ''
   });
@@ -551,6 +563,7 @@ export function ConfigPage() {
 
   const sections = [
     { id: 'general', label: 'General', icon: Settings, description: 'Basic MockForge settings' },
+    { id: 'protocols', label: 'Protocols', icon: Server, description: 'Protocol enable/disable settings' },
     { id: 'latency', label: 'Latency', icon: Zap, description: 'Response delay and timing' },
     { id: 'faults', label: 'Fault Injection', icon: Shield, description: 'Error simulation and failure modes' },
     { id: 'traffic-shaping', label: 'Traffic Shaping', icon: Wifi, description: 'Bandwidth control and network simulation' },
@@ -722,9 +735,54 @@ export function ConfigPage() {
                 </div>
               </ModernCard>
             </Section>
-          )}
+           )}
 
-          {activeSection === 'latency' && (
+           {activeSection === 'protocols' && (
+             <Section title="Protocol Configuration" subtitle="Enable or disable protocol support">
+               <ModernCard>
+                 <div className="space-y-6">
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {[
+                       { key: 'http', label: 'HTTP/REST', description: 'RESTful API mocking' },
+                       { key: 'graphql', label: 'GraphQL', description: 'GraphQL API mocking' },
+                       { key: 'grpc', label: 'gRPC', description: 'gRPC service mocking' },
+                       { key: 'websocket', label: 'WebSocket', description: 'WebSocket connection mocking' },
+                       { key: 'smtp', label: 'SMTP', description: 'Email protocol mocking' },
+                       { key: 'mqtt', label: 'MQTT', description: 'IoT messaging protocol' },
+                       { key: 'ftp', label: 'FTP', description: 'File transfer protocol' },
+                       { key: 'kafka', label: 'Kafka', description: 'Event streaming platform' },
+                       { key: 'rabbitmq', label: 'RabbitMQ', description: 'Message queuing system' },
+                       { key: 'amqp', label: 'AMQP', description: 'Advanced message queuing' },
+                     ].map((protocol) => (
+                       <div key={protocol.key} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                         <div>
+                           <div className="font-medium text-gray-900 dark:text-gray-100">{protocol.label}</div>
+                           <div className="text-sm text-gray-500 dark:text-gray-400">{protocol.description}</div>
+                         </div>
+                         <label className="relative inline-flex items-center cursor-pointer">
+                           <input
+                             type="checkbox"
+                             className="sr-only peer"
+                             checked={formData.protocols?.[protocol.key as keyof typeof formData.protocols] ?? false}
+                             onChange={(e) => setFormData(prev => ({
+                               ...prev,
+                               protocols: {
+                                 ...prev.protocols,
+                                 [protocol.key]: e.target.checked
+                               }
+                             }))}
+                           />
+                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                         </label>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               </ModernCard>
+             </Section>
+           )}
+
+           {activeSection === 'latency' && (
             <Section title="Latency Configuration" subtitle="Control response timing and delays">
               <ModernCard>
                 <div className="space-y-6">

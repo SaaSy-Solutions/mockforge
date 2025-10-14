@@ -882,6 +882,41 @@ enum MailboxCommands {
         #[arg(short, long)]
         output: PathBuf,
     },
+
+    /// Search emails in mailbox
+    Search {
+        /// Filter by sender email
+        #[arg(long)]
+        sender: Option<String>,
+
+        /// Filter by recipient email
+        #[arg(long)]
+        recipient: Option<String>,
+
+        /// Filter by subject
+        #[arg(long)]
+        subject: Option<String>,
+
+        /// Filter by body content
+        #[arg(long)]
+        body: Option<String>,
+
+        /// Filter emails since date (RFC3339 format)
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Filter emails until date (RFC3339 format)
+        #[arg(long)]
+        until: Option<String>,
+
+        /// Use regex matching instead of substring
+        #[arg(long)]
+        regex: bool,
+
+        /// Case sensitive matching
+        #[arg(long)]
+        case_sensitive: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1909,6 +1944,33 @@ async fn handle_serve(
         None
     };
 
+    // Create SMTP registry if enabled
+    let smtp_registry = if config.smtp.enabled {
+        use mockforge_smtp::{SmtpSpecRegistry};
+        use std::sync::Arc;
+
+        let mut registry = SmtpSpecRegistry::with_mailbox_size(config.smtp.max_mailbox_messages);
+
+        if let Some(fixtures_dir) = &config.smtp.fixtures_dir {
+            if fixtures_dir.exists() {
+                if let Err(e) = registry.load_fixtures(fixtures_dir) {
+                    eprintln!(
+                        "⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}",
+                        fixtures_dir, e
+                    );
+                } else {
+                    println!("   Loaded SMTP fixtures from {:?}", fixtures_dir);
+                }
+            } else {
+                println!("   No SMTP fixtures directory found at {:?}", fixtures_dir);
+            }
+        }
+
+        Some(Arc::new(registry))
+    } else {
+        None
+    };
+
     let http_app = if config.core.traffic_shaping_enabled {
         use mockforge_core::TrafficShaper;
         let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
@@ -1919,6 +1981,7 @@ async fn handle_serve(
             true,
             multi_tenant_config,
             None,
+            smtp_registry.clone(),
         )
         .await
     } else {
@@ -1931,6 +1994,7 @@ async fn handle_serve(
             Some(config.routes.clone()),
             config.http.cors.clone(),
             None,
+            smtp_registry.clone(),
         )
         .await
     };
@@ -2017,34 +2081,15 @@ async fn handle_serve(
     });
 
     // Start SMTP server (if enabled)
-    let smtp_handle = if config.smtp.enabled {
+    let smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
+        let smtp_registry = smtp_registry.clone();
 
         Some(tokio::spawn(async move {
-            use mockforge_smtp::{SmtpServer, SmtpSpecRegistry};
-            use std::sync::Arc;
+            use mockforge_smtp::SmtpServer;
 
             println!("📧 SMTP server listening on {}:{}", smtp_config.host, smtp_config.port);
-
-            // Create registry and load fixtures
-            let mut registry =
-                SmtpSpecRegistry::with_mailbox_size(smtp_config.max_mailbox_messages);
-
-            if let Some(fixtures_dir) = &smtp_config.fixtures_dir {
-                if fixtures_dir.exists() {
-                    if let Err(e) = registry.load_fixtures(fixtures_dir) {
-                        eprintln!(
-                            "⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}",
-                            fixtures_dir, e
-                        );
-                    } else {
-                        println!("   Loaded SMTP fixtures from {:?}", fixtures_dir);
-                    }
-                } else {
-                    println!("   No SMTP fixtures directory found at {:?}", fixtures_dir);
-                }
-            }
 
             // Convert core SmtpConfig to mockforge_smtp::SmtpConfig
             let smtp_server_config = mockforge_smtp::SmtpConfig {
@@ -2056,9 +2101,12 @@ async fn handle_serve(
                 max_connections: smtp_config.max_connections,
                 enable_mailbox: smtp_config.enable_mailbox,
                 max_mailbox_messages: smtp_config.max_mailbox_messages,
+                enable_starttls: smtp_config.enable_starttls,
+                tls_cert_path: smtp_config.tls_cert_path.clone(),
+                tls_key_path: smtp_config.tls_key_path.clone(),
             };
 
-            let server = SmtpServer::new(smtp_server_config, Arc::new(registry));
+            let server = SmtpServer::new(smtp_server_config, smtp_registry);
 
             tokio::select! {
                 result = server.start() => {

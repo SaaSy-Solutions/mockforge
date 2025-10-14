@@ -1,0 +1,37 @@
+{
+  "id": "kafka-user-events",
+  "name": "Kafka User Events Stream",
+  "description": "Mock fixture for Kafka user events streaming",
+  "protocol": "Kafka",
+  "request": {
+    "pattern": "PubSub",
+    "topic": "user-events",
+    "partition": 0
+  },
+  "response": {
+    "status": {
+      "Generic": true
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "event_type": "user_login",
+      "user_id": "12345",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "metadata": {
+        "source": "web_app",
+        "version": "1.0"
+      }
+    },
+    "content_type": "application/json",
+    "delay_ms": 0
+  },
+  "metadata": {
+    "example": "true",
+    "protocol": "kafka"
+  },
+  "enabled": true,
+  "priority": 1,
+  "tags": ["kafka", "events", "streaming"]
+}

@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use mockforge_core::openapi::OpenApiSpec;
+use mockforge_smtp::EmailSearchFilters;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -67,6 +68,7 @@ pub struct ManagementState {
     pub port: u16,
     pub start_time: std::time::Instant,
     pub request_counter: Arc<RwLock<u64>>,
+    pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
 }
 
 impl ManagementState {
@@ -78,7 +80,18 @@ impl ManagementState {
             port,
             start_time: std::time::Instant::now(),
             request_counter: Arc::new(RwLock::new(0)),
+            smtp_registry: None,
         }
+    }
+
+    pub fn with_smtp_registry(mut self, smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>) -> Self {
+        self.smtp_registry = Some(smtp_registry);
+        self
+    }
+
+    pub fn with_smtp_registry(mut self, smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>) -> Self {
+        self.smtp_registry = Some(smtp_registry);
+        self
     }
 }
 
@@ -235,36 +248,96 @@ async fn import_mocks(
 }
 
 /// List SMTP emails in mailbox
-async fn list_smtp_emails() -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(serde_json::json!({
-            "error": "SMTP mailbox management not available via HTTP API",
-            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox."
-        })),
-    )
+async fn list_smtp_emails(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        match smtp_registry.get_emails() {
+            Ok(emails) => (
+                StatusCode::OK,
+                Json(serde_json::json!(emails)),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to retrieve emails",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
 }
 
 /// Get specific SMTP email
-async fn get_smtp_email(Path(_id): Path<String>) -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(serde_json::json!({
-            "error": "SMTP mailbox management not available via HTTP API",
-            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox."
-        })),
-    )
+async fn get_smtp_email(
+    State(state): State<ManagementState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        match smtp_registry.get_email_by_id(&id) {
+            Ok(Some(email)) => (
+                StatusCode::OK,
+                Json(serde_json::json!(email)),
+            ),
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "Email not found",
+                    "id": id
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to retrieve email",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
 }
 
 /// Clear SMTP mailbox
-async fn clear_smtp_mailbox() -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(serde_json::json!({
-            "error": "SMTP mailbox management not available via HTTP API",
-            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox."
-        })),
-    )
+async fn clear_smtp_mailbox(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        match smtp_registry.clear_mailbox() {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "message": "Mailbox cleared successfully"
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to clear mailbox",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
 }
 
 /// Export SMTP mailbox
@@ -280,6 +353,47 @@ async fn export_smtp_mailbox(
             "requested_format": format
         })),
     )
+}
+
+/// Search SMTP emails
+async fn search_smtp_emails(
+    State(state): State<ManagementState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        let filters = EmailSearchFilters {
+            sender: params.get("sender").cloned(),
+            recipient: params.get("recipient").cloned(),
+            subject: params.get("subject").cloned(),
+            body: params.get("body").cloned(),
+            since: params.get("since").and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|dt| dt.with_timezone(&chrono::Utc)),
+            until: params.get("until").and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|dt| dt.with_timezone(&chrono::Utc)),
+            use_regex: params.get("regex").map(|s| s == "true").unwrap_or(false),
+            case_sensitive: params.get("case_sensitive").map(|s| s == "true").unwrap_or(false),
+        };
+
+        match smtp_registry.search_emails(filters) {
+            Ok(emails) => (
+                StatusCode::OK,
+                Json(serde_json::json!(emails)),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to search emails",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
 }
 
 /// Build the management API router
@@ -299,6 +413,7 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/smtp/mailbox", delete(clear_smtp_mailbox))
         .route("/smtp/mailbox/{id}", get(get_smtp_email))
         .route("/smtp/mailbox/export", get(export_smtp_mailbox))
+        .route("/smtp/mailbox/search", get(search_smtp_emails))
         .with_state(state)
 }
 

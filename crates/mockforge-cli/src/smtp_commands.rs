@@ -44,6 +44,18 @@ async fn handle_mailbox_command(
         MailboxCommands::Export { format, output } => {
             handle_mailbox_export(&format, &output).await?;
         }
+        MailboxCommands::Search {
+            sender,
+            recipient,
+            subject,
+            body,
+            since,
+            until,
+            regex,
+            case_sensitive,
+        } => {
+            handle_mailbox_search(sender, recipient, subject, body, since, until, regex, case_sensitive).await?;
+        }
     }
     Ok(())
 }
@@ -208,6 +220,104 @@ async fn handle_mailbox_export(
                 println!("✅ Mailbox exported to {}", output.display());
             } else {
                 println!("❌ Failed to export mailbox: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to MockForge management API: {}", e);
+            println!("💡 Make sure MockForge server is running");
+        }
+    }
+
+    Ok(())
+}
+
+/// Search emails in mailbox
+async fn handle_mailbox_search(
+    sender: Option<String>,
+    recipient: Option<String>,
+    subject: Option<String>,
+    body: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
+    regex: bool,
+    case_sensitive: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🔍 Searching emails in mailbox...");
+
+    let mut query_params = Vec::new();
+    if let Some(ref s) = sender {
+        query_params.push(format!("sender={}", urlencoding::encode(s)));
+    }
+    if let Some(ref r) = recipient {
+        query_params.push(format!("recipient={}", urlencoding::encode(r)));
+    }
+    if let Some(ref s) = subject {
+        query_params.push(format!("subject={}", urlencoding::encode(s)));
+    }
+    if let Some(ref b) = body {
+        query_params.push(format!("body={}", urlencoding::encode(b)));
+    }
+    if let Some(ref s) = since {
+        query_params.push(format!("since={}", urlencoding::encode(s)));
+    }
+    if let Some(ref u) = until {
+        query_params.push(format!("until={}", urlencoding::encode(u)));
+    }
+    if regex {
+        query_params.push("regex=true".to_string());
+    }
+    if case_sensitive {
+        query_params.push("case_sensitive=true".to_string());
+    }
+
+    let query_string = if query_params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", query_params.join("&"))
+    };
+
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
+
+    match client
+        .get(format!("{}/smtp/mailbox/search{}", management_url, query_string))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                let emails: Vec<serde_json::Value> = response.json().await?;
+                if emails.is_empty() {
+                    println!("🔍 No emails found matching the criteria");
+                } else {
+                    println!("🔍 Found {} emails:", emails.len());
+                    println!("{:<5} {:<30} {:<50} {}", "ID", "From", "Subject", "Received");
+                    println!("{}", "-".repeat(100));
+
+                    for email in emails {
+                        let id = email["id"].as_str().unwrap_or("N/A");
+                        let from = email["from"].as_str().unwrap_or("N/A");
+                        let subject = email["subject"].as_str().unwrap_or("N/A");
+                        let received = email["received_at"].as_str().unwrap_or("N/A");
+
+                        let subject_display = if subject.len() > 47 {
+                            format!("{}...", &subject[..44])
+                        } else {
+                            subject.to_string()
+                        };
+
+                        println!(
+                            "{:<5} {:<30} {:<50} {}",
+                            &id[..std::cmp::min(id.len(), 5)],
+                            &from[..std::cmp::min(from.len(), 30)],
+                            subject_display,
+                            received
+                        );
+                    }
+                }
+            } else {
+                println!("❌ Failed to search mailbox: HTTP {}", response.status());
             }
         }
         Err(e) => {

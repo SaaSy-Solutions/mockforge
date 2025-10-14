@@ -7,6 +7,7 @@ pub mod auth;
 pub mod matcher;
 pub mod middleware;
 pub mod protocol_registry;
+pub mod streaming;
 
 use crate::Result;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ pub use auth::{AuthMiddleware, AuthResult, Claims};
 pub use matcher::{FuzzyRequestMatcher, RequestFingerprint, SimpleRequestMatcher};
 pub use middleware::{LatencyMiddleware, LoggingMiddleware, MetricsMiddleware};
 pub use protocol_registry::{ProtocolHandler, ProtocolRegistry};
+pub use streaming::{MessageBuilder, MessageStream, ProtocolMessage, StreamingMetadata, StreamingProtocol, StreamingProtocolRegistry};
 
 /// Protocol type enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

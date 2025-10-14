@@ -128,6 +128,55 @@ pub struct RouteValidationConfig {
     pub schema: serde_json::Value,
 }
 
+/// Protocol enable/disable configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolConfig {
+    /// Enable this protocol
+    pub enabled: bool,
+}
+
+/// Protocols configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolsConfig {
+    /// HTTP protocol configuration
+    pub http: ProtocolConfig,
+    /// GraphQL protocol configuration
+    pub graphql: ProtocolConfig,
+    /// gRPC protocol configuration
+    pub grpc: ProtocolConfig,
+    /// WebSocket protocol configuration
+    pub websocket: ProtocolConfig,
+    /// SMTP protocol configuration
+    pub smtp: ProtocolConfig,
+    /// MQTT protocol configuration
+    pub mqtt: ProtocolConfig,
+    /// FTP protocol configuration
+    pub ftp: ProtocolConfig,
+    /// Kafka protocol configuration
+    pub kafka: ProtocolConfig,
+    /// RabbitMQ protocol configuration
+    pub rabbitmq: ProtocolConfig,
+    /// AMQP protocol configuration
+    pub amqp: ProtocolConfig,
+}
+
+impl Default for ProtocolsConfig {
+    fn default() -> Self {
+        Self {
+            http: ProtocolConfig { enabled: true },
+            graphql: ProtocolConfig { enabled: true },
+            grpc: ProtocolConfig { enabled: true },
+            websocket: ProtocolConfig { enabled: true },
+            smtp: ProtocolConfig { enabled: false },
+            mqtt: ProtocolConfig { enabled: false },
+            ftp: ProtocolConfig { enabled: false },
+            kafka: ProtocolConfig { enabled: false },
+            rabbitmq: ProtocolConfig { enabled: false },
+            amqp: ProtocolConfig { enabled: false },
+        }
+    }
+}
+
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -157,6 +206,9 @@ pub struct ServerConfig {
     /// Custom routes configuration
     #[serde(default)]
     pub routes: Vec<RouteConfig>,
+    /// Protocol enable/disable configuration
+    #[serde(default)]
+    pub protocols: ProtocolsConfig,
 }
 
 // Default is derived for ServerConfig
@@ -336,6 +388,12 @@ pub struct SmtpConfig {
     pub enable_mailbox: bool,
     /// Maximum mailbox size
     pub max_mailbox_messages: usize,
+    /// Enable STARTTLS support
+    pub enable_starttls: bool,
+    /// Path to TLS certificate file
+    pub tls_cert_path: Option<std::path::PathBuf>,
+    /// Path to TLS private key file
+    pub tls_key_path: Option<std::path::PathBuf>,
 }
 
 impl Default for SmtpConfig {
@@ -350,6 +408,9 @@ impl Default for SmtpConfig {
             max_connections: 10,
             enable_mailbox: true,
             max_mailbox_messages: 1000,
+            enable_starttls: false,
+            tls_cert_path: None,
+            tls_key_path: None,
         }
     }
 }

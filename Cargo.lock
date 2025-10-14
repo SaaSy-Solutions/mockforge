@@ -3938,6 +3938,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "url",
+ "urlencoding",
 ]
 
 [[package]]
@@ -4359,12 +4360,15 @@ dependencies = [
  "mail-parser",
  "mockforge-core",
  "regex",
+ "rustls 0.21.12",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-rustls 0.24.1",
  "tracing",
  "uuid",
 ]

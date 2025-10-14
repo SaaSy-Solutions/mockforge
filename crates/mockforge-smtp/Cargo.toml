@@ -31,6 +31,9 @@ mail-parser = "0.9"
 chrono = { workspace = true }
 uuid = { workspace = true }
 regex = { workspace = true }
+tokio-rustls = "0.24"
+rustls-pemfile = "1.0"
+rustls = "0.21"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }

@@ -283,7 +283,7 @@ pub async fn build_router(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
 ) -> Router {
-    build_router_with_multi_tenant(spec_path, options, failure_config, None, None, None, None).await
+    build_router_with_multi_tenant(spec_path, options, failure_config, None, None, None, None, None).await
 }
 
 /// Build the base HTTP router with multi-tenant workspace support
@@ -297,6 +297,7 @@ pub async fn build_router_with_multi_tenant(
     ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
+    smtp_registry: Option<std::sync::Arc<mockforge_smtp::SmtpSpecRegistry>>,
 ) -> Router {
     use std::time::Instant;
 
@@ -479,7 +480,10 @@ pub async fn build_router_with_multi_tenant(
     }
 
     // Add management API endpoints
-    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    if let Some(smtp_reg) = smtp_registry {
+        management_state = management_state.with_smtp_registry(smtp_reg);
+    }
     app = app.nest("/__mockforge/api", management_router(management_state));
 
     // Add management WebSocket endpoint
@@ -807,6 +811,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
+    smtp_registry: Option<std::sync::Arc<mockforge_smtp::SmtpSpecRegistry>>,
 ) -> Router {
     use crate::chain_handlers::create_chain_state;
     use axum::{
@@ -835,6 +840,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         route_configs,
         cors_config,
         ai_generator,
+        smtp_registry,
     )
     .await;
 
@@ -886,6 +892,7 @@ pub async fn build_router_with_traffic_shaping(
     options: Option<ValidationOptions>,
     traffic_shaper: Option<TrafficShaper>,
     traffic_shaping_enabled: bool,
+    smtp_registry: Option<std::sync::Arc<mockforge_smtp::SmtpSpecRegistry>>,
 ) -> Router {
     build_router_with_traffic_shaping_and_multi_tenant(
         spec_path,
@@ -894,6 +901,7 @@ pub async fn build_router_with_traffic_shaping(
         traffic_shaping_enabled,
         None,
         None,
+        smtp_registry,
     )
     .await
 }
@@ -908,6 +916,7 @@ pub async fn build_router_with_traffic_shaping_and_multi_tenant(
     ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
+    smtp_registry: Option<std::sync::Arc<mockforge_smtp::SmtpSpecRegistry>>,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
@@ -953,6 +962,14 @@ pub async fn build_router_with_traffic_shaping_and_multi_tenant(
     )
     // Add SSE endpoints
     .merge(sse::sse_router());
+
+    // Add management API endpoints
+    let management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
+    let mut management_state = management_state;
+    if let Some(smtp_reg) = smtp_registry {
+        management_state = management_state.with_smtp_registry(smtp_reg);
+    }
+    app = app.nest("/__mockforge/api", management_router(management_state));
 
     // If traffic shaping is enabled, apply traffic shaping middleware to all routes
     if traffic_shaping_enabled && traffic_shaper.is_some() {
@@ -1014,6 +1031,7 @@ pub async fn start_with_traffic_shaping(
         options,
         traffic_shaper,
         traffic_shaping_enabled,
+        None,
     )
     .await;
     serve_router(port, app).await
@@ -1147,13 +1165,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_router_with_traffic_shaping_disabled() {
-        let _router = build_router_with_traffic_shaping(None, None, None, false).await;
+        let _router = build_router_with_traffic_shaping(None, None, None, false, None).await;
         // Should succeed with traffic shaping disabled
     }
 
     #[tokio::test]
     async fn test_build_router_with_traffic_shaping_enabled_no_shaper() {
-        let _router = build_router_with_traffic_shaping(None, None, None, true).await;
+        let _router = build_router_with_traffic_shaping(None, None, None, true, None).await;
         // Should succeed even without a traffic shaper
     }
 

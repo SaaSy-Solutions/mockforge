@@ -49,6 +49,7 @@ hyper = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.8"
 hex = { workspace = true }
+urlencoding = "2.1"
 colored = "2.2"
 
 [dev-dependencies]

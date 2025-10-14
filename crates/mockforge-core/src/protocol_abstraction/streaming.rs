@@ -226,5 +226,4 @@ mod tests {
         // Note: We can't easily test with actual handlers without implementing mock streaming protocols
         // This would require creating mock implementations of StreamingProtocol
     }
-}</content>
-</xai:function_call<parameter name="filePath">crates/mockforge-core/src/protocol_abstraction/streaming.rs
+}
