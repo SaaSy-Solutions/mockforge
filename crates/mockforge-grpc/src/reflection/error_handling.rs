@@ -95,12 +95,12 @@ where
 pub fn simulate_error(error_rate: f64) -> Result<(), Status> {
     use rand::Rng;
 
-    let mut rng = rand::thread_rng();
-    let random: f64 = rng.gen();
+    let mut rng = rand::rng();
+    let random: f64 = rng.random();
 
     if random < error_rate {
         // Simulate different types of errors
-        let error_type: u32 = rng.gen_range(0..5);
+        let error_type: u32 = rng.random_range(0..5);
         match error_type {
             0 => Err(Status::unavailable("Simulated service unavailable")),
             1 => Err(Status::deadline_exceeded("Simulated timeout")),

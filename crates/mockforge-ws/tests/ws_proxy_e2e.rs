@@ -25,7 +25,7 @@ async fn ws_proxy_routes_to_upstream() {
                     match msg {
                         Ok(Message::Text(text)) => {
                             let response = format!("UPSTREAM_ECHO: {}", text);
-                            if let Err(e) = ws_stream.send(Message::Text(response)).await {
+                            if let Err(e) = ws_stream.send(Message::Text(response.into())).await {
                                 eprintln!("Failed to send response: {}", e);
                                 break;
                             }
@@ -115,7 +115,7 @@ async fn ws_proxy_passthrough_by_default() {
             match msg {
                 Ok(Message::Text(text)) => {
                     let response = format!("UPSTREAM: {}", text);
-                    let _ = ws_stream.send(Message::Text(response)).await;
+                    let _ = ws_stream.send(Message::Text(response.into())).await;
                 }
                 Ok(Message::Close(_)) => break,
                 _ => {}

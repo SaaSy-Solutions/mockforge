@@ -187,6 +187,8 @@ pub struct HttpCorsConfig {
 /// HTTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpConfig {
+    /// Enable HTTP server
+    pub enabled: bool,
     /// Server port
     pub port: u16,
     /// Host address
@@ -218,6 +220,7 @@ pub struct HttpConfig {
 impl Default for HttpConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             port: 3000,
             host: "0.0.0.0".to_string(),
             openapi_spec: None,
@@ -252,6 +255,8 @@ impl Default for HttpConfig {
 /// WebSocket server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketConfig {
+    /// Enable WebSocket server
+    pub enabled: bool,
     /// Server port
     pub port: u16,
     /// Host address
@@ -265,6 +270,7 @@ pub struct WebSocketConfig {
 impl Default for WebSocketConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             port: 3001,
             host: "0.0.0.0".to_string(),
             replay_file: None,
@@ -276,6 +282,8 @@ impl Default for WebSocketConfig {
 /// gRPC server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcConfig {
+    /// Enable gRPC server
+    pub enabled: bool,
     /// Server port
     pub port: u16,
     /// Host address
@@ -289,6 +297,7 @@ pub struct GrpcConfig {
 impl Default for GrpcConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             port: 50051,
             host: "0.0.0.0".to_string(),
             proto_dir: None,

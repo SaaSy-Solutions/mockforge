@@ -2,7 +2,7 @@
 
 use crate::{SmtpConfig, SmtpSpecRegistry};
 use mockforge_core::protocol_abstraction::{
-    MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry,
+    MessagePattern, MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry,
 };
 use mockforge_core::Result;
 use std::collections::HashMap;
@@ -264,8 +264,13 @@ async fn process_email(
     // Create protocol request
     let mut request = ProtocolRequest {
         protocol: Protocol::Smtp,
+        pattern: MessagePattern::OneWay,
         operation: "SEND".to_string(),
         path: from.clone(),
+        topic: None,
+        routing_key: None,
+        partition: None,
+        qos: None,
         metadata: HashMap::from([
             ("from".to_string(), from.clone()),
             ("to".to_string(), to.clone()),

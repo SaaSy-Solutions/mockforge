@@ -9,6 +9,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+// Temporary: MessagePattern should be imported from super, but there's a compilation issue
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum MessagePattern {
+    /// Request-Response pattern (HTTP, gRPC unary)
+    RequestResponse,
+    /// One-way/fire-and-forget pattern (MQTT publish, email)
+    OneWay,
+    /// Publish-Subscribe pattern (Kafka, RabbitMQ, MQTT)
+    PubSub,
+    /// Streaming pattern (gRPC streaming, WebSocket)
+    Streaming,
+}
+
 /// JWT Claims
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -317,8 +330,13 @@ mod tests {
 
         let request = ProtocolRequest {
             protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
             metadata,
             body: None,
             client_ip: None,
@@ -351,8 +369,7 @@ mod tests {
             operation: "GET".to_string(),
             path: "/test".to_string(),
             metadata,
-            body: None,
-            client_ip: None,
+            ..Default::default()
         };
 
         let token = middleware.extract_token(&request);
