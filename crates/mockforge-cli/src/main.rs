@@ -1918,6 +1918,7 @@ async fn handle_serve(
             traffic_shaper,
             true,
             multi_tenant_config,
+            None,
         )
         .await
     } else {
@@ -1929,6 +1930,7 @@ async fn handle_serve(
             multi_tenant_config,
             Some(config.routes.clone()),
             config.http.cors.clone(),
+            None,
         )
         .await
     };

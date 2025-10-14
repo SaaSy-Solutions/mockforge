@@ -8,10 +8,6 @@ mod admin_handlers_tests {
     use chrono::Utc;
 
     fn create_test_state() -> AdminState {
-        use mockforge_core::init_global_logger;
-        use std::sync::Arc;
-
-        let _logger = Arc::new(init_global_logger(1000).clone());
         AdminState::new(
             Some("127.0.0.1:3000".parse().unwrap()),
             Some("127.0.0.1:3001".parse().unwrap()),
@@ -121,8 +117,7 @@ mod admin_handlers_tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Hanging test - needs investigation of async cleanup"]
+    #[tokio::test]
     async fn test_log_filtering() {
         let state = create_test_state();
 
@@ -184,8 +179,7 @@ mod admin_handlers_tests {
         assert_eq!(logs.len(), 2); // Should be limited to 2
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Hanging test - needs investigation of async cleanup"]
+    #[tokio::test]
     async fn test_clear_logs() {
         let state = create_test_state();
 
@@ -218,8 +212,7 @@ mod admin_handlers_tests {
         assert_eq!(metrics.active_threads, 12);
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Hanging test - needs investigation of async cleanup"]
+    #[tokio::test]
     async fn test_request_log_creation() {
         let state = create_test_state();
 
@@ -242,8 +235,7 @@ mod admin_handlers_tests {
         assert_eq!(log.id, "req_1");
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Hanging test - needs investigation of async cleanup"]
+    #[tokio::test]
     async fn test_log_rotation() {
         let state = create_test_state();
 
@@ -259,8 +251,7 @@ mod admin_handlers_tests {
         assert_eq!(logs[0].id, "req_11"); // First 10 were removed
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Hanging test - needs investigation of async cleanup"]
+    #[tokio::test]
     async fn test_response_time_tracking() {
         let state = create_test_state();
 
@@ -275,8 +266,7 @@ mod admin_handlers_tests {
         assert!(metrics.response_times.contains(&500));
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Hanging test - needs investigation of async cleanup"]
+    #[tokio::test]
     async fn test_endpoint_metrics_tracking() {
         let state = create_test_state();
 

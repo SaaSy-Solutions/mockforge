@@ -283,7 +283,7 @@ pub async fn build_router(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
 ) -> Router {
-    build_router_with_multi_tenant(spec_path, options, failure_config, None, None, None).await
+    build_router_with_multi_tenant(spec_path, options, failure_config, None, None, None, None).await
 }
 
 /// Build the base HTTP router with multi-tenant workspace support
@@ -294,6 +294,9 @@ pub async fn build_router_with_multi_tenant(
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
     _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     _cors_config: Option<mockforge_core::config::HttpCorsConfig>,
+    ai_generator: Option<
+        std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
+    >,
 ) -> Router {
     use std::time::Instant;
 
@@ -399,7 +402,10 @@ pub async fn build_router_with_multi_tenant(
                 // Measure router building
                 let router_build_start = Instant::now();
                 let overrides_enabled = overrides.is_some();
-                let openapi_router = if let Some(failure_config) = &failure_config {
+                let openapi_router = if let Some(ai_generator) = &ai_generator {
+                    tracing::debug!("Building router with AI generator support");
+                    registry.build_router_with_ai(Some(ai_generator.clone()))
+                } else if let Some(failure_config) = &failure_config {
                     tracing::debug!("Building router with failure injection and overrides");
                     let failure_injector = FailureInjector::new(Some(failure_config.clone()), true);
                     registry.build_router_with_injectors_and_overrides(
@@ -778,8 +784,16 @@ pub async fn build_router_with_chains(
     options: Option<ValidationOptions>,
     circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
 ) -> Router {
-    build_router_with_chains_and_multi_tenant(spec_path, options, circling_config, None, None, None)
-        .await
+    build_router_with_chains_and_multi_tenant(
+        spec_path,
+        options,
+        circling_config,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
 }
 
 /// Build the base HTTP router with chaining and multi-tenant support
@@ -790,6 +804,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
     route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
+    ai_generator: Option<
+        std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
+    >,
 ) -> Router {
     use crate::chain_handlers::create_chain_state;
     use axum::{
@@ -817,6 +834,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         multi_tenant_config,
         route_configs,
         cors_config,
+        ai_generator,
     )
     .await;
 
@@ -875,6 +893,7 @@ pub async fn build_router_with_traffic_shaping(
         traffic_shaper,
         traffic_shaping_enabled,
         None,
+        None,
     )
     .await
 }
@@ -886,6 +905,9 @@ pub async fn build_router_with_traffic_shaping_and_multi_tenant(
     traffic_shaper: Option<TrafficShaper>,
     traffic_shaping_enabled: bool,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+    ai_generator: Option<
+        std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
+    >,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;

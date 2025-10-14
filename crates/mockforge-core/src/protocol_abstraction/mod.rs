@@ -512,7 +512,12 @@ impl UnifiedFixture {
             }
         }
 
-        // TODO: Implement custom matcher logic
+        // Check custom matcher logic
+        if let Some(custom_matcher) = &self.request.custom_matcher {
+            if !self.evaluate_custom_matcher(custom_matcher, request) {
+                return false;
+            }
+        }
 
         true
     }
@@ -528,6 +533,125 @@ impl UnifiedFixture {
             // Fall back to exact match
             value == pattern
         }
+    }
+
+    /// Evaluate custom matcher expression
+    fn evaluate_custom_matcher(&self, expression: &str, request: &ProtocolRequest) -> bool {
+        // Simple expression evaluator for custom matching logic
+        // Supports basic conditions like:
+        // - operation == "GET"
+        // - path =~ "/api/.*"
+        // - headers.content-type == "application/json"
+        // - body contains "test"
+
+        let expr = expression.trim();
+
+        // Handle different types of expressions
+        if expr.contains("==") {
+            self.evaluate_equality(expr, request)
+        } else if expr.contains("=~") {
+            self.evaluate_regex_match(expr, request)
+        } else if expr.contains("contains") {
+            self.evaluate_contains(expr, request)
+        } else {
+            // Unknown expression format, log warning and return false
+            tracing::warn!("Unknown custom matcher expression format: {}", expr);
+            false
+        }
+    }
+
+    /// Evaluate equality expressions (field == "value")
+    fn evaluate_equality(&self, expr: &str, request: &ProtocolRequest) -> bool {
+        let parts: Vec<&str> = expr.split("==").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let expected_value = parts[1].trim_matches('"');
+
+        match field {
+            "operation" => request.operation == expected_value,
+            "path" => request.path == expected_value,
+            "topic" => request.topic.as_ref().unwrap_or(&String::new()) == expected_value,
+            "routing_key" => {
+                request.routing_key.as_ref().unwrap_or(&String::new()) == expected_value
+            }
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..]; // Remove "headers." prefix
+                request.metadata.get(header_name).map_or(false, |v| v == expected_value)
+            }
+            _ => {
+                tracing::warn!("Unknown field in equality expression: {}", field);
+                false
+            }
+        }
+    }
+
+    /// Evaluate regex match expressions (field =~ "pattern")
+    fn evaluate_regex_match(&self, expr: &str, request: &ProtocolRequest) -> bool {
+        let parts: Vec<&str> = expr.split("=~").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let pattern = parts[1].trim_matches('"');
+
+        let value: String = match field {
+            "operation" => request.operation.clone(),
+            "path" => request.path.clone(),
+            "topic" => request.topic.clone().unwrap_or_default(),
+            "routing_key" => request.routing_key.clone().unwrap_or_default(),
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..]; // Remove "headers." prefix
+                request.metadata.get(header_name).cloned().unwrap_or_default()
+            }
+            _ => {
+                tracing::warn!("Unknown field in regex expression: {}", field);
+                return false;
+            }
+        };
+
+        use regex::Regex;
+        match Regex::new(pattern) {
+            Ok(re) => re.is_match(&value),
+            Err(e) => {
+                tracing::warn!("Invalid regex pattern '{}': {}", pattern, e);
+                false
+            }
+        }
+    }
+
+    /// Evaluate contains expressions (field contains "substring")
+    fn evaluate_contains(&self, expr: &str, request: &ProtocolRequest) -> bool {
+        let parts: Vec<&str> = expr.split("contains").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let substring = parts[1].trim_matches('"');
+
+        let value: String = match field {
+            "body" => {
+                if let Some(body) = &request.body {
+                    String::from_utf8_lossy(body).to_string()
+                } else {
+                    return false;
+                }
+            }
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..]; // Remove "headers." prefix
+                request.metadata.get(header_name).cloned().unwrap_or_default()
+            }
+            _ => {
+                tracing::warn!("Unsupported field for contains expression: {}", field);
+                return false;
+            }
+        };
+
+        value.contains(substring)
     }
 
     /// Convert fixture response to ProtocolResponse
@@ -925,5 +1049,273 @@ mod tests {
             client_ip: None,
         };
         assert!(!fixture.matches(&post_request));
+    }
+
+    #[test]
+    fn test_custom_matcher_equality() {
+        let fixture = UnifiedFixture {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            description: "".to_string(),
+            protocol: Protocol::Http,
+            request: FixtureRequest {
+                pattern: Some(MessagePattern::RequestResponse),
+                operation: Some("GET".to_string()),
+                path: Some("/api/users".to_string()),
+                topic: None,
+                routing_key: None,
+                partition: None,
+                qos: None,
+                headers: HashMap::new(),
+                body_pattern: None,
+                custom_matcher: Some("operation == \"GET\"".to_string()),
+            },
+            response: FixtureResponse {
+                status: FixtureStatus::Http(200),
+                headers: HashMap::new(),
+                body: None,
+                content_type: None,
+                delay_ms: 0,
+                template_vars: HashMap::new(),
+            },
+            metadata: HashMap::new(),
+            enabled: true,
+            priority: 0,
+            tags: vec![],
+        };
+
+        // Test matching request
+        let request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "GET".to_string(),
+            path: "/api/users".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: None,
+            client_ip: None,
+        };
+        assert!(fixture.matches(&request));
+
+        // Test non-matching request
+        let post_request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "POST".to_string(),
+            path: "/api/users".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: None,
+            client_ip: None,
+        };
+        assert!(!fixture.matches(&post_request));
+    }
+
+    #[test]
+    fn test_custom_matcher_regex() {
+        let fixture = UnifiedFixture {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            description: "".to_string(),
+            protocol: Protocol::Http,
+            request: FixtureRequest {
+                pattern: Some(MessagePattern::RequestResponse),
+                operation: Some("GET".to_string()),
+                path: Some("/api/.*".to_string()),
+                topic: None,
+                routing_key: None,
+                partition: None,
+                qos: None,
+                headers: HashMap::new(),
+                body_pattern: None,
+                custom_matcher: Some("path =~ \"/api/.*\"".to_string()),
+            },
+            response: FixtureResponse {
+                status: FixtureStatus::Http(200),
+                headers: HashMap::new(),
+                body: None,
+                content_type: None,
+                delay_ms: 0,
+                template_vars: HashMap::new(),
+            },
+            metadata: HashMap::new(),
+            enabled: true,
+            priority: 0,
+            tags: vec![],
+        };
+
+        // Test matching request
+        let request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "GET".to_string(),
+            path: "/api/users".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: None,
+            client_ip: None,
+        };
+        assert!(fixture.matches(&request));
+
+        // Test non-matching request
+        let other_request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "GET".to_string(),
+            path: "/other/path".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: None,
+            client_ip: None,
+        };
+        assert!(!fixture.matches(&other_request));
+    }
+
+    #[test]
+    fn test_custom_matcher_contains() {
+        let fixture = UnifiedFixture {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            description: "".to_string(),
+            protocol: Protocol::Http,
+            request: FixtureRequest {
+                pattern: Some(MessagePattern::RequestResponse),
+                operation: Some("POST".to_string()),
+                path: Some("/api/users".to_string()),
+                topic: None,
+                routing_key: None,
+                partition: None,
+                qos: None,
+                headers: HashMap::new(),
+                body_pattern: None,
+                custom_matcher: Some("body contains \"test\"".to_string()),
+            },
+            response: FixtureResponse {
+                status: FixtureStatus::Http(200),
+                headers: HashMap::new(),
+                body: None,
+                content_type: None,
+                delay_ms: 0,
+                template_vars: HashMap::new(),
+            },
+            metadata: HashMap::new(),
+            enabled: true,
+            priority: 0,
+            tags: vec![],
+        };
+
+        // Test matching request
+        let request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "POST".to_string(),
+            path: "/api/users".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: Some(b"{\"name\": \"test user\"}".to_vec()),
+            client_ip: None,
+        };
+        assert!(fixture.matches(&request));
+
+        // Test non-matching request
+        let no_match_request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "POST".to_string(),
+            path: "/api/users".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: Some(b"{\"name\": \"other user\"}".to_vec()),
+            client_ip: None,
+        };
+        assert!(!fixture.matches(&no_match_request));
+    }
+
+    #[test]
+    fn test_custom_matcher_header() {
+        let fixture = UnifiedFixture {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            description: "".to_string(),
+            protocol: Protocol::Http,
+            request: FixtureRequest {
+                pattern: Some(MessagePattern::RequestResponse),
+                operation: Some("GET".to_string()),
+                path: Some("/api/data".to_string()),
+                topic: None,
+                routing_key: None,
+                partition: None,
+                qos: None,
+                headers: HashMap::new(),
+                body_pattern: None,
+                custom_matcher: Some("headers.content-type == \"application/json\"".to_string()),
+            },
+            response: FixtureResponse {
+                status: FixtureStatus::Http(200),
+                headers: HashMap::new(),
+                body: None,
+                content_type: None,
+                delay_ms: 0,
+                template_vars: HashMap::new(),
+            },
+            metadata: HashMap::new(),
+            enabled: true,
+            priority: 0,
+            tags: vec![],
+        };
+
+        // Test matching request
+        let mut headers = HashMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        let request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "GET".to_string(),
+            path: "/api/data".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: headers,
+            body: None,
+            client_ip: None,
+        };
+        assert!(fixture.matches(&request));
+
+        // Test non-matching request
+        let mut wrong_headers = HashMap::new();
+        wrong_headers.insert("content-type".to_string(), "text/plain".to_string());
+        let wrong_request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: MessagePattern::RequestResponse,
+            operation: "GET".to_string(),
+            path: "/api/data".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: wrong_headers,
+            body: None,
+            client_ip: None,
+        };
+        assert!(!fixture.matches(&wrong_request));
     }
 }

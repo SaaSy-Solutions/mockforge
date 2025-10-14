@@ -3,9 +3,9 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json},
     routing::{delete, get, post, put},
     Router,
 };
@@ -226,48 +226,60 @@ async fn export_mocks(
 /// Import mocks from JSON/YAML
 async fn import_mocks(
     State(state): State<ManagementState>,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-    body: String,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let format = params
-        .get("format")
-        .map(|f| match f.as_str() {
-            "yaml" | "yml" => ExportFormat::Yaml,
-            _ => ExportFormat::Json,
-        })
-        .unwrap_or(ExportFormat::Json);
+    Json(mocks): Json<Vec<MockConfig>>,
+) -> impl IntoResponse {
+    let mut current_mocks = state.mocks.write().await;
+    current_mocks.clear();
+    current_mocks.extend(mocks);
+    Json(serde_json::json!({ "status": "imported", "count": current_mocks.len() }))
+}
 
-    let imported_mocks: Vec<MockConfig> = match format {
-        ExportFormat::Json => serde_json::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?,
-        ExportFormat::Yaml => serde_yaml::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?,
-    };
+/// List SMTP emails in mailbox
+async fn list_smtp_emails() -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "SMTP mailbox management not available via HTTP API",
+            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox."
+        })),
+    )
+}
 
-    let mut mocks = state.mocks.write().await;
+/// Get specific SMTP email
+async fn get_smtp_email(Path(_id): Path<String>) -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "SMTP mailbox management not available via HTTP API",
+            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox."
+        })),
+    )
+}
 
-    // Determine import strategy
-    let merge = params.get("merge").map(|v| v == "true").unwrap_or(false);
+/// Clear SMTP mailbox
+async fn clear_smtp_mailbox() -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "SMTP mailbox management not available via HTTP API",
+            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox."
+        })),
+    )
+}
 
-    if merge {
-        // Merge: add new mocks, update existing ones by ID
-        for imported in imported_mocks {
-            if let Some(pos) = mocks.iter().position(|m| m.id == imported.id) {
-                mocks[pos] = imported;
-            } else {
-                mocks.push(imported);
-            }
-        }
-    } else {
-        // Replace: clear existing and add imported
-        *mocks = imported_mocks;
-    }
-
-    info!("Imported {} mocks (merge: {})", mocks.len(), merge);
-
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "imported": mocks.len(),
-        "merge": merge
-    })))
+/// Export SMTP mailbox
+async fn export_smtp_mailbox(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let format = params.get("format").unwrap_or(&"json".to_string()).clone();
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "SMTP mailbox management not available via HTTP API",
+            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox.",
+            "requested_format": format
+        })),
+    )
 }
 
 /// Build the management API router
@@ -283,6 +295,10 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/mocks/{id}", delete(delete_mock))
         .route("/export", get(export_mocks))
         .route("/import", post(import_mocks))
+        .route("/smtp/mailbox", get(list_smtp_emails))
+        .route("/smtp/mailbox", delete(clear_smtp_mailbox))
+        .route("/smtp/mailbox/{id}", get(get_smtp_email))
+        .route("/smtp/mailbox/export", get(export_smtp_mailbox))
         .with_state(state)
 }
 
