@@ -13,6 +13,7 @@ use tokio::net::TcpListener;
 mod plugin_commands;
 mod mqtt_commands;
 mod smtp_commands;
+mod ftp_commands;
 mod workspace_commands;
 
 #[derive(Parser)]
@@ -374,6 +375,18 @@ enum Commands {
     Mqtt {
         #[command(subcommand)]
         mqtt_command: MqttCommands,
+    },
+
+    /// FTP server management
+    ///
+    /// Examples:
+    ///   mockforge ftp serve --port 2121
+    ///   mockforge ftp fixtures load ./fixtures/ftp/
+    ///   mockforge ftp vfs add /test.txt --content "Hello World"
+    #[command(verbatim_doc_comment)]
+    Ftp {
+        #[command(subcommand)]
+        ftp_command: ftp_commands::FtpCommands,
     },
 
     /// Generate synthetic data
@@ -1286,6 +1299,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Mqtt { mqtt_command } => {
             mqtt_commands::handle_mqtt_command(mqtt_command).await?;
+        }
+        Commands::Ftp { ftp_command } => {
+            ftp_commands::handle_ftp_command(ftp_command).await?;
         }
         Commands::Data { data_command } => {
             handle_data(data_command).await?;

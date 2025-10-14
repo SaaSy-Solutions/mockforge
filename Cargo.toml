@@ -21,6 +21,7 @@ members = [
     "crates/mockforge-chaos",
     "crates/mockforge-bench",
     "crates/mockforge-smtp",
+    "crates/mockforge-ftp",
     "examples/plugins/response-graphql",
     "test_openapi_demo"
 ]

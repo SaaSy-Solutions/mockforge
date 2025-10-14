@@ -24,10 +24,15 @@
   - [Fixtures](protocols/mqtt/fixtures.md)
   - [Examples](protocols/mqtt/examples.md)
 - [SMTP](protocols/smtp/getting-started.md)
-  - [Getting Started](protocols/smtp/getting-started.md)
-  - [Configuration](protocols/smtp/configuration.md)
-  - [Fixtures](protocols/smtp/fixtures.md)
-  - [Examples](protocols/smtp/examples.md)
+   - [Getting Started](protocols/smtp/getting-started.md)
+   - [Configuration](protocols/smtp/configuration.md)
+   - [Fixtures](protocols/smtp/fixtures.md)
+   - [Examples](protocols/smtp/examples.md)
+- [FTP](protocols/ftp/getting-started.md)
+   - [Getting Started](protocols/ftp/getting-started.md)
+   - [Configuration](protocols/ftp/configuration.md)
+   - [Fixtures](protocols/ftp/fixtures.md)
+   - [Examples](protocols/ftp/examples.md)
 
 ## User Guide
 

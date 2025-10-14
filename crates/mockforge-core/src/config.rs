@@ -191,6 +191,8 @@ pub struct ServerConfig {
     pub mqtt: MqttConfig,
     /// SMTP server configuration
     pub smtp: SmtpConfig,
+    /// FTP server configuration
+    pub ftp: FtpConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
     /// Request chaining configuration
@@ -452,6 +454,45 @@ impl Default for SmtpConfig {
             enable_starttls: false,
             tls_cert_path: None,
             tls_key_path: None,
+        }
+    }
+}
+
+/// FTP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FtpConfig {
+    /// Enable FTP server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Passive mode port range
+    pub passive_ports: (u16, u16),
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Connection timeout in seconds
+    pub timeout_secs: u64,
+    /// Allow anonymous access
+    pub allow_anonymous: bool,
+    /// Fixtures directory
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Virtual root directory
+    pub virtual_root: std::path::PathBuf,
+}
+
+impl Default for FtpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 2121,
+            host: "0.0.0.0".to_string(),
+            passive_ports: (50000, 51000),
+            max_connections: 100,
+            timeout_secs: 300,
+            allow_anonymous: true,
+            fixtures_dir: None,
+            virtual_root: std::path::PathBuf::from("/mockforge"),
         }
     }
 }
