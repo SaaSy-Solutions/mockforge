@@ -168,7 +168,7 @@ impl Default for ProtocolsConfig {
             grpc: ProtocolConfig { enabled: true },
             websocket: ProtocolConfig { enabled: true },
             smtp: ProtocolConfig { enabled: false },
-            mqtt: ProtocolConfig { enabled: false },
+            mqtt: ProtocolConfig { enabled: true },
             ftp: ProtocolConfig { enabled: false },
             kafka: ProtocolConfig { enabled: false },
             rabbitmq: ProtocolConfig { enabled: false },
@@ -187,6 +187,8 @@ pub struct ServerConfig {
     pub websocket: WebSocketConfig,
     /// gRPC server configuration
     pub grpc: GrpcConfig,
+    /// MQTT server configuration
+    pub mqtt: MqttConfig,
     /// SMTP server configuration
     pub smtp: SmtpConfig,
     /// Admin UI configuration
@@ -365,6 +367,45 @@ pub struct TlsConfig {
     pub cert_path: String,
     /// Private key file path
     pub key_path: String,
+}
+
+/// MQTT server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttConfig {
+    /// Enable MQTT server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Maximum packet size
+    pub max_packet_size: usize,
+    /// Keep-alive timeout in seconds
+    pub keep_alive_secs: u16,
+    /// Directory containing fixture files
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Enable retained messages
+    pub enable_retained_messages: bool,
+    /// Maximum retained messages
+    pub max_retained_messages: usize,
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 1883,
+            host: "0.0.0.0".to_string(),
+            max_connections: 1000,
+            max_packet_size: 268435456, // 256 MB
+            keep_alive_secs: 60,
+            fixtures_dir: None,
+            enable_retained_messages: true,
+            max_retained_messages: 10000,
+        }
+    }
 }
 
 /// SMTP server configuration

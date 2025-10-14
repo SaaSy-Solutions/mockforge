@@ -7,9 +7,11 @@ use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
 mod plugin_commands;
+mod mqtt_commands;
 mod smtp_commands;
 mod workspace_commands;
 
@@ -57,6 +59,10 @@ enum Commands {
         /// SMTP server port
         #[arg(long, default_value = "1025", help_heading = "Server Ports")]
         smtp_port: u16,
+
+        /// MQTT server port
+        #[arg(long, default_value = "1883", help_heading = "Server Ports")]
+        mqtt_port: u16,
 
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
@@ -355,6 +361,19 @@ enum Commands {
     Smtp {
         #[command(subcommand)]
         smtp_command: SmtpCommands,
+    },
+
+    /// MQTT broker management and topic operations
+    ///
+    /// Examples:
+    ///   mockforge mqtt publish --topic "sensors/temp" --payload '{"temp": 22.5}'
+    ///   mockforge mqtt subscribe --topic "sensors/#"
+    ///   mockforge mqtt topics list
+    ///   mockforge mqtt fixtures load ./fixtures/mqtt/
+    #[command(verbatim_doc_comment)]
+    Mqtt {
+        #[command(subcommand)]
+        mqtt_command: MqttCommands,
     },
 
     /// Generate synthetic data
@@ -935,6 +954,109 @@ enum FixturesCommands {
 }
 
 #[derive(Subcommand)]
+enum MqttCommands {
+    /// Publish message to MQTT topic
+    Publish {
+        /// MQTT broker host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// MQTT broker port
+        #[arg(long, default_value = "1883")]
+        port: u16,
+
+        /// Topic to publish to
+        #[arg(short, long)]
+        topic: String,
+
+        /// Message payload (JSON string)
+        #[arg(short, long)]
+        payload: String,
+
+        /// QoS level (0, 1, 2)
+        #[arg(short, long, default_value = "0")]
+        qos: u8,
+
+        /// Retain message
+        #[arg(long)]
+        retain: bool,
+    },
+
+    /// Subscribe to MQTT topic
+    Subscribe {
+        /// MQTT broker host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// MQTT broker port
+        #[arg(long, default_value = "1883")]
+        port: u16,
+
+        /// Topic filter to subscribe to
+        #[arg(short, long)]
+        topic: String,
+
+        /// QoS level (0, 1, 2)
+        #[arg(short, long, default_value = "0")]
+        qos: u8,
+    },
+
+    /// Topic management commands
+    Topics {
+        #[command(subcommand)]
+        topics_command: MqttTopicsCommands,
+    },
+
+    /// Fixture management commands
+    Fixtures {
+        #[command(subcommand)]
+        fixtures_command: MqttFixturesCommands,
+    },
+
+    /// Client management commands
+    Clients {
+        #[command(subcommand)]
+        clients_command: MqttClientsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum MqttTopicsCommands {
+    /// List active topics
+    List,
+
+    /// Clear retained messages
+    ClearRetained,
+}
+
+#[derive(Subcommand)]
+enum MqttFixturesCommands {
+    /// Load fixtures from directory
+    Load {
+        /// Path to fixtures directory
+        path: PathBuf,
+    },
+
+    /// Start auto-publish for all fixtures
+    StartAutoPublish,
+
+    /// Stop auto-publish for all fixtures
+    StopAutoPublish,
+}
+
+#[derive(Subcommand)]
+enum MqttClientsCommands {
+    /// List connected clients
+    List,
+
+    /// Disconnect client
+    Disconnect {
+        /// Client ID to disconnect
+        client_id: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum DataCommands {
     /// Generate data from built-in templates
     ///
@@ -1034,6 +1156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ws_port,
             grpc_port,
             smtp_port: _smtp_port,
+            mqtt_port: _mqtt_port,
             admin,
             admin_port,
             metrics,
@@ -1160,6 +1283,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Smtp { smtp_command } => {
             smtp_commands::handle_smtp_command(smtp_command).await?;
+        }
+        Commands::Mqtt { mqtt_command } => {
+            mqtt_commands::handle_mqtt_command(mqtt_command).await?;
         }
         Commands::Data { data_command } => {
             handle_data(data_command).await?;
@@ -1971,6 +2097,33 @@ async fn handle_serve(
         None
     };
 
+    // Create MQTT registry if enabled
+    let mqtt_registry = if config.mqtt.enabled {
+        use mockforge_mqtt::{MqttSpecRegistry};
+        use std::sync::Arc;
+
+        let mut registry = MqttSpecRegistry::new();
+
+        if let Some(fixtures_dir) = &config.mqtt.fixtures_dir {
+            if fixtures_dir.exists() {
+                if let Err(e) = registry.load_fixtures(fixtures_dir) {
+                    eprintln!(
+                        "⚠️  Warning: Failed to load MQTT fixtures from {:?}: {}",
+                        fixtures_dir, e
+                    );
+                } else {
+                    println!("   Loaded MQTT fixtures from {:?}", fixtures_dir);
+                }
+            } else {
+                println!("   No MQTT fixtures directory found at {:?}", fixtures_dir);
+            }
+        }
+
+        Some(Arc::new(registry))
+    } else {
+        None
+    };
+
     let http_app = if config.core.traffic_shaping_enabled {
         use mockforge_core::TrafficShaper;
         let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
@@ -1982,6 +2135,7 @@ async fn handle_serve(
             multi_tenant_config,
             None,
             smtp_registry.clone(),
+            mqtt_broker.clone(),
         )
         .await
     } else {
@@ -1995,6 +2149,7 @@ async fn handle_serve(
             config.http.cors.clone(),
             None,
             smtp_registry.clone(),
+            mqtt_broker.clone(),
         )
         .await
     };
@@ -2106,7 +2261,8 @@ async fn handle_serve(
                 tls_key_path: smtp_config.tls_key_path.clone(),
             };
 
-            let server = SmtpServer::new(smtp_server_config, smtp_registry);
+            let server = SmtpServer::new(smtp_server_config, smtp_registry)
+                .map_err(|e| format!("Failed to create SMTP server: {}", e))?;
 
             tokio::select! {
                 result = server.start() => {
@@ -2120,6 +2276,63 @@ async fn handle_serve(
     } else {
         None
     };
+
+    // Create MQTT broker instance (if enabled)
+    let mqtt_broker = if let Some(ref mqtt_registry) = mqtt_registry {
+        let mqtt_config = config.mqtt.clone();
+
+        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
+        let broker_config = mockforge_mqtt::broker::MqttConfig {
+            port: mqtt_config.port,
+            host: mqtt_config.host.clone(),
+            max_connections: mqtt_config.max_connections,
+            max_packet_size: mqtt_config.max_packet_size,
+            keep_alive_secs: mqtt_config.keep_alive_secs,
+            version: mockforge_mqtt::broker::MqttVersion::default(),
+        };
+
+        Some(Arc::new(mockforge_mqtt::MqttBroker::new(broker_config.clone(), mqtt_registry.clone())
+            .with_metrics(metrics_registry.clone())))
+    } else {
+        None
+    };
+
+    // Start MQTT server (if enabled)
+    let mqtt_handle = if let Some(ref mqtt_registry) = mqtt_registry {
+        let mqtt_config = config.mqtt.clone();
+        let mqtt_shutdown = shutdown_token.clone();
+
+        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
+        let broker_config = mockforge_mqtt::broker::MqttConfig {
+            port: mqtt_config.port,
+            host: mqtt_config.host.clone(),
+            max_connections: mqtt_config.max_connections,
+            max_packet_size: mqtt_config.max_packet_size,
+            keep_alive_secs: mqtt_config.keep_alive_secs,
+            version: mockforge_mqtt::broker::MqttVersion::default(),
+        };
+
+        Some(tokio::spawn(async move {
+            use mockforge_mqtt::start_mqtt_server;
+
+            println!("📡 MQTT broker listening on {}:{}", mqtt_config.host, mqtt_config.port);
+
+            // Start the MQTT server
+            tokio::select! {
+                result = start_mqtt_server(broker_config) => {
+                    result.map_err(|e| format!("MQTT server error: {:?}", e))
+                }
+                _ = mqtt_shutdown.cancelled() => {
+                    println!("🛑 Shutting down MQTT broker...");
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
+
 
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {

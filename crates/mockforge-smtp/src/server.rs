@@ -56,16 +56,13 @@ impl SmtpServer {
         // Load certificate
         let cert_file = File::open(cert_path)?;
         let mut cert_reader = BufReader::new(cert_file);
-        let certs = certs(&mut cert_reader)
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+        let certs: Vec<Vec<u8>> = certs(&mut cert_reader)?;
+        let certs = certs.into_iter().map(rustls::Certificate).collect();
 
         // Load private key
         let key_file = File::open(key_path)?;
         let mut key_reader = BufReader::new(key_file);
-        let mut keys = pkcs8_private_keys(&mut key_reader)
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut keys: Vec<Vec<u8>> = pkcs8_private_keys(&mut key_reader)?;
 
         if keys.is_empty() {
             return Err(mockforge_core::Error::generic("No private keys found"));
@@ -74,7 +71,7 @@ impl SmtpServer {
         let mut server_config = rustls::ServerConfig::builder()
             .with_safe_defaults()
             .with_no_client_auth()
-            .with_single_cert(certs, keys.remove(0))
+            .with_single_cert(certs, rustls::PrivateKey(keys.remove(0)))
             .map_err(|e| mockforge_core::Error::generic(format!("TLS config error: {}", e)))?;
 
         server_config.alpn_protocols = vec![b"smtp".to_vec()];

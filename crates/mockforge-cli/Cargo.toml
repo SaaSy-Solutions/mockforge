@@ -29,6 +29,7 @@ mockforge-ws = { path = "../mockforge-ws" }
 mockforge-grpc = { path = "../mockforge-grpc" }
 mockforge-graphql = { path = "../mockforge-graphql" }
 mockforge-smtp = { path = "../mockforge-smtp" }
+mockforge-mqtt = { path = "../mockforge-mqtt" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-ui = { path = "../mockforge-ui" }
 mockforge-observability = { path = "../mockforge-observability" }
@@ -48,6 +49,7 @@ axum = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.8"
+rumqttc = "0.24"
 hex = { workspace = true }
 urlencoding = "2.1"
 colored = "2.2"

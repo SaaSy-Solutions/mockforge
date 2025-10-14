@@ -1,0 +1,33 @@
+[package]
+name = "mockforge-mqtt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "MQTT protocol support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords = ["mqtt", "iot", "pubsub", "mock", "testing"]
+categories = ["development-tools::testing", "network-programming"]
+
+[dependencies]
+mockforge-core = { path = "../mockforge-core" }
+tokio = { workspace = true }
+rumqttd = "0.18"
+rumqttc = "0.24"
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+tracing = { workspace = true }
+regex = "1.10"
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }

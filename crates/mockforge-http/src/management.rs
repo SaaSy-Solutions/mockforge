@@ -69,6 +69,7 @@ pub struct ManagementState {
     pub start_time: std::time::Instant,
     pub request_counter: Arc<RwLock<u64>>,
     pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
+    pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
 }
 
 impl ManagementState {
@@ -81,6 +82,7 @@ impl ManagementState {
             start_time: std::time::Instant::now(),
             request_counter: Arc::new(RwLock::new(0)),
             smtp_registry: None,
+            mqtt_broker: None,
         }
     }
 
@@ -89,8 +91,8 @@ impl ManagementState {
         self
     }
 
-    pub fn with_smtp_registry(mut self, smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>) -> Self {
-        self.smtp_registry = Some(smtp_registry);
+    pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
+        self.mqtt_broker = Some(mqtt_broker);
         self
     }
 }
@@ -396,6 +398,71 @@ async fn search_smtp_emails(
     }
 }
 
+/// MQTT broker statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttBrokerStats {
+    pub connected_clients: usize,
+    pub active_topics: usize,
+    pub retained_messages: usize,
+    pub total_subscriptions: usize,
+}
+
+/// MQTT management handlers
+async fn get_mqtt_stats(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        let connected_clients = broker.get_connected_clients().await.len();
+        let active_topics = broker.get_active_topics().await.len();
+        let stats = broker.get_topic_stats().await;
+
+        let broker_stats = MqttBrokerStats {
+            connected_clients,
+            active_topics,
+            retained_messages: stats.retained_messages,
+            total_subscriptions: stats.total_subscriptions,
+        };
+
+        Json(broker_stats).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
+async fn get_mqtt_clients(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        let clients = broker.get_connected_clients().await;
+        Json(serde_json::json!({
+            "clients": clients
+        })).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
+async fn get_mqtt_topics(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        let topics = broker.get_active_topics().await;
+        Json(serde_json::json!({
+            "topics": topics
+        })).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
+async fn disconnect_mqtt_client(
+    State(state): State<ManagementState>,
+    Path(client_id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        match broker.disconnect_client(&client_id).await {
+            Ok(_) => (StatusCode::OK, format!("Client '{}' disconnected", client_id)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to disconnect client: {}", e)).into_response(),
+        }
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
 /// Build the management API router
 pub fn management_router(state: ManagementState) -> Router {
     Router::new()
@@ -414,6 +481,10 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/smtp/mailbox/{id}", get(get_smtp_email))
         .route("/smtp/mailbox/export", get(export_smtp_mailbox))
         .route("/smtp/mailbox/search", get(search_smtp_emails))
+        .route("/mqtt/stats", get(get_mqtt_stats))
+        .route("/mqtt/clients", get(get_mqtt_clients))
+        .route("/mqtt/topics", get(get_mqtt_topics))
+        .route("/mqtt/clients/{client_id}", delete(disconnect_mqtt_client))
         .with_state(state)
 }
 

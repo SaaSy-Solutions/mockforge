@@ -16,6 +16,19 @@
 - [Admin UI Walkthrough](tutorials/admin-ui-walkthrough.md)
 - [Add a Custom Plugin](tutorials/add-custom-plugin.md)
 
+## Protocols
+
+- [MQTT](protocols/mqtt/getting-started.md)
+  - [Getting Started](protocols/mqtt/getting-started.md)
+  - [Configuration](protocols/mqtt/configuration.md)
+  - [Fixtures](protocols/mqtt/fixtures.md)
+  - [Examples](protocols/mqtt/examples.md)
+- [SMTP](protocols/smtp/getting-started.md)
+  - [Getting Started](protocols/smtp/getting-started.md)
+  - [Configuration](protocols/smtp/configuration.md)
+  - [Fixtures](protocols/smtp/fixtures.md)
+  - [Examples](protocols/smtp/examples.md)
+
 ## User Guide
 
 - [HTTP Mocking](user-guide/http-mocking.md)

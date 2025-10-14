@@ -3,6 +3,7 @@ members = [
     "crates/mockforge-cli",
     "crates/mockforge-core",
     "crates/mockforge-http",
+    "crates/mockforge-mqtt",
     "crates/mockforge-ws",
     "crates/mockforge-grpc",
     "crates/mockforge-graphql",
