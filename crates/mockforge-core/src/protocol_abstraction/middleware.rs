@@ -4,7 +4,6 @@ use super::{Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse};
 use crate::{request_logger::log_request_global, Result};
 use std::time::Instant;
 
-
 /// Logging middleware that works across all protocols
 pub struct LoggingMiddleware {
     /// Middleware name
@@ -396,7 +395,7 @@ mod tests {
         let middleware = LoggingMiddleware::new(false);
         let mut request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: super::MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,

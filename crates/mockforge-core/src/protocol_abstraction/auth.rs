@@ -316,7 +316,7 @@ mod tests {
 
         let request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,

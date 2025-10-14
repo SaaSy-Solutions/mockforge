@@ -3,8 +3,6 @@
 use super::{Protocol, ProtocolRequest, RequestMatcher};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-
-
 /// Simple request matcher that matches on operation and path
 pub struct SimpleRequestMatcher;
 
@@ -210,7 +208,7 @@ mod tests {
         let matcher = SimpleRequestMatcher;
         let request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,
@@ -239,7 +237,7 @@ mod tests {
         let matcher = FuzzyRequestMatcher::default();
         let request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,
@@ -263,7 +261,7 @@ mod tests {
     fn test_request_fingerprint_from_request() {
         let request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/users".to_string(),
             topic: None,
@@ -285,7 +283,7 @@ mod tests {
     fn test_request_fingerprint_simple() {
         let request = ProtocolRequest {
             protocol: Protocol::Grpc,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "greeter.SayHello".to_string(),
             path: "/greeter.Greeter/SayHello".to_string(),
             topic: None,
@@ -311,7 +309,7 @@ mod tests {
     fn test_fingerprint_matches() {
         let request1 = ProtocolRequest {
             protocol: Protocol::GraphQL,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "Query.users".to_string(),
             path: "/graphql".to_string(),
             topic: None,
@@ -325,7 +323,7 @@ mod tests {
 
         let request2 = ProtocolRequest {
             protocol: Protocol::GraphQL,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "Query.users".to_string(),
             path: "/graphql".to_string(),
             topic: None,
@@ -348,7 +346,7 @@ mod tests {
     fn test_fingerprint_similarity() {
         let request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,
@@ -370,7 +368,7 @@ mod tests {
     fn test_fingerprint_different_protocol() {
         let request1 = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,
@@ -384,7 +382,7 @@ mod tests {
 
         let request2 = ProtocolRequest {
             protocol: Protocol::Grpc,
-            pattern: MessagePattern::RequestResponse,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,

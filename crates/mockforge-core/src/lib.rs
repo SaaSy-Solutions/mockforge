@@ -238,8 +238,8 @@ pub use priority_handler::{
     MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
 };
 pub use protocol_abstraction::{
-    MessagePattern, MiddlewareChain, Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse,
-    RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
+    MessagePattern, MiddlewareChain, Protocol, ProtocolMiddleware, ProtocolRequest,
+    ProtocolResponse, RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
     ValidationError as ProtocolValidationError, ValidationResult as ProtocolValidationResult,
 };
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};

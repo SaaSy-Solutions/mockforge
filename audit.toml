@@ -1,0 +1,4 @@
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2023-0071", reason = "rsa - Marvin Attack: no fixed upgrade available, affects unused MySQL feature in sqlx" },
+]

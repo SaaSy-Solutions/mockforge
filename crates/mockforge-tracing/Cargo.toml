@@ -21,7 +21,7 @@ opentelemetry-semantic-conventions = "0.13"
 # Tracing integration
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-opentelemetry = "0.25"
+tracing-opentelemetry = "0.22"
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
