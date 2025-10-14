@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use tokio::net::TcpListener;
 
 mod plugin_commands;
+mod smtp_commands;
 mod workspace_commands;
 
 #[derive(Parser)]
@@ -340,6 +341,20 @@ enum Commands {
         /// Validate configuration and check port availability without starting servers
         #[arg(long, help_heading = "Validation")]
         dry_run: bool,
+    },
+
+    /// SMTP server management and mailbox operations
+    ///
+    /// Examples:
+    ///   mockforge smtp mailbox list
+    ///   mockforge smtp mailbox show email-123
+    ///   mockforge smtp mailbox clear
+    ///   mockforge smtp fixtures list
+    ///   mockforge smtp send --to user@example.com --subject "Test"
+    #[command(verbatim_doc_comment)]
+    Smtp {
+        #[command(subcommand)]
+        smtp_command: SmtpCommands,
     },
 
     /// Generate synthetic data
@@ -802,6 +817,89 @@ enum ConfigCommands {
 }
 
 #[derive(Subcommand)]
+enum SmtpCommands {
+    /// Mailbox management commands
+    Mailbox {
+        #[command(subcommand)]
+        mailbox_command: MailboxCommands,
+    },
+
+    /// Fixture management commands
+    Fixtures {
+        #[command(subcommand)]
+        fixtures_command: FixturesCommands,
+    },
+
+    /// Send test email
+    Send {
+        /// Recipient email address
+        #[arg(short, long)]
+        to: String,
+
+        /// Email subject
+        #[arg(short, long)]
+        subject: String,
+
+        /// Email body
+        #[arg(short, long, default_value = "Test email from MockForge CLI")]
+        body: String,
+
+        /// SMTP server host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// SMTP server port
+        #[arg(long, default_value = "1025")]
+        port: u16,
+
+        /// Sender email address
+        #[arg(long, default_value = "test@mockforge.cli")]
+        from: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum MailboxCommands {
+    /// List all emails in mailbox
+    List,
+
+    /// Show details of specific email
+    Show {
+        /// Email ID
+        email_id: String,
+    },
+
+    /// Clear all emails from mailbox
+    Clear,
+
+    /// Export mailbox to file
+    Export {
+        /// Output format (mbox, json, csv)
+        #[arg(short, long, default_value = "mbox")]
+        format: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum FixturesCommands {
+    /// List loaded fixtures
+    List,
+
+    /// Reload fixtures from disk
+    Reload,
+
+    /// Validate fixture file
+    Validate {
+        /// Fixture file path
+        file: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum DataCommands {
     /// Generate data from built-in templates
     ///
@@ -1024,6 +1122,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 dry_run,
             )
             .await?;
+        }
+        Commands::Smtp { smtp_command } => {
+            smtp_commands::handle_smtp_command(smtp_command).await?;
         }
         Commands::Data { data_command } => {
             handle_data(data_command).await?;
