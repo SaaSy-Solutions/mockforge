@@ -4,18 +4,6 @@ use super::{Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse};
 use crate::{request_logger::log_request_global, Result};
 use std::time::Instant;
 
-// Temporary: MessagePattern should be imported from super, but there's a compilation issue
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum MessagePattern {
-    /// Request-Response pattern (HTTP, gRPC unary)
-    RequestResponse,
-    /// One-way/fire-and-forget pattern (MQTT publish, email)
-    OneWay,
-    /// Publish-Subscribe pattern (Kafka, RabbitMQ, MQTT)
-    PubSub,
-    /// Streaming pattern (gRPC streaming, WebSocket)
-    Streaming,
-}
 
 /// Logging middleware that works across all protocols
 pub struct LoggingMiddleware {
@@ -408,7 +396,7 @@ mod tests {
         let middleware = LoggingMiddleware::new(false);
         let mut request = ProtocolRequest {
             protocol: Protocol::Http,
-            pattern: MessagePattern::RequestResponse,
+            pattern: super::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
             topic: None,

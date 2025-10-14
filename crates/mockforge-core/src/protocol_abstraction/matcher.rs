@@ -4,18 +4,6 @@ use super::{Protocol, ProtocolRequest, RequestMatcher};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-// Temporary: MessagePattern should be imported from super, but there's a compilation issue
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum MessagePattern {
-    /// Request-Response pattern (HTTP, gRPC unary)
-    RequestResponse,
-    /// One-way/fire-and-forget pattern (MQTT publish, email)
-    OneWay,
-    /// Publish-Subscribe pattern (Kafka, RabbitMQ, MQTT)
-    PubSub,
-    /// Streaming pattern (gRPC streaming, WebSocket)
-    Streaming,
-}
 
 /// Simple request matcher that matches on operation and path
 pub struct SimpleRequestMatcher;
