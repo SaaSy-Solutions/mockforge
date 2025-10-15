@@ -581,7 +581,7 @@ impl UnifiedFixture {
             }
             _ if field.starts_with("headers.") => {
                 let header_name = &field[8..]; // Remove "headers." prefix
-                request.metadata.get(header_name).map_or(false, |v| v == expected_value)
+                request.metadata.get(header_name).is_some_and(|v| v == expected_value)
             }
             _ => {
                 tracing::warn!("Unknown field in equality expression: {}", field);

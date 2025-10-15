@@ -14,6 +14,7 @@ mod plugin_commands;
 mod mqtt_commands;
 mod smtp_commands;
 mod ftp_commands;
+mod kafka_commands;
 mod workspace_commands;
 
 #[derive(Parser)]
@@ -387,6 +388,19 @@ enum Commands {
     Ftp {
         #[command(subcommand)]
         ftp_command: ftp_commands::FtpCommands,
+    },
+
+    /// Kafka broker management and topic operations
+    ///
+    /// Examples:
+    ///   mockforge kafka serve --port 9092
+    ///   mockforge kafka produce --topic orders --value '{"id": "123"}'
+    ///   mockforge kafka consume --topic orders --group test-group
+    ///   mockforge kafka topic create orders --partitions 3
+    #[command(verbatim_doc_comment)]
+    Kafka {
+        #[command(subcommand)]
+        kafka_command: kafka_commands::KafkaCommands,
     },
 
     /// Generate synthetic data
@@ -1302,6 +1316,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Ftp { ftp_command } => {
             ftp_commands::handle_ftp_command(ftp_command).await?;
+        }
+        Commands::Kafka { kafka_command } => {
+            kafka_commands::handle_kafka_command(kafka_command).await?;
         }
         Commands::Data { data_command } => {
             handle_data(data_command).await?;

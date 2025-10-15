@@ -9,44 +9,14 @@
 //!
 //! ## Key Management Architecture
 //!
-//! MockForge uses a hierarchical key management system:
-//!
-//! 1. **Master Key**: Stored in OS keychain, used to encrypt workspace keys
-//! 2. **Workspace Key**: Generated per workspace, encrypted with master key
-//! 3. **Session Keys**: Derived from workspace keys for specific operations
-//!
-//! ## Template Functions
-//!
-//! - `{{encrypt "text"}}` - Encrypt using AES-256-GCM
-//! - `{{secure "text"}}` - Encrypt using ChaCha20-Poly1305 (12-byte nonce)
-//! - `{{decrypt "ciphertext"}}` - Decrypt ciphertext back to plaintext
-//!
-//! ## Automatic Encryption
-//!
-//! MockForge can automatically encrypt sensitive data in requests and responses:
-//!
-//! - **Authorization headers** (Bearer tokens, API keys, Basic auth)
-//! - **Password fields** in request bodies
-//! - **Environment variables** containing sensitive data
-//! - **Custom fields** configured by the user
-//!
-//! Automatic encryption is enabled per workspace and can be configured in workspace settings.
 
-// Re-export sub-modules for backward compatibility
-pub mod algorithms;
-pub mod auto_encryption;
-pub mod derivation;
-pub mod errors;
-pub mod key_management;
-
-// Re-export commonly used types
-pub use algorithms::*;
-pub use auto_encryption::*;
-pub use derivation::*;
+#![allow(dead_code)]
+#[allow(deprecated)]
 pub use errors::*;
 pub use key_management::{FileKeyStorage, KeyStorage, KeyStore as KeyManagementStore};
 
 use crate::workspace_persistence::WorkspacePersistence;
+#[allow(deprecated)]
 use aes_gcm::{
     aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -1104,6 +1074,13 @@ pub fn decrypt_with_key(
 
     key.decrypt(ciphertext, associated_data)
 }
+
+mod errors;
+mod key_management;
+mod algorithms;
+mod derivation;
+mod auto_encryption;
+mod key_rotation;
 
 #[cfg(test)]
 mod tests {

@@ -193,6 +193,8 @@ pub struct ServerConfig {
     pub smtp: SmtpConfig,
     /// FTP server configuration
     pub ftp: FtpConfig,
+    /// Kafka server configuration
+    pub kafka: KafkaConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
     /// Request chaining configuration
@@ -493,6 +495,51 @@ impl Default for FtpConfig {
             allow_anonymous: true,
             fixtures_dir: None,
             virtual_root: std::path::PathBuf::from("/mockforge"),
+        }
+    }
+}
+
+/// Kafka server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaConfig {
+    /// Enable Kafka server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Broker ID
+    pub broker_id: i32,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Log retention time in milliseconds
+    pub log_retention_ms: i64,
+    /// Log segment size in bytes
+    pub log_segment_bytes: i64,
+    /// Fixtures directory
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Auto-create topics
+    pub auto_create_topics: bool,
+    /// Default number of partitions for new topics
+    pub default_partitions: i32,
+    /// Default replication factor for new topics
+    pub default_replication_factor: i16,
+}
+
+impl Default for KafkaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 9092,  // Standard Kafka port
+            host: "0.0.0.0".to_string(),
+            broker_id: 1,
+            max_connections: 1000,
+            log_retention_ms: 604800000,  // 7 days
+            log_segment_bytes: 1073741824,  // 1 GB
+            fixtures_dir: None,
+            auto_create_topics: true,
+            default_partitions: 3,
+            default_replication_factor: 1,
         }
     }
 }

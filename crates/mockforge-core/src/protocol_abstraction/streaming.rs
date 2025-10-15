@@ -54,7 +54,7 @@ pub trait StreamingProtocol: Send + Sync {
     async fn publish(&self, topic: &str, message: ProtocolMessage) -> Result<()>;
 
     /// Unsubscribe from a topic
-    async fn unsubscribe(&self, topic: &str, consumer_id: &str) -> Result<()> {
+    async fn unsubscribe(&self, _topic: &str, _consumer_id: &str) -> Result<()> {
         // Default implementation does nothing
         Ok(())
     }

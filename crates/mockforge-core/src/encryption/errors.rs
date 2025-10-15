@@ -71,7 +71,7 @@ pub enum EncryptionError {
 
     /// Workspace encryption error
     #[error("Workspace encryption error: {message}")]
-    WorkspaceEncryptionError { message: String },
+    Workspace { message: String },
 
     /// Generic encryption error
     #[error("Encryption error: {message}")]
@@ -186,7 +186,7 @@ impl EncryptionError {
 
     /// Create a new workspace encryption error
     pub fn workspace_encryption_error(message: impl Into<String>) -> Self {
-        Self::WorkspaceEncryptionError {
+        Self::Workspace {
             message: message.into(),
         }
     }
@@ -217,7 +217,7 @@ impl EncryptionError {
             | Self::KeyStoreError { .. }
             | Self::RandomGenerationFailed { .. }
             | Self::CipherOperationFailed { .. }
-            | Self::WorkspaceEncryptionError { .. }
+            | Self::Workspace { .. }
             | Self::Generic { .. } => true,
         }
     }
@@ -243,7 +243,7 @@ impl EncryptionError {
             | Self::SerializationError { .. }
             | Self::TemplateError { .. }
             | Self::AutoEncryptionConfigError { .. }
-            | Self::WorkspaceEncryptionError { .. }
+            | Self::Workspace { .. }
             | Self::Generic { .. } => ErrorSeverity::Low,
 
             Self::KeyNotFound { .. } => ErrorSeverity::Info,

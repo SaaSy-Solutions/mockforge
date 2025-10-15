@@ -4,6 +4,7 @@
 //! throughout MockForge, including AES-GCM and ChaCha20-Poly1305 implementations.
 
 use crate::encryption::errors::{EncryptionError, EncryptionResult};
+#[allow(deprecated)]
 use aes_gcm::{
     aead::{generic_array::GenericArray, Aead, KeyInit},
     Aes256Gcm, Nonce,
