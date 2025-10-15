@@ -3,6 +3,7 @@ members = [
     "crates/mockforge-cli",
     "crates/mockforge-core",
     "crates/mockforge-http",
+    "crates/mockforge-mqtt",
     "crates/mockforge-ws",
     "crates/mockforge-grpc",
     "crates/mockforge-graphql",
@@ -20,6 +21,8 @@ members = [
     "crates/mockforge-chaos",
     "crates/mockforge-bench",
     "crates/mockforge-smtp",
+    "crates/mockforge-ftp",
+    "crates/mockforge-kafka",
     "examples/plugins/response-graphql",
     "test_openapi_demo"
 ]

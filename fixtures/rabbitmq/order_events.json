@@ -1,0 +1,42 @@
+{
+  "id": "rabbitmq-order-events",
+  "name": "RabbitMQ Order Events",
+  "description": "Mock fixture for RabbitMQ order processing events",
+  "protocol": "RabbitMq",
+  "request": {
+    "pattern": "PubSub",
+    "topic": "orders",
+    "routing_key": "order.created"
+  },
+  "response": {
+    "status": {
+      "Generic": true
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "event_type": "order_created",
+      "order_id": "ORD-12345",
+      "customer_id": "CUST-67890",
+      "amount": 99.99,
+      "items": [
+        {
+          "product_id": "PROD-001",
+          "quantity": 2,
+          "price": 49.99
+        }
+      ],
+      "timestamp": "2024-01-15T10:30:00Z"
+    },
+    "content_type": "application/json",
+    "delay_ms": 0
+  },
+  "metadata": {
+    "example": "true",
+    "protocol": "rabbitmq"
+  },
+  "enabled": true,
+  "priority": 1,
+  "tags": ["rabbitmq", "orders", "events"]
+}

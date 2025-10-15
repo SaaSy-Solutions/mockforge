@@ -1,0 +1,36 @@
+[package]
+name = "mockforge-kafka"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Kafka protocol support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords = ["kafka", "event-streaming", "mock", "testing"]
+categories = ["development-tools::testing", "network-programming"]
+
+[dependencies]
+mockforge-core = { path = "../mockforge-core" }
+tokio = { workspace = true }
+ rdkafka = "0.38"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[[bench]]
+name = "kafka_benchmarks"
+harness = false
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }

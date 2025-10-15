@@ -21,6 +21,18 @@ pub enum Error {
     #[error("Configuration error: {message}")]
     Config { message: String },
 
+    #[error("Protocol not found: {message}")]
+    ProtocolNotFound { message: String },
+
+    #[error("Protocol disabled: {message}")]
+    ProtocolDisabled { message: String },
+
+    #[error("Protocol handler in use: {message}")]
+    ProtocolHandlerInUse { message: String },
+
+    #[error("Protocol validation error: {message}")]
+    ProtocolValidationError { protocol: String, message: String },
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -87,6 +99,35 @@ impl Error {
     /// Create a config error
     pub fn config<S: Into<String>>(message: S) -> Self {
         Self::Config {
+            message: message.into(),
+        }
+    }
+
+    /// Create a protocol not found error
+    pub fn protocol_not_found<S: Into<String>>(message: S) -> Self {
+        Self::ProtocolNotFound {
+            message: message.into(),
+        }
+    }
+
+    /// Create a protocol disabled error
+    pub fn protocol_disabled<S: Into<String>>(message: S) -> Self {
+        Self::ProtocolDisabled {
+            message: message.into(),
+        }
+    }
+
+    /// Create a protocol handler in use error
+    pub fn protocol_handler_in_use<S: Into<String>>(message: S) -> Self {
+        Self::ProtocolHandlerInUse {
+            message: message.into(),
+        }
+    }
+
+    /// Create a protocol validation error
+    pub fn protocol_validation_error<S: Into<String>>(protocol: S, message: S) -> Self {
+        Self::ProtocolValidationError {
+            protocol: protocol.into(),
             message: message.into(),
         }
     }

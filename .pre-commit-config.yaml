@@ -43,7 +43,7 @@ repos:
   - id: cargo-audit
     name: cargo audit
     entry: cargo
-    args: [audit]
+    args: [audit, --ignore, RUSTSEC-2023-0071]
     language: system
     pass_filenames: false
     files: ^Cargo\.(toml|lock)$

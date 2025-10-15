@@ -7,10 +7,14 @@ use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
 mod plugin_commands;
+mod mqtt_commands;
 mod smtp_commands;
+mod ftp_commands;
+mod kafka_commands;
 mod workspace_commands;
 
 #[derive(Parser)]
@@ -57,6 +61,10 @@ enum Commands {
         /// SMTP server port
         #[arg(long, default_value = "1025", help_heading = "Server Ports")]
         smtp_port: u16,
+
+        /// MQTT server port
+        #[arg(long, default_value = "1883", help_heading = "Server Ports")]
+        mqtt_port: u16,
 
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
@@ -355,6 +363,44 @@ enum Commands {
     Smtp {
         #[command(subcommand)]
         smtp_command: SmtpCommands,
+    },
+
+    /// MQTT broker management and topic operations
+    ///
+    /// Examples:
+    ///   mockforge mqtt publish --topic "sensors/temp" --payload '{"temp": 22.5}'
+    ///   mockforge mqtt subscribe --topic "sensors/#"
+    ///   mockforge mqtt topics list
+    ///   mockforge mqtt fixtures load ./fixtures/mqtt/
+    #[command(verbatim_doc_comment)]
+    Mqtt {
+        #[command(subcommand)]
+        mqtt_command: MqttCommands,
+    },
+
+    /// FTP server management
+    ///
+    /// Examples:
+    ///   mockforge ftp serve --port 2121
+    ///   mockforge ftp fixtures load ./fixtures/ftp/
+    ///   mockforge ftp vfs add /test.txt --content "Hello World"
+    #[command(verbatim_doc_comment)]
+    Ftp {
+        #[command(subcommand)]
+        ftp_command: ftp_commands::FtpCommands,
+    },
+
+    /// Kafka broker management and topic operations
+    ///
+    /// Examples:
+    ///   mockforge kafka serve --port 9092
+    ///   mockforge kafka produce --topic orders --value '{"id": "123"}'
+    ///   mockforge kafka consume --topic orders --group test-group
+    ///   mockforge kafka topic create orders --partitions 3
+    #[command(verbatim_doc_comment)]
+    Kafka {
+        #[command(subcommand)]
+        kafka_command: kafka_commands::KafkaCommands,
     },
 
     /// Generate synthetic data
@@ -882,6 +928,41 @@ enum MailboxCommands {
         #[arg(short, long)]
         output: PathBuf,
     },
+
+    /// Search emails in mailbox
+    Search {
+        /// Filter by sender email
+        #[arg(long)]
+        sender: Option<String>,
+
+        /// Filter by recipient email
+        #[arg(long)]
+        recipient: Option<String>,
+
+        /// Filter by subject
+        #[arg(long)]
+        subject: Option<String>,
+
+        /// Filter by body content
+        #[arg(long)]
+        body: Option<String>,
+
+        /// Filter emails since date (RFC3339 format)
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Filter emails until date (RFC3339 format)
+        #[arg(long)]
+        until: Option<String>,
+
+        /// Use regex matching instead of substring
+        #[arg(long)]
+        regex: bool,
+
+        /// Case sensitive matching
+        #[arg(long)]
+        case_sensitive: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -896,6 +977,109 @@ enum FixturesCommands {
     Validate {
         /// Fixture file path
         file: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum MqttCommands {
+    /// Publish message to MQTT topic
+    Publish {
+        /// MQTT broker host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// MQTT broker port
+        #[arg(long, default_value = "1883")]
+        port: u16,
+
+        /// Topic to publish to
+        #[arg(short, long)]
+        topic: String,
+
+        /// Message payload (JSON string)
+        #[arg(short, long)]
+        payload: String,
+
+        /// QoS level (0, 1, 2)
+        #[arg(short, long, default_value = "0")]
+        qos: u8,
+
+        /// Retain message
+        #[arg(long)]
+        retain: bool,
+    },
+
+    /// Subscribe to MQTT topic
+    Subscribe {
+        /// MQTT broker host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// MQTT broker port
+        #[arg(long, default_value = "1883")]
+        port: u16,
+
+        /// Topic filter to subscribe to
+        #[arg(short, long)]
+        topic: String,
+
+        /// QoS level (0, 1, 2)
+        #[arg(short, long, default_value = "0")]
+        qos: u8,
+    },
+
+    /// Topic management commands
+    Topics {
+        #[command(subcommand)]
+        topics_command: MqttTopicsCommands,
+    },
+
+    /// Fixture management commands
+    Fixtures {
+        #[command(subcommand)]
+        fixtures_command: MqttFixturesCommands,
+    },
+
+    /// Client management commands
+    Clients {
+        #[command(subcommand)]
+        clients_command: MqttClientsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum MqttTopicsCommands {
+    /// List active topics
+    List,
+
+    /// Clear retained messages
+    ClearRetained,
+}
+
+#[derive(Subcommand)]
+enum MqttFixturesCommands {
+    /// Load fixtures from directory
+    Load {
+        /// Path to fixtures directory
+        path: PathBuf,
+    },
+
+    /// Start auto-publish for all fixtures
+    StartAutoPublish,
+
+    /// Stop auto-publish for all fixtures
+    StopAutoPublish,
+}
+
+#[derive(Subcommand)]
+enum MqttClientsCommands {
+    /// List connected clients
+    List,
+
+    /// Disconnect client
+    Disconnect {
+        /// Client ID to disconnect
+        client_id: String,
     },
 }
 
@@ -999,6 +1183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ws_port,
             grpc_port,
             smtp_port: _smtp_port,
+            mqtt_port: _mqtt_port,
             admin,
             admin_port,
             metrics,
@@ -1125,6 +1310,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Smtp { smtp_command } => {
             smtp_commands::handle_smtp_command(smtp_command).await?;
+        }
+        Commands::Mqtt { mqtt_command } => {
+            mqtt_commands::handle_mqtt_command(mqtt_command).await?;
+        }
+        Commands::Ftp { ftp_command } => {
+            ftp_commands::handle_ftp_command(ftp_command).await?;
+        }
+        Commands::Kafka { kafka_command } => {
+            kafka_commands::handle_kafka_command(kafka_command).await?;
         }
         Commands::Data { data_command } => {
             handle_data(data_command).await?;
@@ -1909,6 +2103,60 @@ async fn handle_serve(
         None
     };
 
+    // Create SMTP registry if enabled
+    let smtp_registry = if config.smtp.enabled {
+        use mockforge_smtp::{SmtpSpecRegistry};
+        use std::sync::Arc;
+
+        let mut registry = SmtpSpecRegistry::with_mailbox_size(config.smtp.max_mailbox_messages);
+
+        if let Some(fixtures_dir) = &config.smtp.fixtures_dir {
+            if fixtures_dir.exists() {
+                if let Err(e) = registry.load_fixtures(fixtures_dir) {
+                    eprintln!(
+                        "⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}",
+                        fixtures_dir, e
+                    );
+                } else {
+                    println!("   Loaded SMTP fixtures from {:?}", fixtures_dir);
+                }
+            } else {
+                println!("   No SMTP fixtures directory found at {:?}", fixtures_dir);
+            }
+        }
+
+        Some(Arc::new(registry))
+    } else {
+        None
+    };
+
+    // Create MQTT registry if enabled
+    let mqtt_registry = if config.mqtt.enabled {
+        use mockforge_mqtt::{MqttSpecRegistry};
+        use std::sync::Arc;
+
+        let mut registry = MqttSpecRegistry::new();
+
+        if let Some(fixtures_dir) = &config.mqtt.fixtures_dir {
+            if fixtures_dir.exists() {
+                if let Err(e) = registry.load_fixtures(fixtures_dir) {
+                    eprintln!(
+                        "⚠️  Warning: Failed to load MQTT fixtures from {:?}: {}",
+                        fixtures_dir, e
+                    );
+                } else {
+                    println!("   Loaded MQTT fixtures from {:?}", fixtures_dir);
+                }
+            } else {
+                println!("   No MQTT fixtures directory found at {:?}", fixtures_dir);
+            }
+        }
+
+        Some(Arc::new(registry))
+    } else {
+        None
+    };
+
     let http_app = if config.core.traffic_shaping_enabled {
         use mockforge_core::TrafficShaper;
         let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
@@ -1918,6 +2166,9 @@ async fn handle_serve(
             traffic_shaper,
             true,
             multi_tenant_config,
+            None,
+            smtp_registry.clone(),
+            mqtt_broker.clone(),
         )
         .await
     } else {
@@ -1929,6 +2180,9 @@ async fn handle_serve(
             multi_tenant_config,
             Some(config.routes.clone()),
             config.http.cors.clone(),
+            None,
+            smtp_registry.clone(),
+            mqtt_broker.clone(),
         )
         .await
     };
@@ -2015,34 +2269,15 @@ async fn handle_serve(
     });
 
     // Start SMTP server (if enabled)
-    let smtp_handle = if config.smtp.enabled {
+    let smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
+        let smtp_registry = smtp_registry.clone();
 
         Some(tokio::spawn(async move {
-            use mockforge_smtp::{SmtpServer, SmtpSpecRegistry};
-            use std::sync::Arc;
+            use mockforge_smtp::SmtpServer;
 
             println!("📧 SMTP server listening on {}:{}", smtp_config.host, smtp_config.port);
-
-            // Create registry and load fixtures
-            let mut registry =
-                SmtpSpecRegistry::with_mailbox_size(smtp_config.max_mailbox_messages);
-
-            if let Some(fixtures_dir) = &smtp_config.fixtures_dir {
-                if fixtures_dir.exists() {
-                    if let Err(e) = registry.load_fixtures(fixtures_dir) {
-                        eprintln!(
-                            "⚠️  Warning: Failed to load SMTP fixtures from {:?}: {}",
-                            fixtures_dir, e
-                        );
-                    } else {
-                        println!("   Loaded SMTP fixtures from {:?}", fixtures_dir);
-                    }
-                } else {
-                    println!("   No SMTP fixtures directory found at {:?}", fixtures_dir);
-                }
-            }
 
             // Convert core SmtpConfig to mockforge_smtp::SmtpConfig
             let smtp_server_config = mockforge_smtp::SmtpConfig {
@@ -2054,9 +2289,13 @@ async fn handle_serve(
                 max_connections: smtp_config.max_connections,
                 enable_mailbox: smtp_config.enable_mailbox,
                 max_mailbox_messages: smtp_config.max_mailbox_messages,
+                enable_starttls: smtp_config.enable_starttls,
+                tls_cert_path: smtp_config.tls_cert_path.clone(),
+                tls_key_path: smtp_config.tls_key_path.clone(),
             };
 
-            let server = SmtpServer::new(smtp_server_config, Arc::new(registry));
+            let server = SmtpServer::new(smtp_server_config, smtp_registry)
+                .map_err(|e| format!("Failed to create SMTP server: {}", e))?;
 
             tokio::select! {
                 result = server.start() => {
@@ -2070,6 +2309,63 @@ async fn handle_serve(
     } else {
         None
     };
+
+    // Create MQTT broker instance (if enabled)
+    let mqtt_broker = if let Some(ref mqtt_registry) = mqtt_registry {
+        let mqtt_config = config.mqtt.clone();
+
+        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
+        let broker_config = mockforge_mqtt::broker::MqttConfig {
+            port: mqtt_config.port,
+            host: mqtt_config.host.clone(),
+            max_connections: mqtt_config.max_connections,
+            max_packet_size: mqtt_config.max_packet_size,
+            keep_alive_secs: mqtt_config.keep_alive_secs,
+            version: mockforge_mqtt::broker::MqttVersion::default(),
+        };
+
+        Some(Arc::new(mockforge_mqtt::MqttBroker::new(broker_config.clone(), mqtt_registry.clone())
+            .with_metrics(metrics_registry.clone())))
+    } else {
+        None
+    };
+
+    // Start MQTT server (if enabled)
+    let mqtt_handle = if let Some(ref mqtt_registry) = mqtt_registry {
+        let mqtt_config = config.mqtt.clone();
+        let mqtt_shutdown = shutdown_token.clone();
+
+        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
+        let broker_config = mockforge_mqtt::broker::MqttConfig {
+            port: mqtt_config.port,
+            host: mqtt_config.host.clone(),
+            max_connections: mqtt_config.max_connections,
+            max_packet_size: mqtt_config.max_packet_size,
+            keep_alive_secs: mqtt_config.keep_alive_secs,
+            version: mockforge_mqtt::broker::MqttVersion::default(),
+        };
+
+        Some(tokio::spawn(async move {
+            use mockforge_mqtt::start_mqtt_server;
+
+            println!("📡 MQTT broker listening on {}:{}", mqtt_config.host, mqtt_config.port);
+
+            // Start the MQTT server
+            tokio::select! {
+                result = start_mqtt_server(broker_config) => {
+                    result.map_err(|e| format!("MQTT server error: {:?}", e))
+                }
+                _ = mqtt_shutdown.cancelled() => {
+                    println!("🛑 Shutting down MQTT broker...");
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
+
 
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {

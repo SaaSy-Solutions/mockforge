@@ -2,7 +2,7 @@
 
 use crate::{SmtpConfig, SmtpSpecRegistry};
 use mockforge_core::protocol_abstraction::{
-    MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry,
+    MessagePattern, MiddlewareChain, Protocol, ProtocolRequest, SpecRegistry,
 };
 use mockforge_core::Result;
 use std::collections::HashMap;
@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 
 /// SMTP server
@@ -17,18 +18,65 @@ pub struct SmtpServer {
     config: SmtpConfig,
     spec_registry: Arc<SmtpSpecRegistry>,
     middleware_chain: Arc<MiddlewareChain>,
+    tls_acceptor: Option<TlsAcceptor>,
 }
 
 impl SmtpServer {
     /// Create a new SMTP server
-    pub fn new(config: SmtpConfig, spec_registry: Arc<SmtpSpecRegistry>) -> Self {
+    pub fn new(config: SmtpConfig, spec_registry: Arc<SmtpSpecRegistry>) -> Result<Self> {
         let middleware_chain = Arc::new(MiddlewareChain::new());
 
-        Self {
+        let tls_acceptor = if config.enable_starttls {
+            Some(Self::load_tls_acceptor(&config)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
             config,
             spec_registry,
             middleware_chain,
+            tls_acceptor,
+        })
+    }
+
+    /// Load TLS acceptor from certificate and key files
+    fn load_tls_acceptor(config: &SmtpConfig) -> Result<TlsAcceptor> {
+        use rustls_pemfile::{certs, pkcs8_private_keys};
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let cert_path = config.tls_cert_path.as_ref().ok_or_else(|| {
+            mockforge_core::Error::generic("TLS certificate path not configured")
+        })?;
+        let key_path = config.tls_key_path.as_ref().ok_or_else(|| {
+            mockforge_core::Error::generic("TLS private key path not configured")
+        })?;
+
+        // Load certificate
+        let cert_file = File::open(cert_path)?;
+        let mut cert_reader = BufReader::new(cert_file);
+        let certs: Vec<Vec<u8>> = certs(&mut cert_reader)?;
+        let certs = certs.into_iter().map(rustls::Certificate).collect();
+
+        // Load private key
+        let key_file = File::open(key_path)?;
+        let mut key_reader = BufReader::new(key_file);
+        let mut keys: Vec<Vec<u8>> = pkcs8_private_keys(&mut key_reader)?;
+
+        if keys.is_empty() {
+            return Err(mockforge_core::Error::generic("No private keys found"));
         }
+
+        let mut server_config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certs, rustls::PrivateKey(keys.remove(0)))
+            .map_err(|e| mockforge_core::Error::generic(format!("TLS config error: {}", e)))?;
+
+        server_config.alpn_protocols = vec![b"smtp".to_vec()];
+
+        Ok(TlsAcceptor::from(Arc::new(server_config)))
     }
 
     /// Create a new SMTP server with custom middleware
@@ -36,12 +84,19 @@ impl SmtpServer {
         config: SmtpConfig,
         spec_registry: Arc<SmtpSpecRegistry>,
         middleware_chain: Arc<MiddlewareChain>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let tls_acceptor = if config.enable_starttls {
+            Some(Self::load_tls_acceptor(&config)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
             config,
             spec_registry,
             middleware_chain,
-        }
+            tls_acceptor,
+        })
     }
 
     /// Start the SMTP server
@@ -153,7 +208,7 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
             let domain = parts.get(1).unwrap_or(&hostname);
             let response = if cmd == "EHLO" {
                 format!(
-                    "250-{} Hello {}\r\n250-SIZE 10485760\r\n250-8BITMIME\r\n250 HELP\r\n",
+                    "250-{} Hello {}\r\n250-SIZE 10485760\r\n250-8BITMIME\r\n250-STARTTLS\r\n250 HELP\r\n",
                     hostname, domain
                 )
             } else {
@@ -209,10 +264,16 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
             Ok(false) // End session
         }
 
+        "STARTTLS" => {
+            // Mock STARTTLS implementation - accept but don't actually upgrade
+            writer.write_all(b"220 Ready to start TLS\r\n").await?;
+            Ok(true)
+        }
+
         "HELP" => {
             let help_text = "214-Commands supported:\r\n\
                             214-  HELLO EHLO MAIL RCPT DATA\r\n\
-                            214-  RSET NOOP QUIT HELP\r\n\
+                            214-  RSET NOOP QUIT HELP STARTTLS\r\n\
                             214 End of HELP info\r\n";
             writer.write_all(help_text.as_bytes()).await?;
             Ok(true)
@@ -264,8 +325,13 @@ async fn process_email(
     // Create protocol request
     let mut request = ProtocolRequest {
         protocol: Protocol::Smtp,
+        pattern: MessagePattern::OneWay,
         operation: "SEND".to_string(),
         path: from.clone(),
+        topic: None,
+        routing_key: None,
+        partition: None,
+        qos: None,
         metadata: HashMap::from([
             ("from".to_string(), from.clone()),
             ("to".to_string(), to.clone()),

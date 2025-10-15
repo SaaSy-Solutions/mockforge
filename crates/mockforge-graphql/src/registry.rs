@@ -292,6 +292,11 @@ mod tests {
 
         let request = ProtocolRequest {
             protocol: Protocol::GraphQL,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::RequestResponse,
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
             operation: "Query.users".to_string(),
             path: "/graphql".to_string(),
             metadata: HashMap::new(),
@@ -310,6 +315,11 @@ mod tests {
 
         let request = ProtocolRequest {
             protocol: Protocol::GraphQL,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::RequestResponse,
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
             operation: "Query.users".to_string(),
             path: "/graphql".to_string(),
             metadata: HashMap::new(),
@@ -336,6 +346,11 @@ mod tests {
 
         let request = ProtocolRequest {
             protocol: Protocol::GraphQL,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::RequestResponse,
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
             operation: "Mutation.createUser".to_string(),
             path: "/graphql".to_string(),
             metadata: HashMap::new(),

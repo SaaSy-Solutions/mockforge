@@ -1,0 +1,34 @@
+{
+  "id": "mqtt-sensor-data",
+  "name": "MQTT Sensor Data Publishing",
+  "description": "Mock fixture for MQTT sensor data publishing",
+  "protocol": "Mqtt",
+  "request": {
+    "pattern": "OneWay",
+    "topic": "sensors/temperature",
+    "qos": 1
+  },
+  "response": {
+    "status": {
+      "Generic": true
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "sensor_id": "temp-001",
+      "temperature": 23.5,
+      "humidity": 65.2,
+      "timestamp": "2024-01-15T10:30:00Z"
+    },
+    "content_type": "application/json",
+    "delay_ms": 0
+  },
+  "metadata": {
+    "example": "true",
+    "protocol": "mqtt"
+  },
+  "enabled": true,
+  "priority": 1,
+  "tags": ["mqtt", "sensor", "iot"]
+}

@@ -18,6 +18,8 @@ pub use generation::*;
 pub use validation::*;
 
 // Legacy types and functions for backward compatibility
+use crate::ai_response::RequestContext;
+use crate::openapi::response::AiGenerator;
 use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 use crate::templating::expand_tokens as core_expand_tokens;
 use crate::{latency::LatencyInjector, overrides::Overrides, Error, Result};
@@ -955,6 +957,91 @@ impl OpenApiRouteRegistry {
     pub fn convert_path_to_axum(openapi_path: &str) -> String {
         // Axum v0.7+ uses {param} format, same as OpenAPI
         openapi_path.to_string()
+    }
+
+    /// Build router with AI generator support
+    pub fn build_router_with_ai(
+        &self,
+        ai_generator: Option<std::sync::Arc<dyn AiGenerator + Send + Sync>>,
+    ) -> Router {
+        use axum::routing::{delete, get, patch, post, put};
+
+        let mut router = Router::new();
+        tracing::debug!("Building router with AI support from {} routes", self.routes.len());
+
+        for route in &self.routes {
+            tracing::debug!("Adding AI-enabled route: {} {}", route.method, route.path);
+
+            let route_clone = route.clone();
+            let ai_generator_clone = ai_generator.clone();
+
+            // Create async handler that extracts request data and builds context
+            let handler = move |headers: HeaderMap, body: Option<Json<Value>>| {
+                let route = route_clone.clone();
+                let ai_generator = ai_generator_clone.clone();
+
+                async move {
+                    tracing::debug!(
+                        "Handling AI request for route: {} {}",
+                        route.method,
+                        route.path
+                    );
+
+                    // Build request context
+                    let mut context = RequestContext::new(route.method.clone(), route.path.clone());
+
+                    // Extract headers
+                    context.headers = headers
+                        .iter()
+                        .map(|(k, v)| {
+                            (k.to_string(), Value::String(v.to_str().unwrap_or("").to_string()))
+                        })
+                        .collect();
+
+                    // Extract body if present
+                    context.body = body.map(|Json(b)| b);
+
+                    // Generate AI response if AI generator is available and route has AI config
+                    let (status, response) = if let (Some(generator), Some(_ai_config)) =
+                        (ai_generator, &route.ai_config)
+                    {
+                        route
+                            .mock_response_with_status_async(&context, Some(generator.as_ref()))
+                            .await
+                    } else {
+                        // No AI support, use static response
+                        route.mock_response_with_status()
+                    };
+
+                    (
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
+                        axum::response::Json(response),
+                    )
+                }
+            };
+
+            match route.method.as_str() {
+                "GET" => {
+                    router = router.route(&route.path, get(handler));
+                }
+                "POST" => {
+                    router = router.route(&route.path, post(handler));
+                }
+                "PUT" => {
+                    router = router.route(&route.path, put(handler));
+                }
+                "DELETE" => {
+                    router = router.route(&route.path, delete(handler));
+                }
+                "PATCH" => {
+                    router = router.route(&route.path, patch(handler));
+                }
+                _ => tracing::warn!("Unsupported HTTP method for AI: {}", route.method),
+            }
+        }
+
+        router
     }
 }
 

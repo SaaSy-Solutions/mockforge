@@ -53,6 +53,16 @@ pub struct MetricsRegistry {
     pub smtp_messages_stored_total: IntCounter,
     pub smtp_errors_total: IntCounterVec,
 
+    // MQTT specific metrics
+    pub mqtt_connections_active: IntGauge,
+    pub mqtt_connections_total: IntCounter,
+    pub mqtt_messages_published_total: IntCounter,
+    pub mqtt_messages_received_total: IntCounter,
+    pub mqtt_topics_active: IntGauge,
+    pub mqtt_subscriptions_active: IntGauge,
+    pub mqtt_retained_messages: IntGauge,
+    pub mqtt_errors_total: IntCounterVec,
+
     // System metrics
     pub memory_usage_bytes: Gauge,
     pub cpu_usage_percent: Gauge,
@@ -271,6 +281,55 @@ impl MetricsRegistry {
         )
         .expect("Failed to create smtp_errors_total metric");
 
+        // MQTT metrics
+        let mqtt_connections_active = IntGauge::new(
+            "mockforge_mqtt_connections_active",
+            "Number of active MQTT client connections",
+        )
+        .expect("Failed to create mqtt_connections_active metric");
+
+        let mqtt_connections_total = IntCounter::new(
+            "mockforge_mqtt_connections_total",
+            "Total number of MQTT client connections established",
+        )
+        .expect("Failed to create mqtt_connections_total metric");
+
+        let mqtt_messages_published_total = IntCounter::new(
+            "mockforge_mqtt_messages_published_total",
+            "Total number of MQTT messages published",
+        )
+        .expect("Failed to create mqtt_messages_published_total metric");
+
+        let mqtt_messages_received_total = IntCounter::new(
+            "mockforge_mqtt_messages_received_total",
+            "Total number of MQTT messages received",
+        )
+        .expect("Failed to create mqtt_messages_received_total metric");
+
+        let mqtt_topics_active = IntGauge::new(
+            "mockforge_mqtt_topics_active",
+            "Number of active MQTT topics",
+        )
+        .expect("Failed to create mqtt_topics_active metric");
+
+        let mqtt_subscriptions_active = IntGauge::new(
+            "mockforge_mqtt_subscriptions_active",
+            "Number of active MQTT subscriptions",
+        )
+        .expect("Failed to create mqtt_subscriptions_active metric");
+
+        let mqtt_retained_messages = IntGauge::new(
+            "mockforge_mqtt_retained_messages",
+            "Number of retained MQTT messages",
+        )
+        .expect("Failed to create mqtt_retained_messages metric");
+
+        let mqtt_errors_total = IntCounterVec::new(
+            Opts::new("mockforge_mqtt_errors_total", "Total number of MQTT errors by type"),
+            &["error_type"],
+        )
+        .expect("Failed to create mqtt_errors_total metric");
+
         // System metrics
         let memory_usage_bytes =
             Gauge::new("mockforge_memory_usage_bytes", "Memory usage in bytes")
@@ -378,6 +437,30 @@ impl MetricsRegistry {
             .register(Box::new(smtp_errors_total.clone()))
             .expect("Failed to register smtp_errors_total");
         registry
+            .register(Box::new(mqtt_connections_active.clone()))
+            .expect("Failed to register mqtt_connections_active");
+        registry
+            .register(Box::new(mqtt_connections_total.clone()))
+            .expect("Failed to register mqtt_connections_total");
+        registry
+            .register(Box::new(mqtt_messages_published_total.clone()))
+            .expect("Failed to register mqtt_messages_published_total");
+        registry
+            .register(Box::new(mqtt_messages_received_total.clone()))
+            .expect("Failed to register mqtt_messages_received_total");
+        registry
+            .register(Box::new(mqtt_topics_active.clone()))
+            .expect("Failed to register mqtt_topics_active");
+        registry
+            .register(Box::new(mqtt_subscriptions_active.clone()))
+            .expect("Failed to register mqtt_subscriptions_active");
+        registry
+            .register(Box::new(mqtt_retained_messages.clone()))
+            .expect("Failed to register mqtt_retained_messages");
+        registry
+            .register(Box::new(mqtt_errors_total.clone()))
+            .expect("Failed to register mqtt_errors_total");
+        registry
             .register(Box::new(memory_usage_bytes.clone()))
             .expect("Failed to register memory_usage_bytes");
         registry
@@ -426,6 +509,14 @@ impl MetricsRegistry {
             smtp_messages_received_total,
             smtp_messages_stored_total,
             smtp_errors_total,
+            mqtt_connections_active,
+            mqtt_connections_total,
+            mqtt_messages_published_total,
+            mqtt_messages_received_total,
+            mqtt_topics_active,
+            mqtt_subscriptions_active,
+            mqtt_retained_messages,
+            mqtt_errors_total,
             memory_usage_bytes,
             cpu_usage_percent,
             thread_count,

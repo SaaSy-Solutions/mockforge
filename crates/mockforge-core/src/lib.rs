@@ -167,6 +167,8 @@
 //! - [API Reference](https://docs.rs/mockforge-core)
 //! - [GitHub Repository](https://github.com/SaaSy-Solutions/mockforge)
 
+#![allow(deprecated)]
+
 pub mod ai_response;
 pub mod cache;
 pub mod chain_execution;
@@ -238,8 +240,8 @@ pub use priority_handler::{
     MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
 };
 pub use protocol_abstraction::{
-    MiddlewareChain, Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse,
-    RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
+    MessagePattern, MiddlewareChain, Protocol, ProtocolMiddleware, ProtocolRequest,
+    ProtocolResponse, RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
     ValidationError as ProtocolValidationError, ValidationResult as ProtocolValidationResult,
 };
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};

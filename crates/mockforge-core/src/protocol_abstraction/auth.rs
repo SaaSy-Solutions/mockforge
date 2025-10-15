@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
 /// JWT Claims
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -317,8 +316,13 @@ mod tests {
 
         let request = ProtocolRequest {
             protocol: Protocol::Http,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
             metadata,
             body: None,
             client_ip: None,
@@ -351,8 +355,7 @@ mod tests {
             operation: "GET".to_string(),
             path: "/test".to_string(),
             metadata,
-            body: None,
-            client_ip: None,
+            ..Default::default()
         };
 
         let token = middleware.extract_token(&request);

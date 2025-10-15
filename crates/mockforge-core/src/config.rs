@@ -128,6 +128,55 @@ pub struct RouteValidationConfig {
     pub schema: serde_json::Value,
 }
 
+/// Protocol enable/disable configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolConfig {
+    /// Enable this protocol
+    pub enabled: bool,
+}
+
+/// Protocols configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolsConfig {
+    /// HTTP protocol configuration
+    pub http: ProtocolConfig,
+    /// GraphQL protocol configuration
+    pub graphql: ProtocolConfig,
+    /// gRPC protocol configuration
+    pub grpc: ProtocolConfig,
+    /// WebSocket protocol configuration
+    pub websocket: ProtocolConfig,
+    /// SMTP protocol configuration
+    pub smtp: ProtocolConfig,
+    /// MQTT protocol configuration
+    pub mqtt: ProtocolConfig,
+    /// FTP protocol configuration
+    pub ftp: ProtocolConfig,
+    /// Kafka protocol configuration
+    pub kafka: ProtocolConfig,
+    /// RabbitMQ protocol configuration
+    pub rabbitmq: ProtocolConfig,
+    /// AMQP protocol configuration
+    pub amqp: ProtocolConfig,
+}
+
+impl Default for ProtocolsConfig {
+    fn default() -> Self {
+        Self {
+            http: ProtocolConfig { enabled: true },
+            graphql: ProtocolConfig { enabled: true },
+            grpc: ProtocolConfig { enabled: true },
+            websocket: ProtocolConfig { enabled: true },
+            smtp: ProtocolConfig { enabled: false },
+            mqtt: ProtocolConfig { enabled: true },
+            ftp: ProtocolConfig { enabled: false },
+            kafka: ProtocolConfig { enabled: false },
+            rabbitmq: ProtocolConfig { enabled: false },
+            amqp: ProtocolConfig { enabled: false },
+        }
+    }
+}
+
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -138,8 +187,14 @@ pub struct ServerConfig {
     pub websocket: WebSocketConfig,
     /// gRPC server configuration
     pub grpc: GrpcConfig,
+    /// MQTT server configuration
+    pub mqtt: MqttConfig,
     /// SMTP server configuration
     pub smtp: SmtpConfig,
+    /// FTP server configuration
+    pub ftp: FtpConfig,
+    /// Kafka server configuration
+    pub kafka: KafkaConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
     /// Request chaining configuration
@@ -157,6 +212,9 @@ pub struct ServerConfig {
     /// Custom routes configuration
     #[serde(default)]
     pub routes: Vec<RouteConfig>,
+    /// Protocol enable/disable configuration
+    #[serde(default)]
+    pub protocols: ProtocolsConfig,
 }
 
 // Default is derived for ServerConfig
@@ -187,6 +245,8 @@ pub struct HttpCorsConfig {
 /// HTTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpConfig {
+    /// Enable HTTP server
+    pub enabled: bool,
     /// Server port
     pub port: u16,
     /// Host address
@@ -218,6 +278,7 @@ pub struct HttpConfig {
 impl Default for HttpConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             port: 3000,
             host: "0.0.0.0".to_string(),
             openapi_spec: None,
@@ -252,6 +313,8 @@ impl Default for HttpConfig {
 /// WebSocket server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketConfig {
+    /// Enable WebSocket server
+    pub enabled: bool,
     /// Server port
     pub port: u16,
     /// Host address
@@ -265,6 +328,7 @@ pub struct WebSocketConfig {
 impl Default for WebSocketConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             port: 3001,
             host: "0.0.0.0".to_string(),
             replay_file: None,
@@ -276,6 +340,8 @@ impl Default for WebSocketConfig {
 /// gRPC server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcConfig {
+    /// Enable gRPC server
+    pub enabled: bool,
     /// Server port
     pub port: u16,
     /// Host address
@@ -289,6 +355,7 @@ pub struct GrpcConfig {
 impl Default for GrpcConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             port: 50051,
             host: "0.0.0.0".to_string(),
             proto_dir: None,
@@ -304,6 +371,45 @@ pub struct TlsConfig {
     pub cert_path: String,
     /// Private key file path
     pub key_path: String,
+}
+
+/// MQTT server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttConfig {
+    /// Enable MQTT server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Maximum packet size
+    pub max_packet_size: usize,
+    /// Keep-alive timeout in seconds
+    pub keep_alive_secs: u16,
+    /// Directory containing fixture files
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Enable retained messages
+    pub enable_retained_messages: bool,
+    /// Maximum retained messages
+    pub max_retained_messages: usize,
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 1883,
+            host: "0.0.0.0".to_string(),
+            max_connections: 1000,
+            max_packet_size: 268435456, // 256 MB
+            keep_alive_secs: 60,
+            fixtures_dir: None,
+            enable_retained_messages: true,
+            max_retained_messages: 10000,
+        }
+    }
 }
 
 /// SMTP server configuration
@@ -327,6 +433,12 @@ pub struct SmtpConfig {
     pub enable_mailbox: bool,
     /// Maximum mailbox size
     pub max_mailbox_messages: usize,
+    /// Enable STARTTLS support
+    pub enable_starttls: bool,
+    /// Path to TLS certificate file
+    pub tls_cert_path: Option<std::path::PathBuf>,
+    /// Path to TLS private key file
+    pub tls_key_path: Option<std::path::PathBuf>,
 }
 
 impl Default for SmtpConfig {
@@ -341,6 +453,93 @@ impl Default for SmtpConfig {
             max_connections: 10,
             enable_mailbox: true,
             max_mailbox_messages: 1000,
+            enable_starttls: false,
+            tls_cert_path: None,
+            tls_key_path: None,
+        }
+    }
+}
+
+/// FTP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FtpConfig {
+    /// Enable FTP server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Passive mode port range
+    pub passive_ports: (u16, u16),
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Connection timeout in seconds
+    pub timeout_secs: u64,
+    /// Allow anonymous access
+    pub allow_anonymous: bool,
+    /// Fixtures directory
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Virtual root directory
+    pub virtual_root: std::path::PathBuf,
+}
+
+impl Default for FtpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 2121,
+            host: "0.0.0.0".to_string(),
+            passive_ports: (50000, 51000),
+            max_connections: 100,
+            timeout_secs: 300,
+            allow_anonymous: true,
+            fixtures_dir: None,
+            virtual_root: std::path::PathBuf::from("/mockforge"),
+        }
+    }
+}
+
+/// Kafka server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaConfig {
+    /// Enable Kafka server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Broker ID
+    pub broker_id: i32,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Log retention time in milliseconds
+    pub log_retention_ms: i64,
+    /// Log segment size in bytes
+    pub log_segment_bytes: i64,
+    /// Fixtures directory
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Auto-create topics
+    pub auto_create_topics: bool,
+    /// Default number of partitions for new topics
+    pub default_partitions: i32,
+    /// Default replication factor for new topics
+    pub default_replication_factor: i16,
+}
+
+impl Default for KafkaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 9092,  // Standard Kafka port
+            host: "0.0.0.0".to_string(),
+            broker_id: 1,
+            max_connections: 1000,
+            log_retention_ms: 604800000,  // 7 days
+            log_segment_bytes: 1073741824,  // 1 GB
+            fixtures_dir: None,
+            auto_create_topics: true,
+            default_partitions: 3,
+            default_replication_factor: 1,
         }
     }
 }

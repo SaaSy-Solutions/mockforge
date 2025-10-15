@@ -29,6 +29,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
+mockforge-smtp = { path = "../mockforge-smtp" }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -52,6 +53,7 @@ mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-observability = { path = "../mockforge-observability" }
 mockforge-tracing = { path = "../mockforge-tracing" }
+mockforge-mqtt = { path = "../mockforge-mqtt" }
 opentelemetry = "0.21"
 
 [features]

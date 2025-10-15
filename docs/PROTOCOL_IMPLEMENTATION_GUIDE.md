@@ -45,6 +45,67 @@ New Protocol Implementation
     └── Admin UI (optional)
 ```
 
+## Implementing Streaming Protocols
+
+Streaming protocols (MQTT, Kafka, RabbitMQ) require additional abstractions for pub/sub messaging patterns.
+
+### Streaming Protocol Traits
+
+Implement the `StreamingProtocol` trait for protocols that support asynchronous messaging:
+
+```rust
+use mockforge_core::protocol_abstraction::{StreamingProtocol, ProtocolMessage, MessageStream, StreamingMetadata};
+
+#[async_trait::async_trait]
+impl StreamingProtocol for MyStreamingProtocol {
+    async fn subscribe(&self, topic: &str, consumer_id: &str) -> Result<MessageStream> {
+        // Implement topic subscription logic
+        todo!()
+    }
+
+    async fn publish(&self, topic: &str, message: ProtocolMessage) -> Result<()> {
+        // Implement message publishing logic
+        todo!()
+    }
+
+    fn get_metadata(&self) -> StreamingMetadata {
+        StreamingMetadata {
+            protocol: Protocol::Mqtt, // or Kafka, RabbitMq, etc.
+            connection_id: self.connection_id.clone(),
+            server_info: Some(self.server_addr.clone()),
+            subscriptions: self.active_subscriptions.clone(),
+            connected: self.is_connected(),
+        }
+    }
+}
+```
+
+### Message Handling
+
+Use `ProtocolMessage` for unified message representation:
+
+```rust
+use mockforge_core::protocol_abstraction::{ProtocolMessage, MessageBuilder};
+
+// Create messages using the builder pattern
+let message = MessageBuilder::new("sensor/temperature")
+    .id("msg-123")
+    .payload(b"{\"temp\": 23.5}"[..].into())
+    .metadata("content-type", "application/json")
+    .qos(1)
+    .build();
+```
+
+### Streaming Registry
+
+Register streaming protocols with `StreamingProtocolRegistry`:
+
+```rust
+let mut registry = StreamingProtocolRegistry::new();
+registry.register_handler(Protocol::Mqtt, Arc::new(mqtt_handler));
+registry.register_handler(Protocol::Kafka, Arc::new(kafka_handler));
+```
+
 ## Creating a New Protocol Crate
 
 ### Step 1: Create Crate Structure
@@ -949,6 +1010,390 @@ This implementation provides:
 3. **Create example fixtures**
 4. **Write documentation**
 5. **Submit PR for review**
+
+## Architecture Diagrams
+
+### Protocol Abstraction Layer Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MockForge Core                           │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │         Protocol Abstraction Layer                 │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐    │    │
+│  │  │ Protocol    │ │Message      │ │Response     │    │    │
+│  │  │ Types       │ │Patterns     │ │Status       │    │    │
+│  │  │             │ │             │ │             │    │    │
+│  │  │ • Http      │ │ • Request-  │ │ • HttpStatus│    │    │
+│  │  │ • GraphQL   │ │   Response  │ │ • GrpcStatus│    │    │
+│  │  │ • gRPC      │ │ • OneWay    │ │ • MqttStatus│    │    │
+│  │  │ • WebSocket │ │ • PubSub    │ │ • KafkaStatus│   │    │
+│  │  │ • MQTT      │ │ • Streaming │ │ • etc.      │    │    │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘    │    │
+│  │                                                     │    │
+│  │  ┌─────────────────────────────────────────────────┐ │    │
+│  │  │         Unified Fixture Format                 │ │    │
+│  │  │                                                 │ │    │
+│  │  │ • Protocol-agnostic request matching           │ │    │
+│  │  │ • Template-based response generation           │ │    │
+│  │  │ • Cross-protocol middleware support            │ │    │
+│  │  └─────────────────────────────────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │         Protocol Registry                           │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  • ProtocolHandler trait                            │    │
+│  │  • Dynamic protocol loading                         │    │
+│  │  • Enable/disable protocols                         │    │
+│  │  • Lifecycle management                             │    │
+│  └─────────────────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │         Streaming Protocol Support                  │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  • StreamingProtocol trait                          │    │
+│  │  • Message streams (futures::Stream)                │    │
+│  │  • Pub/Sub patterns                                 │    │
+│  │  • Async message handling                           │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Request Flow Through Abstraction Layer
+
+```
+Client Request
+      │
+      ▼
+┌─────────────┐     ┌─────────────────────┐     ┌─────────────┐
+│ Protocol    │────▶│  ProtocolRequest    │────▶│ Spec        │
+│ Parser      │     │  Abstraction        │     │ Registry    │
+│ (HTTP/gRPC/ │     │                     │     │             │
+│  MQTT/etc.) │     └─────────────────────┘     │ • Validate  │
+└─────────────┘              │                  │ • Generate  │
+                             │                  │   Response  │
+                    ┌────────▼────────┐         └─────────────┘
+                    │ Middleware      │                │
+                    │ Chain           │                │
+                    │                 │         ┌──────▼──────┐
+                    │ • Logging       │         │ Protocol    │
+                    │ • Metrics       │         │ Response    │
+                    │ • Latency       │         │ Abstraction │
+                    │ • Auth          │         └─────────────┘
+                    └─────────────────┘                │
+                             │                        ▼
+                    ┌────────▼────────┐         ┌─────────────┐
+                    │ Protocol        │◀────────│ Protocol    │
+                    │ Response        │         │ Serializer │
+                    │ Abstraction     │         │ (JSON/XML/ │
+                    └─────────────────┘         │  Binary)    │
+                             │                  └─────────────┘
+                             ▼
+                       Client Response
+```
+
+### Protocol Implementation Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                Protocol Implementation                     │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────┐ │
+│  │   Server    │ │   Parser   │ │  Handler   │ │ Fixture │ │
+│  │             │ │            │ │            │ │ Loader  │ │
+│  │ • TCP/UDP   │ │ • Protocol │ │ • Request  │ │ • YAML  │ │
+│  │ • Async I/O │ │   specific │ │   routing  │ │ • JSON  │ │
+│  │ • Connection│ │ • Message  │ │ • Response │ │ • Dir   │ │
+│  │   pooling   │ │   framing  │ │   gen      │ │   scan  │ │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │            SpecRegistry Implementation              │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  • operations() - List available endpoints          │    │
+│  │  • find_operation() - Find by path/method           │    │
+│  │  • validate_request() - Schema validation           │    │
+│  │  • generate_mock_response() - Fixture matching      │    │
+│  └─────────────────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │            Configuration Integration                │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  • ServerConfig struct extension                    │    │
+│  │  • Environment variable overrides                   │    │
+│  │  • Default configurations                           │    │
+│  │  • Validation                                       │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Streaming Protocol Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Streaming Protocol Flow                       │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐     ┌─────────────────┐     ┌─────────┐    │
+│  │   Client    │────▶│  Subscription   │────▶│ Message │    │
+│  │             │     │   Manager       │     │ Stream  │    │
+│  │ • Subscribe │     │                 │     │         │    │
+│  │ • Publish   │     │ • Topic routing │     │ • Async │    │
+│  │ • Unsub     │     │ • QoS handling │     │ • Back- │    │
+│  └─────────────┘     └─────────────────┘     │   pressure│  │
+│                                              └─────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │            StreamingProtocol Trait                  │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  async fn subscribe() -> MessageStream              │    │
+│  │  async fn publish(message: ProtocolMessage)         │    │
+│  │  async fn unsubscribe()                              │    │
+│  │  fn get_metadata() -> StreamingMetadata             │    │
+│  └─────────────────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │            Message Processing Pipeline              │    │
+│  ├─────────────────────────────────────────────────────┤    │
+│  │  ProtocolMessage ──▶ Validation ──▶ Middleware ──▶ │    │
+│  │                        │              │             │    │
+│  │                        ▼              ▼             │    │
+│  │                   Schema Check   Logging/Metrics    │    │
+│  │                                                     │    │
+│  │  ◀───────────────────────────────────────────────── │    │
+│  │             Response Generation                      │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Migration Guide for Existing Protocols
+
+### Migrating from Legacy Protocol Implementations
+
+If you have existing protocol implementations that don't use the new abstraction layer, follow these steps to migrate:
+
+#### Step 1: Update Protocol Enum
+
+Add your protocol to the `Protocol` enum in `crates/mockforge-core/src/protocol_abstraction/mod.rs`:
+
+```rust
+pub enum Protocol {
+    // ... existing protocols ...
+    YourProtocol,
+}
+```
+
+Add the corresponding display implementation:
+
+```rust
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // ... existing cases ...
+            Protocol::YourProtocol => write!(f, "YourProtocol"),
+        }
+    }
+}
+```
+
+#### Step 2: Add Response Status
+
+Add your protocol's status type to `ResponseStatus` enum:
+
+```rust
+pub enum ResponseStatus {
+    // ... existing variants ...
+    YourProtocolStatus(u16), // Example: using u16 for status codes
+}
+```
+
+Implement the `is_success()` and `as_code()` methods:
+
+```rust
+impl ResponseStatus {
+    pub fn is_success(&self) -> bool {
+        match self {
+            // ... existing cases ...
+            ResponseStatus::YourProtocolStatus(code) => (200..300).contains(code),
+        }
+    }
+
+    pub fn as_code(&self) -> Option<i32> {
+        match self {
+            // ... existing cases ...
+            ResponseStatus::YourProtocolStatus(code) => Some(*code as i32),
+        }
+    }
+}
+```
+
+#### Step 3: Implement SpecRegistry Trait
+
+Create a new `SpecRegistry` implementation that wraps your existing fixture loading logic:
+
+```rust
+pub struct YourProtocolSpecRegistry {
+    // Wrap existing fixture storage
+    fixtures: Vec<YourExistingFixture>,
+}
+
+impl SpecRegistry for YourProtocolSpecRegistry {
+    fn protocol(&self) -> Protocol {
+        Protocol::YourProtocol
+    }
+
+    fn operations(&self) -> Vec<SpecOperation> {
+        self.fixtures.iter().map(|f| SpecOperation {
+            name: f.name.clone(),
+            path: f.endpoint.clone(),
+            operation_type: f.method.clone(),
+            input_schema: f.request_schema.clone(),
+            output_schema: f.response_schema.clone(),
+            metadata: f.metadata.clone(),
+        }).collect()
+    }
+
+    fn find_operation(&self, operation: &str, path: &str) -> Option<SpecOperation> {
+        self.operations().into_iter().find(|op|
+            op.operation_type == operation && op.path == path
+        )
+    }
+
+    fn validate_request(&self, request: &ProtocolRequest) -> Result<ValidationResult> {
+        // Convert ProtocolRequest to your existing validation format
+        // Use existing validation logic
+        todo!()
+    }
+
+    fn generate_mock_response(&self, request: &ProtocolRequest) -> Result<ProtocolResponse> {
+        // Find matching fixture using existing logic
+        // Convert to ProtocolResponse
+        todo!()
+    }
+}
+```
+
+#### Step 4: Update Server Implementation
+
+Modify your server to use `ProtocolRequest` and `ProtocolResponse`:
+
+```rust
+// Before (example)
+async fn handle_request(&self, request: YourRequestType) -> YourResponseType {
+    // Existing logic
+}
+
+// After
+async fn handle_request(&self, request: ProtocolRequest) -> Result<ProtocolResponse> {
+    // Convert ProtocolRequest to your internal format
+    let internal_request = convert_to_internal(request)?;
+
+    // Use existing logic
+    let internal_response = self.process_internal_request(internal_request).await?;
+
+    // Convert back to ProtocolResponse
+    convert_to_protocol_response(internal_response)
+}
+```
+
+#### Step 5: Update Configuration
+
+Add your protocol configuration to `ServerConfig` in `config.rs`:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YourProtocolConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub host: String,
+    // ... other existing config fields
+}
+
+impl Default for YourProtocolConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true, // or false depending on your protocol
+            port: 9999,
+            host: "0.0.0.0".to_string(),
+            // ... defaults
+        }
+    }
+}
+
+// Add to ServerConfig
+pub struct ServerConfig {
+    // ... existing fields ...
+    pub your_protocol: YourProtocolConfig,
+}
+```
+
+#### Step 6: Update CLI Integration
+
+Modify the server startup code in `crates/mockforge-cli/src/commands/serve.rs`:
+
+```rust
+pub async fn start_servers(config: ServerConfig) -> Result<()> {
+    let mut tasks = Vec::new();
+
+    // ... existing server starts ...
+
+    // Add your protocol server
+    if config.your_protocol.enabled {
+        let server_config = config.your_protocol.clone();
+        let registry = Arc::new(YourProtocolSpecRegistry::new(/* params */));
+
+        let task = tokio::spawn(async move {
+            let server = YourProtocolServer::new(server_config, registry);
+            server.start().await?;
+            Ok(())
+        });
+
+        tasks.push(task);
+    }
+
+    // ... wait for tasks ...
+}
+```
+
+#### Step 7: Update Tests
+
+Update your tests to use the new abstraction types:
+
+```rust
+#[tokio::test]
+async fn test_request_handling() {
+    let registry = YourProtocolSpecRegistry::new();
+
+    let request = ProtocolRequest {
+        protocol: Protocol::YourProtocol,
+        operation: "GET".to_string(),
+        path: "/test".to_string(),
+        // ... other fields
+    };
+
+    let response = registry.generate_mock_response(&request).await?;
+    assert!(response.status.is_success());
+}
+```
+
+### Benefits of Migration
+
+- **Unified API**: All protocols now use the same request/response types
+- **Middleware Support**: Automatic support for logging, metrics, latency injection
+- **Fixture Format**: Unified fixture format across all protocols
+- **Admin UI**: Automatic inclusion in the admin interface
+- **Extensibility**: Easier to add new features that work across protocols
+
+### Rollback Plan
+
+If migration issues arise:
+
+1. Keep the old implementation alongside the new one
+2. Use feature flags to switch between implementations
+3. Gradually migrate tests and fixtures
+4. Remove old code after successful migration
 
 ## Resources
 

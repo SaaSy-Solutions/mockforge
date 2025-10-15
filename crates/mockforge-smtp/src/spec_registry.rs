@@ -6,10 +6,24 @@ use mockforge_core::protocol_abstraction::{
     ValidationError, ValidationResult,
 };
 use mockforge_core::Result;
+use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::RwLock;
 use tracing::{debug, error, info, warn};
+
+/// Email search filters
+#[derive(Debug, Clone, Default)]
+pub struct EmailSearchFilters {
+    pub sender: Option<String>,
+    pub recipient: Option<String>,
+    pub subject: Option<String>,
+    pub body: Option<String>,
+    pub since: Option<chrono::DateTime<chrono::Utc>>,
+    pub until: Option<chrono::DateTime<chrono::Utc>>,
+    pub use_regex: bool,
+    pub case_sensitive: bool,
+}
 
 /// SMTP protocol registry implementing SpecRegistry trait
 pub struct SmtpSpecRegistry {
@@ -181,6 +195,90 @@ impl SmtpSpecRegistry {
             total_emails: mailbox.len(),
             max_capacity: self.max_mailbox_size,
         })
+    }
+
+    /// Search emails with filters
+    pub fn search_emails(&self, filters: EmailSearchFilters) -> Result<Vec<StoredEmail>> {
+        let mailbox = self.mailbox.read().map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+        })?;
+
+        let mut results: Vec<StoredEmail> = mailbox
+            .iter()
+            .filter(|email| {
+                // Helper function to check if field matches filter
+                let matches_filter = |field: &str, filter: &Option<String>| -> bool {
+                    if let Some(ref f) = filter {
+                        let field_cmp = if filters.case_sensitive {
+                            field.to_string()
+                        } else {
+                            field.to_lowercase()
+                        };
+                        let filter_cmp = if filters.case_sensitive {
+                            f.clone()
+                        } else {
+                            f.to_lowercase()
+                        };
+
+                        if filters.use_regex {
+                            if let Ok(re) = Regex::new(&filter_cmp) {
+                                re.is_match(&field_cmp)
+                            } else {
+                                false // invalid regex, no match
+                            }
+                        } else {
+                            field_cmp.contains(&filter_cmp)
+                        }
+                    } else {
+                        true
+                    }
+                };
+
+                // Filter by sender
+                if !matches_filter(&email.from, &filters.sender) {
+                    return false;
+                }
+
+                // Filter by recipient
+                if let Some(ref recipient_filter) = filters.recipient {
+                    let has_recipient = email.to.iter().any(|to| matches_filter(to, &Some(recipient_filter.clone())));
+                    if !has_recipient {
+                        return false;
+                    }
+                }
+
+                // Filter by subject
+                if !matches_filter(&email.subject, &filters.subject) {
+                    return false;
+                }
+
+                // Filter by body
+                if !matches_filter(&email.body, &filters.body) {
+                    return false;
+                }
+
+                // Filter by date range
+                if let Some(since) = filters.since {
+                    if email.received_at < since {
+                        return false;
+                    }
+                }
+
+                if let Some(until) = filters.until {
+                    if email.received_at > until {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        // Sort by received_at descending (newest first)
+        results.sort_by(|a, b| b.received_at.cmp(&a.received_at));
+
+        Ok(results)
     }
 }
 

@@ -3,13 +3,14 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json},
     routing::{delete, get, post, put},
     Router,
 };
 use mockforge_core::openapi::OpenApiSpec;
+use mockforge_smtp::EmailSearchFilters;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -67,6 +68,8 @@ pub struct ManagementState {
     pub port: u16,
     pub start_time: std::time::Instant,
     pub request_counter: Arc<RwLock<u64>>,
+    pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
+    pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
 }
 
 impl ManagementState {
@@ -78,7 +81,19 @@ impl ManagementState {
             port,
             start_time: std::time::Instant::now(),
             request_counter: Arc::new(RwLock::new(0)),
+            smtp_registry: None,
+            mqtt_broker: None,
         }
+    }
+
+    pub fn with_smtp_registry(mut self, smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>) -> Self {
+        self.smtp_registry = Some(smtp_registry);
+        self
+    }
+
+    pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
+        self.mqtt_broker = Some(mqtt_broker);
+        self
     }
 }
 
@@ -226,48 +241,226 @@ async fn export_mocks(
 /// Import mocks from JSON/YAML
 async fn import_mocks(
     State(state): State<ManagementState>,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-    body: String,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let format = params
-        .get("format")
-        .map(|f| match f.as_str() {
-            "yaml" | "yml" => ExportFormat::Yaml,
-            _ => ExportFormat::Json,
-        })
-        .unwrap_or(ExportFormat::Json);
+    Json(mocks): Json<Vec<MockConfig>>,
+) -> impl IntoResponse {
+    let mut current_mocks = state.mocks.write().await;
+    current_mocks.clear();
+    current_mocks.extend(mocks);
+    Json(serde_json::json!({ "status": "imported", "count": current_mocks.len() }))
+}
 
-    let imported_mocks: Vec<MockConfig> = match format {
-        ExportFormat::Json => serde_json::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?,
-        ExportFormat::Yaml => serde_yaml::from_str(&body).map_err(|_| StatusCode::BAD_REQUEST)?,
-    };
-
-    let mut mocks = state.mocks.write().await;
-
-    // Determine import strategy
-    let merge = params.get("merge").map(|v| v == "true").unwrap_or(false);
-
-    if merge {
-        // Merge: add new mocks, update existing ones by ID
-        for imported in imported_mocks {
-            if let Some(pos) = mocks.iter().position(|m| m.id == imported.id) {
-                mocks[pos] = imported;
-            } else {
-                mocks.push(imported);
-            }
+/// List SMTP emails in mailbox
+async fn list_smtp_emails(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        match smtp_registry.get_emails() {
+            Ok(emails) => (
+                StatusCode::OK,
+                Json(serde_json::json!(emails)),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to retrieve emails",
+                    "message": e.to_string()
+                })),
+            ),
         }
     } else {
-        // Replace: clear existing and add imported
-        *mocks = imported_mocks;
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
     }
+}
 
-    info!("Imported {} mocks (merge: {})", mocks.len(), merge);
+/// Get specific SMTP email
+async fn get_smtp_email(
+    State(state): State<ManagementState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        match smtp_registry.get_email_by_id(&id) {
+            Ok(Some(email)) => (
+                StatusCode::OK,
+                Json(serde_json::json!(email)),
+            ),
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "Email not found",
+                    "id": id
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to retrieve email",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
+}
 
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "imported": mocks.len(),
-        "merge": merge
-    })))
+/// Clear SMTP mailbox
+async fn clear_smtp_mailbox(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        match smtp_registry.clear_mailbox() {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "message": "Mailbox cleared successfully"
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to clear mailbox",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
+}
+
+/// Export SMTP mailbox
+async fn export_smtp_mailbox(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let format = params.get("format").unwrap_or(&"json".to_string()).clone();
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "SMTP mailbox management not available via HTTP API",
+            "message": "SMTP server runs separately from HTTP server. Use CLI commands to access mailbox.",
+            "requested_format": format
+        })),
+    )
+}
+
+/// Search SMTP emails
+async fn search_smtp_emails(
+    State(state): State<ManagementState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if let Some(ref smtp_registry) = state.smtp_registry {
+        let filters = EmailSearchFilters {
+            sender: params.get("sender").cloned(),
+            recipient: params.get("recipient").cloned(),
+            subject: params.get("subject").cloned(),
+            body: params.get("body").cloned(),
+            since: params.get("since").and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|dt| dt.with_timezone(&chrono::Utc)),
+            until: params.get("until").and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|dt| dt.with_timezone(&chrono::Utc)),
+            use_regex: params.get("regex").map(|s| s == "true").unwrap_or(false),
+            case_sensitive: params.get("case_sensitive").map(|s| s == "true").unwrap_or(false),
+        };
+
+        match smtp_registry.search_emails(filters) {
+            Ok(emails) => (
+                StatusCode::OK,
+                Json(serde_json::json!(emails)),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to search emails",
+                    "message": e.to_string()
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "error": "SMTP mailbox management not available",
+                "message": "SMTP server is not enabled or registry not available."
+            })),
+        )
+    }
+}
+
+/// MQTT broker statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttBrokerStats {
+    pub connected_clients: usize,
+    pub active_topics: usize,
+    pub retained_messages: usize,
+    pub total_subscriptions: usize,
+}
+
+/// MQTT management handlers
+async fn get_mqtt_stats(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        let connected_clients = broker.get_connected_clients().await.len();
+        let active_topics = broker.get_active_topics().await.len();
+        let stats = broker.get_topic_stats().await;
+
+        let broker_stats = MqttBrokerStats {
+            connected_clients,
+            active_topics,
+            retained_messages: stats.retained_messages,
+            total_subscriptions: stats.total_subscriptions,
+        };
+
+        Json(broker_stats).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
+async fn get_mqtt_clients(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        let clients = broker.get_connected_clients().await;
+        Json(serde_json::json!({
+            "clients": clients
+        })).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
+async fn get_mqtt_topics(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        let topics = broker.get_active_topics().await;
+        Json(serde_json::json!({
+            "topics": topics
+        })).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
+}
+
+async fn disconnect_mqtt_client(
+    State(state): State<ManagementState>,
+    Path(client_id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(broker) = &state.mqtt_broker {
+        match broker.disconnect_client(&client_id).await {
+            Ok(_) => (StatusCode::OK, format!("Client '{}' disconnected", client_id)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to disconnect client: {}", e)).into_response(),
+        }
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
+    }
 }
 
 /// Build the management API router
@@ -283,6 +476,15 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/mocks/{id}", delete(delete_mock))
         .route("/export", get(export_mocks))
         .route("/import", post(import_mocks))
+        .route("/smtp/mailbox", get(list_smtp_emails))
+        .route("/smtp/mailbox", delete(clear_smtp_mailbox))
+        .route("/smtp/mailbox/{id}", get(get_smtp_email))
+        .route("/smtp/mailbox/export", get(export_smtp_mailbox))
+        .route("/smtp/mailbox/search", get(search_smtp_emails))
+        .route("/mqtt/stats", get(get_mqtt_stats))
+        .route("/mqtt/clients", get(get_mqtt_clients))
+        .route("/mqtt/topics", get(get_mqtt_topics))
+        .route("/mqtt/clients/{client_id}", delete(disconnect_mqtt_client))
         .with_state(state)
 }
 

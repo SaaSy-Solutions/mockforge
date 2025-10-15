@@ -136,10 +136,10 @@ impl SmartMockGenerator {
     /// Generate a deterministic random number
     fn next_random<T>(&mut self) -> T
     where
-        rand::distributions::Standard: rand::distributions::Distribution<T>,
+        rand::distr::StandardUniform: rand::distr::Distribution<T>,
     {
         if let Some(ref mut rng) = self.rng {
-            rng.gen()
+            rng.random()
         } else {
             rand::random()
         }
@@ -149,9 +149,9 @@ impl SmartMockGenerator {
     #[allow(dead_code)] // Used in future smart generation features
     fn next_random_range(&mut self, min: i64, max: i64) -> i64 {
         if let Some(ref mut rng) = self.rng {
-            rng.gen_range(min..=max)
+            rng.random_range(min..=max)
         } else {
-            rand::thread_rng().gen_range(min..=max)
+            rand::rng().random_range(min..=max)
         }
     }
 
@@ -616,13 +616,13 @@ impl SmartMockGenerator {
 
     /// Generate random string
     pub fn generate_random_string(&mut self, length: usize) -> String {
-        use rand::distributions::Alphanumeric;
-        use rand::{thread_rng, Rng};
+        use rand::distr::Alphanumeric;
+        use rand::{rng, Rng};
 
         if let Some(ref mut rng) = self.rng {
             rng.sample_iter(&Alphanumeric).take(length).map(char::from).collect()
         } else {
-            thread_rng().sample_iter(&Alphanumeric).take(length).map(char::from).collect()
+            rng().sample_iter(&Alphanumeric).take(length).map(char::from).collect()
         }
     }
 

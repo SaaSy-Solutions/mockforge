@@ -1,0 +1,35 @@
+{
+  "id": "amqp-notification-queue",
+  "name": "AMQP Notification Queue",
+  "description": "Mock fixture for AMQP notification messaging",
+  "protocol": "Amqp",
+  "request": {
+    "pattern": "OneWay",
+    "routing_key": "notifications.email"
+  },
+  "response": {
+    "status": {
+      "Generic": true
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "type": "email_notification",
+      "recipient": "user@example.com",
+      "subject": "Welcome to MockForge",
+      "body": "Thank you for using MockForge!",
+      "priority": "normal",
+      "timestamp": "2024-01-15T10:30:00Z"
+    },
+    "content_type": "application/json",
+    "delay_ms": 0
+  },
+  "metadata": {
+    "example": "true",
+    "protocol": "amqp"
+  },
+  "enabled": true,
+  "priority": 1,
+  "tags": ["amqp", "notifications", "messaging"]
+}

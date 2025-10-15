@@ -22,19 +22,21 @@ tokio = { workspace = true, features = ["signal"] }
 tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tracing-opentelemetry = "0.25"
+tracing-opentelemetry = "0.22"
 mockforge-core = { path = "../mockforge-core" }
-mockforge-http = { path = "../mockforge-http" }
-mockforge-ws = { path = "../mockforge-ws" }
-mockforge-grpc = { path = "../mockforge-grpc" }
-mockforge-graphql = { path = "../mockforge-graphql" }
-mockforge-smtp = { path = "../mockforge-smtp" }
+mockforge-http = { path = "../mockforge-http", optional = true }
+mockforge-ws = { path = "../mockforge-ws", optional = true }
+mockforge-grpc = { path = "../mockforge-grpc", optional = true }
+mockforge-graphql = { path = "../mockforge-graphql", optional = true }
+mockforge-smtp = { path = "../mockforge-smtp", optional = true }
+mockforge-mqtt = { path = "../mockforge-mqtt", optional = true }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-ui = { path = "../mockforge-ui" }
 mockforge-observability = { path = "../mockforge-observability" }
 mockforge-tracing = { path = "../mockforge-tracing" }
 mockforge-recorder = { path = "../mockforge-recorder" }
 mockforge-bench = { path = "../mockforge-bench" }
+mockforge-ftp = { path = "../mockforge-ftp", optional = true }
 mockforge-plugin-core = { path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { path = "../mockforge-plugin-loader" }
 # mockforge-chaos = { path = "../mockforge-chaos" }  # Temporarily disabled due to compilation errors
@@ -48,8 +50,19 @@ axum = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.8"
+rumqttc = "0.24"
 hex = { workspace = true }
+urlencoding = "2.1"
 colored = "2.2"
+
+[features]
+default = ["http", "mqtt", "ws", "grpc", "graphql", "ftp"]
+http = ["mockforge-http"]
+mqtt = ["mockforge-mqtt"]
+ws = ["mockforge-ws"]
+grpc = ["mockforge-grpc"]
+graphql = ["mockforge-graphql"]
+ftp = ["mockforge-ftp"]
 
 [dev-dependencies]
 assert_cmd = "2.0"

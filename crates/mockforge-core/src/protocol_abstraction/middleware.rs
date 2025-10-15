@@ -144,6 +144,70 @@ impl ProtocolMiddleware for LoggingMiddleware {
                     None
                 },
             ),
+            Protocol::Mqtt => crate::create_http_log_entry(
+                "MQTT",
+                &request.topic.clone().unwrap_or_else(|| request.path.clone()),
+                if response.status.is_success() {
+                    200
+                } else {
+                    500
+                },
+                duration_ms as u64,
+                request.client_ip.clone(),
+                None,
+                request.metadata.clone(),
+                response.body.len() as u64,
+                if !response.status.is_success() {
+                    Some(format!("MQTT Error: {:?}", response.status))
+                } else {
+                    None
+                },
+            ),
+            Protocol::Ftp => crate::create_http_log_entry(
+                "FTP",
+                &request.path,
+                response.status.as_code().unwrap_or(226) as u16,
+                duration_ms as u64,
+                request.client_ip.clone(),
+                None,
+                request.metadata.clone(),
+                response.body.len() as u64,
+                if !response.status.is_success() {
+                    Some(format!("FTP Error: {:?}", response.status))
+                } else {
+                    None
+                },
+            ),
+            Protocol::Kafka => crate::create_http_log_entry(
+                "Kafka",
+                &request.topic.clone().unwrap_or_else(|| request.path.clone()),
+                response.status.as_code().unwrap_or(0) as u16,
+                duration_ms as u64,
+                request.client_ip.clone(),
+                None,
+                request.metadata.clone(),
+                response.body.len() as u64,
+                if !response.status.is_success() {
+                    Some(format!("Kafka Error: {:?}", response.status))
+                } else {
+                    None
+                },
+            ),
+            Protocol::RabbitMq | Protocol::Amqp => crate::create_http_log_entry(
+                "AMQP",
+                &request.routing_key.clone().unwrap_or_else(|| request.path.clone()),
+                response.status.as_code().unwrap_or(200) as u16,
+                duration_ms as u64,
+                request.client_ip.clone(),
+                None,
+                request.metadata.clone(),
+                response.body.len() as u64,
+                if !response.status.is_success() {
+                    Some(format!("AMQP Error: {:?}", response.status))
+                } else {
+                    None
+                },
+            ),
         };
 
         // Log to centralized logger
@@ -331,8 +395,13 @@ mod tests {
         let middleware = LoggingMiddleware::new(false);
         let mut request = ProtocolRequest {
             protocol: Protocol::Http,
+            pattern: crate::MessagePattern::RequestResponse,
             operation: "GET".to_string(),
             path: "/test".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
             metadata: HashMap::new(),
             body: None,
             client_ip: None,

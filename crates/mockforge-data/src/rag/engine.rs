@@ -769,8 +769,15 @@ impl RagEngine {
 
 impl Default for RagEngine {
     fn default() -> Self {
-        // This would normally return an error, but for compatibility we provide a default
-        unimplemented!("RagEngine::default() should not be used directly")
+        use crate::rag::storage::InMemoryStorage;
+
+        // Create a default RAG engine with in-memory storage
+        // This is primarily for testing and compatibility purposes
+        let config = crate::rag::config::RagConfig::default();
+        let storage = Arc::new(InMemoryStorage::default());
+
+        // We can unwrap here since default config should be valid
+        Self::new(config, storage).expect("Failed to create default RagEngine")
     }
 }
 
