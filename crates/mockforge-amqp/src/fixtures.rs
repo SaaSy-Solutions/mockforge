@@ -48,8 +48,35 @@ pub struct AmqpFixture {
 
 impl AmqpFixture {
     /// Load fixtures from a directory
-    pub fn load_from_dir(_dir: &std::path::PathBuf) -> mockforge_core::Result<Vec<Self>> {
-        // TODO: Implement fixture loading from YAML files
-        Ok(vec![])
+    pub fn load_from_dir(dir: &std::path::PathBuf) -> mockforge_core::Result<Vec<Self>> {
+        let mut fixtures = Vec::new();
+
+        if !dir.exists() {
+            return Ok(fixtures);
+        }
+
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.extension().and_then(|s| s.to_str()) == Some("yaml") ||
+               path.extension().and_then(|s| s.to_str()) == Some("yml") {
+                match Self::load_from_file(&path) {
+                    Ok(fixture) => fixtures.push(fixture),
+                    Err(e) => {
+                        tracing::warn!("Failed to load fixture from {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+
+        Ok(fixtures)
+    }
+
+    /// Load a single fixture from a YAML file
+    fn load_from_file(path: &std::path::Path) -> mockforge_core::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let fixture: AmqpFixture = serde_yaml::from_str(&content)?;
+        Ok(fixture)
     }
 }

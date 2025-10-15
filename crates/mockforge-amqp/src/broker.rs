@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 use crate::exchanges::ExchangeManager;
+use crate::protocol::ConnectionHandler;
 use crate::queues::QueueManager;
 use crate::spec_registry::AmqpSpecRegistry;
 use mockforge_core::config::AmqpConfig;
@@ -31,8 +33,36 @@ impl AmqpBroker {
 
     /// Start the AMQP broker server
     pub async fn start(&self) -> Result<()> {
-        // TODO: Implement server startup
-        tracing::info!("Starting AMQP broker on port {}", self.config.port);
-        Ok(())
+        let addr = format!("{}:{}", self.config.host, self.config.port);
+        let listener = TcpListener::bind(&addr).await
+            .map_err(|e| mockforge_core::Error::generic(format!("Failed to bind to {}: {}", addr, e)))?;
+
+        tracing::info!("Starting AMQP broker on {}", addr);
+
+        loop {
+            let (socket, _) = listener.accept().await
+                .map_err(|e| mockforge_core::Error::generic(format!("Failed to accept connection: {}", e)))?;
+
+            let exchanges = Arc::clone(&self.exchanges);
+            let queues = Arc::clone(&self.queues);
+            let spec_registry = Arc::clone(&self.spec_registry);
+
+            tokio::spawn(async move {
+                if let Err(e) = Self::handle_connection(socket, exchanges, queues, spec_registry).await {
+                    tracing::error!("Connection error: {}", e);
+                }
+            });
+        }
+    }
+
+    async fn handle_connection(
+        socket: tokio::net::TcpStream,
+        _exchanges: Arc<RwLock<ExchangeManager>>,
+        _queues: Arc<RwLock<QueueManager>>,
+        _spec_registry: Arc<AmqpSpecRegistry>,
+    ) -> Result<()> {
+        let handler = ConnectionHandler::new(socket);
+        handler.handle().await
+            .map_err(|e| mockforge_core::Error::generic(format!("Connection handler error: {}", e)))
     }
 }

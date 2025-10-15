@@ -46,9 +46,52 @@ impl Exchange {
         self.bindings.iter().map(|b| b.queue.clone()).collect()
     }
 
-    fn route_topic(&self, _routing_key: &str) -> Vec<String> {
-        // TODO: Implement topic pattern matching
-        vec![]
+    fn route_topic(&self, routing_key: &str) -> Vec<String> {
+        let routing_parts: Vec<&str> = routing_key.split('.').collect();
+
+        self.bindings
+            .iter()
+            .filter(|binding| {
+                let pattern_parts: Vec<&str> = binding.routing_key.split('.').collect();
+                Self::matches_topic_pattern(&routing_parts, &pattern_parts)
+            })
+            .map(|binding| binding.queue.clone())
+            .collect()
+    }
+
+    fn matches_topic_pattern(routing_parts: &[&str], pattern_parts: &[&str]) -> bool {
+        if routing_parts.len() > pattern_parts.len() && !pattern_parts.contains(&"#") {
+            return false;
+        }
+
+        let mut routing_iter = routing_parts.iter();
+        let mut pattern_iter = pattern_parts.iter();
+
+        while let (Some(&routing), Some(&pattern)) = (routing_iter.next(), pattern_iter.next()) {
+            match pattern {
+                "*" => {
+                    // * matches exactly one word
+                    continue;
+                }
+                "#" => {
+                    // # matches zero or more words
+                    // If # is at the end, it matches everything remaining
+                    if pattern_iter.next().is_none() {
+                        return true;
+                    }
+                    // If # is in the middle, we need to find the next pattern after #
+                    // This is more complex - for now, simple implementation
+                    return true;
+                }
+                word if word == routing => {
+                    continue;
+                }
+                _ => return false,
+            }
+        }
+
+        // Check if we have remaining routing parts that need to be matched
+        routing_iter.next().is_none()
     }
 
     fn route_headers(&self, _message: &Message) -> Vec<String> {

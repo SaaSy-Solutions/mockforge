@@ -1,0 +1,65 @@
+identifier: "order-processing"
+name: "Order Processing Workflow"
+description: "Simulates order processing message flow"
+
+exchanges:
+  - name: "orders"
+    type: "topic"
+    durable: true
+    auto_delete: false
+
+  - name: "dlx.orders"  # Dead letter exchange
+    type: "fanout"
+    durable: true
+
+queues:
+  - name: "orders.new"
+    durable: true
+    exclusive: false
+    auto_delete: false
+    properties:
+      max_length: 10000
+      message_ttl: 3600000  # 1 hour
+      dead_letter_exchange: "dlx.orders"
+    message_template:
+      order_id: "{{uuid}}"
+      customer_id: "{{faker.uuid}}"
+      items: []
+      total: "{{faker.float 10.0 1000.0}}"
+      status: "new"
+      created_at: "{{now}}"
+
+  - name: "orders.processing"
+    durable: true
+    message_template:
+      order_id: "{{uuid}}"
+      status: "processing"
+      updated_at: "{{now}}"
+
+  - name: "orders.dlq"  # Dead letter queue
+    durable: true
+
+bindings:
+  - exchange: "orders"
+    queue: "orders.new"
+    routing_key: "order.created"
+
+  - exchange: "orders"
+    queue: "orders.processing"
+    routing_key: "order.processing"
+
+  - exchange: "dlx.orders"
+    queue: "orders.dlq"
+    routing_key: "#"
+
+auto_publish:
+  enabled: true
+  exchange: "orders"
+  routing_key: "order.created"
+  rate_per_second: 5
+  message_template:
+    event_type: "order.created"
+    order_id: "{{uuid}}"
+    customer_id: "{{faker.uuid}}"
+    total: "{{faker.float 10.0 1000.0}}"
+    timestamp: "{{now}}"

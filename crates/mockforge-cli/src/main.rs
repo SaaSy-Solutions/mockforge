@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
+mod amqp_commands;
 mod ftp_commands;
 mod kafka_commands;
 mod mqtt_commands;
@@ -401,6 +402,19 @@ enum Commands {
     Kafka {
         #[command(subcommand)]
         kafka_command: kafka_commands::KafkaCommands,
+    },
+
+    /// AMQP broker management and message operations
+    ///
+    /// Examples:
+    ///   mockforge amqp serve --port 5672
+    ///   mockforge amqp publish --exchange orders --routing-key "order.created" --body '{"id": "123"}'
+    ///   mockforge amqp consume --queue orders.new
+    ///   mockforge amqp exchange declare orders --type topic --durable
+    #[command(verbatim_doc_comment)]
+    Amqp {
+        #[command(subcommand)]
+        amqp_command: amqp_commands::AmqpCommands,
     },
 
     /// Generate synthetic data
@@ -1319,6 +1333,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Kafka { kafka_command } => {
             kafka_commands::handle_kafka_command(kafka_command).await?;
+        }
+        Commands::Amqp { amqp_command } => {
+            amqp_commands::execute_amqp_command(amqp_command).await?;
         }
         Commands::Data { data_command } => {
             handle_data(data_command).await?;
