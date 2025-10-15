@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 /// Manages consumer groups for the Kafka broker
 #[derive(Debug)]
 pub struct ConsumerGroupManager {
@@ -42,7 +41,15 @@ impl ConsumerGroupManager {
             groups: HashMap::new(),
         }
     }
+}
 
+impl Default for ConsumerGroupManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConsumerGroupManager {
     /// Get a reference to all groups (for internal use)
     pub fn groups(&self) -> &HashMap<String, ConsumerGroup> {
         &self.groups
@@ -55,17 +62,15 @@ impl ConsumerGroupManager {
         member_id: &str,
         client_id: &str,
     ) -> Result<JoinGroupResponse> {
-        let group = self.groups.entry(group_id.to_string()).or_insert_with(|| {
-            ConsumerGroup {
-                group_id: group_id.to_string(),
-                members: HashMap::new(),
-                coordinator: GroupCoordinator {
-                    coordinator_id: 1,
-                    host: "localhost".to_string(),
-                    port: 9092,
-                },
-                offsets: HashMap::new(),
-            }
+        let group = self.groups.entry(group_id.to_string()).or_insert_with(|| ConsumerGroup {
+            group_id: group_id.to_string(),
+            members: HashMap::new(),
+            coordinator: GroupCoordinator {
+                coordinator_id: 1,
+                host: "localhost".to_string(),
+                port: 9092,
+            },
+            offsets: HashMap::new(),
         });
 
         group.members.insert(
@@ -116,22 +121,25 @@ impl ConsumerGroupManager {
 
     /// Get committed offsets for a group
     pub fn get_committed_offsets(&self, group_id: &str) -> HashMap<(String, i32), i64> {
-        self.groups
-            .get(group_id)
-            .map(|g| g.offsets.clone())
-            .unwrap_or_default()
+        self.groups.get(group_id).map(|g| g.offsets.clone()).unwrap_or_default()
     }
 
     /// Simulate consumer lag
     pub async fn simulate_lag(&mut self, group_id: &str, topic: &str, lag: i64) {
         if let Some(group) = self.groups.get_mut(group_id) {
             // Simulate lag by setting committed offsets behind
-            for partition in 0..10 { // TODO: Get actual partition count from topics
+            for partition in 0..10 {
+                // TODO: Get actual partition count from topics
                 let key = (topic.to_string(), partition);
                 let current_offset = group.offsets.get(&key).copied().unwrap_or(0);
                 group.offsets.insert(key, current_offset.saturating_sub(lag));
             }
-            tracing::info!("Simulated lag of {} messages for group {} on topic {}", lag, group_id, topic);
+            tracing::info!(
+                "Simulated lag of {} messages for group {} on topic {}",
+                lag,
+                group_id,
+                topic
+            );
         }
     }
 
@@ -152,10 +160,11 @@ impl ConsumerGroupManager {
             let target_offset = match to {
                 "earliest" => 0,
                 "latest" => i64::MAX, // TODO: Get actual latest offset
-                _ => return, // Invalid reset target
+                _ => return,          // Invalid reset target
             };
 
-            for partition in 0..10 { // TODO: Get actual partition count
+            for partition in 0..10 {
+                // TODO: Get actual partition count
                 let key = (topic.to_string(), partition);
                 group.offsets.insert(key, target_offset);
             }

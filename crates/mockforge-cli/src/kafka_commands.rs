@@ -1,8 +1,8 @@
-use clap::{Args, Subcommand};
-use mockforge_kafka::{KafkaMockBroker, KafkaSpecRegistry, Topic, ConsumerGroupManager};
-use mockforge_core::config::KafkaConfig;
-use std::path::PathBuf;
 use anyhow::Result;
+use clap::{Args, Subcommand};
+use mockforge_core::config::KafkaConfig;
+use mockforge_kafka::{ConsumerGroupManager, KafkaMockBroker, KafkaSpecRegistry, Topic};
+use std::path::PathBuf;
 
 /// Kafka server management commands
 #[derive(Subcommand)]
@@ -143,7 +143,6 @@ pub enum KafkaCommands {
         #[command(subcommand)]
         simulate_command: KafkaSimulateCommands,
     },
-
 }
 
 /// Topic management subcommands
@@ -271,13 +270,15 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
             println!("Starting Kafka broker on {}:{}", host, port);
             Ok(())
         }
-        KafkaCommands::Topic { topic_command } => {
-            execute_topic_command(topic_command).await
-        }
-        KafkaCommands::Groups { groups_command } => {
-            execute_groups_command(groups_command).await
-        }
-        KafkaCommands::Produce { topic, key, value, partition, header } => {
+        KafkaCommands::Topic { topic_command } => execute_topic_command(topic_command).await,
+        KafkaCommands::Groups { groups_command } => execute_groups_command(groups_command).await,
+        KafkaCommands::Produce {
+            topic,
+            key,
+            value,
+            partition,
+            header,
+        } => {
             // TODO: Connect to broker and produce message
             println!("Producing message to topic {}: {}", topic, value);
             if let Some(key) = key {
@@ -291,7 +292,13 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
             }
             Ok(())
         }
-        KafkaCommands::Consume { topic, group, partition, from, count } => {
+        KafkaCommands::Consume {
+            topic,
+            group,
+            partition,
+            from,
+            count,
+        } => {
             // TODO: Connect to broker and consume messages
             println!("Consuming from topic {}", topic);
             if let Some(group) = group {
@@ -323,9 +330,16 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
 
 async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
     match command {
-        KafkaTopicCommands::Create { name, partitions, replication_factor } => {
+        KafkaTopicCommands::Create {
+            name,
+            partitions,
+            replication_factor,
+        } => {
             // TODO: Connect to broker and create topic
-            println!("Creating topic {} with {} partitions (replication factor: {})", name, partitions, replication_factor);
+            println!(
+                "Creating topic {} with {} partitions (replication factor: {})",
+                name, partitions, replication_factor
+            );
             Ok(())
         }
         KafkaTopicCommands::List => {

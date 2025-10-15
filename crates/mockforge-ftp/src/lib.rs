@@ -55,15 +55,15 @@
 //! - [`mockforge-core`](https://docs.rs/mockforge-core): Core mocking functionality
 //! - [`libunftp`](https://docs.rs/libunftp): Underlying FTP server library
 
-pub mod server;
-pub mod vfs;
-pub mod fixtures;
-pub mod spec_registry;
 pub mod commands;
+pub mod fixtures;
+pub mod server;
+pub mod spec_registry;
 pub mod storage;
+pub mod vfs;
 
 // Re-export main types
+pub use fixtures::{FileValidation, FtpFixture, UploadRule, UploadStorage, VirtualFileConfig};
 pub use server::FtpServer;
-pub use vfs::{VirtualFileSystem, VirtualFile, FileContent, FileMetadata, GenerationPattern};
-pub use fixtures::{FtpFixture, VirtualFileConfig, UploadRule, UploadStorage, FileValidation};
 pub use spec_registry::FtpSpecRegistry;
+pub use vfs::{FileContent, FileMetadata, GenerationPattern, VirtualFile, VirtualFileSystem};

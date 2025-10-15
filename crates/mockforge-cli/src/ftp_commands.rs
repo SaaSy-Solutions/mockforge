@@ -1,8 +1,11 @@
-use clap::{Args, Subcommand};
-use mockforge_ftp::{FtpServer, FtpSpecRegistry, VirtualFileSystem, VirtualFile, FileContent, FileMetadata, GenerationPattern};
-use mockforge_core::config::FtpConfig;
-use std::path::PathBuf;
 use anyhow::Result;
+use clap::{Args, Subcommand};
+use mockforge_core::config::FtpConfig;
+use mockforge_ftp::{
+    FileContent, FileMetadata, FtpServer, FtpSpecRegistry, GenerationPattern, VirtualFile,
+    VirtualFileSystem,
+};
+use std::path::PathBuf;
 
 /// FTP server management commands
 #[derive(Subcommand)]
@@ -158,15 +161,9 @@ pub async fn handle_ftp_command(command: FtpCommands) -> Result<()> {
             host,
             config,
             virtual_root,
-        } => {
-            handle_ftp_serve(port, host, config, virtual_root).await
-        }
-        FtpCommands::Fixtures { fixtures_command } => {
-            handle_ftp_fixtures(fixtures_command).await
-        }
-        FtpCommands::Vfs { vfs_command } => {
-            handle_ftp_vfs(vfs_command).await
-        }
+        } => handle_ftp_serve(port, host, config, virtual_root).await,
+        FtpCommands::Fixtures { fixtures_command } => handle_ftp_fixtures(fixtures_command).await,
+        FtpCommands::Vfs { vfs_command } => handle_ftp_vfs(vfs_command).await,
     }
 }
 

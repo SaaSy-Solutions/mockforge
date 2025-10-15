@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_ftp::vfs::{VirtualFileSystem, FileContent, FilePermissions};
 use mockforge_ftp::fixtures::{FixtureRegistry, UploadRule};
 use mockforge_ftp::storage::MockStorage;
+use mockforge_ftp::vfs::{FileContent, FilePermissions, VirtualFileSystem};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -43,7 +43,8 @@ fn vfs_benchmarks(c: &mut Criterion) {
                     FileContent::Static(format!("Content {}", i).into_bytes()),
                     FileMetadata::default(),
                 );
-                vfs.add_file(std::path::PathBuf::from(&format!("/file{}.txt", i)), file).unwrap();
+                vfs.add_file(std::path::PathBuf::from(&format!("/file{}.txt", i)), file)
+                    .unwrap();
             }
             vfs
         };
@@ -173,10 +174,5 @@ fn storage_benchmarks(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    benches,
-    vfs_benchmarks,
-    fixture_benchmarks,
-    storage_benchmarks
-);
+criterion_group!(benches, vfs_benchmarks, fixture_benchmarks, storage_benchmarks);
 criterion_main!(benches);

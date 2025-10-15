@@ -54,7 +54,17 @@ async fn handle_mailbox_command(
             regex,
             case_sensitive,
         } => {
-            handle_mailbox_search(sender, recipient, subject, body, since, until, regex, case_sensitive).await?;
+            handle_mailbox_search(
+                sender,
+                recipient,
+                subject,
+                body,
+                since,
+                until,
+                regex,
+                case_sensitive,
+            )
+            .await?;
         }
     }
     Ok(())

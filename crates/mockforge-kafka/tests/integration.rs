@@ -1,7 +1,5 @@
-use mockforge_kafka::{KafkaMockBroker, KafkaSpecRegistry};
 use mockforge_core::config::KafkaConfig;
-use std::time::Duration;
-use tokio::time::timeout;
+use mockforge_kafka::{KafkaMockBroker, KafkaSpecRegistry};
 use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
 use rdkafka::client::DefaultClientContext;
 use rdkafka::config::ClientConfig;
@@ -9,6 +7,8 @@ use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message;
 use std::collections::HashMap;
+use std::time::Duration;
+use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_broker_creation() {
@@ -27,7 +27,7 @@ async fn test_spec_registry_creation() {
 #[tokio::test]
 async fn test_topic_creation() {
     let config = KafkaConfig::default();
-    let broker = KafkaMockBroker::new(config).await.unwrap();
+    let _broker = KafkaMockBroker::new(config).await.unwrap();
 
     // TODO: Add topic creation test once broker methods are implemented
     assert!(true); // Placeholder
@@ -108,7 +108,7 @@ async fn test_full_broker_integration() {
         name: "test-topic",
         num_partitions: 3,
         replication: TopicReplication::Fixed(1),
-        config: HashMap::new(),
+        config: vec![],
     }];
 
     let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(5)));
@@ -122,9 +122,7 @@ async fn test_full_broker_integration() {
 
     // Test producer
     let producer: FutureProducer = client_config.clone().create().unwrap();
-    let record = FutureRecord::to("test-topic")
-        .payload("test message")
-        .key("test-key");
+    let record = FutureRecord::to("test-topic").payload("test message").key("test-key");
 
     let produce_result = producer.send(record, Duration::from_secs(5)).await;
     match produce_result {

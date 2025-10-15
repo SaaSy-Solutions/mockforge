@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use crate::spec_registry::FtpSpecRegistry;
+use crate::storage::MockForgeStorage;
+use crate::vfs::VirtualFileSystem;
 use anyhow::Result;
 use libunftp::Server;
 use mockforge_core::config::FtpConfig;
-use crate::vfs::VirtualFileSystem;
-use crate::spec_registry::FtpSpecRegistry;
-use crate::storage::MockForgeStorage;
+use std::sync::Arc;
 
 /// FTP Server implementation for MockForge
 #[derive(Debug)]

@@ -306,11 +306,9 @@ impl MetricsRegistry {
         )
         .expect("Failed to create mqtt_messages_received_total metric");
 
-        let mqtt_topics_active = IntGauge::new(
-            "mockforge_mqtt_topics_active",
-            "Number of active MQTT topics",
-        )
-        .expect("Failed to create mqtt_topics_active metric");
+        let mqtt_topics_active =
+            IntGauge::new("mockforge_mqtt_topics_active", "Number of active MQTT topics")
+                .expect("Failed to create mqtt_topics_active metric");
 
         let mqtt_subscriptions_active = IntGauge::new(
             "mockforge_mqtt_subscriptions_active",
@@ -318,11 +316,9 @@ impl MetricsRegistry {
         )
         .expect("Failed to create mqtt_subscriptions_active metric");
 
-        let mqtt_retained_messages = IntGauge::new(
-            "mockforge_mqtt_retained_messages",
-            "Number of retained MQTT messages",
-        )
-        .expect("Failed to create mqtt_retained_messages metric");
+        let mqtt_retained_messages =
+            IntGauge::new("mockforge_mqtt_retained_messages", "Number of retained MQTT messages")
+                .expect("Failed to create mqtt_retained_messages metric");
 
         let mqtt_errors_total = IntCounterVec::new(
             Opts::new("mockforge_mqtt_errors_total", "Total number of MQTT errors by type"),

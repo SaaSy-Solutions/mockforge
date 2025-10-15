@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// FTP fixture configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +31,10 @@ pub enum FileContentConfig {
     #[serde(rename = "template")]
     Template { template: String },
     #[serde(rename = "generated")]
-    Generated { size: usize, pattern: GenerationPattern },
+    Generated {
+        size: usize,
+        pattern: GenerationPattern,
+    },
 }
 
 /// Upload rule configuration
@@ -85,7 +88,11 @@ impl UploadRule {
             // Check file size
             if let Some(max_size) = validation.max_size_bytes {
                 if data.len() as u64 > max_size {
-                    return Err(format!("File too large: {} bytes (max: {})", data.len(), max_size));
+                    return Err(format!(
+                        "File too large: {} bytes (max: {})",
+                        data.len(),
+                        max_size
+                    ));
                 }
             }
 

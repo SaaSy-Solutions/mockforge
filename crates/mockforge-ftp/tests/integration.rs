@@ -1,6 +1,11 @@
-use mockforge_ftp::{FtpServer, FtpSpecRegistry, FtpFixture, VirtualFileConfig, UploadRule, UploadStorage, VirtualFile, FileContent, FileMetadata};
 use mockforge_core::config::FtpConfig;
-use mockforge_core::protocol_abstraction::{ProtocolRequest, ProtocolResponse, ResponseStatus, Protocol};
+use mockforge_core::protocol_abstraction::{
+    Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus,
+};
+use mockforge_ftp::{
+    FileContent, FileMetadata, FtpFixture, FtpServer, FtpSpecRegistry, UploadRule, UploadStorage,
+    VirtualFile, VirtualFileConfig,
+};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -8,12 +13,14 @@ use tokio::time::timeout;
 fn test_ftp_server_creation() {
     let config = FtpConfig::default();
     let server = FtpServer::new(config);
-    assert!(!server.spec_registry().fixtures.is_empty() || server.spec_registry().fixtures.is_empty()); // Just check it doesn't panic
+    assert!(
+        !server.spec_registry().fixtures.is_empty() || server.spec_registry().fixtures.is_empty()
+    ); // Just check it doesn't panic
 }
 
 #[test]
 fn test_vfs_operations() {
-    use mockforge_ftp::vfs::{VirtualFileSystem, VirtualFile, FileContent, FileMetadata};
+    use mockforge_ftp::vfs::{FileContent, FileMetadata, VirtualFile, VirtualFileSystem};
     use std::path::PathBuf;
 
     let vfs = VirtualFileSystem::new(PathBuf::from("/test"));
@@ -66,7 +73,9 @@ fn test_spec_registry_basic() {
 
 #[test]
 fn test_vfs_file_operations() {
-    use mockforge_ftp::vfs::{VirtualFileSystem, VirtualFile, FileContent, FileMetadata, GenerationPattern};
+    use mockforge_ftp::vfs::{
+        FileContent, FileMetadata, GenerationPattern, VirtualFile, VirtualFileSystem,
+    };
     use std::path::PathBuf;
 
     let vfs = VirtualFileSystem::new(PathBuf::from("/test"));
@@ -84,7 +93,10 @@ fn test_vfs_file_operations() {
     // Test generated content
     let generated_file = VirtualFile::new(
         PathBuf::from("/test/generated.bin"),
-        FileContent::Generated { size: 100, pattern: GenerationPattern::Zeros },
+        FileContent::Generated {
+            size: 100,
+            pattern: GenerationPattern::Zeros,
+        },
         FileMetadata::default(),
     );
     vfs.add_file(PathBuf::from("/test/generated.bin"), generated_file).unwrap();

@@ -1,5 +1,8 @@
-use mockforge_core::protocol_abstraction::{SpecRegistry, ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, ValidationResult, ValidationError};
-use mockforge_core::{Protocol, Result, Error, templating};
+use mockforge_core::protocol_abstraction::{
+    ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
+    ValidationError, ValidationResult,
+};
+use mockforge_core::{templating, Error, Protocol, Result};
 use std::path::Path;
 use tracing::{debug, warn};
 
@@ -85,28 +88,31 @@ impl SpecRegistry for MqttSpecRegistry {
     }
 
     fn operations(&self) -> Vec<SpecOperation> {
-        self.fixture_registry.fixtures().map(|fixture| {
-            SpecOperation {
+        self.fixture_registry
+            .fixtures()
+            .map(|fixture| SpecOperation {
                 name: fixture.identifier.clone(),
                 path: fixture.topic_pattern.clone(),
                 operation_type: "PUBLISH".to_string(),
                 input_schema: None,
-                output_schema: Some(serde_json::to_string(&fixture.response.payload).unwrap_or_default()),
+                output_schema: Some(
+                    serde_json::to_string(&fixture.response.payload).unwrap_or_default(),
+                ),
                 metadata: std::collections::HashMap::new(),
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     fn find_operation(&self, _operation: &str, path: &str) -> Option<SpecOperation> {
-        self.find_fixture_by_topic(path).map(|fixture| {
-            SpecOperation {
-                name: fixture.identifier.clone(),
-                path: fixture.topic_pattern.clone(),
-                operation_type: "PUBLISH".to_string(),
-                input_schema: None,
-                output_schema: Some(serde_json::to_string(&fixture.response.payload).unwrap_or_default()),
-                metadata: std::collections::HashMap::new(),
-            }
+        self.find_fixture_by_topic(path).map(|fixture| SpecOperation {
+            name: fixture.identifier.clone(),
+            path: fixture.topic_pattern.clone(),
+            operation_type: "PUBLISH".to_string(),
+            input_schema: None,
+            output_schema: Some(
+                serde_json::to_string(&fixture.response.payload).unwrap_or_default(),
+            ),
+            metadata: std::collections::HashMap::new(),
         })
     }
 
@@ -136,11 +142,13 @@ impl SpecRegistry for MqttSpecRegistry {
     }
 
     fn generate_mock_response(&self, request: &ProtocolRequest) -> Result<ProtocolResponse> {
-        let topic = request.topic.as_ref()
-            .ok_or_else(|| Error::Validation { message: "Missing topic".to_string() })?;
+        let topic = request.topic.as_ref().ok_or_else(|| Error::Validation {
+            message: "Missing topic".to_string(),
+        })?;
 
-        let fixture = self.find_fixture_by_topic(topic)
-            .ok_or_else(|| Error::Routing { message: format!("No fixture found for topic: {}", topic) })?;
+        let fixture = self.find_fixture_by_topic(topic).ok_or_else(|| Error::Routing {
+            message: format!("No fixture found for topic: {}", topic),
+        })?;
 
         // Create templating context with environment variables
         let mut env_vars = std::collections::HashMap::new();
@@ -149,8 +157,8 @@ impl SpecRegistry for MqttSpecRegistry {
         let context = templating::TemplatingContext::with_env(env_vars);
 
         // Use template engine to render payload
-        let template_str = serde_json::to_string(&fixture.response.payload)
-            .map_err(|e| Error::Json(e))?;
+        let template_str =
+            serde_json::to_string(&fixture.response.payload).map_err(|e| Error::Json(e))?;
         let expanded_payload = templating::expand_str_with_context(&template_str, &context);
         let payload = expanded_payload.into_bytes();
 

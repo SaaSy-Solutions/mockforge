@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use std::path::PathBuf;
 
 /// FTP-related CLI commands
 #[derive(Debug, Subcommand)]
@@ -117,7 +117,13 @@ async fn execute_vfs_command(command: VfsCommands) -> Result<()> {
             // TODO: Implement tree view
             Ok(())
         }
-        VfsSubcommands::Add { path, content, template, generate, size } => {
+        VfsSubcommands::Add {
+            path,
+            content,
+            template,
+            generate,
+            size,
+        } => {
             println!("Adding virtual file: {}", path.display());
             // TODO: Implement file addition
             Ok(())

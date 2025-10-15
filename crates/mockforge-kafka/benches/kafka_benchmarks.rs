@@ -1,7 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_kafka::{KafkaMockBroker, topics::Topic, topics::TopicConfig, partitions::KafkaMessage};
-use mockforge_core::config::KafkaConfig;
-use std::collections::HashMap;
+use mockforge_kafka::{partitions::KafkaMessage, topics::Topic, topics::TopicConfig};
 
 fn bench_topic_creation(c: &mut Criterion) {
     c.bench_function("topic_creation", |b| {
@@ -58,7 +56,8 @@ fn bench_consumer_group_join(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches,
+criterion_group!(
+    benches,
     bench_topic_creation,
     bench_partition_append,
     bench_message_generation,

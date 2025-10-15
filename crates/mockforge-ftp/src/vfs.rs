@@ -1,12 +1,12 @@
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use handlebars::Handlebars;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use handlebars::Handlebars;
-use anyhow::Result;
 
 /// Virtual File System for FTP server
 #[derive(Debug, Clone)]
@@ -44,7 +44,8 @@ impl VirtualFileSystem {
 
     pub fn list_files(&self, path: &Path) -> Vec<VirtualFile> {
         let files = self.files.blocking_read();
-        files.iter()
+        files
+            .iter()
             .filter(|(file_path, _)| file_path.starts_with(path))
             .map(|(_, file)| file.clone())
             .collect()
@@ -89,18 +90,12 @@ impl VirtualFile {
                 let rendered = handlebars.render_template(template, &context)?;
                 Ok(rendered.into_bytes())
             }
-            FileContent::Generated { size, pattern } => {
-                match pattern {
-                    GenerationPattern::Random => {
-                        Ok((0..*size).map(|_| rand::random::<u8>()).collect())
-                    }
-                    GenerationPattern::Zeros => Ok(vec![0; *size]),
-                    GenerationPattern::Ones => Ok(vec![1; *size]),
-                    GenerationPattern::Incremental => {
-                        Ok((0..*size).map(|i| (i % 256) as u8).collect())
-                    }
-                }
-            }
+            FileContent::Generated { size, pattern } => match pattern {
+                GenerationPattern::Random => Ok((0..*size).map(|_| rand::random::<u8>()).collect()),
+                GenerationPattern::Zeros => Ok(vec![0; *size]),
+                GenerationPattern::Ones => Ok(vec![1; *size]),
+                GenerationPattern::Incremental => Ok((0..*size).map(|i| (i % 256) as u8).collect()),
+            },
         }
     }
 }
@@ -110,7 +105,10 @@ impl VirtualFile {
 pub enum FileContent {
     Static(Vec<u8>),
     Template(String),
-    Generated { size: usize, pattern: GenerationPattern },
+    Generated {
+        size: usize,
+        pattern: GenerationPattern,
+    },
 }
 
 /// File metadata
@@ -163,7 +161,10 @@ fn create_template_context() -> Value {
 
     // Add random values
     context.insert("random_int".to_string(), Value::Number(rand::random::<i64>().into()));
-    context.insert("random_float".to_string(), Value::String(format!("{:.6}", rand::random::<f64>())));
+    context.insert(
+        "random_float".to_string(),
+        Value::String(format!("{:.6}", rand::random::<f64>())),
+    );
 
     // Add UUID
     context.insert("uuid".to_string(), Value::String(uuid::Uuid::new_v4().to_string()));

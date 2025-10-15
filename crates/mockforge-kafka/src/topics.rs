@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use crate::partitions::Partition;
 use crate::fixtures::KafkaFixture;
+use crate::partitions::Partition;
 
 /// Represents a Kafka topic
 #[derive(Debug)]
@@ -25,7 +25,7 @@ impl Default for TopicConfig {
         Self {
             num_partitions: 3,
             replication_factor: 1,
-            retention_ms: 604800000, // 7 days
+            retention_ms: 604800000,    // 7 days
             max_message_bytes: 1048576, // 1MB
         }
     }
@@ -34,9 +34,7 @@ impl Default for TopicConfig {
 impl Topic {
     /// Create a new topic
     pub fn new(name: String, config: TopicConfig) -> Self {
-        let partitions = (0..config.num_partitions)
-            .map(|id| Partition::new(id))
-            .collect();
+        let partitions = (0..config.num_partitions).map(Partition::new).collect();
 
         Self {
             name,
@@ -67,11 +65,18 @@ impl Topic {
     }
 
     /// Produce a record to the appropriate partition
-    pub async fn produce(&mut self, partition: i32, record: crate::partitions::KafkaMessage) -> mockforge_core::Result<i64> {
+    pub async fn produce(
+        &mut self,
+        partition: i32,
+        record: crate::partitions::KafkaMessage,
+    ) -> mockforge_core::Result<i64> {
         if let Some(partition) = self.partitions.get_mut(partition as usize) {
             Ok(partition.append(record))
         } else {
-            Err(mockforge_core::Error::generic(format!("Partition {} does not exist", partition)))
+            Err(mockforge_core::Error::generic(format!(
+                "Partition {} does not exist",
+                partition
+            )))
         }
     }
 

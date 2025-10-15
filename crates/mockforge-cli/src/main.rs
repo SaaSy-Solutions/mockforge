@@ -10,11 +10,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-mod plugin_commands;
-mod mqtt_commands;
-mod smtp_commands;
 mod ftp_commands;
 mod kafka_commands;
+mod mqtt_commands;
+mod plugin_commands;
+mod smtp_commands;
 mod workspace_commands;
 
 #[derive(Parser)]
@@ -2105,7 +2105,7 @@ async fn handle_serve(
 
     // Create SMTP registry if enabled
     let smtp_registry = if config.smtp.enabled {
-        use mockforge_smtp::{SmtpSpecRegistry};
+        use mockforge_smtp::SmtpSpecRegistry;
         use std::sync::Arc;
 
         let mut registry = SmtpSpecRegistry::with_mailbox_size(config.smtp.max_mailbox_messages);
@@ -2132,7 +2132,7 @@ async fn handle_serve(
 
     // Create MQTT registry if enabled
     let mqtt_registry = if config.mqtt.enabled {
-        use mockforge_mqtt::{MqttSpecRegistry};
+        use mockforge_mqtt::MqttSpecRegistry;
         use std::sync::Arc;
 
         let mut registry = MqttSpecRegistry::new();
@@ -2324,8 +2324,10 @@ async fn handle_serve(
             version: mockforge_mqtt::broker::MqttVersion::default(),
         };
 
-        Some(Arc::new(mockforge_mqtt::MqttBroker::new(broker_config.clone(), mqtt_registry.clone())
-            .with_metrics(metrics_registry.clone())))
+        Some(Arc::new(
+            mockforge_mqtt::MqttBroker::new(broker_config.clone(), mqtt_registry.clone())
+                .with_metrics(metrics_registry.clone()),
+        ))
     } else {
         None
     };
@@ -2364,8 +2366,6 @@ async fn handle_serve(
     } else {
         None
     };
-
-
 
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {

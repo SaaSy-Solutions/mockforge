@@ -16,21 +16,95 @@ impl KafkaProtocolHandler {
     pub fn new() -> Self {
         let mut api_versions = HashMap::new();
         // Add supported API versions
-        api_versions.insert(0, ApiVersion { min_version: 0, max_version: 12 }); // Produce
-        api_versions.insert(1, ApiVersion { min_version: 0, max_version: 16 }); // Fetch
-        api_versions.insert(3, ApiVersion { min_version: 0, max_version: 12 }); // Metadata
-        api_versions.insert(9, ApiVersion { min_version: 0, max_version: 5 }); // ListGroups
-        api_versions.insert(15, ApiVersion { min_version: 0, max_version: 9 }); // DescribeGroups
-        api_versions.insert(16, ApiVersion { min_version: 0, max_version: 9 }); // DescribeGroups (alternative)
-        api_versions.insert(18, ApiVersion { min_version: 0, max_version: 4 }); // ApiVersions
-        api_versions.insert(19, ApiVersion { min_version: 0, max_version: 7 }); // CreateTopics
-        api_versions.insert(20, ApiVersion { min_version: 0, max_version: 6 }); // DeleteTopics
-        api_versions.insert(32, ApiVersion { min_version: 0, max_version: 4 }); // DescribeConfigs
-        api_versions.insert(49, ApiVersion { min_version: 0, max_version: 4 }); // DescribeConfigs (alternative)
+        api_versions.insert(
+            0,
+            ApiVersion {
+                min_version: 0,
+                max_version: 12,
+            },
+        ); // Produce
+        api_versions.insert(
+            1,
+            ApiVersion {
+                min_version: 0,
+                max_version: 16,
+            },
+        ); // Fetch
+        api_versions.insert(
+            3,
+            ApiVersion {
+                min_version: 0,
+                max_version: 12,
+            },
+        ); // Metadata
+        api_versions.insert(
+            9,
+            ApiVersion {
+                min_version: 0,
+                max_version: 5,
+            },
+        ); // ListGroups
+        api_versions.insert(
+            15,
+            ApiVersion {
+                min_version: 0,
+                max_version: 9,
+            },
+        ); // DescribeGroups
+        api_versions.insert(
+            16,
+            ApiVersion {
+                min_version: 0,
+                max_version: 9,
+            },
+        ); // DescribeGroups (alternative)
+        api_versions.insert(
+            18,
+            ApiVersion {
+                min_version: 0,
+                max_version: 4,
+            },
+        ); // ApiVersions
+        api_versions.insert(
+            19,
+            ApiVersion {
+                min_version: 0,
+                max_version: 7,
+            },
+        ); // CreateTopics
+        api_versions.insert(
+            20,
+            ApiVersion {
+                min_version: 0,
+                max_version: 6,
+            },
+        ); // DeleteTopics
+        api_versions.insert(
+            32,
+            ApiVersion {
+                min_version: 0,
+                max_version: 4,
+            },
+        ); // DescribeConfigs
+        api_versions.insert(
+            49,
+            ApiVersion {
+                min_version: 0,
+                max_version: 4,
+            },
+        ); // DescribeConfigs (alternative)
 
         Self { api_versions }
     }
+}
 
+impl Default for KafkaProtocolHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KafkaProtocolHandler {
     /// Parse a Kafka request from bytes
     pub fn parse_request(&self, data: &[u8]) -> Result<KafkaRequest> {
         // TODO: Implement proper Kafka protocol parsing
@@ -41,16 +115,24 @@ impl KafkaProtocolHandler {
 
         // Extract API key from the request (simplified)
         // In real Kafka protocol, this would parse the full header
-        let api_key = if data.len() > 8 { (data[8] as i16) | ((data[9] as i16) << 8) } else { 18 }; // Default to ApiVersions
+        let api_key = if data.len() > 8 {
+            (data[8] as i16) | ((data[9] as i16) << 8)
+        } else {
+            18
+        }; // Default to ApiVersions
 
         match api_key {
             18 => Ok(KafkaRequest::ApiVersions), // ApiVersions
-            _ => Ok(KafkaRequest::ApiVersions), // Default to ApiVersions for now
+            _ => Ok(KafkaRequest::ApiVersions),  // Default to ApiVersions for now
         }
     }
 
     /// Serialize a Kafka response to bytes
-    pub fn serialize_response(&self, response: &KafkaResponse, correlation_id: i32) -> Result<Vec<u8>> {
+    pub fn serialize_response(
+        &self,
+        response: &KafkaResponse,
+        correlation_id: i32,
+    ) -> Result<Vec<u8>> {
         // TODO: Implement proper Kafka protocol serialization
         // For now, return a minimal response
         match response {

@@ -1,11 +1,10 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
-use std::collections::HashMap;
-use chrono::Utc;
-
 
 /// Kafka fixture for message generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,7 +12,7 @@ pub struct KafkaFixture {
     pub identifier: String,
     pub name: String,
     pub topic: String,
-    pub partition: Option<i32>, // None = all partitions
+    pub partition: Option<i32>,      // None = all partitions
     pub key_pattern: Option<String>, // Template
     pub value_template: serde_json::Value,
     pub headers: std::collections::HashMap<String, String>,
@@ -51,7 +50,7 @@ impl AutoProducer {
 
     /// Add a fixture for auto-production
     pub async fn add_fixture(&self, fixture: KafkaFixture) {
-        if fixture.auto_produce.as_ref().map_or(false, |ap| ap.enabled) {
+        if fixture.auto_produce.as_ref().is_some_and(|ap| ap.enabled) {
             let fixture_id = fixture.identifier.clone();
             self.fixtures.write().await.insert(fixture_id, fixture);
         }
@@ -77,7 +76,10 @@ impl AutoProducer {
                             for _ in 0..auto_produce.rate_per_second {
                                 if let Ok(_message) = fixture.generate_message(&HashMap::new()) {
                                     // TODO: Actually produce the message to the broker
-                                    tracing::debug!("Auto-producing message to topic {}", fixture.topic);
+                                    tracing::debug!(
+                                        "Auto-producing message to topic {}",
+                                        fixture.topic
+                                    );
                                 }
                             }
                         }
@@ -107,7 +109,10 @@ impl KafkaFixture {
     }
 
     /// Generate a message using the fixture
-    pub fn generate_message(&self, _context: &std::collections::HashMap<String, String>) -> mockforge_core::Result<crate::partitions::KafkaMessage> {
+    pub fn generate_message(
+        &self,
+        _context: &std::collections::HashMap<String, String>,
+    ) -> mockforge_core::Result<crate::partitions::KafkaMessage> {
         // TODO: Implement message generation with templating
         Ok(crate::partitions::KafkaMessage {
             offset: 0,

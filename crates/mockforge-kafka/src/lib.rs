@@ -122,19 +122,19 @@
 //! - [`rdkafka`](https://docs.rs/rdkafka): Kafka client library for testing integration
 
 pub mod broker;
-pub mod topics;
-pub mod partitions;
 pub mod consumer_groups;
 pub mod fixtures;
-pub mod spec_registry;
-pub mod protocol;
 pub mod metrics;
+pub mod partitions;
+pub mod protocol;
+pub mod spec_registry;
+pub mod topics;
 
 // Re-export main types
 pub use broker::KafkaMockBroker;
-pub use topics::{Topic, TopicConfig};
-pub use partitions::{Partition, KafkaMessage};
-pub use consumer_groups::{ConsumerGroupManager, ConsumerGroup};
-pub use fixtures::{KafkaFixture, AutoProduceConfig};
-pub use spec_registry::KafkaSpecRegistry;
+pub use consumer_groups::{ConsumerGroup, ConsumerGroupManager};
+pub use fixtures::{AutoProduceConfig, KafkaFixture};
 pub use metrics::{KafkaMetrics, MetricsExporter, MetricsSnapshot};
+pub use partitions::{KafkaMessage, Partition};
+pub use spec_registry::KafkaSpecRegistry;
+pub use topics::{Topic, TopicConfig};

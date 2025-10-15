@@ -1075,11 +1075,11 @@ pub fn decrypt_with_key(
     key.decrypt(ciphertext, associated_data)
 }
 
+mod algorithms;
+mod auto_encryption;
+mod derivation;
 mod errors;
 mod key_management;
-mod algorithms;
-mod derivation;
-mod auto_encryption;
 mod key_rotation;
 
 #[cfg(test)]

@@ -1,14 +1,14 @@
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::collections::HashMap;
-use tokio::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::RwLock;
 
-use crate::topics::Topic;
 use crate::consumer_groups::ConsumerGroupManager;
-use crate::spec_registry::KafkaSpecRegistry;
-use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaResponse};
 use crate::metrics::KafkaMetrics;
+use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaResponse};
+use crate::spec_registry::KafkaSpecRegistry;
+use crate::topics::Topic;
 use mockforge_core::config::KafkaConfig;
 use mockforge_core::Result;
 
@@ -167,12 +167,18 @@ impl KafkaMockBroker {
         loop {
             // Read message size (4 bytes) with timeout
             let mut size_buf = [0u8; 4];
-            match tokio::time::timeout(std::time::Duration::from_secs(30), socket.read_exact(&mut size_buf)).await {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                socket.read_exact(&mut size_buf),
+            )
+            .await
+            {
                 Ok(Ok(_)) => {
                     let message_size = i32::from_be_bytes(size_buf) as usize;
 
                     // Validate message size (prevent DoS)
-                    if message_size > 10 * 1024 * 1024 { // 10MB limit
+                    if message_size > 10 * 1024 * 1024 {
+                        // 10MB limit
                         self.metrics.record_error();
                         tracing::warn!("Message size too large: {} bytes", message_size);
                         continue;
@@ -180,7 +186,12 @@ impl KafkaMockBroker {
 
                     // Read message
                     let mut message_buf = vec![0u8; message_size];
-                    if let Err(e) = tokio::time::timeout(std::time::Duration::from_secs(10), socket.read_exact(&mut message_buf)).await {
+                    if let Err(e) = tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        socket.read_exact(&mut message_buf),
+                    )
+                    .await
+                    {
                         self.metrics.record_error();
                         tracing::error!("Timeout reading message: {}", e);
                         break;
@@ -309,8 +320,6 @@ impl KafkaMockBroker {
     fn handle_describe_configs(&self) -> Result<KafkaResponse> {
         Ok(KafkaResponse::DescribeConfigs)
     }
-
-
 }
 
 /// Record represents a Kafka message record

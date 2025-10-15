@@ -50,8 +50,8 @@ struct PendingQoS1Message {
 /// QoS 2 message state
 #[derive(Debug, Clone)]
 enum QoS2State {
-    Received,  // PUBREC sent, waiting for PUBREL
-    Released,  // PUBREL received, PUBCOMP sent
+    Received, // PUBREC sent, waiting for PUBREL
+    Released, // PUBREL received, PUBCOMP sent
 }
 
 /// QoS handler for managing message delivery guarantees
@@ -79,7 +79,10 @@ impl QoSHandler {
 
     /// Handle QoS 1: At least once delivery
     pub async fn handle_qo_s1(&self, message: MessageState, client_id: &str) -> Result<()> {
-        info!("QoS 1: Storing message for at-least-once delivery, packet {}", message.packet_id);
+        info!(
+            "QoS 1: Storing message for at-least-once delivery, packet {}",
+            message.packet_id
+        );
 
         let pending = PendingQoS1Message {
             message: message.clone(),
@@ -211,7 +214,10 @@ impl QoSHandler {
             if message.retry_count < self.max_retries {
                 message.retry_count += 1;
                 to_retry.push((*packet_id, message.client_id.clone()));
-                info!("Retrying QoS 1 message for packet {} (attempt {})", packet_id, message.retry_count);
+                info!(
+                    "Retrying QoS 1 message for packet {} (attempt {})",
+                    packet_id, message.retry_count
+                );
             } else {
                 warn!("QoS 1 message for packet {} exceeded max retries", packet_id);
             }

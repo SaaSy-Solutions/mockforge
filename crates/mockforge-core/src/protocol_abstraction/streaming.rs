@@ -82,7 +82,11 @@ impl StreamingProtocolRegistry {
     }
 
     /// Register a streaming protocol handler
-    pub fn register_handler(&mut self, protocol: super::Protocol, handler: Arc<dyn StreamingProtocol>) {
+    pub fn register_handler(
+        &mut self,
+        protocol: super::Protocol,
+        handler: Arc<dyn StreamingProtocol>,
+    ) {
         self.handlers.insert(protocol, handler);
     }
 
@@ -149,7 +153,9 @@ impl MessageBuilder {
     /// Set the message payload from JSON
     pub fn json<T: serde::Serialize>(mut self, value: &T) -> Result<Self> {
         self.message.payload = serde_json::to_vec(value)?;
-        self.message.metadata.insert("content-type".to_string(), "application/json".to_string());
+        self.message
+            .metadata
+            .insert("content-type".to_string(), "application/json".to_string());
         Ok(self)
     }
 
@@ -205,10 +211,7 @@ mod tests {
             value: 42,
         };
 
-        let message = MessageBuilder::new("json-topic")
-            .json(&data)
-            .unwrap()
-            .build();
+        let message = MessageBuilder::new("json-topic").json(&data).unwrap().build();
 
         assert_eq!(message.topic, "json-topic");
         assert_eq!(message.metadata.get("content-type"), Some(&"application/json".to_string()));

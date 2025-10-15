@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::topics::TopicTree;
-use crate::spec_registry::MqttSpecRegistry;
 use crate::qos::QoSHandler;
+use crate::spec_registry::MqttSpecRegistry;
+use crate::topics::TopicTree;
 
 /// MQTT protocol version
 #[derive(Debug, Clone, Copy)]
@@ -87,16 +87,21 @@ impl MqttBroker {
         }
     }
 
-    pub fn with_metrics(mut self, metrics_registry: Arc<mockforge_observability::prometheus::MetricsRegistry>) -> Self {
+    pub fn with_metrics(
+        mut self,
+        metrics_registry: Arc<mockforge_observability::prometheus::MetricsRegistry>,
+    ) -> Self {
         self.metrics_registry = Some(metrics_registry);
         self
     }
 
     /// Handle client connection with session management
-    pub async fn client_connect(&self, client_id: &str, clean_session: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_secs();
+    pub async fn client_connect(
+        &self,
+        client_id: &str,
+        clean_session: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
 
         let mut clients = self.clients.write().await;
         let mut sessions = self.session_store.write().await;
@@ -153,10 +158,11 @@ impl MqttBroker {
     }
 
     /// Handle client disconnection with session persistence
-    pub async fn client_disconnect(&self, client_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_secs();
+    pub async fn client_disconnect(
+        &self,
+        client_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
 
         let mut clients = self.clients.write().await;
         let mut sessions = self.session_store.write().await;
@@ -191,7 +197,11 @@ impl MqttBroker {
     }
 
     /// Subscribe client to topics with session persistence
-    pub async fn client_subscribe(&self, client_id: &str, topics: Vec<(String, u8)>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn client_subscribe(
+        &self,
+        client_id: &str,
+        topics: Vec<(String, u8)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut clients = self.clients.write().await;
         let mut broker_topics = self.topics.write().await;
 
@@ -204,8 +214,12 @@ impl MqttBroker {
                 let retained_messages = broker_topics.get_retained_for_filter(&filter);
                 for (topic, message) in retained_messages {
                     info!("Sending retained message for topic {} to client {}", topic, client_id);
-                    let qos_level = crate::qos::QoS::from_u8(message.qos).unwrap_or(crate::qos::QoS::AtMostOnce);
-                    if let Err(e) = self.route_message_to_client(client_id, topic, &message.payload, qos_level).await {
+                    let qos_level = crate::qos::QoS::from_u8(message.qos)
+                        .unwrap_or(crate::qos::QoS::AtMostOnce);
+                    if let Err(e) = self
+                        .route_message_to_client(client_id, topic, &message.payload, qos_level)
+                        .await
+                    {
                         warn!("Failed to deliver retained message to client {}: {}", client_id, e);
                     }
                 }
@@ -224,7 +238,11 @@ impl MqttBroker {
     }
 
     /// Unsubscribe client from topics
-    pub async fn client_unsubscribe(&self, client_id: &str, filters: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn client_unsubscribe(
+        &self,
+        client_id: &str,
+        filters: Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut clients = self.clients.write().await;
         let mut broker_topics = self.topics.write().await;
 
@@ -274,7 +292,10 @@ impl MqttBroker {
     }
 
     /// Disconnect a client
-    pub async fn disconnect_client(&self, client_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn disconnect_client(
+        &self,
+        client_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.client_disconnect(client_id).await
     }
 
@@ -364,8 +385,12 @@ impl MqttBroker {
         let topics_read = self.topics.read().await;
         let subscribers = topics_read.match_topic(topic);
         for subscriber in &subscribers {
-            info!("Routing to subscriber: {} on topic filter: {}", subscriber.client_id, subscriber.filter);
-            self.route_message_to_client(&subscriber.client_id, topic, &payload, qos_level).await?;
+            info!(
+                "Routing to subscriber: {} on topic filter: {}",
+                subscriber.client_id, subscriber.filter
+            );
+            self.route_message_to_client(&subscriber.client_id, topic, &payload, qos_level)
+                .await?;
         }
 
         // Record metrics
@@ -377,7 +402,12 @@ impl MqttBroker {
     }
 
     /// Generate a response payload from a fixture using template expansion
-    fn generate_fixture_response(&self, fixture: &crate::fixtures::MqttFixture, topic: &str, received_payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    fn generate_fixture_response(
+        &self,
+        fixture: &crate::fixtures::MqttFixture,
+        topic: &str,
+        received_payload: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         use mockforge_core::templating;
 
         // Create templating context with environment variables
@@ -389,7 +419,10 @@ impl MqttBroker {
             env_vars.insert("payload".to_string(), received_json.to_string());
         } else {
             // If not JSON, add as string
-            env_vars.insert("payload".to_string(), String::from_utf8_lossy(received_payload).to_string());
+            env_vars.insert(
+                "payload".to_string(),
+                String::from_utf8_lossy(received_payload).to_string(),
+            );
         }
 
         let context = templating::TemplatingContext::with_env(env_vars);
@@ -402,7 +435,13 @@ impl MqttBroker {
     }
 
     /// Route a message to a specific client
-    async fn route_message_to_client(&self, client_id: &str, topic: &str, payload: &[u8], qos: crate::qos::QoS) -> Result<(), Box<dyn std::error::Error>> {
+    async fn route_message_to_client(
+        &self,
+        client_id: &str,
+        topic: &str,
+        payload: &[u8],
+        qos: crate::qos::QoS,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Check if client is connected
         let clients = self.clients.read().await;
         if let Some(client_state) = clients.get(client_id) {
@@ -433,7 +472,11 @@ impl MqttBroker {
 
                 // Update client state (in real implementation, this would be handled by the MQTT protocol)
                 // For simulation purposes, we just log
-                info!("Added QoS {} message to pending delivery queue for client {}", qos.as_u8(), client_id);
+                info!(
+                    "Added QoS {} message to pending delivery queue for client {}",
+                    qos.as_u8(),
+                    client_id
+                );
             }
 
             Ok(())

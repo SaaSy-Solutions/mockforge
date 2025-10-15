@@ -1,6 +1,6 @@
 //! MQTT broker management and topic operations
 
-use crate::{MqttCommands};
+use crate::MqttCommands;
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use std::time::Duration;
 
@@ -19,7 +19,12 @@ pub async fn handle_mqtt_command(
         } => {
             handle_publish_command(host, port, topic, payload, qos, retain).await?;
         }
-        MqttCommands::Subscribe { host, port, topic, qos } => {
+        MqttCommands::Subscribe {
+            host,
+            port,
+            topic,
+            qos,
+        } => {
             handle_subscribe_command(host, port, topic, qos).await?;
         }
         MqttCommands::Topics { topics_command } => {
@@ -203,7 +208,9 @@ async fn handle_fixtures_command(
 }
 
 /// Load MQTT fixtures from directory
-async fn handle_fixtures_load(path: std::path::PathBuf) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_fixtures_load(
+    path: std::path::PathBuf,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("📁 Loading MQTT fixtures from: {}", path.display());
 
     // Check if path exists
@@ -223,7 +230,8 @@ async fn handle_fixtures_load(path: std::path::PathBuf) -> Result<(), Box<dyn st
 }
 
 /// Start auto-publish for all fixtures
-async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
     println!("▶️  Starting auto-publish for all MQTT fixtures...");
 
     // TODO: Connect to broker and start auto-publishing
@@ -236,7 +244,8 @@ async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::
 }
 
 /// Stop auto-publish for all fixtures
-async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
     println!("⏹️  Stopping auto-publish for all MQTT fixtures...");
 
     // TODO: Connect to broker and stop auto-publishing
@@ -279,7 +288,9 @@ async fn handle_clients_list() -> Result<(), Box<dyn std::error::Error + Send + 
 }
 
 /// Disconnect a specific MQTT client
-async fn handle_clients_disconnect(client_id: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_clients_disconnect(
+    client_id: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🔌 Disconnecting MQTT client: {}", client_id);
 
     // TODO: Connect to broker management interface and disconnect client
