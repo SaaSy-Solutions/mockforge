@@ -14,7 +14,7 @@ categories = ["development-tools", "email"]
 
 [dependencies]
 # MockForge core
-mockforge-core = { path = "../mockforge-core" }
+mockforge-core = "0.1.0"
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util"] }
