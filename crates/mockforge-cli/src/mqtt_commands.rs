@@ -1,6 +1,6 @@
 //! MQTT broker management and topic operations
 
-use crate::{MqttCommands};
+use crate::MqttCommands;
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use std::time::Duration;
 
@@ -19,7 +19,12 @@ pub async fn handle_mqtt_command(
         } => {
             handle_publish_command(host, port, topic, payload, qos, retain).await?;
         }
-        MqttCommands::Subscribe { host, port, topic, qos } => {
+        MqttCommands::Subscribe {
+            host,
+            port,
+            topic,
+            qos,
+        } => {
             handle_subscribe_command(host, port, topic, qos).await?;
         }
         MqttCommands::Topics { topics_command } => {
@@ -157,17 +162,38 @@ async fn handle_topics_command(
 async fn handle_topics_list() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("📋 Listing active MQTT topics...");
 
-    // TODO: Connect to broker management interface and list topics
-    // For now, this is a placeholder. In a full implementation, this would:
-    // 1. Connect to the broker's management API (HTTP endpoint)
-    // 2. Query for active subscription topics and retained message topics
-    // 3. Display the results
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
-    println!("ℹ️  Management interface not yet implemented");
-    println!("   This would connect to the broker's management API to list:");
-    println!("   - Active subscription topics");
-    println!("   - Topics with retained messages");
-    println!("   - Topic statistics");
+    match client.get(format!("{}/mqtt/topics", management_url)).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let topics: Vec<String> = response.json().await?;
+                if topics.is_empty() {
+                    println!("📭 No active MQTT topics found");
+                } else {
+                    println!("📬 Found {} active topics:", topics.len());
+                    println!("{:<50} {}", "Topic", "Type");
+                    println!("{}", "-".repeat(70));
+
+                    for topic in topics {
+                        println!("{:<50} {}", topic, "subscription/retained");
+                    }
+                }
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!("❌ MQTT broker management API not available");
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to list topics: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }
@@ -176,10 +202,27 @@ async fn handle_topics_list() -> Result<(), Box<dyn std::error::Error + Send + S
 async fn handle_topics_clear_retained() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🧹 Clearing retained MQTT messages...");
 
-    // TODO: Implement clearing retained messages
-    // This would involve connecting to the broker and clearing retained messages
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
-    println!("✅ Retained messages cleared (placeholder implementation)");
+    match client.delete(format!("{}/mqtt/topics/retained", management_url)).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("✅ Retained messages cleared successfully");
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!("❌ MQTT broker management API not available");
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to clear retained messages: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }
@@ -203,7 +246,9 @@ async fn handle_fixtures_command(
 }
 
 /// Load MQTT fixtures from directory
-async fn handle_fixtures_load(path: std::path::PathBuf) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_fixtures_load(
+    path: std::path::PathBuf,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("📁 Loading MQTT fixtures from: {}", path.display());
 
     // Check if path exists
@@ -211,38 +256,148 @@ async fn handle_fixtures_load(path: std::path::PathBuf) -> Result<(), Box<dyn st
         return Err(format!("Fixtures path does not exist: {}", path.display()).into());
     }
 
-    // TODO: Integrate with running broker's fixture registry
-    // For now, we demonstrate the loading capability but don't connect to the broker
+    // Load fixtures from directory
+    let mut fixtures = Vec::new();
+    let mut loaded_count = 0;
 
-    println!("ℹ️  Fixture loading capability implemented");
-    println!("   Path exists: {}", path.display());
-    println!("   Note: Integration with running broker not yet implemented");
-    println!("   This would load fixtures into the broker's registry for mocking");
+    // Read all .json and .yaml files from the directory
+    for entry in std::fs::read_dir(&path)? {
+        let entry = entry?;
+        let file_path = entry.path();
+
+        if file_path.is_file() {
+            if let Some(extension) = file_path.extension() {
+                if extension == "json" || extension == "yaml" || extension == "yml" {
+                    match std::fs::read_to_string(&file_path) {
+                        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                            Ok(fixture) => {
+                                fixtures.push(fixture);
+                                loaded_count += 1;
+                                println!("  ✓ Loaded fixture from {}", file_path.display());
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "  ⚠️  Failed to parse fixture {}: {}",
+                                    file_path.display(),
+                                    e
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!(
+                                "  ⚠️  Failed to read fixture {}: {}",
+                                file_path.display(),
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if fixtures.is_empty() {
+        println!("⚠️  No valid fixtures found in {}", path.display());
+        return Ok(());
+    }
+
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
+
+    match client
+        .post(format!("{}/mqtt/fixtures", management_url))
+        .json(&fixtures)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!(
+                    "✅ Successfully loaded {} MQTT fixtures into broker registry",
+                    loaded_count
+                );
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!("❌ MQTT broker management API not available");
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to load fixtures: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }
 
 /// Start auto-publish for all fixtures
-async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
     println!("▶️  Starting auto-publish for all MQTT fixtures...");
 
-    // TODO: Connect to broker and start auto-publishing
-    // This would enable automatic publishing of fixture messages at configured intervals
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
-    println!("ℹ️  Auto-publish control not yet integrated with broker");
-    println!("   This would start automatic publishing of fixture messages");
+    match client
+        .post(format!("{}/mqtt/fixtures/auto-publish/start", management_url))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("✅ Auto-publish started for all MQTT fixtures");
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!("❌ MQTT broker management API not available");
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to start auto-publish: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }
 
 /// Stop auto-publish for all fixtures
-async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
     println!("⏹️  Stopping auto-publish for all MQTT fixtures...");
 
-    // TODO: Connect to broker and stop auto-publishing
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
-    println!("ℹ️  Auto-publish control not yet integrated with broker");
-    println!("   This would stop automatic publishing of fixture messages");
+    match client
+        .post(format!("{}/mqtt/fixtures/auto-publish/stop", management_url))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("✅ Auto-publish stopped for all MQTT fixtures");
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!("❌ MQTT broker management API not available");
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to stop auto-publish: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }
@@ -266,27 +421,83 @@ async fn handle_clients_command(
 async fn handle_clients_list() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("👥 Listing connected MQTT clients...");
 
-    // TODO: Connect to broker management interface and list clients
-    // This would query the broker for connected client information
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
-    println!("ℹ️  Management interface not yet implemented");
-    println!("   This would show:");
-    println!("   - Connected client IDs");
-    println!("   - Client connection time");
-    println!("   - Active subscriptions per client");
+    match client.get(format!("{}/mqtt/clients", management_url)).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let clients: Vec<serde_json::Value> = response.json().await?;
+                if clients.is_empty() {
+                    println!("📭 No connected MQTT clients");
+                } else {
+                    println!("📬 Found {} connected clients:", clients.len());
+                    println!("{:<30} {:<20} {}", "Client ID", "Connected At", "Subscriptions");
+                    println!("{}", "-".repeat(80));
+
+                    for client_info in clients {
+                        let client_id = client_info["client_id"].as_str().unwrap_or("N/A");
+                        let connected_at = client_info["connected_at"].as_str().unwrap_or("N/A");
+                        let subscriptions = client_info["subscriptions"]
+                            .as_array()
+                            .map(|subs| subs.len().to_string())
+                            .unwrap_or_else(|| "N/A".to_string());
+
+                        println!("{:<30} {:<20} {}", client_id, connected_at, subscriptions);
+                    }
+                }
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!("❌ MQTT broker management API not available");
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to list clients: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }
 
 /// Disconnect a specific MQTT client
-async fn handle_clients_disconnect(client_id: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_clients_disconnect(
+    client_id: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🔌 Disconnecting MQTT client: {}", client_id);
 
-    // TODO: Connect to broker management interface and disconnect client
-    // This would send a management command to force disconnect a client
+    // Connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
-    println!("ℹ️  Management interface not yet implemented");
-    println!("✅ Client '{}' disconnect requested (would be sent to broker)", client_id);
+    match client
+        .delete(format!("{}/mqtt/clients/{}", management_url, urlencoding::encode(&client_id)))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("✅ Client '{}' disconnected successfully", client_id);
+            } else if response.status() == reqwest::StatusCode::NOT_FOUND {
+                println!(
+                    "❌ Client '{}' not found or MQTT broker management API not available",
+                    client_id
+                );
+                println!("   Make sure MockForge server is running with MQTT support");
+            } else {
+                println!("❌ Failed to disconnect client: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to management API: {}", e);
+            println!("   Make sure MockForge server is running on {}", management_url);
+        }
+    }
 
     Ok(())
 }

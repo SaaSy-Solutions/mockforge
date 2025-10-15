@@ -50,8 +50,8 @@ struct PendingQoS1Message {
 /// QoS 2 message state
 #[derive(Debug, Clone)]
 enum QoS2State {
-    Received,  // PUBREC sent, waiting for PUBREL
-    Released,  // PUBREL received, PUBCOMP sent
+    Received, // PUBREC sent, waiting for PUBREL
+    Released, // PUBREL received, PUBCOMP sent
 }
 
 /// QoS handler for managing message delivery guarantees
@@ -59,6 +59,12 @@ pub struct QoSHandler {
     qos1_pending: Arc<RwLock<HashMap<u16, PendingQoS1Message>>>,
     qos2_states: Arc<RwLock<HashMap<u16, QoS2State>>>,
     max_retries: u8,
+}
+
+impl Default for QoSHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QoSHandler {
@@ -71,7 +77,7 @@ impl QoSHandler {
     }
 
     /// Handle QoS 0: At most once delivery
-    pub async fn handle_qo_s0(&self, message: MessageState) -> Result<()> {
+    pub async fn handle_qo_s0(&self, _message: MessageState) -> Result<()> {
         info!("QoS 0: Fire and forget delivery");
         // QoS 0 - no acknowledgment needed
         Ok(())
@@ -79,7 +85,10 @@ impl QoSHandler {
 
     /// Handle QoS 1: At least once delivery
     pub async fn handle_qo_s1(&self, message: MessageState, client_id: &str) -> Result<()> {
-        info!("QoS 1: Storing message for at-least-once delivery, packet {}", message.packet_id);
+        info!(
+            "QoS 1: Storing message for at-least-once delivery, packet {}",
+            message.packet_id
+        );
 
         let pending = PendingQoS1Message {
             message: message.clone(),
@@ -110,7 +119,7 @@ impl QoSHandler {
 
     /// Handle PUBACK (QoS 1 acknowledgment)
     pub async fn handle_puback(&self, packet_id: u16) -> Result<()> {
-        if let Some(pending) = self.qos1_pending.write().await.remove(&packet_id) {
+        if let Some(_pending) = self.qos1_pending.write().await.remove(&packet_id) {
             info!("QoS 1: Received PUBACK for packet {}, delivery confirmed", packet_id);
         } else {
             warn!("QoS 1: Received PUBACK for unknown packet {}", packet_id);
@@ -211,7 +220,10 @@ impl QoSHandler {
             if message.retry_count < self.max_retries {
                 message.retry_count += 1;
                 to_retry.push((*packet_id, message.client_id.clone()));
-                info!("Retrying QoS 1 message for packet {} (attempt {})", packet_id, message.retry_count);
+                info!(
+                    "Retrying QoS 1 message for packet {} (attempt {})",
+                    packet_id, message.retry_count
+                );
             } else {
                 warn!("QoS 1 message for packet {} exceeded max retries", packet_id);
             }

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub struct MqttFixture {
     pub identifier: String,
     pub name: String,
-    pub topic_pattern: String,  // Regex pattern for topic matching
+    pub topic_pattern: String, // Regex pattern for topic matching
     pub qos: u8,
     pub retained: bool,
     pub response: MqttResponse,
@@ -16,7 +16,7 @@ pub struct MqttFixture {
 /// Response configuration for MQTT fixtures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttResponse {
-    pub payload: serde_json::Value,  // Template-enabled JSON payload
+    pub payload: serde_json::Value, // Template-enabled JSON payload
 }
 
 /// Auto-publish configuration
@@ -24,12 +24,18 @@ pub struct MqttResponse {
 pub struct AutoPublishConfig {
     pub enabled: bool,
     pub interval_ms: u64,
-    pub count: Option<usize>,  // None = infinite
+    pub count: Option<usize>, // None = infinite
 }
 
 /// MQTT fixture registry
 pub struct MqttFixtureRegistry {
     fixtures: HashMap<String, MqttFixture>,
+}
+
+impl Default for MqttFixtureRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MqttFixtureRegistry {
@@ -49,10 +55,7 @@ impl MqttFixtureRegistry {
 
     pub fn find_by_topic(&self, topic: &str) -> Option<&MqttFixture> {
         for fixture in self.fixtures.values() {
-            if regex::Regex::new(&fixture.topic_pattern)
-                .ok()?
-                .is_match(topic)
-            {
+            if regex::Regex::new(&fixture.topic_pattern).ok()?.is_match(topic) {
                 return Some(fixture);
             }
         }
@@ -64,7 +67,10 @@ impl MqttFixtureRegistry {
     }
 
     /// Load fixtures from a directory
-    pub fn load_from_directory(&mut self, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn load_from_directory(
+        &mut self,
+        path: &std::path::Path,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if !path.exists() {
             return Err(format!("Fixtures directory does not exist: {}", path.display()).into());
         }
@@ -89,7 +95,11 @@ impl MqttFixtureRegistry {
                                 loaded_count += 1;
                             }
                             Err(e) => {
-                                eprintln!("Warning: Failed to load fixture from {}: {}", path.display(), e);
+                                eprintln!(
+                                    "Warning: Failed to load fixture from {}: {}",
+                                    path.display(),
+                                    e
+                                );
                             }
                         }
                     }
@@ -102,7 +112,10 @@ impl MqttFixtureRegistry {
     }
 
     /// Load a single fixture file
-    fn load_fixture_file(&self, path: &std::path::Path) -> Result<MqttFixture, Box<dyn std::error::Error + Send + Sync>> {
+    fn load_fixture_file(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<MqttFixture, Box<dyn std::error::Error + Send + Sync>> {
         let content = std::fs::read_to_string(path)?;
         let fixture: MqttFixture = if path.extension().unwrap_or_default() == "json" {
             serde_json::from_str(&content)?

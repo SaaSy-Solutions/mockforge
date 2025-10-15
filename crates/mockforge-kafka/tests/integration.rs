@@ -1,14 +1,24 @@
-use mockforge_kafka::{KafkaMockBroker, KafkaSpecRegistry};
 use mockforge_core::config::KafkaConfig;
-use std::time::Duration;
-use tokio::time::timeout;
+use mockforge_kafka::consumer_groups::PartitionAssignment;
+use mockforge_kafka::fixtures::KafkaFixture;
+use mockforge_kafka::topics::{Topic, TopicConfig};
+use mockforge_kafka::KafkaMockBroker;
+use mockforge_kafka::KafkaSpecRegistry;
 use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
 use rdkafka::client::DefaultClientContext;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message;
+use serde_json;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
+use std::sync::Arc;
+use std::time::Duration;
+use tempfile::TempDir;
+use tokio::sync::RwLock;
+use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_broker_creation() {
@@ -20,7 +30,8 @@ async fn test_broker_creation() {
 #[tokio::test]
 async fn test_spec_registry_creation() {
     let config = KafkaConfig::default();
-    let registry = KafkaSpecRegistry::new(config).await;
+    let topics = Arc::new(RwLock::new(HashMap::new()));
+    let registry = KafkaSpecRegistry::new(config, topics).await;
     assert!(registry.is_ok());
 }
 
@@ -29,38 +40,220 @@ async fn test_topic_creation() {
     let config = KafkaConfig::default();
     let broker = KafkaMockBroker::new(config).await.unwrap();
 
-    // TODO: Add topic creation test once broker methods are implemented
-    assert!(true); // Placeholder
+    // Test direct topic creation in broker
+    let topic_name = "test-topic";
+    let topic_config = TopicConfig::default();
+    let topic = Topic::new(topic_name.to_string(), topic_config);
+
+    // Access the broker's topics map directly (this is a test, so we can do this)
+    // Note: In a real implementation, topics would be created via protocol requests
+    {
+        let mut topics = broker.topics.write().await;
+        topics.insert(topic_name.to_string(), topic);
+    }
+
+    // Verify topic was created
+    {
+        let topics = broker.topics.read().await;
+        assert!(topics.contains_key(topic_name));
+        let created_topic = topics.get(topic_name).unwrap();
+        assert_eq!(created_topic.name, topic_name);
+        assert_eq!(created_topic.config.num_partitions, 3); // default
+    }
 }
 
 #[tokio::test]
 async fn test_fixture_loading() {
-    // TODO: Test fixture loading from YAML
-    assert!(true); // Placeholder
+    let temp_dir = TempDir::new().unwrap();
+    let yaml_content = r#"
+- identifier: "test-fixture-1"
+  name: "Test Fixture 1"
+  topic: "test-topic"
+  partition: 0
+  key_pattern: "key-{{id}}"
+  value_template: {"message": "Hello {{name}}", "id": "{{id}}"}
+  headers: {"content-type": "application/json"}
+  auto_produce:
+    enabled: false
+    rate_per_second: 1
+- identifier: "test-fixture-2"
+  name: "Test Fixture 2"
+  topic: "test-topic"
+  value_template: {"message": "World"}
+  headers: {}
+"#;
+    let yaml_path = temp_dir.path().join("fixtures.yaml");
+    let mut file = File::create(&yaml_path).unwrap();
+    file.write_all(yaml_content.as_bytes()).unwrap();
+
+    let fixtures = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+    assert_eq!(fixtures.len(), 2);
+    assert_eq!(fixtures[0].identifier, "test-fixture-1");
+    assert_eq!(fixtures[0].topic, "test-topic");
+    assert_eq!(fixtures[1].identifier, "test-fixture-2");
 }
 
 #[tokio::test]
 async fn test_message_generation() {
-    // TODO: Test message generation from fixtures
-    assert!(true); // Placeholder
+    let fixture = KafkaFixture {
+        identifier: "test-fixture".to_string(),
+        name: "Test Fixture".to_string(),
+        topic: "test-topic".to_string(),
+        partition: Some(0),
+        key_pattern: Some("key-{{id}}".to_string()),
+        value_template: serde_json::json!({"message": "Hello {{name}}", "id": "{{id}}"}),
+        headers: [("content-type".to_string(), "application/json".to_string())].into(),
+        auto_produce: None,
+    };
+
+    let mut context = HashMap::new();
+    context.insert("id".to_string(), "123".to_string());
+    context.insert("name".to_string(), "World".to_string());
+
+    let message = fixture.generate_message(&context).unwrap();
+    assert_eq!(message.key, Some(b"key-123".to_vec()));
+    let value: serde_json::Value = serde_json::from_slice(&message.value).unwrap();
+    assert_eq!(value["message"], "Hello World");
+    assert_eq!(value["id"], "123");
+    assert_eq!(message.headers.len(), 1);
+    assert_eq!(message.headers[0], ("content-type".to_string(), b"application/json".to_vec()));
 }
 
 #[tokio::test]
 async fn test_consumer_group_operations() {
-    // TODO: Test consumer group join, sync, etc.
-    assert!(true); // Placeholder
+    let config = KafkaConfig::default();
+    let broker = KafkaMockBroker::new(config).await.unwrap();
+
+    // Create a topic with 2 partitions
+    let topic_config = TopicConfig {
+        num_partitions: 2,
+        ..Default::default()
+    };
+    broker.test_create_topic("test-topic", topic_config).await;
+
+    // Join a consumer group
+    broker.test_join_group("test-group", "member-1", "client-1").await.unwrap();
+
+    // Sync group to assign partitions
+    broker.test_sync_group("test-group", vec![]).await.unwrap();
+
+    // Verify assignments
+    let assignments = broker.test_get_assignments("test-group", "member-1").await;
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].topic, "test-topic");
+    assert_eq!(assignments[0].partitions.len(), 2); // Should get both partitions since only one member
+
+    // Join another member
+    broker.test_join_group("test-group", "member-2", "client-2").await.unwrap();
+
+    // Sync again to rebalance
+    broker.test_sync_group("test-group", vec![]).await.unwrap();
+
+    // Verify rebalanced assignments
+    let assignments1 = broker.test_get_assignments("test-group", "member-1").await;
+    let assignments2 = broker.test_get_assignments("test-group", "member-2").await;
+
+    // With round-robin, each should get one partition
+    assert_eq!(assignments1.len(), 1);
+    assert_eq!(assignments2.len(), 1);
+    assert_eq!(assignments1[0].partitions.len(), 1);
+    assert_eq!(assignments2[0].partitions.len(), 1);
+
+    // Check that partitions are assigned uniquely
+    let all_partitions: std::collections::HashSet<i32> = assignments1[0]
+        .partitions
+        .iter()
+        .chain(&assignments2[0].partitions)
+        .cloned()
+        .collect();
+    assert_eq!(all_partitions, std::collections::HashSet::from([0, 1]));
 }
 
 #[tokio::test]
 async fn test_partition_assignment() {
-    // TODO: Test partition assignment logic
-    assert!(true); // Placeholder
+    let config = KafkaConfig::default();
+    let broker = KafkaMockBroker::new(config).await.unwrap();
+
+    // Create a topic with 3 partitions
+    let topic_config = TopicConfig::default();
+    broker.test_create_topic("test-topic", topic_config).await;
+
+    // Join multiple members to the group
+    broker.test_join_group("test-group", "member-1", "client-1").await.unwrap();
+    broker.test_join_group("test-group", "member-2", "client-2").await.unwrap();
+    broker.test_join_group("test-group", "member-3", "client-3").await.unwrap();
+
+    // Sync group to assign partitions
+    broker.test_sync_group("test-group", vec![]).await.unwrap();
+
+    // Verify assignments for round-robin
+    let assignments_member1 = broker.test_get_assignments("test-group", "member-1").await;
+    let assignments_member2 = broker.test_get_assignments("test-group", "member-2").await;
+    let assignments_member3 = broker.test_get_assignments("test-group", "member-3").await;
+
+    // With 3 members and 3 partitions, each should get 1 partition
+    assert_eq!(assignments_member1.len(), 1);
+    assert_eq!(assignments_member2.len(), 1);
+    assert_eq!(assignments_member3.len(), 1);
+
+    // Check that partitions are assigned (0, 1, 2)
+    let all_assigned_partitions: std::collections::HashSet<i32> = assignments_member1
+        .iter()
+        .chain(&assignments_member2)
+        .chain(&assignments_member3)
+        .flat_map(|a| &a.partitions)
+        .cloned()
+        .collect();
+    assert_eq!(all_assigned_partitions, std::collections::HashSet::from([0, 1, 2]));
+
+    // Test with custom assignments
+    let custom_assignments = vec![PartitionAssignment {
+        topic: "test-topic".to_string(),
+        partitions: vec![0, 1],
+    }];
+    broker.test_sync_group("test-group", custom_assignments).await.unwrap();
+
+    // Verify custom assignments
+    let new_assignments = broker.test_get_assignments("test-group", "member-1").await;
+    // Since we assign to all members, each should have the custom assignment
+    assert!(new_assignments
+        .iter()
+        .any(|a| a.topic == "test-topic" && a.partitions.contains(&0)));
+    assert!(new_assignments
+        .iter()
+        .any(|a| a.topic == "test-topic" && a.partitions.contains(&1)));
 }
 
 #[tokio::test]
 async fn test_offset_management() {
-    // TODO: Test offset commit and fetch
-    assert!(true); // Placeholder
+    let config = KafkaConfig::default();
+    let broker = KafkaMockBroker::new(config).await.unwrap();
+
+    // Create a topic first
+    let topic_config = TopicConfig::default();
+    broker.test_create_topic("test-topic", topic_config).await;
+
+    // Create a consumer group by joining it
+    broker.test_join_group("test-group", "member-1", "client-1").await.unwrap();
+
+    // Commit some offsets
+    let mut offsets = HashMap::new();
+    offsets.insert(("test-topic".to_string(), 0), 100);
+    offsets.insert(("test-topic".to_string(), 1), 200);
+    offsets.insert(("test-topic".to_string(), 2), 300);
+
+    broker.test_commit_offsets("test-group", offsets.clone()).await.unwrap();
+
+    // Fetch committed offsets and verify
+    let committed_offsets = broker.test_get_committed_offsets("test-group").await;
+    assert_eq!(committed_offsets.len(), 3);
+    assert_eq!(committed_offsets.get(&("test-topic".to_string(), 0)), Some(&100));
+    assert_eq!(committed_offsets.get(&("test-topic".to_string(), 1)), Some(&200));
+    assert_eq!(committed_offsets.get(&("test-topic".to_string(), 2)), Some(&300));
+
+    // Test fetching offsets for non-existent group
+    let empty_offsets = broker.test_get_committed_offsets("non-existent-group").await;
+    assert!(empty_offsets.is_empty());
 }
 
 #[tokio::test]
@@ -108,7 +301,7 @@ async fn test_full_broker_integration() {
         name: "test-topic",
         num_partitions: 3,
         replication: TopicReplication::Fixed(1),
-        config: HashMap::new(),
+        config: vec![],
     }];
 
     let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(5)));
@@ -122,9 +315,7 @@ async fn test_full_broker_integration() {
 
     // Test producer
     let producer: FutureProducer = client_config.clone().create().unwrap();
-    let record = FutureRecord::to("test-topic")
-        .payload("test message")
-        .key("test-key");
+    let record = FutureRecord::to("test-topic").payload("test message").key("test-key");
 
     let produce_result = producer.send(record, Duration::from_secs(5)).await;
     match produce_result {

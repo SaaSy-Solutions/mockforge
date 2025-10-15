@@ -1,7 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_kafka::{KafkaMockBroker, topics::Topic, topics::TopicConfig, partitions::KafkaMessage};
-use mockforge_core::config::KafkaConfig;
-use std::collections::HashMap;
+use mockforge_kafka::{partitions::KafkaMessage, topics::Topic, topics::TopicConfig};
+use serde_json;
 
 fn bench_topic_creation(c: &mut Criterion) {
     c.bench_function("topic_creation", |b| {
@@ -31,17 +30,32 @@ fn bench_partition_append(c: &mut Criterion) {
 }
 
 fn bench_message_generation(c: &mut Criterion) {
-    // TODO: Implement with actual fixture
+    let fixture = mockforge_kafka::fixtures::KafkaFixture {
+        identifier: "bench-fixture".to_string(),
+        name: "Benchmark Fixture".to_string(),
+        topic: "test-topic".to_string(),
+        partition: Some(0),
+        key_pattern: Some("test-key-{{counter}}".to_string()),
+        value_template: serde_json::json!({
+            "event_type": "user_action",
+            "user_id": "{{uuid}}",
+            "timestamp": "{{now}}",
+            "data": {
+                "action": "click",
+                "element": "button"
+            }
+        }),
+        headers: std::collections::HashMap::new(),
+        auto_produce: None,
+    };
+
+    let mut counter = 0;
     c.bench_function("message_generation", |b| {
         b.iter(|| {
-            // Simulate message generation
-            let message = KafkaMessage {
-                offset: 0,
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                key: Some(b"key".to_vec()),
-                value: br#"{"test": "data"}"#.to_vec(),
-                headers: vec![],
-            };
+            let mut context = std::collections::HashMap::new();
+            context.insert("counter".to_string(), counter.to_string());
+            counter += 1;
+            let message = fixture.generate_message(&context).unwrap();
             black_box(message);
         });
     });
@@ -58,7 +72,8 @@ fn bench_consumer_group_join(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches,
+criterion_group!(
+    benches,
     bench_topic_creation,
     bench_partition_append,
     bench_message_generation,

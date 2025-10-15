@@ -1,7 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_ftp::vfs::{VirtualFileSystem, FileContent, FilePermissions};
-use mockforge_ftp::fixtures::{FixtureRegistry, UploadRule};
-use mockforge_ftp::storage::MockStorage;
+use mockforge_ftp::fixtures::FileContentConfig;
+use mockforge_ftp::vfs::{FileContent, FileMetadata, VirtualFile, VirtualFileSystem};
+use mockforge_ftp::{
+    FileValidation, FtpFixture, FtpSpecRegistry, UploadRule, UploadStorage, VirtualFileConfig,
+};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -43,7 +45,8 @@ fn vfs_benchmarks(c: &mut Criterion) {
                     FileContent::Static(format!("Content {}", i).into_bytes()),
                     FileMetadata::default(),
                 );
-                vfs.add_file(std::path::PathBuf::from(&format!("/file{}.txt", i)), file).unwrap();
+                vfs.add_file(std::path::PathBuf::from(&format!("/file{}.txt", i)), file)
+                    .unwrap();
             }
             vfs
         };
@@ -75,60 +78,60 @@ fn vfs_benchmarks(c: &mut Criterion) {
 fn fixture_benchmarks(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
-    c.bench_function("fixture_registry_load", |b| {
-        let fixture_config = r#"
-        name: "benchmark_fixture"
-        description: "Benchmark fixture"
-        virtual_files:
-          - path: "/test1.txt"
-            content:
-              type: "static"
-              content: "Test content 1"
-          - path: "/test2.txt"
-            content:
-              type: "static"
-              content: "Test content 2"
-        upload_rules:
-          - path_pattern: "/uploads/.*"
-            auto_accept: true
-            storage:
-              type: "memory"
-        "#;
-
+    c.bench_function("fixture_registry_creation", |b| {
         b.iter(|| {
-            rt.block_on(async {
-                let registry = FixtureRegistry::new();
-                black_box(registry.load_fixture_from_yaml(fixture_config).await).unwrap();
-            });
+            let fixture = FtpFixture {
+                identifier: "benchmark_fixture".to_string(),
+                name: "benchmark_fixture".to_string(),
+                description: Some("Benchmark fixture".to_string()),
+                virtual_files: vec![
+                    VirtualFileConfig {
+                        path: std::path::PathBuf::from("/test1.txt"),
+                        content: FileContentConfig::Static {
+                            content: "Test content 1".to_string(),
+                        },
+                        permissions: "644".to_string(),
+                        owner: "user".to_string(),
+                        group: "group".to_string(),
+                    },
+                    VirtualFileConfig {
+                        path: std::path::PathBuf::from("/test2.txt"),
+                        content: FileContentConfig::Static {
+                            content: "Test content 2".to_string(),
+                        },
+                        permissions: "644".to_string(),
+                        owner: "user".to_string(),
+                        group: "group".to_string(),
+                    },
+                ],
+                upload_rules: vec![UploadRule {
+                    path_pattern: "/uploads/.*".to_string(),
+                    auto_accept: true,
+                    validation: None,
+                    storage: UploadStorage::Memory,
+                }],
+            };
+
+            let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+            black_box(registry);
         });
     });
 
     c.bench_function("fixture_upload_validation", |b| {
-        let registry = {
-            let registry = FixtureRegistry::new();
-            let fixture_config = r#"
-            name: "upload_fixture"
-            description: "Upload fixture"
-            upload_rules:
-              - path_pattern: "/uploads/.*"
-                auto_accept: true
-                validation:
-                  max_size_bytes: 1048576
-                storage:
-                  type: "memory"
-            "#;
-            registry.load_fixture_from_yaml(fixture_config).unwrap();
-            registry
+        let rule = UploadRule {
+            path_pattern: "/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: Some(FileValidation {
+                max_size_bytes: Some(1048576),
+                allowed_extensions: None,
+                mime_types: None,
+            }),
+            storage: UploadStorage::Memory,
         };
 
         b.iter(|| {
-            let rule = UploadRule {
-                path_pattern: "/uploads/.*".to_string(),
-                auto_accept: true,
-                validation: None,
-                storage: mockforge_ftp::fixtures::StorageConfig::Memory,
-            };
-            black_box(registry.validate_upload("/uploads/test.txt", 1024, &rule)).unwrap();
+            let data = b"Test file content for validation";
+            black_box(rule.validate_file(data, "/uploads/test.txt")).unwrap();
         });
     });
 }
@@ -136,47 +139,58 @@ fn fixture_benchmarks(c: &mut Criterion) {
 fn storage_benchmarks(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
-    c.bench_function("storage_write_small_file", |b| {
-        let storage = Arc::new(MockStorage::new());
+    c.bench_function("vfs_file_operations", |b| {
+        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
 
         b.iter(|| {
             rt.block_on(async {
-                let data = b"Hello, World!";
-                black_box(storage.write_file("/test.txt", data).await).unwrap();
+                // Add a file
+                let file = VirtualFile::new(
+                    std::path::PathBuf::from("/test.txt"),
+                    FileContent::Static(b"Hello, World!".to_vec()),
+                    FileMetadata::default(),
+                );
+                black_box(vfs.add_file(std::path::PathBuf::from("/test.txt"), file)).unwrap();
+
+                // Read the file
+                let retrieved = black_box(vfs.get_file(std::path::Path::new("/test.txt")).unwrap());
+                let content = black_box(retrieved.render_content()).unwrap();
+
+                // Remove the file
+                black_box(vfs.remove_file(std::path::Path::new("/test.txt"))).unwrap();
+
+                content
             });
         });
     });
 
-    c.bench_function("storage_write_large_file", |b| {
-        let storage = Arc::new(MockStorage::new());
+    c.bench_function("vfs_large_file_operations", |b| {
+        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
         let large_data = vec![0u8; 1024 * 1024]; // 1MB
 
         b.iter(|| {
             rt.block_on(async {
-                black_box(storage.write_file("/large.bin", &large_data).await).unwrap();
-            });
-        });
-    });
+                // Add a large file
+                let file = VirtualFile::new(
+                    std::path::PathBuf::from("/large.bin"),
+                    FileContent::Static(large_data.clone()),
+                    FileMetadata::default(),
+                );
+                black_box(vfs.add_file(std::path::PathBuf::from("/large.bin"), file)).unwrap();
 
-    c.bench_function("storage_read_file", |b| {
-        let storage = Arc::new(rt.block_on(async {
-            let storage = MockStorage::new();
-            storage.write_file("/read_test.txt", b"Benchmark read content").await.unwrap();
-            storage
-        }));
+                // Read the file
+                let retrieved =
+                    black_box(vfs.get_file(std::path::Path::new("/large.bin")).unwrap());
+                let content = black_box(retrieved.render_content()).unwrap();
 
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(storage.read_file("/read_test.txt").await).unwrap();
+                // Remove the file
+                black_box(vfs.remove_file(std::path::Path::new("/large.bin"))).unwrap();
+
+                content.len()
             });
         });
     });
 }
 
-criterion_group!(
-    benches,
-    vfs_benchmarks,
-    fixture_benchmarks,
-    storage_benchmarks
-);
+criterion_group!(benches, vfs_benchmarks, fixture_benchmarks, storage_benchmarks);
 criterion_main!(benches);

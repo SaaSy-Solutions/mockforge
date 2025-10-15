@@ -1,11 +1,9 @@
 //! Integration tests for MQTT broker
 
-use mockforge_mqtt::{MqttBroker, MqttSpecRegistry, MqttFixture, MqttResponse};
+use mockforge_core::protocol_abstraction::{MessagePattern, Protocol, SpecRegistry};
 use mockforge_mqtt::broker::MqttConfig;
-use mockforge_core::protocol_abstraction::{SpecRegistry, Protocol, MessagePattern};
+use mockforge_mqtt::{MqttBroker, MqttFixture, MqttResponse, MqttSpecRegistry};
 use std::sync::Arc;
-
-
 
 #[tokio::test]
 async fn test_broker_creation() {
@@ -228,7 +226,7 @@ async fn test_validation() {
 
 #[tokio::test]
 async fn test_qo_s_handling() {
-    use mockforge_mqtt::qos::{QoSHandler, QoS, MessageState};
+    use mockforge_mqtt::qos::{MessageState, QoS, QoSHandler};
 
     let handler = QoSHandler::new();
 
@@ -345,7 +343,10 @@ async fn test_template_integration() {
     assert!(result.is_ok());
 
     let response = result.unwrap();
-    assert_eq!(response.status, mockforge_core::protocol_abstraction::ResponseStatus::MqttStatus(true));
+    assert_eq!(
+        response.status,
+        mockforge_core::protocol_abstraction::ResponseStatus::MqttStatus(true)
+    );
     assert!(!response.body.is_empty());
 
     // Parse the JSON response

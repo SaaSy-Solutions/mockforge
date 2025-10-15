@@ -21,7 +21,7 @@ async fn start_test_server() -> (SmtpServer, u16) {
     };
 
     let registry = Arc::new(SmtpSpecRegistry::new());
-    let server = SmtpServer::new(config, registry);
+    let server = SmtpServer::new(config, registry).expect("Failed to create SMTP server");
     (server, port)
 }
 
@@ -32,7 +32,7 @@ fn bench_server_startup(c: &mut Criterion) {
     c.bench_function("smtp_server_startup", |b| {
         b.iter(|| {
             rt.block_on(async {
-                let (server, _port) = start_test_server().await;
+                let (server, _port) = start_test_server().await.unwrap();
                 black_box(server);
             })
         });

@@ -1,15 +1,29 @@
+use crate::fixtures::{FtpFixture, UploadRule};
+use crate::vfs::VirtualFileSystem;
+use mockforge_core::protocol_abstraction::{
+    Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
+    ValidationError, ValidationResult,
+};
+use mockforge_core::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use mockforge_core::Result;
-use mockforge_core::protocol_abstraction::{SpecRegistry, SpecOperation, ValidationResult, ValidationError, Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus};
-use crate::vfs::VirtualFileSystem;
-use crate::fixtures::{FtpFixture, UploadRule};
+
+/// Tracked upload information
+#[derive(Debug, Clone)]
+pub struct UploadRecord {
+    pub id: String,
+    pub path: std::path::PathBuf,
+    pub size: u64,
+    pub uploaded_at: chrono::DateTime<chrono::Utc>,
+    pub rule_name: Option<String>,
+}
 
 /// FTP Spec Registry for MockForge
 #[derive(Debug, Clone)]
 pub struct FtpSpecRegistry {
     pub fixtures: Vec<FtpFixture>,
     pub vfs: Arc<VirtualFileSystem>,
+    pub uploads: Arc<std::sync::RwLock<Vec<UploadRecord>>>,
 }
 
 impl FtpSpecRegistry {
@@ -17,12 +31,24 @@ impl FtpSpecRegistry {
         Self {
             fixtures: Vec::new(),
             vfs: Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/"))),
+            uploads: Arc::new(std::sync::RwLock::new(Vec::new())),
         }
     }
 
-    pub fn with_fixtures(mut self, fixtures: Vec<FtpFixture>) -> Self {
+    pub fn with_fixtures(mut self, fixtures: Vec<FtpFixture>) -> Result<Self> {
+        // Load virtual files into VFS fixtures
+        let mut vfs_fixtures = Vec::new();
+        for fixture in &fixtures {
+            for virtual_file in &fixture.virtual_files {
+                vfs_fixtures.push(virtual_file.clone().to_file_fixture());
+            }
+        }
+        self.vfs
+            .load_fixtures(vfs_fixtures)
+            .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+
         self.fixtures = fixtures;
-        self
+        Ok(self)
     }
 
     pub fn with_vfs(mut self, vfs: Arc<VirtualFileSystem>) -> Self {
@@ -39,6 +65,35 @@ impl FtpSpecRegistry {
             }
         }
         None
+    }
+
+    pub fn record_upload(
+        &self,
+        path: std::path::PathBuf,
+        size: u64,
+        rule_name: Option<String>,
+    ) -> Result<String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let record = UploadRecord {
+            id: id.clone(),
+            path,
+            size,
+            uploaded_at: chrono::Utc::now(),
+            rule_name,
+        };
+
+        let mut uploads = self.uploads.write().unwrap();
+        uploads.push(record);
+
+        Ok(id)
+    }
+
+    pub fn get_uploads(&self) -> Vec<UploadRecord> {
+        self.uploads.read().unwrap().clone()
+    }
+
+    pub fn get_upload(&self, id: &str) -> Option<UploadRecord> {
+        self.uploads.read().unwrap().iter().find(|u| u.id == id).cloned()
     }
 }
 
@@ -64,7 +119,10 @@ impl SpecRegistry for FtpSpecRegistry {
                     input_schema: None,
                     output_schema: None,
                     metadata: HashMap::from([
-                        ("description".to_string(), fixture.description.clone().unwrap_or_default()),
+                        (
+                            "description".to_string(),
+                            fixture.description.clone().unwrap_or_default(),
+                        ),
                         ("permissions".to_string(), file.permissions.clone()),
                         ("owner".to_string(), file.owner.clone()),
                     ]),
@@ -102,7 +160,9 @@ impl SpecRegistry for FtpSpecRegistry {
         }
 
         // Basic validation - operation should be a valid FTP command
-        let valid_operations = ["RETR", "STOR", "LIST", "DELE", "MKD", "RMD", "CWD", "PWD", "SIZE", "MDTM"];
+        let valid_operations = [
+            "RETR", "STOR", "LIST", "DELE", "MKD", "RMD", "CWD", "PWD", "SIZE", "MDTM",
+        ];
         if !valid_operations.contains(&request.operation.as_str()) {
             return Ok(ValidationResult::failure(vec![ValidationError {
                 message: format!("Unsupported FTP operation: {}", request.operation),
@@ -120,7 +180,9 @@ impl SpecRegistry for FtpSpecRegistry {
                 // Download file
                 let path = std::path::Path::new(&request.path);
                 if let Some(file) = self.vfs.get_file(path) {
-                    let content = file.render_content().map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+                    let content = file
+                        .render_content()
+                        .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
                     Ok(ProtocolResponse {
                         status: ResponseStatus::FtpStatus(150), // Opening data connection
                         body: content,
@@ -193,9 +255,11 @@ impl SpecRegistry for FtpSpecRegistry {
                 // Directory listing
                 let path = std::path::Path::new(&request.path);
                 let files = self.vfs.list_files(path);
-                let listing = files.iter()
+                let listing = files
+                    .iter()
                     .map(|file| {
-                        format!("-rw-r--r-- 1 {} {} {} {} {} {}",
+                        format!(
+                            "-rw-r--r-- 1 {} {} {} {} {} {}",
                             file.metadata.owner,
                             file.metadata.group,
                             file.metadata.size,
@@ -221,7 +285,9 @@ impl SpecRegistry for FtpSpecRegistry {
                 // Delete file
                 let path = std::path::Path::new(&request.path);
                 if self.vfs.get_file(path).is_some() {
-                    self.vfs.remove_file(path).map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+                    self.vfs
+                        .remove_file(path)
+                        .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
                     Ok(ProtocolResponse {
                         status: ResponseStatus::FtpStatus(250), // File deleted
                         body: b"File deleted".to_vec(),

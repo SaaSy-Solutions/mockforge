@@ -241,7 +241,10 @@ impl SmtpSpecRegistry {
 
                 // Filter by recipient
                 if let Some(ref recipient_filter) = filters.recipient {
-                    let has_recipient = email.to.iter().any(|to| matches_filter(to, &Some(recipient_filter.clone())));
+                    let has_recipient = email
+                        .to
+                        .iter()
+                        .any(|to| matches_filter(to, &Some(recipient_filter.clone())));
                     if !has_recipient {
                         return false;
                     }

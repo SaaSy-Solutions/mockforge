@@ -60,6 +60,8 @@ opentelemetry = "0.21"
 default = []
 # Enable richer faker-backed tokens in templating via mockforge-data
 data-faker = []
+# Enable SMTP support
+smtp = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -1,8 +1,17 @@
-use clap::{Args, Subcommand};
-use mockforge_kafka::{KafkaMockBroker, KafkaSpecRegistry, Topic, ConsumerGroupManager};
-use mockforge_core::config::KafkaConfig;
-use std::path::PathBuf;
 use anyhow::Result;
+use clap::Subcommand;
+use mockforge_core::config::{load_config, KafkaConfig};
+use mockforge_kafka::{KafkaFixture, KafkaMockBroker};
+use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::message::{Headers, Message, OwnedHeaders};
+use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::topic_partition_list::TopicPartitionList;
+use rdkafka::Offset;
+use std::collections::{BTreeMap, HashSet};
+use std::path::PathBuf;
+use std::time::Duration;
 
 /// Kafka server management commands
 #[derive(Subcommand)]
@@ -143,7 +152,6 @@ pub enum KafkaCommands {
         #[command(subcommand)]
         simulate_command: KafkaSimulateCommands,
     },
-
 }
 
 /// Topic management subcommands
@@ -267,43 +275,141 @@ pub async fn handle_kafka_command(command: KafkaCommands) -> Result<()> {
 pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
     match command {
         KafkaCommands::Serve { port, host, config } => {
-            // TODO: Implement serve command
+            let mut kafka_config = if let Some(config_path) = config {
+                let server_config = load_config(config_path).await?;
+                server_config.kafka
+            } else {
+                KafkaConfig::default()
+            };
+            kafka_config.port = port;
+            kafka_config.host = host.clone();
+
+            let broker = KafkaMockBroker::new(kafka_config).await?;
             println!("Starting Kafka broker on {}:{}", host, port);
+            broker.start().await?;
             Ok(())
         }
-        KafkaCommands::Topic { topic_command } => {
-            execute_topic_command(topic_command).await
-        }
-        KafkaCommands::Groups { groups_command } => {
-            execute_groups_command(groups_command).await
-        }
-        KafkaCommands::Produce { topic, key, value, partition, header } => {
-            // TODO: Connect to broker and produce message
-            println!("Producing message to topic {}: {}", topic, value);
-            if let Some(key) = key {
-                println!("  Key: {}", key);
+        KafkaCommands::Topic { topic_command } => execute_topic_command(topic_command).await,
+        KafkaCommands::Groups { groups_command } => execute_groups_command(groups_command).await,
+        KafkaCommands::Produce {
+            topic,
+            key,
+            value,
+            partition,
+            header,
+        } => {
+            let producer: FutureProducer = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Producer creation failed: {}", e))?;
+
+            let mut record = FutureRecord::to(&topic).payload(&value);
+            if let Some(k) = &key {
+                record = record.key(k);
             }
-            if let Some(partition) = partition {
-                println!("  Partition: {}", partition);
+            if let Some(p) = partition {
+                record = record.partition(p);
             }
-            if !header.is_empty() {
-                println!("  Headers: {:?}", header);
+            for (k, v) in &header {
+                record = record.header(k.as_str(), v.as_bytes());
+            }
+
+            let delivery_status = producer.send(record, Duration::from_secs(0)).await;
+            match delivery_status {
+                Ok((partition, offset)) => {
+                    println!(
+                        "Message produced to topic {} partition {} at offset {}",
+                        topic, partition, offset
+                    );
+                }
+                Err((e, _)) => {
+                    return Err(anyhow::anyhow!("Failed to produce message: {}", e).into());
+                }
             }
             Ok(())
         }
-        KafkaCommands::Consume { topic, group, partition, from, count } => {
-            // TODO: Connect to broker and consume messages
-            println!("Consuming from topic {}", topic);
-            if let Some(group) = group {
-                println!("  Consumer group: {}", group);
+        KafkaCommands::Consume {
+            topic,
+            group,
+            partition,
+            from,
+            count,
+        } => {
+            let group_id = group.unwrap_or_else(|| "cli-consumer".to_string());
+            let consumer: StreamConsumer = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .set("group.id", &group_id)
+                .set("enable.auto.commit", "false")
+                .set("auto.offset.reset", "earliest")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Consumer creation failed: {}", e))?;
+
+            if let Some(p) = partition {
+                // Assign to specific partition
+                let mut tpl = TopicPartitionList::new();
+                tpl.add_partition(&topic, p);
+                consumer.assign(&tpl).map_err(|e| anyhow::anyhow!("Assign failed: {}", e))?;
+
+                // Seek to beginning or end
+                let offset = match from.as_str() {
+                    "beginning" => rdkafka::Offset::Beginning,
+                    "end" => rdkafka::Offset::End,
+                    _ => return Err(anyhow::anyhow!("Invalid 'from' value: {}", from).into()),
+                };
+                consumer
+                    .seek(&topic, p, offset, Duration::from_secs(30))
+                    .map_err(|e| anyhow::anyhow!("Seek failed: {}", e))?;
+            } else {
+                // Subscribe to topic
+                consumer
+                    .subscribe(&[&topic])
+                    .map_err(|e| anyhow::anyhow!("Subscribe failed: {}", e))?;
             }
-            if let Some(partition) = partition {
-                println!("  Partition: {}", partition);
+
+            let mut message_count = 0;
+            let max_count = count.unwrap_or(usize::MAX);
+
+            println!("Consuming from topic {}...", topic);
+            if let Some(p) = partition {
+                println!("  Partition: {}", p);
             }
             println!("  From: {}", from);
-            if let Some(count) = count {
-                println!("  Count: {}", count);
+
+            loop {
+                if message_count >= max_count {
+                    break;
+                }
+
+                match consumer.recv().await {
+                    Ok(message) => {
+                        message_count += 1;
+                        println!("Message {}:", message_count);
+                        if let Some(key) = message.key() {
+                            println!("  Key: {}", String::from_utf8_lossy(key));
+                        }
+                        if let Some(payload) = message.payload() {
+                            println!("  Value: {}", String::from_utf8_lossy(payload));
+                        }
+                        println!("  Partition: {}", message.partition());
+                        println!("  Offset: {}", message.offset());
+                        if let Some(headers) = message.headers() {
+                            for header in headers.iter() {
+                                println!(
+                                    "  Header {}: {}",
+                                    header.key,
+                                    String::from_utf8_lossy(header.value.unwrap_or(&[]))
+                                );
+                            }
+                        }
+                        println!();
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Receive failed: {}", e).into());
+                    }
+                }
             }
+
+            println!("Consumed {} messages", message_count);
             Ok(())
         }
         KafkaCommands::Fixtures { fixtures_command } => {
@@ -313,9 +419,38 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
             execute_simulate_command(simulate_command).await
         }
         KafkaCommands::Metrics { format } => {
-            // TODO: Connect to broker and get metrics
-            println!("Kafka broker metrics (format: {}):", format);
-            println!("Note: Metrics collection requires a running broker instance");
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let metadata = admin
+                .fetch_metadata(None, Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+
+            if format == "prometheus" {
+                println!("# Kafka Metrics");
+                println!("kafka_topics_total {}", metadata.topics().len());
+                let mut total_partitions = 0;
+                for topic in metadata.topics() {
+                    let partitions = topic.partitions().len();
+                    total_partitions += partitions;
+                    println!("kafka_topic_partitions{{topic=\"{}\"}} {}", topic.name(), partitions);
+                }
+                println!("kafka_partitions_total {}", total_partitions);
+                println!("kafka_brokers_total {}", metadata.brokers().len());
+            } else {
+                println!("Kafka Broker Metrics:");
+                println!("  Brokers: {}", metadata.brokers().len());
+                println!("  Topics: {}", metadata.topics().len());
+                let mut total_partitions = 0;
+                for topic in metadata.topics() {
+                    let partitions = topic.partitions().len();
+                    total_partitions += partitions;
+                    println!("    {}: {} partitions", topic.name(), partitions);
+                }
+                println!("  Total Partitions: {}", total_partitions);
+            }
             Ok(())
         }
     }
@@ -323,24 +458,88 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
 
 async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
     match command {
-        KafkaTopicCommands::Create { name, partitions, replication_factor } => {
-            // TODO: Connect to broker and create topic
-            println!("Creating topic {} with {} partitions (replication factor: {})", name, partitions, replication_factor);
+        KafkaTopicCommands::Create {
+            name,
+            partitions,
+            replication_factor,
+        } => {
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let new_topic =
+                NewTopic::new(&name, partitions, TopicReplication::Fixed(replication_factor));
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+
+            admin
+                .create_topics(&[&new_topic], &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("Create topic failed: {}", e))?;
+
+            println!(
+                "Topic '{}' created successfully with {} partitions (replication factor: {})",
+                name, partitions, replication_factor
+            );
             Ok(())
         }
         KafkaTopicCommands::List => {
-            // TODO: Connect to broker and list topics
-            println!("Listing topics");
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let metadata = admin
+                .fetch_metadata(None, Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+
+            println!("Topics:");
+            for topic in metadata.topics() {
+                println!("  {} ({} partitions)", topic.name(), topic.partitions().len());
+            }
             Ok(())
         }
         KafkaTopicCommands::Describe { name } => {
-            // TODO: Connect to broker and describe topic
-            println!("Describing topic {}", name);
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let metadata = admin
+                .fetch_metadata(Some(&name), Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+
+            let topic = metadata
+                .topics()
+                .iter()
+                .find(|t| t.name() == name)
+                .ok_or_else(|| anyhow::anyhow!("Topic {} not found", name))?;
+
+            println!("Topic: {}", topic.name());
+            println!("Partitions: {}", topic.partitions().len());
+            for partition in topic.partitions() {
+                println!(
+                    "  Partition {}: Leader={}, Replicas={:?}",
+                    partition.id(),
+                    partition.leader(),
+                    partition.replicas().iter().map(|b| b.id()).collect::<Vec<_>>()
+                );
+            }
             Ok(())
         }
         KafkaTopicCommands::Delete { name } => {
-            // TODO: Connect to broker and delete topic
-            println!("Deleting topic {}", name);
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+            admin
+                .delete_topics(&[&name], &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("Delete topic failed: {}", e))?;
+
+            println!("Topic '{}' deleted successfully", name);
             Ok(())
         }
     }
@@ -349,18 +548,149 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
 async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
     match command {
         KafkaGroupsCommands::List => {
-            // TODO: Implement groups listing
-            println!("Listing consumer groups");
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let groups = admin
+                .list_groups(None, Duration::from_secs(30))
+                .await
+                .map_err(|e| anyhow::anyhow!("List groups failed: {}", e))?;
+
+            println!("Consumer Groups:");
+            for group in groups.groups() {
+                println!("  {}", group.name());
+            }
             Ok(())
         }
         KafkaGroupsCommands::Describe { group_id } => {
-            // TODO: Implement group description
-            println!("Describing group {}", group_id);
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            // Describe the consumer group
+            let groups = vec![group_id.clone()];
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+            let group_descriptions = admin
+                .describe_consumer_groups(&groups, &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("Describe consumer groups failed: {}", e))?;
+
+            if group_descriptions.is_empty() {
+                return Err(anyhow::anyhow!("Consumer group {} not found", group_id));
+            }
+
+            let group_desc = &group_descriptions[0];
+            if let Some(error) = group_desc.error() {
+                return Err(anyhow::anyhow!("Error describing group {}: {}", group_id, error));
+            }
+
+            println!("Consumer Group: {}", group_id);
+            println!("  State: {}", group_desc.state().unwrap_or("Unknown"));
+            println!("  Protocol: {}", group_desc.protocol().unwrap_or("Unknown"));
+            println!("  Protocol Type: {}", group_desc.protocol_type().unwrap_or("Unknown"));
+
+            let members = group_desc.members();
+            println!("  Members: {}", members.len());
+
+            if !members.is_empty() {
+                println!();
+                for (i, member) in members.iter().enumerate() {
+                    println!("  Member {}: {}", i + 1, member.client_id().unwrap_or("Unknown"));
+                    println!("    Client ID: {}", member.client_id().unwrap_or("Unknown"));
+                    println!("    Client Host: {}", member.client_host().unwrap_or("Unknown"));
+                    println!("    Member ID: {}", member.member_id().unwrap_or("Unknown"));
+                    println!("    Member Metadata: {} bytes", member.member_metadata().len());
+                    println!("    Member Assignment: {} bytes", member.member_assignment().len());
+
+                    // Try to parse assignment information
+                    let assignment = member.assignment();
+                    let topics = assignment.topics();
+                    if !topics.is_empty() {
+                        println!("    Assigned Topics:");
+                        for topic in topics {
+                            let partitions = assignment.topic_partitions(topic);
+                            if let Some(partitions) = partitions {
+                                println!("      {}: partitions {:?}", topic, partitions);
+                            }
+                        }
+                    }
+                    println!();
+                }
+            }
+
             Ok(())
         }
         KafkaGroupsCommands::Offsets { group_id } => {
-            // TODO: Implement offsets display
-            println!("Showing offsets for group {}", group_id);
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            // List consumer group offsets
+            let groups = vec![group_id.clone()];
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+            let group_offsets = admin
+                .list_consumer_group_offsets(&groups, &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("List consumer group offsets failed: {}", e))?;
+
+            if group_offsets.is_empty() {
+                println!("No offset information found for group {}", group_id);
+                return Ok(());
+            }
+
+            let offsets = &group_offsets[0];
+            if let Some(error) = offsets.error() {
+                return Err(anyhow::anyhow!(
+                    "Error listing offsets for group {}: {}",
+                    group_id,
+                    error
+                ));
+            }
+
+            println!("Consumer group offsets for '{}':", group_id);
+
+            let mut total_partitions = 0;
+            let mut topics_offsets = BTreeMap::new();
+
+            // Group offsets by topic
+            for partition_offset in offsets.partitions() {
+                let topic = partition_offset.topic();
+                let partition = partition_offset.partition();
+                let offset = partition_offset.offset();
+                let metadata = partition_offset.metadata();
+
+                topics_offsets
+                    .entry(topic)
+                    .or_insert_with(Vec::new)
+                    .push((partition, offset, metadata));
+                total_partitions += 1;
+            }
+
+            if topics_offsets.is_empty() {
+                println!("  No committed offsets found");
+                return Ok(());
+            }
+
+            for (topic, partitions) in &topics_offsets {
+                println!("  Topic: {}", topic);
+                for (partition, offset, metadata) in partitions {
+                    println!("    Partition {}: offset {}", partition, offset);
+                    if !metadata.is_empty() {
+                        println!("      Metadata: {}", metadata);
+                    }
+                }
+                println!();
+            }
+
+            println!(
+                "Total: {} partitions across {} topics",
+                total_partitions,
+                topics_offsets.len()
+            );
             Ok(())
         }
     }
@@ -369,23 +699,151 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
 async fn execute_fixtures_command(command: KafkaFixturesCommands) -> Result<()> {
     match command {
         KafkaFixturesCommands::Load { directory } => {
-            // TODO: Implement fixtures loading
-            println!("Loading fixtures from {:?}", directory);
-            Ok(())
+            if !directory.exists() {
+                return Err(anyhow::anyhow!("Directory does not exist: {}", directory.display()));
+            }
+
+            if !directory.is_dir() {
+                return Err(anyhow::anyhow!("Path is not a directory: {}", directory.display()));
+            }
+
+            match KafkaFixture::load_from_dir(&directory) {
+                Ok(fixtures) => {
+                    if fixtures.is_empty() {
+                        println!("No fixture files found in {}", directory.display());
+                        println!("Fixture files should be YAML files (.yaml or .yml) containing KafkaFixture definitions.");
+                        return Ok(());
+                    }
+
+                    println!(
+                        "Successfully loaded {} fixtures from {}",
+                        fixtures.len(),
+                        directory.display()
+                    );
+
+                    // Validate fixtures and show summary
+                    let mut topics = std::collections::HashSet::new();
+                    let mut auto_produce_count = 0;
+
+                    for fixture in &fixtures {
+                        topics.insert(&fixture.topic);
+                        if fixture.auto_produce.as_ref().is_some_and(|ap| ap.enabled) {
+                            auto_produce_count += 1;
+                        }
+                    }
+
+                    println!("Fixtures cover {} unique topics", topics.len());
+                    if auto_produce_count > 0 {
+                        println!("{} fixtures have auto-produce enabled", auto_produce_count);
+                    }
+
+                    println!("\nFixtures loaded:");
+                    for fixture in &fixtures {
+                        println!("  ✓ {} ({})", fixture.identifier, fixture.name);
+                    }
+
+                    println!(
+                        "\nNote: Fixtures are loaded for validation. In a running mock broker,"
+                    );
+                    println!(
+                        "these would be available for message generation and auto-production."
+                    );
+
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to load fixtures from {}: {}",
+                    directory.display(),
+                    e
+                )),
+            }
         }
         KafkaFixturesCommands::List => {
-            // TODO: Implement fixtures listing
-            println!("Listing fixtures");
+            // Try to load fixtures from common directories
+            let fixture_dirs = vec![
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+                PathBuf::from("./fixtures"),
+                PathBuf::from("./kafka-fixtures"),
+            ];
+
+            let mut all_fixtures = Vec::new();
+            let mut found_dirs = Vec::new();
+
+            for dir in fixture_dirs {
+                if dir.exists() && dir.is_dir() {
+                    match KafkaFixture::load_from_dir(&dir) {
+                        Ok(fixtures) => {
+                            if !fixtures.is_empty() {
+                                all_fixtures.extend(fixtures);
+                                found_dirs.push(dir);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to load fixtures from {}: {}", dir.display(), e);
+                        }
+                    }
+                }
+            }
+
+            if all_fixtures.is_empty() {
+                println!(
+                    "No fixtures found. Checked directories: ./, ./fixtures, ./kafka-fixtures"
+                );
+                println!("Create YAML fixture files in one of these directories to define message templates.");
+                return Ok(());
+            }
+
+            println!(
+                "Found {} fixtures in {} director{}:",
+                all_fixtures.len(),
+                found_dirs.len(),
+                if found_dirs.len() == 1 { "y" } else { "ies" }
+            );
+
+            for dir in &found_dirs {
+                println!("  {}", dir.display());
+            }
+
+            println!("\nFixtures:");
+            for fixture in &all_fixtures {
+                println!("  {}: {}", fixture.identifier, fixture.name);
+                println!("    Topic: {}", fixture.topic);
+                println!(
+                    "    Partition: {}",
+                    fixture.partition.map_or("all".to_string(), |p| p.to_string())
+                );
+                if let Some(auto_produce) = &fixture.auto_produce {
+                    if auto_produce.enabled {
+                        println!("    Auto-produce: {} msg/sec", auto_produce.rate_per_second);
+                        if let Some(duration) = auto_produce.duration_seconds {
+                            println!("    Duration: {} seconds", duration);
+                        }
+                        if let Some(count) = auto_produce.total_count {
+                            println!("    Total count: {} messages", count);
+                        }
+                    } else {
+                        println!("    Auto-produce: disabled");
+                    }
+                } else {
+                    println!("    Auto-produce: not configured");
+                }
+                println!("    Headers: {}", fixture.headers.len());
+                println!();
+            }
+
             Ok(())
         }
         KafkaFixturesCommands::StartAutoProduce => {
-            // TODO: Implement auto-produce start
-            println!("Starting auto-produce");
+            // Note: Auto-produce is controlled by fixture configuration
+            // This command would start auto-production for all fixtures with auto_produce.enabled = true
+            // In a full implementation, this would connect to the mock broker's management API
+            println!("Auto-produce start requested - ensure fixtures have auto_produce.enabled = true in their configuration");
             Ok(())
         }
         KafkaFixturesCommands::StopAutoProduce => {
-            // TODO: Implement auto-produce stop
-            println!("Stopping auto-produce");
+            // Note: In a full implementation, this would connect to the mock broker's management API
+            // to stop all auto-production tasks
+            println!("Auto-produce stop requested - this would disable auto_produce for all running fixtures");
             Ok(())
         }
     }
@@ -394,18 +852,183 @@ async fn execute_fixtures_command(command: KafkaFixturesCommands) -> Result<()> 
 async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> {
     match command {
         KafkaSimulateCommands::Lag { group, topic, lag } => {
-            // TODO: Implement lag simulation
-            println!("Simulating lag of {} messages for group {} on topic {}", lag, group, topic);
+            // Create a consumer to get watermark offsets
+            let consumer: StreamConsumer = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .set("group.id", "lag-simulator")
+                .set("enable.auto.commit", "false")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Consumer creation failed: {}", e))?;
+
+            // Get topic metadata to know partitions
+            let metadata = consumer
+                .fetch_metadata(Some(&topic), Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+            let topic_metadata = metadata
+                .topics()
+                .iter()
+                .find(|t| t.name() == topic)
+                .ok_or_else(|| anyhow::anyhow!("Topic {} not found", topic))?;
+
+            // Create topic partition list with lag-simulated offsets
+            let mut tpl = TopicPartitionList::new();
+            for partition in topic_metadata.partitions() {
+                // Get watermark offsets for this partition
+                let (low_watermark, high_watermark) = consumer
+                    .fetch_watermarks(&topic, partition.id(), Duration::from_secs(30))
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Fetch watermarks failed for partition {}: {}",
+                            partition.id(),
+                            e
+                        )
+                    })?;
+
+                // Calculate target offset as high_watermark - lag
+                let target_offset = if lag >= 0 {
+                    high_watermark.saturating_sub(lag as i64)
+                } else {
+                    // Negative lag doesn't make sense, default to low watermark
+                    low_watermark
+                };
+
+                tpl.add_partition_offset(&topic, partition.id(), Offset::Offset(target_offset));
+            }
+
+            // Create admin client to alter offsets
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            // Alter offsets to simulate lag
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+            admin
+                .alter_consumer_group_offsets(&group, &[tpl], &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("Alter consumer group offsets failed: {}", e))?;
+
+            println!("Simulated lag of {} messages for group {} on topic {} (set offsets behind high watermark)", lag, group, topic);
             Ok(())
         }
         KafkaSimulateCommands::Rebalance { group } => {
-            // TODO: Implement rebalance trigger
-            println!("Triggering rebalance for group {}", group);
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            // Describe the consumer group to get its current state
+            let groups = vec![group.clone()];
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+            let group_descriptions = admin
+                .describe_consumer_groups(&groups, &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("Describe consumer groups failed: {}", e))?;
+
+            if group_descriptions.is_empty() {
+                return Err(anyhow::anyhow!("Consumer group {} not found", group));
+            }
+
+            let group_desc = &group_descriptions[0];
+            if let Some(error) = group_desc.error() {
+                return Err(anyhow::anyhow!("Error describing group {}: {}", group, error));
+            }
+
+            // Get topics that this group is consuming
+            let mut topics = HashSet::new();
+            for member in group_desc.members() {
+                for topic in member.assignment().topics() {
+                    topics.insert(topic.to_string());
+                }
+            }
+
+            if topics.is_empty() {
+                println!(
+                    "No active topics found for group {}, rebalance may not be triggered",
+                    group
+                );
+                return Ok(());
+            }
+
+            // For each topic, alter offsets to trigger rebalance-like behavior
+            for topic in topics {
+                // Get topic metadata
+                let metadata =
+                    admin.fetch_metadata(Some(&topic), Duration::from_secs(30)).map_err(|e| {
+                        anyhow::anyhow!("Fetch metadata failed for topic {}: {}", topic, e)
+                    })?;
+                let topic_metadata = metadata
+                    .topics()
+                    .iter()
+                    .find(|t| t.name() == topic)
+                    .ok_or_else(|| anyhow::anyhow!("Topic {} not found", topic))?;
+
+                // Create topic partition list - alter to latest to simulate rebalance
+                let mut tpl = TopicPartitionList::new();
+                for partition in topic_metadata.partitions() {
+                    tpl.add_partition_offset(&topic, partition.id(), Offset::End);
+                }
+
+                // Alter offsets to latest (this can trigger rebalance-like behavior)
+                admin.alter_consumer_group_offsets(&group, &[tpl], &options).await.map_err(
+                    |e| {
+                        anyhow::anyhow!(
+                            "Alter consumer group offsets failed for topic {}: {}",
+                            topic,
+                            e
+                        )
+                    },
+                )?;
+            }
+
+            println!(
+                "Triggered rebalance simulation for group {} by altering offsets on {} topics",
+                group,
+                topics.len()
+            );
             Ok(())
         }
         KafkaSimulateCommands::ResetOffsets { group, topic, to } => {
-            // TODO: Implement offset reset
-            println!("Resetting offsets for group {} on topic {} to {}", group, topic, to);
+            let admin: AdminClient<_> = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            // Get topic metadata to know partitions
+            let metadata = admin
+                .fetch_metadata(Some(&topic), Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+            let topic_metadata = metadata
+                .topics()
+                .iter()
+                .find(|t| t.name() == topic)
+                .ok_or_else(|| anyhow::anyhow!("Topic {} not found", topic))?;
+
+            // Create topic partition list with reset offsets
+            let mut tpl = TopicPartitionList::new();
+            let target_offset = match to.as_str() {
+                "earliest" => Offset::Beginning,
+                "latest" => Offset::End,
+                offset_str => {
+                    let offset: i64 = offset_str
+                        .parse()
+                        .map_err(|_| anyhow::anyhow!("Invalid offset: {}", offset_str))?;
+                    Offset::Offset(offset)
+                }
+            };
+
+            for partition in topic_metadata.partitions() {
+                tpl.add_partition_offset(&topic, partition.id(), target_offset);
+            }
+
+            // Reset offsets
+            let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
+            admin
+                .alter_consumer_group_offsets(&group, &[tpl], &options)
+                .await
+                .map_err(|e| anyhow::anyhow!("Alter consumer group offsets failed: {}", e))?;
+
+            println!("Successfully reset offsets for group {} on topic {} to {}", group, topic, to);
             Ok(())
         }
     }

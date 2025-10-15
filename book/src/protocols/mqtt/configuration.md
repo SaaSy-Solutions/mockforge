@@ -327,5 +327,4 @@ mqtt:
 
 - [Getting Started](../getting-started.md) - Basic MQTT setup
 - [Fixtures](fixtures.md) - Define MQTT mock scenarios
-- [Examples](examples.md) - Real-world usage examples</content>
-</xai:function_call">Write file: book/src/protocols/mqtt/configuration.md
+- [Examples](examples.md) - Real-world usage examples

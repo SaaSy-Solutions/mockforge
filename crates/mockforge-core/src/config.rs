@@ -195,6 +195,8 @@ pub struct ServerConfig {
     pub ftp: FtpConfig,
     /// Kafka server configuration
     pub kafka: KafkaConfig,
+    /// AMQP server configuration
+    pub amqp: AmqpConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
     /// Request chaining configuration
@@ -530,16 +532,55 @@ impl Default for KafkaConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            port: 9092,  // Standard Kafka port
+            port: 9092, // Standard Kafka port
             host: "0.0.0.0".to_string(),
             broker_id: 1,
             max_connections: 1000,
-            log_retention_ms: 604800000,  // 7 days
-            log_segment_bytes: 1073741824,  // 1 GB
+            log_retention_ms: 604800000,   // 7 days
+            log_segment_bytes: 1073741824, // 1 GB
             fixtures_dir: None,
             auto_create_topics: true,
             default_partitions: 3,
             default_replication_factor: 1,
+        }
+    }
+}
+
+/// AMQP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmqpConfig {
+    /// Enable AMQP server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Maximum channels per connection
+    pub max_channels_per_connection: u16,
+    /// Frame max size
+    pub frame_max: u32,
+    /// Heartbeat interval in seconds
+    pub heartbeat_interval: u16,
+    /// Fixtures directory
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Virtual hosts
+    pub virtual_hosts: Vec<String>,
+}
+
+impl Default for AmqpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 5672, // Standard AMQP port
+            host: "0.0.0.0".to_string(),
+            max_connections: 1000,
+            max_channels_per_connection: 100,
+            frame_max: 131072, // 128 KB
+            heartbeat_interval: 60,
+            fixtures_dir: None,
+            virtual_hosts: vec!["/".to_string()],
         }
     }
 }

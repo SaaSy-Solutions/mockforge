@@ -46,12 +46,14 @@ impl SmtpServer {
         use std::fs::File;
         use std::io::BufReader;
 
-        let cert_path = config.tls_cert_path.as_ref().ok_or_else(|| {
-            mockforge_core::Error::generic("TLS certificate path not configured")
-        })?;
-        let key_path = config.tls_key_path.as_ref().ok_or_else(|| {
-            mockforge_core::Error::generic("TLS private key path not configured")
-        })?;
+        let cert_path = config
+            .tls_cert_path
+            .as_ref()
+            .ok_or_else(|| mockforge_core::Error::generic("TLS certificate path not configured"))?;
+        let key_path = config
+            .tls_key_path
+            .as_ref()
+            .ok_or_else(|| mockforge_core::Error::generic("TLS private key path not configured"))?;
 
         // Load certificate
         let cert_file = File::open(cert_path)?;

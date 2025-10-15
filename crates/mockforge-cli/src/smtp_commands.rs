@@ -1,6 +1,7 @@
 //! SMTP server management and mailbox operations
 
 use crate::{FixturesCommands, MailboxCommands, SmtpCommands};
+use mockforge_smtp::SmtpFixture;
 
 /// Handle SMTP commands
 pub async fn handle_smtp_command(
@@ -54,7 +55,17 @@ async fn handle_mailbox_command(
             regex,
             case_sensitive,
         } => {
-            handle_mailbox_search(sender, recipient, subject, body, since, until, regex, case_sensitive).await?;
+            handle_mailbox_search(
+                sender,
+                recipient,
+                subject,
+                body,
+                since,
+                until,
+                regex,
+                case_sensitive,
+            )
+            .await?;
         }
     }
     Ok(())
@@ -335,23 +346,13 @@ async fn handle_fixtures_command(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match fixtures_command {
         FixturesCommands::List => {
-            println!("📋 Listing loaded fixtures...");
-            // TODO: Implement fixture listing
-            println!(
-                "Fixture listing not yet implemented. Start MockForge server to access fixtures."
-            );
+            handle_fixtures_list().await?;
         }
         FixturesCommands::Reload => {
-            println!("🔄 Reloading fixtures from disk...");
-            // TODO: Implement fixture reloading
-            println!(
-                "Fixture reloading not yet implemented. Start MockForge server to access fixtures."
-            );
+            handle_fixtures_reload().await?;
         }
         FixturesCommands::Validate { file } => {
-            println!("🔍 Validating fixture file {}...", file.display());
-            // TODO: Implement fixture validation
-            println!("Fixture validation not yet implemented.");
+            handle_fixtures_validate(&file).await?;
         }
     }
     Ok(())
@@ -470,5 +471,164 @@ async fn handle_send_command(
     }
 
     println!("✅ Email sent successfully!");
+    Ok(())
+}
+
+/// Reload SMTP fixtures from disk
+async fn handle_fixtures_reload() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🔄 Reloading SMTP fixtures from disk...");
+
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
+
+    match client.post(format!("{}/smtp/fixtures/reload", management_url)).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let result: serde_json::Value = response.json().await?;
+                let count = result["fixtures_loaded"].as_u64().unwrap_or(0);
+                println!("✅ Successfully reloaded {} fixtures", count);
+            } else {
+                println!("❌ Failed to reload fixtures: HTTP {}", response.status());
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to MockForge management API: {}", e);
+            println!("💡 Make sure MockForge server is running");
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate SMTP fixture file
+async fn handle_fixtures_validate(
+    file: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🔍 Validating SMTP fixture file {}...", file.display());
+
+    // First, try to validate locally by parsing the file
+    match std::fs::read_to_string(file) {
+        Ok(content) => {
+            // Try to parse as YAML first, then JSON
+            let parse_result = if file.extension().and_then(|s| s.to_str()) == Some("json") {
+                serde_json::from_str::<SmtpFixture>(&content)
+            } else {
+                serde_yaml::from_str::<SmtpFixture>(&content)
+            };
+
+            match parse_result {
+                Ok(fixture) => {
+                    println!("✅ Fixture file is valid");
+                    println!("  Identifier: {}", fixture.identifier);
+                    println!("  Name: {}", fixture.name);
+                    println!("  Description: {}", fixture.description);
+                    println!("  Status Code: {}", fixture.response.status_code);
+                    println!("  Match All: {}", fixture.match_criteria.match_all);
+
+                    if let Some(pattern) = &fixture.match_criteria.recipient_pattern {
+                        println!("  Recipient Pattern: {}", pattern);
+                    }
+                    if let Some(pattern) = &fixture.match_criteria.sender_pattern {
+                        println!("  Sender Pattern: {}", pattern);
+                    }
+                    if let Some(pattern) = &fixture.match_criteria.subject_pattern {
+                        println!("  Subject Pattern: {}", pattern);
+                    }
+                }
+                Err(e) => {
+                    println!("❌ Fixture file is invalid: {}", e);
+                    return Ok(());
+                }
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to read fixture file: {}", e);
+            return Ok(());
+        }
+    }
+
+    // Also try to validate via management API if server is running
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
+
+    let file_content = std::fs::read_to_string(file)?;
+    match client
+        .post(format!("{}/smtp/fixtures/validate", management_url))
+        .body(file_content)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            if response.status().is_success() {
+                println!("✅ Server validation passed");
+            } else {
+                let error_msg =
+                    response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                println!("⚠️  Server validation failed: {}", error_msg);
+            }
+        }
+        Err(_) => {
+            // Server not available, but local validation passed
+            println!("💡 Server validation skipped (server not running)");
+        }
+    }
+
+    Ok(())
+}
+
+/// List loaded SMTP fixtures
+async fn handle_fixtures_list() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("📋 Listing loaded SMTP fixtures...");
+
+    // Try to connect to MockForge management API
+    let client = reqwest::Client::new();
+    let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
+        .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
+
+    match client.get(format!("{}/smtp/fixtures", management_url)).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                let fixtures: Vec<serde_json::Value> = response.json().await?;
+                if fixtures.is_empty() {
+                    println!("📋 No fixtures loaded");
+                } else {
+                    println!("📋 Found {} fixtures:", fixtures.len());
+                    println!("{:<20} {:<50} {}", "Identifier", "Name", "Description");
+                    println!("{}", "-".repeat(100));
+
+                    for fixture in fixtures {
+                        let identifier = fixture["identifier"].as_str().unwrap_or("N/A");
+                        let name = fixture["name"].as_str().unwrap_or("N/A");
+                        let description = fixture["description"].as_str().unwrap_or("");
+
+                        // Truncate name if too long
+                        let name_display = if name.len() > 47 {
+                            format!("{}...", &name[..44])
+                        } else {
+                            name.to_string()
+                        };
+
+                        println!(
+                            "{:<20} {:<50} {}",
+                            &identifier[..std::cmp::min(identifier.len(), 20)],
+                            name_display,
+                            description
+                        );
+                    }
+                }
+            } else {
+                println!("❌ Failed to access fixtures: HTTP {}", response.status());
+                println!("💡 Make sure MockForge server is running with SMTP enabled");
+            }
+        }
+        Err(e) => {
+            println!("❌ Failed to connect to MockForge management API: {}", e);
+            println!("💡 Make sure MockForge server is running at {}", management_url);
+            println!("💡 Or set MOCKFORGE_MANAGEMENT_URL environment variable");
+        }
+    }
+
     Ok(())
 }

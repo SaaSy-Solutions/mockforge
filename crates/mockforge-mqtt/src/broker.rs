@@ -1,24 +1,21 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
-use crate::topics::TopicTree;
-use crate::spec_registry::MqttSpecRegistry;
 use crate::qos::QoSHandler;
+use crate::spec_registry::MqttSpecRegistry;
+use crate::topics::TopicTree;
 
 /// MQTT protocol version
 #[derive(Debug, Clone, Copy)]
+#[derive(Default)]
 pub enum MqttVersion {
     V3_1_1,
+    #[default]
     V5_0,
 }
 
-impl Default for MqttVersion {
-    fn default() -> Self {
-        MqttVersion::V5_0 // Default to v5.0 for better features
-    }
-}
 
 /// MQTT broker configuration
 #[derive(Debug, Clone)]
@@ -68,40 +65,35 @@ pub struct MqttBroker {
     clients: Arc<RwLock<HashMap<String, ClientState>>>,
     session_store: Arc<RwLock<HashMap<String, ClientSession>>>,
     qos_handler: QoSHandler,
-    fixture_registry: Arc<RwLock<MqttFixtureRegistry>>,
+    fixture_registry: Arc<RwLock<crate::fixtures::MqttFixtureRegistry>>,
     next_packet_id: Arc<RwLock<u16>>,
-    metrics_registry: Option<Arc<mockforge_observability::prometheus::MetricsRegistry>>,
 }
 
 impl MqttBroker {
-    pub fn new(config: MqttConfig, spec_registry: Arc<MqttSpecRegistry>) -> Self {
+    pub fn new(config: MqttConfig, _spec_registry: Arc<MqttSpecRegistry>) -> Self {
         Self {
             config,
             topics: Arc::new(RwLock::new(TopicTree::new())),
             clients: Arc::new(RwLock::new(HashMap::new())),
             session_store: Arc::new(RwLock::new(HashMap::new())),
             qos_handler: QoSHandler::new(),
-            fixture_registry: Arc::new(RwLock::new(MqttFixtureRegistry::new())),
+            fixture_registry: Arc::new(RwLock::new(crate::fixtures::MqttFixtureRegistry::new())),
             next_packet_id: Arc::new(RwLock::new(1)),
-            metrics_registry: None,
         }
     }
 
-    pub fn with_metrics(mut self, metrics_registry: Arc<mockforge_observability::prometheus::MetricsRegistry>) -> Self {
-        self.metrics_registry = Some(metrics_registry);
-        self
-    }
-
     /// Handle client connection with session management
-    pub async fn client_connect(&self, client_id: &str, clean_session: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_secs();
+    pub async fn client_connect(
+        &self,
+        client_id: &str,
+        clean_session: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
 
         let mut clients = self.clients.write().await;
         let mut sessions = self.session_store.write().await;
 
-        if let Some(existing_client) = clients.get(client_id) {
+        if let Some(_existing_client) = clients.get(client_id) {
             // Client already connected - this shouldn't happen in normal operation
             info!("Client {} already connected, updating session", client_id);
         }
@@ -143,20 +135,21 @@ impl MqttBroker {
         clients.insert(client_id.to_string(), client_state);
 
         // Record metrics
-        if let Some(metrics) = &self.metrics_registry {
-            metrics.mqtt_connections_active.inc();
-            metrics.mqtt_connections_total.inc();
-        }
+        // if let Some(metrics) = &self.metrics_registry {
+        //     metrics.mqtt_connections_active.inc();
+        //     metrics.mqtt_connections_total.inc();
+        // }
 
         info!("Client {} connected with clean_session: {}", client_id, clean_session);
         Ok(())
     }
 
     /// Handle client disconnection with session persistence
-    pub async fn client_disconnect(&self, client_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_secs();
+    pub async fn client_disconnect(
+        &self,
+        client_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
 
         let mut clients = self.clients.write().await;
         let mut sessions = self.session_store.write().await;
@@ -183,15 +176,19 @@ impl MqttBroker {
         }
 
         // Record metrics
-        if let Some(metrics) = &self.metrics_registry {
-            metrics.mqtt_connections_active.dec();
-        }
+        // if let Some(metrics) = &self.metrics_registry {
+        //     metrics.mqtt_connections_active.dec();
+        // }
 
         Ok(())
     }
 
     /// Subscribe client to topics with session persistence
-    pub async fn client_subscribe(&self, client_id: &str, topics: Vec<(String, u8)>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn client_subscribe(
+        &self,
+        client_id: &str,
+        topics: Vec<(String, u8)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut clients = self.clients.write().await;
         let mut broker_topics = self.topics.write().await;
 
@@ -204,8 +201,12 @@ impl MqttBroker {
                 let retained_messages = broker_topics.get_retained_for_filter(&filter);
                 for (topic, message) in retained_messages {
                     info!("Sending retained message for topic {} to client {}", topic, client_id);
-                    let qos_level = crate::qos::QoS::from_u8(message.qos).unwrap_or(crate::qos::QoS::AtMostOnce);
-                    if let Err(e) = self.route_message_to_client(client_id, topic, &message.payload, qos_level).await {
+                    let qos_level = crate::qos::QoS::from_u8(message.qos)
+                        .unwrap_or(crate::qos::QoS::AtMostOnce);
+                    if let Err(e) = self
+                        .route_message_to_client(client_id, topic, &message.payload, qos_level)
+                        .await
+                    {
                         warn!("Failed to deliver retained message to client {}: {}", client_id, e);
                     }
                 }
@@ -224,7 +225,11 @@ impl MqttBroker {
     }
 
     /// Unsubscribe client from topics
-    pub async fn client_unsubscribe(&self, client_id: &str, filters: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn client_unsubscribe(
+        &self,
+        client_id: &str,
+        filters: Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut clients = self.clients.write().await;
         let mut broker_topics = self.topics.write().await;
 
@@ -274,7 +279,10 @@ impl MqttBroker {
     }
 
     /// Disconnect a client
-    pub async fn disconnect_client(&self, client_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn disconnect_client(
+        &self,
+        client_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.client_disconnect(client_id).await
     }
 
@@ -302,6 +310,72 @@ impl MqttBroker {
         payload: Vec<u8>,
         qos: u8,
         retain: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.handle_publish_internal(client_id, topic, payload, qos, retain, false)
+            .await
+    }
+
+    /// Publish a message with QoS handling but skip fixture lookup (used for fixture responses)
+    pub async fn publish_with_qos(
+        &self,
+        client_id: &str,
+        topic: &str,
+        payload: Vec<u8>,
+        qos: u8,
+        retain: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Publishing with QoS to topic: {} with QoS: {}", topic, qos);
+
+        let qos_level = crate::qos::QoS::from_u8(qos).unwrap_or(crate::qos::QoS::AtMostOnce);
+
+        let packet_id = if qos_level != crate::qos::QoS::AtMostOnce {
+            self.next_packet_id().await
+        } else {
+            0 // QoS 0 doesn't use packet IDs
+        };
+
+        let message_state = crate::qos::MessageState {
+            packet_id,
+            topic: topic.to_string(),
+            payload: payload.clone(),
+            qos: qos_level,
+            retained: retain,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+
+        // Handle retained messages
+        if retain {
+            let mut topics = self.topics.write().await;
+            topics.retain_message(topic, payload.clone(), qos);
+            info!("Stored retained message for topic: {}", topic);
+        }
+
+        // Handle based on QoS level
+        match qos_level {
+            crate::qos::QoS::AtMostOnce => {
+                self.qos_handler.handle_qo_s0(message_state).await?;
+            }
+            crate::qos::QoS::AtLeastOnce => {
+                self.qos_handler.handle_qo_s1(message_state, client_id).await?;
+            }
+            crate::qos::QoS::ExactlyOnce => {
+                self.qos_handler.handle_qo_s2(message_state, client_id).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_publish_internal(
+        &self,
+        client_id: &str,
+        topic: &str,
+        payload: Vec<u8>,
+        qos: u8,
+        retain: bool,
+        is_fixture_response: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         info!("Handling publish to topic: {} with QoS: {}", topic, qos);
 
@@ -344,40 +418,73 @@ impl MqttBroker {
             }
         }
 
-        // Check if this matches any fixtures
-        if let Some(fixture) = self.spec_registry.find_fixture_by_topic(topic) {
-            info!("Found matching fixture: {}", fixture.identifier);
+        // Check if this matches any fixtures (skip if this is already a fixture response to avoid recursion)
+        if !is_fixture_response {
+            if let Some(fixture) = self.fixture_registry.read().await.find_by_topic(topic) {
+                info!("Found matching fixture: {}", fixture.identifier);
 
-            // Generate response using template engine
-            match self.generate_fixture_response(fixture, topic, &payload) {
-                Ok(response_payload) => {
-                    info!("Generated fixture response with {} bytes", response_payload.len());
-                    // TODO: Publish the response to the appropriate topic
-                }
-                Err(e) => {
-                    warn!("Failed to generate fixture response: {}", e);
+                // Generate response using template engine
+                match self.generate_fixture_response(fixture, topic, &payload) {
+                    Ok(response_payload) => {
+                        info!("Generated fixture response with {} bytes", response_payload.len());
+                        // Publish the response to the same topic as the request (skip fixture lookup to avoid recursion)
+                        if let Err(e) = self
+                            .publish_with_qos(
+                                client_id,
+                                topic,
+                                response_payload,
+                                fixture.qos,
+                                fixture.retained,
+                            )
+                            .await
+                        {
+                            warn!("Failed to publish fixture response: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to generate fixture response: {}", e);
+                    }
                 }
             }
         }
 
         // Route to subscribers
-        let topics_read = self.topics.read().await;
-        let subscribers = topics_read.match_topic(topic);
-        for subscriber in &subscribers {
-            info!("Routing to subscriber: {} on topic filter: {}", subscriber.client_id, subscriber.filter);
-            self.route_message_to_client(&subscriber.client_id, topic, &payload, qos_level).await?;
-        }
+        self.route_to_subscribers(topic, &payload, qos_level).await?;
 
         // Record metrics
-        if let Some(metrics) = &self.metrics_registry {
-            metrics.mqtt_messages_published_total.inc();
-        }
+        // if let Some(metrics) = &self.metrics_registry {
+        //     metrics.mqtt_messages_published_total.inc();
+        // }
 
         Ok(())
     }
 
+    /// Route a message to all subscribers of a topic
+    async fn route_to_subscribers(
+        &self,
+        topic: &str,
+        payload: &[u8],
+        qos: crate::qos::QoS,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let topics_read = self.topics.read().await;
+        let subscribers = topics_read.match_topic(topic);
+        for subscriber in &subscribers {
+            info!(
+                "Routing to subscriber: {} on topic filter: {}",
+                subscriber.client_id, subscriber.filter
+            );
+            self.route_message_to_client(&subscriber.client_id, topic, payload, qos).await?;
+        }
+        Ok(())
+    }
+
     /// Generate a response payload from a fixture using template expansion
-    fn generate_fixture_response(&self, fixture: &crate::fixtures::MqttFixture, topic: &str, received_payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    fn generate_fixture_response(
+        &self,
+        fixture: &crate::fixtures::MqttFixture,
+        topic: &str,
+        received_payload: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         use mockforge_core::templating;
 
         // Create templating context with environment variables
@@ -389,7 +496,10 @@ impl MqttBroker {
             env_vars.insert("payload".to_string(), received_json.to_string());
         } else {
             // If not JSON, add as string
-            env_vars.insert("payload".to_string(), String::from_utf8_lossy(received_payload).to_string());
+            env_vars.insert(
+                "payload".to_string(),
+                String::from_utf8_lossy(received_payload).to_string(),
+            );
         }
 
         let context = templating::TemplatingContext::with_env(env_vars);
@@ -402,7 +512,13 @@ impl MqttBroker {
     }
 
     /// Route a message to a specific client
-    async fn route_message_to_client(&self, client_id: &str, topic: &str, payload: &[u8], qos: crate::qos::QoS) -> Result<(), Box<dyn std::error::Error>> {
+    async fn route_message_to_client(
+        &self,
+        client_id: &str,
+        topic: &str,
+        payload: &[u8],
+        qos: crate::qos::QoS,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Check if client is connected
         let clients = self.clients.read().await;
         if let Some(client_state) = clients.get(client_id) {
@@ -412,9 +528,9 @@ impl MqttBroker {
             // For the management layer, we simulate the delivery and record metrics
 
             // Record metrics
-            if let Some(metrics) = &self.metrics_registry {
-                metrics.mqtt_messages_received_total.inc();
-            }
+            // if let Some(metrics) = &self.metrics_registry {
+            //     metrics.mqtt_messages_received_total.inc();
+            // }
 
             // Add to client's pending messages if QoS requires it
             if qos != crate::qos::QoS::AtMostOnce {
@@ -433,7 +549,11 @@ impl MqttBroker {
 
                 // Update client state (in real implementation, this would be handled by the MQTT protocol)
                 // For simulation purposes, we just log
-                info!("Added QoS {} message to pending delivery queue for client {}", qos.as_u8(), client_id);
+                info!(
+                    "Added QoS {} message to pending delivery queue for client {}",
+                    qos.as_u8(),
+                    client_id
+                );
             }
 
             Ok(())
@@ -445,15 +565,15 @@ impl MqttBroker {
 
     /// Update Prometheus metrics with current broker statistics
     pub async fn update_metrics(&self) {
-        if let Some(metrics) = &self.metrics_registry {
-            let connected_clients = self.get_connected_clients().await.len() as i64;
-            let active_topics = self.get_active_topics().await.len() as i64;
-            let topic_stats = self.get_topic_stats().await;
+        // if let Some(metrics) = &self.metrics_registry {
+        //     let connected_clients = self.get_connected_clients().await.len() as i64;
+        //     let active_topics = self.get_active_topics().await.len() as i64;
+        //     let topic_stats = self.get_topic_stats().await;
 
-            metrics.mqtt_connections_active.set(connected_clients);
-            metrics.mqtt_topics_active.set(active_topics);
-            metrics.mqtt_subscriptions_active.set(topic_stats.total_subscriptions as i64);
-            metrics.mqtt_retained_messages.set(topic_stats.retained_messages as i64);
-        }
+        //     metrics.mqtt_connections_active.set(connected_clients);
+        //     metrics.mqtt_topics_active.set(active_topics);
+        //     metrics.mqtt_subscriptions_active.set(topic_stats.total_subscriptions as i64);
+        //     metrics.mqtt_retained_messages.set(topic_stats.retained_messages as i64);
+        // }
     }
 }

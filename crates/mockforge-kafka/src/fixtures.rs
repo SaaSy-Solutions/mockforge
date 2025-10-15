@@ -1,11 +1,12 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_yaml;
+use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
-use std::collections::HashMap;
-use chrono::Utc;
-
 
 /// Kafka fixture for message generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,7 +14,7 @@ pub struct KafkaFixture {
     pub identifier: String,
     pub name: String,
     pub topic: String,
-    pub partition: Option<i32>, // None = all partitions
+    pub partition: Option<i32>,      // None = all partitions
     pub key_pattern: Option<String>, // Template
     pub value_template: serde_json::Value,
     pub headers: std::collections::HashMap<String, String>,
@@ -51,7 +52,7 @@ impl AutoProducer {
 
     /// Add a fixture for auto-production
     pub async fn add_fixture(&self, fixture: KafkaFixture) {
-        if fixture.auto_produce.as_ref().map_or(false, |ap| ap.enabled) {
+        if fixture.auto_produce.as_ref().is_some_and(|ap| ap.enabled) {
             let fixture_id = fixture.identifier.clone();
             self.fixtures.write().await.insert(fixture_id, fixture);
         }
@@ -75,9 +76,33 @@ impl AutoProducer {
                         if auto_produce.enabled {
                             // Generate and produce messages
                             for _ in 0..auto_produce.rate_per_second {
-                                if let Ok(_message) = fixture.generate_message(&HashMap::new()) {
-                                    // TODO: Actually produce the message to the broker
-                                    tracing::debug!("Auto-producing message to topic {}", fixture.topic);
+                                if let Ok(message) = fixture.generate_message(&HashMap::new()) {
+                                    // Produce the message to the broker
+                                    let mut topics = _broker.topics.write().await;
+                                    if let Some(topic) = topics.get_mut(&fixture.topic) {
+                                        let partition = fixture.partition.unwrap_or_else(|| {
+                                            topic.assign_partition(message.key.as_deref())
+                                        });
+
+                                        if let Err(e) = topic.produce(partition, message).await {
+                                            tracing::error!(
+                                                "Failed to produce message to topic {}: {}",
+                                                fixture.topic,
+                                                e
+                                            );
+                                        } else {
+                                            tracing::debug!(
+                                                "Auto-produced message to topic {} partition {}",
+                                                fixture.topic,
+                                                partition
+                                            );
+                                        }
+                                    } else {
+                                        tracing::warn!(
+                                            "Topic {} not found for auto-production",
+                                            fixture.topic
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -101,20 +126,60 @@ impl AutoProducer {
 
 impl KafkaFixture {
     /// Load fixtures from a directory
-    pub fn load_from_dir(_dir: &PathBuf) -> mockforge_core::Result<Vec<Self>> {
-        // TODO: Implement fixture loading from YAML files
-        Ok(vec![])
+    pub fn load_from_dir(dir: &PathBuf) -> mockforge_core::Result<Vec<Self>> {
+        let mut fixtures = Vec::new();
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("yaml")
+                || path.extension().and_then(|s| s.to_str()) == Some("yml")
+            {
+                let file = fs::File::open(&path)?;
+                let file_fixtures: Vec<Self> = serde_yaml::from_reader(file)?;
+                fixtures.extend(file_fixtures);
+            }
+        }
+        Ok(fixtures)
     }
 
     /// Generate a message using the fixture
-    pub fn generate_message(&self, _context: &std::collections::HashMap<String, String>) -> mockforge_core::Result<crate::partitions::KafkaMessage> {
-        // TODO: Implement message generation with templating
+    pub fn generate_message(
+        &self,
+        context: &std::collections::HashMap<String, String>,
+    ) -> mockforge_core::Result<crate::partitions::KafkaMessage> {
+        // Render key if pattern provided
+        let key = self.key_pattern.as_ref().map(|pattern| self.render_template(pattern, context));
+
+        // Render value template
+        let value_str = serde_json::to_string(&self.value_template)?;
+        let value_rendered = self.render_template(&value_str, context);
+        let value = value_rendered.into_bytes();
+
+        // Render headers
+        let headers = self
+            .headers
+            .iter()
+            .map(|(k, v)| (k.clone(), self.render_template(v, context).into_bytes()))
+            .collect();
+
         Ok(crate::partitions::KafkaMessage {
             offset: 0,
             timestamp: Utc::now().timestamp_millis(),
-            key: None,
-            value: vec![],
-            headers: vec![],
+            key: key.map(|k| k.into_bytes()),
+            value,
+            headers,
         })
+    }
+
+    fn render_template(
+        &self,
+        template: &str,
+        context: &std::collections::HashMap<String, String>,
+    ) -> String {
+        let mut result = template.to_string();
+        for (key, value) in context {
+            result = result.replace(&format!("{{{{{}}}}}", key), value);
+        }
+        result
     }
 }

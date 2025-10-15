@@ -1,19 +1,19 @@
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use handlebars::Handlebars;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use handlebars::Handlebars;
-use anyhow::Result;
 
 /// Virtual File System for FTP server
 #[derive(Debug, Clone)]
 pub struct VirtualFileSystem {
     root: PathBuf,
     files: Arc<RwLock<HashMap<PathBuf, VirtualFile>>>,
-    fixtures: HashMap<PathBuf, FileFixture>,
+    fixtures: Arc<RwLock<HashMap<PathBuf, FileFixture>>>,
 }
 
 impl VirtualFileSystem {
@@ -21,7 +21,7 @@ impl VirtualFileSystem {
         Self {
             root,
             files: Arc::new(RwLock::new(HashMap::new())),
-            fixtures: HashMap::new(),
+            fixtures: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -33,7 +33,17 @@ impl VirtualFileSystem {
 
     pub fn get_file(&self, path: &Path) -> Option<VirtualFile> {
         let files = self.files.blocking_read();
-        files.get(path).cloned()
+        if let Some(file) = files.get(path) {
+            return Some(file.clone());
+        }
+
+        // Check fixtures
+        let fixtures = self.fixtures.blocking_read();
+        if let Some(fixture) = fixtures.get(path) {
+            return Some(fixture.clone().to_virtual_file());
+        }
+
+        None
     }
 
     pub fn remove_file(&self, path: &Path) -> Result<()> {
@@ -44,7 +54,8 @@ impl VirtualFileSystem {
 
     pub fn list_files(&self, path: &Path) -> Vec<VirtualFile> {
         let files = self.files.blocking_read();
-        files.iter()
+        files
+            .iter()
             .filter(|(file_path, _)| file_path.starts_with(path))
             .map(|(_, file)| file.clone())
             .collect()
@@ -53,6 +64,19 @@ impl VirtualFileSystem {
     pub fn clear(&self) -> Result<()> {
         let mut files = self.files.blocking_write();
         files.clear();
+        Ok(())
+    }
+
+    pub fn add_fixture(&self, fixture: FileFixture) -> Result<()> {
+        let mut fixtures = self.fixtures.blocking_write();
+        fixtures.insert(fixture.path.clone(), fixture);
+        Ok(())
+    }
+
+    pub fn load_fixtures(&self, fixtures: Vec<FileFixture>) -> Result<()> {
+        for fixture in fixtures {
+            self.add_fixture(fixture)?;
+        }
         Ok(())
     }
 }
@@ -89,18 +113,12 @@ impl VirtualFile {
                 let rendered = handlebars.render_template(template, &context)?;
                 Ok(rendered.into_bytes())
             }
-            FileContent::Generated { size, pattern } => {
-                match pattern {
-                    GenerationPattern::Random => {
-                        Ok((0..*size).map(|_| rand::random::<u8>()).collect())
-                    }
-                    GenerationPattern::Zeros => Ok(vec![0; *size]),
-                    GenerationPattern::Ones => Ok(vec![1; *size]),
-                    GenerationPattern::Incremental => {
-                        Ok((0..*size).map(|i| (i % 256) as u8).collect())
-                    }
-                }
-            }
+            FileContent::Generated { size, pattern } => match pattern {
+                GenerationPattern::Random => Ok((0..*size).map(|_| rand::random::<u8>()).collect()),
+                GenerationPattern::Zeros => Ok(vec![0; *size]),
+                GenerationPattern::Ones => Ok(vec![1; *size]),
+                GenerationPattern::Incremental => Ok((0..*size).map(|i| (i % 256) as u8).collect()),
+            },
         }
     }
 }
@@ -110,7 +128,10 @@ impl VirtualFile {
 pub enum FileContent {
     Static(Vec<u8>),
     Template(String),
-    Generated { size: usize, pattern: GenerationPattern },
+    Generated {
+        size: usize,
+        pattern: GenerationPattern,
+    },
 }
 
 /// File metadata
@@ -150,6 +171,12 @@ pub struct FileFixture {
     pub metadata: FileMetadata,
 }
 
+impl FileFixture {
+    pub fn to_virtual_file(self) -> VirtualFile {
+        VirtualFile::new(self.path, self.content, self.metadata)
+    }
+}
+
 /// Create a template context with common variables for template rendering
 fn create_template_context() -> Value {
     let mut context = serde_json::Map::new();
@@ -163,7 +190,10 @@ fn create_template_context() -> Value {
 
     // Add random values
     context.insert("random_int".to_string(), Value::Number(rand::random::<i64>().into()));
-    context.insert("random_float".to_string(), Value::String(format!("{:.6}", rand::random::<f64>())));
+    context.insert(
+        "random_float".to_string(),
+        Value::String(format!("{:.6}", rand::random::<f64>())),
+    );
 
     // Add UUID
     context.insert("uuid".to_string(), Value::String(uuid::Uuid::new_v4().to_string()));

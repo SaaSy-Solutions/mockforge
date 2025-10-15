@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use regex::Regex;
+use std::collections::HashMap;
 
 /// Represents a subscription to a topic
 #[derive(Debug, Clone)]
@@ -21,6 +21,12 @@ pub struct RetainedMessage {
 pub struct TopicTree {
     subscriptions: HashMap<String, Vec<Subscription>>,
     retained: HashMap<String, RetainedMessage>,
+}
+
+impl Default for TopicTree {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TopicTree {
@@ -52,7 +58,7 @@ impl TopicTree {
         let regex_pattern = filter
             .replace('+', "[^/]+")  // + matches any single level
             .replace("#", ".+")      // # matches any remaining levels
-            .replace("$", "\\$");    // Escape $ for regex
+            .replace("$", "\\$"); // Escape $ for regex
 
         let regex = match Regex::new(&format!("^{}$", regex_pattern)) {
             Ok(r) => r,
@@ -72,7 +78,7 @@ impl TopicTree {
 
         self.subscriptions
             .entry(filter.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(subscription);
     }
 
@@ -111,7 +117,8 @@ impl TopicTree {
 
     /// Get all retained messages that match a subscription filter
     pub fn get_retained_for_filter(&self, filter: &str) -> Vec<(&str, &RetainedMessage)> {
-        self.retained.iter()
+        self.retained
+            .iter()
             .filter(|(topic, _)| self.matches_filter(topic, filter))
             .map(|(topic, message)| (topic.as_str(), message))
             .collect()
@@ -124,9 +131,8 @@ impl TopicTree {
             .unwrap()
             .as_secs();
 
-        self.retained.retain(|_, message| {
-            now.saturating_sub(message.timestamp) < max_age_secs
-        });
+        self.retained
+            .retain(|_, message| now.saturating_sub(message.timestamp) < max_age_secs);
     }
 
     /// Get all topic filters (subscription patterns)
@@ -143,9 +149,7 @@ impl TopicTree {
     pub fn stats(&self) -> TopicStats {
         TopicStats {
             total_subscriptions: self.subscriptions.len(),
-            total_subscribers: self.subscriptions.values()
-                .map(|subs| subs.len())
-                .sum(),
+            total_subscribers: self.subscriptions.values().map(|subs| subs.len()).sum(),
             retained_messages: self.retained.len(),
         }
     }

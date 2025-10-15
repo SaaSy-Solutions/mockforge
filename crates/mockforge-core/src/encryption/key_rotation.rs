@@ -2,7 +2,7 @@
 //!
 //! This module provides automatic key rotation, versioning, and secure key lifecycle management
 
-use super::algorithms::{EncryptionAlgorithm, EncryptionKey, EncryptedData};
+use super::algorithms::{EncryptedData, EncryptionAlgorithm, EncryptionKey};
 use super::errors::{EncryptionError, EncryptionResult};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -96,7 +96,7 @@ impl Default for KeyRotationConfig {
     fn default() -> Self {
         Self {
             rotation_interval_days: 30, // Rotate every 30 days
-            max_previous_keys: 5,        // Keep last 5 keys
+            max_previous_keys: 5,       // Keep last 5 keys
             algorithm: EncryptionAlgorithm::Aes256Gcm,
             auto_rotate: true,
         }
@@ -209,12 +209,13 @@ impl KeyManager {
     }
 
     /// Encrypt data with the current key
-    pub fn encrypt(&self, plaintext: &[u8], aad: Option<&[u8]>) -> EncryptionResult<VersionedEncryptedData> {
-        let encrypted_data = super::algorithms::EncryptionEngine::encrypt(
-            &self.current_key.key,
-            plaintext,
-            aad,
-        )?;
+    pub fn encrypt(
+        &self,
+        plaintext: &[u8],
+        aad: Option<&[u8]>,
+    ) -> EncryptionResult<VersionedEncryptedData> {
+        let encrypted_data =
+            super::algorithms::EncryptionEngine::encrypt(&self.current_key.key, plaintext, aad)?;
 
         Ok(VersionedEncryptedData {
             version: self.current_key.version,
@@ -388,14 +389,14 @@ mod tests {
 
         // Key with rotation in the past
         let past_rotation = Utc::now() - Duration::days(1);
-        let versioned_key = VersionedKey::new(KeyVersion::new(1), key.clone())
-            .with_rotation(past_rotation);
+        let versioned_key =
+            VersionedKey::new(KeyVersion::new(1), key.clone()).with_rotation(past_rotation);
         assert!(versioned_key.should_rotate());
 
         // Key with rotation in the future
         let future_rotation = Utc::now() + Duration::days(1);
-        let versioned_key = VersionedKey::new(KeyVersion::new(1), key)
-            .with_rotation(future_rotation);
+        let versioned_key =
+            VersionedKey::new(KeyVersion::new(1), key).with_rotation(future_rotation);
         assert!(!versioned_key.should_rotate());
     }
 
@@ -418,7 +419,8 @@ mod tests {
         // Create encrypted data with unknown version
         let plaintext = b"test";
         let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
-        let encrypted = super::super::algorithms::EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
+        let encrypted =
+            super::super::algorithms::EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
 
         let versioned = VersionedEncryptedData {
             version: KeyVersion::new(999), // Unknown version

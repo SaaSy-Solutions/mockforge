@@ -1,6 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_mqtt::{TopicTree, MqttSpecRegistry, MqttFixture, MqttResponse, qos::QoSHandler, qos::MessageState};
-use mockforge_core::protocol_abstraction::{SpecRegistry, ProtocolRequest, Protocol, MessagePattern};
+use mockforge_core::protocol_abstraction::{
+    MessagePattern, Protocol, ProtocolRequest, SpecRegistry,
+};
+use mockforge_mqtt::{
+    qos::MessageState, qos::QoSHandler, MqttFixture, MqttResponse, MqttSpecRegistry, TopicTree,
+};
 use std::sync::Arc;
 
 fn benchmark_topic_matching(c: &mut Criterion) {
@@ -95,8 +99,6 @@ fn benchmark_spec_registry(c: &mut Criterion) {
         })
     });
 }
-
-
 
 fn benchmark_qos_handling(c: &mut Criterion) {
     let handler = QoSHandler::new();
