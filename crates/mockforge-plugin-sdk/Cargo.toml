@@ -2,12 +2,12 @@
 name = "mockforge-plugin-sdk"
 version = "0.1.0"
 edition = "2021"
-authors = ["MockForge Contributors"]
+authors = ["SaaSy Solutions LLC <talksaas@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
 description = "Official SDK for developing MockForge plugins with helper macros and testing utilities"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
-homepage = "https://docs.mockforge.dev"
-documentation = "https://docs.rs/mockforge-plugin-sdk"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge"
 readme = "README.md"
 keywords = ["mockforge", "plugin", "sdk", "wasm", "api"]
 categories = ["development-tools", "api-bindings", "wasm"]
