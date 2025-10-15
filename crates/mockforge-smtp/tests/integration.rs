@@ -594,8 +594,7 @@ async fn test_smtp_connection_timeout() {
     let port = find_available_port().await;
     let config_with_port = SmtpConfig { port, ..config };
     let registry = Arc::new(SmtpSpecRegistry::new());
-    let server = SmtpServer::new(config_with_port, registry)
-        .expect("Failed to create SMTP server");
+    let server = SmtpServer::new(config_with_port, registry).expect("Failed to create SMTP server");
 
     tokio::spawn(async move {
         server.start().await.ok();

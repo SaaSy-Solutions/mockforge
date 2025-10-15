@@ -163,8 +163,7 @@ impl SpecRegistry for MqttSpecRegistry {
         let context = templating::TemplatingContext::with_env(env_vars);
 
         // Use template engine to render payload
-        let template_str =
-            serde_json::to_string(&fixture.response.payload).map_err(Error::Json)?;
+        let template_str = serde_json::to_string(&fixture.response.payload).map_err(Error::Json)?;
         let expanded_payload = templating::expand_str_with_context(&template_str, &context);
         let payload = expanded_payload.into_bytes();
 

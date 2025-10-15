@@ -8,14 +8,12 @@ use crate::spec_registry::MqttSpecRegistry;
 use crate::topics::TopicTree;
 
 /// MQTT protocol version
-#[derive(Debug, Clone, Copy)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum MqttVersion {
     V3_1_1,
     #[default]
     V5_0,
 }
-
 
 /// MQTT broker configuration
 #[derive(Debug, Clone)]

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Subcommand;
 use futures_lite::stream::StreamExt;
-use lapin::{options::*, types::FieldTable, Connection, ConnectionProperties, BasicProperties};
+use lapin::{options::*, types::FieldTable, BasicProperties, Connection, ConnectionProperties};
 use mockforge_amqp::{AmqpBroker, AmqpSpecRegistry};
 use mockforge_core::config::{load_config, AmqpConfig};
 use std::path::PathBuf;
@@ -265,7 +265,10 @@ async fn serve_amqp(port: u16, host: String, config: Option<PathBuf>) -> Result<
     let broker = AmqpBroker::new(amqp_config, spec_registry);
 
     println!("Starting AMQP broker on {}:{}", broker.config.host, broker.config.port);
-    broker.start().await.map_err(|e| anyhow::anyhow!("Failed to start broker: {}", e))
+    broker
+        .start()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start broker: {}", e))
 }
 
 async fn execute_exchange_command(command: ExchangeCommands) -> Result<()> {
@@ -447,12 +450,7 @@ async fn unbind_queue(exchange: &str, queue: &str, routing_key: &str) -> Result<
         .map_err(|e| anyhow::anyhow!("Failed to create channel: {}", e))?;
 
     channel
-        .queue_unbind(
-            queue,
-            exchange,
-            routing_key,
-            FieldTable::default(),
-        )
+        .queue_unbind(queue, exchange, routing_key, FieldTable::default())
         .await
         .map_err(|e| {
             anyhow::anyhow!(

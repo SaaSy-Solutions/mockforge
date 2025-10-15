@@ -2,8 +2,7 @@ use anyhow::Result;
 use clap::Subcommand;
 use mockforge_core::config::FtpConfig;
 use mockforge_ftp::{
-    FileContent, FileMetadata, FtpServer, GenerationPattern, VirtualFile,
-    VirtualFileSystem,
+    FileContent, FileMetadata, FtpServer, GenerationPattern, VirtualFile, VirtualFileSystem,
 };
 use std::path::PathBuf;
 

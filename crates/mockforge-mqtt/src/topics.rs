@@ -76,10 +76,7 @@ impl TopicTree {
             client_id: client_id.to_string(),
         };
 
-        self.subscriptions
-            .entry(filter.to_string())
-            .or_default()
-            .push(subscription);
+        self.subscriptions.entry(filter.to_string()).or_default().push(subscription);
     }
 
     /// Remove a subscription
