@@ -55,7 +55,25 @@ impl Queue {
     }
 
     pub fn dequeue(&mut self) -> Option<QueuedMessage> {
-        self.messages.pop_front()
+        while let Some(message) = self.messages.front() {
+            // Check message expiration
+            if message.is_expired() {
+                self.messages.pop_front();
+                continue;
+            }
+
+            // Check queue TTL
+            if let Some(ttl) = self.properties.message_ttl {
+                if message.enqueued_at.elapsed() >= ttl {
+                    self.messages.pop_front();
+                    continue;
+                }
+            }
+
+            // Message is valid, return it
+            return self.messages.pop_front();
+        }
+        None
     }
 }
 

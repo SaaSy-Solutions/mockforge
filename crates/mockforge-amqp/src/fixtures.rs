@@ -5,6 +5,7 @@ use crate::exchanges::ExchangeType;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExchangeConfig {
     pub name: String,
+    #[serde(rename = "type")]
     pub exchange_type: ExchangeType,
     pub durable: bool,
 }
@@ -14,7 +15,7 @@ pub struct ExchangeConfig {
 pub struct QueueConfig {
     pub name: String,
     pub durable: bool,
-    pub message_template: serde_json::Value,
+    pub message_template: Option<serde_json::Value>,
 }
 
 /// Configuration for a binding in fixtures
@@ -75,8 +76,15 @@ impl AmqpFixture {
 
     /// Load a single fixture from a YAML file
     fn load_from_file(path: &std::path::Path) -> mockforge_core::Result<Self> {
+        println!("Loading fixture from: {:?}", path);
         let content = std::fs::read_to_string(path)?;
-        let fixture: AmqpFixture = serde_yaml::from_str(&content)?;
+        println!("File content length: {}", content.len());
+        let fixture: AmqpFixture = serde_yaml::from_str(&content)
+            .map_err(|e| {
+                println!("YAML parsing error: {}", e);
+                e
+            })?;
+        println!("Successfully loaded fixture: {}", fixture.identifier);
         Ok(fixture)
     }
 }

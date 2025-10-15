@@ -26,6 +26,26 @@ pub struct MessageProperties {
     pub app_id: Option<String>,
 }
 
+impl Default for MessageProperties {
+    fn default() -> Self {
+        Self {
+            content_type: None,
+            content_encoding: None,
+            headers: HashMap::new(),
+            delivery_mode: DeliveryMode::NonPersistent,
+            priority: 0,
+            correlation_id: None,
+            reply_to: None,
+            expiration: None,
+            message_id: None,
+            timestamp: None,
+            type_field: None,
+            user_id: None,
+            app_id: None,
+        }
+    }
+}
+
 /// A message
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -51,5 +71,16 @@ impl QueuedMessage {
             delivery_count: 0,
             consumer_tag: None,
         }
+    }
+
+    /// Check if the message has expired
+    pub fn is_expired(&self) -> bool {
+        if let Some(expiration) = &self.message.properties.expiration {
+            if let Ok(expiry_ms) = expiration.parse::<u64>() {
+                let elapsed = self.enqueued_at.elapsed().as_millis() as u64;
+                return elapsed >= expiry_ms;
+            }
+        }
+        false
     }
 }

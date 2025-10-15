@@ -5,6 +5,7 @@ use crate::messages::Message;
 
 /// Exchange types supported by AMQP
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ExchangeType {
     Direct,
     Fanout,
@@ -59,7 +60,7 @@ impl Exchange {
             .collect()
     }
 
-    fn matches_topic_pattern(routing_parts: &[&str], pattern_parts: &[&str]) -> bool {
+    pub fn matches_topic_pattern(routing_parts: &[&str], pattern_parts: &[&str]) -> bool {
         if routing_parts.len() > pattern_parts.len() && !pattern_parts.contains(&"#") {
             return false;
         }
