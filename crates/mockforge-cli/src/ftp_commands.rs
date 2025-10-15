@@ -1,8 +1,8 @@
 use anyhow::Result;
-use clap::{Args, Subcommand};
+use clap::Subcommand;
 use mockforge_core::config::FtpConfig;
 use mockforge_ftp::{
-    FileContent, FileMetadata, FtpServer, FtpSpecRegistry, GenerationPattern, VirtualFile,
+    FileContent, FileMetadata, FtpServer, GenerationPattern, VirtualFile,
     VirtualFileSystem,
 };
 use std::path::PathBuf;
@@ -178,7 +178,7 @@ async fn handle_ftp_serve(
     let config = FtpConfig {
         host,
         port,
-        virtual_root,
+        virtual_root: virtual_root.into(),
         ..Default::default()
     };
 

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -13,11 +14,19 @@ use mockforge_core::{Protocol, Result};
 pub struct KafkaSpecRegistry {
     fixtures: Vec<Arc<crate::fixtures::KafkaFixture>>,
     template_engine: mockforge_core::templating::TemplateEngine,
+    topics: std::sync::Arc<
+        tokio::sync::RwLock<std::collections::HashMap<String, crate::topics::Topic>>,
+    >,
 }
 
 impl KafkaSpecRegistry {
     /// Create a new Kafka spec registry
-    pub async fn new(config: mockforge_core::config::KafkaConfig) -> Result<Self> {
+    pub async fn new(
+        config: mockforge_core::config::KafkaConfig,
+        topics: std::sync::Arc<
+            tokio::sync::RwLock<std::collections::HashMap<String, crate::topics::Topic>>,
+        >,
+    ) -> Result<Self> {
         let fixtures = if let Some(fixtures_dir) = &config.fixtures_dir {
             crate::fixtures::KafkaFixture::load_from_dir(fixtures_dir)?
                 .into_iter()
@@ -32,6 +41,7 @@ impl KafkaSpecRegistry {
         Ok(Self {
             fixtures,
             template_engine,
+            topics,
         })
     }
 
@@ -43,23 +53,63 @@ impl KafkaSpecRegistry {
     /// Produce a message to a topic
     pub async fn produce(
         &self,
-        _topic: &str,
-        _key: Option<&str>,
-        _value: &serde_json::Value,
+        topic: &str,
+        key: Option<&str>,
+        value: &serde_json::Value,
     ) -> Result<i64> {
-        // TODO: Implement actual produce logic
-        Ok(0)
+        let mut topics = self.topics.write().await;
+
+        // Get or create the topic
+        let topic_entry = topics.entry(topic.to_string()).or_insert_with(|| {
+            crate::topics::Topic::new(topic.to_string(), crate::topics::TopicConfig::default())
+        });
+
+        // Assign partition based on key
+        let partition_id = topic_entry.assign_partition(key.map(|k| k.as_bytes()));
+
+        // Create the message
+        let message = crate::partitions::KafkaMessage {
+            offset: 0, // Will be set by partition.append
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            key: key.map(|k| k.as_bytes().to_vec()),
+            value: serde_json::to_vec(value).map_err(mockforge_core::Error::Json)?,
+            headers: vec![],
+        };
+
+        // Append to partition
+        let offset = topic_entry
+            .get_partition_mut(partition_id)
+            .ok_or_else(|| {
+                mockforge_core::Error::generic(format!("Partition {} not found", partition_id))
+            })?
+            .append(message);
+
+        Ok(offset)
     }
 
     /// Fetch messages from a topic partition
     pub async fn fetch(
         &self,
-        _topic: &str,
-        _partition: i32,
-        _offset: i64,
+        topic: &str,
+        partition: i32,
+        offset: i64,
     ) -> Result<Vec<crate::partitions::KafkaMessage>> {
-        // TODO: Implement actual fetch logic
-        Ok(vec![])
+        let topics = self.topics.read().await;
+
+        if let Some(topic_entry) = topics.get(topic) {
+            if let Some(partition_entry) = topic_entry.get_partition(partition) {
+                // Fetch messages starting from offset
+                let messages = partition_entry.fetch(offset, 1000); // Max 1000 messages
+                Ok(messages.into_iter().cloned().collect())
+            } else {
+                Err(mockforge_core::Error::generic(format!(
+                    "Partition {} not found in topic {}",
+                    partition, topic
+                )))
+            }
+        } else {
+            Err(mockforge_core::Error::generic(format!("Topic {} not found", topic)))
+        }
     }
 }
 

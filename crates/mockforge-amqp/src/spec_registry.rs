@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -37,9 +38,7 @@ impl AmqpSpecRegistry {
 
     /// Find fixture by queue name
     pub fn find_fixture_for_queue(&self, queue: &str) -> Option<Arc<crate::fixtures::AmqpFixture>> {
-        self.fixtures.iter().find(|f| {
-            f.queues.iter().any(|q| q.name == queue)
-        }).cloned()
+        self.fixtures.iter().find(|f| f.queues.iter().any(|q| q.name == queue)).cloned()
     }
 }
 
@@ -79,26 +78,24 @@ impl SpecRegistry for AmqpSpecRegistry {
         self.fixtures
             .iter()
             .find(|fixture| fixture.identifier == path)
-            .and_then(|fixture| {
-                match operation {
-                    "PUBLISH" => Some(SpecOperation {
-                        name: format!("{}-publish", fixture.identifier),
-                        path: fixture.identifier.clone(),
-                        operation_type: "PUBLISH".to_string(),
-                        input_schema: Some("AmqpMessage".to_string()),
-                        output_schema: Some("PublishResponse".to_string()),
-                        metadata: HashMap::new(),
-                    }),
-                    "CONSUME" => Some(SpecOperation {
-                        name: format!("{}-consume", fixture.identifier),
-                        path: fixture.identifier.clone(),
-                        operation_type: "CONSUME".to_string(),
-                        input_schema: Some("ConsumeRequest".to_string()),
-                        output_schema: Some("AmqpMessage".to_string()),
-                        metadata: HashMap::new(),
-                    }),
-                    _ => None,
-                }
+            .and_then(|fixture| match operation {
+                "PUBLISH" => Some(SpecOperation {
+                    name: format!("{}-publish", fixture.identifier),
+                    path: fixture.identifier.clone(),
+                    operation_type: "PUBLISH".to_string(),
+                    input_schema: Some("AmqpMessage".to_string()),
+                    output_schema: Some("PublishResponse".to_string()),
+                    metadata: HashMap::new(),
+                }),
+                "CONSUME" => Some(SpecOperation {
+                    name: format!("{}-consume", fixture.identifier),
+                    path: fixture.identifier.clone(),
+                    operation_type: "CONSUME".to_string(),
+                    input_schema: Some("ConsumeRequest".to_string()),
+                    output_schema: Some("AmqpMessage".to_string()),
+                    metadata: HashMap::new(),
+                }),
+                _ => None,
             })
     }
 
@@ -106,17 +103,13 @@ impl SpecRegistry for AmqpSpecRegistry {
         let valid = match request.operation.as_str() {
             "PUBLISH" => {
                 if let Some(exchange) = request.metadata.get("exchange") {
-                    self.fixtures.iter().any(|f| {
-                        f.exchanges.iter().any(|e| e.name == *exchange)
-                    })
+                    self.fixtures.iter().any(|f| f.exchanges.iter().any(|e| e.name == *exchange))
                 } else {
                     false
                 }
             }
             "CONSUME" => {
-                self.fixtures.iter().any(|f| {
-                    f.queues.iter().any(|q| q.name == request.path)
-                })
+                self.fixtures.iter().any(|f| f.queues.iter().any(|q| q.name == request.path))
             }
             _ => false,
         };
@@ -141,9 +134,13 @@ impl SpecRegistry for AmqpSpecRegistry {
 
         match operation.as_str() {
             "PUBLISH" => {
-                let exchange = request.metadata.get("exchange")
+                let exchange = request
+                    .metadata
+                    .get("exchange")
                     .ok_or_else(|| mockforge_core::Error::generic("Missing exchange"))?;
-                let routing_key = request.routing_key.as_ref()
+                let routing_key = request
+                    .routing_key
+                    .as_ref()
                     .ok_or_else(|| mockforge_core::Error::generic("Missing routing key"))?;
 
                 // For now, just acknowledge the publish
@@ -160,17 +157,41 @@ impl SpecRegistry for AmqpSpecRegistry {
             "CONSUME" => {
                 let queue = &request.path;
 
-                // For now, return empty response
+                // Find fixture and queue config
+                let fixture = self.find_fixture_for_queue(queue);
+                let queue_config =
+                    fixture.as_ref().and_then(|f| f.queues.iter().find(|q| q.name == *queue));
+
+                let body = if let Some(queue_config) = queue_config {
+                    if let Some(message_template) = &queue_config.message_template {
+                        // Use template engine to expand the message template
+                        let templating_context =
+                            mockforge_core::templating::TemplatingContext::with_env(
+                                request.metadata.clone(),
+                            );
+                        let expanded = self
+                            .template_engine
+                            .expand_tokens_with_context(message_template, &templating_context);
+                        serde_json::to_string(&expanded)
+                            .map_err(mockforge_core::Error::Json)?
+                            .into_bytes()
+                    } else {
+                        vec![]
+                    }
+                } else {
+                    vec![]
+                };
+
                 Ok(ProtocolResponse {
                     status: ResponseStatus::AmqpStatus(200),
-                    metadata: HashMap::from([
-                        ("queue".to_string(), queue.clone()),
-                    ]),
-                    body: vec![],
-                    content_type: "application/octet-stream".to_string(),
+                    metadata: HashMap::from([("queue".to_string(), queue.clone())]),
+                    body,
+                    content_type: "application/json".to_string(),
                 })
             }
-            _ => Err(mockforge_core::Error::generic(format!("Unsupported operation: {}", operation))),
+            _ => {
+                Err(mockforge_core::Error::generic(format!("Unsupported operation: {}", operation)))
+            }
         }
     }
 }

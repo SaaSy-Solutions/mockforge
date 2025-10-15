@@ -692,5 +692,4 @@ if __name__ == "__main__":
 
 - [Getting Started](../getting-started.md) - Basic MQTT setup
 - [Configuration](configuration.md) - Detailed configuration options
-- [Fixtures](fixtures.md) - Define MQTT mock scenarios</content>
-</xai:function_call">Write file: book/src/protocols/mqtt/examples.md
+- [Fixtures](fixtures.md) - Define MQTT mock scenarios

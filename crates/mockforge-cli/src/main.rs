@@ -12,9 +12,11 @@ use tokio::net::TcpListener;
 
 mod amqp_commands;
 mod ftp_commands;
+#[cfg(feature = "kafka")]
 mod kafka_commands;
 mod mqtt_commands;
 mod plugin_commands;
+#[cfg(feature = "smtp")]
 mod smtp_commands;
 mod workspace_commands;
 
@@ -360,6 +362,7 @@ enum Commands {
     ///   mockforge smtp mailbox clear
     ///   mockforge smtp fixtures list
     ///   mockforge smtp send --to user@example.com --subject "Test"
+    #[cfg(feature = "smtp")]
     #[command(verbatim_doc_comment)]
     Smtp {
         #[command(subcommand)]
@@ -398,6 +401,7 @@ enum Commands {
     ///   mockforge kafka produce --topic orders --value '{"id": "123"}'
     ///   mockforge kafka consume --topic orders --group test-group
     ///   mockforge kafka topic create orders --partitions 3
+    #[cfg(feature = "kafka")]
     #[command(verbatim_doc_comment)]
     Kafka {
         #[command(subcommand)]
@@ -1322,6 +1326,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )
             .await?;
         }
+        #[cfg(feature = "smtp")]
         Commands::Smtp { smtp_command } => {
             smtp_commands::handle_smtp_command(smtp_command).await?;
         }
@@ -1331,6 +1336,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Ftp { ftp_command } => {
             ftp_commands::handle_ftp_command(ftp_command).await?;
         }
+        #[cfg(feature = "kafka")]
         Commands::Kafka { kafka_command } => {
             kafka_commands::handle_kafka_command(kafka_command).await?;
         }
@@ -2121,11 +2127,13 @@ async fn handle_serve(
     };
 
     // Create SMTP registry if enabled
+    #[cfg(feature = "smtp")]
     let smtp_registry = if config.smtp.enabled {
         use mockforge_smtp::SmtpSpecRegistry;
+        use std::any::Any;
         use std::sync::Arc;
 
-        let mut registry = SmtpSpecRegistry::with_mailbox_size(config.smtp.max_mailbox_messages);
+        let mut registry = SmtpSpecRegistry::new();
 
         if let Some(fixtures_dir) = &config.smtp.fixtures_dir {
             if fixtures_dir.exists() {
@@ -2142,10 +2150,12 @@ async fn handle_serve(
             }
         }
 
-        Some(Arc::new(registry))
+        Some(Arc::new(registry) as Arc<dyn Any + Send + Sync>)
     } else {
         None
     };
+    #[cfg(not(feature = "smtp"))]
+    let smtp_registry = None::<Arc<dyn std::any::Any + Send + Sync>>;
 
     // Create MQTT registry if enabled
     let mqtt_registry = if config.mqtt.enabled {
@@ -2174,35 +2184,43 @@ async fn handle_serve(
         None
     };
 
-    let http_app = if config.core.traffic_shaping_enabled {
-        use mockforge_core::TrafficShaper;
-        let traffic_shaper = Some(TrafficShaper::new(config.core.traffic_shaping.clone()));
-        mockforge_http::build_router_with_traffic_shaping_and_multi_tenant(
-            config.http.openapi_spec.clone(),
-            None,
-            traffic_shaper,
-            true,
-            multi_tenant_config,
-            None,
-            smtp_registry.clone(),
-            mqtt_broker.clone(),
-        )
-        .await
+    // Create MQTT broker instance (if enabled)
+    let mqtt_broker = if let Some(ref mqtt_registry) = mqtt_registry {
+        let mqtt_config = config.mqtt.clone();
+
+        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
+        let broker_config = mockforge_mqtt::broker::MqttConfig {
+            port: mqtt_config.port,
+            host: mqtt_config.host.clone(),
+            max_connections: mqtt_config.max_connections,
+            max_packet_size: mqtt_config.max_packet_size,
+            keep_alive_secs: mqtt_config.keep_alive_secs,
+            version: mockforge_mqtt::broker::MqttVersion::default(),
+        };
+
+        Some(Arc::new(mockforge_mqtt::MqttBroker::new(
+            broker_config.clone(),
+            mqtt_registry.clone(),
+        )))
     } else {
-        // Use chain-enabled router for standard operation
-        mockforge_http::build_router_with_chains_and_multi_tenant(
-            config.http.openapi_spec.clone(),
-            None,
-            None, // Use default chain config
-            multi_tenant_config,
-            Some(config.routes.clone()),
-            config.http.cors.clone(),
-            None,
-            smtp_registry.clone(),
-            mqtt_broker.clone(),
-        )
-        .await
+        None
     };
+
+    // Use standard router (traffic shaping temporarily disabled)
+    let http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
+        config.http.openapi_spec.clone(),
+        None,
+        None, // circling_config
+        multi_tenant_config,
+        Some(config.routes.clone()),
+        config.http.cors.clone(),
+        None, // ai_generator
+        smtp_registry.as_ref().cloned(),
+        mqtt_broker.clone(),
+        None,  // traffic_shaper
+        false, // traffic_shaping_enabled
+    )
+    .await;
 
     println!(
         "✅ HTTP server configured with health check at http://localhost:{}/health",
@@ -2289,62 +2307,42 @@ async fn handle_serve(
     let smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
-        let smtp_registry = smtp_registry.clone();
+
+        // Convert core SmtpConfig to mockforge_smtp::SmtpConfig
+        let server_config = mockforge_smtp::SmtpConfig {
+            port: smtp_config.port,
+            host: smtp_config.host.clone(),
+            hostname: smtp_config.hostname.clone(),
+            fixtures_dir: smtp_config.fixtures_dir.clone(),
+            timeout_secs: smtp_config.timeout_secs,
+            max_connections: smtp_config.max_connections,
+            enable_mailbox: smtp_config.enable_mailbox,
+            max_mailbox_messages: smtp_config.max_mailbox_messages,
+            enable_starttls: smtp_config.enable_starttls,
+            tls_cert_path: smtp_config.tls_cert_path.clone(),
+            tls_key_path: smtp_config.tls_key_path.clone(),
+        };
+
+        // Downcast the registry
+        let smtp_reg =
+            smtp_registry.clone().downcast::<mockforge_smtp::SmtpSpecRegistry>().unwrap();
 
         Some(tokio::spawn(async move {
-            use mockforge_smtp::SmtpServer;
-
             println!("📧 SMTP server listening on {}:{}", smtp_config.host, smtp_config.port);
 
-            // Convert core SmtpConfig to mockforge_smtp::SmtpConfig
-            let smtp_server_config = mockforge_smtp::SmtpConfig {
-                port: smtp_config.port,
-                host: smtp_config.host.clone(),
-                hostname: smtp_config.hostname.clone(),
-                fixtures_dir: smtp_config.fixtures_dir.clone(),
-                timeout_secs: smtp_config.timeout_secs,
-                max_connections: smtp_config.max_connections,
-                enable_mailbox: smtp_config.enable_mailbox,
-                max_mailbox_messages: smtp_config.max_mailbox_messages,
-                enable_starttls: smtp_config.enable_starttls,
-                tls_cert_path: smtp_config.tls_cert_path.clone(),
-                tls_key_path: smtp_config.tls_key_path.clone(),
-            };
-
-            let server = SmtpServer::new(smtp_server_config, smtp_registry)
-                .map_err(|e| format!("Failed to create SMTP server: {}", e))?;
-
             tokio::select! {
-                result = server.start() => {
+                result = async {
+                    let server = mockforge_smtp::SmtpServer::new(server_config, smtp_reg)?;
+                    server.start().await
+                } => {
                     result.map_err(|e| format!("SMTP server error: {}", e))
                 }
                 _ = smtp_shutdown.cancelled() => {
+                    println!("🛑 Shutting down SMTP server...");
                     Ok(())
                 }
             }
         }))
-    } else {
-        None
-    };
-
-    // Create MQTT broker instance (if enabled)
-    let mqtt_broker = if let Some(ref mqtt_registry) = mqtt_registry {
-        let mqtt_config = config.mqtt.clone();
-
-        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
-        let broker_config = mockforge_mqtt::broker::MqttConfig {
-            port: mqtt_config.port,
-            host: mqtt_config.host.clone(),
-            max_connections: mqtt_config.max_connections,
-            max_packet_size: mqtt_config.max_packet_size,
-            keep_alive_secs: mqtt_config.keep_alive_secs,
-            version: mockforge_mqtt::broker::MqttVersion::default(),
-        };
-
-        Some(Arc::new(
-            mockforge_mqtt::MqttBroker::new(broker_config.clone(), mqtt_registry.clone())
-                .with_metrics(metrics_registry.clone()),
-        ))
     } else {
         None
     };
@@ -2539,30 +2537,6 @@ async fn handle_serve(
                 }
                 Some(Err(e)) => {
                     let error = format!("Metrics server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = smtp_handle {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("📧 SMTP server stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("SMTP server task panicked: {}", e);
                     eprintln!("❌ {}", error);
                     Some(error)
                 }

@@ -273,5 +273,4 @@ Now that you have a basic MQTT broker running, explore:
 
 1. **[Fixtures](./fixtures.md)** - Define MQTT message patterns and mock responses
 2. **[Configuration](./configuration.md)** - Fine-tune broker behavior
-3. **[Examples](./examples.md)** - See real-world implementations</content>
-</xai:function_call">Write file: book/src/protocols/mqtt/getting-started.md
+3. **[Examples](./examples.md)** - See real-world implementations

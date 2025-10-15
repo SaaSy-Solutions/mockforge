@@ -215,8 +215,9 @@ async fn test_conformance_basic_connection() {
         lapin::Connection::connect(
             &format!("amqp://127.0.0.1:{}", port),
             lapin::ConnectionProperties::default(),
-        )
-    ).await;
+        ),
+    )
+    .await;
 
     // Clean up
     broker_handle.abort();
@@ -268,42 +269,45 @@ async fn test_publisher_confirms() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Test publisher confirms with lapin
-    let conn_result = timeout(
-        Duration::from_secs(5),
-        async {
-            let connection = lapin::Connection::connect(
-                &format!("amqp://127.0.0.1:{}", port),
-                lapin::ConnectionProperties::default(),
-            ).await?;
+    let conn_result = timeout(Duration::from_secs(5), async {
+        let connection = lapin::Connection::connect(
+            &format!("amqp://127.0.0.1:{}", port),
+            lapin::ConnectionProperties::default(),
+        )
+        .await?;
 
-            let channel = connection.create_channel().await?;
+        let channel = connection.create_channel().await?;
 
-            // Enable publisher confirms
-            channel.confirm_select(lapin::options::ConfirmSelectOptions::default()).await?;
+        // Enable publisher confirms
+        channel.confirm_select(lapin::options::ConfirmSelectOptions::default()).await?;
 
-            // Declare exchange
-            channel.exchange_declare(
+        // Declare exchange
+        channel
+            .exchange_declare(
                 "test-exchange",
                 lapin::ExchangeKind::Direct,
                 lapin::options::ExchangeDeclareOptions::default(),
                 lapin::types::FieldTable::default(),
-            ).await?;
+            )
+            .await?;
 
-            // Publish a message
-            let confirm = channel.basic_publish(
+        // Publish a message
+        let confirm = channel
+            .basic_publish(
                 "test-exchange",
                 "test-key",
                 lapin::options::BasicPublishOptions::default(),
                 b"test message",
                 lapin::BasicProperties::default(),
-            ).await?;
+            )
+            .await?;
 
-            // Wait for confirmation
-            confirm.await?;
+        // Wait for confirmation
+        confirm.await?;
 
-            Ok::<(), lapin::Error>(())
-        }
-    ).await;
+        Ok::<(), lapin::Error>(())
+    })
+    .await;
 
     // Clean up
     broker_handle.abort();
@@ -374,17 +378,20 @@ async fn test_transaction_support() {
     // more complex state management
 
     let mut channels = HashMap::new();
-    channels.insert(1u16, Channel {
-        id: 1,
-        state: ChannelState::Open,
-        consumer_tag: None,
-        prefetch_count: 0,
-        prefetch_size: 0,
-        publisher_confirms: false,
-        transaction_mode: false,
-        next_delivery_tag: 1,
-        unconfirmed_messages: HashMap::new(),
-    });
+    channels.insert(
+        1u16,
+        Channel {
+            id: 1,
+            state: ChannelState::Open,
+            consumer_tag: None,
+            prefetch_count: 0,
+            prefetch_size: 0,
+            publisher_confirms: false,
+            transaction_mode: false,
+            next_delivery_tag: 1,
+            unconfirmed_messages: HashMap::new(),
+        },
+    );
 
     // Simulate Tx.Select
     if let Some(ch) = channels.get_mut(&1) {

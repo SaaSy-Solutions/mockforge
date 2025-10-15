@@ -13,6 +13,12 @@ pub struct MqttSpecRegistry {
     fixture_registry: MqttFixtureRegistry,
 }
 
+impl Default for MqttSpecRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MqttSpecRegistry {
     pub fn new() -> Self {
         Self {
@@ -158,7 +164,7 @@ impl SpecRegistry for MqttSpecRegistry {
 
         // Use template engine to render payload
         let template_str =
-            serde_json::to_string(&fixture.response.payload).map_err(|e| Error::Json(e))?;
+            serde_json::to_string(&fixture.response.payload).map_err(Error::Json)?;
         let expanded_payload = templating::expand_str_with_context(&template_str, &context);
         let payload = expanded_payload.into_bytes();
 

@@ -1,6 +1,6 @@
 //! MQTT server implementation using rumqttd
 
-use crate::broker::{MqttConfig, MqttVersion};
+use crate::broker::MqttConfig;
 use rumqttd::Broker;
 
 /// Start an MQTT server using rumqttd

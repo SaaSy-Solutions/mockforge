@@ -102,7 +102,10 @@ fn bench_topic_pattern_matching(c: &mut Criterion) {
         b.iter(|| {
             let routing_parts = black_box(vec!["order", "created", "user", "123"]);
             let pattern_parts = black_box(vec!["order", "*", "user", "#"]);
-            let result = mockforge_amqp::exchanges::Exchange::matches_topic_pattern(&routing_parts, &pattern_parts);
+            let result = mockforge_amqp::exchanges::Exchange::matches_topic_pattern(
+                &routing_parts,
+                &pattern_parts,
+            );
             black_box(result);
         });
     });

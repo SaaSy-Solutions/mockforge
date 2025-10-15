@@ -41,11 +41,9 @@ mod import_tests {
     #[test]
     fn test_encryption_module_can_be_imported() {
         // Just verify the module can be imported
-        use mockforge_core::encryption::*;
-
         // This ensures the encryption module API is available
         // Actual functionality is tested by existing tests
-        let _algorithms = algorithms::EncryptionAlgorithm::Aes256Gcm;
+        let _algorithms = mockforge_core::encryption::EncryptionAlgorithm::Aes256Gcm;
     }
 
     #[test]

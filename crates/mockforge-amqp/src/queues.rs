@@ -1,6 +1,6 @@
+use crate::messages::QueuedMessage;
 use std::collections::VecDeque;
 use std::time::Duration;
-use crate::messages::QueuedMessage;
 
 /// Queue properties for TTL, length limits, etc.
 #[derive(Debug, Clone)]
@@ -82,6 +82,12 @@ pub struct QueueManager {
     queues: std::collections::HashMap<String, Queue>,
 }
 
+impl Default for QueueManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueueManager {
     pub fn new() -> Self {
         Self {
@@ -89,7 +95,13 @@ impl QueueManager {
         }
     }
 
-    pub fn declare_queue(&mut self, name: String, durable: bool, exclusive: bool, auto_delete: bool) {
+    pub fn declare_queue(
+        &mut self,
+        name: String,
+        durable: bool,
+        exclusive: bool,
+        auto_delete: bool,
+    ) {
         let queue = Queue::new(name.clone(), durable, exclusive, auto_delete);
         self.queues.insert(name, queue);
     }

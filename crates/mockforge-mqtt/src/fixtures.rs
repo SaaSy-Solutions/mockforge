@@ -32,6 +32,12 @@ pub struct MqttFixtureRegistry {
     fixtures: HashMap<String, MqttFixture>,
 }
 
+impl Default for MqttFixtureRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MqttFixtureRegistry {
     pub fn new() -> Self {
         Self {

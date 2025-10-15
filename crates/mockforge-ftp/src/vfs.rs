@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 pub struct VirtualFileSystem {
     root: PathBuf,
     files: Arc<RwLock<HashMap<PathBuf, VirtualFile>>>,
-    fixtures: HashMap<PathBuf, FileFixture>,
+    fixtures: Arc<RwLock<HashMap<PathBuf, FileFixture>>>,
 }
 
 impl VirtualFileSystem {
@@ -21,7 +21,7 @@ impl VirtualFileSystem {
         Self {
             root,
             files: Arc::new(RwLock::new(HashMap::new())),
-            fixtures: HashMap::new(),
+            fixtures: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -33,7 +33,17 @@ impl VirtualFileSystem {
 
     pub fn get_file(&self, path: &Path) -> Option<VirtualFile> {
         let files = self.files.blocking_read();
-        files.get(path).cloned()
+        if let Some(file) = files.get(path) {
+            return Some(file.clone());
+        }
+
+        // Check fixtures
+        let fixtures = self.fixtures.blocking_read();
+        if let Some(fixture) = fixtures.get(path) {
+            return Some(fixture.clone().to_virtual_file());
+        }
+
+        None
     }
 
     pub fn remove_file(&self, path: &Path) -> Result<()> {
@@ -54,6 +64,19 @@ impl VirtualFileSystem {
     pub fn clear(&self) -> Result<()> {
         let mut files = self.files.blocking_write();
         files.clear();
+        Ok(())
+    }
+
+    pub fn add_fixture(&self, fixture: FileFixture) -> Result<()> {
+        let mut fixtures = self.fixtures.blocking_write();
+        fixtures.insert(fixture.path.clone(), fixture);
+        Ok(())
+    }
+
+    pub fn load_fixtures(&self, fixtures: Vec<FileFixture>) -> Result<()> {
+        for fixture in fixtures {
+            self.add_fixture(fixture)?;
+        }
         Ok(())
     }
 }
@@ -146,6 +169,12 @@ pub struct FileFixture {
     pub path: PathBuf,
     pub content: FileContent,
     pub metadata: FileMetadata,
+}
+
+impl FileFixture {
+    pub fn to_virtual_file(self) -> VirtualFile {
+        VirtualFile::new(self.path, self.content, self.metadata)
+    }
 }
 
 /// Create a template context with common variables for template rendering

@@ -23,6 +23,12 @@ pub struct TopicTree {
     retained: HashMap<String, RetainedMessage>,
 }
 
+impl Default for TopicTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TopicTree {
     pub fn new() -> Self {
         Self {
@@ -72,7 +78,7 @@ impl TopicTree {
 
         self.subscriptions
             .entry(filter.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(subscription);
     }
 

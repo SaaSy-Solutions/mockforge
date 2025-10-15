@@ -8,11 +8,22 @@ use mockforge_core::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Tracked upload information
+#[derive(Debug, Clone)]
+pub struct UploadRecord {
+    pub id: String,
+    pub path: std::path::PathBuf,
+    pub size: u64,
+    pub uploaded_at: chrono::DateTime<chrono::Utc>,
+    pub rule_name: Option<String>,
+}
+
 /// FTP Spec Registry for MockForge
 #[derive(Debug, Clone)]
 pub struct FtpSpecRegistry {
     pub fixtures: Vec<FtpFixture>,
     pub vfs: Arc<VirtualFileSystem>,
+    pub uploads: Arc<std::sync::RwLock<Vec<UploadRecord>>>,
 }
 
 impl FtpSpecRegistry {
@@ -20,12 +31,24 @@ impl FtpSpecRegistry {
         Self {
             fixtures: Vec::new(),
             vfs: Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/"))),
+            uploads: Arc::new(std::sync::RwLock::new(Vec::new())),
         }
     }
 
-    pub fn with_fixtures(mut self, fixtures: Vec<FtpFixture>) -> Self {
+    pub fn with_fixtures(mut self, fixtures: Vec<FtpFixture>) -> Result<Self> {
+        // Load virtual files into VFS fixtures
+        let mut vfs_fixtures = Vec::new();
+        for fixture in &fixtures {
+            for virtual_file in &fixture.virtual_files {
+                vfs_fixtures.push(virtual_file.clone().to_file_fixture());
+            }
+        }
+        self.vfs
+            .load_fixtures(vfs_fixtures)
+            .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+
         self.fixtures = fixtures;
-        self
+        Ok(self)
     }
 
     pub fn with_vfs(mut self, vfs: Arc<VirtualFileSystem>) -> Self {
@@ -42,6 +65,35 @@ impl FtpSpecRegistry {
             }
         }
         None
+    }
+
+    pub fn record_upload(
+        &self,
+        path: std::path::PathBuf,
+        size: u64,
+        rule_name: Option<String>,
+    ) -> Result<String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let record = UploadRecord {
+            id: id.clone(),
+            path,
+            size,
+            uploaded_at: chrono::Utc::now(),
+            rule_name,
+        };
+
+        let mut uploads = self.uploads.write().unwrap();
+        uploads.push(record);
+
+        Ok(id)
+    }
+
+    pub fn get_uploads(&self) -> Vec<UploadRecord> {
+        self.uploads.read().unwrap().clone()
+    }
+
+    pub fn get_upload(&self, id: &str) -> Option<UploadRecord> {
+        self.uploads.read().unwrap().iter().find(|u| u.id == id).cloned()
     }
 }
 

@@ -10,7 +10,7 @@ pub mod spec_registry;
 pub mod topics;
 
 pub use broker::{MqttBroker, MqttConfig};
-pub use fixtures::{AutoPublishConfig, MqttFixture, MqttResponse};
+pub use fixtures::{AutoPublishConfig, MqttFixture, MqttFixtureRegistry, MqttResponse};
 pub use server::start_mqtt_server;
 pub use spec_registry::MqttSpecRegistry;
 pub use topics::TopicTree;

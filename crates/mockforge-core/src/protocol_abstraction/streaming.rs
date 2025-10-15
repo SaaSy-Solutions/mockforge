@@ -223,7 +223,7 @@ mod tests {
         let mut registry = StreamingProtocolRegistry::new();
 
         // Registry should start empty
-        assert!(!registry.supports_protocol(&super::Protocol::Mqtt));
+        assert!(!registry.supports_protocol(&crate::protocol_abstraction::Protocol::Mqtt));
         assert_eq!(registry.registered_protocols().len(), 0);
 
         // Note: We can't easily test with actual handlers without implementing mock streaming protocols

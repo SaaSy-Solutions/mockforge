@@ -86,7 +86,10 @@ impl ManagementState {
         }
     }
 
-    pub fn with_smtp_registry(mut self, smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>) -> Self {
+    pub fn with_smtp_registry(
+        mut self,
+        smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>,
+    ) -> Self {
         self.smtp_registry = Some(smtp_registry);
         self
     }
@@ -253,10 +256,7 @@ async fn import_mocks(
 async fn list_smtp_emails(State(state): State<ManagementState>) -> impl IntoResponse {
     if let Some(ref smtp_registry) = state.smtp_registry {
         match smtp_registry.get_emails() {
-            Ok(emails) => (
-                StatusCode::OK,
-                Json(serde_json::json!(emails)),
-            ),
+            Ok(emails) => (StatusCode::OK, Json(serde_json::json!(emails))),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
@@ -283,10 +283,7 @@ async fn get_smtp_email(
 ) -> impl IntoResponse {
     if let Some(ref smtp_registry) = state.smtp_registry {
         match smtp_registry.get_email_by_id(&id) {
-            Ok(Some(email)) => (
-                StatusCode::OK,
-                Json(serde_json::json!(email)),
-            ),
+            Ok(Some(email)) => (StatusCode::OK, Json(serde_json::json!(email))),
             Ok(None) => (
                 StatusCode::NOT_FOUND,
                 Json(serde_json::json!({
@@ -368,17 +365,20 @@ async fn search_smtp_emails(
             recipient: params.get("recipient").cloned(),
             subject: params.get("subject").cloned(),
             body: params.get("body").cloned(),
-            since: params.get("since").and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|dt| dt.with_timezone(&chrono::Utc)),
-            until: params.get("until").and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|dt| dt.with_timezone(&chrono::Utc)),
+            since: params
+                .get("since")
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc)),
+            until: params
+                .get("until")
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc)),
             use_regex: params.get("regex").map(|s| s == "true").unwrap_or(false),
             case_sensitive: params.get("case_sensitive").map(|s| s == "true").unwrap_or(false),
         };
 
         match smtp_registry.search_emails(filters) {
-            Ok(emails) => (
-                StatusCode::OK,
-                Json(serde_json::json!(emails)),
-            ),
+            Ok(emails) => (StatusCode::OK, Json(serde_json::json!(emails))),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
@@ -432,7 +432,8 @@ async fn get_mqtt_clients(State(state): State<ManagementState>) -> impl IntoResp
         let clients = broker.get_connected_clients().await;
         Json(serde_json::json!({
             "clients": clients
-        })).into_response()
+        }))
+        .into_response()
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
     }
@@ -443,7 +444,8 @@ async fn get_mqtt_topics(State(state): State<ManagementState>) -> impl IntoRespo
         let topics = broker.get_active_topics().await;
         Json(serde_json::json!({
             "topics": topics
-        })).into_response()
+        }))
+        .into_response()
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
     }
@@ -455,8 +457,13 @@ async fn disconnect_mqtt_client(
 ) -> impl IntoResponse {
     if let Some(broker) = &state.mqtt_broker {
         match broker.disconnect_client(&client_id).await {
-            Ok(_) => (StatusCode::OK, format!("Client '{}' disconnected", client_id)).into_response(),
-            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to disconnect client: {}", e)).into_response(),
+            Ok(_) => {
+                (StatusCode::OK, format!("Client '{}' disconnected", client_id)).into_response()
+            }
+            Err(e) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to disconnect client: {}", e))
+                    .into_response()
+            }
         }
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
@@ -465,7 +472,7 @@ async fn disconnect_mqtt_client(
 
 /// Build the management API router
 pub fn management_router(state: ManagementState) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/health", get(health_check))
         .route("/stats", get(get_stats))
         .route("/config", get(get_config))
@@ -475,7 +482,9 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/mocks/{id}", put(update_mock))
         .route("/mocks/{id}", delete(delete_mock))
         .route("/export", get(export_mocks))
-        .route("/import", post(import_mocks))
+        .route("/import", post(import_mocks));
+
+    router
         .route("/smtp/mailbox", get(list_smtp_emails))
         .route("/smtp/mailbox", delete(clear_smtp_mailbox))
         .route("/smtp/mailbox/{id}", get(get_smtp_email))

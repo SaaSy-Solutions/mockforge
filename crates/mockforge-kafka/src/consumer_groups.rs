@@ -21,7 +21,7 @@ pub struct GroupMember {
     pub assignment: Vec<PartitionAssignment>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PartitionAssignment {
     pub topic: String,
     pub partitions: Vec<i32>,
@@ -95,13 +95,61 @@ impl ConsumerGroupManager {
     pub async fn sync_group(
         &mut self,
         group_id: &str,
-        _assignments: Vec<PartitionAssignment>,
+        assignments: Vec<PartitionAssignment>,
+        topics: &std::collections::HashMap<String, crate::topics::Topic>,
     ) -> Result<()> {
-        if let Some(_group) = self.groups.get_mut(group_id) {
-            // TODO: Implement assignment distribution
+        if let Some(group) = self.groups.get_mut(group_id) {
+            // If assignments are provided, use them (leader assignment)
+            if !assignments.is_empty() {
+                // Distribute assignments to members
+                for assignment in assignments {
+                    // For simplicity, assign to all members (in real Kafka, leader assigns specific partitions to specific members)
+                    for member in group.members.values_mut() {
+                        member.assignment.push(assignment.clone());
+                    }
+                }
+            } else {
+                // Simple round-robin assignment if no assignments provided
+                Self::assign_partitions_round_robin(group, topics);
+            }
             Ok(())
         } else {
             Err(anyhow::anyhow!("Group {} does not exist", group_id))
+        }
+    }
+
+    /// Assign partitions to group members using round-robin strategy
+    fn assign_partitions_round_robin(
+        group: &mut ConsumerGroup,
+        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+    ) {
+        // Clear existing assignments for rebalance
+        for member in group.members.values_mut() {
+            member.assignment.clear();
+        }
+
+        let mut member_ids: Vec<String> = group.members.keys().cloned().collect();
+        member_ids.sort(); // Sort for deterministic assignment
+
+        let mut member_idx = 0;
+        for (topic_name, topic) in topics {
+            let num_partitions = topic.config.num_partitions as usize;
+            for partition_id in 0..num_partitions {
+                let member_id = &member_ids[member_idx % member_ids.len()];
+                if let Some(member) = group.members.get_mut(member_id.as_str()) {
+                    // Find or create assignment for this topic
+                    let assignment = member.assignment.iter_mut().find(|a| a.topic == *topic_name);
+                    if let Some(assignment) = assignment {
+                        assignment.partitions.push(partition_id as i32);
+                    } else {
+                        member.assignment.push(PartitionAssignment {
+                            topic: topic_name.clone(),
+                            partitions: vec![partition_id as i32],
+                        });
+                    }
+                }
+                member_idx += 1;
+            }
         }
     }
 
@@ -125,12 +173,20 @@ impl ConsumerGroupManager {
     }
 
     /// Simulate consumer lag
-    pub async fn simulate_lag(&mut self, group_id: &str, topic: &str, lag: i64) {
+    pub async fn simulate_lag(
+        &mut self,
+        group_id: &str,
+        topic: &str,
+        lag: i64,
+        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+    ) {
         if let Some(group) = self.groups.get_mut(group_id) {
+            // Get actual partition count from topics
+            let num_partitions =
+                topics.get(topic).map(|t| t.config.num_partitions).unwrap_or(1) as usize;
             // Simulate lag by setting committed offsets behind
-            for partition in 0..10 {
-                // TODO: Get actual partition count from topics
-                let key = (topic.to_string(), partition);
+            for partition in 0..num_partitions {
+                let key = (topic.to_string(), partition as i32);
                 let current_offset = group.offsets.get(&key).copied().unwrap_or(0);
                 group.offsets.insert(key, current_offset.saturating_sub(lag));
             }
@@ -155,20 +211,27 @@ impl ConsumerGroupManager {
     }
 
     /// Reset consumer offsets
-    pub async fn reset_offsets(&mut self, group_id: &str, topic: &str, to: &str) {
+    pub async fn reset_offsets(
+        &mut self,
+        group_id: &str,
+        topic: &str,
+        to: &str,
+        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+    ) {
         if let Some(group) = self.groups.get_mut(group_id) {
-            let target_offset = match to {
-                "earliest" => 0,
-                "latest" => i64::MAX, // TODO: Get actual latest offset
-                _ => return,          // Invalid reset target
-            };
-
-            for partition in 0..10 {
-                // TODO: Get actual partition count
-                let key = (topic.to_string(), partition);
-                group.offsets.insert(key, target_offset);
+            if let Some(topic_data) = topics.get(topic) {
+                let num_partitions = topic_data.config.num_partitions as usize;
+                for partition in 0..num_partitions {
+                    let key = (topic.to_string(), partition as i32);
+                    let target_offset = match to {
+                        "earliest" => 0,
+                        "latest" => topic_data.partitions[partition].high_watermark,
+                        _ => return, // Invalid reset target
+                    };
+                    group.offsets.insert(key, target_offset);
+                }
+                tracing::info!("Reset offsets for group {} on topic {} to {}", group_id, topic, to);
             }
-            tracing::info!("Reset offsets for group {} on topic {} to {}", group_id, topic, to);
         }
     }
 }

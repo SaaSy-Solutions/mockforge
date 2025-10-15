@@ -61,6 +61,12 @@ pub struct QoSHandler {
     max_retries: u8,
 }
 
+impl Default for QoSHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QoSHandler {
     pub fn new() -> Self {
         Self {
@@ -71,7 +77,7 @@ impl QoSHandler {
     }
 
     /// Handle QoS 0: At most once delivery
-    pub async fn handle_qo_s0(&self, message: MessageState) -> Result<()> {
+    pub async fn handle_qo_s0(&self, _message: MessageState) -> Result<()> {
         info!("QoS 0: Fire and forget delivery");
         // QoS 0 - no acknowledgment needed
         Ok(())
@@ -113,7 +119,7 @@ impl QoSHandler {
 
     /// Handle PUBACK (QoS 1 acknowledgment)
     pub async fn handle_puback(&self, packet_id: u16) -> Result<()> {
-        if let Some(pending) = self.qos1_pending.write().await.remove(&packet_id) {
+        if let Some(_pending) = self.qos1_pending.write().await.remove(&packet_id) {
             info!("QoS 1: Received PUBACK for packet {}, delivery confirmed", packet_id);
         } else {
             warn!("QoS 1: Received PUBACK for unknown packet {}", packet_id);

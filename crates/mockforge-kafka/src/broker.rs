@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::consumer_groups::ConsumerGroupManager;
 use crate::metrics::KafkaMetrics;
-use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaResponse};
+use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaRequestType, KafkaResponse};
 use crate::spec_registry::KafkaSpecRegistry;
 use crate::topics::Topic;
 use mockforge_core::config::KafkaConfig;
@@ -59,9 +59,9 @@ pub struct KafkaMockBroker {
     /// Broker configuration
     config: KafkaConfig,
     /// Topic storage with thread-safe access
-    topics: Arc<RwLock<HashMap<String, Topic>>>,
+    pub topics: Arc<RwLock<HashMap<String, Topic>>>,
     /// Consumer group manager
-    consumer_groups: Arc<RwLock<ConsumerGroupManager>>,
+    pub consumer_groups: Arc<RwLock<ConsumerGroupManager>>,
     /// Specification registry for fixture-based responses
     spec_registry: Arc<KafkaSpecRegistry>,
     /// Metrics collection and reporting
@@ -97,7 +97,7 @@ impl KafkaMockBroker {
     pub async fn new(config: KafkaConfig) -> Result<Self> {
         let topics = Arc::new(RwLock::new(HashMap::new()));
         let consumer_groups = Arc::new(RwLock::new(ConsumerGroupManager::new()));
-        let spec_registry = KafkaSpecRegistry::new(config.clone()).await?;
+        let spec_registry = KafkaSpecRegistry::new(config.clone(), Arc::clone(&topics)).await?;
         let metrics = Arc::new(KafkaMetrics::new());
 
         Ok(Self {
@@ -213,7 +213,7 @@ impl KafkaMockBroker {
                     let start_time = std::time::Instant::now();
 
                     // Handle request
-                    let response = match self.handle_request(request) {
+                    let response = match self.handle_request(request).await {
                         Ok(resp) => resp,
                         Err(e) => {
                             self.metrics.record_error();
@@ -268,57 +268,158 @@ impl KafkaMockBroker {
     }
 
     /// Handle a parsed Kafka request
-    fn handle_request(&self, request: KafkaRequest) -> Result<KafkaResponse> {
-        match request {
-            KafkaRequest::Metadata => self.handle_metadata(),
-            KafkaRequest::Produce => self.handle_produce(),
-            KafkaRequest::Fetch => self.handle_fetch(),
-            KafkaRequest::ListGroups => self.handle_list_groups(),
-            KafkaRequest::DescribeGroups => self.handle_describe_groups(),
-            KafkaRequest::ApiVersions => self.handle_api_versions(),
-            KafkaRequest::CreateTopics => self.handle_create_topics(),
-            KafkaRequest::DeleteTopics => self.handle_delete_topics(),
-            KafkaRequest::DescribeConfigs => self.handle_describe_configs(),
+    async fn handle_request(&self, request: KafkaRequest) -> Result<KafkaResponse> {
+        match request.request_type {
+            KafkaRequestType::Metadata => self.handle_metadata().await,
+            KafkaRequestType::Produce => self.handle_produce().await,
+            KafkaRequestType::Fetch => self.handle_fetch().await,
+            KafkaRequestType::ListGroups => self.handle_list_groups().await,
+            KafkaRequestType::DescribeGroups => self.handle_describe_groups().await,
+            KafkaRequestType::ApiVersions => self.handle_api_versions().await,
+            KafkaRequestType::CreateTopics => self.handle_create_topics().await,
+            KafkaRequestType::DeleteTopics => self.handle_delete_topics().await,
+            KafkaRequestType::DescribeConfigs => self.handle_describe_configs().await,
         }
     }
 
-    fn handle_metadata(&self) -> Result<KafkaResponse> {
+    async fn handle_metadata(&self) -> Result<KafkaResponse> {
         // Simplified metadata response
         Ok(KafkaResponse::Metadata)
     }
 
-    fn handle_produce(&self) -> Result<KafkaResponse> {
-        // TODO: Implement produce logic
+    async fn handle_produce(&self) -> Result<KafkaResponse> {
+        // Produce logic not yet implemented
         Ok(KafkaResponse::Produce)
     }
 
-    fn handle_fetch(&self) -> Result<KafkaResponse> {
-        // TODO: Implement fetch logic
+    async fn handle_fetch(&self) -> Result<KafkaResponse> {
+        // Fetch logic not yet implemented
         Ok(KafkaResponse::Fetch)
     }
 
-    fn handle_api_versions(&self) -> Result<KafkaResponse> {
+    async fn handle_api_versions(&self) -> Result<KafkaResponse> {
         Ok(KafkaResponse::ApiVersions)
     }
 
-    fn handle_list_groups(&self) -> Result<KafkaResponse> {
+    async fn handle_list_groups(&self) -> Result<KafkaResponse> {
         Ok(KafkaResponse::ListGroups)
     }
 
-    fn handle_describe_groups(&self) -> Result<KafkaResponse> {
+    async fn handle_describe_groups(&self) -> Result<KafkaResponse> {
         Ok(KafkaResponse::DescribeGroups)
     }
 
-    fn handle_create_topics(&self) -> Result<KafkaResponse> {
+    async fn handle_create_topics(&self) -> Result<KafkaResponse> {
+        // For now, create a default topic as a placeholder
+        // Protocol parsing for actual topic creation parameters is not yet implemented
+        let topic_name = "default-topic".to_string();
+        let topic_config = crate::topics::TopicConfig::default();
+        let topic = crate::topics::Topic::new(topic_name.clone(), topic_config);
+
+        // Store the topic
+        let mut topics = self.topics.write().await;
+        topics.insert(topic_name, topic);
+
         Ok(KafkaResponse::CreateTopics)
     }
 
-    fn handle_delete_topics(&self) -> Result<KafkaResponse> {
+    async fn handle_delete_topics(&self) -> Result<KafkaResponse> {
         Ok(KafkaResponse::DeleteTopics)
     }
 
-    fn handle_describe_configs(&self) -> Result<KafkaResponse> {
+    async fn handle_describe_configs(&self) -> Result<KafkaResponse> {
         Ok(KafkaResponse::DescribeConfigs)
+    }
+
+    /// Test helper: Commit offsets for a consumer group (only available in tests)
+    pub async fn test_commit_offsets(
+        &self,
+        group_id: &str,
+        offsets: std::collections::HashMap<(String, i32), i64>,
+    ) -> Result<()> {
+        let mut consumer_groups = self.consumer_groups.write().await;
+        consumer_groups
+            .commit_offsets(group_id, offsets)
+            .await
+            .map_err(|e| mockforge_core::Error::from(e.to_string()))
+    }
+
+    /// Test helper: Get committed offsets for a consumer group (only available in tests)
+    pub async fn test_get_committed_offsets(
+        &self,
+        group_id: &str,
+    ) -> std::collections::HashMap<(String, i32), i64> {
+        let consumer_groups = self.consumer_groups.read().await;
+        consumer_groups.get_committed_offsets(group_id)
+    }
+
+    /// Test helper: Create a topic (only available in tests)
+    pub async fn test_create_topic(&self, name: &str, config: crate::topics::TopicConfig) {
+        use crate::topics::Topic;
+        let topic = Topic::new(name.to_string(), config);
+        let mut topics = self.topics.write().await;
+        topics.insert(name.to_string(), topic);
+    }
+
+    /// Test helper: Join a consumer group (only available in tests)
+    pub async fn test_join_group(
+        &self,
+        group_id: &str,
+        member_id: &str,
+        client_id: &str,
+    ) -> Result<()> {
+        let mut consumer_groups = self.consumer_groups.write().await;
+        consumer_groups
+            .join_group(group_id, member_id, client_id)
+            .await
+            .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Test helper: Sync group assignment (only available in tests)
+    pub async fn test_sync_group(
+        &self,
+        group_id: &str,
+        assignments: Vec<crate::consumer_groups::PartitionAssignment>,
+    ) -> Result<()> {
+        let topics = self.topics.read().await;
+        let mut consumer_groups = self.consumer_groups.write().await;
+        consumer_groups
+            .sync_group(group_id, assignments, &topics)
+            .await
+            .map_err(|e| mockforge_core::Error::from(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Test helper: Get group member assignments (only available in tests)
+    pub async fn test_get_assignments(
+        &self,
+        group_id: &str,
+        member_id: &str,
+    ) -> Vec<crate::consumer_groups::PartitionAssignment> {
+        let consumer_groups = self.consumer_groups.read().await;
+        if let Some(group) = consumer_groups.groups().get(group_id) {
+            if let Some(member) = group.members.get(member_id) {
+                return member.assignment.clone();
+            }
+        }
+        vec![]
+    }
+
+    /// Test helper: Simulate consumer lag (only available in tests)
+    pub async fn test_simulate_lag(&self, group_id: &str, topic: &str, lag: i64) -> Result<()> {
+        let topics = self.topics.read().await;
+        let mut consumer_groups = self.consumer_groups.write().await;
+        consumer_groups.simulate_lag(group_id, topic, lag, &topics).await;
+        Ok(())
+    }
+
+    /// Test helper: Reset consumer offsets (only available in tests)
+    pub async fn test_reset_offsets(&self, group_id: &str, topic: &str, to: &str) -> Result<()> {
+        let topics = self.topics.read().await;
+        let mut consumer_groups = self.consumer_groups.write().await;
+        consumer_groups.reset_offsets(group_id, topic, to, &topics).await;
+        Ok(())
     }
 }
 
@@ -360,15 +461,5 @@ impl Drop for ConnectionGuard {
 
 /// Extract API key from request for metrics
 fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
-    match request {
-        KafkaRequest::Produce => 0,
-        KafkaRequest::Fetch => 1,
-        KafkaRequest::Metadata => 3,
-        KafkaRequest::ListGroups => 9,
-        KafkaRequest::DescribeGroups => 15,
-        KafkaRequest::ApiVersions => 18,
-        KafkaRequest::CreateTopics => 19,
-        KafkaRequest::DeleteTopics => 20,
-        KafkaRequest::DescribeConfigs => 32,
-    }
+    request.api_key
 }

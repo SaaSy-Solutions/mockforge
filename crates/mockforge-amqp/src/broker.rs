@@ -34,21 +34,25 @@ impl AmqpBroker {
     /// Start the AMQP broker server
     pub async fn start(&self) -> Result<()> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
-        let listener = TcpListener::bind(&addr).await
-            .map_err(|e| mockforge_core::Error::generic(format!("Failed to bind to {}: {}", addr, e)))?;
+        let listener = TcpListener::bind(&addr).await.map_err(|e| {
+            mockforge_core::Error::generic(format!("Failed to bind to {}: {}", addr, e))
+        })?;
 
         tracing::info!("Starting AMQP broker on {}", addr);
 
         loop {
-            let (socket, _) = listener.accept().await
-                .map_err(|e| mockforge_core::Error::generic(format!("Failed to accept connection: {}", e)))?;
+            let (socket, _) = listener.accept().await.map_err(|e| {
+                mockforge_core::Error::generic(format!("Failed to accept connection: {}", e))
+            })?;
 
             let exchanges = Arc::clone(&self.exchanges);
             let queues = Arc::clone(&self.queues);
             let spec_registry = Arc::clone(&self.spec_registry);
 
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_connection(socket, exchanges, queues, spec_registry).await {
+                if let Err(e) =
+                    Self::handle_connection(socket, exchanges, queues, spec_registry).await
+                {
                     tracing::error!("Connection error: {}", e);
                 }
             });
@@ -62,7 +66,9 @@ impl AmqpBroker {
         _spec_registry: Arc<AmqpSpecRegistry>,
     ) -> Result<()> {
         let handler = ConnectionHandler::new(socket);
-        handler.handle().await
+        handler
+            .handle()
+            .await
             .map_err(|e| mockforge_core::Error::generic(format!("Connection handler error: {}", e)))
     }
 }

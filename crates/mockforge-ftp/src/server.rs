@@ -2,7 +2,7 @@ use crate::spec_registry::FtpSpecRegistry;
 use crate::storage::MockForgeStorage;
 use crate::vfs::VirtualFileSystem;
 use anyhow::Result;
-use libunftp::Server;
+use libunftp::ServerBuilder;
 use mockforge_core::config::FtpConfig;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ impl FtpServer {
         let storage = MockForgeStorage::new(self.vfs.clone(), self.spec_registry.clone());
 
         // Create the FTP server with our custom storage
-        let server = Server::new(Box::new(move || storage.clone()))
+        let server = ServerBuilder::new(Box::new(move || storage.clone()))
             .greeting("MockForge FTP Server")
             .passive_ports(49152..65535); // Use dynamic port range for passive mode
 

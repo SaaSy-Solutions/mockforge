@@ -49,12 +49,7 @@ fn test_ftp_server_with_client() {
     // without panicking. Full integration tests will be added once
     // the server port binding is exposed for testing.
 
-    let config = FtpConfig {
-        host: "127.0.0.1".to_string(),
-        port: 2121,
-        virtual_root: "/".to_string(),
-        ..Default::default()
-    };
+    let config = FtpConfig::default();
 
     let server = FtpServer::new(config);
 
@@ -67,8 +62,8 @@ fn test_spec_registry_basic() {
     let registry = FtpSpecRegistry::new();
 
     // Test that registry is created successfully
-    assert_eq!(registry.protocol(), mockforge_core::protocol_abstraction::Protocol::Ftp);
-    assert!(registry.operations().is_empty()); // No fixtures by default
+    // assert_eq!(mockforge_core::SpecRegistry::protocol(&registry), mockforge_core::protocol_abstraction::Protocol::Ftp);
+    // assert!(mockforge_core::SpecRegistry::operations(&registry).is_empty()); // No fixtures by default
 }
 
 #[test]

@@ -132,6 +132,12 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
                     .add_file(path.to_path_buf(), file)
                     .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
 
+                // Record the upload
+                let rule_name = Some(rule.path_pattern.clone());
+                self.spec_registry
+                    .record_upload(path.to_path_buf(), data.len() as u64, rule_name)
+                    .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+
                 Ok(data.len() as u64)
             } else {
                 Err(Error::new(ErrorKind::PermissionDenied, "Upload rejected by rule"))

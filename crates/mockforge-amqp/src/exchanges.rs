@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::bindings::Binding;
 use crate::messages::Message;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Exchange types supported by AMQP
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -95,15 +95,53 @@ impl Exchange {
         routing_iter.next().is_none()
     }
 
-    fn route_headers(&self, _message: &Message) -> Vec<String> {
-        // TODO: Implement header matching
-        vec![]
+    fn route_headers(&self, message: &Message) -> Vec<String> {
+        self.bindings
+            .iter()
+            .filter(|binding| {
+                Self::matches_headers(&message.properties.headers, &binding.arguments)
+            })
+            .map(|binding| binding.queue.clone())
+            .collect()
+    }
+
+    fn matches_headers(
+        message_headers: &HashMap<String, String>,
+        binding_args: &HashMap<String, String>,
+    ) -> bool {
+        let x_match = binding_args.get("x-match").map(|s| s.as_str()).unwrap_or("all");
+
+        // Filter out x-match from the headers to match
+        let headers_to_match: HashMap<_, _> =
+            binding_args.iter().filter(|(k, _)| *k != "x-match").collect();
+
+        if headers_to_match.is_empty() {
+            return true; // No headers to match means it matches
+        }
+
+        if x_match == "any" {
+            // Match if any of the specified headers match
+            headers_to_match.iter().any(|(key, value)| {
+                message_headers.get(key.as_str()).map(|v| v == *value).unwrap_or(false)
+            })
+        } else {
+            // Match if all specified headers match (default is "all")
+            headers_to_match.iter().all(|(key, value)| {
+                message_headers.get(key.as_str()).map(|v| v == *value).unwrap_or(false)
+            })
+        }
     }
 }
 
 /// Manager for all exchanges
 pub struct ExchangeManager {
     exchanges: HashMap<String, Exchange>,
+}
+
+impl Default for ExchangeManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExchangeManager {
@@ -113,7 +151,13 @@ impl ExchangeManager {
         }
     }
 
-    pub fn declare_exchange(&mut self, name: String, exchange_type: ExchangeType, durable: bool, auto_delete: bool) {
+    pub fn declare_exchange(
+        &mut self,
+        name: String,
+        exchange_type: ExchangeType,
+        durable: bool,
+        auto_delete: bool,
+    ) {
         let exchange = Exchange {
             name: name.clone(),
             exchange_type,
@@ -127,5 +171,13 @@ impl ExchangeManager {
 
     pub fn get_exchange(&self, name: &str) -> Option<&Exchange> {
         self.exchanges.get(name)
+    }
+
+    pub fn list_exchanges(&self) -> Vec<&Exchange> {
+        self.exchanges.values().collect()
+    }
+
+    pub fn delete_exchange(&mut self, name: &str) -> bool {
+        self.exchanges.remove(name).is_some()
     }
 }

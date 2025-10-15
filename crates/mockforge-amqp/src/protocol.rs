@@ -3,8 +3,8 @@
 //! This module implements the AMQP 0.9.1 protocol for handling connections,
 //! channels, and method frames.
 
-use std::io;
 use std::collections::HashMap;
+use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -200,17 +200,20 @@ impl ConnectionHandler {
     pub fn new(stream: TcpStream) -> Self {
         let mut channels = HashMap::new();
         // Channel 0 is always open for connection-level communication
-        channels.insert(0, Channel {
-            id: 0,
-            state: ChannelState::Open,
-            consumer_tag: None,
-            prefetch_count: 0,
-            prefetch_size: 0,
-            publisher_confirms: false,
-            transaction_mode: false,
-            next_delivery_tag: 1,
-            unconfirmed_messages: HashMap::new(),
-        });
+        channels.insert(
+            0,
+            Channel {
+                id: 0,
+                state: ChannelState::Open,
+                consumer_tag: None,
+                prefetch_count: 0,
+                prefetch_size: 0,
+                publisher_confirms: false,
+                transaction_mode: false,
+                next_delivery_tag: 1,
+                unconfirmed_messages: HashMap::new(),
+            },
+        );
 
         Self {
             stream,
@@ -263,7 +266,11 @@ impl ConnectionHandler {
                 response.write_to_stream(&mut self.stream).await?;
             }
             _ => {
-                tracing::debug!("Received frame type {:?} on channel {}", frame.frame_type, frame.channel);
+                tracing::debug!(
+                    "Received frame type {:?} on channel {}",
+                    frame.frame_type,
+                    frame.channel
+                );
             }
         }
         Ok(())
@@ -284,7 +291,12 @@ impl ConnectionHandler {
             arguments,
         };
 
-        tracing::debug!("Received method: class={} method={} on channel {}", class_id, method_id, frame.channel);
+        tracing::debug!(
+            "Received method: class={} method={} on channel {}",
+            class_id,
+            method_id,
+            frame.channel
+        );
 
         match (class_id, method_id) {
             (class_id::CONNECTION, method_id::CONNECTION_START) => {
@@ -332,15 +344,9 @@ impl ConnectionHandler {
             (class_id::BASIC, method_id::BASIC_GET) => {
                 self.handle_basic_get(frame.channel, &method).await
             }
-            (class_id::TX, method_id::TX_SELECT) => {
-                self.handle_tx_select(frame.channel).await
-            }
-            (class_id::TX, method_id::TX_COMMIT) => {
-                self.handle_tx_commit(frame.channel).await
-            }
-            (class_id::TX, method_id::TX_ROLLBACK) => {
-                self.handle_tx_rollback(frame.channel).await
-            }
+            (class_id::TX, method_id::TX_SELECT) => self.handle_tx_select(frame.channel).await,
+            (class_id::TX, method_id::TX_COMMIT) => self.handle_tx_commit(frame.channel).await,
+            (class_id::TX, method_id::TX_ROLLBACK) => self.handle_tx_rollback(frame.channel).await,
             (class_id::CONFIRM, method_id::CONFIRM_SELECT) => {
                 self.handle_confirm_select(frame.channel).await
             }
@@ -359,7 +365,7 @@ impl ConnectionHandler {
         payload.extend_from_slice(&method_id::CONNECTION_START_OK.to_be_bytes());
         // Client properties (empty table)
         payload.push(0); // table size
-        // Mechanism: PLAIN
+                         // Mechanism: PLAIN
         let mechanism = b"PLAIN";
         payload.extend_from_slice(&(mechanism.len() as u32).to_be_bytes());
         payload.extend_from_slice(mechanism);
@@ -393,17 +399,29 @@ impl ConnectionHandler {
         tune_response.write_to_stream(&mut self.stream).await
     }
 
-    async fn handle_connection_start_ok(&mut self, _channel: u16, _method: &MethodFrame) -> io::Result<()> {
+    async fn handle_connection_start_ok(
+        &mut self,
+        _channel: u16,
+        _method: &MethodFrame,
+    ) -> io::Result<()> {
         // Connection.Start-Ok received, connection is progressing
         Ok(())
     }
 
-    async fn handle_connection_tune_ok(&mut self, _channel: u16, _method: &MethodFrame) -> io::Result<()> {
+    async fn handle_connection_tune_ok(
+        &mut self,
+        _channel: u16,
+        _method: &MethodFrame,
+    ) -> io::Result<()> {
         // Connection.Tune-Ok received
         Ok(())
     }
 
-    async fn handle_connection_open(&mut self, channel: u16, _method: &MethodFrame) -> io::Result<()> {
+    async fn handle_connection_open(
+        &mut self,
+        channel: u16,
+        _method: &MethodFrame,
+    ) -> io::Result<()> {
         // Send Connection.Open-Ok
         let mut payload = Vec::new();
         payload.extend_from_slice(&class_id::CONNECTION.to_be_bytes());
@@ -436,17 +454,20 @@ impl ConnectionHandler {
     // Channel methods
     async fn handle_channel_open(&mut self, channel: u16) -> io::Result<()> {
         // Create new channel
-        self.channels.insert(channel, Channel {
-            id: channel,
-            state: ChannelState::Open,
-            consumer_tag: None,
-            prefetch_count: 0,
-            prefetch_size: 0,
-            publisher_confirms: false,
-            transaction_mode: false,
-            next_delivery_tag: 1,
-            unconfirmed_messages: HashMap::new(),
-        });
+        self.channels.insert(
+            channel,
+            Channel {
+                id: channel,
+                state: ChannelState::Open,
+                consumer_tag: None,
+                prefetch_count: 0,
+                prefetch_size: 0,
+                publisher_confirms: false,
+                transaction_mode: false,
+                next_delivery_tag: 1,
+                unconfirmed_messages: HashMap::new(),
+            },
+        );
 
         // Send Channel.Open-Ok
         let mut payload = Vec::new();
@@ -482,7 +503,11 @@ impl ConnectionHandler {
     }
 
     // Exchange methods
-    async fn handle_exchange_declare(&mut self, channel: u16, method: &MethodFrame) -> io::Result<()> {
+    async fn handle_exchange_declare(
+        &mut self,
+        channel: u16,
+        method: &MethodFrame,
+    ) -> io::Result<()> {
         // Parse exchange name from arguments (skip reserved fields)
         let mut offset = 0;
         // Skip reserved1 (u16), reserved2 (u16)
@@ -552,7 +577,7 @@ impl ConnectionHandler {
         response.write_to_stream(&mut self.stream).await
     }
 
-    async fn handle_queue_bind(&mut self, channel: u16, method: &MethodFrame) -> io::Result<()> {
+    async fn handle_queue_bind(&mut self, channel: u16, _method: &MethodFrame) -> io::Result<()> {
         // Parse arguments: reserved, queue, exchange, routing_key, arguments
         tracing::debug!("Queue bind received");
 
@@ -590,7 +615,9 @@ impl ConnectionHandler {
         if offset + routing_key_len > method.arguments.len() {
             return Ok(());
         }
-        let routing_key = String::from_utf8_lossy(&method.arguments[offset..offset + routing_key_len]).to_string();
+        let routing_key =
+            String::from_utf8_lossy(&method.arguments[offset..offset + routing_key_len])
+                .to_string();
 
         tracing::debug!("Basic publish: routing_key={}", routing_key);
 
@@ -620,7 +647,11 @@ impl ConnectionHandler {
         Ok(())
     }
 
-    async fn handle_basic_consume(&mut self, channel: u16, method: &MethodFrame) -> io::Result<()> {
+    async fn handle_basic_consume(
+        &mut self,
+        channel: u16,
+        _method: &MethodFrame,
+    ) -> io::Result<()> {
         // Parse consumer tag
         let consumer_tag = format!("ctag-{}", self.next_consumer_tag);
         self.next_consumer_tag += 1;

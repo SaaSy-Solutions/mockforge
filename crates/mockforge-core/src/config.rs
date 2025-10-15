@@ -573,11 +573,11 @@ impl Default for AmqpConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            port: 5672,  // Standard AMQP port
+            port: 5672, // Standard AMQP port
             host: "0.0.0.0".to_string(),
             max_connections: 1000,
             max_channels_per_connection: 100,
-            frame_max: 131072,  // 128 KB
+            frame_max: 131072, // 128 KB
             heartbeat_interval: 60,
             fixtures_dir: None,
             virtual_hosts: vec!["/".to_string()],

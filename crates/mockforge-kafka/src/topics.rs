@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::fixtures::KafkaFixture;
@@ -10,6 +11,7 @@ pub struct Topic {
     pub partitions: Vec<Partition>,
     pub config: TopicConfig,
     pub fixtures: Vec<Arc<KafkaFixture>>,
+    round_robin_counter: AtomicUsize,
 }
 
 #[derive(Debug, Clone)]
@@ -41,11 +43,12 @@ impl Topic {
             partitions,
             config,
             fixtures: vec![],
+            round_robin_counter: AtomicUsize::new(0),
         }
     }
 
     /// Assign partition for a message based on key
-    pub fn assign_partition(&self, key: Option<&[u8]>) -> i32 {
+    pub fn assign_partition(&mut self, key: Option<&[u8]>) -> i32 {
         match key {
             Some(key_bytes) => {
                 // Use murmur hash for partition assignment
@@ -58,8 +61,9 @@ impl Topic {
             }
             None => {
                 // Round-robin for messages without keys
-                // TODO: Implement round-robin counter
-                0
+                let partition = self.round_robin_counter.fetch_add(1, Ordering::Relaxed)
+                    % self.config.num_partitions as usize;
+                partition as i32
             }
         }
     }
