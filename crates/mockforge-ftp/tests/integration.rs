@@ -1,13 +1,5 @@
 use mockforge_core::config::FtpConfig;
-use mockforge_core::protocol_abstraction::{
-    Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus,
-};
-use mockforge_ftp::{
-    FileContent, FileMetadata, FtpFixture, FtpServer, FtpSpecRegistry, UploadRule, UploadStorage,
-    VirtualFile, VirtualFileConfig,
-};
-use std::time::Duration;
-use tokio::time::timeout;
+use mockforge_ftp::{FtpServer, FtpSpecRegistry};
 
 #[test]
 fn test_ftp_server_creation() {
@@ -59,7 +51,7 @@ fn test_ftp_server_with_client() {
 
 #[test]
 fn test_spec_registry_basic() {
-    let registry = FtpSpecRegistry::new();
+    let _registry = FtpSpecRegistry::new();
 
     // Test that registry is created successfully
     // assert_eq!(mockforge_core::SpecRegistry::protocol(&registry), mockforge_core::protocol_abstraction::Protocol::Ftp);

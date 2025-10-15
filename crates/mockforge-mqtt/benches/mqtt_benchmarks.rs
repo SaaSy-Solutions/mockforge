@@ -1,11 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_core::protocol_abstraction::{
-    MessagePattern, Protocol, ProtocolRequest, SpecRegistry,
-};
+use mockforge_core::protocol_abstraction::SpecRegistry;
 use mockforge_mqtt::{
     qos::MessageState, qos::QoSHandler, MqttFixture, MqttResponse, MqttSpecRegistry, TopicTree,
 };
-use std::sync::Arc;
 
 fn benchmark_topic_matching(c: &mut Criterion) {
     let mut tree = TopicTree::new();
@@ -117,6 +114,7 @@ fn benchmark_qos_handling(c: &mut Criterion) {
     group.bench_function("qos_0", |b| {
         b.iter(|| {
             let result = handler.handle_qo_s0(black_box(message.clone()));
+            #[allow(unused_must_use)]
             black_box(result);
         })
     });
@@ -124,6 +122,7 @@ fn benchmark_qos_handling(c: &mut Criterion) {
     group.bench_function("qos_1", |b| {
         b.iter(|| {
             let result = handler.handle_qo_s1(black_box(message.clone()), black_box("client1"));
+            #[allow(unused_must_use)]
             black_box(result);
         })
     });

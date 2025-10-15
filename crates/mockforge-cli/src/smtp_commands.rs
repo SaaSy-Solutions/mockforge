@@ -511,10 +511,10 @@ async fn handle_fixtures_validate(
     match std::fs::read_to_string(file) {
         Ok(content) => {
             // Try to parse as YAML first, then JSON
-            let parse_result = if file.extension().and_then(|s| s.to_str()) == Some("json") {
-                serde_json::from_str::<SmtpFixture>(&content)
+            let parse_result: Result<SmtpFixture, Box<dyn std::error::Error>> = if file.extension().and_then(|s| s.to_str()) == Some("json") {
+                serde_json::from_str::<SmtpFixture>(&content).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
             } else {
-                serde_yaml::from_str::<SmtpFixture>(&content)
+                serde_yaml::from_str::<SmtpFixture>(&content).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
             };
 
             match parse_result {

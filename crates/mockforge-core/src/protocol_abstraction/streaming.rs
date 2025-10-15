@@ -215,12 +215,12 @@ mod tests {
 
         assert_eq!(message.topic, "json-topic");
         assert_eq!(message.metadata.get("content-type"), Some(&"application/json".to_string()));
-        assert!(message.payload.len() > 0);
+        assert!(!message.payload.is_empty());
     }
 
     #[test]
     fn test_streaming_registry() {
-        let mut registry = StreamingProtocolRegistry::new();
+        let registry = StreamingProtocolRegistry::new();
 
         // Registry should start empty
         assert!(!registry.supports_protocol(&crate::protocol_abstraction::Protocol::Mqtt));

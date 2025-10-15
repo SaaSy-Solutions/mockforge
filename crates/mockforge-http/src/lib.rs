@@ -287,6 +287,7 @@ pub async fn build_router(
 }
 
 /// Build the base HTTP router with multi-tenant workspace support
+#[allow(clippy::too_many_arguments)]
 pub async fn build_router_with_multi_tenant(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
@@ -805,14 +806,15 @@ pub async fn build_router_with_chains(
 }
 
 /// Build the base HTTP router with chaining and multi-tenant support
+#[allow(clippy::too_many_arguments)]
 pub async fn build_router_with_chains_and_multi_tenant(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
-    circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
+    _circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
-    route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
-    cors_config: Option<mockforge_core::config::HttpCorsConfig>,
-    ai_generator: Option<
+    _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
+    _cors_config: Option<mockforge_core::config::HttpCorsConfig>,
+    _ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
     smtp_registry: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
@@ -824,9 +826,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     use crate::op_middleware::Shared;
     use mockforge_core::Overrides;
 
+    #[allow(dead_code)]
     type SmtpRegistry = mockforge_smtp::SmtpSpecRegistry;
 
-    let shared = Shared {
+    let _shared = Shared {
         profiles: LatencyProfiles::default(),
         overrides: Overrides::default(),
         failure_injector: None,

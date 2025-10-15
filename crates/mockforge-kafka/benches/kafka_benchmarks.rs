@@ -1,6 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mockforge_kafka::{partitions::KafkaMessage, topics::Topic, topics::TopicConfig};
-use serde_json;
 
 fn bench_topic_creation(c: &mut Criterion) {
     c.bench_function("topic_creation", |b| {
@@ -67,6 +66,7 @@ fn bench_consumer_group_join(c: &mut Criterion) {
     c.bench_function("consumer_group_join", |b| {
         b.iter(|| {
             let result = manager.join_group("test-group", "member-1", "client-1");
+            #[allow(unused_must_use)]
             black_box(result);
         });
     });

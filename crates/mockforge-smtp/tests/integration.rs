@@ -806,7 +806,6 @@ async fn test_smtp_load_concurrent_connections() {
 
     // Create 10 concurrent connections
     for i in 0..10 {
-        let port = port;
         let handle = tokio::spawn(async move {
             let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
                 .await

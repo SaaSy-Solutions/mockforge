@@ -32,7 +32,7 @@ fn bench_server_startup(c: &mut Criterion) {
     c.bench_function("smtp_server_startup", |b| {
         b.iter(|| {
             rt.block_on(async {
-                let (server, _port) = start_test_server().await.unwrap();
+                let (server, _port) = start_test_server().await;
                 black_box(server);
             })
         });

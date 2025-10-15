@@ -18,6 +18,7 @@ pub struct SmtpServer {
     config: SmtpConfig,
     spec_registry: Arc<SmtpSpecRegistry>,
     middleware_chain: Arc<MiddlewareChain>,
+    #[allow(dead_code)]
     tls_acceptor: Option<TlsAcceptor>,
 }
 

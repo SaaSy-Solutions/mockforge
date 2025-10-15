@@ -42,6 +42,7 @@ pub struct MessageState {
 /// QoS 1 message awaiting acknowledgment
 #[derive(Debug, Clone)]
 struct PendingQoS1Message {
+    #[allow(dead_code)]
     message: MessageState,
     client_id: String,
     retry_count: u8,

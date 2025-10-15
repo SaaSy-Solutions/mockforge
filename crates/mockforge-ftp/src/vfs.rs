@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 /// Virtual File System for FTP server
 #[derive(Debug, Clone)]
 pub struct VirtualFileSystem {
+    #[allow(dead_code)]
     root: PathBuf,
     files: Arc<RwLock<HashMap<PathBuf, VirtualFile>>>,
     fixtures: Arc<RwLock<HashMap<PathBuf, FileFixture>>>,

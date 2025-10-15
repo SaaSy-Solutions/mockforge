@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 fn vfs_benchmarks(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
+    let _rt = Runtime::new().unwrap();
 
     c.bench_function("vfs_add_static_file", |b| {
         b.iter(|| {
@@ -76,7 +76,7 @@ fn vfs_benchmarks(c: &mut Criterion) {
 }
 
 fn fixture_benchmarks(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
+    let _rt = Runtime::new().unwrap();
 
     c.bench_function("fixture_registry_creation", |b| {
         b.iter(|| {

@@ -10,7 +10,6 @@ use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message;
-use serde_json;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -290,7 +289,7 @@ async fn test_full_broker_integration() {
 
     // Create Kafka client configuration
     let mut client_config = ClientConfig::new();
-    client_config.set("bootstrap.servers", &format!("127.0.0.1:{}", config.port));
+    client_config.set("bootstrap.servers", format!("127.0.0.1:{}", config.port));
     client_config.set("group.id", "test-group");
     client_config.set("auto.offset.reset", "earliest");
     client_config.set("enable.auto.commit", "false");
@@ -367,7 +366,7 @@ async fn test_protocol_operations() {
 
     // Test metadata request
     let mut client_config = ClientConfig::new();
-    client_config.set("bootstrap.servers", &format!("127.0.0.1:{}", config.port));
+    client_config.set("bootstrap.servers", format!("127.0.0.1:{}", config.port));
 
     let admin_client: AdminClient<DefaultClientContext> = client_config.create().unwrap();
 

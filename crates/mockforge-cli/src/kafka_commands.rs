@@ -60,17 +60,17 @@ pub enum KafkaCommands {
         topic_command: KafkaTopicCommands,
     },
 
-    /// Manage Kafka consumer groups
-    ///
-    /// Examples:
-    ///   mockforge kafka groups list
-    ///   mockforge kafka groups describe test-group
-    ///   mockforge kafka groups offsets test-group
-    #[command(verbatim_doc_comment)]
-    Groups {
-        #[command(subcommand)]
-        groups_command: KafkaGroupsCommands,
-    },
+    // /// Manage Kafka consumer groups
+    // ///
+    // /// Examples:
+    // ///   mockforge kafka groups list
+    // ///   mockforge kafka groups describe test-group
+    // ///   mockforge kafka groups offsets test-group
+    // #[command(verbatim_doc_comment)]
+    // Groups {
+    //     #[command(subcommand)]
+    //     groups_command: KafkaGroupsCommands,
+    // },
 
     /// Produce messages to topics
     ///
@@ -310,13 +310,16 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
             if let Some(p) = partition {
                 record = record.partition(p);
             }
-            for (k, v) in &header {
-                record = record.header(k.as_str(), v.as_bytes());
+            // TODO: Implement header support
+            if !header.is_empty() {
+                return Err(anyhow::anyhow!("Headers not yet supported"));
             }
 
             let delivery_status = producer.send(record, Duration::from_secs(0)).await;
             match delivery_status {
-                Ok((partition, offset)) => {
+                Ok(delivery) => {
+                    let partition = delivery.partition;
+                    let offset = delivery.offset;
                     println!(
                         "Message produced to topic {} partition {} at offset {}",
                         topic, partition, offset
@@ -425,7 +428,8 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
 
             let metadata = admin
-                .fetch_metadata(None, Duration::from_secs(30))
+                .inner()
+                .inner().fetch_metadata(None, Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
 
             if format == "prometheus" {
@@ -469,11 +473,11 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
 
             let new_topic =
-                NewTopic::new(&name, partitions, TopicReplication::Fixed(replication_factor));
+                NewTopic::new(&name, partitions, TopicReplication::Fixed(replication_factor as i32));
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
 
             admin
-                .create_topics(&[&new_topic], &options)
+                .create_topics(&[new_topic], &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("Create topic failed: {}", e))?;
 
@@ -490,7 +494,8 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
 
             let metadata = admin
-                .fetch_metadata(None, Duration::from_secs(30))
+                .inner()
+                .inner().fetch_metadata(None, Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
 
             println!("Topics:");
@@ -506,7 +511,7 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
 
             let metadata = admin
-                .fetch_metadata(Some(&name), Duration::from_secs(30))
+                .inner().fetch_metadata(None, Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
 
             let topic = metadata
@@ -522,7 +527,7 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
                     "  Partition {}: Leader={}, Replicas={:?}",
                     partition.id(),
                     partition.leader(),
-                    partition.replicas().iter().map(|b| b.id()).collect::<Vec<_>>()
+                    partition.replicas().iter().map(|b| *b).collect::<Vec<_>>()
                 );
             }
             Ok(())
@@ -535,7 +540,7 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
 
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
             admin
-                .delete_topics(&[&name], &options)
+                .delete_topics(&[name.as_str()], &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("Delete topic failed: {}", e))?;
 
@@ -574,7 +579,8 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
             let groups = vec![group_id.clone()];
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
             let group_descriptions = admin
-                .describe_consumer_groups(&groups, &options)
+                .inner()
+                .inner().describe_consumer_groups(&groups, &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("Describe consumer groups failed: {}", e))?;
 
@@ -610,7 +616,7 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
                     let topics = assignment.topics();
                     if !topics.is_empty() {
                         println!("    Assigned Topics:");
-                        for topic in topics {
+                        for topic in &topics {
                             let partitions = assignment.topic_partitions(topic);
                             if let Some(partitions) = partitions {
                                 println!("      {}: partitions {:?}", topic, partitions);
@@ -633,7 +639,7 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
             let groups = vec![group_id.clone()];
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
             let group_offsets = admin
-                .list_consumer_group_offsets(&groups, &options)
+                .inner().list_consumer_group_offsets(&groups, &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("List consumer group offsets failed: {}", e))?;
 
@@ -862,7 +868,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
 
             // Get topic metadata to know partitions
             let metadata = consumer
-                .fetch_metadata(Some(&topic), Duration::from_secs(30))
+                .fetch_metadata(Some(topic.as_str()), Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
             let topic_metadata = metadata
                 .topics()
@@ -904,7 +910,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
             // Alter offsets to simulate lag
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
             admin
-                .alter_consumer_group_offsets(&group, &[tpl], &options)
+                .inner().alter_consumer_group_offsets(&group, &[tpl], &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("Alter consumer group offsets failed: {}", e))?;
 
@@ -921,7 +927,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
             let groups = vec![group.clone()];
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
             let group_descriptions = admin
-                .describe_consumer_groups(&groups, &options)
+                .inner().describe_consumer_groups(&groups, &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("Describe consumer groups failed: {}", e))?;
 
@@ -951,10 +957,10 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
             }
 
             // For each topic, alter offsets to trigger rebalance-like behavior
-            for topic in topics {
+            for topic in &topics {
                 // Get topic metadata
                 let metadata =
-                    admin.fetch_metadata(Some(&topic), Duration::from_secs(30)).map_err(|e| {
+                    admin.inner().fetch_metadata(Some(topic.as_str()), Duration::from_secs(30)).map_err(|e| {
                         anyhow::anyhow!("Fetch metadata failed for topic {}: {}", topic, e)
                     })?;
                 let topic_metadata = metadata
@@ -996,7 +1002,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
 
             // Get topic metadata to know partitions
             let metadata = admin
-                .fetch_metadata(Some(&topic), Duration::from_secs(30))
+                .inner().fetch_metadata(Some(topic.as_str()), Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
             let topic_metadata = metadata
                 .topics()
@@ -1024,7 +1030,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
             // Reset offsets
             let options = AdminOptions::new().request_timeout(Some(Duration::from_secs(30)));
             admin
-                .alter_consumer_group_offsets(&group, &[tpl], &options)
+                .inner().alter_consumer_group_offsets(&group, &[tpl], &options)
                 .await
                 .map_err(|e| anyhow::anyhow!("Alter consumer group offsets failed: {}", e))?;
 

@@ -48,7 +48,7 @@ async fn test_exchange_routing() {
     // Test direct exchange
     exchange_manager.declare_exchange("direct-test".to_string(), ExchangeType::Direct, true, false);
 
-    let message = Message {
+    let _message = Message {
         properties: MessageProperties {
             content_type: Some("application/json".to_string()),
             ..MessageProperties::default()
@@ -225,12 +225,10 @@ async fn test_conformance_basic_connection() {
     match conn_result {
         Ok(Ok(_connection)) => {
             // Connection successful - basic protocol compliance
-            assert!(true);
         }
         Ok(Err(e)) => {
             // Connection failed - this might be expected if protocol implementation is incomplete
             tracing::warn!("Connection failed (expected for incomplete implementation): {}", e);
-            assert!(true); // Don't fail the test, just log the issue
         }
         Err(_) => {
             // Timeout - server didn't start properly
@@ -315,12 +313,10 @@ async fn test_publisher_confirms() {
     match conn_result {
         Ok(Ok(())) => {
             // Publisher confirms working
-            assert!(true);
         }
         Ok(Err(e)) => {
             // May fail if full protocol not implemented
             tracing::warn!("Publisher confirms test failed: {}", e);
-            assert!(true);
         }
         Err(_) => {
             panic!("Test timeout");

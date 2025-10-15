@@ -2185,7 +2185,7 @@ async fn handle_serve(
     };
 
     // Create MQTT broker instance (if enabled)
-    let mqtt_broker = if let Some(ref mqtt_registry) = mqtt_registry {
+    let mqtt_broker = if let Some(ref _mqtt_registry) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
 
         // Convert core MqttConfig to mockforge_mqtt::MqttConfig
@@ -2200,7 +2200,7 @@ async fn handle_serve(
 
         Some(Arc::new(mockforge_mqtt::MqttBroker::new(
             broker_config.clone(),
-            mqtt_registry.clone(),
+            mqtt_registry.as_ref().unwrap().clone(),
         )))
     } else {
         None
@@ -2304,7 +2304,7 @@ async fn handle_serve(
     });
 
     // Start SMTP server (if enabled)
-    let smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
+    let _smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
 
@@ -2348,7 +2348,7 @@ async fn handle_serve(
     };
 
     // Start MQTT server (if enabled)
-    let mqtt_handle = if let Some(ref mqtt_registry) = mqtt_registry {
+    let _mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
         let mqtt_shutdown = shutdown_token.clone();
 
