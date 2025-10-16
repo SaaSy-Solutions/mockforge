@@ -23,10 +23,10 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 fastrand = "2.0"
-mockforge-core = { path = "../mockforge-core" }
-mockforge-data = { path = "../mockforge-data" }
-mockforge-observability = { path = "../mockforge-observability" }
-mockforge-tracing = { path = "../mockforge-tracing" }
+mockforge-core = { version = "0.1.0", path = "../mockforge-core" }
+mockforge-data = { version = "0.1.0", path = "../mockforge-data" }
+mockforge-observability = { version = "0.1.0", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.1.0", path = "../mockforge-tracing" }
 opentelemetry = "0.21"
 
 [dev-dependencies]
