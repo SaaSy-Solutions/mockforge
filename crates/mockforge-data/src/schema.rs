@@ -1,7 +1,7 @@
 //! Schema definitions for data generation
 
 use crate::faker::EnhancedFaker;
-use mockforge_core::{Error, Result};
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

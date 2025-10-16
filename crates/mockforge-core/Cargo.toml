@@ -1,13 +1,13 @@
 [package]
 name = "mockforge-core"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.1.0"
+edition = "2021"
+authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
+license = "MIT OR Apache-2.0"
 description = "Shared logic for MockForge - routing, validation, latency, proxy"
-repository.workspace = true
-homepage.workspace = true
-documentation.workspace = true
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge-core"
 keywords = ["mock", "api", "testing", "http", "grpc"]
 categories = ["development-tools::testing", "web-programming"]
 
@@ -68,8 +68,8 @@ tempfile = "3.10"
 tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
-mockforge-data = { path = "../mockforge-data" }
 proptest = "1.8.0"
+mockforge-data = { version = "0.1.0", path = "../mockforge-data" }
 
 [[bench]]
 name = "core_benchmarks"

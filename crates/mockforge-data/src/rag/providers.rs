@@ -3,7 +3,7 @@
 //! This module handles integrations with various LLM and embedding providers,
 //! providing a unified interface for different AI services.
 
-use mockforge_core::Result;
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

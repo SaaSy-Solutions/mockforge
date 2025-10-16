@@ -3,7 +3,7 @@
 //! This module provides utility functions for text processing,
 //! similarity calculations, data validation, and other common RAG operations.
 
-use mockforge_core::Result;
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

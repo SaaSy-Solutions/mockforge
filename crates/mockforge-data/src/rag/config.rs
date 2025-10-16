@@ -3,7 +3,7 @@
 //! This module handles all configuration aspects of the RAG system,
 //! including provider settings, model configurations, and operational parameters.
 
-use mockforge_core::Result;
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;

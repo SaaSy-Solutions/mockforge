@@ -4,7 +4,7 @@
 //! evolve naturally over time or across requests (e.g., order statuses progressing,
 //! customer data changing).
 
-use mockforge_core::{Error, Result};
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

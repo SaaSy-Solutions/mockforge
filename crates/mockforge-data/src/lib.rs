@@ -2,6 +2,9 @@
 //!
 //! Synthetic data generation engine with faker primitives and RAG (Retrieval-Augmented Generation).
 
+// Re-export error types from mockforge-core
+pub use mockforge_core::{Error, Result};
+
 pub mod dataset;
 pub mod drift;
 pub mod faker;
@@ -93,14 +96,18 @@ impl GenerationResult {
     }
 
     /// Get data as JSON string
-    pub fn to_json_string(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(&self.data)
+    pub fn to_json_string(&self) -> mockforge_core::Result<String> {
+        Ok(serde_json::to_string_pretty(&self.data)?)
     }
 
     /// Get data as JSON Lines string
-    pub fn to_jsonl_string(&self) -> Result<String, serde_json::Error> {
-        let lines: Result<Vec<String>, _> = self.data.iter().map(serde_json::to_string).collect();
-        lines.map(|lines| lines.join("\n"))
+    pub fn to_jsonl_string(&self) -> mockforge_core::Result<String> {
+        let lines: Vec<String> = self
+            .data
+            .iter()
+            .map(|v| serde_json::to_string(v))
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(lines.join("\n"))
     }
 }
 

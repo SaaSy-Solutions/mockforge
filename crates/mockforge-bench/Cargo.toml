@@ -2,7 +2,7 @@
 name = "mockforge-bench"
 version = "0.1.0"
 edition = "2021"
-authors = ["SaaSy Solutions LLC <talksaas@saasysolutionsllc.com>"]
+authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 description = "Load and performance testing for MockForge"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
@@ -11,7 +11,7 @@ documentation = "https://docs.rs/mockforge"
 
 [dependencies]
 # Core dependencies
-mockforge-core = "0.1.0"
+mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-recorder = { path = "../mockforge-recorder", optional = true }
 

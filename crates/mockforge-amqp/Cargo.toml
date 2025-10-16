@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "AMQP protocol support for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
@@ -12,7 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-mockforge-core = "0.1.0"
+mockforge-core = { version = "0.1.0", path = "../mockforge-core" }
 tokio.workspace = true
 lapin = "2.3"
 serde.workspace = true

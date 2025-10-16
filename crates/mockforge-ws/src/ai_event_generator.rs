@@ -20,7 +20,8 @@ impl AiEventGenerator {
     /// Create a new AI event generator
     pub fn new(config: ReplayAugmentationConfig) -> mockforge_core::Result<Self> {
         debug!("Creating AI event generator");
-        let engine = ReplayAugmentationEngine::new(config)?;
+        let engine = ReplayAugmentationEngine::new(config)
+            .map_err(|e| mockforge_core::Error::generic(e.to_string()))?;
         Ok(Self {
             engine: Arc::new(RwLock::new(engine)),
         })
@@ -172,7 +173,8 @@ impl WebSocketAiConfig {
     /// Create an AI event generator from this configuration
     pub fn create_generator(&self) -> mockforge_core::Result<Option<AiEventGenerator>> {
         if let Some(replay_config) = &self.replay {
-            Ok(Some(AiEventGenerator::new(replay_config.clone())?))
+            let generator = AiEventGenerator::new(replay_config.clone())?;
+            Ok(Some(generator))
         } else {
             Ok(None)
         }

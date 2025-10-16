@@ -4,7 +4,7 @@
 //! supporting various indexing strategies and similarity search algorithms.
 
 use crate::rag::engine::DocumentChunk;
-use mockforge_core::Result;
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
