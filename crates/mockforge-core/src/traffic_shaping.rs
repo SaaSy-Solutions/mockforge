@@ -7,10 +7,13 @@
 
 use crate::{Error, Result};
 use rand::Rng;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
+
+const GLOBAL_BUCKET_KEY: &str = "__global__";
 
 /// Bandwidth throttling configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -126,19 +129,17 @@ impl BurstLossConfig {
     }
 
     /// Get the effective burst loss config for the given tags
-    pub fn get_effective_config(&self, tags: &[String]) -> &BurstLossConfig {
-        // Check for tag overrides (use the first matching tag)
+    pub fn effective_config<'a>(&'a self, tags: &[String]) -> Cow<'a, BurstLossConfig> {
         if let Some(override_config) = tags.iter().find_map(|tag| self.tag_overrides.get(tag)) {
-            // Create a temporary config with the override values
-            // This is a bit of a hack, but works for our use case
             let mut temp_config = self.clone();
             temp_config.burst_probability = override_config.burst_probability;
             temp_config.burst_duration_ms = override_config.burst_duration_ms;
             temp_config.loss_rate_during_burst = override_config.loss_rate_during_burst;
             temp_config.recovery_time_ms = override_config.recovery_time_ms;
-            return Box::leak(Box::new(temp_config));
+            Cow::Owned(temp_config)
+        } else {
+            Cow::Borrowed(self)
         }
-        self
     }
 }
 
@@ -300,8 +301,8 @@ pub struct TrafficShaper {
     bandwidth_config: BandwidthConfig,
     /// Burst loss configuration
     burst_loss_config: BurstLossConfig,
-    /// Token bucket for bandwidth throttling (per connection/IP could be added later)
-    token_bucket: Arc<Mutex<TokenBucket>>,
+    /// Token buckets keyed by effective tag/group
+    token_buckets: Arc<RwLock<HashMap<String, Arc<Mutex<TokenBucket>>>>>,
     /// Burst loss state
     burst_loss_state: Arc<Mutex<BurstLossState>>,
 }
@@ -309,20 +310,10 @@ pub struct TrafficShaper {
 impl TrafficShaper {
     /// Create a new traffic shaper
     pub fn new(config: TrafficShapingConfig) -> Self {
-        let token_bucket = if config.bandwidth.enabled && config.bandwidth.max_bytes_per_sec > 0 {
-            TokenBucket::new(
-                config.bandwidth.burst_capacity_bytes,
-                config.bandwidth.max_bytes_per_sec,
-            )
-        } else {
-            // Unlimited bandwidth - create a bucket that never blocks
-            TokenBucket::new(u64::MAX, u64::MAX)
-        };
-
         Self {
             bandwidth_config: config.bandwidth,
             burst_loss_config: config.burst_loss,
-            token_bucket: Arc::new(Mutex::new(token_bucket)),
+            token_buckets: Arc::new(RwLock::new(HashMap::new())),
             burst_loss_state: Arc::new(Mutex::new(BurstLossState::new())),
         }
     }
@@ -333,30 +324,42 @@ impl TrafficShaper {
             return Ok(());
         }
 
-        let effective_limit = self.bandwidth_config.get_effective_limit(tags);
+        let (bucket_key, effective_limit) = self.resolve_bandwidth_bucket(tags);
+
         if effective_limit == 0 {
-            // Unlimited bandwidth
             return Ok(());
         }
 
-        let mut bucket = self.token_bucket.lock().await;
+        let bucket_arc = self.get_or_create_bucket(&bucket_key, effective_limit).await;
 
-        if !bucket.try_consume(data_size) {
-            // Wait for tokens to become available
-            let wait_time = bucket.time_until_available(data_size);
-            if !wait_time.is_zero() {
-                tokio::time::sleep(wait_time).await;
+        {
+            let mut bucket = bucket_arc.lock().await;
+            if bucket.try_consume(data_size) {
+                return Ok(());
             }
-            // Try again (should succeed now)
-            if !bucket.try_consume(data_size) {
+
+            let wait_time = bucket.time_until_available(data_size);
+            drop(bucket);
+
+            if wait_time.is_zero() {
                 return Err(Error::generic(format!(
                     "Failed to acquire bandwidth tokens for {} bytes",
                     data_size
                 )));
             }
+
+            tokio::time::sleep(wait_time).await;
         }
 
-        Ok(())
+        let mut bucket = bucket_arc.lock().await;
+        if bucket.try_consume(data_size) {
+            Ok(())
+        } else {
+            Err(Error::generic(format!(
+                "Failed to acquire bandwidth tokens for {} bytes",
+                data_size
+            )))
+        }
     }
 
     /// Check if a packet should be dropped due to burst loss
@@ -365,9 +368,9 @@ impl TrafficShaper {
             return false;
         }
 
-        let effective_config = self.burst_loss_config.get_effective_config(tags);
+        let effective_config = self.burst_loss_config.effective_config(tags);
         let mut state = self.burst_loss_state.lock().await;
-        state.should_drop_packet(effective_config)
+        state.should_drop_packet(effective_config.as_ref())
     }
 
     /// Process a data transfer with both bandwidth throttling and burst loss
@@ -389,11 +392,24 @@ impl TrafficShaper {
 
     /// Get current bandwidth usage statistics
     pub async fn get_bandwidth_stats(&self) -> BandwidthStats {
-        let bucket = self.token_bucket.lock().await;
-        BandwidthStats {
-            current_tokens: bucket.tokens as u64,
-            capacity: bucket.capacity as u64,
-            refill_rate_bytes_per_sec: bucket.refill_rate as u64,
+        let maybe_bucket = {
+            let guard = self.token_buckets.read().await;
+            guard.get(GLOBAL_BUCKET_KEY).cloned()
+        };
+
+        if let Some(bucket_arc) = maybe_bucket {
+            let bucket = bucket_arc.lock().await;
+            BandwidthStats {
+                current_tokens: bucket.tokens as u64,
+                capacity: bucket.capacity as u64,
+                refill_rate_bytes_per_sec: bucket.refill_rate as u64,
+            }
+        } else {
+            BandwidthStats {
+                current_tokens: self.bandwidth_config.burst_capacity_bytes,
+                capacity: self.bandwidth_config.burst_capacity_bytes,
+                refill_rate_bytes_per_sec: self.bandwidth_config.max_bytes_per_sec,
+            }
         }
     }
 
@@ -404,6 +420,37 @@ impl TrafficShaper {
             in_burst: state.in_burst,
             burst_start: state.burst_start,
             recovery_start: state.recovery_start,
+        }
+    }
+
+    async fn get_or_create_bucket(
+        &self,
+        bucket_key: &str,
+        effective_limit: u64,
+    ) -> Arc<Mutex<TokenBucket>> {
+        if let Some(existing) = self.token_buckets.read().await.get(bucket_key).cloned() {
+            return existing;
+        }
+
+        let mut buckets = self.token_buckets.write().await;
+        buckets
+            .entry(bucket_key.to_string())
+            .or_insert_with(|| {
+                Arc::new(Mutex::new(TokenBucket::new(
+                    self.bandwidth_config.burst_capacity_bytes,
+                    effective_limit,
+                )))
+            })
+            .clone()
+    }
+
+    fn resolve_bandwidth_bucket(&self, tags: &[String]) -> (String, u64) {
+        if let Some((tag, limit)) = tags.iter().find_map(|tag| {
+            self.bandwidth_config.tag_overrides.get(tag).map(|limit| (tag.as_str(), *limit))
+        }) {
+            (format!("tag:{}", tag), limit)
+        } else {
+            (GLOBAL_BUCKET_KEY.to_string(), self.bandwidth_config.max_bytes_per_sec)
         }
     }
 }
@@ -469,6 +516,36 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn test_bandwidth_tag_override_with_global_unlimited() {
+        let mut bandwidth = BandwidthConfig::default();
+        bandwidth.enabled = true;
+        bandwidth.max_bytes_per_sec = 0;
+        bandwidth.burst_capacity_bytes = 100;
+        bandwidth = bandwidth.with_tag_override("limited".to_string(), 100);
+
+        let shaper = TrafficShaper::new(TrafficShapingConfig {
+            bandwidth,
+            burst_loss: BurstLossConfig::default(),
+        });
+
+        let tags = vec!["limited".to_string()];
+        shaper
+            .throttle_bandwidth(100, &tags)
+            .await
+            .expect("initial transfer should succeed immediately");
+
+        let start = Instant::now();
+        shaper
+            .throttle_bandwidth(100, &tags)
+            .await
+            .expect("tag override should throttle but eventually succeed");
+        assert!(
+            start.elapsed() >= Duration::from_millis(900),
+            "override-specific transfer should respect configured rate"
+        );
+    }
+
     #[test]
     fn test_bandwidth_config_overrides() {
         let mut config = BandwidthConfig::new(1000, 100);
@@ -480,5 +557,24 @@ mod tests {
             config.get_effective_limit(&["low-priority".to_string(), "high-priority".to_string()]),
             5000
         );
+    }
+
+    #[test]
+    fn test_burst_loss_effective_config_override() {
+        let override_cfg = BurstLossOverride {
+            burst_probability: 0.8,
+            burst_duration_ms: 2000,
+            loss_rate_during_burst: 0.9,
+            recovery_time_ms: 5000,
+        };
+
+        let config =
+            BurstLossConfig::default().with_tag_override("flaky".to_string(), override_cfg.clone());
+
+        let effective = config.effective_config(&["flaky".to_string()]);
+        assert_eq!(effective.burst_probability, override_cfg.burst_probability);
+        assert_eq!(effective.burst_duration_ms, override_cfg.burst_duration_ms);
+        assert_eq!(effective.loss_rate_during_burst, override_cfg.loss_rate_during_burst);
+        assert_eq!(effective.recovery_time_ms, override_cfg.recovery_time_ms);
     }
 }
