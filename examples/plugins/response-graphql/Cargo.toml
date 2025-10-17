@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["MockForge Team"]
 description = "Example GraphQL response generator plugin for MockForge"
 license = "MIT OR Apache-2.0"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
