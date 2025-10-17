@@ -8,15 +8,3 @@ shared-version = true
 consolidate-commits = true
 pre-release-commit-message = "chore: release {{version}}"
 tag-message = "Release {{version}}"
-
-[[pre-release-replacements]]
-file = "README.md"
-search = "mockforge-cli = \".*\""
-replace = "mockforge-cli = \"{{version}}\""
-min = 0
-
-[[pre-release-replacements]]
-file = "book/src/README.md"
-search = "mockforge-cli = \".*\""
-replace = "mockforge-cli = \"{{version}}\""
-min = 0

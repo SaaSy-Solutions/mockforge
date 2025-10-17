@@ -61,10 +61,11 @@ PY
 TARGET_VERSION=$(compute_version)
 
 scripts/update-changelog.sh "$TARGET_VERSION"
+scripts/update-version-refs.sh "$TARGET_VERSION"
 
-git add CHANGELOG.md book/src/reference/changelog.md
+git add CHANGELOG.md book/src/reference/changelog.md README.md book/src/README.md
 if ! git diff --cached --quiet; then
-  git commit -m "docs: update changelog for $TARGET_VERSION"
+  git commit -m "docs: prepare release $TARGET_VERSION"
 fi
 
 scripts/check-changelog.sh
