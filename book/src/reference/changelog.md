@@ -28,6 +28,18 @@
 
 ### Changes
 
+- build: remove per-crate release metadata
+- build: fix release metadata field name
+- build: move workspace release metadata into Cargo.toml
+- build: require execute flag for release wrapper
+- build: automate changelog generation during release
+- build: add release wrapper with changelog guard
+- build: align release tooling with cargo-release 0.25
+
+## [0.1.2] - 2025-10-17
+
+### Changes
+
 - build: fix release metadata field name
 - build: move workspace release metadata into Cargo.toml
 - build: require execute flag for release wrapper
