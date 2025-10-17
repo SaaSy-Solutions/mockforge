@@ -29,7 +29,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.1.0", path = "../mockforge-smtp" }
+mockforge-smtp = { version = "0.1.0", path = "../mockforge-smtp", optional = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -53,7 +53,7 @@ mockforge-core = { version = "0.1.0", path = "../mockforge-core" }
 mockforge-data = { version = "0.1.0", path = "../mockforge-data" }
 mockforge-observability = { version = "0.1.0", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.1.0", path = "../mockforge-tracing" }
-mockforge-mqtt = { version = "0.1.0", path = "../mockforge-mqtt" }
+mockforge-mqtt = { version = "0.1.0", path = "../mockforge-mqtt", optional = true }
 opentelemetry = "0.21"
 
 [features]
@@ -61,7 +61,9 @@ default = []
 # Enable richer faker-backed tokens in templating via mockforge-data
 data-faker = []
 # Enable SMTP support
-smtp = []
+smtp = ["mockforge-smtp"]
+# Enable MQTT integration
+mqtt = ["mockforge-mqtt"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

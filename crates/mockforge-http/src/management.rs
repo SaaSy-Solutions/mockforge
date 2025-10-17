@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use mockforge_core::openapi::OpenApiSpec;
+#[cfg(feature = "smtp")]
 use mockforge_smtp::EmailSearchFilters;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -68,7 +69,9 @@ pub struct ManagementState {
     pub port: u16,
     pub start_time: std::time::Instant,
     pub request_counter: Arc<RwLock<u64>>,
+    #[cfg(feature = "smtp")]
     pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
+    #[cfg(feature = "mqtt")]
     pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
 }
 
@@ -81,11 +84,14 @@ impl ManagementState {
             port,
             start_time: std::time::Instant::now(),
             request_counter: Arc::new(RwLock::new(0)),
+            #[cfg(feature = "smtp")]
             smtp_registry: None,
+            #[cfg(feature = "mqtt")]
             mqtt_broker: None,
         }
     }
 
+    #[cfg(feature = "smtp")]
     pub fn with_smtp_registry(
         mut self,
         smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>,
@@ -94,6 +100,7 @@ impl ManagementState {
         self
     }
 
+    #[cfg(feature = "mqtt")]
     pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
         self.mqtt_broker = Some(mqtt_broker);
         self
@@ -252,6 +259,7 @@ async fn import_mocks(
     Json(serde_json::json!({ "status": "imported", "count": current_mocks.len() }))
 }
 
+#[cfg(feature = "smtp")]
 /// List SMTP emails in mailbox
 async fn list_smtp_emails(State(state): State<ManagementState>) -> impl IntoResponse {
     if let Some(ref smtp_registry) = state.smtp_registry {
@@ -277,6 +285,7 @@ async fn list_smtp_emails(State(state): State<ManagementState>) -> impl IntoResp
 }
 
 /// Get specific SMTP email
+#[cfg(feature = "smtp")]
 async fn get_smtp_email(
     State(state): State<ManagementState>,
     Path(id): Path<String>,
@@ -311,6 +320,7 @@ async fn get_smtp_email(
 }
 
 /// Clear SMTP mailbox
+#[cfg(feature = "smtp")]
 async fn clear_smtp_mailbox(State(state): State<ManagementState>) -> impl IntoResponse {
     if let Some(ref smtp_registry) = state.smtp_registry {
         match smtp_registry.clear_mailbox() {
@@ -340,6 +350,7 @@ async fn clear_smtp_mailbox(State(state): State<ManagementState>) -> impl IntoRe
 }
 
 /// Export SMTP mailbox
+#[cfg(feature = "smtp")]
 async fn export_smtp_mailbox(
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
@@ -355,6 +366,7 @@ async fn export_smtp_mailbox(
 }
 
 /// Search SMTP emails
+#[cfg(feature = "smtp")]
 async fn search_smtp_emails(
     State(state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -399,6 +411,7 @@ async fn search_smtp_emails(
 }
 
 /// MQTT broker statistics
+#[cfg(feature = "mqtt")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttBrokerStats {
     pub connected_clients: usize,
@@ -408,6 +421,7 @@ pub struct MqttBrokerStats {
 }
 
 /// MQTT management handlers
+#[cfg(feature = "mqtt")]
 async fn get_mqtt_stats(State(state): State<ManagementState>) -> impl IntoResponse {
     if let Some(broker) = &state.mqtt_broker {
         let connected_clients = broker.get_connected_clients().await.len();
@@ -427,6 +441,7 @@ async fn get_mqtt_stats(State(state): State<ManagementState>) -> impl IntoRespon
     }
 }
 
+#[cfg(feature = "mqtt")]
 async fn get_mqtt_clients(State(state): State<ManagementState>) -> impl IntoResponse {
     if let Some(broker) = &state.mqtt_broker {
         let clients = broker.get_connected_clients().await;
@@ -439,6 +454,7 @@ async fn get_mqtt_clients(State(state): State<ManagementState>) -> impl IntoResp
     }
 }
 
+#[cfg(feature = "mqtt")]
 async fn get_mqtt_topics(State(state): State<ManagementState>) -> impl IntoResponse {
     if let Some(broker) = &state.mqtt_broker {
         let topics = broker.get_active_topics().await;
@@ -451,6 +467,7 @@ async fn get_mqtt_topics(State(state): State<ManagementState>) -> impl IntoRespo
     }
 }
 
+#[cfg(feature = "mqtt")]
 async fn disconnect_mqtt_client(
     State(state): State<ManagementState>,
     Path(client_id): Path<String>,
@@ -484,17 +501,28 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/export", get(export_mocks))
         .route("/import", post(import_mocks));
 
-    router
+    #[cfg(feature = "smtp")]
+    let router = router
         .route("/smtp/mailbox", get(list_smtp_emails))
         .route("/smtp/mailbox", delete(clear_smtp_mailbox))
         .route("/smtp/mailbox/{id}", get(get_smtp_email))
         .route("/smtp/mailbox/export", get(export_smtp_mailbox))
-        .route("/smtp/mailbox/search", get(search_smtp_emails))
+        .route("/smtp/mailbox/search", get(search_smtp_emails));
+
+    #[cfg(not(feature = "smtp"))]
+    let router = router;
+
+    #[cfg(feature = "mqtt")]
+    let router = router
         .route("/mqtt/stats", get(get_mqtt_stats))
         .route("/mqtt/clients", get(get_mqtt_clients))
         .route("/mqtt/topics", get(get_mqtt_topics))
-        .route("/mqtt/clients/{client_id}", delete(disconnect_mqtt_client))
-        .with_state(state)
+        .route("/mqtt/clients/{client_id}", delete(disconnect_mqtt_client));
+
+    #[cfg(not(feature = "mqtt"))]
+    let router = router;
+
+    router.with_state(state)
 }
 
 #[cfg(test)]

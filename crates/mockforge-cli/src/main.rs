@@ -5,15 +5,19 @@ use mockforge_core::encryption::init_key_store;
 use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
+use std::any::Any;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
+#[cfg(feature = "amqp")]
 mod amqp_commands;
+#[cfg(feature = "ftp")]
 mod ftp_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
+#[cfg(feature = "mqtt")]
 mod mqtt_commands;
 mod plugin_commands;
 #[cfg(feature = "smtp")]
@@ -369,6 +373,7 @@ enum Commands {
         smtp_command: SmtpCommands,
     },
 
+    #[cfg(feature = "mqtt")]
     /// MQTT broker management and topic operations
     ///
     /// Examples:
@@ -382,6 +387,7 @@ enum Commands {
         mqtt_command: MqttCommands,
     },
 
+    #[cfg(feature = "ftp")]
     /// FTP server management
     ///
     /// Examples:
@@ -408,6 +414,7 @@ enum Commands {
         kafka_command: kafka_commands::KafkaCommands,
     },
 
+    #[cfg(feature = "amqp")]
     /// AMQP broker management and message operations
     ///
     /// Examples:
@@ -1330,9 +1337,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Smtp { smtp_command } => {
             smtp_commands::handle_smtp_command(smtp_command).await?;
         }
+        #[cfg(feature = "mqtt")]
         Commands::Mqtt { mqtt_command } => {
             mqtt_commands::handle_mqtt_command(mqtt_command).await?;
         }
+        #[cfg(feature = "ftp")]
         Commands::Ftp { ftp_command } => {
             ftp_commands::handle_ftp_command(ftp_command).await?;
         }
@@ -1340,6 +1349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Kafka { kafka_command } => {
             kafka_commands::handle_kafka_command(kafka_command).await?;
         }
+        #[cfg(feature = "amqp")]
         Commands::Amqp { amqp_command } => {
             amqp_commands::execute_amqp_command(amqp_command).await?;
         }
@@ -2130,7 +2140,6 @@ async fn handle_serve(
     #[cfg(feature = "smtp")]
     let smtp_registry = if config.smtp.enabled {
         use mockforge_smtp::SmtpSpecRegistry;
-        use std::any::Any;
         use std::sync::Arc;
 
         let mut registry = SmtpSpecRegistry::new();
@@ -2157,7 +2166,7 @@ async fn handle_serve(
     #[cfg(not(feature = "smtp"))]
     let smtp_registry = None::<Arc<dyn std::any::Any + Send + Sync>>;
 
-    // Create MQTT registry if enabled
+    #[cfg(feature = "mqtt")]
     let mqtt_registry = if config.mqtt.enabled {
         use mockforge_mqtt::MqttSpecRegistry;
         use std::sync::Arc;
@@ -2184,7 +2193,7 @@ async fn handle_serve(
         None
     };
 
-    // Create MQTT broker instance (if enabled)
+    #[cfg(feature = "mqtt")]
     let mqtt_broker = if let Some(ref _mqtt_registry) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
 
@@ -2206,6 +2215,13 @@ async fn handle_serve(
         None
     };
 
+    #[cfg(feature = "mqtt")]
+    let mqtt_broker_for_http = mqtt_broker
+        .as_ref()
+        .map(|broker| Arc::clone(broker) as Arc<dyn Any + Send + Sync>);
+    #[cfg(not(feature = "mqtt"))]
+    let mqtt_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
+
     // Use standard router (traffic shaping temporarily disabled)
     let http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
@@ -2216,7 +2232,7 @@ async fn handle_serve(
         config.http.cors.clone(),
         None, // ai_generator
         smtp_registry.as_ref().cloned(),
-        mqtt_broker.clone(),
+        mqtt_broker_for_http,
         None,  // traffic_shaper
         false, // traffic_shaping_enabled
     )
@@ -2303,7 +2319,7 @@ async fn handle_serve(
         }
     });
 
-    // Start SMTP server (if enabled)
+    #[cfg(feature = "smtp")]
     let _smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
@@ -2347,7 +2363,7 @@ async fn handle_serve(
         None
     };
 
-    // Start MQTT server (if enabled)
+    #[cfg(feature = "mqtt")]
     let _mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
         let mqtt_shutdown = shutdown_token.clone();

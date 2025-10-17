@@ -23,13 +23,64 @@ echo -e "${BLUE}🚀 Starting MockForge Development Environment${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
+# Determine available port inspection tool
+PORT_CHECK_TOOL=""
+if command -v lsof >/dev/null 2>&1; then
+    PORT_CHECK_TOOL="lsof"
+elif command -v ss >/dev/null 2>&1; then
+    PORT_CHECK_TOOL="ss"
+elif command -v netstat >/dev/null 2>&1; then
+    PORT_CHECK_TOOL="netstat"
+else
+    echo -e "${YELLOW}⚠️  No port inspection tool (lsof/ss/netstat) detected; skipping port checks${NC}"
+fi
+
+# Determine whether to skip the UI dev server
+UI_SKIP_VALUE=$(printf '%s' "${UI_SKIP:-false}" | tr '[:upper:]' '[:lower:]')
+if [ "$UI_SKIP_VALUE" = "true" ] || [ "$UI_SKIP_VALUE" = "1" ]; then
+    SKIP_UI=true
+    echo -e "${YELLOW}⚠️  UI dev server will be skipped (UI_SKIP=${UI_SKIP})${NC}"
+else
+    SKIP_UI=false
+fi
+
+# Ensure npm is available before starting the UI when not skipped
+if [ "$SKIP_UI" != "true" ]; then
+    if ! command -v npm >/dev/null 2>&1; then
+        echo -e "${RED}❌ npm is required to run the UI dev server${NC}"
+        echo -e "${YELLOW}Install Node.js/npm or set UI_SKIP=true to skip the UI startup${NC}"
+        exit 1
+    fi
+fi
+
 # Function to check if a port is available
 check_port() {
     local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null ; then
-        echo -e "${RED}❌ Port $port is already in use${NC}"
-        return 1
-    fi
+
+    case "$PORT_CHECK_TOOL" in
+        lsof)
+            if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+                echo -e "${RED}❌ Port $port is already in use${NC}"
+                return 1
+            fi
+            ;;
+        ss)
+            if ss -ltn | awk '{print $4}' | grep -q ":$port$"; then
+                echo -e "${RED}❌ Port $port is already in use${NC}"
+                return 1
+            fi
+            ;;
+        netstat)
+            if netstat -ltn | awk '{print $4}' | grep -q ":$port$"; then
+                echo -e "${RED}❌ Port $port is already in use${NC}"
+                return 1
+            fi
+            ;;
+        "")
+            # Port checks disabled; always succeed
+            ;;
+    esac
+
     return 0
 }
 
@@ -87,6 +138,10 @@ wait_for_backend() {
 
 # Function to start UI dev server
 start_ui() {
+    if [ "$SKIP_UI" = "true" ]; then
+        echo -e "${YELLOW}UI dev server skipped by UI_SKIP flag${NC}"
+        return 0
+    fi
     echo -e "${YELLOW}Starting UI dev server...${NC}"
     echo -e "${BLUE}🌐 UI dev server starting (may take a moment)${NC}"
     echo ""
@@ -106,24 +161,39 @@ if [ "$1" = "--background" ] || [ "$1" = "-b" ]; then
     # Wait a bit for backend to start
     sleep 3
 
-    # Start UI in background
-    start_ui &
-    UI_PID=$!
+    UI_PID=""
+    if [ "$SKIP_UI" != "true" ]; then
+        # Start UI in background
+        start_ui &
+        UI_PID=$!
+    else
+        echo -e "${YELLOW}UI dev server launch skipped in background mode${NC}"
+    fi
 
     echo ""
     echo -e "${GREEN}✅ Services started in background${NC}"
     echo -e "${BLUE}📊 Backend PID: $BACKEND_PID${NC}"
-    echo -e "${BLUE}🎨 UI PID: $UI_PID${NC}"
+    if [ -n "$UI_PID" ]; then
+        echo -e "${BLUE}🎨 UI PID: $UI_PID${NC}"
+    fi
     echo ""
     echo -e "${YELLOW}To stop services:${NC}"
-    echo -e "${BLUE}kill $BACKEND_PID $UI_PID${NC}"
+    if [ -n "$UI_PID" ]; then
+        echo -e "${BLUE}kill $BACKEND_PID $UI_PID${NC}"
+    else
+        echo -e "${BLUE}kill $BACKEND_PID${NC}"
+    fi
     echo ""
     echo -e "${YELLOW}Access URLs:${NC}"
     echo -e "${BLUE}🌐 UI: http://localhost:5173${NC}"
     echo -e "${BLUE}🎛️ Admin: http://localhost:$ADMIN_PORT${NC}"
 
     # Wait for processes
-    wait
+    if [ -n "$UI_PID" ]; then
+        wait $BACKEND_PID $UI_PID
+    else
+        wait $BACKEND_PID
+    fi
 else
     echo -e "${YELLOW}Starting services...${NC}"
     echo -e "${BLUE}Press Ctrl+C to stop both services${NC}"
@@ -143,10 +213,16 @@ else
         exit 1
     fi
 
-    # Start UI in foreground (this will be the primary process)
-    start_ui &
-    UI_PID=$!
+    UI_PID=""
+    if [ "$SKIP_UI" != "true" ]; then
+        # Start UI in foreground (this will be the primary process)
+        start_ui &
+        UI_PID=$!
 
-    # Wait for either process to exit
-    wait $BACKEND_PID $UI_PID
+        # Wait for either process to exit
+        wait $BACKEND_PID $UI_PID
+    else
+        echo -e "${YELLOW}UI dev server launch skipped (UI_SKIP flag)${NC}"
+        wait $BACKEND_PID
+    fi
 fi

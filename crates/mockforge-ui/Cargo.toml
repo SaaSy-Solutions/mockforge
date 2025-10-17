@@ -25,12 +25,12 @@ tower-http = { workspace = true }
 mime_guess = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
 mockforge-core = { path = "../mockforge-core" }
-mockforge-http = { path = "../mockforge-http" }
+mockforge-http = { path = "../mockforge-http", features = ["smtp", "mqtt"] }
 mockforge-ws = { path = "../mockforge-ws" }
 mockforge-grpc = { path = "../mockforge-grpc" }
 mockforge-plugin-core = { path = "../mockforge-plugin-core" }

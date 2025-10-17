@@ -298,7 +298,7 @@ pub async fn build_router_with_multi_tenant(
     ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
-    smtp_registry: Option<std::sync::Arc<mockforge_smtp::SmtpSpecRegistry>>,
+    smtp_registry: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
 ) -> Router {
     use std::time::Instant;
 
@@ -482,9 +482,21 @@ pub async fn build_router_with_multi_tenant(
 
     // Add management API endpoints
     let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
-    if let Some(smtp_reg) = smtp_registry {
-        management_state = management_state.with_smtp_registry(smtp_reg);
-    }
+    #[cfg(feature = "smtp")]
+    let mut management_state = {
+        if let Some(smtp_reg) = smtp_registry {
+            let smtp_reg = smtp_reg
+                .downcast::<mockforge_smtp::SmtpSpecRegistry>()
+                .expect("Invalid SMTP registry type passed to HTTP management state");
+            management_state.with_smtp_registry(smtp_reg)
+        } else {
+            management_state
+        }
+    };
+    #[cfg(not(feature = "smtp"))]
+    let mut management_state = management_state;
+    #[cfg(not(feature = "smtp"))]
+    let _ = smtp_registry;
     app = app.nest("/__mockforge/api", management_router(management_state));
 
     // Add management WebSocket endpoint
@@ -818,16 +830,13 @@ pub async fn build_router_with_chains_and_multi_tenant(
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
     smtp_registry: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
-    mqtt_broker: Option<std::sync::Arc<mockforge_mqtt::MqttBroker>>,
+    mqtt_broker: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,
     traffic_shaping_enabled: bool,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
     use mockforge_core::Overrides;
-
-    #[allow(dead_code)]
-    type SmtpRegistry = mockforge_smtp::SmtpSpecRegistry;
 
     let _shared = Shared {
         profiles: LatencyProfiles::default(),
@@ -872,14 +881,38 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add management API endpoints
     let management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
-    let mut management_state = management_state;
-    if let Some(smtp_reg) = smtp_registry {
-        let smtp_reg = smtp_reg.downcast::<mockforge_smtp::SmtpSpecRegistry>().unwrap();
-        management_state = management_state.with_smtp_registry(smtp_reg);
-    }
-    if let Some(mqtt_broker) = mqtt_broker {
-        management_state = management_state.with_mqtt_broker(mqtt_broker);
-    }
+    #[cfg(feature = "smtp")]
+    let management_state = {
+        if let Some(smtp_reg) = smtp_registry {
+            let smtp_reg = smtp_reg
+                .downcast::<mockforge_smtp::SmtpSpecRegistry>()
+                .expect("Invalid SMTP registry type passed to HTTP management state");
+            management_state.with_smtp_registry(smtp_reg)
+        } else {
+            management_state
+        }
+    };
+    #[cfg(not(feature = "smtp"))]
+    let management_state = {
+        let _ = smtp_registry;
+        management_state
+    };
+    #[cfg(feature = "mqtt")]
+    let management_state = {
+        if let Some(broker) = mqtt_broker {
+            let broker = broker
+                .downcast::<mockforge_mqtt::MqttBroker>()
+                .expect("Invalid MQTT broker passed to HTTP management state");
+            management_state.with_mqtt_broker(broker)
+        } else {
+            management_state
+        }
+    };
+    #[cfg(not(feature = "mqtt"))]
+    let management_state = {
+        let _ = mqtt_broker;
+        management_state
+    };
     app = app.nest("/__mockforge/api", management_router(management_state));
 
     // Add workspace routing middleware if multi-tenant is enabled
