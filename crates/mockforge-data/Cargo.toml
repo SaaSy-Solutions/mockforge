@@ -26,7 +26,7 @@ rand = { workspace = true }
 fake = { version = "3.0", features = ["derive", "http", "chrono", "uuid", "random_color"] }
 fastrand = "2.0"
 itertools = { workspace = true }
-mockforge-core = { version = "0.1.1", path = "../mockforge-core" }
+mockforge-core = { version = "0.1.2", path = "../mockforge-core" }
 reqwest = { workspace = true }
 async-trait = "0.1"
 
