@@ -20,27 +20,3 @@ file = "book/src/README.md"
 search = "mockforge-cli = \".*\""
 replace = "mockforge-cli = \"{{version}}\""
 min = 0
-
-[workspace.metadata.release]
-release = true
-shared-version = true
-consolidated-commit = true
-publish-order = [
-    "mockforge-ws",
-    "mockforge-http",
-    "mockforge-grpc",
-    "mockforge-cli"
-]
-
-# Individual crate configurations
-[workspace.metadata.release.mockforge-ws]
-release = true
-
-[workspace.metadata.release.mockforge-http]
-release = true
-
-[workspace.metadata.release.mockforge-grpc]
-release = true
-
-[workspace.metadata.release.mockforge-cli]
-release = true

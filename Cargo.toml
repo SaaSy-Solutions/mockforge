@@ -50,6 +50,30 @@ categories = ["development-tools", "api-bindings", "web-programming"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+# Release configuration for cargo-release 0.25.x
+[workspace.metadata.release]
+release = true
+shared-version = true
+consolidated-commit = true
+publish-order = [
+    "mockforge-ws",
+    "mockforge-http",
+    "mockforge-grpc",
+    "mockforge-cli"
+]
+
+[workspace.metadata.release.mockforge-ws]
+release = true
+
+[workspace.metadata.release.mockforge-http]
+release = true
+
+[workspace.metadata.release.mockforge-grpc]
+release = true
+
+[workspace.metadata.release.mockforge-cli]
+release = true
+
 # Workspace-wide linting configuration
 [workspace.lints.rust]
 # Deny these lints
