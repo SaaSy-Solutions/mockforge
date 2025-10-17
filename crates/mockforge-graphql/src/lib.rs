@@ -33,13 +33,14 @@
 //! ### With Custom Schema
 //!
 //! ```rust,no_run
-//! use mockforge_graphql::{GraphQLSchema, GraphQLExecutor, create_graphql_router};
+//! use mockforge_graphql::{create_graphql_router, GraphQLSchema};
 //! use mockforge_core::LatencyProfile;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-//! let schema = GraphQLSchema::from_file("schema.graphql").await?;
-//! let latency = Some(LatencyProfile::fast());
-//! let router = create_graphql_router(latency).await?;
+//! let schema = GraphQLSchema::generate_basic_schema();
+//! assert!(schema.schema().sdl().contains("type Query"));
+//! let latency = Some(LatencyProfile::with_normal_distribution(80, 20.0));
+//! let _router = create_graphql_router(latency).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -96,7 +97,7 @@
 //! ## GraphQL Playground
 //!
 //! Access the interactive GraphQL Playground at:
-//! ```
+//! ```text
 //! http://localhost:4000/playground
 //! ```
 //!

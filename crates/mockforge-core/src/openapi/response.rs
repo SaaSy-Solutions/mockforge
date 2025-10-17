@@ -233,30 +233,28 @@ impl ResponseGenerator {
         }
 
         // Fall back to schema-based generation
-        match &media_type.schema {
-            Some(schema_ref) => {
-                match schema_ref {
-                    ReferenceOr::Item(schema) => Ok(Self::generate_example_from_schema(schema)),
-                    ReferenceOr::Reference { reference } => {
-                        // Resolve the schema reference
-                        if let Some(schema) = spec.get_schema(reference) {
-                            Ok(Self::generate_example_from_schema(&schema.schema))
-                        } else {
-                            // Reference not found, return empty object
-                            Ok(Value::Object(serde_json::Map::new()))
-                        }
-                    }
-                }
-            }
-            None => {
-                // No schema, return empty object
-                Ok(Value::Object(serde_json::Map::new()))
-            }
+        if let Some(schema_ref) = &media_type.schema {
+            Ok(Self::generate_example_from_schema_ref(spec, schema_ref))
+        } else {
+            Ok(Value::Object(serde_json::Map::new()))
+        }
+    }
+
+    fn generate_example_from_schema_ref(
+        spec: &OpenApiSpec,
+        schema_ref: &ReferenceOr<Schema>,
+    ) -> Value {
+        match schema_ref {
+            ReferenceOr::Item(schema) => Self::generate_example_from_schema(spec, schema),
+            ReferenceOr::Reference { reference } => spec
+                .get_schema(reference)
+                .map(|schema| Self::generate_example_from_schema(spec, &schema.schema))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
         }
     }
 
     /// Generate example data from an OpenAPI schema
-    fn generate_example_from_schema(schema: &Schema) -> Value {
+    fn generate_example_from_schema(spec: &OpenApiSpec, schema: &Schema) -> Value {
         match &schema.schema_kind {
             openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
                 // Use faker for string fields based on field name hints
@@ -269,18 +267,41 @@ impl ResponseGenerator {
             openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {
                 let mut map = serde_json::Map::new();
-                for (prop_name, _) in &obj.properties {
-                    let value = Self::generate_example_for_property(prop_name);
+                for (prop_name, prop_schema) in &obj.properties {
+                    let value = match prop_schema {
+                        ReferenceOr::Item(prop_schema) => {
+                            Self::generate_example_from_schema(spec, prop_schema.as_ref())
+                        }
+                        ReferenceOr::Reference { reference } => spec
+                            .get_schema(reference)
+                            .map(|schema| Self::generate_example_from_schema(spec, &schema.schema))
+                            .unwrap_or_else(|| Self::generate_example_for_property(prop_name)),
+                    };
+                    let value = match value {
+                        Value::Null => Self::generate_example_for_property(prop_name),
+                        Value::Object(ref obj) if obj.is_empty() => {
+                            Self::generate_example_for_property(prop_name)
+                        }
+                        _ => value,
+                    };
                     map.insert(prop_name.clone(), value);
                 }
                 Value::Object(map)
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) => match &arr.items {
-                Some(ReferenceOr::Item(item_schema)) => {
-                    let example_item = Self::generate_example_from_schema(item_schema);
+                Some(item_schema) => {
+                    let example_item = match item_schema {
+                        ReferenceOr::Item(item_schema) => {
+                            Self::generate_example_from_schema(spec, item_schema.as_ref())
+                        }
+                        ReferenceOr::Reference { reference } => spec
+                            .get_schema(reference)
+                            .map(|schema| Self::generate_example_from_schema(spec, &schema.schema))
+                            .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
+                    };
                     Value::Array(vec![example_item])
                 }
-                _ => Value::Array(vec![Value::String("item".to_string())]),
+                None => Value::Array(vec![Value::String("item".to_string())]),
             },
             _ => Value::Object(serde_json::Map::new()),
         }
@@ -412,6 +433,68 @@ impl ResponseGenerator {
             }
             _ => value.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openapiv3::ReferenceOr;
+
+    #[test]
+    fn generates_example_using_referenced_schemas() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /apiaries:
+    get:
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Apiary'
+components:
+  schemas:
+    Apiary:
+      type: object
+      properties:
+        id:
+          type: string
+        hive:
+          $ref: '#/components/schemas/Hive'
+    Hive:
+      type: object
+      properties:
+        name:
+          type: string
+        active:
+          type: boolean
+        "#;
+
+        let spec = OpenApiSpec::from_string(yaml, Some("yaml")).expect("load spec");
+        let path_item = spec
+            .spec
+            .paths
+            .paths
+            .get("/apiaries")
+            .and_then(ReferenceOr::as_item)
+            .expect("path item");
+        let operation = path_item.get.as_ref().expect("GET operation");
+
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .expect("generate response");
+
+        let obj = response.as_object().expect("response object");
+        assert!(obj.contains_key("id"));
+        let hive = obj.get("hive").and_then(|value| value.as_object()).expect("hive object");
+        assert!(hive.contains_key("name"));
+        assert!(hive.contains_key("active"));
     }
 }
 

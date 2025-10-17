@@ -723,7 +723,7 @@ pub fn validate_openapi_operation_security(
 ///
 /// let malicious = "<script>alert('xss')</script>";
 /// let safe = sanitize_html(malicious);
-/// assert_eq!(safe, "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;");
+/// assert_eq!(safe, "&lt;script&gt;alert(&#39;xss&#39;)&lt;&#x2F;script&gt;");
 /// ```
 pub fn sanitize_html(input: &str) -> String {
     input

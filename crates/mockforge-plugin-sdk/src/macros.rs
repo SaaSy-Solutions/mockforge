@@ -7,15 +7,43 @@
 /// # Example
 ///
 /// ```rust,no_run
-/// use mockforge_plugin_sdk::prelude::*;
+/// use mockforge_plugin_sdk::{export_plugin, prelude::*, Result as PluginCoreResult};
+/// use std::collections::HashMap;
 ///
-/// #[derive(Debug)]
+/// #[derive(Debug, Default)]
 /// pub struct MyPlugin;
 ///
 /// #[async_trait]
 /// impl AuthPlugin for MyPlugin {
-///     async fn authenticate(&self, context: &PluginContext, credentials: &AuthCredentials) -> PluginResult<AuthResult> {
-///         Ok(AuthResult::authenticated("user123"))
+///     fn capabilities(&self) -> PluginCapabilities {
+///         PluginCapabilities::default()
+///     }
+///
+///     async fn initialize(&self, _config: &AuthPluginConfig) -> PluginCoreResult<()> {
+///         Ok(())
+///     }
+///
+///     async fn authenticate(
+///         &self,
+///         _context: &PluginContext,
+///         _request: &AuthRequest,
+///         _config: &AuthPluginConfig,
+///     ) -> PluginCoreResult<PluginResult<AuthResponse>> {
+///         let identity = UserIdentity::new("user123");
+///         let response = AuthResponse::success(identity, HashMap::new());
+///         Ok(PluginResult::success(response, 0))
+///     }
+///
+///     fn validate_config(&self, _config: &AuthPluginConfig) -> PluginCoreResult<()> {
+///         Ok(())
+///     }
+///
+///     fn supported_schemes(&self) -> Vec<String> {
+///         vec!["basic".to_string()]
+///     }
+///
+///     async fn cleanup(&self) -> PluginCoreResult<()> {
+///         Ok(())
 ///     }
 /// }
 ///
@@ -55,7 +83,7 @@ macro_rules! export_plugin {
 ///     version = "1.0.0",
 ///     name = "My Plugin",
 ///     description = "A custom plugin",
-///     types = ["auth"],
+///     capabilities = ["network:http"],
 ///     author = {
 ///         name = "Your Name",
 ///         email = "your.email@example.com",
@@ -69,7 +97,7 @@ macro_rules! plugin_config {
         version = $version:expr,
         name = $name:expr,
         description = $desc:expr,
-        types = [$($plugin_type:expr),*],
+        capabilities = [$($capability:expr),*],
         author = {
             name = $author_name:expr,
             email = $author_email:expr $(,)?
@@ -84,12 +112,12 @@ macro_rules! plugin_config {
                 PluginVersion::parse($version).expect("Invalid version"),
                 $name,
                 $desc,
-                PluginAuthor::new($author_name).with_email($author_email),
+                PluginAuthor::with_email($author_name, $author_email),
             );
 
             let mut manifest = PluginManifest::new(info);
             $(
-                manifest.types.push($plugin_type.to_string());
+                manifest.capabilities.push($capability.to_string());
             )*
             manifest
         }
@@ -103,12 +131,65 @@ macro_rules! plugin_config {
 /// ```rust,no_run
 /// # use mockforge_plugin_sdk::prelude::*;
 /// # async fn test_auth() {
+/// use axum::http::{HeaderMap, Method, Uri};
+/// use mockforge_plugin_sdk::{
+///     mock_context, plugin_test, prelude::*, Result as PluginCoreResult,
+/// };
+/// use std::collections::HashMap;
+///
+/// #[derive(Default)]
+/// struct TestPlugin;
+///
+/// #[async_trait]
+/// impl AuthPlugin for TestPlugin {
+///     fn capabilities(&self) -> PluginCapabilities {
+///         PluginCapabilities::default()
+///     }
+///
+///     async fn initialize(&self, _config: &AuthPluginConfig) -> PluginCoreResult<()> {
+///         Ok(())
+///     }
+///
+///     async fn authenticate(
+///         &self,
+///         _context: &PluginContext,
+///         _request: &AuthRequest,
+///         _config: &AuthPluginConfig,
+///     ) -> PluginCoreResult<PluginResult<AuthResponse>> {
+///         let identity = UserIdentity::new("user");
+///         let response = AuthResponse::success(identity, HashMap::new());
+///         Ok(PluginResult::success(response, 0))
+///     }
+///
+///     fn validate_config(&self, _config: &AuthPluginConfig) -> PluginCoreResult<()> {
+///         Ok(())
+///     }
+///
+///     fn supported_schemes(&self) -> Vec<String> {
+///         vec!["basic".to_string()]
+///     }
+///
+///     async fn cleanup(&self) -> PluginCoreResult<()> {
+///         Ok(())
+///     }
+/// }
+///
 /// plugin_test! {
 ///     test_name: authenticate_valid_user,
-///     plugin: MyAuthPlugin,
-///     input: AuthCredentials::basic("user", "pass"),
+///     plugin: TestPlugin,
+///     context: mock_context! {
+///         plugin_id: "test-plugin",
+///         request_id: "req-123",
+///     },
+///     request: AuthRequest::from_axum(
+///         Method::GET,
+///         Uri::from_static("/login"),
+///         HeaderMap::new(),
+///         None
+///     ),
+///     config: AuthPluginConfig::default(),
 ///     assert: |result| {
-///         assert!(result.is_ok());
+///         assert!(result.unwrap().is_success());
 ///     }
 /// }
 /// # }
@@ -118,14 +199,18 @@ macro_rules! plugin_test {
     (
         test_name: $name:ident,
         plugin: $plugin:ty,
-        input: $input:expr,
+        context: $context:expr,
+        request: $request:expr,
+        config: $config:expr,
         assert: $assert:expr
     ) => {
         #[tokio::test]
         async fn $name() {
             let plugin = <$plugin>::default();
-            let context = mockforge_plugin_core::PluginContext::default();
-            let result = plugin.process(&context, $input).await;
+            let context = $context;
+            let request = $request;
+            let config = $config;
+            let result = plugin.authenticate(&context, &request, &config).await;
             ($assert)(result);
         }
     };
@@ -136,7 +221,7 @@ macro_rules! plugin_test {
 /// # Example
 ///
 /// ```rust,no_run
-/// # use mockforge_plugin_sdk::prelude::*;
+/// # use mockforge_plugin_sdk::{mock_context, prelude::*};
 /// let context = mock_context! {
 ///     plugin_id: "test-plugin",
 ///     request_id: "req-123",
@@ -148,16 +233,16 @@ macro_rules! mock_context {
         plugin_id: $plugin_id:expr,
         request_id: $request_id:expr $(,)?
     ) => {{
-        use mockforge_plugin_core::PluginContext;
-        PluginContext {
-            plugin_id: $plugin_id.to_string(),
-            request_id: $request_id.to_string(),
-            ..Default::default()
-        }
+        use mockforge_plugin_core::{PluginContext, PluginId, PluginVersion};
+        let mut context =
+            PluginContext::new(PluginId::new($plugin_id), PluginVersion::new(0, 1, 0));
+        context.request_id = $request_id.to_string();
+        context
     }};
 
     () => {{
-        mockforge_plugin_core::PluginContext::default()
+        use mockforge_plugin_core::{PluginContext, PluginId, PluginVersion};
+        PluginContext::new(PluginId::new("mockforge-plugin"), PluginVersion::new(0, 1, 0))
     }};
 }
 

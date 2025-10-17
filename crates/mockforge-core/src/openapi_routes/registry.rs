@@ -10,9 +10,11 @@ use crate::openapi::route::OpenApiRoute;
 use crate::openapi::spec::OpenApiSpec;
 use axum::extract::Json;
 use axum::http::HeaderMap;
+use openapiv3::{PathItem, ReferenceOr};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use url::Url;
 
 /// OpenAPI route registry that manages generated routes
 #[derive(Debug, Clone)]
@@ -23,6 +25,128 @@ pub struct OpenApiRouteRegistry {
     routes: Vec<OpenApiRoute>,
     /// Validation options
     options: ValidationOptions,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registry_from_yaml(yaml: &str) -> OpenApiRouteRegistry {
+        let spec = OpenApiSpec::from_string(yaml, Some("yaml")).expect("parse spec");
+        OpenApiRouteRegistry::new_with_env(spec)
+    }
+
+    #[test]
+    fn generates_routes_from_components_path_items() {
+        let yaml = r#"
+openapi: 3.1.0
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /users:
+    $ref: '#/components/pathItems/UserCollection'
+components:
+  pathItems:
+    UserCollection:
+      get:
+        operationId: listUsers
+        responses:
+          '200':
+            description: ok
+            content:
+              application/json:
+                schema:
+                  type: array
+                  items:
+                    type: string
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let routes = registry.routes();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].method, "GET");
+        assert_eq!(routes[0].path, "/users");
+    }
+
+    #[test]
+    fn generates_routes_from_paths_references() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: PathRef API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      operationId: getUsers
+      responses:
+        '200':
+          description: ok
+  /all-users:
+    $ref: '#/paths/~1users'
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let routes = registry.routes();
+        assert_eq!(routes.len(), 2);
+
+        let mut paths: Vec<(&str, &str)> = routes
+            .iter()
+            .map(|route| (route.method.as_str(), route.path.as_str()))
+            .collect();
+        paths.sort();
+
+        assert_eq!(paths, vec![("GET", "/all-users"), ("GET", "/users")]);
+    }
+
+    #[test]
+    fn generates_routes_with_server_base_path() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Base Path API
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/api/v1
+paths:
+  /users:
+    get:
+      operationId: getUsers
+      responses:
+        '200':
+          description: ok
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let paths: Vec<String> = registry.routes().iter().map(|route| route.path.clone()).collect();
+        assert!(paths.contains(&"/api/v1/users".to_string()));
+        assert!(!paths.contains(&"/users".to_string()));
+    }
+
+    #[test]
+    fn generates_routes_with_relative_server_base_path() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Relative Base Path API
+  version: "1.0.0"
+servers:
+  - url: /api/v2
+paths:
+  /orders:
+    post:
+      operationId: createOrder
+      responses:
+        '201':
+          description: created
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let paths: Vec<String> = registry.routes().iter().map(|route| route.path.clone()).collect();
+        assert!(paths.contains(&"/api/v2/orders".to_string()));
+        assert!(!paths.contains(&"/orders".to_string()));
+    }
 }
 
 impl OpenApiRouteRegistry {
@@ -86,81 +210,223 @@ impl OpenApiRouteRegistry {
             "Generating routes from OpenAPI spec with {} paths",
             spec.spec.paths.paths.len()
         );
+        let base_paths = Self::collect_base_paths(spec);
 
         for (path, path_item) in &spec.spec.paths.paths {
             tracing::debug!("Processing path: {}", path);
-            if let Some(item) = path_item.as_item() {
-                // Generate route for each HTTP method
-                if let Some(op) = &item.get {
-                    tracing::debug!("  Adding GET route for path: {}", path);
-                    routes.push(OpenApiRoute::from_operation(
-                        "GET",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.post {
-                    routes.push(OpenApiRoute::from_operation(
-                        "POST",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.put {
-                    routes.push(OpenApiRoute::from_operation(
-                        "PUT",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.delete {
-                    routes.push(OpenApiRoute::from_operation(
-                        "DELETE",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.patch {
-                    routes.push(OpenApiRoute::from_operation(
-                        "PATCH",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.head {
-                    routes.push(OpenApiRoute::from_operation(
-                        "HEAD",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.options {
-                    routes.push(OpenApiRoute::from_operation(
-                        "OPTIONS",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
-                if let Some(op) = &item.trace {
-                    routes.push(OpenApiRoute::from_operation(
-                        "TRACE",
-                        path.clone(),
-                        op,
-                        spec.clone(),
-                    ));
-                }
+            let mut visited = HashSet::new();
+            if let Some(item) = Self::resolve_path_item(path_item, spec, &mut visited) {
+                Self::collect_routes_for_path(&mut routes, path, &item, spec, &base_paths);
+            } else {
+                tracing::warn!(
+                    "Skipping path {} because the referenced PathItem could not be resolved",
+                    path
+                );
             }
         }
 
         tracing::debug!("Generated {} total routes from OpenAPI spec", routes.len());
         routes
+    }
+
+    fn collect_routes_for_path(
+        routes: &mut Vec<OpenApiRoute>,
+        path: &str,
+        item: &PathItem,
+        spec: &Arc<OpenApiSpec>,
+        base_paths: &[String],
+    ) {
+        if let Some(op) = &item.get {
+            tracing::debug!("  Adding GET route for path: {}", path);
+            Self::push_routes_for_method(routes, "GET", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.post {
+            Self::push_routes_for_method(routes, "POST", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.put {
+            Self::push_routes_for_method(routes, "PUT", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.delete {
+            Self::push_routes_for_method(routes, "DELETE", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.patch {
+            Self::push_routes_for_method(routes, "PATCH", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.head {
+            Self::push_routes_for_method(routes, "HEAD", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.options {
+            Self::push_routes_for_method(routes, "OPTIONS", path, op, spec, base_paths);
+        }
+        if let Some(op) = &item.trace {
+            Self::push_routes_for_method(routes, "TRACE", path, op, spec, base_paths);
+        }
+    }
+
+    fn push_routes_for_method(
+        routes: &mut Vec<OpenApiRoute>,
+        method: &str,
+        path: &str,
+        operation: &openapiv3::Operation,
+        spec: &Arc<OpenApiSpec>,
+        base_paths: &[String],
+    ) {
+        for base in base_paths {
+            let full_path = Self::join_base_path(base, path);
+            routes.push(OpenApiRoute::from_operation(method, full_path, operation, spec.clone()));
+        }
+    }
+
+    fn collect_base_paths(spec: &Arc<OpenApiSpec>) -> Vec<String> {
+        let mut base_paths = Vec::new();
+
+        for server in spec.servers() {
+            if let Some(base_path) = Self::extract_base_path(server.url.as_str()) {
+                if !base_paths.contains(&base_path) {
+                    base_paths.push(base_path);
+                }
+            }
+        }
+
+        if base_paths.is_empty() {
+            base_paths.push(String::new());
+        }
+
+        base_paths
+    }
+
+    fn extract_base_path(raw_url: &str) -> Option<String> {
+        let trimmed = raw_url.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        if trimmed.starts_with('/') {
+            return Some(Self::normalize_base_path(trimmed));
+        }
+
+        if let Ok(parsed) = Url::parse(trimmed) {
+            return Some(Self::normalize_base_path(parsed.path()));
+        }
+
+        None
+    }
+
+    fn normalize_base_path(path: &str) -> String {
+        let trimmed = path.trim();
+        if trimmed.is_empty() || trimmed == "/" {
+            String::new()
+        } else {
+            let mut normalized = trimmed.trim_end_matches('/').to_string();
+            if !normalized.starts_with('/') {
+                normalized.insert(0, '/');
+            }
+            normalized
+        }
+    }
+
+    fn join_base_path(base: &str, path: &str) -> String {
+        let trimmed_path = path.trim_start_matches('/');
+
+        if base.is_empty() {
+            if trimmed_path.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{}", trimmed_path)
+            }
+        } else if trimmed_path.is_empty() {
+            base.to_string()
+        } else {
+            format!("{}/{}", base, trimmed_path)
+        }
+    }
+
+    fn resolve_path_item(
+        value: &ReferenceOr<PathItem>,
+        spec: &Arc<OpenApiSpec>,
+        visited: &mut HashSet<String>,
+    ) -> Option<PathItem> {
+        match value {
+            ReferenceOr::Item(item) => Some(item.clone()),
+            ReferenceOr::Reference { reference } => {
+                Self::resolve_path_item_reference(reference, spec, visited)
+            }
+        }
+    }
+
+    fn resolve_path_item_reference(
+        reference: &str,
+        spec: &Arc<OpenApiSpec>,
+        visited: &mut HashSet<String>,
+    ) -> Option<PathItem> {
+        if !visited.insert(reference.to_string()) {
+            tracing::warn!("Detected recursive path item reference: {}", reference);
+            return None;
+        }
+
+        if let Some(name) = reference.strip_prefix("#/components/pathItems/") {
+            return Self::resolve_component_path_item(name, spec, visited);
+        }
+
+        if let Some(pointer) = reference.strip_prefix("#/paths/") {
+            let decoded_path = Self::decode_json_pointer(pointer);
+            if let Some(next) = spec.spec.paths.paths.get(&decoded_path) {
+                return Self::resolve_path_item(next, spec, visited);
+            }
+            tracing::warn!(
+                "Path reference {} resolved to missing path '{}'",
+                reference,
+                decoded_path
+            );
+            return None;
+        }
+
+        tracing::warn!("Unsupported path item reference: {}", reference);
+        None
+    }
+
+    fn resolve_component_path_item(
+        name: &str,
+        spec: &Arc<OpenApiSpec>,
+        visited: &mut HashSet<String>,
+    ) -> Option<PathItem> {
+        let raw = spec.raw_document.as_ref()?;
+        let components = raw.get("components")?.as_object()?;
+        let path_items = components.get("pathItems")?.as_object()?;
+        let item_value = path_items.get(name)?;
+
+        if let Some(reference) = item_value
+            .as_object()
+            .and_then(|obj| obj.get("$ref"))
+            .and_then(|value| value.as_str())
+        {
+            tracing::debug!(
+                "Resolving components.pathItems entry '{}' via reference {}",
+                name,
+                reference
+            );
+            return Self::resolve_path_item_reference(reference, spec, visited);
+        }
+
+        match serde_json::from_value(item_value.clone()) {
+            Ok(item) => Some(item),
+            Err(err) => {
+                tracing::warn!(
+                    "Failed to deserialize components.pathItems entry '{}' as a PathItem: {}",
+                    name,
+                    err
+                );
+                None
+            }
+        }
+    }
+
+    fn decode_json_pointer(pointer: &str) -> String {
+        let segments: Vec<String> = pointer
+            .split('/')
+            .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
+            .collect();
+        segments.join("/")
     }
 
     /// Get all routes

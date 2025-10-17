@@ -40,17 +40,23 @@
 //!
 //! ```rust,no_run
 //! use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
+//! use mockforge_grpc::dynamic::http_bridge::HttpBridgeConfig;
 //! use mockforge_core::LatencyProfile;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //! let config = DynamicGrpcConfig {
 //!     proto_dir: "./my-protos".to_string(),
 //!     enable_reflection: true,
-//!     max_message_size: 8 * 1024 * 1024, // 8MB
+//!     excluded_services: vec!["ExperimentalService".to_string()],
+//!     http_bridge: Some(HttpBridgeConfig {
+//!         enabled: true,
+//!         base_path: "/api".to_string(),
+//!         ..Default::default()
+//!     }),
 //!     ..Default::default()
 //! };
 //!
-//! let latency = Some(LatencyProfile::normal());
+//! let latency = Some(LatencyProfile::with_normal_distribution(120, 35.0));
 //! start_with_config(50051, latency, config).await?;
 //! # Ok(())
 //! # }
@@ -61,14 +67,17 @@
 //! Expose gRPC services as REST APIs:
 //!
 //! ```rust,no_run
-//! use mockforge_grpc::{DynamicGrpcConfig, start_with_config};
+//! use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
+//! use mockforge_grpc::dynamic::http_bridge::HttpBridgeConfig;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //! let config = DynamicGrpcConfig {
 //!     proto_dir: "./proto".to_string(),
-//!     enable_http_bridge: true,
-//!     http_bridge_port: 8080,
-//!     generate_openapi: true,
+//!     http_bridge: Some(HttpBridgeConfig {
+//!         enabled: true,
+//!         base_path: "/api".to_string(),
+//!         ..Default::default()
+//!     }),
 //!     ..Default::default()
 //! };
 //!

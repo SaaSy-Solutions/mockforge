@@ -1,0 +1,8 @@
+# Test config for auto-loading
+http:
+  port: 3000
+  openapi_spec: "./examples/openapi-demo.json"
+websocket:
+  port: 3001
+grpc:
+  port: 50051

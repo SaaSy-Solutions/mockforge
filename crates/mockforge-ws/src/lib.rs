@@ -29,6 +29,7 @@
 //!
 //! ```rust,no_run
 //! use mockforge_ws::router;
+//! use std::net::SocketAddr;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,7 +37,7 @@
 //!     let app = router();
 //!
 //!     // Start server
-//!     let addr = "0.0.0.0:3001".parse()?;
+//!     let addr: SocketAddr = "0.0.0.0:3001".parse()?;
 //!     let listener = tokio::net::TcpListener::bind(addr).await?;
 //!     axum::serve(listener, app).await?;
 //!
@@ -48,11 +49,14 @@
 //!
 //! ```rust,no_run
 //! use mockforge_ws::router_with_latency;
-//! use mockforge_core::{LatencyProfile, latency::LatencyInjector};
+//! use mockforge_core::latency::{FaultConfig, LatencyInjector};
+//! use mockforge_core::LatencyProfile;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let latency = LatencyProfile::slow(); // 300-800ms
-//! let injector = LatencyInjector::new(latency, None);
+//! let latency = LatencyProfile::with_normal_distribution(250, 75.0)
+//!     .with_min_ms(100)
+//!     .with_max_ms(500);
+//! let injector = LatencyInjector::new(latency, FaultConfig::default());
 //! let app = router_with_latency(injector);
 //! # Ok(())
 //! # }
@@ -81,22 +85,18 @@
 //!
 //! ```rust,no_run
 //! use mockforge_ws::{AiEventGenerator, WebSocketAiConfig};
-//! use mockforge_data::RagConfig;
+//! use mockforge_data::replay_augmentation::{scenarios, ReplayMode};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let ai_config = WebSocketAiConfig {
 //!     enabled: true,
-//!     narrative: "Simulate 5 minutes of live stock market trading".to_string(),
-//!     event_count: 20,
-//!     rag_config: RagConfig {
-//!         provider: "openai".to_string(),
-//!         model: "gpt-3.5-turbo".to_string(),
-//!         ..Default::default()
-//!     },
+//!     replay: Some(scenarios::stock_market_scenario()),
+//!     max_events: Some(30),
+//!     event_rate: Some(1.5),
 //! };
 //!
-//! let generator = AiEventGenerator::new(ai_config);
-//! let events = generator.generate_events().await?;
+//! let generator = AiEventGenerator::new(ai_config.replay.clone().unwrap())?;
+//! let _events = generator; // use the generator with `stream_events` in your handler
 //! # Ok(())
 //! # }
 //! ```

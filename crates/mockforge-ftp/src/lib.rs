@@ -26,7 +26,7 @@
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let config = FtpConfig::default();
-//!     let server = FtpServer::new(config).await?;
+//!     let server = FtpServer::new(config);
 //!
 //!     server.start().await?;
 //!     Ok(())

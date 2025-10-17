@@ -53,41 +53,41 @@ enum Commands {
         #[arg(short, long)]
         config: Option<PathBuf>,
 
-        /// HTTP server port
-        #[arg(long, default_value = "3000", help_heading = "Server Ports")]
-        http_port: u16,
+        /// HTTP server port (defaults to config or 3000)
+        #[arg(long, help_heading = "Server Ports")]
+        http_port: Option<u16>,
 
-        /// WebSocket server port
-        #[arg(long, default_value = "3001", help_heading = "Server Ports")]
-        ws_port: u16,
+        /// WebSocket server port (defaults to config or 3001)
+        #[arg(long, help_heading = "Server Ports")]
+        ws_port: Option<u16>,
 
-        /// gRPC server port
-        #[arg(long, default_value = "50051", help_heading = "Server Ports")]
-        grpc_port: u16,
+        /// gRPC server port (defaults to config or 50051)
+        #[arg(long, help_heading = "Server Ports")]
+        grpc_port: Option<u16>,
 
-        /// SMTP server port
-        #[arg(long, default_value = "1025", help_heading = "Server Ports")]
-        smtp_port: u16,
+        /// SMTP server port (defaults to config or 1025)
+        #[arg(long, help_heading = "Server Ports")]
+        smtp_port: Option<u16>,
 
-        /// MQTT server port
-        #[arg(long, default_value = "1883", help_heading = "Server Ports")]
-        mqtt_port: u16,
+        /// MQTT server port (defaults to config or 1883)
+        #[arg(long, help_heading = "Server Ports")]
+        mqtt_port: Option<u16>,
 
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
         admin: bool,
 
-        /// Admin UI port (when running standalone)
-        #[arg(long, default_value = "9080", help_heading = "Admin & UI")]
-        admin_port: u16,
+        /// Admin UI port (defaults to config or 9080)
+        #[arg(long, help_heading = "Admin & UI")]
+        admin_port: Option<u16>,
 
         /// Enable Prometheus metrics endpoint
         #[arg(long, help_heading = "Observability & Metrics")]
         metrics: bool,
 
-        /// Metrics server port
-        #[arg(long, default_value = "9090", help_heading = "Observability & Metrics")]
-        metrics_port: u16,
+        /// Metrics server port (defaults to config or 9090)
+        #[arg(long, help_heading = "Observability & Metrics")]
+        metrics_port: Option<u16>,
 
         /// Enable OpenTelemetry distributed tracing
         #[arg(long, help_heading = "Tracing")]
@@ -1520,13 +1520,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 #[derive(Debug)]
 struct ServeArgs {
     config_path: Option<PathBuf>,
-    http_port: u16,
-    ws_port: u16,
-    grpc_port: u16,
+    http_port: Option<u16>,
+    ws_port: Option<u16>,
+    grpc_port: Option<u16>,
     admin: bool,
-    admin_port: u16,
+    admin_port: Option<u16>,
     metrics: bool,
-    metrics_port: u16,
+    metrics_port: Option<u16>,
     tracing: bool,
     tracing_service_name: String,
     tracing_environment: String,
@@ -1570,15 +1570,52 @@ struct ServeArgs {
     dry_run: bool,
 }
 
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn parses_admin_port_override() {
+        let cli = Cli::parse_from([
+            "mockforge",
+            "serve",
+            "--admin",
+            "--admin-port",
+            "3100",
+            "--http-port",
+            "3200",
+            "--ws-port",
+            "3201",
+            "--grpc-port",
+            "5200",
+        ]);
+
+        match cli.command {
+            Commands::Serve { admin_port, .. } => assert_eq!(admin_port, Some(3100)),
+            _ => panic!("expected serve command"),
+        }
+    }
+}
+
 /// Build ServerConfig from CLI arguments, config file, and environment variables
 /// Precedence: CLI args > Config file > Environment variables > Defaults
 async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
-    // Step 1: Load config from file if provided, otherwise use defaults
+    // Step 1: Load config from file if provided, otherwise try to auto-discover, otherwise use defaults
     let mut config = if let Some(path) = &serve_args.config_path {
         println!("📄 Loading configuration from: {}", path.display());
         load_config_with_fallback(path.clone()).await
     } else {
-        ServerConfig::default()
+        // Try to auto-discover config file
+        match discover_config_file() {
+            Ok(discovered_path) => {
+                println!("📄 Auto-discovered configuration from: {}", discovered_path.display());
+                load_config_with_fallback(discovered_path).await
+            }
+            Err(_) => {
+                // No config file found, use defaults
+                ServerConfig::default()
+            }
+        }
     };
 
     // Step 2: Apply environment variable overrides
@@ -1587,27 +1624,41 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     // Step 3: Apply CLI argument overrides (CLI takes highest precedence)
 
     // HTTP configuration
-    config.http.port = serve_args.http_port;
+    if let Some(http_port) = serve_args.http_port {
+        config.http.port = http_port;
+    }
     if let Some(spec_path) = &serve_args.spec {
         config.http.openapi_spec = Some(spec_path.to_string_lossy().to_string());
     }
 
     // WebSocket configuration
-    config.websocket.port = serve_args.ws_port;
+    if let Some(ws_port) = serve_args.ws_port {
+        config.websocket.port = ws_port;
+    }
     if let Some(replay_path) = &serve_args.ws_replay_file {
         config.websocket.replay_file = Some(replay_path.to_string_lossy().to_string());
     }
 
     // gRPC configuration
-    config.grpc.port = serve_args.grpc_port;
+    if let Some(grpc_port) = serve_args.grpc_port {
+        config.grpc.port = grpc_port;
+    }
 
     // Admin configuration
-    config.admin.enabled = serve_args.admin;
-    config.admin.port = serve_args.admin_port;
+    if serve_args.admin {
+        config.admin.enabled = true;
+    }
+    if let Some(admin_port) = serve_args.admin_port {
+        config.admin.port = admin_port;
+    }
 
     // Prometheus metrics configuration
-    config.observability.prometheus.enabled = serve_args.metrics;
-    config.observability.prometheus.port = serve_args.metrics_port;
+    if serve_args.metrics {
+        config.observability.prometheus.enabled = true;
+    }
+    if let Some(metrics_port) = serve_args.metrics_port {
+        config.observability.prometheus.port = metrics_port;
+    }
 
     // OpenTelemetry tracing configuration
     if serve_args.tracing {
@@ -1742,6 +1793,34 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     config
 }
 
+fn ensure_ports_available(ports: &[(u16, &str)]) -> Result<(), String> {
+    let mut unavailable_ports = Vec::new();
+
+    for (port, name) in ports {
+        match std::net::TcpListener::bind(("127.0.0.1", *port)) {
+            Ok(_) => {}
+            Err(err) => unavailable_ports.push((*port, *name, err)),
+        }
+    }
+
+    if unavailable_ports.is_empty() {
+        return Ok(());
+    }
+
+    let mut error_msg = String::from("One or more ports are already in use:\n\n");
+    for (port, name, err) in &unavailable_ports {
+        error_msg.push_str(&format!("  • {} port {}: {}\n", name, port, err));
+    }
+    error_msg.push_str("\nPossible solutions:\n");
+    error_msg.push_str("  1. Stop the process using these ports\n");
+    error_msg.push_str("  2. Use different ports with flags like --http-port, --ws-port, etc.\n");
+    error_msg.push_str(
+        "  3. Find the process using the port with: lsof -i :<port> or netstat -tulpn | grep <port>\n",
+    );
+
+    Err(error_msg)
+}
+
 /// Validate server configuration before starting
 async fn validate_serve_config(
     config_path: &Option<PathBuf>,
@@ -1749,7 +1828,6 @@ async fn validate_serve_config(
     ports: &[(u16, &str)],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::fs;
-    use std::net::TcpListener;
 
     // Validate config file if provided
     if let Some(config) = config_path {
@@ -1799,32 +1877,8 @@ async fn validate_serve_config(
         }
     }
 
-    // Check port availability
-    let mut unavailable_ports = Vec::new();
-    for (port, name) in ports {
-        // Try to bind to the port to check if it's available
-        match TcpListener::bind(("127.0.0.1", *port)) {
-            Ok(_) => {
-                // Port is available
-            }
-            Err(e) => {
-                unavailable_ports.push((*port, *name, e));
-            }
-        }
-    }
-
-    if !unavailable_ports.is_empty() {
-        let mut error_msg = String::from("One or more ports are already in use:\n\n");
-        for (port, name, err) in &unavailable_ports {
-            error_msg.push_str(&format!("  • {} port {}: {}\n", name, port, err));
-        }
-        error_msg.push_str("\nPossible solutions:\n");
-        error_msg.push_str("  1. Stop the process using these ports\n");
-        error_msg
-            .push_str("  2. Use different ports with flags like --http-port, --ws-port, etc.\n");
-        error_msg.push_str("  3. Find the process using the port with: lsof -i :<port> or netstat -tulpn | grep <port>\n");
-
-        return Err(error_msg.into());
+    if let Err(err) = ensure_ports_available(ports) {
+        return Err(err.into());
     }
 
     Ok(())
@@ -1866,14 +1920,14 @@ fn initialize_opentelemetry_tracing(
 #[allow(clippy::too_many_arguments)]
 async fn handle_serve(
     config_path: Option<PathBuf>,
-    http_port: u16,
-    ws_port: u16,
-    grpc_port: u16,
-    _smtp_port: u16,
+    http_port: Option<u16>,
+    ws_port: Option<u16>,
+    grpc_port: Option<u16>,
+    _smtp_port: Option<u16>,
     admin: bool,
-    admin_port: u16,
+    admin_port: Option<u16>,
     metrics: bool,
-    metrics_port: u16,
+    metrics_port: Option<u16>,
     tracing: bool,
     tracing_service_name: String,
     tracing_environment: String,
@@ -1912,23 +1966,36 @@ async fn handle_serve(
     rag_api_key: Option<String>,
     dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Perform early validation
-    let mut ports_to_check = vec![
-        (http_port, "HTTP"),
-        (ws_port, "WebSocket"),
-        (grpc_port, "gRPC"),
-    ];
+    // Auto-discover config file if not provided
+    let effective_config_path = if config_path.is_some() {
+        config_path.clone()
+    } else {
+        // Try to discover config file
+        if let Ok(current_dir) = std::env::current_dir() {
+            let config_names = vec![
+                "mockforge.yaml",
+                "mockforge.yml",
+                ".mockforge.yaml",
+                ".mockforge.yml",
+            ];
 
-    if admin {
-        ports_to_check.push((admin_port, "Admin UI"));
-    }
-
-    if metrics {
-        ports_to_check.push((metrics_port, "Metrics"));
-    }
+            // Check current directory
+            let mut discovered = None;
+            for name in &config_names {
+                let path = current_dir.join(name);
+                if path.exists() {
+                    discovered = Some(path);
+                    break;
+                }
+            }
+            discovered
+        } else {
+            None
+        }
+    };
 
     let serve_args = ServeArgs {
-        config_path: config_path.clone(),
+        config_path: effective_config_path.clone(),
         http_port,
         ws_port,
         grpc_port,
@@ -1975,7 +2042,30 @@ async fn handle_serve(
         dry_run,
     };
 
-    validate_serve_config(&serve_args.config_path, &serve_args.spec, &ports_to_check).await?;
+    // Validate config and spec paths (skip port checks for now)
+    validate_serve_config(&serve_args.config_path, &serve_args.spec, &[]).await?;
+
+    // Merge configuration sources
+    let mut config = build_server_config_from_cli(&serve_args).await;
+
+    // Determine ports to validate using final configuration
+    let mut final_ports = vec![
+        (config.http.port, "HTTP"),
+        (config.websocket.port, "WebSocket"),
+        (config.grpc.port, "gRPC"),
+    ];
+
+    if config.admin.enabled {
+        final_ports.push((config.admin.port, "Admin UI"));
+    }
+
+    if config.observability.prometheus.enabled {
+        final_ports.push((config.observability.prometheus.port, "Metrics"));
+    }
+
+    if let Err(port_error) = ensure_ports_available(&final_ports) {
+        return Err(port_error.into());
+    }
 
     if serve_args.dry_run {
         println!("✅ Configuration validation passed!");
@@ -1986,14 +2076,9 @@ async fn handle_serve(
         if serve_args.spec.is_some() {
             println!("✅ OpenAPI spec file is valid");
         }
-        if serve_args.spec.is_some() {
-            println!("✅ OpenAPI spec file is valid");
-        }
         println!("\n🎉 Dry run successful - no issues found!");
         return Ok(());
     }
-
-    let mut config = build_server_config_from_cli(&serve_args).await;
 
     if !config.routes.is_empty() {
         println!("📄 Found {} routes in config", config.routes.len());

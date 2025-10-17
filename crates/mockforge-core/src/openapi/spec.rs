@@ -4,7 +4,8 @@
 //! parsing them, and providing basic operations on the specs.
 
 use crate::{Error, Result};
-use openapiv3::OpenAPI;
+use openapiv3::{OpenAPI, ReferenceOr, Schema};
+use std::collections::HashSet;
 use std::path::Path;
 use tokio::fs;
 
@@ -15,6 +16,8 @@ pub struct OpenApiSpec {
     pub spec: OpenAPI,
     /// Path to the original spec file
     pub file_path: Option<String>,
+    /// Raw OpenAPI document preserved as JSON for resolving unsupported constructs
+    pub raw_document: Option<serde_json::Value>,
 }
 
 impl OpenApiSpec {
@@ -25,46 +28,67 @@ impl OpenApiSpec {
             .await
             .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec file: {}", e)))?;
 
-        let spec: OpenAPI = if path_ref.extension().and_then(|s| s.to_str()) == Some("yaml")
+        let (raw_document, spec) = if path_ref.extension().and_then(|s| s.to_str()) == Some("yaml")
             || path_ref.extension().and_then(|s| s.to_str()) == Some("yml")
         {
-            serde_yaml::from_str(&content)
-                .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?
+            let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content)
+                .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
+            let raw = serde_json::to_value(&yaml_value).map_err(|e| {
+                Error::generic(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
+            })?;
+            let spec = serde_json::from_value(raw.clone())
+                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
+            (raw, spec)
         } else {
-            serde_json::from_str(&content)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
+            let raw: serde_json::Value = serde_json::from_str(&content)
+                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
+            let spec = serde_json::from_value(raw.clone())
+                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
+            (raw, spec)
         };
 
         Ok(Self {
             spec,
             file_path: path_ref.to_str().map(|s| s.to_string()),
+            raw_document: Some(raw_document),
         })
     }
 
     /// Load OpenAPI spec from string content
     pub fn from_string(content: &str, format: Option<&str>) -> Result<Self> {
-        let spec: OpenAPI = if format == Some("yaml") || format == Some("yml") {
-            serde_yaml::from_str(content)
-                .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?
+        let (raw_document, spec) = if format == Some("yaml") || format == Some("yml") {
+            let yaml_value: serde_yaml::Value = serde_yaml::from_str(content)
+                .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
+            let raw = serde_json::to_value(&yaml_value).map_err(|e| {
+                Error::generic(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
+            })?;
+            let spec = serde_json::from_value(raw.clone())
+                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
+            (raw, spec)
         } else {
-            serde_json::from_str(content)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
+            let raw: serde_json::Value = serde_json::from_str(content)
+                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
+            let spec = serde_json::from_value(raw.clone())
+                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
+            (raw, spec)
         };
 
         Ok(Self {
             spec,
             file_path: None,
+            raw_document: Some(raw_document),
         })
     }
 
     /// Load OpenAPI spec from JSON value
     pub fn from_json(json: serde_json::Value) -> Result<Self> {
-        let spec: OpenAPI = serde_json::from_value(json)
+        let spec: OpenAPI = serde_json::from_value(json.clone())
             .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
 
         Ok(Self {
             spec,
             file_path: None,
+            raw_document: Some(json),
         })
     }
 
@@ -187,27 +211,7 @@ impl OpenApiSpec {
 
     /// Get a schema by reference
     pub fn get_schema(&self, reference: &str) -> Option<crate::openapi::schema::OpenApiSchema> {
-        if let Some(schema_name) = reference.strip_prefix("#/components/schemas/") {
-            if let Some(components) = &self.spec.components {
-                if let Some(schema) = components.schemas.get(schema_name) {
-                    match schema {
-                        openapiv3::ReferenceOr::Item(schema) => {
-                            Some(crate::openapi::schema::OpenApiSchema::new(schema.clone()))
-                        }
-                        openapiv3::ReferenceOr::Reference { .. } => {
-                            // Recursive reference, for now return None
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        self.resolve_schema(reference).map(crate::openapi::schema::OpenApiSchema::new)
     }
 
     /// Validate security requirements
@@ -229,6 +233,33 @@ impl OpenApiSpec {
         }
 
         Err(Error::generic("Security validation failed: no valid authentication provided"))
+    }
+
+    fn resolve_schema(&self, reference: &str) -> Option<Schema> {
+        let mut visited = HashSet::new();
+        self.resolve_schema_recursive(reference, &mut visited)
+    }
+
+    fn resolve_schema_recursive(
+        &self,
+        reference: &str,
+        visited: &mut HashSet<String>,
+    ) -> Option<Schema> {
+        if !visited.insert(reference.to_string()) {
+            tracing::warn!("Detected recursive schema reference: {}", reference);
+            return None;
+        }
+
+        let schema_name = reference.strip_prefix("#/components/schemas/")?;
+        let components = self.spec.components.as_ref()?;
+        let schema_ref = components.schemas.get(schema_name)?;
+
+        match schema_ref {
+            ReferenceOr::Item(schema) => Some(schema.clone()),
+            ReferenceOr::Reference { reference: nested } => {
+                self.resolve_schema_recursive(nested, visited)
+            }
+        }
     }
 
     /// Check if a single security requirement is satisfied
@@ -344,5 +375,48 @@ impl OpenApiSpec {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openapiv3::{SchemaKind, Type};
+
+    #[test]
+    fn resolves_nested_schema_references() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Test API
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    Apiary:
+      type: object
+      properties:
+        id:
+          type: string
+        hive:
+          $ref: '#/components/schemas/Hive'
+    Hive:
+      type: object
+      properties:
+        name:
+          type: string
+    HiveWrapper:
+      $ref: '#/components/schemas/Hive'
+        "#;
+
+        let spec = OpenApiSpec::from_string(yaml, Some("yaml")).expect("spec parses");
+
+        let apiary = spec.get_schema("#/components/schemas/Apiary").expect("resolve apiary schema");
+        assert!(matches!(apiary.schema.schema_kind, SchemaKind::Type(Type::Object(_))));
+
+        let wrapper = spec
+            .get_schema("#/components/schemas/HiveWrapper")
+            .expect("resolve wrapper schema");
+        assert!(matches!(wrapper.schema.schema_kind, SchemaKind::Type(Type::Object(_))));
     }
 }

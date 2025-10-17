@@ -103,14 +103,17 @@
 //!
 //! ```rust,no_run
 //! use mockforge_kafka::MetricsExporter;
+//! use mockforge_kafka::KafkaMetrics;
+//! use std::sync::Arc;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let exporter = MetricsExporter::new();
+//!     let metrics = Arc::new(KafkaMetrics::default());
+//!     let exporter = MetricsExporter::new(metrics.clone());
 //!
 //!     // Export metrics in Prometheus format
-//!     let metrics = exporter.export_prometheus().await?;
-//!     println!("{}", metrics);
+//!     let snapshot = exporter.export_prometheus();
+//!     println!("{}", snapshot);
 //!
 //!     Ok(())
 //! }

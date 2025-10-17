@@ -11,19 +11,43 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use mockforge_plugin_sdk::prelude::*;
+//! use mockforge_plugin_sdk::{export_plugin, prelude::*, Result as PluginCoreResult};
+//! use std::collections::HashMap;
 //!
-//! #[derive(Debug)]
+//! #[derive(Debug, Default)]
 //! pub struct MyPlugin;
 //!
 //! #[async_trait]
 //! impl AuthPlugin for MyPlugin {
+//!     fn capabilities(&self) -> PluginCapabilities {
+//!         PluginCapabilities::default()
+//!     }
+//!
+//!     async fn initialize(&self, _config: &AuthPluginConfig) -> PluginCoreResult<()> {
+//!         Ok(())
+//!     }
+//!
 //!     async fn authenticate(
 //!         &self,
-//!         context: &PluginContext,
-//!         credentials: &AuthCredentials,
-//!     ) -> PluginResult<AuthResult> {
-//!         Ok(AuthResult::authenticated("user123"))
+//!         _context: &PluginContext,
+//!         _request: &AuthRequest,
+//!         _config: &AuthPluginConfig,
+//!     ) -> PluginCoreResult<PluginResult<AuthResponse>> {
+//!         let identity = UserIdentity::new("user123");
+//!         let response = AuthResponse::success(identity, HashMap::new());
+//!         Ok(PluginResult::success(response, 0))
+//!     }
+//!
+//!     fn validate_config(&self, _config: &AuthPluginConfig) -> PluginCoreResult<()> {
+//!         Ok(())
+//!     }
+//!
+//!     fn supported_schemes(&self) -> Vec<String> {
+//!         vec!["basic".to_string()]
+//!     }
+//!
+//!     async fn cleanup(&self) -> PluginCoreResult<()> {
+//!         Ok(())
 //!     }
 //! }
 //!

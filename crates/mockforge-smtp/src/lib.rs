@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use mockforge_smtp::{SmtpServer, SmtpConfig, SmtpSpecRegistry};
+//! use mockforge_smtp::{SmtpConfig, SmtpServer, SmtpSpecRegistry};
 //! use std::sync::Arc;
 //!
 //! #[tokio::main]
@@ -14,7 +14,7 @@
 //!     let config = SmtpConfig::default();
 //!     let registry = Arc::new(SmtpSpecRegistry::new());
 //!
-//!     let server = SmtpServer::new(config, registry);
+//!     let server = SmtpServer::new(config, registry)?;
 //!     server.start().await?;
 //!
 //!     Ok(())

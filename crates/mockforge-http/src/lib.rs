@@ -23,21 +23,25 @@
 //! ### Basic HTTP Server from OpenAPI
 //!
 //! ```rust,no_run
-//! use mockforge_http::build_router;
-//! use mockforge_core::{ValidationOptions, FailureConfig};
 //! use axum::Router;
+//! use mockforge_core::openapi_routes::ValidationMode;
+//! use mockforge_core::ValidationOptions;
+//! use mockforge_http::build_router;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Build router from OpenAPI specification
 //!     let router = build_router(
 //!         Some("./api-spec.json".to_string()),
-//!         Some(ValidationOptions::enforce()),
+//!         Some(ValidationOptions {
+//!             request_mode: ValidationMode::Enforce,
+//!             ..ValidationOptions::default()
+//!         }),
 //!         None,
 //!     ).await;
 //!
 //!     // Start the server
-//!     let addr = "0.0.0.0:3000".parse()?;
+//!     let addr: std::net::SocketAddr = "0.0.0.0:3000".parse()?;
 //!     let listener = tokio::net::TcpListener::bind(addr).await?;
 //!     axum::serve(listener, router).await?;
 //!
@@ -50,14 +54,10 @@
 //! Enable real-time monitoring and configuration:
 //!
 //! ```rust,no_run
-//! use mockforge_http::{management_router, ManagementState, ServerStats};
-//! use std::sync::Arc;
-//! use tokio::sync::RwLock;
+//! use mockforge_http::{management_router, ManagementState};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create management state
-//! let stats = Arc::new(RwLock::new(ServerStats::default()));
-//! let state = ManagementState::new(stats);
+//! let state = ManagementState::new(None, None, 3000);
 //!
 //! // Build management router
 //! let mgmt_router = management_router(state);
@@ -74,24 +74,33 @@
 //! Generate intelligent responses based on request context:
 //!
 //! ```rust,no_run
-//! use mockforge_http::{AiResponseConfig, process_response_with_ai};
-//! use mockforge_data::RagConfig;
+//! use mockforge_data::intelligent_mock::{IntelligentMockConfig, ResponseMode};
+//! use mockforge_http::{process_response_with_ai, AiResponseConfig};
+//! use serde_json::json;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let ai_config = AiResponseConfig {
-//!     enabled: true,
-//!     rag_config: RagConfig {
-//!         provider: "openai".to_string(),
-//!         model: "gpt-3.5-turbo".to_string(),
-//!         api_key: Some("sk-...".to_string()),
-//!         ..Default::default()
-//!     },
-//!     prompt: "Generate realistic user data".to_string(),
-//!     schema: None,
+//!     intelligent: Some(
+//!         IntelligentMockConfig::new(ResponseMode::Intelligent)
+//!             .with_prompt("Generate realistic user data".to_string()),
+//!     ),
+//!     drift: None,
 //! };
 //!
-//! // AI will generate contextual response
-//! let response = process_response_with_ai(&ai_config, /* request_data */).await?;
+//! let response = process_response_with_ai(
+//!     Some(json!({"name": "Alice"})),
+//!     ai_config
+//!         .intelligent
+//!         .clone()
+//!         .map(serde_json::to_value)
+//!         .transpose()?,
+//!     ai_config
+//!         .drift
+//!         .clone()
+//!         .map(serde_json::to_value)
+//!         .transpose()?,
+//! )
+//! .await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -849,6 +858,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Start with basic router
     let mut app = Router::new();
+    let mut include_default_health = true;
 
     // If an OpenAPI spec is provided, integrate it
     if let Some(ref spec) = spec_path {
@@ -860,7 +870,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 } else {
                     OpenApiRouteRegistry::new_with_env(openapi)
                 };
-                app = registry.build_router();
+                if registry
+                    .routes()
+                    .iter()
+                    .any(|route| route.method == "GET" && route.path == "/health")
+                {
+                    include_default_health = false;
+                }
+                let spec_router = registry.build_router();
+                app = app.merge(spec_router);
             }
             Err(e) => {
                 warn!("Failed to load OpenAPI spec from {:?}: {}. Starting without OpenAPI integration.", spec_path, e);
@@ -868,16 +886,19 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
     }
 
-    // Add basic health check endpoint
-    app = app.route(
-        "/health",
-        axum::routing::get(|| async {
-            use mockforge_core::server_utils::health::HealthStatus;
-            axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
-        }),
-    )
-    // Add SSE endpoints
-    .merge(sse::sse_router());
+    if include_default_health {
+        app = app.route(
+            "/health",
+            axum::routing::get(|| async {
+                use mockforge_core::server_utils::health::HealthStatus;
+                axum::Json(
+                    serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap(),
+                )
+            }),
+        );
+    }
+
+    app = app.merge(sse::sse_router());
 
     // Add management API endpoints
     let management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port

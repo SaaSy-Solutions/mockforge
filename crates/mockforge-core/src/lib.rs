@@ -24,23 +24,22 @@
 //!
 //! ```rust,no_run
 //! use mockforge_core::{
-//!     OpenApiSpec, OpenApiRouteRegistry, ValidationOptions,
-//!     LatencyProfile, Config,
+//!     Config, LatencyProfile, OpenApiRouteRegistry, OpenApiSpec, Result, ValidationOptions,
 //! };
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! async fn main() -> Result<()> {
 //!     // Load OpenAPI specification
 //!     let spec = OpenApiSpec::from_file("api.json").await?;
 //!
 //!     // Create route registry with validation
-//!     let registry = OpenApiRouteRegistry::new(spec, ValidationOptions::default());
+//!     let registry = OpenApiRouteRegistry::new_with_options(spec, ValidationOptions::default());
 //!
 //!     // Configure core features
 //!     let config = Config {
 //!         latency_enabled: true,
 //!         failures_enabled: false,
-//!         default_latency: LatencyProfile::normal(),
+//!         default_latency: LatencyProfile::with_normal_distribution(400, 120.0),
 //!         ..Default::default()
 //!     };
 //!
@@ -56,31 +55,62 @@
 //! Chain multiple requests together with shared context:
 //!
 //! ```rust,no_run
-//! use mockforge_core::{ChainDefinition, ChainRequest, RequestChainRegistry};
+//! use mockforge_core::{
+//!     ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestChainRegistry, Result,
+//! };
+//! use mockforge_core::request_chaining::RequestBody;
+//! use serde_json::json;
+//! use std::collections::HashMap;
 //!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut registry = RequestChainRegistry::new();
+//! # async fn example() -> Result<()> {
+//! let registry = RequestChainRegistry::new(ChainConfig::default());
 //!
 //! // Define a chain: create user → add to group → verify membership
 //! let chain = ChainDefinition {
-//!     name: "user_onboarding".to_string(),
-//!     steps: vec![
-//!         ChainRequest {
-//!             method: "POST".to_string(),
-//!             path: "/users".to_string(),
-//!             body: Some(r#"{"name": "{{faker.name}}"}"#.to_string()),
-//!             extract: vec![("user_id".to_string(), "$.id".to_string())],
-//!             ..Default::default()
+//!     id: "user_onboarding".to_string(),
+//!     name: "User Onboarding".to_string(),
+//!     description: Some("Create user → add to group".to_string()),
+//!     config: ChainConfig {
+//!         enabled: true,
+//!         ..ChainConfig::default()
+//!     },
+//!     links: vec![
+//!         ChainLink {
+//!             request: ChainRequest {
+//!                 id: "create_user".to_string(),
+//!                 method: "POST".to_string(),
+//!                 url: "https://api.example.com/users".to_string(),
+//!                 headers: HashMap::new(),
+//!                 body: Some(RequestBody::json(json!({"name": "{{faker.name}}"}))),
+//!                 depends_on: Vec::new(),
+//!                 timeout_secs: None,
+//!                 expected_status: None,
+//!                 scripting: None,
+//!             },
+//!             extract: HashMap::from([("user_id".to_string(), "create_user.body.id".to_string())]),
+//!             store_as: Some("create_user_response".to_string()),
 //!         },
-//!         ChainRequest {
-//!             method: "POST".to_string(),
-//!             path: "/groups/{{user_id}}/members".to_string(),
-//!             ..Default::default()
+//!         ChainLink {
+//!             request: ChainRequest {
+//!                 id: "add_to_group".to_string(),
+//!                 method: "POST".to_string(),
+//!                 url: "https://api.example.com/groups/{{user_id}}/members".to_string(),
+//!                 headers: HashMap::new(),
+//!                 body: None,
+//!                 depends_on: vec!["create_user".to_string()],
+//!                 timeout_secs: None,
+//!                 expected_status: None,
+//!                 scripting: None,
+//!             },
+//!             extract: HashMap::new(),
+//!             store_as: None,
 //!         },
 //!     ],
+//!     variables: HashMap::new(),
+//!     tags: vec!["onboarding".to_string()],
 //! };
 //!
-//! registry.register_chain("user_onboarding", chain)?;
+//! registry.store().register_chain(chain).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -93,7 +123,9 @@
 //! use mockforge_core::{LatencyProfile, FailureConfig, create_failure_injector};
 //!
 //! // Configure latency simulation
-//! let latency = LatencyProfile::slow(); // 300-800ms
+//! let latency = LatencyProfile::with_normal_distribution(400, 120.0)
+//!     .with_min_ms(100)
+//!     .with_max_ms(800);
 //!
 //! // Configure failure injection
 //! let failure_config = FailureConfig {
@@ -102,7 +134,7 @@
 //!     ..Default::default()
 //! };
 //!
-//! let injector = create_failure_injector(Some(failure_config));
+//! let injector = create_failure_injector(true, Some(failure_config));
 //! ```
 //!
 //! ## Key Modules
