@@ -17,6 +17,17 @@ DRY_RUN=${DRY_RUN:-false}
 WAIT_TIME=${WAIT_TIME:-30}  # Seconds to wait between publishes
 CRATES_IO_TOKEN=${CRATES_IO_TOKEN:-""}
 
+# Determine current workspace version
+WORKSPACE_VERSION=$(
+    python3 - <<'PY'
+import tomllib
+from pathlib import Path
+
+data = tomllib.loads(Path("Cargo.toml").read_text())
+print(data["workspace"]["package"]["version"])
+PY
+)
+
 # Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -55,14 +66,11 @@ wait_for_processing() {
 # Function to check if a crate already exists on crates.io
 crate_exists() {
     local crate_name=$1
-    local version="0.1.0"  # Current version from workspace
 
-    # Check if the crate exists by trying to get its info
-    if cargo search "$crate_name" --limit 1 | grep -q "^$crate_name ="; then
-        return 0  # Crate exists
-    else
-        return 1  # Crate doesn't exist
+    if cargo search "$crate_name" --limit 1 | grep -q "^$crate_name = \"$WORKSPACE_VERSION\""; then
+        return 0  # Target version already exists
     fi
+    return 1
 }
 
 # Function to publish a crate
@@ -104,12 +112,37 @@ convert_crate_dependencies() {
 
     if [ -f "$cargo_toml" ]; then
         print_status "Converting dependencies for $crate_name..."
-        # Convert mockforge-core path dependency to version dependency
-        sed -i 's|mockforge-core = { path = "../mockforge-core" }|mockforge-core = "0.1.0"|g' "$cargo_toml"
-        # Convert mockforge-data path dependency to version dependency (if it exists)
-        sed -i 's|mockforge-data = { path = "../mockforge-data" }|mockforge-data = "0.1.0"|g' "$cargo_toml"
-        # Convert mockforge-plugin-core path dependency to version dependency (if it exists)
-        sed -i 's|mockforge-plugin-core = { path = "../mockforge-plugin-core" }|mockforge-plugin-core = "0.1.0"|g' "$cargo_toml"
+        python3 - "$cargo_toml" "$WORKSPACE_VERSION" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+version = sys.argv[2]
+text = path.read_text()
+changed = False
+
+targets = [
+    ("mockforge-core", "../mockforge-core"),
+    ("mockforge-data", "../mockforge-data"),
+    ("mockforge-plugin-core", "../mockforge-plugin-core"),
+]
+
+for name, rel in targets:
+    patterns = [
+        rf'{name}\s*=\s*\{{\s*path\s*=\s*"{rel}"\s*\}}',
+        rf'{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{rel}"\s*\}}',
+    ]
+    replacement = f'{name} = "{version}"'
+    for pattern in patterns:
+        new_text, count = re.subn(pattern, replacement, text)
+        if count:
+            text = new_text
+            changed = True
+
+if changed:
+    path.write_text(text)
+PY
     fi
 }
 
@@ -166,12 +199,33 @@ restore_dependencies() {
     for crate in "${crates_to_restore[@]}"; do
         local cargo_toml="crates/$crate/Cargo.toml"
         if [ -f "$cargo_toml" ]; then
-            # Restore mockforge-core path dependency
-            sed -i 's|mockforge-core = "0.1.0"|mockforge-core = { path = "../mockforge-core" }|g' "$cargo_toml"
-            # Restore mockforge-data path dependency
-            sed -i 's|mockforge-data = "0.1.0"|mockforge-data = { path = "../mockforge-data" }|g' "$cargo_toml"
-            # Restore mockforge-plugin-core path dependency
-            sed -i 's|mockforge-plugin-core = "0.1.0"|mockforge-plugin-core = { path = "../mockforge-plugin-core" }|g' "$cargo_toml"
+            python3 - "$cargo_toml" "$WORKSPACE_VERSION" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+version = sys.argv[2]
+text = path.read_text()
+changed = False
+
+targets = [
+    ("mockforge-core", "../mockforge-core"),
+    ("mockforge-data", "../mockforge-data"),
+    ("mockforge-plugin-core", "../mockforge-plugin-core"),
+]
+
+for name, rel in targets:
+    replacement = f'{name} = {{ version = "{version}", path = "{rel}" }}'
+    pattern = rf'{name}\s*=\s*"{version}"'
+    new_text, count = re.subn(pattern, replacement, text)
+    if count:
+        text = new_text
+        changed = True
+
+if changed:
+    path.write_text(text)
+PY
         fi
     done
 
@@ -271,6 +325,7 @@ main() {
     # Phase 1: Publish base crates (no internal dependencies)
     print_status "Phase 1: Publishing base crates..."
 
+    convert_crate_dependencies "mockforge-core"
     publish_crate "mockforge-core"
     wait_for_processing
 
