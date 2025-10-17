@@ -8,6 +8,7 @@ use tokio::fs;
 
 /// Authentication configuration for HTTP requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AuthConfig {
     /// JWT configuration
     pub jwt: Option<JwtConfig>,
@@ -246,6 +247,7 @@ pub struct HttpCorsConfig {
 
 /// HTTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HttpConfig {
     /// Enable HTTP server
     pub enabled: bool,
@@ -314,6 +316,7 @@ impl Default for HttpConfig {
 
 /// WebSocket server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WebSocketConfig {
     /// Enable WebSocket server
     pub enabled: bool,
@@ -341,6 +344,7 @@ impl Default for WebSocketConfig {
 
 /// gRPC server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GrpcConfig {
     /// Enable gRPC server
     pub enabled: bool,
@@ -377,6 +381,7 @@ pub struct TlsConfig {
 
 /// MQTT server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MqttConfig {
     /// Enable MQTT server
     pub enabled: bool,
@@ -416,6 +421,7 @@ impl Default for MqttConfig {
 
 /// SMTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SmtpConfig {
     /// Enable SMTP server
     pub enabled: bool,
@@ -464,6 +470,7 @@ impl Default for SmtpConfig {
 
 /// FTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FtpConfig {
     /// Enable FTP server
     pub enabled: bool,
@@ -503,6 +510,7 @@ impl Default for FtpConfig {
 
 /// Kafka server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct KafkaConfig {
     /// Enable Kafka server
     pub enabled: bool,
@@ -548,6 +556,7 @@ impl Default for KafkaConfig {
 
 /// AMQP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AmqpConfig {
     /// Enable AMQP server
     pub enabled: bool,
@@ -587,6 +596,7 @@ impl Default for AmqpConfig {
 
 /// Admin UI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AdminConfig {
     /// Enable admin UI
     pub enabled: bool,
@@ -626,6 +636,7 @@ impl Default for AdminConfig {
 
 /// Logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LoggingConfig {
     /// Log level
     pub level: String,
@@ -652,7 +663,7 @@ impl Default for LoggingConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct ChainingConfig {
     /// Enable request chaining
     pub enabled: bool,
@@ -677,6 +688,7 @@ impl Default for ChainingConfig {
 
 /// Data generation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DataConfig {
     /// Default number of rows to generate
     pub default_rows: usize,
@@ -784,6 +796,7 @@ impl Default for RagConfig {
 
 /// Observability configuration for metrics and distributed tracing
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ObservabilityConfig {
     /// Prometheus metrics configuration
     pub prometheus: PrometheusConfig,
@@ -797,6 +810,7 @@ pub struct ObservabilityConfig {
 
 /// Prometheus metrics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PrometheusConfig {
     /// Enable Prometheus metrics endpoint
     pub enabled: bool,
@@ -821,6 +835,7 @@ impl Default for PrometheusConfig {
 
 /// OpenTelemetry distributed tracing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct OpenTelemetryConfig {
     /// Enable OpenTelemetry tracing
     pub enabled: bool,
@@ -854,6 +869,7 @@ impl Default for OpenTelemetryConfig {
 
 /// API Flight Recorder configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RecorderConfig {
     /// Enable recording
     pub enabled: bool,
@@ -896,6 +912,7 @@ impl Default for RecorderConfig {
 
 /// Chaos engineering configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ChaosEngConfig {
     /// Enable chaos engineering
     pub enabled: bool,

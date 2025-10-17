@@ -262,4 +262,28 @@ mod tests {
         assert_eq!(body["first"], "first_rule");
         assert_eq!(body["second"], "second_rule");
     }
+
+    #[test]
+    fn test_overrides_replace_root_object() {
+        let overrides = Overrides {
+            rules: vec![OverrideRule {
+                targets: vec!["operation:testReplace".to_string()],
+                mode: OverrideMode::Replace,
+                patch: vec![PatchOp::Replace {
+                    path: "".to_string(),
+                    value: json!({"id": "1234", "kind": "replaced"}),
+                }],
+                when: None,
+                post_templating: false,
+            }],
+            regex_cache: Default::default(),
+        };
+
+        let mut body = json!({"existing": true});
+        overrides.apply("testReplace", &[], "/test-replace", &mut body);
+
+        assert_eq!(body["kind"], "replaced");
+        assert_eq!(body["id"], "1234");
+        assert!(body.get("existing").is_none());
+    }
 }

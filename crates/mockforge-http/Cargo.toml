@@ -75,3 +75,4 @@ mockforge-ws = { path = "../mockforge-ws" }
 mockforge-plugin-core = { version = "0.1.0", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
+once_cell = { workspace = true }

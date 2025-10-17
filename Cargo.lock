@@ -4993,6 +4993,7 @@ dependencies = [
  "mockforge-tracing",
  "mockforge-ws",
  "oauth2",
+ "once_cell",
  "opentelemetry",
  "opentelemetry_sdk",
  "rand 0.9.2",

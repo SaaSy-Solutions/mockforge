@@ -1085,6 +1085,10 @@ mod key_rotation;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+
+    static MASTER_KEY_TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     #[test]
     fn test_aes_gcm_encrypt_decrypt() {
@@ -1186,6 +1190,8 @@ mod tests {
 
     #[test]
     fn test_master_key_manager() {
+        let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
+
         let manager = MasterKeyManager::new();
 
         // Clean up any existing master key from previous tests
@@ -1211,6 +1217,8 @@ mod tests {
 
     #[test]
     fn test_workspace_key_manager() {
+        let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
+
         // First ensure we have a valid master key
         let master_manager = MasterKeyManager::new();
         let needs_generation =
@@ -1260,6 +1268,8 @@ mod tests {
 
     #[test]
     fn test_auto_encryption_processor() {
+        let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
+
         // Setup workspace with encryption enabled
         let master_manager = MasterKeyManager::new();
         let needs_key =
@@ -1299,6 +1309,8 @@ mod tests {
     #[test]
     #[ignore] // Requires system keychain access
     fn test_json_field_encryption() {
+        let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
+
         // Setup workspace
         let master_manager = MasterKeyManager::new();
         if !master_manager.has_master_key() || master_manager.get_master_key().is_err() {
@@ -1346,6 +1358,8 @@ mod tests {
 
     #[test]
     fn test_env_var_encryption() {
+        let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
+
         // Setup workspace
         let master_manager = MasterKeyManager::new();
         if !master_manager.has_master_key() || master_manager.get_master_key().is_err() {
@@ -1383,6 +1397,8 @@ mod tests {
 
     #[test]
     fn test_encryption_utils() {
+        let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
+
         // Setup workspace
         let master_manager = MasterKeyManager::new();
         let needs_key =

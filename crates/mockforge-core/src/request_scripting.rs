@@ -698,8 +698,8 @@ mod tests {
         };
 
         let script = r#"
-            for (let i = 0; i < 1000; i++) {
-                // Small loop to ensure measurable execution time
+            for (let i = 0; i < 1000000; i++) {
+                // Loop to ensure measurable execution time
             }
             "script executed successfully";
         "#;

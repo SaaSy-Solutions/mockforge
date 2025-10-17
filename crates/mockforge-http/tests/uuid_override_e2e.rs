@@ -1,12 +1,18 @@
 use axum::Router;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::net::SocketAddr;
+use tokio::sync::Mutex;
+
+static OVERRIDE_ENV_GUARD: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 /// Test that UUID templating works in override files
 #[tokio::test]
 async fn test_uuid_override_templating() {
+    let _env_guard = OVERRIDE_ENV_GUARD.lock().await;
+
     let spec = serde_json::json!({
         "openapi":"3.0.0",
         "info": {"title":"UUID Override Test","version":"1"},
@@ -133,6 +139,8 @@ async fn test_uuid_override_templating() {
 /// Test UUID templating with different override modes
 #[tokio::test]
 async fn test_uuid_override_modes() {
+    let _env_guard = OVERRIDE_ENV_GUARD.lock().await;
+
     let spec = serde_json::json!({
         "openapi":"3.0.0",
         "info": {"title":"UUID Override Modes Test","version":"1"},
@@ -273,6 +281,8 @@ async fn test_uuid_override_modes() {
 /// Test UUID templating with post-templating enabled
 #[tokio::test]
 async fn test_uuid_post_templating() {
+    let _env_guard = OVERRIDE_ENV_GUARD.lock().await;
+
     let spec = serde_json::json!({
         "openapi":"3.0.0",
         "info": {"title":"UUID Post-Templating Test","version":"1"},
