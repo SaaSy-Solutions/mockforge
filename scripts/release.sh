@@ -10,6 +10,20 @@ fi
 LEVEL="$1"
 shift
 
+EXECUTE=false
+for arg in "$@"; do
+  if [ "$arg" = "--execute" ]; then
+    EXECUTE=true
+    break
+  fi
+done
+
+if [ "$EXECUTE" = false ]; then
+  echo "This wrapper requires --execute so it can create the changelog commit." >&2
+  echo "For dry runs, invoke cargo release directly." >&2
+  exit 1
+fi
+
 if git status --porcelain | grep -Eq '^[^?]'; then
   echo "Working tree must be clean before running the release script." >&2
   exit 1
