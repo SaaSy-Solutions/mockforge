@@ -29,7 +29,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.1.1", path = "../mockforge-smtp", optional = true }
+mockforge-smtp = { version = "0.1.2", path = "../mockforge-smtp", optional = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -49,11 +49,11 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { version = "0.1.1", path = "../mockforge-core" }
-mockforge-data = { version = "0.1.1", path = "../mockforge-data" }
-mockforge-observability = { version = "0.1.1", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.1.1", path = "../mockforge-tracing" }
-mockforge-mqtt = { version = "0.1.1", path = "../mockforge-mqtt", optional = true }
+mockforge-core = { version = "0.1.2", path = "../mockforge-core" }
+mockforge-data = { version = "0.1.2", path = "../mockforge-data" }
+mockforge-observability = { version = "0.1.2", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.1.2", path = "../mockforge-tracing" }
+mockforge-mqtt = { version = "0.1.2", path = "../mockforge-mqtt", optional = true }
 opentelemetry = "0.21"
 
 [features]
@@ -72,7 +72,7 @@ tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
 mockforge-ws = { path = "../mockforge-ws" }
-mockforge-plugin-core = { version = "0.1.1", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.1.2", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }
