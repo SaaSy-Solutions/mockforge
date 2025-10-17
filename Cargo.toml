@@ -54,7 +54,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace.metadata.release]
 release = true
 shared-version = true
-consolidated-commit = true
+consolidate-commits = true
 publish-order = [
     "mockforge-ws",
     "mockforge-http",
