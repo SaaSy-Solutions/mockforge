@@ -1,46 +1,32 @@
-# cargo-release configuration
-# See: https://github.com/crate-ci/cargo-release
+# cargo-release configuration compatible with 0.25.x
 
-[package]
-# Publish to crates.io
+allow-branch = ["main"]
 publish = true
-# Don't verify that the version doesn't already exist
-no-verify = false
-# Allow dirty working directory
-allow-dirty = false
-# Generate changelog
-generate-changelog = true
-# Pre-release commit message
-pre-release-commit-message = "chore: release {{version}}"
-# Tag message
-tag-message = "Release {{version}}"
-# Don't push to remote
 push = false
-# Don't create GitHub release
-# (we handle this in GitHub Actions)
-create-release = false
+verify = true
+shared-version = true
+consolidate-commits = true
+pre-release-commit-message = "chore: release {{version}}"
+tag-message = "Release {{version}}"
 
-[[package.metadata.release.pre-release-replacements]]
+[[pre-release-replacements]]
 file = "README.md"
 search = "mockforge-cli = \".*\""
 replace = "mockforge-cli = \"{{version}}\""
-exactly = 1
+min = 0
 
-[[package.metadata.release.pre-release-replacements]]
+[[pre-release-replacements]]
 file = "book/src/README.md"
 search = "mockforge-cli = \".*\""
 replace = "mockforge-cli = \"{{version}}\""
-exactly = 1
+min = 0
 
-# Workspace member configuration
+pre-release-hook = ["./scripts/check-changelog.sh"]
+
 [workspace.metadata.release]
-# Release members in order
 release = true
-# Shared changelog
 shared-version = true
-# Consolidated commit
 consolidated-commit = true
-# Publish order (dependencies first)
 publish-order = [
     "mockforge-ws",
     "mockforge-http",
