@@ -6,6 +6,12 @@ push = false
 verify = true
 shared-version = true
 consolidate-commits = true
+publish-order = [
+    "mockforge-ws",
+    "mockforge-http",
+    "mockforge-grpc",
+    "mockforge-cli"
+]
 pre-release-commit-message = "chore: release {{version}}"
 tag-message = "Release {{version}}"
 
