@@ -1,12 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-if ! git diff --cached --name-only | grep -q '^CHANGELOG\.md$'; then
-  echo "Changelog not staged; aborting release." >&2
+# Ensure working tree is clean before release (cargo-release requirement)
+if git status --porcelain | grep -Eq '^[^?]'; then
+  echo "Working tree is dirty. Commit or stash changes before releasing." >&2
   exit 1
 fi
 
-if ! git diff --cached --name-only | grep -q '^book/src/reference/changelog\.md$'; then
-  echo "Book changelog not staged; aborting release." >&2
+changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD)
+
+if ! grep -qx 'CHANGELOG.md' <<<"$changed_files"; then
+  echo "The latest commit does not update CHANGELOG.md. Add the changelog entry first." >&2
+  exit 1
+fi
+
+if ! grep -qx 'book/src/reference/changelog.md' <<<"$changed_files"; then
+  echo "The latest commit does not update book/src/reference/changelog.md. Keep the docs in sync before releasing." >&2
   exit 1
 fi

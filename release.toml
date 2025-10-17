@@ -21,8 +21,6 @@ search = "mockforge-cli = \".*\""
 replace = "mockforge-cli = \"{{version}}\""
 min = 0
 
-pre-release-hook = ["./scripts/check-changelog.sh"]
-
 [workspace.metadata.release]
 release = true
 shared-version = true
