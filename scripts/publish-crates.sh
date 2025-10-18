@@ -140,6 +140,12 @@ for name, rel in targets:
             text = new_text
             changed = True
 
+publish_pattern = re.compile(r'(publish\s*=\s*)false(\s*#.*)?')
+new_text, count = publish_pattern.subn(lambda m: f"{m.group(1)}true{m.group(2) or ''}", text)
+if count:
+    text = new_text
+    changed = True
+
 if changed:
     path.write_text(text)
 PY
@@ -153,6 +159,12 @@ convert_dependencies() {
     # List of crates that need dependency conversion
     local crates_to_convert=(
         "mockforge-data"
+        "mockforge-observability"
+        "mockforge-tracing"
+        "mockforge-recorder"
+        "mockforge-plugin-registry"
+        "mockforge-reporting"
+        "mockforge-chaos"
         "mockforge-http"
         "mockforge-grpc"
         "mockforge-ws"
@@ -181,6 +193,12 @@ restore_dependencies() {
 
     local crates_to_restore=(
         "mockforge-data"
+        "mockforge-observability"
+        "mockforge-tracing"
+        "mockforge-recorder"
+        "mockforge-plugin-registry"
+        "mockforge-reporting"
+        "mockforge-chaos"
         "mockforge-http"
         "mockforge-grpc"
         "mockforge-ws"
@@ -222,6 +240,12 @@ for name, rel in targets:
     if count:
         text = new_text
         changed = True
+
+publish_pattern = re.compile(r'(publish\s*=\s*)true(\s*#.*)?')
+new_text, count = publish_pattern.subn(lambda m: f"{m.group(1)}false{m.group(2) or ''}", text)
+if count:
+    text = new_text
+    changed = True
 
 if changed:
     path.write_text(text)
@@ -342,6 +366,31 @@ main() {
     # Convert dependencies for mockforge-plugin-sdk and publish it
     convert_crate_dependencies "mockforge-plugin-sdk"
     publish_crate "mockforge-plugin-sdk"
+    wait_for_processing
+
+    # Publish shared internal crates required by downstream crates
+    convert_crate_dependencies "mockforge-observability"
+    publish_crate "mockforge-observability"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-tracing"
+    publish_crate "mockforge-tracing"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-recorder"
+    publish_crate "mockforge-recorder"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-plugin-registry"
+    publish_crate "mockforge-plugin-registry"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-reporting"
+    publish_crate "mockforge-reporting"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-chaos"
+    publish_crate "mockforge-chaos"
     wait_for_processing
 
     # Phase 2: Publish remaining dependent crates
