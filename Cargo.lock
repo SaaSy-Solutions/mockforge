@@ -5306,7 +5306,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-jaeger",
  "opentelemetry-otlp",
- "opentelemetry-semantic-conventions",
+ "opentelemetry-semantic-conventions 0.31.0",
  "opentelemetry_sdk",
  "thiserror 1.0.69",
  "tokio",
@@ -5935,7 +5935,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "opentelemetry",
- "opentelemetry-semantic-conventions",
+ "opentelemetry-semantic-conventions 0.13.0",
  "opentelemetry_sdk",
  "thrift",
  "tokio",
@@ -5952,7 +5952,7 @@ dependencies = [
  "http 0.2.12",
  "opentelemetry",
  "opentelemetry-proto",
- "opentelemetry-semantic-conventions",
+ "opentelemetry-semantic-conventions 0.13.0",
  "opentelemetry_sdk",
  "prost 0.11.9",
  "thiserror 1.0.69",
@@ -5980,6 +5980,12 @@ checksum = "f5774f1ef1f982ef2a447f6ee04ec383981a3ab99c8e77a1a7b30182e65bbc84"
 dependencies = [
  "opentelemetry",
 ]
+
+[[package]]
+name = "opentelemetry-semantic-conventions"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e62e29dfe041afb8ed2a6c9737ab57db4907285d999ef8ad3a59092a36bdc846"
 
 [[package]]
 name = "opentelemetry_sdk"
