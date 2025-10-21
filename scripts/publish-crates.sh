@@ -178,6 +178,8 @@ convert_dependencies() {
         "mockforge-plugin-loader"
         "mockforge-k8s-operator"
         "mockforge-registry-server"
+        "mockforge-ui"
+        "mockforge-cli"
     )
 
     for crate in "${crates_to_convert[@]}"; do
@@ -212,6 +214,8 @@ restore_dependencies() {
         "mockforge-plugin-loader"
         "mockforge-k8s-operator"
         "mockforge-registry-server"
+        "mockforge-ui"
+        "mockforge-cli"
     )
 
     for crate in "${crates_to_restore[@]}"; do
@@ -449,6 +453,15 @@ main() {
 
     convert_crate_dependencies "mockforge-registry-server"
     publish_crate "mockforge-registry-server"
+    wait_for_processing
+
+    # CLI binary (needs mockforge-ui published first)
+    convert_crate_dependencies "mockforge-ui"
+    publish_crate "mockforge-ui"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-cli"
+    publish_crate "mockforge-cli"
     wait_for_processing
 
     print_success "All crates published successfully!"

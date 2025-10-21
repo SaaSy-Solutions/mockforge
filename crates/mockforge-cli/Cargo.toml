@@ -8,7 +8,7 @@ description = "CLI interface for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Binary crate, not meant for library consumption
+publish = true  # Binary crate available via cargo install
 
 [[bin]]
 name = "mockforge"
