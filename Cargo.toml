@@ -19,11 +19,13 @@ members = [
     "crates/mockforge-reporting",
     "crates/mockforge-chaos",
     "crates/mockforge-bench",
+    "crates/mockforge-test",
     "crates/mockforge-smtp",
     "crates/mockforge-ftp",
     "crates/mockforge-amqp",
     "crates/mockforge-kafka",
     "examples/plugins/response-graphql",
+    "examples/test-integration",
     "test_openapi_demo"
 ]
 exclude = [

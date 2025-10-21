@@ -5298,6 +5298,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-test"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "async-trait",
+ "futures",
+ "mockforge-core",
+ "mockforge-data",
+ "mockforge-http",
+ "openapiv3",
+ "parking_lot",
+ "predicates",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "which",
+]
+
+[[package]]
+name = "mockforge-test-integration-examples"
+version = "0.1.0"
+dependencies = [
+ "mockforge-test",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "which",
+]
+
+[[package]]
 name = "mockforge-tracing"
 version = "0.1.2"
 dependencies = [
