@@ -2,11 +2,15 @@
 
 ### Added
 
-- Nothing yet.
+- Kubernetes-style health endpoint aliases (`/healthz`, `/readyz`, `/livez`, `/startupz`)
+- Dashboard shortcut endpoint (`/_mf`) as alias for `/__mockforge/dashboard`
+- Comprehensive health endpoints documentation (`docs/HEALTH_ENDPOINTS.md`)
+- Roadmap completion summary documentation (`ROADMAP_COMPLETION_SUMMARY.md`)
 
 ### Changed
 
-- Nothing yet.
+- Enhanced health check endpoints with both RESTful and Kubernetes naming conventions
+- Improved documentation coverage for health and monitoring features
 
 ### Deprecated
 
