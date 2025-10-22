@@ -1,0 +1,361 @@
+asyncapi: 2.6.0
+info:
+  title: IoT Sensor Network API
+  version: 1.0.0
+  description: |
+    AsyncAPI specification for an IoT sensor network that streams
+    temperature, humidity, and motion sensor data via MQTT.
+  contact:
+    name: API Support
+    email: support@iot-sensors.example.com
+
+servers:
+  production:
+    url: mqtt://broker.iot-sensors.example.com:1883
+    protocol: mqtt
+    description: Production MQTT broker
+  development:
+    url: mqtt://localhost:1883
+    protocol: mqtt
+    description: Development MQTT broker
+
+channels:
+  sensors/temperature:
+    description: Temperature sensor data stream
+    publish:
+      summary: Publish temperature readings
+      message:
+        name: TemperatureReading
+        title: Temperature Reading
+        payload:
+          type: object
+          required:
+            - sensorId
+            - temperature
+            - unit
+            - timestamp
+          properties:
+            sensorId:
+              type: string
+              description: Unique identifier for the sensor
+              example: temp-sensor-001
+            temperature:
+              type: number
+              format: float
+              description: Temperature reading
+              minimum: -50
+              maximum: 150
+              example: 22.5
+            unit:
+              type: string
+              description: Temperature unit
+              enum:
+                - celsius
+                - fahrenheit
+              example: celsius
+            location:
+              type: object
+              description: Geographic location of the sensor
+              properties:
+                latitude:
+                  type: number
+                  format: double
+                  example: 37.7749
+                longitude:
+                  type: number
+                  format: double
+                  example: -122.4194
+                building:
+                  type: string
+                  example: Building A
+                floor:
+                  type: integer
+                  example: 2
+                room:
+                  type: string
+                  example: Room 201
+            timestamp:
+              type: string
+              format: date-time
+              description: Timestamp of the reading
+              example: '2025-10-22T12:00:00Z'
+            batteryLevel:
+              type: integer
+              description: Battery level percentage
+              minimum: 0
+              maximum: 100
+              example: 85
+        examples:
+          - payload:
+              sensorId: temp-sensor-001
+              temperature: 22.5
+              unit: celsius
+              location:
+                latitude: 37.7749
+                longitude: -122.4194
+                building: Building A
+                floor: 2
+                room: Room 201
+              timestamp: '2025-10-22T12:00:00Z'
+              batteryLevel: 85
+
+  sensors/humidity:
+    description: Humidity sensor data stream
+    publish:
+      summary: Publish humidity readings
+      message:
+        name: HumidityReading
+        title: Humidity Reading
+        payload:
+          type: object
+          required:
+            - sensorId
+            - humidity
+            - timestamp
+          properties:
+            sensorId:
+              type: string
+              description: Unique identifier for the sensor
+              example: humid-sensor-001
+            humidity:
+              type: number
+              format: float
+              description: Relative humidity percentage
+              minimum: 0
+              maximum: 100
+              example: 65.2
+            temperature:
+              type: number
+              format: float
+              description: Associated temperature reading
+              example: 22.5
+            location:
+              type: object
+              description: Geographic location of the sensor
+              properties:
+                building:
+                  type: string
+                  example: Building A
+                floor:
+                  type: integer
+                  example: 2
+                room:
+                  type: string
+                  example: Room 201
+            timestamp:
+              type: string
+              format: date-time
+              description: Timestamp of the reading
+              example: '2025-10-22T12:00:00Z'
+            batteryLevel:
+              type: integer
+              description: Battery level percentage
+              minimum: 0
+              maximum: 100
+              example: 80
+        examples:
+          - payload:
+              sensorId: humid-sensor-001
+              humidity: 65.2
+              temperature: 22.5
+              location:
+                building: Building A
+                floor: 2
+                room: Room 201
+              timestamp: '2025-10-22T12:00:00Z'
+              batteryLevel: 80
+
+  sensors/motion:
+    description: Motion sensor event stream
+    publish:
+      summary: Publish motion detection events
+      message:
+        name: MotionEvent
+        title: Motion Detection Event
+        payload:
+          type: object
+          required:
+            - sensorId
+            - motionDetected
+            - timestamp
+          properties:
+            sensorId:
+              type: string
+              description: Unique identifier for the sensor
+              example: motion-sensor-001
+            motionDetected:
+              type: boolean
+              description: Whether motion was detected
+              example: true
+            confidence:
+              type: number
+              format: float
+              description: Confidence level of detection (0-1)
+              minimum: 0
+              maximum: 1
+              example: 0.95
+            location:
+              type: object
+              description: Geographic location of the sensor
+              properties:
+                building:
+                  type: string
+                  example: Building A
+                floor:
+                  type: integer
+                  example: 1
+                zone:
+                  type: string
+                  example: Entrance Hall
+            timestamp:
+              type: string
+              format: date-time
+              description: Timestamp of the event
+              example: '2025-10-22T12:00:00Z'
+            metadata:
+              type: object
+              description: Additional metadata
+              additionalProperties: true
+        examples:
+          - payload:
+              sensorId: motion-sensor-001
+              motionDetected: true
+              confidence: 0.95
+              location:
+                building: Building A
+                floor: 1
+                zone: Entrance Hall
+              timestamp: '2025-10-22T12:00:00Z'
+
+  sensors/control:
+    description: Sensor control commands
+    subscribe:
+      summary: Receive sensor control commands
+      message:
+        name: ControlCommand
+        title: Sensor Control Command
+        payload:
+          type: object
+          required:
+            - sensorId
+            - command
+          properties:
+            sensorId:
+              type: string
+              description: Target sensor identifier
+              example: temp-sensor-001
+            command:
+              type: string
+              description: Command to execute
+              enum:
+                - start
+                - stop
+                - reset
+                - calibrate
+                - set_interval
+              example: set_interval
+            parameters:
+              type: object
+              description: Command parameters
+              properties:
+                interval:
+                  type: integer
+                  description: Sampling interval in seconds
+                  minimum: 1
+                  maximum: 3600
+                  example: 60
+                threshold:
+                  type: number
+                  description: Alert threshold value
+                  example: 30.0
+            timestamp:
+              type: string
+              format: date-time
+              description: Command timestamp
+              example: '2025-10-22T12:00:00Z'
+        examples:
+          - payload:
+              sensorId: temp-sensor-001
+              command: set_interval
+              parameters:
+                interval: 60
+              timestamp: '2025-10-22T12:00:00Z'
+
+  sensors/alerts:
+    description: Sensor alert notifications
+    publish:
+      summary: Publish sensor alerts
+      message:
+        name: SensorAlert
+        title: Sensor Alert
+        payload:
+          type: object
+          required:
+            - sensorId
+            - alertType
+            - severity
+            - message
+            - timestamp
+          properties:
+            sensorId:
+              type: string
+              description: Sensor that triggered the alert
+              example: temp-sensor-001
+            alertType:
+              type: string
+              description: Type of alert
+              enum:
+                - threshold_exceeded
+                - low_battery
+                - connection_lost
+                - calibration_needed
+                - malfunction
+              example: threshold_exceeded
+            severity:
+              type: string
+              description: Alert severity level
+              enum:
+                - info
+                - warning
+                - critical
+              example: warning
+            message:
+              type: string
+              description: Human-readable alert message
+              example: Temperature exceeded threshold of 30°C
+            currentValue:
+              type: number
+              description: Current sensor reading
+              example: 32.5
+            threshold:
+              type: number
+              description: Configured threshold
+              example: 30.0
+            location:
+              type: object
+              description: Sensor location
+              properties:
+                building:
+                  type: string
+                floor:
+                  type: integer
+                room:
+                  type: string
+            timestamp:
+              type: string
+              format: date-time
+              description: Alert timestamp
+              example: '2025-10-22T12:00:00Z'
+        examples:
+          - payload:
+              sensorId: temp-sensor-001
+              alertType: threshold_exceeded
+              severity: warning
+              message: Temperature exceeded threshold of 30°C
+              currentValue: 32.5
+              threshold: 30.0
+              location:
+                building: Building A
+                floor: 2
+                room: Room 201
+              timestamp: '2025-10-22T12:00:00Z'

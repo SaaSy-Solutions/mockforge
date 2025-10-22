@@ -3,7 +3,7 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{delete, get, post, put},
@@ -541,6 +541,19 @@ pub fn management_router_with_ui_builder(
 
     // Nest UI Builder under /ui-builder
     management.nest("/ui-builder", ui_builder)
+}
+
+/// Build management router with spec import API
+pub fn management_router_with_spec_import(state: ManagementState) -> Router {
+    use crate::spec_import::{spec_import_router, SpecImportState};
+
+    // Create base management router
+    let management = management_router(state);
+
+    // Merge with spec import router
+    Router::new()
+        .merge(management)
+        .merge(spec_import_router(SpecImportState::new()))
 }
 
 #[cfg(test)]

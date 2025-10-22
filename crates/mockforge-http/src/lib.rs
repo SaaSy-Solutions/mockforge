@@ -177,6 +177,7 @@ pub mod quick_mock;
 pub mod rag_ai_generator;
 pub mod replay_listing;
 pub mod request_logging;
+pub mod spec_import;
 pub mod sse;
 pub mod token_response;
 pub mod ui_builder;

@@ -15,6 +15,7 @@ use tokio::net::TcpListener;
 mod amqp_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
+mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
 #[cfg(feature = "mqtt")]
@@ -571,6 +572,19 @@ enum Commands {
     Config {
         #[command(subcommand)]
         config_command: ConfigCommands,
+    },
+
+    /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
+    ///
+    /// Examples:
+    ///   mockforge import openapi ./specs/api.yaml
+    ///   mockforge import openapi ./specs/api.json --output mocks.json --verbose
+    ///   mockforge import asyncapi ./specs/events.yaml --protocol mqtt
+    ///   mockforge import coverage ./specs/api.yaml
+    #[command(verbatim_doc_comment)]
+    Import {
+        #[command(subcommand)]
+        import_command: import_commands::ImportCommands,
     },
 
     /// Test AI-powered features
@@ -1470,6 +1484,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
+        }
+        Commands::Import { import_command } => {
+            import_commands::handle_import_command(import_command).await?;
         }
         Commands::TestAi { ai_command } => {
             handle_test_ai(ai_command).await?;
