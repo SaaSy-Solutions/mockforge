@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT w.id, w.name, w.description, w.owner_id, w.config, w.version, w.created_at, w.updated_at, w.is_archived as \"is_archived: bool\"\n            FROM workspaces w\n            INNER JOIN workspace_members m ON w.id = m.workspace_id\n            WHERE m.user_id = ? AND w.is_archived = FALSE\n            ORDER BY w.updated_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "owner_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "config",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "version",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_archived: bool",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "97a3446f6f4d43dc127e5698080a11474ab948a17ff9ce1c57cf3435c0499ef8"
+}

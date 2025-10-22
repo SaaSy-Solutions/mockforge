@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, workspace_id, author_id, message, parent_id, version, snapshot, changes, created_at\n            FROM commits\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "author_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "message",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "parent_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "version",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "snapshot",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "changes",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "af3981e96affc0ecb97b3199c2f54f20e0f143f0a95babfc65fb0c5f66b3430b"
+}
