@@ -4676,7 +4676,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4695,7 +4695,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "colored 2.2.0",
@@ -4719,7 +4719,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4754,7 +4754,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4805,7 +4805,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -4860,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4885,7 +4885,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4911,7 +4911,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -4942,7 +4942,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum 0.8.6",
  "base64 0.22.1",
@@ -4982,7 +4982,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5038,7 +5038,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5060,7 +5060,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5082,7 +5082,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum 0.8.6",
  "once_cell",
@@ -5100,7 +5100,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5122,7 +5122,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5149,7 +5149,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5187,7 +5187,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -5204,7 +5204,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-response-graphql"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5223,7 +5223,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5248,7 +5248,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum 0.8.6",
@@ -5275,7 +5275,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5295,7 +5295,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5319,7 +5319,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -5346,7 +5346,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-integration-examples"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "mockforge-test",
  "tokio",
@@ -5357,7 +5357,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum 0.8.6",
  "http 1.3.1",
@@ -5376,7 +5376,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum 0.8.6",
@@ -5407,7 +5407,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "axum 0.8.6",
@@ -8950,7 +8950,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test-openapi"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "mockforge-core",
  "serde_json",
