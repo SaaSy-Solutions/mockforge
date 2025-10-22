@@ -2,15 +2,11 @@
 
 ### Added
 
-- Kubernetes-style health endpoint aliases (`/healthz`, `/readyz`, `/livez`, `/startupz`)
-- Dashboard shortcut endpoint (`/_mf`) as alias for `/__mockforge/dashboard`
-- Comprehensive health endpoints documentation (`docs/HEALTH_ENDPOINTS.md`)
-- Roadmap completion summary documentation (`ROADMAP_COMPLETION_SUMMARY.md`)
+- Nothing yet.
 
 ### Changed
 
-- Enhanced health check endpoints with both RESTful and Kubernetes naming conventions
-- Improved documentation coverage for health and monitoring features
+- Nothing yet.
 
 ### Deprecated
 
@@ -27,6 +23,23 @@
 ### Security
 
 - Nothing yet.
+
+## [0.1.3] - 2025-10-22
+
+### Changes
+
+- docs: update CHANGELOG for 0.1.3 release
+- docs: add roadmap completion summary
+- feat: add Kubernetes-style health endpoint aliases and dashboard shortcut
+- feat: add unified config & profiles with multi-format support
+- feat: add capture scrubbing and deterministic replay
+- feat: add native GraphQL operation handlers with advanced features
+- feat: add programmable WebSocket handlers
+- feat: add HTTP scenario switching for OpenAPI response examples
+- feat: add mockforge-test crate and integration testing examples
+- build: enable publishing for mockforge-ui and mockforge-cli
+- build: extend publish script for internal crates
+- build: parameterize publish script with workspace version
 
 ## [0.1.2] - 2025-10-17
 
