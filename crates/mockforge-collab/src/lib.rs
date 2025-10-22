@@ -63,10 +63,12 @@ pub mod conflict;
 pub mod error;
 pub mod events;
 pub mod history;
+pub mod middleware;
 pub mod models;
 pub mod permissions;
 pub mod server;
 pub mod sync;
+pub mod user;
 pub mod websocket;
 pub mod workspace;
 

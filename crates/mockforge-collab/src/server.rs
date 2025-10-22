@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::events::EventBus;
 use crate::history::History;
 use crate::sync::SyncEngine;
+use crate::user::UserService;
 use crate::websocket::{ws_handler, WsState};
 use crate::workspace::WorkspaceService;
 use axum::routing::get;
@@ -22,6 +23,8 @@ pub struct CollabServer {
     db: Pool<Sqlite>,
     /// Authentication service
     auth: Arc<AuthService>,
+    /// User service
+    user: Arc<UserService>,
     /// Workspace service
     workspace: Arc<WorkspaceService>,
     /// Event bus
@@ -43,6 +46,7 @@ impl CollabServer {
 
         // Create services
         let auth = Arc::new(AuthService::new(config.jwt_secret.clone()));
+        let user = Arc::new(UserService::new(db.clone(), auth.clone()));
         let workspace = Arc::new(WorkspaceService::new(db.clone()));
         let event_bus = Arc::new(EventBus::new(config.event_bus_capacity));
         let sync = Arc::new(SyncEngine::new(event_bus.clone()));
@@ -54,6 +58,7 @@ impl CollabServer {
             config,
             db,
             auth,
+            user,
             workspace,
             event_bus,
             sync,
@@ -68,6 +73,7 @@ impl CollabServer {
         // Create API router
         let api_state = ApiState {
             auth: self.auth.clone(),
+            user: self.user.clone(),
             workspace: self.workspace.clone(),
         };
         let api_router = create_api_router(api_state);
