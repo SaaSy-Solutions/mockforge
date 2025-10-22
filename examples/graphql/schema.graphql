@@ -1,0 +1,164 @@
+# E-commerce GraphQL Schema Example
+# This schema demonstrates MockForge's GraphQL handler capabilities
+
+type Query {
+  # Get a single user by ID
+  user(id: ID!): User
+
+  # List users with optional pagination
+  users(limit: Int = 10, offset: Int = 0): [User!]!
+
+  # Get a single product by ID
+  product(id: ID!): Product
+
+  # List products with filtering
+  products(
+    category: String
+    minPrice: Float
+    maxPrice: Float
+    limit: Int = 20
+  ): [Product!]!
+
+  # Get all orders for a user
+  orders(userId: ID!): [Order!]!
+
+  # Search products by keyword
+  searchProducts(query: String!): [Product!]!
+}
+
+type Mutation {
+  # Create a new user
+  createUser(input: CreateUserInput!): User!
+
+  # Update existing user
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+
+  # Delete a user
+  deleteUser(id: ID!): DeleteResult!
+
+  # Add product to cart
+  addToCart(userId: ID!, productId: ID!, quantity: Int!): Cart!
+
+  # Create an order
+  createOrder(input: CreateOrderInput!): Order!
+}
+
+type Subscription {
+  # Subscribe to order status updates
+  orderStatusChanged(orderId: ID!): Order!
+
+  # Subscribe to new products
+  productAdded(category: String): Product!
+}
+
+# User type
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  role: UserRole!
+  createdAt: String!
+  cart: Cart
+  orders: [Order!]!
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  GUEST
+}
+
+# Product type
+type Product {
+  id: ID!
+  name: String!
+  description: String!
+  price: Float!
+  category: String!
+  inStock: Boolean!
+  imageUrl: String
+  reviews: [Review!]!
+  averageRating: Float
+}
+
+# Review type
+type Review {
+  id: ID!
+  userId: ID!
+  user: User!
+  rating: Int!
+  comment: String
+  createdAt: String!
+}
+
+# Cart type
+type Cart {
+  id: ID!
+  userId: ID!
+  items: [CartItem!]!
+  total: Float!
+}
+
+type CartItem {
+  id: ID!
+  product: Product!
+  quantity: Int!
+  subtotal: Float!
+}
+
+# Order type
+type Order {
+  id: ID!
+  userId: ID!
+  user: User!
+  items: [OrderItem!]!
+  total: Float!
+  status: OrderStatus!
+  createdAt: String!
+  updatedAt: String!
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+type OrderItem {
+  id: ID!
+  product: Product!
+  quantity: Int!
+  price: Float!
+}
+
+# Input types
+input CreateUserInput {
+  name: String!
+  email: String!
+  password: String!
+  role: UserRole = USER
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+  password: String
+}
+
+input CreateOrderInput {
+  userId: ID!
+  items: [OrderItemInput!]!
+}
+
+input OrderItemInput {
+  productId: ID!
+  quantity: Int!
+}
+
+# Response types
+type DeleteResult {
+  success: Boolean!
+  message: String
+}

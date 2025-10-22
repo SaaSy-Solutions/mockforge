@@ -281,6 +281,18 @@ enum Commands {
         #[arg(long, help_heading = "Server Configuration")]
         ws_replay_file: Option<PathBuf>,
 
+        /// GraphQL schema file (.graphql or .gql)
+        #[arg(long, help_heading = "Server Configuration")]
+        graphql: Option<PathBuf>,
+
+        /// GraphQL server port (defaults to config or 4000)
+        #[arg(long, help_heading = "Server Ports")]
+        graphql_port: Option<u16>,
+
+        /// GraphQL upstream server URL for passthrough
+        #[arg(long, help_heading = "Server Configuration")]
+        graphql_upstream: Option<String>,
+
         /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
         #[arg(long, help_heading = "Traffic Shaping")]
         traffic_shaping: bool,
@@ -1256,6 +1268,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             bulkhead_queue_timeout_ms: _,
             spec,
             ws_replay_file,
+            graphql,
+            graphql_port,
+            graphql_upstream,
             traffic_shaping,
             bandwidth_limit,
             burst_size,
@@ -1316,6 +1331,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 chaos_packet_loss,
                 spec,
                 ws_replay_file,
+                graphql,
+                graphql_port,
+                graphql_upstream,
                 traffic_shaping,
                 bandwidth_limit,
                 burst_size,
@@ -1550,6 +1568,9 @@ struct ServeArgs {
     chaos_packet_loss: Option<f64>,
     spec: Option<PathBuf>,
     ws_replay_file: Option<PathBuf>,
+    graphql: Option<PathBuf>,
+    graphql_port: Option<u16>,
+    graphql_upstream: Option<String>,
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
@@ -1637,6 +1658,17 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     }
     if let Some(replay_path) = &serve_args.ws_replay_file {
         config.websocket.replay_file = Some(replay_path.to_string_lossy().to_string());
+    }
+
+    // GraphQL configuration
+    if let Some(graphql_port) = serve_args.graphql_port {
+        config.graphql.port = graphql_port;
+    }
+    if let Some(schema_path) = &serve_args.graphql {
+        config.graphql.schema_path = Some(schema_path.to_string_lossy().to_string());
+    }
+    if let Some(upstream_url) = &serve_args.graphql_upstream {
+        config.graphql.upstream_url = Some(upstream_url.clone());
     }
 
     // gRPC configuration
@@ -1951,6 +1983,9 @@ async fn handle_serve(
     chaos_packet_loss: Option<f64>,
     spec: Option<PathBuf>,
     ws_replay_file: Option<PathBuf>,
+    graphql: Option<PathBuf>,
+    graphql_port: Option<u16>,
+    graphql_upstream: Option<String>,
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
@@ -2026,6 +2061,9 @@ async fn handle_serve(
         chaos_packet_loss,
         spec,
         ws_replay_file,
+        graphql,
+        graphql_port,
+        graphql_upstream,
         traffic_shaping,
         bandwidth_limit,
         burst_size,

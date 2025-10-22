@@ -186,6 +186,8 @@ pub struct ServerConfig {
     pub http: HttpConfig,
     /// WebSocket server configuration
     pub websocket: WebSocketConfig,
+    /// GraphQL server configuration
+    pub graphql: GraphQLConfig,
     /// gRPC server configuration
     pub grpc: GrpcConfig,
     /// MQTT server configuration
@@ -366,6 +368,43 @@ impl Default for GrpcConfig {
             host: "0.0.0.0".to_string(),
             proto_dir: None,
             tls: None,
+        }
+    }
+}
+
+/// GraphQL server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GraphQLConfig {
+    /// Enable GraphQL server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// GraphQL schema file path (.graphql or .gql)
+    pub schema_path: Option<String>,
+    /// Handlers directory for custom resolvers
+    pub handlers_dir: Option<String>,
+    /// Enable GraphQL Playground UI
+    pub playground_enabled: bool,
+    /// Upstream GraphQL server URL for passthrough
+    pub upstream_url: Option<String>,
+    /// Enable introspection queries
+    pub introspection_enabled: bool,
+}
+
+impl Default for GraphQLConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            port: 4000,
+            host: "0.0.0.0".to_string(),
+            schema_path: None,
+            handlers_dir: None,
+            playground_enabled: true,
+            upstream_url: None,
+            introspection_enabled: true,
         }
     }
 }
