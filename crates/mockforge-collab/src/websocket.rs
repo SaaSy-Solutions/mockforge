@@ -54,7 +54,7 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
                             let _ = sender.send(Message::Text(
                                 serde_json::to_string(&SyncMessage::Error {
                                     message: e.to_string(),
-                                }).unwrap()
+                                }).unwrap().into()
                             )).await;
                         }
                     }
@@ -85,7 +85,7 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
                         if subscriptions.contains(&change_event.workspace_id) {
                             let msg = SyncMessage::Change { event: change_event };
                             if let Ok(json) = serde_json::to_string(&msg) {
-                                let _ = sender.send(Message::Text(json)).await;
+                                let _ = sender.send(Message::Text(json.into())).await;
                             }
                         }
                     }
@@ -139,7 +139,7 @@ async fn handle_client_message(
                 };
                 let json = serde_json::to_string(&response)?;
                 sender
-                    .send(Message::Text(json))
+                    .send(Message::Text(json.into()))
                     .await
                     .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
             }
@@ -166,7 +166,7 @@ async fn handle_client_message(
                     };
                     let json = serde_json::to_string(&response)?;
                     sender
-                        .send(Message::Text(json))
+                        .send(Message::Text(json.into()))
                         .await
                         .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
                 }
@@ -177,7 +177,7 @@ async fn handle_client_message(
             let pong = SyncMessage::Pong;
             let json = serde_json::to_string(&pong)?;
             sender
-                .send(Message::Text(json))
+                .send(Message::Text(json.into()))
                 .await
                 .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
         }

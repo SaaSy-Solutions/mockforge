@@ -40,10 +40,7 @@ impl TestContext {
             .expect("Failed to create database pool");
 
         // Run migrations
-        sqlx::migrate!("./migrations")
-            .run(&db)
-            .await
-            .expect("Failed to run migrations");
+        sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
 
         // Create services
         let auth = Arc::new(AuthService::new("test-secret-key".to_string()));
@@ -75,18 +72,11 @@ impl TestContext {
     pub async fn create_test_user(&self, username: &str, email: &str) -> (User, String) {
         let user = self
             .user
-            .create_user(
-                username.to_string(),
-                email.to_string(),
-                "password123".to_string(),
-            )
+            .create_user(username.to_string(), email.to_string(), "password123".to_string())
             .await
             .expect("Failed to create test user");
 
-        let token = self
-            .auth
-            .generate_token(&user)
-            .expect("Failed to generate token");
+        let token = self.auth.generate_token(&user).expect("Failed to generate token");
 
         (user, token.access_token)
     }

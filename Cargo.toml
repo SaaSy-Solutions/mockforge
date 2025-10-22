@@ -28,7 +28,7 @@ members = [
     "examples/plugins/response-graphql",
     "examples/test-integration",
     "test_openapi_demo"
-]
+, "crates/mockforge-analytics"]
 exclude = [
     "crates/mockforge-registry-server",
     "temp-publish"

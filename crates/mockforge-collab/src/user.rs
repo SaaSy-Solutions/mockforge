@@ -191,10 +191,11 @@ impl UserService {
         let new_hash = self.auth.hash_password(new_password)?;
 
         // Update password
+        let now = chrono::Utc::now();
         sqlx::query!(
             r#"UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?"#,
             new_hash,
-            chrono::Utc::now(),
+            now,
             user_id
         )
         .execute(&self.db)
@@ -205,9 +206,10 @@ impl UserService {
 
     /// Deactivate user account
     pub async fn deactivate_user(&self, user_id: Uuid) -> Result<()> {
+        let now = chrono::Utc::now();
         sqlx::query!(
             r#"UPDATE users SET is_active = FALSE, updated_at = ? WHERE id = ?"#,
-            chrono::Utc::now(),
+            now,
             user_id
         )
         .execute(&self.db)

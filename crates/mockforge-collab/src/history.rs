@@ -26,7 +26,7 @@ pub struct Commit {
     /// Changes made in this commit (diff)
     pub changes: serde_json::Value,
     /// Timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl Commit {
@@ -70,7 +70,7 @@ pub struct Snapshot {
     /// Created by
     pub created_by: Uuid,
     /// Created timestamp
-    pub created_at: DateTime<Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl Snapshot {
@@ -145,7 +145,16 @@ impl VersionControl {
         sqlx::query_as!(
             Commit,
             r#"
-            SELECT id, workspace_id, author_id, message, parent_id, version, snapshot, changes, created_at
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                author_id as "author_id: Uuid",
+                message,
+                parent_id as "parent_id: Uuid",
+                version,
+                snapshot,
+                changes,
+                created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM commits
             WHERE id = ?
             "#,
@@ -163,7 +172,16 @@ impl VersionControl {
         let commits = sqlx::query_as!(
             Commit,
             r#"
-            SELECT id, workspace_id, author_id, message, parent_id, version, snapshot, changes, created_at
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                author_id as "author_id: Uuid",
+                message,
+                parent_id as "parent_id: Uuid",
+                version,
+                snapshot,
+                changes,
+                created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM commits
             WHERE workspace_id = ?
             ORDER BY created_at DESC
@@ -183,7 +201,16 @@ impl VersionControl {
         let commit = sqlx::query_as!(
             Commit,
             r#"
-            SELECT id, workspace_id, author_id, message, parent_id, version, snapshot, changes, created_at
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                author_id as "author_id: Uuid",
+                message,
+                parent_id as "parent_id: Uuid",
+                version,
+                snapshot,
+                changes,
+                created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM commits
             WHERE workspace_id = ?
             ORDER BY created_at DESC
@@ -235,7 +262,14 @@ impl VersionControl {
         sqlx::query_as!(
             Snapshot,
             r#"
-            SELECT id, workspace_id, name, description, commit_id, created_by, created_at
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                name,
+                description,
+                commit_id as "commit_id: Uuid",
+                created_by as "created_by: Uuid",
+                created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM snapshots
             WHERE workspace_id = ? AND name = ?
             "#,
@@ -252,7 +286,14 @@ impl VersionControl {
         let snapshots = sqlx::query_as!(
             Snapshot,
             r#"
-            SELECT id, workspace_id, name, description, commit_id, created_by, created_at
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                name,
+                description,
+                commit_id as "commit_id: Uuid",
+                created_by as "created_by: Uuid",
+                created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM snapshots
             WHERE workspace_id = ?
             ORDER BY created_at DESC

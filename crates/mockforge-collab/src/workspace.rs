@@ -88,7 +88,16 @@ impl WorkspaceService {
         let workspace = sqlx::query_as!(
             TeamWorkspace,
             r#"
-            SELECT id, name, description, owner_id, config, version, created_at, updated_at, is_archived as "is_archived: bool"
+            SELECT
+                id as "id: Uuid",
+                name,
+                description,
+                owner_id as "owner_id: Uuid",
+                config,
+                version,
+                created_at as "created_at: chrono::DateTime<chrono::Utc>",
+                updated_at as "updated_at: chrono::DateTime<chrono::Utc>",
+                is_archived as "is_archived: bool"
             FROM workspaces
             WHERE id = ?
             "#,
@@ -161,13 +170,14 @@ impl WorkspaceService {
         let member = self.get_member(workspace_id, user_id).await?;
         PermissionChecker::check(member.role, Permission::WorkspaceDelete)?;
 
+        let now = Utc::now();
         sqlx::query!(
             r#"
             UPDATE workspaces
             SET is_archived = TRUE, updated_at = ?
             WHERE id = ?
             "#,
-            Utc::now(),
+            now,
             workspace_id
         )
         .execute(&self.db)
@@ -284,7 +294,13 @@ impl WorkspaceService {
         sqlx::query_as!(
             WorkspaceMember,
             r#"
-            SELECT id, workspace_id, user_id, role as "role: UserRole", joined_at, last_activity
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                user_id as "user_id: Uuid",
+                role as "role: UserRole",
+                joined_at as "joined_at: chrono::DateTime<chrono::Utc>",
+                last_activity as "last_activity: chrono::DateTime<chrono::Utc>"
             FROM workspace_members
             WHERE workspace_id = ? AND user_id = ?
             "#,
@@ -301,7 +317,13 @@ impl WorkspaceService {
         let members = sqlx::query_as!(
             WorkspaceMember,
             r#"
-            SELECT id, workspace_id, user_id, role as "role: UserRole", joined_at, last_activity
+            SELECT
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
+                user_id as "user_id: Uuid",
+                role as "role: UserRole",
+                joined_at as "joined_at: chrono::DateTime<chrono::Utc>",
+                last_activity as "last_activity: chrono::DateTime<chrono::Utc>"
             FROM workspace_members
             WHERE workspace_id = ?
             ORDER BY joined_at
@@ -319,7 +341,16 @@ impl WorkspaceService {
         let workspaces = sqlx::query_as!(
             TeamWorkspace,
             r#"
-            SELECT w.id, w.name, w.description, w.owner_id, w.config, w.version, w.created_at, w.updated_at, w.is_archived as "is_archived: bool"
+            SELECT
+                w.id as "id: Uuid",
+                w.name,
+                w.description,
+                w.owner_id as "owner_id: Uuid",
+                w.config,
+                w.version,
+                w.created_at as "created_at: chrono::DateTime<chrono::Utc>",
+                w.updated_at as "updated_at: chrono::DateTime<chrono::Utc>",
+                w.is_archived as "is_archived: bool"
             FROM workspaces w
             INNER JOIN workspace_members m ON w.id = m.workspace_id
             WHERE m.user_id = ? AND w.is_archived = FALSE

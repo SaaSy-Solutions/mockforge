@@ -42,9 +42,7 @@ async fn test_create_commit_success() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["message"], "Initial commit");
@@ -190,9 +188,7 @@ async fn test_list_commits_with_pagination() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert!(json["commits"].is_array());
@@ -238,9 +234,7 @@ async fn test_get_commit() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["message"], "Test commit");
@@ -324,9 +318,7 @@ async fn test_restore_to_commit() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["workspace_id"], workspace_id.to_string());
@@ -348,15 +340,7 @@ async fn test_restore_viewer_forbidden() {
     // Create a commit as owner
     let commit = ctx
         .history
-        .create_commit(
-            workspace_id,
-            owner.id,
-            "Test".to_string(),
-            None,
-            1,
-            json!({}),
-            json!({}),
-        )
+        .create_commit(workspace_id, owner.id, "Test".to_string(), None, 1, json!({}), json!({}))
         .await
         .unwrap();
 
@@ -423,9 +407,7 @@ async fn test_create_snapshot_success() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["name"], "v1.0.0");
@@ -558,9 +540,7 @@ async fn test_list_snapshots() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert!(json.is_array());
@@ -606,9 +586,7 @@ async fn test_get_snapshot_by_name() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["name"], "v1.0.0");
@@ -643,9 +621,7 @@ async fn test_commit_version_increment() {
         .await
         .unwrap();
 
-    let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body1 = axum::body::to_bytes(response1.into_body(), usize::MAX).await.unwrap();
     let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
     assert_eq!(json1["version"], 1);
 
@@ -671,9 +647,7 @@ async fn test_commit_version_increment() {
         .await
         .unwrap();
 
-    let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX).await.unwrap();
     let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
     assert_eq!(json2["version"], 2);
     assert_eq!(json2["parent_id"], json1["id"]);

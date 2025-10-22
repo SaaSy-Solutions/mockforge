@@ -43,6 +43,7 @@ mockforge-ws = { version = "0.1.3", path = "../mockforge-ws" }
 mockforge-grpc = { version = "0.1.3", path = "../mockforge-grpc" }
 mockforge-plugin-core = { version = "0.1.3", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { version = "0.1.3", path = "../mockforge-plugin-loader" }
+mockforge-analytics = { version = "0.1.3", path = "../mockforge-analytics" }
 
 [build-dependencies]
 serde = { workspace = true }
