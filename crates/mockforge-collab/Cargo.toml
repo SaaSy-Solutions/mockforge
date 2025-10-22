@@ -67,6 +67,9 @@ similar = "2.6"
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.13"
+tower = { workspace = true, features = ["util"] }
+hyper = { workspace = true, features = ["client", "http1"] }
+axum-test = "15.3"
 
 [features]
 default = ["sqlite"]
