@@ -50,16 +50,18 @@
 //! }
 //! ```
 
+pub mod admin;
 pub mod builder;
 pub mod error;
 pub mod ffi;
 pub mod server;
 pub mod stub;
 
+pub use admin::{AdminClient, MockConfig as AdminMockConfig, MockConfigBuilder, MockList, MockResponse as AdminMockResponse, ServerConfig as AdminServerConfig, ServerStats};
 pub use builder::MockServerBuilder;
 pub use error::{Error, Result};
 pub use server::MockServer;
-pub use stub::{ResponseStub, StubBuilder};
+pub use stub::{DynamicStub, DynamicResponseFn, RequestContext, ResponseStub, StubBuilder};
 
 // Re-export commonly used types from mockforge-core
 pub use mockforge_core::{

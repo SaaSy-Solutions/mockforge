@@ -3,6 +3,7 @@
 use crate::server::MockServer;
 use crate::{Error, Result};
 use mockforge_core::{Config, FailureConfig, LatencyProfile, ProxyConfig, ServerConfig};
+use std::net::TcpListener;
 use std::path::PathBuf;
 
 /// Builder for creating and configuring mock servers
@@ -16,6 +17,8 @@ pub struct MockServerBuilder {
     proxy_config: Option<ProxyConfig>,
     enable_admin: bool,
     admin_port: Option<u16>,
+    auto_port: bool,
+    port_range: Option<(u16, u16)>,
 }
 
 impl Default for MockServerBuilder {
@@ -37,12 +40,29 @@ impl MockServerBuilder {
             proxy_config: None,
             enable_admin: false,
             admin_port: None,
+            auto_port: false,
+            port_range: None,
         }
     }
 
     /// Set the HTTP port
     pub fn port(mut self, port: u16) -> Self {
         self.port = Some(port);
+        self.auto_port = false;
+        self
+    }
+
+    /// Automatically discover an available port
+    pub fn auto_port(mut self) -> Self {
+        self.auto_port = true;
+        self.port = None;
+        self
+    }
+
+    /// Set the port range for automatic port discovery
+    /// Default range is 30000-30100
+    pub fn port_range(mut self, start: u16, end: u16) -> Self {
+        self.port_range = Some((start, end));
         self
     }
 
@@ -105,10 +125,17 @@ impl MockServerBuilder {
             ServerConfig::default()
         };
 
-        // Apply builder settings
-        if let Some(port) = self.port {
+        // Apply port settings
+        if self.auto_port {
+            // Discover an available port
+            let (start, end) = self.port_range.unwrap_or((30000, 30100));
+            let port = find_available_port(start, end)?;
+            config.http.port = port;
+        } else if let Some(port) = self.port {
             config.http.port = port;
         }
+
+        // Apply other builder settings
         if let Some(host) = self.host {
             config.http.host = host;
         }
@@ -136,4 +163,48 @@ impl MockServerBuilder {
         // Create and start the server
         MockServer::from_config(config, core_config).await
     }
+}
+
+/// Check if a port is available by attempting to bind to it
+///
+/// Note: There is a small race condition (TOCTOU - Time Of Check, Time Of Use)
+/// between checking availability and the actual server binding. In practice,
+/// this is rarely an issue for test environments. For guaranteed port assignment,
+/// consider using `port(0)` to let the OS assign any available port.
+fn is_port_available(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+/// Find an available port in the specified range
+///
+/// Scans the port range and returns the first available port.
+/// Returns an error if no ports are available in the range.
+///
+/// # Arguments
+/// * `start` - Starting port number (inclusive)
+/// * `end` - Ending port number (inclusive)
+///
+/// # Errors
+/// Returns `Error::InvalidConfig` if start >= end
+/// Returns `Error::PortDiscoveryFailed` if no ports are available
+fn find_available_port(start: u16, end: u16) -> Result<u16> {
+    // Validate port range
+    if start >= end {
+        return Err(Error::InvalidConfig(format!(
+            "Invalid port range: start ({}) must be less than end ({})",
+            start, end
+        )));
+    }
+
+    // Try to find an available port
+    for port in start..=end {
+        if is_port_available(port) {
+            return Ok(port);
+        }
+    }
+
+    Err(Error::PortDiscoveryFailed(format!(
+        "No available ports found in range {}-{}",
+        start, end
+    )))
 }
