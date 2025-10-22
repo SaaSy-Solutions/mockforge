@@ -220,6 +220,69 @@ pub struct ServerConfig {
     /// Protocol enable/disable configuration
     #[serde(default)]
     pub protocols: ProtocolsConfig,
+    /// Named configuration profiles (dev, ci, demo, etc.)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub profiles: HashMap<String, ProfileConfig>,
+}
+
+/// Profile configuration - a partial ServerConfig that overrides base settings
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ProfileConfig {
+    /// HTTP server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpConfig>,
+    /// WebSocket server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub websocket: Option<WebSocketConfig>,
+    /// GraphQL server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graphql: Option<GraphQLConfig>,
+    /// gRPC server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grpc: Option<GrpcConfig>,
+    /// MQTT server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mqtt: Option<MqttConfig>,
+    /// SMTP server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smtp: Option<SmtpConfig>,
+    /// FTP server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ftp: Option<FtpConfig>,
+    /// Kafka server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kafka: Option<KafkaConfig>,
+    /// AMQP server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amqp: Option<AmqpConfig>,
+    /// Admin UI configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub admin: Option<AdminConfig>,
+    /// Request chaining configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chaining: Option<ChainingConfig>,
+    /// Core MockForge configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub core: Option<CoreConfig>,
+    /// Logging configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingConfig>,
+    /// Data generation configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<DataConfig>,
+    /// Observability configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observability: Option<ObservabilityConfig>,
+    /// Multi-tenant workspace configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multi_tenant: Option<crate::multi_tenant::MultiTenantConfig>,
+    /// Custom routes configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routes: Option<Vec<RouteConfig>>,
+    /// Protocol enable/disable configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<ProtocolsConfig>,
 }
 
 // Default is derived for ServerConfig
@@ -1271,6 +1334,203 @@ pub fn validate_config(config: &ServerConfig) -> Result<()> {
     Ok(())
 }
 
+/// Apply a profile to a base configuration
+pub fn apply_profile(mut base: ServerConfig, profile: ProfileConfig) -> ServerConfig {
+    // Macro to merge optional fields
+    macro_rules! merge_field {
+        ($field:ident) => {
+            if let Some(override_val) = profile.$field {
+                base.$field = override_val;
+            }
+        };
+    }
+
+    merge_field!(http);
+    merge_field!(websocket);
+    merge_field!(graphql);
+    merge_field!(grpc);
+    merge_field!(mqtt);
+    merge_field!(smtp);
+    merge_field!(ftp);
+    merge_field!(kafka);
+    merge_field!(amqp);
+    merge_field!(admin);
+    merge_field!(chaining);
+    merge_field!(core);
+    merge_field!(logging);
+    merge_field!(data);
+    merge_field!(observability);
+    merge_field!(multi_tenant);
+    merge_field!(routes);
+    merge_field!(protocols);
+
+    base
+}
+
+/// Load configuration with profile support
+pub async fn load_config_with_profile<P: AsRef<Path>>(
+    path: P,
+    profile_name: Option<&str>,
+) -> Result<ServerConfig> {
+    // Use load_config_auto to support all formats
+    let mut config = load_config_auto(&path).await?;
+
+    // Apply profile if specified
+    if let Some(profile) = profile_name {
+        if let Some(profile_config) = config.profiles.remove(profile) {
+            tracing::info!("Applying profile: {}", profile);
+            config = apply_profile(config, profile_config);
+        } else {
+            return Err(Error::generic(format!(
+                "Profile '{}' not found in configuration. Available profiles: {}",
+                profile,
+                config.profiles.keys().map(|k| k.as_str()).collect::<Vec<_>>().join(", ")
+            )));
+        }
+    }
+
+    // Clear profiles from final config to save memory
+    config.profiles.clear();
+
+    Ok(config)
+}
+
+/// Load configuration from TypeScript/JavaScript file
+pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
+    use rquickjs::{Context, Runtime};
+
+    let content = fs::read_to_string(&path)
+        .await
+        .map_err(|e| Error::generic(format!("Failed to read JS/TS config file: {}", e)))?;
+
+    // Create a JavaScript runtime
+    let runtime = Runtime::new()
+        .map_err(|e| Error::generic(format!("Failed to create JS runtime: {}", e)))?;
+    let context = Context::full(&runtime)
+        .map_err(|e| Error::generic(format!("Failed to create JS context: {}", e)))?;
+
+    context.with(|ctx| {
+        // For TypeScript files, we need to strip type annotations
+        // This is a simple approach - for production, consider using a proper TS compiler
+        let js_content = if path
+            .as_ref()
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|ext| ext == "ts")
+            .unwrap_or(false)
+        {
+            strip_typescript_types(&content)
+        } else {
+            content
+        };
+
+        // Evaluate the config file
+        let result: rquickjs::Value = ctx
+            .eval(js_content.as_bytes())
+            .map_err(|e| Error::generic(format!("Failed to evaluate JS config: {}", e)))?;
+
+        // Convert to JSON string
+        let json_str: String = ctx
+            .json_stringify(result)
+            .map_err(|e| Error::generic(format!("Failed to stringify JS config: {}", e)))?
+            .ok_or_else(|| Error::generic("JS config returned undefined"))?
+            .get()
+            .map_err(|e| Error::generic(format!("Failed to get JSON string: {}", e)))?;
+
+        // Parse JSON into ServerConfig
+        serde_json::from_str(&json_str).map_err(|e| {
+            Error::generic(format!("Failed to parse JS config as ServerConfig: {}", e))
+        })
+    })
+}
+
+/// Simple TypeScript type stripper (removes type annotations)
+/// Note: This is a basic implementation. For production use, consider using swc or esbuild
+fn strip_typescript_types(content: &str) -> String {
+    use regex::Regex;
+
+    let mut result = content.to_string();
+
+    // Remove interface declarations (handles multi-line)
+    let interface_re = Regex::new(r"(?ms)interface\s+\w+\s*\{[^}]*\}\s*").unwrap();
+    result = interface_re.replace_all(&result, "").to_string();
+
+    // Remove type aliases
+    let type_alias_re = Regex::new(r"(?m)^type\s+\w+\s*=\s*[^;]+;\s*").unwrap();
+    result = type_alias_re.replace_all(&result, "").to_string();
+
+    // Remove type annotations (: Type)
+    let type_annotation_re = Regex::new(r":\s*[A-Z]\w*(<[^>]+>)?(\[\])?").unwrap();
+    result = type_annotation_re.replace_all(&result, "").to_string();
+
+    // Remove type imports and exports
+    let type_import_re = Regex::new(r"(?m)^(import|export)\s+type\s+.*$").unwrap();
+    result = type_import_re.replace_all(&result, "").to_string();
+
+    // Remove as Type
+    let as_type_re = Regex::new(r"\s+as\s+\w+").unwrap();
+    result = as_type_re.replace_all(&result, "").to_string();
+
+    result
+}
+
+/// Enhanced load_config that supports multiple formats including JS/TS
+pub async fn load_config_auto<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
+    let ext = path.as_ref().extension().and_then(|s| s.to_str()).unwrap_or("");
+
+    match ext {
+        "ts" | "js" => load_config_from_js(&path).await,
+        "yaml" | "yml" | "json" => load_config(&path).await,
+        _ => Err(Error::generic(format!(
+            "Unsupported config file format: {}. Supported: .ts, .js, .yaml, .yml, .json",
+            ext
+        ))),
+    }
+}
+
+/// Discover configuration file with support for all formats
+pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
+    let current_dir = std::env::current_dir()
+        .map_err(|e| Error::generic(format!("Failed to get current directory: {}", e)))?;
+
+    let config_names = vec![
+        "mockforge.config.ts",
+        "mockforge.config.js",
+        "mockforge.yaml",
+        "mockforge.yml",
+        ".mockforge.yaml",
+        ".mockforge.yml",
+    ];
+
+    // Check current directory
+    for name in &config_names {
+        let path = current_dir.join(name);
+        if tokio::fs::metadata(&path).await.is_ok() {
+            return Ok(path);
+        }
+    }
+
+    // Check parent directories (up to 5 levels)
+    let mut dir = current_dir.clone();
+    for _ in 0..5 {
+        if let Some(parent) = dir.parent() {
+            for name in &config_names {
+                let path = parent.join(name);
+                if tokio::fs::metadata(&path).await.is_ok() {
+                    return Ok(path);
+                }
+            }
+            dir = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
+    Err(Error::generic(
+        "No configuration file found. Expected one of: mockforge.config.ts, mockforge.config.js, mockforge.yaml, mockforge.yml",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1297,5 +1557,46 @@ mod tests {
         config.websocket.port = 3001; // Fix port conflict
         config.logging.level = "invalid".to_string();
         assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_apply_profile() {
+        let mut base = ServerConfig::default();
+        assert_eq!(base.http.port, 3000);
+
+        let mut profile = ProfileConfig::default();
+        profile.http = Some(HttpConfig {
+            port: 8080,
+            ..Default::default()
+        });
+        profile.logging = Some(LoggingConfig {
+            level: "debug".to_string(),
+            ..Default::default()
+        });
+
+        let merged = apply_profile(base, profile);
+        assert_eq!(merged.http.port, 8080);
+        assert_eq!(merged.logging.level, "debug");
+        assert_eq!(merged.websocket.port, 3001); // Unchanged
+    }
+
+    #[test]
+    fn test_strip_typescript_types() {
+        let ts_code = r#"
+interface Config {
+    port: number;
+    host: string;
+}
+
+const config: Config = {
+    port: 3000,
+    host: "localhost"
+} as Config;
+"#;
+
+        let stripped = strip_typescript_types(ts_code);
+        assert!(!stripped.contains("interface"));
+        assert!(!stripped.contains(": Config"));
+        assert!(!stripped.contains("as Config"));
     }
 }

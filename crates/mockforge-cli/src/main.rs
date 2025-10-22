@@ -2,7 +2,7 @@ use axum::serve;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use mockforge_core::encryption::init_key_store;
-use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
+use mockforge_core::{apply_env_overrides, ServerConfig};
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
 use std::any::Any;
@@ -52,6 +52,10 @@ enum Commands {
         /// Configuration file path
         #[arg(short, long)]
         config: Option<PathBuf>,
+
+        /// Configuration profile to use (dev, ci, demo, etc.)
+        #[arg(short, long)]
+        profile: Option<String>,
 
         /// HTTP server port (defaults to config or 3000)
         #[arg(long, help_heading = "Server Ports")]
@@ -1216,6 +1220,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match cli.command {
         Commands::Serve {
             config,
+            profile,
             http_port,
             ws_port,
             grpc_port,
@@ -1300,6 +1305,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
             handle_serve(
                 config,
+                profile,
                 http_port,
                 ws_port,
                 grpc_port,
@@ -1538,6 +1544,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 #[derive(Debug)]
 struct ServeArgs {
     config_path: Option<PathBuf>,
+    profile: Option<String>,
     http_port: Option<u16>,
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
@@ -1619,21 +1626,84 @@ mod cli_tests {
 }
 
 /// Build ServerConfig from CLI arguments, config file, and environment variables
-/// Precedence: CLI args > Config file > Environment variables > Defaults
+/// Precedence: CLI args > Env vars > Profile > Config file > Defaults
 async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
+    use mockforge_core::config::{
+        discover_config_file_all_formats, load_config_auto, load_config_with_profile,
+    };
+
     // Step 1: Load config from file if provided, otherwise try to auto-discover, otherwise use defaults
     let mut config = if let Some(path) = &serve_args.config_path {
         println!("📄 Loading configuration from: {}", path.display());
-        load_config_with_fallback(path.clone()).await
+
+        // Try auto-format detection (supports .ts, .js, .yaml, .yml, .json)
+        match load_config_auto(path).await {
+            Ok(cfg) => {
+                // Apply profile if specified
+                if let Some(profile_name) = &serve_args.profile {
+                    match load_config_with_profile(path, Some(profile_name)).await {
+                        Ok(cfg_with_profile) => {
+                            println!("✅ Applied profile: {}", profile_name);
+                            cfg_with_profile
+                        }
+                        Err(e) => {
+                            eprintln!("⚠️  Failed to apply profile '{}': {}", profile_name, e);
+                            eprintln!("   Using base configuration without profile");
+                            cfg
+                        }
+                    }
+                } else {
+                    cfg
+                }
+            }
+            Err(e) => {
+                eprintln!("⚠️  Failed to load config file: {}", e);
+                eprintln!("   Using default configuration");
+                ServerConfig::default()
+            }
+        }
     } else {
-        // Try to auto-discover config file
-        match discover_config_file() {
+        // Try to auto-discover config file (now supports all formats)
+        match discover_config_file_all_formats().await {
             Ok(discovered_path) => {
                 println!("📄 Auto-discovered configuration from: {}", discovered_path.display());
-                load_config_with_fallback(discovered_path).await
+
+                match load_config_auto(&discovered_path).await {
+                    Ok(cfg) => {
+                        // Apply profile if specified
+                        if let Some(profile_name) = &serve_args.profile {
+                            match load_config_with_profile(&discovered_path, Some(profile_name))
+                                .await
+                            {
+                                Ok(cfg_with_profile) => {
+                                    println!("✅ Applied profile: {}", profile_name);
+                                    cfg_with_profile
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "⚠️  Failed to apply profile '{}': {}",
+                                        profile_name, e
+                                    );
+                                    eprintln!("   Using base configuration without profile");
+                                    cfg
+                                }
+                            }
+                        } else {
+                            cfg
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("⚠️  Failed to load auto-discovered config: {}", e);
+                        ServerConfig::default()
+                    }
+                }
             }
             Err(_) => {
-                // No config file found, use defaults
+                // No config file found
+                if serve_args.profile.is_some() {
+                    eprintln!("⚠️  Profile specified but no config file found");
+                    eprintln!("   Using default configuration");
+                }
                 ServerConfig::default()
             }
         }
@@ -1952,6 +2022,7 @@ fn initialize_opentelemetry_tracing(
 #[allow(clippy::too_many_arguments)]
 async fn handle_serve(
     config_path: Option<PathBuf>,
+    profile: Option<String>,
     http_port: Option<u16>,
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
@@ -2031,6 +2102,7 @@ async fn handle_serve(
 
     let serve_args = ServeArgs {
         config_path: effective_config_path.clone(),
+        profile,
         http_port,
         ws_port,
         grpc_port,

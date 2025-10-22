@@ -1,0 +1,153 @@
+# MockForge Configuration with Profiles
+# This example demonstrates unified configuration with multiple profiles
+
+# Base configuration (applies to all profiles unless overridden)
+http:
+  port: 3000
+  host: "0.0.0.0"
+  cors:
+    enabled: true
+    allowed_origins: ["*"]
+    allowed_methods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+
+grpc:
+  port: 50051
+  host: "0.0.0.0"
+
+admin:
+  enabled: false
+  port: 9080
+  host: "127.0.0.1"
+
+logging:
+  level: "info"
+  json_format: false
+
+observability:
+  prometheus:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+
+# Named Profiles
+profiles:
+  # Development profile - verbose logging, all features enabled
+  dev:
+    logging:
+      level: "debug"
+      json_format: false
+
+    admin:
+      enabled: true
+      port: 9080
+      api_enabled: true
+
+    observability:
+      prometheus:
+        enabled: true
+      recorder:
+        enabled: true
+        database_path: "./dev-recordings.db"
+        max_requests: 1000
+        retention_days: 3
+
+    core:
+      latency_enabled: false
+      failures_enabled: false
+
+  # CI profile - minimal logging, no admin UI
+  ci:
+    http:
+      port: 8080
+
+    websocket:
+      port: 8081
+
+    grpc:
+      port: 58051
+
+    logging:
+      level: "warn"
+      json_format: true
+
+    admin:
+      enabled: false
+
+    observability:
+      prometheus:
+        enabled: true
+        port: 9091
+      recorder:
+        enabled: false
+
+    core:
+      latency_enabled: false
+      failures_enabled: false
+
+  # Demo profile - showcase features with simulated delays
+  demo:
+    logging:
+      level: "info"
+
+    admin:
+      enabled: true
+      port: 9080
+      mount_path: "/admin"
+
+    observability:
+      prometheus:
+        enabled: true
+      recorder:
+        enabled: true
+        database_path: "./demo-recordings.db"
+        api_enabled: true
+      chaos:
+        enabled: true
+        latency:
+          enabled: true
+          fixed_delay_ms: 150
+          jitter_percent: 0.2
+          probability: 0.5
+
+    core:
+      latency_enabled: true
+
+  # Production-like profile - optimized for stability
+  prod:
+    logging:
+      level: "warn"
+      json_format: true
+      file_path: "/var/log/mockforge/mockforge.log"
+
+    admin:
+      enabled: true
+      port: 9080
+      auth_required: true
+      username: "admin"
+      # In production, use environment variables for credentials
+      # password: loaded from MOCKFORGE_ADMIN_PASSWORD env var
+
+    observability:
+      prometheus:
+        enabled: true
+        port: 9090
+      opentelemetry:
+        enabled: true
+        service_name: "mockforge-prod"
+        environment: "production"
+        jaeger_endpoint: "http://jaeger:14268/api/traces"
+        sampling_rate: 0.1
+      recorder:
+        enabled: true
+        database_path: "/var/lib/mockforge/recordings.db"
+        max_requests: 100000
+        retention_days: 30
+
+    core:
+      latency_enabled: false
+      failures_enabled: false
+      traffic_shaping_enabled: false
