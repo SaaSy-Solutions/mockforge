@@ -279,7 +279,9 @@ fn openapi_schema_to_json_schema(schema: &openapiv3::Schema) -> Value {
 
                 // enumeration is Vec<Option<String>>, not Option
                 if !string_type.enumeration.is_empty() {
-                    let enum_values: Vec<Value> = string_type.enumeration.iter()
+                    let enum_values: Vec<Value> = string_type
+                        .enumeration
+                        .iter()
                         .filter_map(|s| s.as_ref().map(|s| json!(s)))
                         .collect();
                     if !enum_values.is_empty() {

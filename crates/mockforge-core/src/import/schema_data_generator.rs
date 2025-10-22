@@ -38,11 +38,7 @@ fn generate_object(schema: &Value) -> Value {
     let _required: Vec<String> = schema
         .get("required")
         .and_then(|r| r.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect()
-        })
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
         .unwrap_or_default();
 
     // Process properties
@@ -75,10 +71,7 @@ fn generate_object(schema: &Value) -> Value {
 
 /// Generate mock array from schema
 fn generate_array(schema: &Value) -> Value {
-    let min_items = schema
-        .get("minItems")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(2) as usize;
+    let min_items = schema.get("minItems").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
 
     let max_items = schema
         .get("maxItems")
@@ -88,9 +81,7 @@ fn generate_array(schema: &Value) -> Value {
     let count = min_items.min(max_items);
 
     if let Some(items_schema) = schema.get("items") {
-        let items: Vec<Value> = (0..count)
-            .map(|_| generate_from_schema(items_schema))
-            .collect();
+        let items: Vec<Value> = (0..count).map(|_| generate_from_schema(items_schema)).collect();
         Value::Array(items)
     } else {
         Value::Array(vec![json!("sample-item-1"), json!("sample-item-2")])
@@ -153,15 +144,9 @@ fn generate_number(schema: &Value) -> Value {
         }
     }
 
-    let minimum = schema
-        .get("minimum")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+    let minimum = schema.get("minimum").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
-    let maximum = schema
-        .get("maximum")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(100.0);
+    let maximum = schema.get("maximum").and_then(|v| v.as_f64()).unwrap_or(100.0);
 
     let value = (minimum + maximum) / 2.0;
 

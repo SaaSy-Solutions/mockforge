@@ -509,19 +509,17 @@ async fn import_openapi_spec_handler(
     info!("Importing OpenAPI specification");
 
     // Import the OpenAPI spec
-    let import_result = import_openapi_spec(
-        &request.content,
-        request.base_url.as_deref(),
-    ).map_err(|e| {
-        error!(error = %e, "Failed to import OpenAPI spec");
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": "Failed to import OpenAPI specification",
-                "details": e
-            }))
-        )
-    })?;
+    let import_result = import_openapi_spec(&request.content, request.base_url.as_deref())
+        .map_err(|e| {
+            error!(error = %e, "Failed to import OpenAPI spec");
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Failed to import OpenAPI specification",
+                    "details": e
+                })),
+            )
+        })?;
 
     let auto_enable = request.auto_enable.unwrap_or(true);
     let mut endpoints = state.endpoints.write().await;
@@ -541,10 +539,12 @@ async fn import_openapi_spec_handler(
             None
         } else {
             Some(
-                route.response.headers
+                route
+                    .response
+                    .headers
                     .into_iter()
                     .map(|(name, value)| HeaderConfig { name, value })
-                    .collect()
+                    .collect(),
             )
         };
 
@@ -552,9 +552,10 @@ async fn import_openapi_spec_handler(
             id: endpoint_id.clone(),
             protocol: Protocol::Http,
             name: format!("{} {}", route.method.to_uppercase(), route.path),
-            description: Some(format!("Auto-generated from OpenAPI spec: {} v{}",
-                import_result.spec_info.title,
-                import_result.spec_info.version)),
+            description: Some(format!(
+                "Auto-generated from OpenAPI spec: {} v{}",
+                import_result.spec_info.title, import_result.spec_info.version
+            )),
             enabled: auto_enable,
             config: EndpointProtocolConfig::Http(HttpEndpointConfig {
                 method: route.method.to_uppercase(),
@@ -716,19 +717,17 @@ async fn import_asyncapi_spec_handler(
     info!("Importing AsyncAPI specification");
 
     // Import the AsyncAPI spec
-    let import_result = import_asyncapi_spec(
-        &request.content,
-        request.base_url.as_deref(),
-    ).map_err(|e| {
-        error!(error = %e, "Failed to import AsyncAPI spec");
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": "Failed to import AsyncAPI specification",
-                "details": e
-            }))
-        )
-    })?;
+    let import_result = import_asyncapi_spec(&request.content, request.base_url.as_deref())
+        .map_err(|e| {
+            error!(error = %e, "Failed to import AsyncAPI spec");
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Failed to import AsyncAPI specification",
+                    "details": e
+                })),
+            )
+        })?;
 
     let auto_enable = request.auto_enable.unwrap_or(true);
     let mut endpoints = state.endpoints.write().await;

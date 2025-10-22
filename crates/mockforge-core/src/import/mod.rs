@@ -16,8 +16,8 @@ pub mod schema_data_generator;
 
 // Re-export the main functions and types
 pub use asyncapi_import::{
-    import_asyncapi_spec, AsyncApiImportResult, AsyncApiSpecInfo, ChannelProtocol,
-    ChannelOperation, MockForgeChannel, OperationType,
+    import_asyncapi_spec, AsyncApiImportResult, AsyncApiSpecInfo, ChannelOperation,
+    ChannelProtocol, MockForgeChannel, OperationType,
 };
 pub use curl_import::{
     import_curl_commands, CurlImportResult, MockForgeResponse as CurlMockForgeResponse,

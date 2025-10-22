@@ -43,11 +43,10 @@ impl AiResponseHandler {
         // Initialize drift engine if configured
         let drift_engine = if let Some(config) = drift_config {
             debug!("Initializing data drift engine");
-            let engine = DataDriftEngine::new(config).map_err(|e| {
-                mockforge_core::Error::Config {
+            let engine =
+                DataDriftEngine::new(config).map_err(|e| mockforge_core::Error::Config {
                     message: format!("Failed to initialize drift engine: {}", e),
-                }
-            })?;
+                })?;
             Some(Arc::new(RwLock::new(engine)))
         } else {
             None

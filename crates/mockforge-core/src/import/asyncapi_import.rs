@@ -150,16 +150,11 @@ pub fn import_asyncapi_spec(
     // Process channels
     if let Some(channel_map) = spec.channels {
         for (channel_name, channel_spec) in channel_map {
-            match convert_channel_to_mockforge(
-                &channel_name,
-                &channel_spec,
-                &spec.servers,
-            ) {
+            match convert_channel_to_mockforge(&channel_name, &channel_spec, &spec.servers) {
                 Ok(channel) => channels.push(channel),
-                Err(e) => warnings.push(format!(
-                    "Failed to convert channel '{}': {}",
-                    channel_name, e
-                )),
+                Err(e) => {
+                    warnings.push(format!("Failed to convert channel '{}': {}", channel_name, e))
+                }
             }
         }
     }
@@ -194,10 +189,7 @@ fn convert_channel_to_mockforge(
 
     // Process subscribe operation
     if let Some(subscribe) = &channel_spec.subscribe {
-        let message_schema = subscribe
-            .message
-            .as_ref()
-            .and_then(|m| m.payload.clone());
+        let message_schema = subscribe.message.as_ref().and_then(|m| m.payload.clone());
 
         let example_message = subscribe
             .message
@@ -214,10 +206,7 @@ fn convert_channel_to_mockforge(
 
     // Process publish operation
     if let Some(publish) = &channel_spec.publish {
-        let message_schema = publish
-            .message
-            .as_ref()
-            .and_then(|m| m.payload.clone());
+        let message_schema = publish.message.as_ref().and_then(|m| m.payload.clone());
 
         let example_message = publish
             .message
