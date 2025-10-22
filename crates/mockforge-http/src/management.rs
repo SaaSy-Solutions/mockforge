@@ -525,6 +525,24 @@ pub fn management_router(state: ManagementState) -> Router {
     router.with_state(state)
 }
 
+/// Build the management API router with UI Builder support
+pub fn management_router_with_ui_builder(
+    state: ManagementState,
+    server_config: mockforge_core::config::ServerConfig,
+) -> Router {
+    use crate::ui_builder::{create_ui_builder_router, UIBuilderState};
+
+    // Create the base management router
+    let management = management_router(state);
+
+    // Create UI Builder state and router
+    let ui_builder_state = UIBuilderState::new(server_config);
+    let ui_builder = create_ui_builder_router(ui_builder_state);
+
+    // Nest UI Builder under /ui-builder
+    management.nest("/ui-builder", ui_builder)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

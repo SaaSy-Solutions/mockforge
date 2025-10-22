@@ -155,6 +155,21 @@ pub fn create_admin_router(
 
     router = router.merge(analytics_router);
 
+    // Add UI Builder router
+    // This provides a low-code visual interface for creating mock endpoints
+    {
+        use mockforge_http::{create_ui_builder_router, UIBuilderState};
+
+        // Load server config for UI Builder
+        // For now, create a default config. In production, this should be loaded from the actual config.
+        let server_config = mockforge_core::config::ServerConfig::default();
+        let ui_builder_state = UIBuilderState::new(server_config);
+        let ui_builder_router = create_ui_builder_router(ui_builder_state);
+
+        router = router.nest("/__mockforge/ui-builder", ui_builder_router);
+        tracing::info!("UI Builder mounted at /__mockforge/ui-builder");
+    }
+
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes
     router = router.route("/{*path}", get(serve_admin_html));
