@@ -2,10 +2,9 @@
 
 use crate::auth::AuthService;
 use crate::error::CollabError;
-use async_trait::async_trait;
 use axum::{
-    extract::{FromRequestParts, Request, State},
-    http::{request::Parts, StatusCode},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::Response,
 };

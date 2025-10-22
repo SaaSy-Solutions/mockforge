@@ -8,7 +8,7 @@ use crate::models::UserRole;
 use crate::user::UserService;
 use crate::workspace::WorkspaceService;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -118,6 +118,18 @@ pub struct CreateSnapshotRequest {
     pub name: String,
     pub description: Option<String>,
     pub commit_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PaginationQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i32,
+    #[serde(default)]
+    pub offset: i32,
+}
+
+fn default_limit() -> i32 {
+    50
 }
 
 // ===== Error Handling =====
@@ -322,17 +334,88 @@ async fn readiness_check() -> impl IntoResponse {
     StatusCode::OK
 }
 
+// ===== Validation Helpers =====
+
+/// Validate commit message
+fn validate_commit_message(message: &str) -> Result<()> {
+    if message.is_empty() {
+        return Err(CollabError::InvalidInput("Commit message cannot be empty".to_string()));
+    }
+    if message.len() > 500 {
+        return Err(CollabError::InvalidInput(
+            "Commit message cannot exceed 500 characters".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Validate snapshot name
+fn validate_snapshot_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(CollabError::InvalidInput("Snapshot name cannot be empty".to_string()));
+    }
+    if name.len() > 100 {
+        return Err(CollabError::InvalidInput(
+            "Snapshot name cannot exceed 100 characters".to_string(),
+        ));
+    }
+    // Allow alphanumeric, hyphens, underscores, and dots
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        return Err(CollabError::InvalidInput(
+            "Snapshot name can only contain alphanumeric characters, hyphens, underscores, and dots".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 // ===== Version Control Handlers =====
 
-/// Create a commit in the workspace
+/// Create a commit in the workspace.
+///
+/// Creates a new commit capturing the current state of the workspace along with
+/// a description of changes. This is similar to `git commit`.
+///
+/// # Requirements
+/// - User must be a workspace member with Editor or Admin role
+/// - Commit message must be 1-500 characters
+///
+/// # Request Body
+/// - `message`: Commit message describing the changes (required, 1-500 chars)
+/// - `changes`: JSON object describing what changed
+///
+/// # Response
+/// Returns the created Commit object with:
+/// - `id`: Unique commit ID
+/// - `workspace_id`: ID of the workspace
+/// - `author_id`: ID of the user who created the commit
+/// - `message`: Commit message
+/// - `parent_id`: ID of the parent commit (null for first commit)
+/// - `version`: Version number (auto-incremented)
+/// - `snapshot`: Full workspace state at this commit
+/// - `changes`: Description of what changed
+/// - `created_at`: Timestamp
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `403 Forbidden`: User is not Editor or Admin
+/// - `404 Not Found`: Workspace not found or user not a member
+/// - `400 Bad Request`: Invalid commit message
 async fn create_commit(
     State(state): State<ApiState>,
     Path(workspace_id): Path<Uuid>,
     Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<CreateCommitRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    // Verify user is a member
-    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+    // Validate input
+    validate_commit_message(&payload.message)?;
+
+    // Verify user has permission (Editor or Admin)
+    let member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+    if !matches!(member.role, UserRole::Admin | UserRole::Editor) {
+        return Err(CollabError::AuthorizationFailed(
+            "Only Admins and Editors can create commits".to_string(),
+        ));
+    }
 
     // Get current workspace state
     let workspace = state.workspace.get_workspace(workspace_id).await?;
@@ -362,22 +445,69 @@ async fn create_commit(
     Ok(Json(serde_json::to_value(commit)?))
 }
 
-/// List commits for a workspace
+/// List commits for a workspace.
+///
+/// Returns the commit history for a workspace in reverse chronological order
+/// (most recent first). Supports pagination via query parameters.
+///
+/// # Requirements
+/// - User must be a workspace member (any role)
+///
+/// # Query Parameters
+/// - `limit`: Number of commits to return (default: 50, max: 100)
+/// - `offset`: Number of commits to skip (default: 0)
+///
+/// # Response
+/// Returns a JSON object with:
+/// - `commits`: Array of Commit objects
+/// - `pagination`: Object with `limit` and `offset` values
+///
+/// # Example
+/// ```
+/// GET /workspaces/{id}/commits?limit=20&offset=0
+/// ```
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `404 Not Found`: Workspace not found or user not a member
 async fn list_commits(
     State(state): State<ApiState>,
     Path(workspace_id): Path<Uuid>,
     Extension(auth_user): Extension<AuthUser>,
+    Query(pagination): Query<PaginationQuery>,
 ) -> Result<Json<serde_json::Value>> {
     // Verify user is a member
     let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
 
-    // Get commit history
-    let commits = state.history.get_history(workspace_id, Some(50)).await?;
+    // Validate pagination params
+    let limit = pagination.limit.clamp(1, 100);
 
-    Ok(Json(serde_json::to_value(commits)?))
+    // Get commit history
+    let commits = state.history.get_history(workspace_id, Some(limit)).await?;
+
+    // Return with pagination metadata
+    Ok(Json(serde_json::json!({
+        "commits": commits,
+        "pagination": {
+            "limit": limit,
+            "offset": pagination.offset,
+        }
+    })))
 }
 
-/// Get a specific commit
+/// Get a specific commit by ID.
+///
+/// Retrieves detailed information about a specific commit, including the full
+/// workspace state snapshot at that point in time.
+///
+/// # Requirements
+/// - User must be a workspace member (any role)
+/// - Commit must belong to the specified workspace
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `404 Not Found`: Commit or workspace not found
+/// - `400 Bad Request`: Commit doesn't belong to this workspace
 async fn get_commit(
     State(state): State<ApiState>,
     Path((workspace_id, commit_id)): Path<(Uuid, Uuid)>,
@@ -399,7 +529,25 @@ async fn get_commit(
     Ok(Json(serde_json::to_value(commit)?))
 }
 
-/// Restore workspace to a specific commit
+/// Restore workspace to a specific commit.
+///
+/// Reverts the workspace to the state captured in the specified commit.
+/// This is a destructive operation that should be used carefully.
+///
+/// # Requirements
+/// - User must be a workspace member with Editor or Admin role
+/// - Commit must exist and belong to the workspace
+///
+/// # Response
+/// Returns an object with:
+/// - `workspace_id`: ID of the restored workspace
+/// - `commit_id`: ID of the commit that was restored
+/// - `restored_state`: The workspace state from the commit
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `403 Forbidden`: User is not Editor or Admin
+/// - `404 Not Found`: Commit or workspace not found
 async fn restore_to_commit(
     State(state): State<ApiState>,
     Path((workspace_id, commit_id)): Path<(Uuid, Uuid)>,
@@ -423,13 +571,35 @@ async fn restore_to_commit(
     })))
 }
 
-/// Create a named snapshot
+/// Create a named snapshot.
+///
+/// Creates a named reference to a specific commit, similar to a git tag.
+/// Snapshots are useful for marking important states like releases.
+///
+/// # Requirements
+/// - User must be a workspace member with Editor or Admin role
+/// - Snapshot name must be 1-100 characters, alphanumeric with -, _, or .
+/// - Commit must exist
+///
+/// # Request Body
+/// - `name`: Name for the snapshot (required, 1-100 chars, alphanumeric)
+/// - `description`: Optional description
+/// - `commit_id`: ID of the commit to snapshot
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `403 Forbidden`: User is not Editor or Admin
+/// - `404 Not Found`: Workspace or commit not found
+/// - `400 Bad Request`: Invalid snapshot name
 async fn create_snapshot(
     State(state): State<ApiState>,
     Path(workspace_id): Path<Uuid>,
     Extension(auth_user): Extension<AuthUser>,
     Json(payload): Json<CreateSnapshotRequest>,
 ) -> Result<Json<serde_json::Value>> {
+    // Validate input
+    validate_snapshot_name(&payload.name)?;
+
     // Verify user has permission (Editor or Admin)
     let member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
     if !matches!(member.role, UserRole::Admin | UserRole::Editor) {
@@ -453,7 +623,16 @@ async fn create_snapshot(
     Ok(Json(serde_json::to_value(snapshot)?))
 }
 
-/// List snapshots for a workspace
+/// List snapshots for a workspace.
+///
+/// Returns all named snapshots for the workspace in reverse chronological order.
+///
+/// # Requirements
+/// - User must be a workspace member (any role)
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `404 Not Found`: Workspace not found or user not a member
 async fn list_snapshots(
     State(state): State<ApiState>,
     Path(workspace_id): Path<Uuid>,
@@ -468,7 +647,16 @@ async fn list_snapshots(
     Ok(Json(serde_json::to_value(snapshots)?))
 }
 
-/// Get a specific snapshot by name
+/// Get a specific snapshot by name.
+///
+/// Retrieves details about a named snapshot, including which commit it references.
+///
+/// # Requirements
+/// - User must be a workspace member (any role)
+///
+/// # Errors
+/// - `401 Unauthorized`: Not authenticated
+/// - `404 Not Found`: Snapshot, workspace not found, or user not a member
 async fn get_snapshot(
     State(state): State<ApiState>,
     Path((workspace_id, name)): Path<(Uuid, String)>,
