@@ -489,6 +489,66 @@ enum Commands {
         config: Option<PathBuf>,
     },
 
+    /// Quick REST mock mode - spin up instant mock API from JSON
+    ///
+    /// Perfect for rapid prototyping with zero configuration. Auto-detects routes
+    /// from JSON keys and creates full CRUD endpoints instantly.
+    ///
+    /// Examples:
+    ///   mockforge quick data.json
+    ///   mockforge quick sample.json --port 4000
+    ///   mockforge quick mock.json --admin --metrics
+    ///
+    /// JSON file structure:
+    /// {
+    ///   "users": [{"id": 1, "name": "Alice"}],
+    ///   "posts": [{"id": 1, "title": "First Post"}]
+    /// }
+    ///
+    /// Auto-generated routes:
+    ///   GET    /users      - List all users
+    ///   GET    /users/:id  - Get single user
+    ///   POST   /users      - Create user
+    ///   PUT    /users/:id  - Update user
+    ///   DELETE /users/:id  - Delete user
+    ///   (same for all root-level JSON keys)
+    ///
+    /// Supports dynamic data generation:
+    ///   "$random.uuid", "$random.int", "$faker.name", "$faker.email", "$ai(prompt)"
+    #[command(verbatim_doc_comment)]
+    Quick {
+        /// JSON file path containing mock data
+        file: PathBuf,
+
+        /// HTTP server port (defaults to 3000)
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Enable admin UI
+        #[arg(long)]
+        admin: bool,
+
+        /// Admin UI port (defaults to 9080)
+        #[arg(long, default_value = "9080")]
+        admin_port: u16,
+
+        /// Enable Prometheus metrics endpoint
+        #[arg(long)]
+        metrics: bool,
+
+        /// Metrics server port (defaults to 9090)
+        #[arg(long, default_value = "9090")]
+        metrics_port: u16,
+
+        /// Enable request logging
+        #[arg(long)]
+        logging: bool,
+
+        /// Host to bind to (defaults to 127.0.0.1)
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
@@ -1388,6 +1448,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             config,
         } => {
             handle_sync(workspace_dir, config).await?;
+        }
+        Commands::Quick {
+            file,
+            port,
+            admin,
+            admin_port,
+            metrics,
+            metrics_port,
+            logging,
+            host,
+        } => {
+            handle_quick(file, port, host, admin, admin_port, metrics, metrics_port, logging)
+                .await?;
         }
         Commands::Completions { shell } => {
             handle_completions(shell);
@@ -2872,6 +2945,97 @@ async fn handle_admin(
     // Keep running until shutdown signal
     tokio::signal::ctrl_c().await?;
     println!("👋 Shutting down admin UI...");
+
+    Ok(())
+}
+
+async fn handle_quick(
+    file: PathBuf,
+    port: u16,
+    host: String,
+    admin: bool,
+    admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
+    logging: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_http::quick_mock::{build_quick_router, QuickMockState};
+    use std::fs;
+
+    println!("\n⚡ MockForge Quick Mock Mode");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("📁 Loading data from: {}", file.display());
+
+    // Load JSON file
+    let json_str = fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
+
+    let json_data: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse JSON from '{}': {}", file.display(), e))?;
+
+    println!("✓ JSON loaded successfully");
+
+    // Create quick mock state
+    println!("🔍 Auto-detecting routes from JSON keys...");
+    let state = QuickMockState::from_json(json_data)
+        .await
+        .map_err(|e| format!("Failed to create quick mock state: {}", e))?;
+
+    let resource_names = state.resource_names().await;
+    println!("✓ Detected {} resource(s):", resource_names.len());
+    for resource in &resource_names {
+        println!("  • /{}", resource);
+    }
+
+    // Build router
+    let app = build_quick_router(state).await;
+
+    println!();
+    println!("🚀 Quick Mock Server Configuration:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("   HTTP Server:  http://{}:{}", host, port);
+
+    if admin {
+        println!("   Admin UI:     http://{}:{}", host, admin_port);
+    }
+    if metrics {
+        println!("   Metrics:      http://{}:{}/__metrics", host, metrics_port);
+    }
+    if logging {
+        println!("   Logging:      Enabled");
+    }
+
+    println!();
+    println!("📚 Available Endpoints:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    for resource in &resource_names {
+        println!("   GET    /{}          - List all", resource);
+        println!("   GET    /{}/:id      - Get by ID", resource);
+        println!("   POST   /{}          - Create new", resource);
+        println!("   PUT    /{}/:id      - Update by ID", resource);
+        println!("   DELETE /{}/:id      - Delete by ID", resource);
+        println!();
+    }
+    println!("   GET    /__quick/info       - API information");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // Start server
+    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+    let listener = TcpListener::bind(addr).await?;
+
+    println!();
+    println!("✅ Server started successfully!");
+    println!("💡 Press Ctrl+C to stop");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // Serve with graceful shutdown
+    serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+        })
+        .await?;
+
+    println!("\n👋 Server stopped\n");
 
     Ok(())
 }

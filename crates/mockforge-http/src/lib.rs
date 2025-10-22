@@ -173,6 +173,7 @@ pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
 pub mod op_middleware;
+pub mod quick_mock;
 pub mod rag_ai_generator;
 pub mod replay_listing;
 pub mod request_logging;
