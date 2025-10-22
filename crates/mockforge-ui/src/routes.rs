@@ -53,6 +53,7 @@ pub fn create_admin_router(
 
     router = router
         .route("/__mockforge/dashboard", get(get_dashboard))
+        .route("/_mf", get(get_dashboard))  // Short alias for dashboard
         .route("/__mockforge/health", get(get_health))
         .route("/admin/server-info", get(get_server_info))
         .route("/__mockforge/server-info", get(get_server_info))
@@ -133,7 +134,12 @@ pub fn create_admin_router(
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))
         .route("/health/startup", get(health::startup_probe))
-        .route("/health", get(health::deep_health_check));
+        .route("/health", get(health::deep_health_check))
+        // Kubernetes-style health endpoint aliases
+        .route("/healthz", get(health::deep_health_check))
+        .route("/readyz", get(health::readiness_probe))
+        .route("/livez", get(health::liveness_probe))
+        .route("/startupz", get(health::startup_probe));
 
     // Analytics routes with Prometheus integration
     let analytics_state = AnalyticsState::new(prometheus_url);
