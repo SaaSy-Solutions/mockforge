@@ -5,7 +5,7 @@ use crate::auth::AuthService;
 use crate::config::CollabConfig;
 use crate::error::Result;
 use crate::events::EventBus;
-use crate::history::History;
+use crate::history::{History, VersionControl};
 use crate::sync::SyncEngine;
 use crate::user::UserService;
 use crate::websocket::{ws_handler, WsState};
@@ -71,10 +71,12 @@ impl CollabServer {
         tracing::info!("Starting MockForge Collaboration Server on {}", addr);
 
         // Create API router
+        let version_control = Arc::new(VersionControl::new(self.db.clone()));
         let api_state = ApiState {
             auth: self.auth.clone(),
             user: self.user.clone(),
             workspace: self.workspace.clone(),
+            history: version_control,
         };
         let api_router = create_api_router(api_state);
 

@@ -19,23 +19,6 @@ pub struct AuthUser {
     pub username: String,
 }
 
-/// Implement extractor for AuthUser
-#[async_trait]
-impl<S> FromRequestParts<S> for AuthUser
-where
-    S: Send + Sync,
-{
-    type Rejection = (StatusCode, String);
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<AuthUser>()
-            .cloned()
-            .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Not authenticated".to_string()))
-    }
-}
-
 /// JWT authentication middleware
 pub async fn auth_middleware(
     State(auth): State<Arc<AuthService>>,
