@@ -21,6 +21,9 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **gRPC Native** | ✅ Full + HTTP Bridge | ❌ No | ❌ No | ⚠️ Limited |
 | **WebSocket** | ✅ Scripted Replay + JSONPath | ❌ No | ⚠️ Basic | ❌ No |
 | **GraphQL** | ✅ Yes | ⚠️ Via HTTP | ⚠️ Via HTTP | ✅ Yes |
+| **Kafka** | ✅ Full Mock Broker | ❌ No | ❌ No | ❌ No |
+| **MQTT** | ✅ Full Broker (3.1.1 & 5.0) | ❌ No | ❌ No | ❌ No |
+| **AMQP/RabbitMQ** | ✅ Full Broker (0.9.1) | ❌ No | ❌ No | ❌ No |
 | **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
 | **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
 | **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |
@@ -51,7 +54,7 @@ All commands, options, and features documented in each protocol section (HTTP, g
 
 ### Key Differentiators
 
-- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, and GraphQL in a single binary
+- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, GraphQL, **Kafka, MQTT, and AMQP** in a single binary
 - **🧠 AI-Driven Mocking**: Industry-first LLM-powered mock generation from natural language prompts
 - **📊 Data Drift Simulation**: Unique realistic data evolution across requests (order status progression, stock depletion, price changes)
 - **🌊 AI Event Streams**: Generate narrative-driven WebSocket events for real-time testing scenarios
@@ -63,7 +66,7 @@ All commands, options, and features documented in each protocol section (HTTP, g
 
 ## ✨ Features
 
-- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, and SMTP email testing
+- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, SMTP email testing, **Kafka event streaming**, **MQTT pub/sub**, and **AMQP message queuing**
 - **🧠 AI-Powered Mocking** *(Industry First)*: Revolutionary artificial intelligence features:
   - **Intelligent Mock Generation**: Generate realistic responses from natural language prompts
     - Natural language → realistic JSON data
@@ -641,6 +644,197 @@ Features:
 3. **Mixed Environments**: Support for both gRPC and HTTP clients
 4. **Development Tools**: Use Postman, curl, or any HTTP client
 5. **Documentation**: Auto-generated API docs for gRPC services
+
+## 📨 Async/Event Protocols (Kafka, MQTT, AMQP)
+
+MockForge provides **first-class support** for async and event-driven protocols, enabling comprehensive testing of message-driven architectures, pub/sub systems, and event-driven microservices.
+
+### Supported Protocols
+
+- **Kafka** - Distributed event streaming with full broker simulation
+- **MQTT** - IoT and pub/sub messaging with QoS support
+- **AMQP** - Enterprise message queuing (RabbitMQ compatible)
+
+### Quick Start
+
+```bash
+# Start all protocols (Kafka, MQTT, AMQP enabled by default)
+mockforge serve
+
+# Override ports
+mockforge serve --kafka-port 9092 --mqtt-port 1883 --amqp-port 5672
+
+# Or use dedicated commands
+mockforge kafka serve --port 9092
+mockforge mqtt publish --topic "sensors/temp" --payload '{"temp": 22.5}'
+mockforge amqp serve --port 5672
+```
+
+### Kafka Mock Broker
+
+**Features:**
+- ✅ 10+ Kafka APIs (Produce, Fetch, Metadata, Consumer Groups, etc.)
+- ✅ Topic & partition management with auto-creation
+- ✅ Consumer group coordination with rebalancing
+- ✅ Offset management and commit tracking
+- ✅ Auto-produce messages at configurable rates
+- ✅ Compatible with rdkafka, KafkaJS, confluent-kafka
+
+**Example:** Using with Python
+
+```python
+from confluent_kafka import Producer, Consumer
+
+# Producer
+producer = Producer({'bootstrap.servers': 'localhost:9092'})
+producer.produce('orders', key='order-123', value='{"total": 99.99}')
+producer.flush()
+
+# Consumer
+consumer = Consumer({
+    'bootstrap.servers': 'localhost:9092',
+    'group.id': 'my-group',
+    'auto.offset.reset': 'earliest'
+})
+consumer.subscribe(['orders'])
+```
+
+**Fixture-Based Testing:**
+
+Create `fixtures/kafka/orders.yaml`:
+
+```yaml
+- identifier: "order-created"
+  topic: "orders.created"
+  key_pattern: "order-{{uuid}}"
+  value_template:
+    order_id: "{{uuid}}"
+    customer_id: "customer-{{faker.int 1000 9999}}"
+    total: "{{faker.float 10.0 1000.0 | round 2}}"
+    status: "pending"
+    created_at: "{{now}}"
+  auto_produce:
+    enabled: true
+    rate_per_second: 10  # Generate 10 orders/second
+```
+
+### MQTT Broker
+
+**Features:**
+- ✅ MQTT 3.1.1 and 5.0 support
+- ✅ QoS levels (0, 1, 2) with delivery guarantees
+- ✅ Topic hierarchies with wildcards (`+`, `#`)
+- ✅ Retained messages and Last Will Testament
+- ✅ Session management and auto-publish
+- ✅ Compatible with Paho, rumqttc, MQTT.js
+
+**Example:** Using with JavaScript
+
+```javascript
+const mqtt = require('mqtt');
+const client = mqtt.connect('mqtt://localhost:1883');
+
+// Publish
+client.publish('sensors/temperature', JSON.stringify({ temp: 22.5 }), { qos: 1 });
+
+// Subscribe
+client.subscribe('sensors/#');
+client.on('message', (topic, message) => {
+  console.log(`${topic}: ${message.toString()}`);
+});
+```
+
+### AMQP Broker
+
+**Features:**
+- ✅ AMQP 0.9.1 protocol (RabbitMQ compatible)
+- ✅ Exchange types (direct, fanout, topic, headers)
+- ✅ Queue management with bindings
+- ✅ Consumer coordination and message routing
+- ✅ Fixture-driven testing
+- ✅ Compatible with lapin, amqplib, RabbitMQ clients
+
+**Example:** Using with Python
+
+```python
+import pika
+
+connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = connection.channel()
+
+# Declare and bind
+channel.exchange_declare(exchange='orders', exchange_type='topic')
+channel.queue_declare(queue='order.processing')
+channel.queue_bind(exchange='orders', queue='order.processing', routing_key='order.created')
+
+# Publish
+channel.basic_publish(exchange='orders', routing_key='order.created',
+                      body='{"order_id": "123"}')
+```
+
+### Advanced Features
+
+**Auto-Production:**
+```yaml
+auto_produce:
+  enabled: true
+  rate_per_second: 100
+  duration_seconds: 0  # 0 = infinite
+```
+
+**Template Engine:**
+```yaml
+value_template:
+  id: "{{uuid}}"
+  customer_name: "{{faker.name}}"
+  amount: "{{faker.float 10.0 1000.0 | round 2}}"
+  created_at: "{{now}}"
+  status: "{{faker.randomChoice ['pending', 'processing', 'completed']}}"
+```
+
+**Metrics & Monitoring:**
+```bash
+curl http://localhost:9080/__mockforge/metrics
+
+# Example metrics
+kafka_messages_produced_total 12345
+mqtt_messages_published_total 5678
+amqp_messages_published_total 9012
+```
+
+### Configuration
+
+```yaml
+kafka:
+  enabled: true
+  port: 9092
+  auto_create_topics: true
+  default_partitions: 3
+  fixtures_dir: "./fixtures/kafka"
+
+mqtt:
+  enabled: true
+  port: 1883
+  max_connections: 1000
+  keep_alive_secs: 60
+  fixtures_dir: "./fixtures/mqtt"
+
+amqp:
+  enabled: true
+  port: 5672
+  max_connections: 1000
+  heartbeat_interval: 60
+  fixtures_dir: "./fixtures/amqp"
+```
+
+### Example Use Cases
+
+1. **Microservices Event Bus** - Order service → Inventory → Notifications → Analytics
+2. **IoT Sensor Networks** - Temperature/humidity sensors publishing via MQTT
+3. **Task Queue Systems** - API publishes tasks, workers consume from specific queues
+4. **Event Sourcing & CQRS** - Event store with read model projections
+
+📖 **For detailed documentation, see [ASYNC_PROTOCOLS.md](ASYNC_PROTOCOLS.md)**
 
 ## 🎯 Data Generation
 

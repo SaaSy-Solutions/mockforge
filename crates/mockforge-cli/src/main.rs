@@ -78,6 +78,14 @@ enum Commands {
         #[arg(long, help_heading = "Server Ports")]
         mqtt_port: Option<u16>,
 
+        /// Kafka broker port (defaults to config or 9092)
+        #[arg(long, help_heading = "Server Ports")]
+        kafka_port: Option<u16>,
+
+        /// AMQP broker port (defaults to config or 5672)
+        #[arg(long, help_heading = "Server Ports")]
+        amqp_port: Option<u16>,
+
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
         admin: bool,
@@ -1299,7 +1307,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ws_port,
             grpc_port,
             smtp_port: _smtp_port,
-            mqtt_port: _mqtt_port,
+            mqtt_port,
+            kafka_port,
+            amqp_port,
             admin,
             admin_port,
             metrics,
@@ -1834,6 +1844,21 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     // gRPC configuration
     if let Some(grpc_port) = serve_args.grpc_port {
         config.grpc.port = grpc_port;
+    }
+
+    // MQTT configuration
+    if let Some(mqtt_port) = serve_args.mqtt_port {
+        config.mqtt.port = mqtt_port;
+    }
+
+    // Kafka configuration
+    if let Some(kafka_port) = serve_args.kafka_port {
+        config.kafka.port = kafka_port;
+    }
+
+    // AMQP configuration
+    if let Some(amqp_port) = serve_args.amqp_port {
+        config.amqp.port = amqp_port;
     }
 
     // Admin configuration
@@ -2682,6 +2707,83 @@ async fn handle_serve(
     } else {
         None
     };
+    #[cfg(not(feature = "mqtt"))]
+    let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+
+    // Start Kafka broker (if enabled)
+    #[cfg(feature = "kafka")]
+    let _kafka_handle = if config.kafka.enabled {
+        let kafka_config = config.kafka.clone();
+        let kafka_shutdown = shutdown_token.clone();
+
+        Some(tokio::spawn(async move {
+            use mockforge_kafka::KafkaMockBroker;
+
+            println!("📨 Kafka broker listening on {}:{}", kafka_config.host, kafka_config.port);
+
+            // Create and start the Kafka broker
+            match KafkaMockBroker::new(kafka_config.clone()).await {
+                Ok(broker) => {
+                    tokio::select! {
+                        result = broker.start() => {
+                            result.map_err(|e| format!("Kafka broker error: {:?}", e))
+                        }
+                        _ = kafka_shutdown.cancelled() => {
+                            println!("🛑 Shutting down Kafka broker...");
+                            Ok(())
+                        }
+                    }
+                }
+                Err(e) => {
+                    Err(format!("Failed to initialize Kafka broker: {:?}", e))
+                }
+            }
+        }))
+    } else {
+        None
+    };
+    #[cfg(not(feature = "kafka"))]
+    let _kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+
+    // Start AMQP broker (if enabled)
+    #[cfg(feature = "amqp")]
+    let _amqp_handle = if config.amqp.enabled {
+        let amqp_config = config.amqp.clone();
+        let amqp_shutdown = shutdown_token.clone();
+
+        Some(tokio::spawn(async move {
+            use mockforge_amqp::{AmqpBroker, AmqpSpecRegistry};
+            use std::sync::Arc;
+
+            println!("🐰 AMQP broker listening on {}:{}", amqp_config.host, amqp_config.port);
+
+            // Create spec registry
+            let spec_registry = Arc::new(AmqpSpecRegistry::new());
+
+            // Load fixtures if configured
+            if let Some(ref fixtures_dir) = amqp_config.fixtures_dir {
+                if fixtures_dir.exists() {
+                    println!("   Loading AMQP fixtures from {:?}", fixtures_dir);
+                }
+            }
+
+            // Create and start the AMQP broker
+            let broker = AmqpBroker::new(amqp_config.clone(), spec_registry);
+            tokio::select! {
+                result = broker.start() => {
+                    result.map_err(|e| format!("AMQP broker error: {:?}", e))
+                }
+                _ = amqp_shutdown.cancelled() => {
+                    println!("🛑 Shutting down AMQP broker...");
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
+    #[cfg(not(feature = "amqp"))]
+    let _amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {
