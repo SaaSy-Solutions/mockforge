@@ -35,8 +35,8 @@ parking_lot = { workspace = true }
 
 # MockForge core
 mockforge-core = { version = "0.1.3", path = "../mockforge-core" }
-mockforge-observability = { version = "0.1.3", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.1.3", path = "../mockforge-tracing" }
+mockforge-observability = { version = "0.1.2", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.1.2", path = "../mockforge-tracing" }
 opentelemetry = "0.21"
 
 # Optional data generation support

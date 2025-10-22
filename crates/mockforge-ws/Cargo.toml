@@ -27,8 +27,8 @@ async-trait = { workspace = true }
 thiserror = "2.0"
 mockforge-core = { version = "0.1.3", path = "../mockforge-core" }
 mockforge-data = { version = "0.1.3", path = "../mockforge-data" }
-mockforge-observability = { version = "0.1.3", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.1.3", path = "../mockforge-tracing" }
+mockforge-observability = { version = "0.1.2", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.1.2", path = "../mockforge-tracing" }
 opentelemetry = "0.21"
 
 [dev-dependencies]
