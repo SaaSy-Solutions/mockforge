@@ -222,30 +222,48 @@ impl OpenApiRoute {
     /// Note: This method does not support AI-assisted response generation.
     /// Use `mock_response_with_status_async` for AI features.
     pub fn mock_response_with_status(&self) -> (u16, serde_json::Value) {
+        self.mock_response_with_status_and_scenario(None)
+    }
+
+    /// Generate a mock response with status code and scenario selection
+    ///
+    /// # Arguments
+    /// * `scenario` - Optional scenario name to select from the OpenAPI examples
+    ///
+    /// # Example
+    /// ```rust
+    /// // Select the "error" scenario from examples
+    /// let (status, body) = route.mock_response_with_status_and_scenario(Some("error"));
+    /// ```
+    pub fn mock_response_with_status_and_scenario(
+        &self,
+        scenario: Option<&str>,
+    ) -> (u16, serde_json::Value) {
         use crate::openapi::response::ResponseGenerator;
 
         // Find the first available status code from the OpenAPI spec
         let status_code = self.find_first_available_status_code();
 
-        // Try to generate a response based on the OpenAPI schema
         // Check if token expansion should be enabled
         let expand_tokens = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
-        match ResponseGenerator::generate_response_with_expansion(
+        match ResponseGenerator::generate_response_with_scenario(
             &self.spec,
             &self.operation,
             status_code,
             Some("application/json"),
             expand_tokens,
+            scenario,
         ) {
             Ok(response_body) => {
                 tracing::debug!(
-                    "ResponseGenerator succeeded for {} {} with status {}: {:?}",
+                    "ResponseGenerator succeeded for {} {} with status {} and scenario {:?}: {:?}",
                     self.method,
                     self.path,
                     status_code,
+                    scenario,
                     response_body
                 );
                 (status_code, response_body)
