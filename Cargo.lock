@@ -5389,6 +5389,7 @@ dependencies = [
 name = "mockforge-ws"
 version = "0.1.2"
 dependencies = [
+ "async-trait",
  "axum 0.8.6",
  "chrono",
  "fastrand 2.3.0",
@@ -5404,6 +5405,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-tungstenite",
  "tracing",

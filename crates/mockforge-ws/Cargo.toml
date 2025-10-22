@@ -23,6 +23,8 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 fastrand = "2.0"
+async-trait = { workspace = true }
+thiserror = "2.0"
 mockforge-core = { version = "0.1.2", path = "../mockforge-core" }
 mockforge-data = { version = "0.1.2", path = "../mockforge-data" }
 mockforge-observability = { version = "0.1.2", path = "../mockforge-observability" }
