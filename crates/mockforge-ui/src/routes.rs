@@ -166,7 +166,8 @@ pub fn create_admin_router(
         let ui_builder_state = UIBuilderState::new(server_config);
         let ui_builder_router = create_ui_builder_router(ui_builder_state);
 
-        router = router.nest("/__mockforge/ui-builder", ui_builder_router);
+        // Nest the UI builder router with its own state
+        router = router.nest_service("/__mockforge/ui-builder", ui_builder_router);
         tracing::info!("UI Builder mounted at /__mockforge/ui-builder");
     }
 

@@ -6,6 +6,7 @@
 pub use mockforge_core::{Error, Result};
 
 pub mod dataset;
+pub mod domains;
 pub mod drift;
 pub mod faker;
 pub mod generator;
@@ -14,8 +15,10 @@ pub mod provider;
 pub mod rag;
 pub mod replay_augmentation;
 pub mod schema;
+pub mod token_resolver;
 
 pub use dataset::{Dataset, DatasetValidationResult};
+pub use domains::{Domain, DomainGenerator, ParseDomainError};
 pub use drift::{DataDriftConfig, DataDriftEngine, DriftStrategy};
 pub use fake::Faker;
 pub use generator::DataGenerator;
@@ -25,6 +28,7 @@ pub use replay_augmentation::{
     EventStrategy, GeneratedEvent, ReplayAugmentationConfig, ReplayAugmentationEngine, ReplayMode,
 };
 pub use schema::{FieldDefinition, SchemaDefinition};
+pub use token_resolver::{resolve_tokens, resolve_tokens_with_rag, TokenResolver, TokenType};
 
 /// Data generation configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
@@ -105,7 +109,7 @@ impl GenerationResult {
         let lines: Vec<String> = self
             .data
             .iter()
-            .map(|v| serde_json::to_string(v))
+            .map(serde_json::to_string)
             .collect::<std::result::Result<_, _>>()?;
         Ok(lines.join("\n"))
     }

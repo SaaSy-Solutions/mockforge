@@ -815,6 +815,31 @@ async fn import_asyncapi_spec_handler(
     }))
 }
 
+/// Resolve tokens in a ResponseBody
+pub async fn resolve_response_body_tokens(
+    body: &ResponseBody,
+) -> Result<serde_json::Value, String> {
+    use crate::token_response::resolve_response_tokens;
+
+    match body {
+        ResponseBody::Static { content } => resolve_response_tokens(content.clone()).await,
+        ResponseBody::Template { template } => {
+            // Templates can also contain tokens, parse and resolve
+            let value = serde_json::Value::String(template.clone());
+            resolve_response_tokens(value).await
+        }
+        ResponseBody::Faker { schema } => {
+            // Faker schemas may contain tokens
+            resolve_response_tokens(schema.clone()).await
+        }
+        ResponseBody::AI { prompt: _ } => {
+            // AI prompts are handled separately by the AI handler
+            // Return as-is since AI generation happens at response time
+            Ok(serde_json::json!({"_ai_prompt": true}))
+        }
+    }
+}
+
 /// Create the UI Builder router
 pub fn create_ui_builder_router(state: UIBuilderState) -> Router {
     Router::new()

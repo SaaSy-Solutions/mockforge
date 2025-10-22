@@ -177,6 +177,7 @@ pub mod rag_ai_generator;
 pub mod replay_listing;
 pub mod request_logging;
 pub mod sse;
+pub mod token_response;
 pub mod ui_builder;
 
 // Re-export AI handler utilities
