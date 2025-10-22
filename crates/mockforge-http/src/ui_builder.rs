@@ -10,6 +10,8 @@ use axum::{
     Router,
 };
 use mockforge_core::config::ServerConfig;
+use mockforge_core::import::asyncapi_import::import_asyncapi_spec;
+use mockforge_core::import::openapi_import::import_openapi_spec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -473,6 +475,347 @@ async fn update_config(
     Ok(Json(new_config))
 }
 
+/// Import OpenAPI specification request
+#[derive(Debug, Deserialize)]
+struct ImportOpenApiRequest {
+    content: String,
+    base_url: Option<String>,
+    auto_enable: Option<bool>,
+}
+
+/// Import OpenAPI specification response
+#[derive(Debug, Serialize)]
+struct ImportOpenApiResponse {
+    success: bool,
+    endpoints_created: usize,
+    warnings: Vec<String>,
+    spec_info: OpenApiSpecInfoResponse,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenApiSpecInfoResponse {
+    title: String,
+    version: String,
+    description: Option<String>,
+    openapi_version: String,
+    servers: Vec<String>,
+}
+
+/// Import OpenAPI/Swagger specification and auto-generate endpoints
+async fn import_openapi_spec_handler(
+    State(state): State<UIBuilderState>,
+    Json(request): Json<ImportOpenApiRequest>,
+) -> Result<Json<ImportOpenApiResponse>, (StatusCode, Json<serde_json::Value>)> {
+    info!("Importing OpenAPI specification");
+
+    // Import the OpenAPI spec
+    let import_result = import_openapi_spec(
+        &request.content,
+        request.base_url.as_deref(),
+    ).map_err(|e| {
+        error!(error = %e, "Failed to import OpenAPI spec");
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Failed to import OpenAPI specification",
+                "details": e
+            }))
+        )
+    })?;
+
+    let auto_enable = request.auto_enable.unwrap_or(true);
+    let mut endpoints = state.endpoints.write().await;
+    let mut created_count = 0;
+
+    // Convert imported routes to EndpointConfig
+    for route in import_result.routes {
+        let endpoint_id = uuid::Uuid::new_v4().to_string();
+
+        // Convert response body to ResponseBody enum
+        let response_body = ResponseBody::Static {
+            content: route.response.body,
+        };
+
+        // Convert headers to HeaderConfig
+        let response_headers: Option<Vec<HeaderConfig>> = if route.response.headers.is_empty() {
+            None
+        } else {
+            Some(
+                route.response.headers
+                    .into_iter()
+                    .map(|(name, value)| HeaderConfig { name, value })
+                    .collect()
+            )
+        };
+
+        let endpoint = EndpointConfig {
+            id: endpoint_id.clone(),
+            protocol: Protocol::Http,
+            name: format!("{} {}", route.method.to_uppercase(), route.path),
+            description: Some(format!("Auto-generated from OpenAPI spec: {} v{}",
+                import_result.spec_info.title,
+                import_result.spec_info.version)),
+            enabled: auto_enable,
+            config: EndpointProtocolConfig::Http(HttpEndpointConfig {
+                method: route.method.to_uppercase(),
+                path: route.path,
+                request: None,
+                response: HttpResponseConfig {
+                    status: route.response.status,
+                    headers: response_headers,
+                    body: response_body,
+                },
+                behavior: None,
+            }),
+        };
+
+        info!(
+            endpoint_id = %endpoint_id,
+            method = %endpoint.name,
+            "Created endpoint from OpenAPI spec"
+        );
+
+        endpoints.push(endpoint);
+        created_count += 1;
+    }
+
+    Ok(Json(ImportOpenApiResponse {
+        success: true,
+        endpoints_created: created_count,
+        warnings: import_result.warnings,
+        spec_info: OpenApiSpecInfoResponse {
+            title: import_result.spec_info.title,
+            version: import_result.spec_info.version,
+            description: import_result.spec_info.description,
+            openapi_version: import_result.spec_info.openapi_version,
+            servers: import_result.spec_info.servers,
+        },
+    }))
+}
+
+/// Export endpoints as OpenAPI specification
+async fn export_openapi_spec_handler(
+    State(state): State<UIBuilderState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let endpoints = state.endpoints.read().await;
+    let server_config = state.server_config.read().await;
+
+    // Build OpenAPI spec from endpoints
+    let http_host = &server_config.http.host;
+    let http_port = server_config.http.port;
+
+    let mut spec = serde_json::json!({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "MockForge Generated API",
+            "version": "1.0.0",
+            "description": "API specification generated from MockForge endpoints"
+        },
+        "servers": [
+            {
+                "url": format!("http://{}:{}", http_host, http_port)
+            }
+        ],
+        "paths": {}
+    });
+
+    let paths = spec["paths"].as_object_mut().unwrap();
+
+    // Group endpoints by path
+    for endpoint in endpoints.iter() {
+        if endpoint.protocol != Protocol::Http {
+            continue; // Only export HTTP endpoints for now
+        }
+
+        if let EndpointProtocolConfig::Http(http_config) = &endpoint.config {
+            let path = &http_config.path;
+
+            if !paths.contains_key(path) {
+                paths.insert(path.clone(), serde_json::json!({}));
+            }
+
+            let method = http_config.method.to_lowercase();
+
+            // Build response body
+            let response_body_content = match &http_config.response.body {
+                ResponseBody::Static { content } => content.clone(),
+                ResponseBody::Template { template } => serde_json::json!({
+                    "type": "string",
+                    "example": template
+                }),
+                ResponseBody::Faker { schema } => schema.clone(),
+                ResponseBody::AI { prompt } => serde_json::json!({
+                    "type": "string",
+                    "description": prompt
+                }),
+            };
+
+            let operation = serde_json::json!({
+                "summary": &endpoint.name,
+                "description": endpoint.description.as_ref().unwrap_or(&String::new()),
+                "operationId": &endpoint.id,
+                "responses": {
+                    http_config.response.status.to_string(): {
+                        "description": format!("Response with status {}", http_config.response.status),
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": response_body_content
+                            }
+                        }
+                    }
+                }
+            });
+
+            paths[path][&method] = operation;
+        }
+    }
+
+    match serde_json::to_string_pretty(&spec) {
+        Ok(json) => Ok((StatusCode::OK, [("Content-Type", "application/json")], json)),
+        Err(e) => {
+            error!(error = %e, "Failed to serialize OpenAPI spec to JSON");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Import AsyncAPI specification request
+#[derive(Debug, Deserialize)]
+struct ImportAsyncApiRequest {
+    content: String,
+    base_url: Option<String>,
+    auto_enable: Option<bool>,
+}
+
+/// Import AsyncAPI specification response
+#[derive(Debug, Serialize)]
+struct ImportAsyncApiResponse {
+    success: bool,
+    endpoints_created: usize,
+    warnings: Vec<String>,
+    spec_info: AsyncApiSpecInfoResponse,
+}
+
+#[derive(Debug, Serialize)]
+struct AsyncApiSpecInfoResponse {
+    title: String,
+    version: String,
+    description: Option<String>,
+    asyncapi_version: String,
+    servers: Vec<String>,
+}
+
+/// Import AsyncAPI specification and auto-generate WebSocket/MQTT/Kafka endpoints
+async fn import_asyncapi_spec_handler(
+    State(state): State<UIBuilderState>,
+    Json(request): Json<ImportAsyncApiRequest>,
+) -> Result<Json<ImportAsyncApiResponse>, (StatusCode, Json<serde_json::Value>)> {
+    info!("Importing AsyncAPI specification");
+
+    // Import the AsyncAPI spec
+    let import_result = import_asyncapi_spec(
+        &request.content,
+        request.base_url.as_deref(),
+    ).map_err(|e| {
+        error!(error = %e, "Failed to import AsyncAPI spec");
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Failed to import AsyncAPI specification",
+                "details": e
+            }))
+        )
+    })?;
+
+    let auto_enable = request.auto_enable.unwrap_or(true);
+    let mut endpoints = state.endpoints.write().await;
+    let mut created_count = 0;
+
+    // Convert imported channels to EndpointConfig
+    for channel in import_result.channels {
+        let endpoint_id = uuid::Uuid::new_v4().to_string();
+
+        // Map AsyncAPI protocol to MockForge protocol
+        let (protocol, config) = match channel.protocol {
+            mockforge_core::import::asyncapi_import::ChannelProtocol::Websocket => {
+                // Create WebSocket endpoint
+                let on_message = if let Some(op) = channel.operations.first() {
+                    if let Some(example) = &op.example_message {
+                        Some(WebsocketAction::Send {
+                            message: ResponseBody::Static {
+                                content: example.clone(),
+                            },
+                        })
+                    } else {
+                        Some(WebsocketAction::Echo)
+                    }
+                } else {
+                    Some(WebsocketAction::Echo)
+                };
+
+                (
+                    Protocol::Websocket,
+                    EndpointProtocolConfig::Websocket(WebsocketEndpointConfig {
+                        path: channel.path.clone(),
+                        on_connect: None,
+                        on_message,
+                        on_disconnect: None,
+                        behavior: None,
+                    }),
+                )
+            }
+            _ => {
+                // For MQTT/Kafka/AMQP, we'll skip for now as they need special handling
+                // Log a warning and continue
+                warn!(
+                    "Skipping channel '{}' with protocol {:?} - not yet supported for UI Builder",
+                    channel.name, channel.protocol
+                );
+                continue;
+            }
+        };
+
+        let endpoint = EndpointConfig {
+            id: endpoint_id.clone(),
+            protocol,
+            name: format!("{} - {}", channel.name, channel.path),
+            description: channel.description.or_else(|| {
+                Some(format!(
+                    "Auto-generated from AsyncAPI spec: {} v{}",
+                    import_result.spec_info.title, import_result.spec_info.version
+                ))
+            }),
+            enabled: auto_enable,
+            config,
+        };
+
+        info!(
+            endpoint_id = %endpoint_id,
+            name = %endpoint.name,
+            "Created endpoint from AsyncAPI spec"
+        );
+
+        endpoints.push(endpoint);
+        created_count += 1;
+    }
+
+    Ok(Json(ImportAsyncApiResponse {
+        success: true,
+        endpoints_created: created_count,
+        warnings: import_result.warnings,
+        spec_info: AsyncApiSpecInfoResponse {
+            title: import_result.spec_info.title,
+            version: import_result.spec_info.version,
+            description: import_result.spec_info.description,
+            asyncapi_version: import_result.spec_info.asyncapi_version,
+            servers: import_result.spec_info.servers,
+        },
+    }))
+}
+
 /// Create the UI Builder router
 pub fn create_ui_builder_router(state: UIBuilderState) -> Router {
     Router::new()
@@ -482,6 +825,9 @@ pub fn create_ui_builder_router(state: UIBuilderState) -> Router {
         .route("/config", get(get_config).put(update_config))
         .route("/config/export", get(export_config))
         .route("/config/import", post(import_config))
+        .route("/openapi/import", post(import_openapi_spec_handler))
+        .route("/openapi/export", get(export_openapi_spec_handler))
+        .route("/asyncapi/import", post(import_asyncapi_spec_handler))
         .with_state(state)
 }
 

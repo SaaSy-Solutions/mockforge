@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Server, Settings, Home } from 'lucide-react'
+import { Server, Settings, Home, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface LayoutProps {
@@ -12,6 +12,7 @@ export default function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { path: '/', icon: Home, label: 'Dashboard' },
+    { path: '/docs', icon: FileText, label: 'API Docs' },
     { path: '/config', icon: Settings, label: 'Config' },
   ]
 

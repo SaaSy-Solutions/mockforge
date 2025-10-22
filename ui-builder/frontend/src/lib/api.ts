@@ -145,4 +145,25 @@ export const configApi = {
   import: (config: string, format: 'yaml' | 'json') => api.post('/config/import', { config, format }),
 }
 
+export interface OpenApiSpecInfo {
+  title: string
+  version: string
+  description?: string
+  openapi_version: string
+  servers: string[]
+}
+
+export interface ImportOpenApiResponse {
+  success: boolean
+  endpoints_created: number
+  warnings: string[]
+  spec_info: OpenApiSpecInfo
+}
+
+export const openApiApi = {
+  import: (content: string, base_url?: string, auto_enable?: boolean) =>
+    api.post<ImportOpenApiResponse>('/openapi/import', { content, base_url, auto_enable }),
+  export: () => api.get<any>('/openapi/export'),
+}
+
 export default api

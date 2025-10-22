@@ -3,6 +3,7 @@
 //! This module provides functionality to import API definitions from external formats
 //! and convert them to MockForge routes, as well as generate commands from OpenAPI specs.
 
+pub mod asyncapi_import;
 pub mod curl_import;
 pub mod har_import;
 pub mod import_utils;
@@ -11,8 +12,13 @@ pub mod openapi_command_generator;
 pub mod openapi_import;
 pub mod postman_environment;
 pub mod postman_import;
+pub mod schema_data_generator;
 
 // Re-export the main functions and types
+pub use asyncapi_import::{
+    import_asyncapi_spec, AsyncApiImportResult, AsyncApiSpecInfo, ChannelProtocol,
+    ChannelOperation, MockForgeChannel, OperationType,
+};
 pub use curl_import::{
     import_curl_commands, CurlImportResult, MockForgeResponse as CurlMockForgeResponse,
     MockForgeRoute as CurlMockForgeRoute,
@@ -40,3 +46,4 @@ pub use postman_environment::{
 pub use postman_import::{
     import_postman_collection, ImportResult, MockForgeResponse, MockForgeRoute,
 };
+pub use schema_data_generator::{generate_from_schema, generate_intelligent_response};

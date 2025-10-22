@@ -23,7 +23,8 @@
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.5.3",
     "sonner": "^1.5.0",
-    "zustand": "^5.0.0-rc.2"
+    "zustand": "^5.0.0-rc.2",
+    "swagger-ui-react": "^5.17.14"
   },
   "devDependencies": {
     "@types/react": "^18.3.9",

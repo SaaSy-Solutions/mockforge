@@ -1,12 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Edit, Power, PowerOff, Globe, Zap, MessageSquare, Server } from 'lucide-react'
+import { Plus, Trash2, Edit, Power, PowerOff, Globe, Zap, MessageSquare, Server, FileJson, Upload, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import { endpointsApi, EndpointConfig } from '@/lib/api'
+import { endpointsApi, EndpointConfig, openApiApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useState, useRef } from 'react'
 
 export default function Dashboard() {
   const queryClient = useQueryClient()
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [specPreview, setSpecPreview] = useState<{title?: string, version?: string, endpoints?: number} | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['endpoints'],
@@ -26,6 +32,113 @@ export default function Dashboard() {
       toast.error('Failed to delete endpoint')
     },
   })
+
+  const importOpenApiMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const content = await file.text()
+      const response = await openApiApi.import(content, undefined, true)
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['endpoints'] })
+      toast.success(`Successfully imported ${data.endpoints_created} endpoints from ${data.spec_info.title}`)
+      if (data.warnings.length > 0) {
+        data.warnings.forEach((warning) => toast.warning(warning))
+      }
+      setShowImportDialog(false)
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.details || 'Failed to import OpenAPI specification')
+    },
+  })
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      // Reset previous state
+      setValidationErrors([])
+      setSpecPreview(null)
+
+      // Validate file type
+      const validExtensions = ['.json', '.yaml', '.yml']
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+
+      if (!validExtensions.includes(fileExtension)) {
+        setValidationErrors([`Invalid file type: ${file.name}. Please upload a JSON or YAML file.`])
+        return
+      }
+
+      // Read and preview file content
+      try {
+        const content = await file.text()
+        let spec: any
+
+        // Parse file
+        if (fileExtension === '.json') {
+          spec = JSON.parse(content)
+        } else {
+          // For YAML, we'll just show basic validation
+          spec = { info: { title: 'YAML Spec', version: '1.0.0' } }
+        }
+
+        // Basic validation
+        const errors: string[] = []
+
+        if (!spec.openapi && !spec.asyncapi && !spec.swagger) {
+          errors.push('Missing API specification version (openapi, asyncapi, or swagger field)')
+        }
+
+        if (!spec.info?.title) {
+          errors.push('Missing spec title (info.title)')
+        }
+
+        if (!spec.info?.version) {
+          errors.push('Missing spec version (info.version)')
+        }
+
+        if (!spec.paths && !spec.channels) {
+          errors.push('No endpoints found (missing paths or channels)')
+        }
+
+        // Count endpoints
+        const endpointCount = Object.keys(spec.paths || spec.channels || {}).length
+
+        if (errors.length > 0) {
+          setValidationErrors(errors)
+        } else {
+          setSpecPreview({
+            title: spec.info?.title,
+            version: spec.info?.version,
+            endpoints: endpointCount,
+          })
+
+          // If valid, proceed with import
+          importOpenApiMutation.mutate(file)
+        }
+      } catch (error) {
+        setValidationErrors([`Failed to parse file: ${error instanceof Error ? error.message : 'Unknown error'}`])
+      }
+    }
+  }
+
+  const handleExportOpenApi = async () => {
+    try {
+      const response = await openApiApi.export()
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'mockforge-openapi.json'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('OpenAPI specification exported successfully')
+      setShowExportDialog(false)
+    } catch (error) {
+      toast.error('Failed to export OpenAPI specification')
+    }
+  }
 
   const getProtocolIcon = (protocol: string) => {
     switch (protocol) {
@@ -74,14 +187,133 @@ export default function Dashboard() {
             Manage your mock endpoints and configurations
           </p>
         </div>
-        <Link
-          to="/endpoints/new"
-          className="inline-flex items-center space-x-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Endpoint</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowImportDialog(true)}
+            className="inline-flex items-center space-x-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-accent"
+          >
+            <Upload className="h-4 w-4" />
+            <span>Import OpenAPI</span>
+          </button>
+          <button
+            onClick={() => setShowExportDialog(true)}
+            className="inline-flex items-center space-x-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-accent"
+            disabled={!data || data.endpoints.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            <span>Export OpenAPI</span>
+          </button>
+          <Link
+            to="/endpoints/new"
+            className="inline-flex items-center space-x-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Endpoint</span>
+          </Link>
+        </div>
       </div>
+
+      {/* Import Dialog */}
+      {showImportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Import OpenAPI Specification</h2>
+              <button
+                onClick={() => {
+                  setShowImportDialog(false)
+                  setValidationErrors([])
+                  setSpecPreview(null)
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-6 text-sm text-muted-foreground">
+              Upload an OpenAPI (Swagger) or AsyncAPI specification file to automatically generate mock endpoints.
+              Supports JSON and YAML formats.
+            </p>
+
+            {/* Validation Errors */}
+            {validationErrors.length > 0 && (
+              <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-4">
+                <p className="mb-2 font-medium text-red-500">Validation Errors:</p>
+                <ul className="list-disc space-y-1 pl-4 text-sm text-red-400">
+                  {validationErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Spec Preview */}
+            {specPreview && (
+              <div className="mb-4 rounded-lg border border-green-500/20 bg-green-500/10 p-4">
+                <p className="mb-2 font-medium text-green-500">Validation Successful</p>
+                <div className="space-y-1 text-sm text-green-400">
+                  <p><strong>Title:</strong> {specPreview.title}</p>
+                  <p><strong>Version:</strong> {specPreview.version}</p>
+                  <p><strong>Endpoints:</strong> {specPreview.endpoints}</p>
+                </div>
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.yaml,.yml"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importOpenApiMutation.isPending}
+              className="w-full rounded-lg border-2 border-dashed border-border bg-accent/50 px-4 py-8 text-center hover:bg-accent disabled:opacity-50"
+            >
+              <FileJson className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+              <p className="text-sm font-medium">
+                {importOpenApiMutation.isPending ? 'Importing...' : 'Click to select specification file'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">OpenAPI, AsyncAPI, JSON, YAML, or YML</p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Dialog */}
+      {showExportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Export OpenAPI Specification</h2>
+              <button
+                onClick={() => setShowExportDialog(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-6 text-sm text-muted-foreground">
+              Export your current endpoints as an OpenAPI 3.0 specification file.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExportDialog(false)}
+                className="flex-1 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExportOpenApi}
+                className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
