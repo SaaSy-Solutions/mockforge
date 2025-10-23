@@ -395,12 +395,12 @@ main() {
     publish_crate "mockforge-plugin-registry"
     wait_for_processing
 
-    convert_crate_dependencies "mockforge-reporting"
-    publish_crate "mockforge-reporting"
-    wait_for_processing
-
     convert_crate_dependencies "mockforge-chaos"
     publish_crate "mockforge-chaos"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-reporting"
+    publish_crate "mockforge-reporting"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-analytics"
