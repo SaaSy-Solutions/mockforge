@@ -11,6 +11,7 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Cloud collaboration features for MockForge - team workspaces, real-time sync, and version control"
+include = ["src/**/*", "migrations/**/*", ".sqlx/**/*", ".cargo/**/*", "Cargo.toml", "README.md", "LICENSE-*"]
 
 [lints]
 workspace = true
