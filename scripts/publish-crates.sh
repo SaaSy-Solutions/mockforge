@@ -165,6 +165,8 @@ convert_dependencies() {
         "mockforge-plugin-registry"
         "mockforge-reporting"
         "mockforge-chaos"
+        "mockforge-analytics"
+        "mockforge-collab"
         "mockforge-http"
         "mockforge-grpc"
         "mockforge-ws"
@@ -174,6 +176,7 @@ convert_dependencies() {
         "mockforge-amqp"
         "mockforge-kafka"
         "mockforge-ftp"
+        "mockforge-sdk"
         "mockforge-bench"
         "mockforge-plugin-loader"
         "mockforge-k8s-operator"
@@ -201,6 +204,8 @@ restore_dependencies() {
         "mockforge-plugin-registry"
         "mockforge-reporting"
         "mockforge-chaos"
+        "mockforge-analytics"
+        "mockforge-collab"
         "mockforge-http"
         "mockforge-grpc"
         "mockforge-ws"
@@ -210,6 +215,7 @@ restore_dependencies() {
         "mockforge-amqp"
         "mockforge-kafka"
         "mockforge-ftp"
+        "mockforge-sdk"
         "mockforge-bench"
         "mockforge-plugin-loader"
         "mockforge-k8s-operator"
@@ -397,6 +403,14 @@ main() {
     publish_crate "mockforge-chaos"
     wait_for_processing
 
+    convert_crate_dependencies "mockforge-analytics"
+    publish_crate "mockforge-analytics"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-collab"
+    publish_crate "mockforge-collab"
+    wait_for_processing
+
     # Phase 2: Publish remaining dependent crates
     print_status "Phase 2: Publishing remaining dependent crates..."
 
@@ -440,6 +454,11 @@ main() {
 
     convert_crate_dependencies "mockforge-ftp"
     publish_crate "mockforge-ftp"
+    wait_for_processing
+
+    # Publish SDK (depends on protocol crates)
+    convert_crate_dependencies "mockforge-sdk"
+    publish_crate "mockforge-sdk"
     wait_for_processing
 
     # Publish utility crates

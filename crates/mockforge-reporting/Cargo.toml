@@ -8,7 +8,7 @@ description = "Report generation and visualization for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Internal reporting component
+publish = true  # Internal reporting component
 
 [dependencies]
 # Serialization
@@ -41,7 +41,7 @@ tera = "1.19"
 tokio = { version = "1", features = ["full"] }
 
 # MockForge dependencies
-mockforge-chaos = { path = "../mockforge-chaos" }
+mockforge-chaos = { version = "0.1.3", path = "../mockforge-chaos" }
 
 # UUID generation
 uuid = { version = "1.6", features = ["v4", "serde"] }
