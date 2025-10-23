@@ -3197,26 +3197,6 @@ dependencies = [
 
 [[package]]
 name = "governor"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68a7f542ee6b35af73b06abc0dad1c1bae89964e4e253bc4b587b91c9637867b"
-dependencies = [
- "cfg-if",
- "dashmap 5.5.3",
- "futures",
- "futures-timer",
- "no-std-compat",
- "nonzero_ext",
- "parking_lot",
- "portable-atomic",
- "quanta 0.12.6",
- "rand 0.8.5",
- "smallvec",
- "spinning_top",
-]
-
-[[package]]
-name = "governor"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be93b4ec2e4710b04d9264c0c7350cdd62a8c20e5e4ac732552ebb8f0debe8eb"
@@ -4807,7 +4787,7 @@ dependencies = [
  "bincode",
  "chrono",
  "futures",
- "governor 0.6.3",
+ "governor",
  "http 1.3.1",
  "http-body-util",
  "mockforge-recorder",
@@ -5188,7 +5168,7 @@ dependencies = [
  "futures-util",
  "glob",
  "globwalk",
- "governor 0.8.1",
+ "governor",
  "hex",
  "http 1.3.1",
  "hyper 1.7.0",
