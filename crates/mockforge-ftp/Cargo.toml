@@ -13,7 +13,7 @@ categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
 mockforge-core = { version = "0.1.3", path = "../mockforge-core" }
-libunftp = "0.20"
+libunftp = "0.21"
 tokio = { workspace = true }
  serde = { workspace = true }
  serde_json = { workspace = true }

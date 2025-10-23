@@ -32,6 +32,6 @@ chrono = { version = "0.4", features = ["serde"] }
 mockforge-chaos = { path = "../mockforge-chaos" }
 
 # Metrics
-prometheus = "0.13"
+prometheus = { version = "0.14", features = ["process"] }
 
 [dev-dependencies]

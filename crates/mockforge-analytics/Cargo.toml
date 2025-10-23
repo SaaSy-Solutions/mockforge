@@ -34,7 +34,7 @@ anyhow = "1.0"
 tracing = "0.1"
 
 # Metrics
-prometheus = "0.13"
+prometheus = { version = "0.14", features = ["process"] }
 
 # HTTP client (for querying Prometheus)
 reqwest = { version = "0.12", features = ["json"] }
