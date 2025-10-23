@@ -10,6 +10,7 @@ documentation.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
+description = "Traffic analytics and metrics dashboard for MockForge"
 
 [dependencies]
 # Database
