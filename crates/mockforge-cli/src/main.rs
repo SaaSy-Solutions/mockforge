@@ -5,6 +5,7 @@ use mockforge_core::encryption::init_key_store;
 use mockforge_core::{apply_env_overrides, ServerConfig};
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
+use serde_json::json;
 use std::any::Any;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -1306,6 +1307,94 @@ enum DataCommands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+
+    /// Generate mock data from OpenAPI specification
+    ///
+    /// Examples:
+    ///   mockforge data mock-openapi api-spec.json --rows 50 --format json
+    ///   mockforge data mock-openapi api-spec.yaml --realistic --output mock-data.json
+    ///   mockforge data mock-openapi api-spec.json --validate --include-optional
+    #[command(verbatim_doc_comment)]
+    MockOpenapi {
+        /// OpenAPI specification file path (JSON or YAML)
+        spec: PathBuf,
+
+        /// Number of rows to generate per schema
+        #[arg(short, long, default_value = "5")]
+        rows: usize,
+
+        /// Output format (json, csv, jsonl)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Enable realistic data generation
+        #[arg(long)]
+        realistic: bool,
+
+        /// Include optional fields in generated data
+        #[arg(long)]
+        include_optional: bool,
+
+        /// Validate generated data against schemas
+        #[arg(long)]
+        validate: bool,
+
+        /// Default array size for generated arrays
+        #[arg(long, default_value = "3")]
+        array_size: usize,
+
+        /// Maximum array size for generated arrays
+        #[arg(long, default_value = "10")]
+        max_array_size: usize,
+    },
+
+    /// Start a mock server based on OpenAPI specification
+    ///
+    /// Examples:
+    ///   mockforge data mock-server api-spec.json --port 8080
+    ///   mockforge data mock-server api-spec.yaml --host 0.0.0.0 --port 3000 --cors
+    ///   mockforge data mock-server api-spec.json --delay /api/users 100 --log-requests
+    #[command(verbatim_doc_comment)]
+    MockServer {
+        /// OpenAPI specification file path (JSON or YAML)
+        spec: PathBuf,
+
+        /// Port to run the mock server on
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Host to bind to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Enable CORS headers
+        #[arg(long)]
+        cors: bool,
+
+        /// Log all incoming requests
+        #[arg(long)]
+        log_requests: bool,
+
+        /// Response delay for specific endpoints (format: endpoint:delay_ms)
+        #[arg(long)]
+        delay: Vec<String>,
+
+        /// Enable realistic data generation
+        #[arg(long)]
+        realistic: bool,
+
+        /// Include optional fields in generated data
+        #[arg(long)]
+        include_optional: bool,
+
+        /// Validate generated data against schemas
+        #[arg(long)]
+        validate: bool,
+    },
 }
 
 #[tokio::main]
@@ -1884,20 +1973,8 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
         config.grpc.port = grpc_port;
     }
 
-    // MQTT configuration
-    if let Some(mqtt_port) = serve_args.mqtt_port {
-        config.mqtt.port = mqtt_port;
-    }
-
-    // Kafka configuration
-    if let Some(kafka_port) = serve_args.kafka_port {
-        config.kafka.port = kafka_port;
-    }
-
-    // AMQP configuration
-    if let Some(amqp_port) = serve_args.amqp_port {
-        config.amqp.port = amqp_port;
-    }
+    // Protocol-specific configurations are handled by their respective modules
+    // MQTT, Kafka, and AMQP ports are configured through their individual modules
 
     // Admin configuration
     if serve_args.admin {
@@ -2796,7 +2873,7 @@ async fn handle_serve(
             println!("🐰 AMQP broker listening on {}:{}", amqp_config.host, amqp_config.port);
 
             // Create spec registry
-            let spec_registry = Arc::new(AmqpSpecRegistry::new());
+            let spec_registry = Arc::new(AmqpSpecRegistry::new(amqp_config.clone()).await.map_err(|e| format!("Failed to create AMQP spec registry: {:?}", e))?);
 
             // Load fixtures if configured
             if let Some(ref fixtures_dir) = amqp_config.fixtures_dir {
@@ -3070,6 +3147,93 @@ async fn handle_data(
             // Format and output the result
             output_result(result, format, output).await?;
         }
+        DataCommands::MockOpenapi {
+            spec,
+            rows,
+            format,
+            output,
+            realistic,
+            include_optional,
+            validate,
+            array_size,
+            max_array_size,
+        } => {
+            println!("🚀 Generating mock data from OpenAPI spec: {}", spec.display());
+            println!("📊 Rows per schema: {}", rows);
+            println!("📄 Output format: {}", format);
+            if realistic {
+                println!("🎭 Realistic data generation enabled");
+            }
+            if include_optional {
+                println!("📝 Including optional fields");
+            }
+            if validate {
+                println!("✅ Schema validation enabled");
+            }
+            println!("📏 Array size: {} (max: {})", array_size, max_array_size);
+            if let Some(output_path) = &output {
+                println!("💾 Output file: {}", output_path.display());
+            }
+
+            // Generate mock data from OpenAPI spec
+            let result = generate_mock_data_from_openapi(
+                &spec,
+                rows,
+                realistic,
+                include_optional,
+                validate,
+                array_size,
+                max_array_size,
+            ).await?;
+
+            // Format and output the result
+            output_mock_data_result(result, format, output).await?;
+        }
+        DataCommands::MockServer {
+            spec,
+            port,
+            host,
+            cors,
+            log_requests,
+            delay,
+            realistic,
+            include_optional,
+            validate,
+        } => {
+            println!("🌐 Starting mock server based on OpenAPI spec: {}", spec.display());
+            println!("🔗 Server will run on {}:{}", host, port);
+            if cors {
+                println!("🌍 CORS enabled");
+            }
+            if log_requests {
+                println!("📝 Request logging enabled");
+            }
+            if !delay.is_empty() {
+                println!("⏱️ Response delays configured: {:?}", delay);
+            }
+            if realistic {
+                println!("🎭 Realistic data generation enabled");
+            }
+            if include_optional {
+                println!("📝 Including optional fields");
+            }
+            if validate {
+                println!("✅ Schema validation enabled");
+            }
+
+            // Start the mock server
+            start_mock_server_from_spec(
+                &spec,
+                port,
+                &host,
+                cors,
+                log_requests,
+                delay,
+                realistic,
+                include_optional,
+                validate,
+            ).await?;
+        }
     }
 
     Ok(())
@@ -3329,7 +3493,7 @@ fn load_rag_config(
 #[allow(clippy::too_many_arguments)]
 async fn generate_from_template(
     template: &str,
-    rows: usize,
+    _rows: usize,
     rag_enabled: bool,
     rag_provider: Option<String>,
     rag_model: Option<String>,
@@ -3340,7 +3504,7 @@ async fn generate_from_template(
     use mockforge_data::schema::templates;
 
     let config = mockforge_data::DataConfig {
-        rows,
+        rows: _rows,
         rag_enabled,
         ..Default::default()
     };
@@ -3458,6 +3622,182 @@ async fn output_result(
     }
 
     Ok(())
+}
+
+/// Generate mock data from OpenAPI specification
+async fn generate_mock_data_from_openapi(
+    spec_path: &PathBuf,
+    rows: usize,
+    realistic: bool,
+    include_optional: bool,
+    validate: bool,
+    array_size: usize,
+    max_array_size: usize,
+) -> Result<mockforge_data::MockDataResult, Box<dyn std::error::Error + Send + Sync>> {
+    // Read the OpenAPI specification file
+    let spec_content = tokio::fs::read_to_string(spec_path).await?;
+
+    // Parse JSON or YAML
+    let spec_json: serde_json::Value = if spec_path.extension().and_then(|s| s.to_str()) == Some("yaml")
+        || spec_path.extension().and_then(|s| s.to_str()) == Some("yml") {
+        serde_yaml::from_str(&spec_content)?
+    } else {
+        serde_json::from_str(&spec_content)?
+    };
+
+    // Create generator configuration
+    let config = mockforge_data::MockGeneratorConfig::new()
+        .realistic_mode(realistic)
+        .include_optional_fields(include_optional)
+        .validate_generated_data(validate)
+        .default_array_size(array_size)
+        .max_array_size(max_array_size);
+
+    // Generate mock data
+    let mut generator = mockforge_data::MockDataGenerator::with_config(config);
+    generator.generate_from_openapi_spec(&spec_json)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+}
+
+/// Output mock data result in the specified format
+async fn output_mock_data_result(
+    result: mockforge_data::MockDataResult,
+    format: String,
+    output_path: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let output_content = match format.to_lowercase().as_str() {
+        "json" => serde_json::to_string_pretty(&result)?,
+        "jsonl" | "jsonlines" => {
+            // Convert to JSONL format
+            let mut jsonl_output = String::new();
+
+            // Add schemas
+            for (schema_name, schema_data) in &result.schemas {
+                let schema_line = json!({
+                    "type": "schema",
+                    "name": schema_name,
+                    "data": schema_data
+                });
+                jsonl_output.push_str(&serde_json::to_string(&schema_line)?);
+                jsonl_output.push('\n');
+            }
+
+            // Add responses
+            for (endpoint, response) in &result.responses {
+                let response_line = json!({
+                    "type": "response",
+                    "endpoint": endpoint,
+                    "status": response.status,
+                    "headers": response.headers,
+                    "body": response.body
+                });
+                jsonl_output.push_str(&serde_json::to_string(&response_line)?);
+                jsonl_output.push('\n');
+            }
+
+            jsonl_output
+        }
+        "csv" => {
+            // For CSV, we'll create a simplified format
+            let mut csv_output = String::new();
+            csv_output.push_str("type,name,endpoint,status,data\n");
+
+            // Add schemas
+            for (schema_name, schema_data) in &result.schemas {
+                csv_output.push_str(&format!("schema,{},\"\",\"\",{}\n",
+                    schema_name,
+                    serde_json::to_string(schema_data)?.replace("\"", "\"\"")
+                ));
+            }
+
+            // Add responses
+            for (endpoint, response) in &result.responses {
+                csv_output.push_str(&format!("response,\"\",{},{},{}\n",
+                    endpoint.replace("\"", "\"\""),
+                    response.status,
+                    serde_json::to_string(&response.body)?.replace("\"", "\"\"")
+                ));
+            }
+
+            csv_output
+        }
+        _ => serde_json::to_string_pretty(&result)?, // Default to JSON
+    };
+
+    // Output to file or stdout
+    if let Some(path) = output_path {
+        tokio::fs::write(&path, &output_content).await?;
+        println!("💾 Mock data written to: {}", path.display());
+    } else {
+        println!("{}", output_content);
+    }
+
+    println!("✅ Generated mock data for {} schemas and {} endpoints",
+        result.schemas.len(), result.responses.len());
+
+    if !result.warnings.is_empty() {
+        println!("⚠️  Warnings:");
+        for warning in result.warnings {
+            println!("   - {}", warning);
+        }
+    }
+
+    Ok(())
+}
+
+/// Start mock server from OpenAPI specification
+async fn start_mock_server_from_spec(
+    spec_path: &PathBuf,
+    port: u16,
+    host: &str,
+    cors: bool,
+    log_requests: bool,
+    delays: Vec<String>,
+    realistic: bool,
+    include_optional: bool,
+    validate: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Read the OpenAPI specification file
+    let spec_content = tokio::fs::read_to_string(spec_path).await?;
+
+    // Parse JSON or YAML
+    let spec_json: serde_json::Value = if spec_path.extension().and_then(|s| s.to_str()) == Some("yaml")
+        || spec_path.extension().and_then(|s| s.to_str()) == Some("yml") {
+        serde_yaml::from_str(&spec_content)?
+    } else {
+        serde_json::from_str(&spec_content)?
+    };
+
+    // Create server configuration
+    let mut config = mockforge_data::MockServerConfig::new(spec_json)
+        .port(port)
+        .host(host.to_string())
+        .enable_cors(cors)
+        .log_requests(log_requests)
+        .generator_config(
+            mockforge_data::MockGeneratorConfig::new()
+                .realistic_mode(realistic)
+                .include_optional_fields(include_optional)
+                .validate_generated_data(validate)
+        );
+
+    // Add response delays
+    for delay_spec in delays {
+        if let Some((endpoint, delay_ms)) = delay_spec.split_once(':') {
+            if let Ok(delay) = delay_ms.parse::<u64>() {
+                config = config.response_delay(endpoint.to_string(), delay);
+            }
+        }
+    }
+
+    // Start the mock server
+    println!("🚀 Starting mock server...");
+    println!("📡 Server will be available at: http://{}:{}", host, port);
+    println!("📋 OpenAPI spec: {}", spec_path.display());
+    println!("🛑 Press Ctrl+C to stop the server");
+
+    mockforge_data::start_mock_server_with_config(config).await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 }
 
 /// Handle shell completions generation
