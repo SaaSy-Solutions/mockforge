@@ -213,6 +213,7 @@ pub mod docker_compose;
 pub mod encryption;
 pub mod error;
 pub mod failure_injection;
+pub mod generate_config;
 pub mod import;
 pub mod intelligent_behavior;
 pub mod latency;
@@ -254,6 +255,10 @@ pub use config::{
 pub use error::{Error, Result};
 pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
+};
+pub use generate_config::{
+    discover_config_file, load_generate_config, load_generate_config_with_fallback,
+    save_generate_config, GenerateConfig, GenerateOptions, InputConfig, OutputConfig, PluginConfig,
 };
 pub use latency::LatencyProfile;
 pub use multi_tenant::{

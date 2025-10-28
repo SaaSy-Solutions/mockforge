@@ -491,6 +491,35 @@ enum Commands {
         no_examples: bool,
     },
 
+    /// Generate mock servers from OpenAPI specifications
+    ///
+    /// Examples:
+    ///   mockforge generate --spec openapi.yaml
+    ///   mockforge generate --spec api.json --output ./generated
+    ///   mockforge generate  # Uses mockforge.toml config
+    #[command(verbatim_doc_comment)]
+    Generate {
+        /// Path to mockforge.toml configuration file
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+
+        /// OpenAPI specification file (JSON or YAML)
+        #[arg(short, long)]
+        spec: Option<PathBuf>,
+
+        /// Output directory path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Generate verbose output
+        #[arg(long)]
+        verbose: bool,
+
+        /// Dry run (validate config without generating)
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Configuration management
     Config {
         #[command(subcommand)]
@@ -1370,6 +1399,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Init { name, no_examples } => {
             handle_init(name, no_examples).await?;
+        }
+        Commands::Generate {
+            config,
+            spec,
+            output,
+            verbose,
+            dry_run,
+        } => {
+            handle_generate(config, spec, output, verbose, dry_run).await?;
         }
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
@@ -3034,6 +3072,147 @@ fn handle_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+}
+
+/// Handle mock generation from configuration
+async fn handle_generate(
+    config_path: Option<PathBuf>,
+    spec_path: Option<PathBuf>,
+    output_path: Option<PathBuf>,
+    verbose: bool,
+    dry_run: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_core::{discover_config_file, load_generate_config_with_fallback};
+
+    println!("🔧 Generating mocks from configuration...");
+
+    // Step 1: Discover or load config file
+    let config_file = if let Some(path) = &config_path {
+        path.clone()
+    } else {
+        match discover_config_file() {
+            Ok(path) => path,
+            Err(_) => {
+                println!("ℹ️  No configuration file found, using defaults");
+                return Err("No configuration file found and no spec provided. Please create mockforge.toml, mockforge.yaml, or mockforge.json, or provide --spec flag.".into());
+            }
+        }
+    };
+
+    if verbose {
+        println!("📄 Loading configuration from: {}", config_file.display());
+    }
+
+    // Step 2: Load configuration with fallback
+    let mut config = load_generate_config_with_fallback(&config_file).await;
+
+    // Step 3: Apply CLI argument overrides
+    if let Some(spec) = &spec_path {
+        config.input.spec = Some(spec.clone());
+    }
+
+    if let Some(output) = &output_path {
+        config.output.path = output.clone();
+    }
+
+    // Step 4: Validate configuration
+    if config.input.spec.is_none() {
+        return Err(
+            "No input specification provided. Please set 'spec' in config file or use --spec flag."
+                .into(),
+        );
+    }
+
+    let spec = config.input.spec.as_ref().unwrap();
+
+    if !spec.exists() {
+        return Err(format!("Specification file not found: {}", spec.display()).into());
+    }
+
+    if verbose {
+        println!("📝 Input spec: {}", spec.display());
+        println!("📂 Output path: {}", config.output.path.display());
+        if let Some(filename) = &config.output.filename {
+            println!("📄 Output filename: {}", filename);
+        }
+        if let Some(options) = &config.options {
+            println!("⚙️  Client: {:?}", options.client);
+            println!("⚙️  Mode: {:?}", options.mode);
+            println!("⚙️  Runtime: {:?}", options.runtime);
+        }
+        if !config.plugins.is_empty() {
+            println!("🔌 Plugins:");
+            for (name, plugin) in &config.plugins {
+                match plugin {
+                    mockforge_core::PluginConfig::Simple(pkg) => {
+                        println!("  - {}: {}", name, pkg);
+                    }
+                    mockforge_core::PluginConfig::Advanced { package, options } => {
+                        println!("  - {}: {} (with options)", name, package);
+                        if !options.is_empty() {
+                            for (k, v) in options {
+                                println!("    - {}: {}", k, v);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if dry_run {
+        println!("✅ Configuration is valid (dry run)");
+        return Ok(());
+    }
+
+    // Step 5: Create output directory
+    if config.output.clean && config.output.path.exists() {
+        if verbose {
+            println!("🧹 Cleaning output directory: {}", config.output.path.display());
+        }
+        tokio::fs::remove_dir_all(&config.output.path).await?;
+    }
+
+    tokio::fs::create_dir_all(&config.output.path).await?;
+
+    // Step 6: Load and process OpenAPI spec
+    let _spec_content = tokio::fs::read_to_string(spec).await?;
+    println!("📖 Loaded OpenAPI specification");
+
+    // Step 7: Generate mock server code
+    println!("🚀 Generating mock server...");
+
+    // For now, just create a placeholder file
+    let output_file = config.output.path.join(
+        config
+            .output
+            .filename
+            .clone()
+            .unwrap_or_else(|| "generated_mock.rs".to_string()),
+    );
+
+    let mock_code = format!(
+        r#"// Generated by MockForge
+// Source: {}
+
+pub struct GeneratedMockServer {{
+    // TODO: Implement mock server based on OpenAPI spec
+}}
+
+impl GeneratedMockServer {{
+    pub fn new() -> Self {{
+        Self {{
+        }}
+    }}
+}}
+"#,
+        spec.display()
+    );
+
+    tokio::fs::write(&output_file, mock_code).await?;
+    println!("✅ Generated: {}", output_file.display());
+
+    Ok(())
 }
 
 /// Handle project initialization

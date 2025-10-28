@@ -19,6 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+toml = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "0.28"
 futures = "0.3"
