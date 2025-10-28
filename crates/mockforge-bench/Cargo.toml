@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-bench"
-version = "0.1.2"
+version = "0.1.6"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 description = "Load and performance testing for MockForge"
@@ -11,8 +11,8 @@ documentation = "https://docs.rs/mockforge"
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.1.2", path = "../mockforge-core" }
-mockforge-data = { version = "0.1.2", path = "../mockforge-data" }
+mockforge-core = { version = "0.1.3", path = "../mockforge-core" }
+mockforge-data = { version = "0.1.3", path = "../mockforge-data" }
 mockforge-recorder = { version = "0.1.2", path = "../mockforge-recorder", optional = true }
 
 # OpenAPI and spec parsing

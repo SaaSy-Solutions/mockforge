@@ -202,8 +202,17 @@ impl OpenApiRouteRegistry {
                                 body: axum::body::Bytes| async move {
                 tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
 
-                // Generate mock response for this request
-                let (selected_status, mock_response) = route_clone.mock_response_with_status();
+                // Determine scenario from header or environment variable
+                // Header takes precedence over environment variable
+                let scenario = headers
+                    .get("X-Mockforge-Scenario")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_string())
+                    .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
+
+                // Generate mock response for this request with scenario support
+                let (selected_status, mock_response) =
+                    route_clone.mock_response_with_status_and_scenario(scenario.as_deref());
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = serde_json::Map::new();
@@ -427,7 +436,7 @@ impl OpenApiRouteRegistry {
             let method_for_router = method_str.clone();
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
-            let (selected_status, mock_response) = route.mock_response_with_status();
+            let route_clone = route.clone();
             let injector = latency_injector.clone();
             let failure_injector = failure_injector.clone();
             let route_overrides = overrides.clone();
@@ -465,6 +474,14 @@ impl OpenApiRouteRegistry {
                 if let Err(e) = injector.inject_latency(&operation_tags).await {
                     tracing::warn!("Failed to inject latency: {}", e);
                 }
+
+                // Determine scenario from header or environment variable
+                // Header takes precedence over environment variable
+                let scenario = headers
+                    .get("X-Mockforge-Scenario")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_string())
+                    .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
 
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
@@ -554,6 +571,10 @@ impl OpenApiRouteRegistry {
                         Json(payload),
                     );
                 }
+
+                // Generate mock response with scenario support
+                let (selected_status, mock_response) =
+                    route_clone.mock_response_with_status_and_scenario(scenario.as_deref());
 
                 // Expand templating tokens in response if enabled (options or env)
                 let mut response = mock_response.clone();

@@ -14,6 +14,7 @@ pub mod protocols;
 pub mod query;
 pub mod recorder;
 pub mod replay;
+pub mod scrubbing;
 pub mod test_generation;
 
 pub use api::create_api_router;
@@ -29,6 +30,9 @@ pub use models::{Protocol, RecordedRequest, RecordedResponse};
 pub use query::{QueryFilter, QueryResult};
 pub use recorder::Recorder;
 pub use replay::ReplayEngine;
+pub use scrubbing::{
+    CaptureFilter, CaptureFilterConfig, ScrubConfig, ScrubRule, ScrubTarget, Scrubber,
+};
 pub use test_generation::{
     GeneratedTest, LlmConfig, TestFormat, TestGenerationConfig, TestGenerationResult,
     TestGenerator, TestSuiteMetadata,

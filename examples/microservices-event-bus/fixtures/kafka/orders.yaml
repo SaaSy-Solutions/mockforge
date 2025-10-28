@@ -1,0 +1,97 @@
+# Kafka Fixtures for Order Service
+
+# Order Created Events
+- identifier: "order-created"
+  topic: "orders.created"
+  partition: null  # Auto-assign
+  key_pattern: "order-{{uuid}}"
+  value_template:
+    event_type: "order.created"
+    order_id: "{{uuid}}"
+    customer_id: "customer-{{faker.int 1000 9999}}"
+    customer_email: "{{faker.email}}"
+    items:
+      - product_id: "{{faker.uuid}}"
+        name: "{{faker.productName}}"
+        quantity: "{{faker.int 1 5}}"
+        price: "{{faker.float 10.0 500.0 | round 2}}"
+    subtotal: "{{faker.float 50.0 2000.0 | round 2}}"
+    tax: "{{faker.float 5.0 200.0 | round 2}}"
+    shipping: "{{faker.float 5.0 25.0 | round 2}}"
+    total: "{{faker.float 60.0 2225.0 | round 2}}"
+    currency: "USD"
+    status: "pending"
+    shipping_address:
+      street: "{{faker.streetAddress}}"
+      city: "{{faker.city}}"
+      state: "{{faker.state}}"
+      zip: "{{faker.zipCode}}"
+      country: "US"
+    payment_method: "{{faker.randomChoice ['credit_card', 'debit_card', 'paypal']}}"
+    created_at: "{{now}}"
+    updated_at: "{{now}}"
+  headers:
+    event_version: "1.0"
+    source_service: "order-service"
+    correlation_id: "{{uuid}}"
+    trace_id: "{{uuid}}"
+  auto_produce:
+    enabled: true
+    rate_per_second: 5  # 5 orders per second
+
+# Order Status Updates
+- identifier: "order-status-updated"
+  topic: "orders.status-updated"
+  key_pattern: "{{context.order_id}}"
+  value_template:
+    event_type: "order.status_updated"
+    order_id: "{{context.order_id}}"
+    previous_status: "{{context.previous_status}}"
+    new_status: "{{context.new_status}}"
+    reason: "{{context.reason}}"
+    updated_at: "{{now}}"
+    updated_by: "system"
+  headers:
+    event_version: "1.0"
+    source_service: "order-service"
+
+# Payment Processed Events
+- identifier: "payment-processed"
+  topic: "payments.processed"
+  key_pattern: "payment-{{uuid}}"
+  value_template:
+    event_type: "payment.processed"
+    payment_id: "{{uuid}}"
+    order_id: "{{context.order_id}}"
+    amount: "{{context.total}}"
+    currency: "USD"
+    payment_method: "{{context.payment_method}}"
+    status: "{{faker.randomChoice ['success', 'failed'] | withProbability [0.95, 0.05]}}"
+    transaction_id: "txn-{{uuid}}"
+    processor: "{{faker.randomChoice ['stripe', 'paypal', 'square']}}"
+    processed_at: "{{now}}"
+  headers:
+    event_version: "1.0"
+    source_service: "payment-service"
+    idempotency_key: "{{uuid}}"
+
+# Inventory Updated Events
+- identifier: "inventory-updated"
+  topic: "inventory.updated"
+  partition: null
+  key_pattern: "product-{{context.product_id}}"
+  value_template:
+    event_type: "inventory.updated"
+    product_id: "{{context.product_id}}"
+    product_name: "{{context.product_name}}"
+    quantity_change: -1  # Decrement for each order
+    previous_quantity: "{{faker.int 0 1000}}"
+    new_quantity: "{{faker.int 0 999}}"
+    warehouse_id: "{{faker.randomChoice ['WH-US-001', 'WH-US-002', 'WH-EU-001']}}"
+    location: "{{faker.randomChoice ['Aisle A1', 'Aisle B3', 'Aisle C2']}}"
+    updated_at: "{{now}}"
+    low_stock_threshold: 50
+    is_low_stock: "{{context.new_quantity < 50}}"
+  headers:
+    event_version: "1.0"
+    source_service: "inventory-service"

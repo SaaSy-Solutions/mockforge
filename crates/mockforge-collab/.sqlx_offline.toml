@@ -1,0 +1,2 @@
+# SQLite offline mode configuration
+# Run `cargo sqlx prepare` to regenerate query metadata

@@ -1,0 +1,195 @@
+{
+  "dashboard": {
+    "title": "MockForge Overview",
+    "description": "Comprehensive overview of MockForge metrics",
+    "tags": ["mockforge", "overview"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(mockforge_requests_total[5m]))",
+            "legendFormat": "Total Requests/sec",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "reqps", "label": "Requests/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "P95 Latency",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(mockforge_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P95 Latency (ms)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "ms", "label": "Latency" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "(sum(rate(mockforge_errors_total[5m])) / sum(rate(mockforge_requests_total[5m]))) * 100",
+            "legendFormat": "Error Rate (%)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "percent", "label": "Error Rate" },
+          { "format": "short" }
+        ],
+        "thresholds": [
+          { "value": 1, "op": "gt", "fill": true, "line": true, "colorMode": "critical" },
+          { "value": 5, "op": "gt", "fill": true, "line": true, "colorMode": "critical" }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Requests by Protocol",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (protocol) (rate(mockforge_requests_total[5m]))",
+            "legendFormat": "{{protocol}}",
+            "refId": "A"
+          }
+        ],
+        "stack": false
+      },
+      {
+        "id": 5,
+        "title": "Top Endpoints by Request Rate",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "topk(10, sum by (path, method) (rate(mockforge_requests_by_path_total[5m])))",
+            "legendFormat": "{{method}} {{path}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Latency Percentiles",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(mockforge_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(mockforge_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(mockforge_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P99",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Active Connections",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(mockforge_requests_in_flight)",
+            "legendFormat": "HTTP",
+            "refId": "A"
+          },
+          {
+            "expr": "mockforge_ws_connections_active",
+            "legendFormat": "WebSocket",
+            "refId": "B"
+          },
+          {
+            "expr": "mockforge_smtp_connections_active",
+            "legendFormat": "SMTP",
+            "refId": "C"
+          },
+          {
+            "expr": "mockforge_mqtt_connections_active",
+            "legendFormat": "MQTT",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "System Metrics",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "mockforge_memory_usage_bytes / 1024 / 1024",
+            "legendFormat": "Memory (MB)",
+            "refId": "A"
+          },
+          {
+            "expr": "mockforge_cpu_usage_percent",
+            "legendFormat": "CPU (%)",
+            "refId": "B",
+            "yAxisIndex": 1
+          }
+        ],
+        "yaxes": [
+          { "format": "decmbytes", "label": "Memory" },
+          { "format": "percent", "label": "CPU" }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Errors by Type",
+        "type": "graph",
+        "datasource": "Prometheus",
+        "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (error_type) (rate(mockforge_errors_total[5m]))",
+            "legendFormat": "{{error_type}}",
+            "refId": "A"
+          }
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "10s"
+  }
+}

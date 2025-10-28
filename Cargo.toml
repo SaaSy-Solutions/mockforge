@@ -7,6 +7,7 @@ members = [
     "crates/mockforge-grpc",
     "crates/mockforge-graphql",
     "crates/mockforge-data",
+    "crates/mockforge-collab",
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-sdk",
@@ -19,13 +20,15 @@ members = [
     "crates/mockforge-reporting",
     "crates/mockforge-chaos",
     "crates/mockforge-bench",
+    "crates/mockforge-test",
     "crates/mockforge-smtp",
     "crates/mockforge-ftp",
     "crates/mockforge-amqp",
     "crates/mockforge-kafka",
     "examples/plugins/response-graphql",
+    "examples/test-integration",
     "test_openapi_demo"
-]
+, "crates/mockforge-analytics", "crates/mockforge-sdk"]
 exclude = [
     "crates/mockforge-registry-server",
     "temp-publish"
@@ -34,7 +37,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.1.2"
+version = "0.1.6"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -88,7 +91,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 
 # HTTP/web framework
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 hyper = { version = "1.0", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "cors", "trace", "compression-full"] }

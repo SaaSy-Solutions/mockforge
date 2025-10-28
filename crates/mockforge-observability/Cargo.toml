@@ -8,7 +8,7 @@ description = "Observability features for MockForge including Prometheus metrics
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Internal observability component
+publish = true  # Internal observability component
 
 [dependencies]
 # Prometheus metrics (updated to 0.14+ to fix protobuf vulnerability RUSTSEC-2024-0437)

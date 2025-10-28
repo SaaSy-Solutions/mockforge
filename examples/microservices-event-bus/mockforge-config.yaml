@@ -1,0 +1,69 @@
+# MockForge Configuration - Microservices Event Bus Example
+# This configuration demonstrates all three async protocols working together
+
+server:
+  host: "0.0.0.0"
+
+  # HTTP API for order service
+  http:
+    enabled: true
+    port: 3000
+    cors:
+      enabled: true
+      allow_origins: ["*"]
+
+  # Kafka Event Streaming
+  kafka:
+    enabled: true
+    port: 9092
+    host: "0.0.0.0"
+    broker_id: 1
+    max_connections: 1000
+    auto_create_topics: true
+    default_partitions: 3
+    default_replication_factor: 1
+    fixtures_dir: "./fixtures/kafka"
+    log_retention_ms: 604800000  # 7 days
+    log_segment_bytes: 1073741824  # 1 GB
+
+  # MQTT Pub/Sub for IoT & Real-time
+  mqtt:
+    enabled: true
+    port: 1883
+    host: "0.0.0.0"
+    max_connections: 10000
+    max_packet_size: 1048576  # 1MB
+    keep_alive_secs: 60
+    fixtures_dir: "./fixtures/mqtt"
+
+  # AMQP Message Queuing for Notifications
+  amqp:
+    enabled: true
+    port: 5672
+    host: "0.0.0.0"
+    max_connections: 1000
+    max_channels_per_connection: 2047
+    frame_max: 131072  # 128KB
+    heartbeat_interval: 60
+    fixtures_dir: "./fixtures/amqp"
+
+  # Admin UI & Metrics
+  admin:
+    enabled: true
+    port: 9080
+
+  metrics:
+    enabled: true
+    port: 9090
+
+  # Enable tracing
+  tracing:
+    enabled: true
+    service_name: "mockforge-microservices"
+    environment: "development"
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"

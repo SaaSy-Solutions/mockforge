@@ -99,23 +99,71 @@ impl ResponseGenerator {
         content_type: Option<&str>,
         expand_tokens: bool,
     ) -> Result<Value> {
+        Self::generate_response_with_scenario(
+            spec,
+            operation,
+            status_code,
+            content_type,
+            expand_tokens,
+            None,
+        )
+    }
+
+    /// Generate a mock response with scenario support
+    ///
+    /// This method allows selection of specific example scenarios from the OpenAPI spec.
+    /// Scenarios are defined using the standard OpenAPI `examples` field (not the singular `example`).
+    ///
+    /// # Arguments
+    /// * `spec` - The OpenAPI specification
+    /// * `operation` - The operation to generate a response for
+    /// * `status_code` - The HTTP status code
+    /// * `content_type` - Optional content type (e.g., "application/json")
+    /// * `expand_tokens` - Whether to expand template tokens like {{now}} and {{uuid}}
+    /// * `scenario` - Optional scenario name to select from the examples map
+    ///
+    /// # Example
+    /// ```yaml
+    /// responses:
+    ///   '200':
+    ///     content:
+    ///       application/json:
+    ///         examples:
+    ///           happy:
+    ///             value: { "status": "success", "message": "All good!" }
+    ///           error:
+    ///             value: { "status": "error", "message": "Something went wrong" }
+    /// ```
+    pub fn generate_response_with_scenario(
+        spec: &OpenApiSpec,
+        operation: &Operation,
+        status_code: u16,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+        scenario: Option<&str>,
+    ) -> Result<Value> {
         // Find the response for the status code
         let response = Self::find_response_for_status(&operation.responses, status_code);
 
         match response {
             Some(response_ref) => {
                 match response_ref {
-                    ReferenceOr::Item(response) => {
-                        Self::generate_from_response(spec, response, content_type, expand_tokens)
-                    }
+                    ReferenceOr::Item(response) => Self::generate_from_response_with_scenario(
+                        spec,
+                        response,
+                        content_type,
+                        expand_tokens,
+                        scenario,
+                    ),
                     ReferenceOr::Reference { reference } => {
                         // Resolve the reference
                         if let Some(resolved_response) = spec.get_response(reference) {
-                            Self::generate_from_response(
+                            Self::generate_from_response_with_scenario(
                                 spec,
                                 resolved_response,
                                 content_type,
                                 expand_tokens,
+                                scenario,
                             )
                         } else {
                             // Reference not found, return empty object
@@ -156,10 +204,32 @@ impl ResponseGenerator {
         content_type: Option<&str>,
         expand_tokens: bool,
     ) -> Result<Value> {
+        Self::generate_from_response_with_scenario(
+            spec,
+            response,
+            content_type,
+            expand_tokens,
+            None,
+        )
+    }
+
+    /// Generate response from a Response object with scenario support
+    fn generate_from_response_with_scenario(
+        spec: &OpenApiSpec,
+        response: &Response,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+        scenario: Option<&str>,
+    ) -> Result<Value> {
         // If content_type is specified, look for that media type
         if let Some(content_type) = content_type {
             if let Some(media_type) = response.content.get(content_type) {
-                return Self::generate_from_media_type(spec, media_type, expand_tokens);
+                return Self::generate_from_media_type_with_scenario(
+                    spec,
+                    media_type,
+                    expand_tokens,
+                    scenario,
+                );
             }
         }
 
@@ -168,24 +238,44 @@ impl ResponseGenerator {
 
         for content_type in &preferred_types {
             if let Some(media_type) = response.content.get(*content_type) {
-                return Self::generate_from_media_type(spec, media_type, expand_tokens);
+                return Self::generate_from_media_type_with_scenario(
+                    spec,
+                    media_type,
+                    expand_tokens,
+                    scenario,
+                );
             }
         }
 
         // If no suitable content type found, return the first available
         if let Some((_, media_type)) = response.content.iter().next() {
-            return Self::generate_from_media_type(spec, media_type, expand_tokens);
+            return Self::generate_from_media_type_with_scenario(
+                spec,
+                media_type,
+                expand_tokens,
+                scenario,
+            );
         }
 
         // No content found, return empty object
         Ok(Value::Object(serde_json::Map::new()))
     }
 
-    /// Generate response from a MediaType
+    /// Generate response from a MediaType with optional scenario selection
     fn generate_from_media_type(
         spec: &OpenApiSpec,
         media_type: &openapiv3::MediaType,
         expand_tokens: bool,
+    ) -> Result<Value> {
+        Self::generate_from_media_type_with_scenario(spec, media_type, expand_tokens, None)
+    }
+
+    /// Generate response from a MediaType with scenario support
+    fn generate_from_media_type_with_scenario(
+        spec: &OpenApiSpec,
+        media_type: &openapiv3::MediaType,
+        expand_tokens: bool,
+        scenario: Option<&str>,
     ) -> Result<Value> {
         // First, check if there's an explicit example
         if let Some(example) = &media_type.example {
@@ -199,36 +289,25 @@ impl ResponseGenerator {
             }
         }
 
-        // Then check examples map
+        // Then check examples map - with scenario support
         if !media_type.examples.is_empty() {
-            if let Some((_, example_ref)) = media_type.examples.iter().next() {
-                match example_ref {
-                    ReferenceOr::Item(example) => {
-                        if let Some(value) = &example.value {
-                            tracing::debug!("Using example from examples map: {:?}", value);
-                            if expand_tokens {
-                                return Ok(Self::expand_templates(value));
-                            } else {
-                                return Ok(value.clone());
-                            }
-                        }
-                    }
-                    ReferenceOr::Reference { reference } => {
-                        // Resolve the example reference
-                        if let Some(example) = spec.get_example(reference) {
-                            if let Some(value) = &example.value {
-                                tracing::debug!("Using resolved example reference: {:?}", value);
-                                if expand_tokens {
-                                    return Ok(Self::expand_templates(value));
-                                } else {
-                                    return Ok(value.clone());
-                                }
-                            }
-                        } else {
-                            tracing::warn!("Example reference '{}' not found", reference);
-                        }
-                    }
+            // If a scenario is specified, try to find it first
+            if let Some(scenario_name) = scenario {
+                if let Some(example_ref) = media_type.examples.get(scenario_name) {
+                    tracing::debug!("Using scenario '{}' from examples map", scenario_name);
+                    return Self::extract_example_value(spec, example_ref, expand_tokens);
+                } else {
+                    tracing::warn!(
+                        "Scenario '{}' not found in examples, falling back to first example",
+                        scenario_name
+                    );
                 }
+            }
+
+            // Fall back to first example if no scenario specified or scenario not found
+            if let Some((example_name, example_ref)) = media_type.examples.iter().next() {
+                tracing::debug!("Using example '{}' from examples map", example_name);
+                return Self::extract_example_value(spec, example_ref, expand_tokens);
             }
         }
 
@@ -238,6 +317,42 @@ impl ResponseGenerator {
         } else {
             Ok(Value::Object(serde_json::Map::new()))
         }
+    }
+
+    /// Extract value from an example reference
+    fn extract_example_value(
+        spec: &OpenApiSpec,
+        example_ref: &ReferenceOr<openapiv3::Example>,
+        expand_tokens: bool,
+    ) -> Result<Value> {
+        match example_ref {
+            ReferenceOr::Item(example) => {
+                if let Some(value) = &example.value {
+                    tracing::debug!("Using example from examples map: {:?}", value);
+                    if expand_tokens {
+                        return Ok(Self::expand_templates(value));
+                    } else {
+                        return Ok(value.clone());
+                    }
+                }
+            }
+            ReferenceOr::Reference { reference } => {
+                // Resolve the example reference
+                if let Some(example) = spec.get_example(reference) {
+                    if let Some(value) = &example.value {
+                        tracing::debug!("Using resolved example reference: {:?}", value);
+                        if expand_tokens {
+                            return Ok(Self::expand_templates(value));
+                        } else {
+                            return Ok(value.clone());
+                        }
+                    }
+                } else {
+                    tracing::warn!("Example reference '{}' not found", reference);
+                }
+            }
+        }
+        Ok(Value::Object(serde_json::Map::new()))
     }
 
     fn generate_example_from_schema_ref(

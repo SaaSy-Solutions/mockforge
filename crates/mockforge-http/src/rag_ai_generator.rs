@@ -159,7 +159,9 @@ impl AiGenerator for RagAiGenerator {
             }
             Err(e) => {
                 warn!("RAG engine generation failed: {}", e);
-                Err(e)
+                Err(mockforge_core::Error::Config {
+                    message: format!("RAG engine generation failed: {}", e),
+                })
             }
         }
     }

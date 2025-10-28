@@ -173,16 +173,26 @@ pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
 pub mod op_middleware;
+pub mod quick_mock;
 pub mod rag_ai_generator;
 pub mod replay_listing;
 pub mod request_logging;
+pub mod spec_import;
 pub mod sse;
+pub mod token_response;
+pub mod ui_builder;
 
 // Re-export AI handler utilities
 pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
 
 // Re-export management API utilities
-pub use management::{management_router, ManagementState, MockConfig, ServerConfig, ServerStats};
+pub use management::{
+    management_router, management_router_with_ui_builder, ManagementState, MockConfig,
+    ServerConfig, ServerStats,
+};
+
+// Re-export UI Builder utilities
+pub use ui_builder::{create_ui_builder_router, EndpointConfig, UIBuilderState};
 
 // Re-export management WebSocket utilities
 pub use management_ws::{ws_management_router, MockEvent, WsManagementState};

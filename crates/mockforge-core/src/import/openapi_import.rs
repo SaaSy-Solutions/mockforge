@@ -3,12 +3,13 @@
 //! This module handles parsing OpenAPI/Swagger specifications and converting them
 //! to MockForge routes and configurations.
 
+use crate::import::schema_data_generator::generate_from_schema;
 use crate::openapi::OpenApiSpec;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 // Pre-compiled regex for path parameter conversion
@@ -150,10 +151,32 @@ fn convert_operation_to_route(
 
                     // Try to generate a sample response from schema
                     if let Some(content) = response.content.get("application/json") {
-                        if let Some(_schema_ref) = &content.schema {
-                            // For now, provide a simple mock response
-                            // In a full implementation, you'd generate sample data from the schema
-                            response_body = serde_json::json!({"message": "Mock response", "path": path, "method": method});
+                        // Check for examples first
+                        if let Some(example) = &content.example {
+                            response_body = example.clone();
+                        } else if !content.examples.is_empty() {
+                            // Use the first example
+                            if let Some((_key, example_ref)) = content.examples.iter().next() {
+                                if let Some(example_value) = example_ref.as_item() {
+                                    if let Some(value) = &example_value.value {
+                                        response_body = value.clone();
+                                    }
+                                }
+                            }
+                        } else if let Some(schema_ref) = &content.schema {
+                            // Generate from schema
+                            response_body = match schema_ref {
+                                openapiv3::ReferenceOr::Item(schema_data) => {
+                                    generate_response_from_openapi_schema(schema_data)
+                                }
+                                openapiv3::ReferenceOr::Reference { .. } => {
+                                    // Can't resolve references easily, use basic mock
+                                    serde_json::json!({"message": "Mock response", "path": path, "method": method})
+                                }
+                            };
+                        } else {
+                            // No schema or example, basic response
+                            response_body = serde_json::json!({"message": "Success"});
                         }
                     } else {
                         // No content schema, provide a basic response
@@ -232,6 +255,103 @@ fn extract_request_body_example(
 /// Convert OpenAPI path parameters {param} to Express-style :param
 fn convert_path_parameters(path: &str) -> String {
     PATH_PARAM_RE.replace_all(path, ":$1").to_string()
+}
+
+/// Generate response from OpenAPI schema
+fn generate_response_from_openapi_schema(schema: &openapiv3::Schema) -> Value {
+    // Convert OpenAPI schema to JSON Schema format for our generator
+    let json_schema = openapi_schema_to_json_schema(schema);
+    generate_from_schema(&json_schema)
+}
+
+/// Convert OpenAPI Schema to JSON Schema Value
+fn openapi_schema_to_json_schema(schema: &openapiv3::Schema) -> Value {
+    match &schema.schema_kind {
+        openapiv3::SchemaKind::Type(type_schema) => match type_schema {
+            openapiv3::Type::String(string_type) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert("type".to_string(), json!("string"));
+
+                // Format is VariantOrUnknownOrEmpty, check if it has a value
+                if !matches!(string_type.format, openapiv3::VariantOrUnknownOrEmpty::Empty) {
+                    obj.insert("format".to_string(), json!(format!("{:?}", string_type.format)));
+                }
+
+                // enumeration is Vec<Option<String>>, not Option
+                if !string_type.enumeration.is_empty() {
+                    let enum_values: Vec<Value> = string_type
+                        .enumeration
+                        .iter()
+                        .filter_map(|s| s.as_ref().map(|s| json!(s)))
+                        .collect();
+                    if !enum_values.is_empty() {
+                        obj.insert("enum".to_string(), json!(enum_values));
+                    }
+                }
+
+                Value::Object(obj)
+            }
+            openapiv3::Type::Number(_) => {
+                json!({"type": "number"})
+            }
+            openapiv3::Type::Integer(_) => {
+                json!({"type": "integer"})
+            }
+            openapiv3::Type::Boolean(_) => {
+                json!({"type": "boolean"})
+            }
+            openapiv3::Type::Array(array_type) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert("type".to_string(), json!("array"));
+
+                if let Some(items) = &array_type.items {
+                    if let Some(item_schema) = items.as_item() {
+                        obj.insert("items".to_string(), openapi_schema_to_json_schema(item_schema));
+                    }
+                }
+
+                Value::Object(obj)
+            }
+            openapiv3::Type::Object(object_type) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert("type".to_string(), json!("object"));
+
+                if !object_type.properties.is_empty() {
+                    let mut props = serde_json::Map::new();
+                    for (name, schema_ref) in &object_type.properties {
+                        if let Some(prop_schema) = schema_ref.as_item() {
+                            props.insert(name.clone(), openapi_schema_to_json_schema(prop_schema));
+                        }
+                    }
+                    obj.insert("properties".to_string(), Value::Object(props));
+                }
+
+                if !object_type.required.is_empty() {
+                    obj.insert("required".to_string(), json!(object_type.required));
+                }
+
+                Value::Object(obj)
+            }
+        },
+        openapiv3::SchemaKind::OneOf { .. } => {
+            // For oneOf, just return a basic object
+            json!({"type": "object"})
+        }
+        openapiv3::SchemaKind::AllOf { .. } => {
+            // For allOf, just return a basic object
+            json!({"type": "object"})
+        }
+        openapiv3::SchemaKind::AnyOf { .. } => {
+            // For anyOf, just return a basic object
+            json!({"type": "object"})
+        }
+        openapiv3::SchemaKind::Not { .. } => {
+            json!({"type": "object"})
+        }
+        openapiv3::SchemaKind::Any(_) => {
+            json!({"type": "object"})
+        }
+    }
 }
 
 #[cfg(test)]

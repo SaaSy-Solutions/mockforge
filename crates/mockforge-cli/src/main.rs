@@ -2,7 +2,7 @@ use axum::serve;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use mockforge_core::encryption::init_key_store;
-use mockforge_core::{apply_env_overrides, load_config_with_fallback, ServerConfig};
+use mockforge_core::{apply_env_overrides, ServerConfig};
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
 use std::any::Any;
@@ -15,6 +15,7 @@ use tokio::net::TcpListener;
 mod amqp_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
+mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
 #[cfg(feature = "mqtt")]
@@ -53,6 +54,10 @@ enum Commands {
         #[arg(short, long)]
         config: Option<PathBuf>,
 
+        /// Configuration profile to use (dev, ci, demo, etc.)
+        #[arg(short, long)]
+        profile: Option<String>,
+
         /// HTTP server port (defaults to config or 3000)
         #[arg(long, help_heading = "Server Ports")]
         http_port: Option<u16>,
@@ -72,6 +77,14 @@ enum Commands {
         /// MQTT server port (defaults to config or 1883)
         #[arg(long, help_heading = "Server Ports")]
         mqtt_port: Option<u16>,
+
+        /// Kafka broker port (defaults to config or 9092)
+        #[arg(long, help_heading = "Server Ports")]
+        kafka_port: Option<u16>,
+
+        /// AMQP broker port (defaults to config or 5672)
+        #[arg(long, help_heading = "Server Ports")]
+        amqp_port: Option<u16>,
 
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
@@ -281,6 +294,18 @@ enum Commands {
         #[arg(long, help_heading = "Server Configuration")]
         ws_replay_file: Option<PathBuf>,
 
+        /// GraphQL schema file (.graphql or .gql)
+        #[arg(long, help_heading = "Server Configuration")]
+        graphql: Option<PathBuf>,
+
+        /// GraphQL server port (defaults to config or 4000)
+        #[arg(long, help_heading = "Server Ports")]
+        graphql_port: Option<u16>,
+
+        /// GraphQL upstream server URL for passthrough
+        #[arg(long, help_heading = "Server Configuration")]
+        graphql_upstream: Option<String>,
+
         /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
         #[arg(long, help_heading = "Traffic Shaping")]
         traffic_shaping: bool,
@@ -473,6 +498,66 @@ enum Commands {
         config: Option<PathBuf>,
     },
 
+    /// Quick REST mock mode - spin up instant mock API from JSON
+    ///
+    /// Perfect for rapid prototyping with zero configuration. Auto-detects routes
+    /// from JSON keys and creates full CRUD endpoints instantly.
+    ///
+    /// Examples:
+    ///   mockforge quick data.json
+    ///   mockforge quick sample.json --port 4000
+    ///   mockforge quick mock.json --admin --metrics
+    ///
+    /// JSON file structure:
+    /// {
+    ///   "users": [{"id": 1, "name": "Alice"}],
+    ///   "posts": [{"id": 1, "title": "First Post"}]
+    /// }
+    ///
+    /// Auto-generated routes:
+    ///   GET    /users      - List all users
+    ///   GET    /users/:id  - Get single user
+    ///   POST   /users      - Create user
+    ///   PUT    /users/:id  - Update user
+    ///   DELETE /users/:id  - Delete user
+    ///   (same for all root-level JSON keys)
+    ///
+    /// Supports dynamic data generation:
+    ///   "$random.uuid", "$random.int", "$faker.name", "$faker.email", "$ai(prompt)"
+    #[command(verbatim_doc_comment)]
+    Quick {
+        /// JSON file path containing mock data
+        file: PathBuf,
+
+        /// HTTP server port (defaults to 3000)
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Enable admin UI
+        #[arg(long)]
+        admin: bool,
+
+        /// Admin UI port (defaults to 9080)
+        #[arg(long, default_value = "9080")]
+        admin_port: u16,
+
+        /// Enable Prometheus metrics endpoint
+        #[arg(long)]
+        metrics: bool,
+
+        /// Metrics server port (defaults to 9090)
+        #[arg(long, default_value = "9090")]
+        metrics_port: u16,
+
+        /// Enable request logging
+        #[arg(long)]
+        logging: bool,
+
+        /// Host to bind to (defaults to 127.0.0.1)
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
@@ -524,6 +609,19 @@ enum Commands {
     Config {
         #[command(subcommand)]
         config_command: ConfigCommands,
+    },
+
+    /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
+    ///
+    /// Examples:
+    ///   mockforge import openapi ./specs/api.yaml
+    ///   mockforge import openapi ./specs/api.json --output mocks.json --verbose
+    ///   mockforge import asyncapi ./specs/events.yaml --protocol mqtt
+    ///   mockforge import coverage ./specs/api.yaml
+    #[command(verbatim_doc_comment)]
+    Import {
+        #[command(subcommand)]
+        import_command: import_commands::ImportCommands,
     },
 
     /// Test AI-powered features
@@ -1233,11 +1331,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match cli.command {
         Commands::Serve {
             config,
+            profile,
             http_port,
             ws_port,
             grpc_port,
             smtp_port: _smtp_port,
-            mqtt_port: _mqtt_port,
+            mqtt_port,
+            kafka_port,
+            amqp_port,
             admin,
             admin_port,
             metrics,
@@ -1285,6 +1386,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             bulkhead_queue_timeout_ms: _,
             spec,
             ws_replay_file,
+            graphql,
+            graphql_port,
+            graphql_upstream,
             traffic_shaping,
             bandwidth_limit,
             burst_size,
@@ -1314,6 +1418,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
             handle_serve(
                 config,
+                profile,
                 http_port,
                 ws_port,
                 grpc_port,
@@ -1345,6 +1450,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 chaos_packet_loss,
                 spec,
                 ws_replay_file,
+                graphql,
+                graphql_port,
+                graphql_upstream,
                 traffic_shaping,
                 bandwidth_limit,
                 burst_size,
@@ -1394,6 +1502,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         } => {
             handle_sync(workspace_dir, config).await?;
         }
+        Commands::Quick {
+            file,
+            port,
+            admin,
+            admin_port,
+            metrics,
+            metrics_port,
+            logging,
+            host,
+        } => {
+            handle_quick(file, port, host, admin, admin_port, metrics, metrics_port, logging)
+                .await?;
+        }
         Commands::Completions { shell } => {
             handle_completions(shell);
         }
@@ -1411,6 +1532,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
+        }
+        Commands::Import { import_command } => {
+            import_commands::handle_import_command(import_command).await?;
         }
         Commands::TestAi { ai_command } => {
             handle_test_ai(ai_command).await?;
@@ -1558,6 +1682,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 #[derive(Debug)]
 struct ServeArgs {
     config_path: Option<PathBuf>,
+    profile: Option<String>,
     http_port: Option<u16>,
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
@@ -1588,6 +1713,9 @@ struct ServeArgs {
     chaos_packet_loss: Option<f64>,
     spec: Option<PathBuf>,
     ws_replay_file: Option<PathBuf>,
+    graphql: Option<PathBuf>,
+    graphql_port: Option<u16>,
+    graphql_upstream: Option<String>,
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
@@ -1636,21 +1764,84 @@ mod cli_tests {
 }
 
 /// Build ServerConfig from CLI arguments, config file, and environment variables
-/// Precedence: CLI args > Config file > Environment variables > Defaults
+/// Precedence: CLI args > Env vars > Profile > Config file > Defaults
 async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
+    use mockforge_core::config::{
+        discover_config_file_all_formats, load_config_auto, load_config_with_profile,
+    };
+
     // Step 1: Load config from file if provided, otherwise try to auto-discover, otherwise use defaults
     let mut config = if let Some(path) = &serve_args.config_path {
         println!("📄 Loading configuration from: {}", path.display());
-        load_config_with_fallback(path.clone()).await
+
+        // Try auto-format detection (supports .ts, .js, .yaml, .yml, .json)
+        match load_config_auto(path).await {
+            Ok(cfg) => {
+                // Apply profile if specified
+                if let Some(profile_name) = &serve_args.profile {
+                    match load_config_with_profile(path, Some(profile_name)).await {
+                        Ok(cfg_with_profile) => {
+                            println!("✅ Applied profile: {}", profile_name);
+                            cfg_with_profile
+                        }
+                        Err(e) => {
+                            eprintln!("⚠️  Failed to apply profile '{}': {}", profile_name, e);
+                            eprintln!("   Using base configuration without profile");
+                            cfg
+                        }
+                    }
+                } else {
+                    cfg
+                }
+            }
+            Err(e) => {
+                eprintln!("⚠️  Failed to load config file: {}", e);
+                eprintln!("   Using default configuration");
+                ServerConfig::default()
+            }
+        }
     } else {
-        // Try to auto-discover config file
-        match discover_config_file() {
+        // Try to auto-discover config file (now supports all formats)
+        match discover_config_file_all_formats().await {
             Ok(discovered_path) => {
                 println!("📄 Auto-discovered configuration from: {}", discovered_path.display());
-                load_config_with_fallback(discovered_path).await
+
+                match load_config_auto(&discovered_path).await {
+                    Ok(cfg) => {
+                        // Apply profile if specified
+                        if let Some(profile_name) = &serve_args.profile {
+                            match load_config_with_profile(&discovered_path, Some(profile_name))
+                                .await
+                            {
+                                Ok(cfg_with_profile) => {
+                                    println!("✅ Applied profile: {}", profile_name);
+                                    cfg_with_profile
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "⚠️  Failed to apply profile '{}': {}",
+                                        profile_name, e
+                                    );
+                                    eprintln!("   Using base configuration without profile");
+                                    cfg
+                                }
+                            }
+                        } else {
+                            cfg
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("⚠️  Failed to load auto-discovered config: {}", e);
+                        ServerConfig::default()
+                    }
+                }
             }
             Err(_) => {
-                // No config file found, use defaults
+                // No config file found
+                if serve_args.profile.is_some() {
+                    eprintln!("⚠️  Profile specified but no config file found");
+                    eprintln!("   Using default configuration");
+                }
                 ServerConfig::default()
             }
         }
@@ -1677,9 +1868,35 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
         config.websocket.replay_file = Some(replay_path.to_string_lossy().to_string());
     }
 
+    // GraphQL configuration
+    if let Some(graphql_port) = serve_args.graphql_port {
+        config.graphql.port = graphql_port;
+    }
+    if let Some(schema_path) = &serve_args.graphql {
+        config.graphql.schema_path = Some(schema_path.to_string_lossy().to_string());
+    }
+    if let Some(upstream_url) = &serve_args.graphql_upstream {
+        config.graphql.upstream_url = Some(upstream_url.clone());
+    }
+
     // gRPC configuration
     if let Some(grpc_port) = serve_args.grpc_port {
         config.grpc.port = grpc_port;
+    }
+
+    // MQTT configuration
+    if let Some(mqtt_port) = serve_args.mqtt_port {
+        config.mqtt.port = mqtt_port;
+    }
+
+    // Kafka configuration
+    if let Some(kafka_port) = serve_args.kafka_port {
+        config.kafka.port = kafka_port;
+    }
+
+    // AMQP configuration
+    if let Some(amqp_port) = serve_args.amqp_port {
+        config.amqp.port = amqp_port;
     }
 
     // Admin configuration
@@ -1958,6 +2175,7 @@ fn initialize_opentelemetry_tracing(
 #[allow(clippy::too_many_arguments)]
 async fn handle_serve(
     config_path: Option<PathBuf>,
+    profile: Option<String>,
     http_port: Option<u16>,
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
@@ -1989,6 +2207,9 @@ async fn handle_serve(
     chaos_packet_loss: Option<f64>,
     spec: Option<PathBuf>,
     ws_replay_file: Option<PathBuf>,
+    graphql: Option<PathBuf>,
+    graphql_port: Option<u16>,
+    graphql_upstream: Option<String>,
     traffic_shaping: bool,
     bandwidth_limit: u64,
     burst_size: u64,
@@ -2034,6 +2255,7 @@ async fn handle_serve(
 
     let serve_args = ServeArgs {
         config_path: effective_config_path.clone(),
+        profile,
         http_port,
         ws_port,
         grpc_port,
@@ -2064,6 +2286,9 @@ async fn handle_serve(
         chaos_packet_loss,
         spec,
         ws_replay_file,
+        graphql,
+        graphql_port,
+        graphql_upstream,
         traffic_shaping,
         bandwidth_limit,
         burst_size,
@@ -2520,6 +2745,83 @@ async fn handle_serve(
     } else {
         None
     };
+    #[cfg(not(feature = "mqtt"))]
+    let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+
+    // Start Kafka broker (if enabled)
+    #[cfg(feature = "kafka")]
+    let _kafka_handle = if config.kafka.enabled {
+        let kafka_config = config.kafka.clone();
+        let kafka_shutdown = shutdown_token.clone();
+
+        Some(tokio::spawn(async move {
+            use mockforge_kafka::KafkaMockBroker;
+
+            println!("📨 Kafka broker listening on {}:{}", kafka_config.host, kafka_config.port);
+
+            // Create and start the Kafka broker
+            match KafkaMockBroker::new(kafka_config.clone()).await {
+                Ok(broker) => {
+                    tokio::select! {
+                        result = broker.start() => {
+                            result.map_err(|e| format!("Kafka broker error: {:?}", e))
+                        }
+                        _ = kafka_shutdown.cancelled() => {
+                            println!("🛑 Shutting down Kafka broker...");
+                            Ok(())
+                        }
+                    }
+                }
+                Err(e) => {
+                    Err(format!("Failed to initialize Kafka broker: {:?}", e))
+                }
+            }
+        }))
+    } else {
+        None
+    };
+    #[cfg(not(feature = "kafka"))]
+    let _kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+
+    // Start AMQP broker (if enabled)
+    #[cfg(feature = "amqp")]
+    let _amqp_handle = if config.amqp.enabled {
+        let amqp_config = config.amqp.clone();
+        let amqp_shutdown = shutdown_token.clone();
+
+        Some(tokio::spawn(async move {
+            use mockforge_amqp::{AmqpBroker, AmqpSpecRegistry};
+            use std::sync::Arc;
+
+            println!("🐰 AMQP broker listening on {}:{}", amqp_config.host, amqp_config.port);
+
+            // Create spec registry
+            let spec_registry = Arc::new(AmqpSpecRegistry::new());
+
+            // Load fixtures if configured
+            if let Some(ref fixtures_dir) = amqp_config.fixtures_dir {
+                if fixtures_dir.exists() {
+                    println!("   Loading AMQP fixtures from {:?}", fixtures_dir);
+                }
+            }
+
+            // Create and start the AMQP broker
+            let broker = AmqpBroker::new(amqp_config.clone(), spec_registry);
+            tokio::select! {
+                result = broker.start() => {
+                    result.map_err(|e| format!("AMQP broker error: {:?}", e))
+                }
+                _ = amqp_shutdown.cancelled() => {
+                    println!("🛑 Shutting down AMQP broker...");
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
+    #[cfg(not(feature = "amqp"))]
+    let _amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {
@@ -2800,6 +3102,97 @@ async fn handle_admin(
     // Keep running until shutdown signal
     tokio::signal::ctrl_c().await?;
     println!("👋 Shutting down admin UI...");
+
+    Ok(())
+}
+
+async fn handle_quick(
+    file: PathBuf,
+    port: u16,
+    host: String,
+    admin: bool,
+    admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
+    logging: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_http::quick_mock::{build_quick_router, QuickMockState};
+    use std::fs;
+
+    println!("\n⚡ MockForge Quick Mock Mode");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("📁 Loading data from: {}", file.display());
+
+    // Load JSON file
+    let json_str = fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
+
+    let json_data: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse JSON from '{}': {}", file.display(), e))?;
+
+    println!("✓ JSON loaded successfully");
+
+    // Create quick mock state
+    println!("🔍 Auto-detecting routes from JSON keys...");
+    let state = QuickMockState::from_json(json_data)
+        .await
+        .map_err(|e| format!("Failed to create quick mock state: {}", e))?;
+
+    let resource_names = state.resource_names().await;
+    println!("✓ Detected {} resource(s):", resource_names.len());
+    for resource in &resource_names {
+        println!("  • /{}", resource);
+    }
+
+    // Build router
+    let app = build_quick_router(state).await;
+
+    println!();
+    println!("🚀 Quick Mock Server Configuration:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("   HTTP Server:  http://{}:{}", host, port);
+
+    if admin {
+        println!("   Admin UI:     http://{}:{}", host, admin_port);
+    }
+    if metrics {
+        println!("   Metrics:      http://{}:{}/__metrics", host, metrics_port);
+    }
+    if logging {
+        println!("   Logging:      Enabled");
+    }
+
+    println!();
+    println!("📚 Available Endpoints:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    for resource in &resource_names {
+        println!("   GET    /{}          - List all", resource);
+        println!("   GET    /{}/:id      - Get by ID", resource);
+        println!("   POST   /{}          - Create new", resource);
+        println!("   PUT    /{}/:id      - Update by ID", resource);
+        println!("   DELETE /{}/:id      - Delete by ID", resource);
+        println!();
+    }
+    println!("   GET    /__quick/info       - API information");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // Start server
+    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+    let listener = TcpListener::bind(addr).await?;
+
+    println!();
+    println!("✅ Server started successfully!");
+    println!("💡 Press Ctrl+C to stop");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // Serve with graceful shutdown
+    serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+        })
+        .await?;
+
+    println!("\n👋 Server stopped\n");
 
     Ok(())
 }

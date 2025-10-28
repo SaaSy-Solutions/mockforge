@@ -24,6 +24,41 @@
 
 - Nothing yet.
 
+## [0.1.3] - 2025-10-22
+
+### Changes
+
+- docs: prepare release 0.1.3
+- docs: update CHANGELOG for 0.1.3 release
+- docs: add roadmap completion summary
+- feat: add Kubernetes-style health endpoint aliases and dashboard shortcut
+- feat: add unified config & profiles with multi-format support
+- feat: add capture scrubbing and deterministic replay
+- feat: add native GraphQL operation handlers with advanced features
+- feat: add programmable WebSocket handlers
+- feat: add HTTP scenario switching for OpenAPI response examples
+- feat: add mockforge-test crate and integration testing examples
+- build: enable publishing for mockforge-ui and mockforge-cli
+- build: extend publish script for internal crates
+- build: parameterize publish script with workspace version
+
+## [0.1.3] - 2025-10-22
+
+### Changes
+
+- docs: update CHANGELOG for 0.1.3 release
+- docs: add roadmap completion summary
+- feat: add Kubernetes-style health endpoint aliases and dashboard shortcut
+- feat: add unified config & profiles with multi-format support
+- feat: add capture scrubbing and deterministic replay
+- feat: add native GraphQL operation handlers with advanced features
+- feat: add programmable WebSocket handlers
+- feat: add HTTP scenario switching for OpenAPI response examples
+- feat: add mockforge-test crate and integration testing examples
+- build: enable publishing for mockforge-ui and mockforge-cli
+- build: extend publish script for internal crates
+- build: parameterize publish script with workspace version
+
 ## [0.1.2] - 2025-10-17
 
 ### Changes

@@ -1,6 +1,6 @@
 //! Core recording functionality
 
-use crate::{database::RecorderDatabase, models::*, Result};
+use crate::{database::RecorderDatabase, models::*, scrubbing::*, Result};
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -12,6 +12,8 @@ use uuid::Uuid;
 pub struct Recorder {
     db: Arc<RecorderDatabase>,
     enabled: Arc<RwLock<bool>>,
+    scrubber: Arc<Scrubber>,
+    filter: Arc<CaptureFilter>,
 }
 
 impl Recorder {
@@ -20,7 +22,29 @@ impl Recorder {
         Self {
             db: Arc::new(db),
             enabled: Arc::new(RwLock::new(true)),
+            scrubber: Scrubber::global(),
+            filter: CaptureFilter::global(),
         }
+    }
+
+    /// Create a new recorder with custom scrubber and filter
+    pub fn with_scrubbing(db: RecorderDatabase, scrubber: Scrubber, filter: CaptureFilter) -> Self {
+        Self {
+            db: Arc::new(db),
+            enabled: Arc::new(RwLock::new(true)),
+            scrubber: Arc::new(scrubber),
+            filter: Arc::new(filter),
+        }
+    }
+
+    /// Get the scrubber
+    pub fn scrubber(&self) -> &Arc<Scrubber> {
+        &self.scrubber
+    }
+
+    /// Get the filter
+    pub fn filter(&self) -> &Arc<CaptureFilter> {
+        &self.filter
     }
 
     /// Check if recording is enabled
@@ -41,10 +65,13 @@ impl Recorder {
     }
 
     /// Record a request
-    pub async fn record_request(&self, request: RecordedRequest) -> Result<String> {
+    pub async fn record_request(&self, mut request: RecordedRequest) -> Result<String> {
         if !self.is_enabled().await {
             return Ok(request.id);
         }
+
+        // Apply scrubbing
+        self.scrubber.scrub_request(&mut request);
 
         let request_id = request.id.clone();
         self.db.insert_request(&request).await?;
@@ -52,10 +79,13 @@ impl Recorder {
     }
 
     /// Record a response
-    pub async fn record_response(&self, response: RecordedResponse) -> Result<()> {
+    pub async fn record_response(&self, mut response: RecordedResponse) -> Result<()> {
         if !self.is_enabled().await {
             return Ok(());
         }
+
+        // Apply scrubbing
+        self.scrubber.scrub_response(&mut response);
 
         self.db.insert_response(&response).await?;
         Ok(())
@@ -105,6 +135,23 @@ impl Recorder {
         body: Option<&[u8]>,
         duration_ms: i64,
     ) -> Result<()> {
+        // Check filter with status code now that we have it
+        // Get the request to check path and method
+        if let Some(request) = self.db.get_request(request_id).await? {
+            let should_capture = self.filter.should_capture(
+                &request.method,
+                &request.path,
+                Some(status_code as u16),
+            );
+
+            if !should_capture {
+                // Delete the request since it doesn't match the filter
+                // (We don't have a delete method, so we just skip the response)
+                debug!("Skipping response recording due to filter");
+                return Ok(());
+            }
+        }
+
         let (body_str, body_encoding) = encode_body(body);
         let size_bytes = body.map(|b| b.len()).unwrap_or(0) as i64;
 
