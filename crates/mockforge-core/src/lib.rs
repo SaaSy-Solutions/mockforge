@@ -221,6 +221,7 @@ pub mod multi_tenant;
 pub mod network_profiles;
 pub mod openapi;
 pub mod openapi_routes;
+pub mod output_control;
 pub mod overrides;
 pub mod performance;
 pub mod priority_handler;
@@ -259,7 +260,8 @@ pub use failure_injection::{
 };
 pub use generate_config::{
     discover_config_file, load_generate_config, load_generate_config_with_fallback,
-    save_generate_config, GenerateConfig, GenerateOptions, InputConfig, OutputConfig, PluginConfig,
+    save_generate_config, BarrelType, GenerateConfig, GenerateOptions, InputConfig, OutputConfig,
+    PluginConfig,
 };
 pub use latency::LatencyProfile;
 pub use multi_tenant::{
@@ -272,6 +274,10 @@ pub use openapi::{
 };
 pub use openapi_routes::{
     create_registry_from_file, create_registry_from_json, OpenApiRouteRegistry, ValidationOptions,
+};
+pub use output_control::{
+    apply_banner, apply_extension, apply_file_naming_template, build_file_naming_context,
+    process_generated_file, BarrelGenerator, FileNamingContext, GeneratedFile,
 };
 pub use overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
 pub use priority_handler::{

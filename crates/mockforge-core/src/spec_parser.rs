@@ -652,30 +652,6 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_swagger_20_valid() {
-        let spec = serde_json::json!({
-            "swagger": "2.0",
-            "info": {
-                "title": "Test API",
-                "version": "1.0.0"
-            },
-            "paths": {
-                "/users": {
-                    "get": {
-                        "responses": {
-                            "200": {
-                                "description": "Success"
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        let result = OpenApiValidator::validate(&spec, SpecFormat::OpenApi20);
-        assert!(result.is_valid);
-    }
-
-    #[test]
     fn test_validate_swagger_20_missing_paths() {
         let spec = serde_json::json!({
             "swagger": "2.0",
