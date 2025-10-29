@@ -23,9 +23,13 @@ mod kafka_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
 mod plugin_commands;
+mod progress;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
 mod workspace_commands;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Parser)]
 #[command(name = "mockforge")]
@@ -383,6 +387,14 @@ enum Commands {
         /// Validate configuration and check port availability without starting servers
         #[arg(long, help_heading = "Validation")]
         dry_run: bool,
+
+        /// Show progress indicators during server startup
+        #[arg(long, help_heading = "Validation")]
+        progress: bool,
+
+        /// Enable verbose logging output
+        #[arg(long, help_heading = "Validation")]
+        verbose: bool,
     },
 
     /// SMTP server management and mailbox operations
@@ -605,6 +617,18 @@ enum Commands {
         /// Dry run (validate config without generating)
         #[arg(long)]
         dry_run: bool,
+
+        /// Watch mode - regenerate when files change
+        #[arg(long)]
+        watch: bool,
+
+        /// Watch debounce time in milliseconds
+        #[arg(long, default_value = "500")]
+        watch_debounce: u64,
+
+        /// Show progress bar during generation
+        #[arg(long)]
+        progress: bool,
     },
 
     /// Configuration management
@@ -891,7 +915,7 @@ enum Commands {
         max_error_rate: f64,
 
         /// Enable verbose output
-        #[arg(short, long)]
+        #[arg(short = 'V', long)]
         verbose: bool,
     },
 }
@@ -982,7 +1006,7 @@ enum AiTestCommands {
         initial_data: PathBuf,
 
         /// Number of drift iterations to simulate
-        #[arg(short, long, default_value = "5")]
+        #[arg(short = 'n', long, default_value = "5")]
         iterations: usize,
 
         /// Output file path
@@ -1506,6 +1530,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             rag_model,
             rag_api_key,
             dry_run,
+            progress,
+            verbose,
         } => {
             // Handle --list-network-profiles flag
             if list_network_profiles {
@@ -1569,6 +1595,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 rag_model,
                 rag_api_key,
                 dry_run,
+                progress,
+                verbose,
             )
             .await?;
         }
@@ -1629,8 +1657,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             output,
             verbose,
             dry_run,
+            watch,
+            watch_debounce,
+            progress,
         } => {
-            handle_generate(config, spec, output, verbose, dry_run).await?;
+            handle_generate(
+                config,
+                spec,
+                output,
+                verbose,
+                dry_run,
+                watch,
+                watch_debounce,
+                progress,
+            )
+            .await?;
         }
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
@@ -1839,6 +1880,8 @@ struct ServeArgs {
     #[allow(dead_code)]
     chaos_random_max_delay: u64,
     dry_run: bool,
+    progress: bool,
+    verbose: bool,
 }
 
 #[cfg(test)]
@@ -2317,6 +2360,8 @@ async fn handle_serve(
     rag_model: Option<String>,
     rag_api_key: Option<String>,
     dry_run: bool,
+    progress: bool,
+    verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Auto-discover config file if not provided
     let effective_config_path = if config_path.is_some() {
@@ -2396,6 +2441,8 @@ async fn handle_serve(
         chaos_random_min_delay,
         chaos_random_max_delay,
         dry_run,
+        progress,
+        verbose,
     };
 
     // Validate config and spec paths (skip port checks for now)
@@ -3845,30 +3892,171 @@ async fn handle_generate(
     output_path: Option<PathBuf>,
     verbose: bool,
     dry_run: bool,
+    watch: bool,
+    watch_debounce: u64,
+    progress: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use mockforge_core::{discover_config_file, load_generate_config_with_fallback};
+    use progress::{CliError, ExitCode, LogLevel, ProgressManager};
+    use std::time::Instant;
 
-    println!("🔧 Generating mocks from configuration...");
+    // Initialize progress manager
+    let mut progress_mgr = ProgressManager::new(verbose);
+
+    // If watch mode is enabled, set up file watching
+    if watch {
+        let files_to_watch = if let Some(spec) = &spec_path {
+            vec![spec.clone()]
+        } else if let Some(config) = &config_path {
+            vec![config.clone()]
+        } else {
+            // Try to discover config file
+            match discover_config_file() {
+                Ok(path) => vec![path],
+                Err(_) => {
+                    return Err(CliError::new(
+                        "No configuration file found for watch mode".to_string(),
+                        ExitCode::ConfigurationError,
+                    )
+                    .with_suggestion(
+                        "Provide --config or --spec flag, or create mockforge.toml".to_string(),
+                    )
+                    .display_and_exit());
+                }
+            }
+        };
+
+        progress_mgr.log(LogLevel::Info, "🔄 Starting watch mode...");
+        progress_mgr.log(
+            LogLevel::Info,
+            &format!("👀 Watching {} file(s) for changes", files_to_watch.len()),
+        );
+
+        // Execute initial generation
+        if let Err(e) = execute_generation(
+            &mut progress_mgr,
+            config_path.clone(),
+            spec_path.clone(),
+            output_path.clone(),
+            verbose,
+            dry_run,
+            progress,
+        )
+        .await
+        {
+            progress_mgr.log(LogLevel::Error, &format!("Initial generation failed: {}", e));
+            return Err(e);
+        }
+
+        // Set up watch loop
+        let callback = move || {
+            let config_path = config_path.clone();
+            let spec_path = spec_path.clone();
+            let output_path = output_path.clone();
+            let verbose = verbose;
+            let dry_run = dry_run;
+            let progress = progress;
+
+            async move {
+                let mut progress_mgr = ProgressManager::new(verbose);
+                execute_generation(
+                    &mut progress_mgr,
+                    config_path,
+                    spec_path,
+                    output_path,
+                    verbose,
+                    dry_run,
+                    progress,
+                )
+                .await
+            }
+        };
+
+        progress::watch::watch_files(files_to_watch, callback, watch_debounce).await?;
+        return Ok(());
+    }
+
+    // Single generation run
+    execute_generation(
+        &mut progress_mgr,
+        config_path,
+        spec_path,
+        output_path,
+        verbose,
+        dry_run,
+        progress,
+    )
+    .await
+}
+
+/// Load and validate a configuration file
+async fn load_and_validate_config(
+    path: &PathBuf,
+    verbose: bool,
+    progress_mgr: &mut crate::progress::ProgressManager,
+) -> mockforge_core::GenerateConfig {
+    use crate::progress::{utils, LogLevel};
+    use mockforge_core::load_generate_config_with_fallback;
+
+    if verbose {
+        progress_mgr
+            .log(LogLevel::Debug, &format!("📄 Loading configuration from: {}", path.display()));
+    }
+    // Validate config file exists
+    if let Err(e) = utils::validate_file_path(path) {
+        e.display_and_exit();
+    }
+    load_generate_config_with_fallback(path).await
+}
+
+/// Execute the actual generation process with progress tracking
+async fn execute_generation(
+    progress_mgr: &mut crate::progress::ProgressManager,
+    config_path: Option<PathBuf>,
+    spec_path: Option<PathBuf>,
+    output_path: Option<PathBuf>,
+    verbose: bool,
+    dry_run: bool,
+    show_progress: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_core::{discover_config_file, GenerateConfig};
+    use progress::{utils, CliError, ExitCode, LogLevel};
+    use std::time::Instant;
+
+    let start_time = Instant::now();
+
+    progress_mgr.log(LogLevel::Info, "🔧 Generating mocks from configuration...");
 
     // Step 1: Discover or load config file
-    let config_file = if let Some(path) = &config_path {
-        path.clone()
+    let (config_file, mut config) = if let Some(path) = &config_path {
+        let config = load_and_validate_config(path, verbose, progress_mgr).await;
+        (Some(path.clone()), config)
     } else {
         match discover_config_file() {
-            Ok(path) => path,
+            Ok(path) => {
+                let config = load_and_validate_config(&path, verbose, progress_mgr).await;
+                (Some(path), config)
+            }
             Err(_) => {
-                println!("ℹ️  No configuration file found, using defaults");
-                return Err("No configuration file found and no spec provided. Please create mockforge.toml, mockforge.yaml, or mockforge.json, or provide --spec flag.".into());
+                // If no config file found, check if spec_path was provided as CLI argument
+                if spec_path.is_none() {
+                    progress_mgr
+                        .log(LogLevel::Warning, "ℹ️  No configuration file found, using defaults");
+                    return Err(CliError::new(
+                        "No configuration file found and no spec provided. Please create mockforge.toml, mockforge.yaml, or mockforge.json, or provide --spec flag.".to_string(),
+                        ExitCode::ConfigurationError,
+                    ).with_suggestion(
+                        "Create a configuration file or use --spec to specify an OpenAPI specification".to_string()
+                    ).display_and_exit());
+                }
+                // If spec_path is provided, we can continue without a config file
+                progress_mgr
+                    .log(LogLevel::Warning, "ℹ️  No configuration file found, using defaults");
+                // Use default configuration directly
+                (None, GenerateConfig::default())
             }
         }
     };
-
-    if verbose {
-        println!("📄 Loading configuration from: {}", config_file.display());
-    }
-
-    // Step 2: Load configuration with fallback
-    let mut config = load_generate_config_with_fallback(&config_file).await;
 
     // Step 3: Apply CLI argument overrides
     if let Some(spec) = &spec_path {
@@ -3881,41 +4069,60 @@ async fn handle_generate(
 
     // Step 4: Validate configuration
     if config.input.spec.is_none() {
-        return Err(
+        return Err(CliError::new(
             "No input specification provided. Please set 'spec' in config file or use --spec flag."
-                .into(),
-        );
+                .to_string(),
+            ExitCode::ConfigurationError,
+        )
+        .with_suggestion(
+            "Add 'spec' field to your configuration file or use --spec flag".to_string(),
+        )
+        .display_and_exit());
     }
 
     let spec = config.input.spec.as_ref().unwrap();
 
     if !spec.exists() {
-        return Err(format!("Specification file not found: {}", spec.display()).into());
+        return Err(CliError::new(
+            format!("Specification file not found: {}", spec.display()),
+            ExitCode::FileNotFound,
+        )
+        .with_suggestion("Check the file path and ensure the specification file exists".to_string())
+        .display_and_exit());
+    }
+
+    // Validate output directory
+    if let Err(e) = utils::validate_output_dir(&config.output.path) {
+        e.display_and_exit();
     }
 
     if verbose {
-        println!("📝 Input spec: {}", spec.display());
-        println!("📂 Output path: {}", config.output.path.display());
+        progress_mgr.log(LogLevel::Debug, &format!("📝 Input spec: {}", spec.display()));
+        progress_mgr
+            .log(LogLevel::Debug, &format!("📂 Output path: {}", config.output.path.display()));
         if let Some(filename) = &config.output.filename {
-            println!("📄 Output filename: {}", filename);
+            progress_mgr.log(LogLevel::Debug, &format!("📄 Output filename: {}", filename));
         }
         if let Some(options) = &config.options {
-            println!("⚙️  Client: {:?}", options.client);
-            println!("⚙️  Mode: {:?}", options.mode);
-            println!("⚙️  Runtime: {:?}", options.runtime);
+            progress_mgr.log(LogLevel::Debug, &format!("⚙️  Client: {:?}", options.client));
+            progress_mgr.log(LogLevel::Debug, &format!("⚙️  Mode: {:?}", options.mode));
+            progress_mgr.log(LogLevel::Debug, &format!("⚙️  Runtime: {:?}", options.runtime));
         }
         if !config.plugins.is_empty() {
-            println!("🔌 Plugins:");
+            progress_mgr.log(LogLevel::Debug, "🔌 Plugins:");
             for (name, plugin) in &config.plugins {
                 match plugin {
                     mockforge_core::PluginConfig::Simple(pkg) => {
-                        println!("  - {}: {}", name, pkg);
+                        progress_mgr.log(LogLevel::Debug, &format!("  - {}: {}", name, pkg));
                     }
                     mockforge_core::PluginConfig::Advanced { package, options } => {
-                        println!("  - {}: {} (with options)", name, package);
+                        progress_mgr.log(
+                            LogLevel::Debug,
+                            &format!("  - {}: {} (with options)", name, package),
+                        );
                         if !options.is_empty() {
                             for (k, v) in options {
-                                println!("    - {}: {}", k, v);
+                                progress_mgr.log(LogLevel::Debug, &format!("    - {}: {}", k, v));
                             }
                         }
                     }
@@ -3925,26 +4132,47 @@ async fn handle_generate(
     }
 
     if dry_run {
-        println!("✅ Configuration is valid (dry run)");
+        progress_mgr.log(LogLevel::Success, "✅ Configuration is valid (dry run)");
         return Ok(());
     }
 
+    // Create progress bar for generation steps
+    let total_steps = 5u64;
+    let progress_bar = if show_progress {
+        Some(progress_mgr.create_main_progress(total_steps, "Generating mocks"))
+    } else {
+        None
+    };
+
     // Step 5: Create output directory
+    progress_mgr.log_step(1, total_steps as usize, "Preparing output directory");
     if config.output.clean && config.output.path.exists() {
         if verbose {
-            println!("🧹 Cleaning output directory: {}", config.output.path.display());
+            progress_mgr.log(
+                LogLevel::Debug,
+                &format!("🧹 Cleaning output directory: {}", config.output.path.display()),
+            );
         }
         tokio::fs::remove_dir_all(&config.output.path).await?;
     }
 
     tokio::fs::create_dir_all(&config.output.path).await?;
+    if let Some(ref pb) = progress_bar {
+        pb.inc(1u64);
+    }
 
     // Step 6: Load and process OpenAPI spec
-    let _spec_content = tokio::fs::read_to_string(spec).await?;
-    println!("📖 Loaded OpenAPI specification");
+    progress_mgr.log_step(2, total_steps as usize, "Loading OpenAPI specification");
+    let spec_content = tokio::fs::read_to_string(spec).await?;
+    let spec_size = utils::format_file_size(spec_content.len() as u64);
+    progress_mgr.log(LogLevel::Info, &format!("📖 Loaded OpenAPI specification ({})", spec_size));
+
+    if let Some(ref pb) = progress_bar {
+        pb.inc(1u64);
+    }
 
     // Step 7: Generate mock server code
-    println!("🚀 Generating mock server...");
+    progress_mgr.log_step(3, total_steps as usize, "Generating mock server code");
 
     // For now, just create a placeholder file
     let output_file = config.output.path.join(
@@ -3958,6 +4186,7 @@ async fn handle_generate(
     let mock_code = format!(
         r#"// Generated by MockForge
 // Source: {}
+// Generated at: {}
 
 pub struct GeneratedMockServer {{
     // TODO: Implement mock server based on OpenAPI spec
@@ -3970,11 +4199,72 @@ impl GeneratedMockServer {{
     }}
 }}
 "#,
-        spec.display()
+        spec.display(),
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
     );
 
     tokio::fs::write(&output_file, mock_code).await?;
-    println!("✅ Generated: {}", output_file.display());
+
+    if let Some(ref pb) = progress_bar {
+        pb.inc(1u64);
+    }
+
+    // Step 8: Generate additional files if needed
+    progress_mgr.log_step(4, total_steps as usize, "Generating additional files");
+
+    // Create a basic README
+    let readme_content = format!(
+        r#"# Generated Mock Server
+
+This mock server was generated by MockForge from the OpenAPI specification:
+- Source: {}
+- Generated: {}
+
+## Usage
+
+```bash
+# Start the mock server
+cargo run
+
+# Or use MockForge CLI
+mockforge serve --spec {}
+```
+
+## Files Generated
+
+- `{}` - Main mock server implementation
+- `README.md` - This file
+"#,
+        spec.display(),
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+        spec.display(),
+        output_file.file_name().unwrap().to_string_lossy()
+    );
+
+    let readme_file = config.output.path.join("README.md");
+    tokio::fs::write(&readme_file, readme_content).await?;
+
+    if let Some(ref pb) = progress_bar {
+        pb.inc(1u64);
+    }
+
+    // Step 9: Finalize
+    progress_mgr.log_step(5, total_steps as usize, "Finalizing generation");
+
+    let duration = start_time.elapsed();
+    let duration_str = utils::format_duration(duration);
+
+    progress_mgr
+        .log(LogLevel::Success, &format!("✅ Mock generation completed in {}", duration_str));
+    progress_mgr.log(
+        LogLevel::Info,
+        &format!("📁 Output directory: {}", config.output.path.display()),
+    );
+    progress_mgr.log(LogLevel::Info, &format!("📄 Generated files: {} files", 2)); // Mock file + README
+
+    if let Some(ref pb) = progress_bar {
+        pb.finish();
+    }
 
     Ok(())
 }

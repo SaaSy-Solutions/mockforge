@@ -88,7 +88,7 @@ pub enum KafkaCommands {
         key: Option<String>,
 
         /// Message value
-        #[arg(short, long)]
+        #[arg(short = 'm', long)]
         value: String,
 
         /// Message partition
@@ -96,7 +96,7 @@ pub enum KafkaCommands {
         partition: Option<i32>,
 
         /// Header (key:value format)
-        #[arg(short, long)]
+        #[arg(short = 'H', long)]
         header: Vec<String>,
     },
 
@@ -261,7 +261,7 @@ pub enum KafkaSimulateCommands {
         topic: String,
 
         /// Reset to offset
-        #[arg(short, long, default_value = "earliest")]
+        #[arg(short = 'o', long, default_value = "earliest")]
         to: String,
     },
 }

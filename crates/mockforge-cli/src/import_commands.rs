@@ -32,7 +32,7 @@ pub enum ImportCommands {
         output: Option<PathBuf>,
 
         /// Show detailed coverage report
-        #[arg(short = 'v', long)]
+        #[arg(short = 'V', long)]
         verbose: bool,
 
         /// Generate mocks for all status codes (not just 2xx)
@@ -63,7 +63,7 @@ pub enum ImportCommands {
         protocol: Option<String>,
 
         /// Show detailed coverage report
-        #[arg(short = 'v', long)]
+        #[arg(short = 'V', long)]
         verbose: bool,
     },
 
