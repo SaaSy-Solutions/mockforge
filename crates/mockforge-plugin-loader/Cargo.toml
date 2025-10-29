@@ -14,7 +14,7 @@ description = "Plugin loader with security sandboxing and validation for MockFor
 
 [dependencies]
 # Plugin core types and traits
-mockforge-plugin-core = { version = "0.2.0", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = "0.2.0"
 
 # Serialization
 serde.workspace = true
