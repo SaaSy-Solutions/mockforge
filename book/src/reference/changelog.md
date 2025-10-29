@@ -2,6 +2,32 @@
 
 ### Added
 
+- Nothing yet.
+
+### Changed
+
+- Nothing yet.
+
+### Deprecated
+
+- Nothing yet.
+
+### Removed
+
+- Nothing yet.
+
+### Fixed
+
+- Nothing yet.
+
+### Security
+
+- Nothing yet.
+
+## [0.2.0] - 2025-10-29
+
+### Added
+
 - Output control features for MockForge generator with comprehensive configuration options
 - Unified spec parser with enhanced validation and error reporting
 - Multi-framework client generation with Angular and Svelte support
@@ -15,14 +41,6 @@
 - Enhanced CLI with progress indicators, error handling, and code quality improvements
 - Comprehensive plugin architecture documentation
 
-### Deprecated
-
-- Nothing yet.
-
-### Removed
-
-- Nothing yet.
-
 ### Fixed
 
 - Remove tests that access private fields in mock data tests
@@ -33,10 +51,6 @@
 - Add version requirements to all mockforge path dependencies
 - Fix publish order dependencies (mockforge-chaos before mockforge-reporting)
 - Update Cargo.lock and format client generator tests
-
-### Security
-
-- Nothing yet.
 
 ## [0.1.3] - 2025-10-22
 
