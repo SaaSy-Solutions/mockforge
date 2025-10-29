@@ -234,6 +234,7 @@ pub mod request_scripting;
 pub mod routing;
 pub mod schema_diff;
 pub mod server_utils;
+pub mod spec_parser;
 pub mod sync_watcher;
 pub mod templating;
 pub mod time_travel;
@@ -301,6 +302,7 @@ pub use routing::{HttpMethod, Route, RouteRegistry};
 pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
+pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};
 pub use time_travel::{
@@ -321,6 +323,8 @@ pub use workspace_import::{
 };
 pub use workspace_persistence::WorkspacePersistence;
 pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
+// Note: ValidationError and ValidationResult from spec_parser conflict with schema_diff::ValidationError
+// Use qualified paths: spec_parser::ValidationError, spec_parser::ValidationResult
 
 /// Core configuration for MockForge
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]

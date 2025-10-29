@@ -93,6 +93,9 @@ impl OpenApiSpec {
     }
 
     /// Validate the OpenAPI specification
+    ///
+    /// This method provides basic validation. For comprehensive validation
+    /// with detailed error messages, use `spec_parser::OpenApiValidator::validate()`.
     pub fn validate(&self) -> Result<()> {
         // Basic validation - check that we have at least one path
         if self.spec.paths.paths.is_empty() {
@@ -109,6 +112,33 @@ impl OpenApiSpec {
         }
 
         Ok(())
+    }
+
+    /// Enhanced validation with detailed error reporting
+    pub fn validate_enhanced(&self) -> crate::spec_parser::ValidationResult {
+        // Convert to JSON value for enhanced validator
+        if let Some(raw) = &self.raw_document {
+            let format = if raw.get("swagger").is_some() {
+                crate::spec_parser::SpecFormat::OpenApi20
+            } else if let Some(version) = raw.get("openapi").and_then(|v| v.as_str()) {
+                if version.starts_with("3.1") {
+                    crate::spec_parser::SpecFormat::OpenApi31
+                } else {
+                    crate::spec_parser::SpecFormat::OpenApi30
+                }
+            } else {
+                // Default to 3.0 if we can't determine
+                crate::spec_parser::SpecFormat::OpenApi30
+            };
+            crate::spec_parser::OpenApiValidator::validate(raw, format)
+        } else {
+            // Fallback to basic validation if no raw document
+            crate::spec_parser::ValidationResult::failure(vec![
+                crate::spec_parser::ValidationError::new(
+                    "Cannot perform enhanced validation without raw document".to_string(),
+                ),
+            ])
+        }
     }
 
     /// Get the OpenAPI version

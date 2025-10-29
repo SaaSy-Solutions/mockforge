@@ -172,6 +172,207 @@ MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin
 ```
 
+## 📋 Schema/Specification Input Support
+
+MockForge supports multiple API specification formats for generating mocks and clients:
+
+### Supported Formats
+
+- **OpenAPI 3.0.x and 3.1.x**: Full support with comprehensive validation
+- **OpenAPI 2.0 (Swagger)**: Format detection and validation (parsing via conversion to 3.x recommended)
+- **GraphQL Schema**: Schema Definition Language (SDL) parsing and validation
+- **Protocol Buffers**: gRPC service definitions from `.proto` files
+
+### Usage Examples
+
+#### OpenAPI Specification
+
+```bash
+# Generate mocks from OpenAPI spec
+mockforge generate --spec api.json --output ./generated
+
+# Serve with OpenAPI spec
+mockforge serve --spec api.yaml --admin
+
+# Import OpenAPI spec and generate mocks
+mockforge import openapi ./specs/api.yaml --output mocks.json
+```
+
+**Example OpenAPI 3.0 Specification:**
+
+```json
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "User Management API",
+    "version": "1.0.0",
+    "description": "API for managing users"
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com/v1"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "required": ["id", "name", "email"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### GraphQL Schema
+
+```bash
+# Serve with GraphQL schema
+mockforge serve --graphql schema.graphql --graphql-port 4000
+
+# Generate from GraphQL schema
+mockforge generate --spec schema.graphql --output ./generated
+```
+
+**Example GraphQL Schema:**
+
+```graphql
+type Query {
+  users: [User!]!
+  user(id: ID!): User
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  createdAt: DateTime!
+}
+
+input CreateUserInput {
+  name: String!
+  email: String!
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+}
+
+scalar DateTime
+```
+
+#### gRPC/Protocol Buffers
+
+```bash
+# Serve with proto files
+mockforge serve --grpc-port 50051
+
+# Proto files are discovered from configured directories
+```
+
+### Validation and Error Reporting
+
+MockForge provides comprehensive validation with detailed error messages:
+
+**Example validation output:**
+
+```bash
+$ mockforge generate --spec invalid-api.json
+
+Invalid OpenAPI specification:
+  Missing 'info' section in OpenAPI 3.x spec (at /info). Hint: Add an 'info' section with 'title' and 'version' fields
+  Missing or empty 'info.title' field (at /info/title). Hint: Add 'title' field to the 'info' section
+  'paths' object cannot be empty. At least one endpoint is required (at /paths). Hint: Add at least one path definition
+
+Fix the validation errors above and try again
+```
+
+**Validation Features:**
+
+- ✅ Automatic format detection (OpenAPI, GraphQL, Protobuf)
+- ✅ Detailed error messages with JSON pointers to problematic fields
+- ✅ Helpful suggestions for fixing validation errors
+- ✅ Support for both JSON and YAML formats
+- ✅ Warnings for incomplete or suboptimal specifications
+
+### Converting Swagger 2.0 to OpenAPI 3.x
+
+While MockForge can detect and validate Swagger 2.0 specifications, full parsing requires OpenAPI 3.x format. Use conversion tools:
+
+```bash
+# Using swagger2openapi (Node.js)
+npx swagger2openapi swagger.json -o openapi.json
+
+# Or use online converter
+# https://editor.swagger.io/
+```
+
 See `examples/README.md` for detailed documentation on the example files.
 
 ### Docker (Alternative Installation)

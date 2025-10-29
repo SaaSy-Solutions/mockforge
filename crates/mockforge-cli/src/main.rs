@@ -4091,6 +4091,144 @@ async fn execute_generation(
         .display_and_exit());
     }
 
+    // Enhanced validation with detailed error messages
+    if verbose {
+        progress_mgr.log(LogLevel::Debug, "🔍 Validating specification...");
+    }
+
+    let spec_content = match tokio::fs::read_to_string(spec).await {
+        Ok(content) => content,
+        Err(e) => CliError::new(
+            format!("Failed to read specification file: {}", e),
+            ExitCode::FileNotFound,
+        )
+        .display_and_exit(),
+    };
+
+    // Detect format and validate
+    let format = match mockforge_core::spec_parser::SpecFormat::detect(&spec_content, Some(spec)) {
+        Ok(fmt) => fmt,
+        Err(e) => {
+            return Err(CliError::new(
+                format!("Failed to detect specification format: {}", e),
+                ExitCode::ConfigurationError,
+            )
+            .with_suggestion(
+                "Ensure your file is a valid OpenAPI, GraphQL, or protobuf specification"
+                    .to_string(),
+            )
+            .display_and_exit());
+        }
+    };
+
+    if verbose {
+        progress_mgr
+            .log(LogLevel::Debug, &format!("📋 Detected format: {}", format.display_name()));
+    }
+
+    // Validate based on format
+    match format {
+        mockforge_core::spec_parser::SpecFormat::OpenApi20
+        | mockforge_core::spec_parser::SpecFormat::OpenApi30
+        | mockforge_core::spec_parser::SpecFormat::OpenApi31 => {
+            // Optimize parsing: try JSON first, then YAML (avoids double parsing)
+            let json_value: serde_json::Value =
+                match serde_json::from_str::<serde_json::Value>(&spec_content) {
+                    Ok(val) => val,
+                    Err(_) => {
+                        // Try YAML if JSON parsing fails
+                        match serde_yaml::from_str(&spec_content) {
+                            Ok(val) => val,
+                            Err(e) => CliError::new(
+                                format!("Invalid JSON or YAML in OpenAPI spec: {}", e),
+                                ExitCode::ConfigurationError,
+                            )
+                            .display_and_exit(),
+                        }
+                    }
+                };
+
+            let validation =
+                mockforge_core::spec_parser::OpenApiValidator::validate(&json_value, format);
+            if !validation.is_valid {
+                let error_details: Vec<String> = validation
+                    .errors
+                    .iter()
+                    .map(|e| {
+                        let mut msg = e.message.clone();
+                        if let Some(path) = &e.path {
+                            msg.push_str(&format!(" (at {})", path));
+                        }
+                        if let Some(suggestion) = &e.suggestion {
+                            msg.push_str(&format!(". Hint: {}", suggestion));
+                        }
+                        msg
+                    })
+                    .collect();
+
+                let error_msg = error_details.join("\n  ");
+                return Err(CliError::new(
+                    format!("Invalid OpenAPI specification:\n  {}", error_msg),
+                    ExitCode::ConfigurationError,
+                )
+                .with_suggestion("Fix the validation errors above and try again".to_string())
+                .display_and_exit());
+            }
+
+            if !validation.warnings.is_empty() && verbose {
+                progress_mgr.log(LogLevel::Warning, "⚠️  Validation warnings:");
+                for warning in &validation.warnings {
+                    progress_mgr.log(LogLevel::Warning, &format!("  - {}", warning));
+                }
+            }
+
+            if verbose {
+                progress_mgr.log(LogLevel::Success, "✅ OpenAPI specification is valid");
+            }
+        }
+        mockforge_core::spec_parser::SpecFormat::GraphQL => {
+            let validation = mockforge_core::spec_parser::GraphQLValidator::validate(&spec_content);
+            if !validation.is_valid {
+                let error_details: Vec<String> = validation
+                    .errors
+                    .iter()
+                    .map(|e| {
+                        let mut msg = e.message.clone();
+                        if let Some(suggestion) = &e.suggestion {
+                            msg.push_str(&format!(". Hint: {}", suggestion));
+                        }
+                        msg
+                    })
+                    .collect();
+
+                let error_msg = error_details.join("\n  ");
+                return Err(CliError::new(
+                    format!("Invalid GraphQL schema:\n  {}", error_msg),
+                    ExitCode::ConfigurationError,
+                )
+                .with_suggestion("Fix the validation errors above and try again".to_string())
+                .display_and_exit());
+            }
+
+            if !validation.warnings.is_empty() && verbose {
+                progress_mgr.log(LogLevel::Warning, "⚠️  Validation warnings:");
+                for warning in &validation.warnings {
+                    progress_mgr.log(LogLevel::Warning, &format!("  - {}", warning));
+                }
+            }
+
+            if verbose {
+                progress_mgr.log(LogLevel::Success, "✅ GraphQL schema is valid");
+            }
+        }
+        mockforge_core::spec_parser::SpecFormat::Protobuf => {
+            if verbose {
+                progress_mgr
+                    .log(LogLevel::Info, "📋 Protobuf validation will be performed during parsing");
+            }
+        }
+    }
+
     // Validate output directory
     if let Err(e) = utils::validate_output_dir(&config.output.path) {
         e.display_and_exit();

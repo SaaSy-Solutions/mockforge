@@ -57,8 +57,66 @@ pub fn import_openapi_spec(
     content: &str,
     _base_url: Option<&str>,
 ) -> Result<OpenApiImportResult, String> {
-    let json_value: Value =
-        serde_json::from_str(content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    // Detect format and validate using enhanced validator
+    let format = crate::spec_parser::SpecFormat::detect(content, None)
+        .map_err(|e| format!("Failed to detect spec format: {}", e))?;
+
+    // Parse as JSON value first for validation - optimized to avoid double parsing
+    // Try JSON first, then YAML (more robust detection)
+    let json_value: Value = match serde_json::from_str::<Value>(content) {
+        Ok(val) => val,
+        Err(_) => {
+            // Try YAML if JSON parsing fails
+            serde_yaml::from_str(content)
+                .map_err(|e| format!("Failed to parse as JSON or YAML: {}", e))?
+        }
+    };
+
+    // Validate using enhanced validator for better error messages
+    match format {
+        crate::spec_parser::SpecFormat::OpenApi20 => {
+            let validation = crate::spec_parser::OpenApiValidator::validate(&json_value, format);
+            if !validation.is_valid {
+                // Format errors on separate lines for better readability
+                let error_msg = validation
+                    .errors
+                    .iter()
+                    .map(|e| format!("  - {}", e))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Err(format!("Invalid OpenAPI 2.0 (Swagger) specification:\n{}", error_msg));
+            }
+
+            // Note: OpenAPI 2.0 support is currently limited to validation.
+            // Full parsing requires conversion to OpenAPI 3.x format.
+            // For now, return a helpful error suggesting conversion.
+            return Err(format!(
+                "OpenAPI 2.0 (Swagger) specifications are detected but not yet fully supported for parsing. \
+                Please convert your Swagger 2.0 spec to OpenAPI 3.x format. \
+                You can use tools like 'swagger2openapi' or the online converter at https://editor.swagger.io/ to convert your spec."
+            ));
+        }
+        crate::spec_parser::SpecFormat::OpenApi30 | crate::spec_parser::SpecFormat::OpenApi31 => {
+            let validation = crate::spec_parser::OpenApiValidator::validate(&json_value, format);
+            if !validation.is_valid {
+                // Format errors on separate lines for better readability
+                let error_msg = validation
+                    .errors
+                    .iter()
+                    .map(|e| format!("  - {}", e))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Err(format!("Invalid OpenAPI specification:\n{}", error_msg));
+            }
+            // Continue with parsing
+        }
+        _ => {
+            return Err(format!(
+                "Unsupported specification format: {}. Only OpenAPI 3.x is currently supported for parsing.",
+                format.display_name()
+            ));
+        }
+    }
 
     let spec = OpenApiSpec::from_json(json_value)
         .map_err(|e| format!("Failed to load OpenAPI spec: {}", e))?;
