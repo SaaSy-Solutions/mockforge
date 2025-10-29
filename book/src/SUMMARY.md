@@ -4,6 +4,7 @@
 
 ## Getting Started
 
+- [Getting Started](getting-started/getting-started.md)
 - [Installation](getting-started/installation.md)
 - [Your First Mock API in 5 Minutes](getting-started/five-minute-api.md)
 - [Quick Start](getting-started/quick-start.md)
@@ -13,6 +14,8 @@
 
 - [Overview](tutorials/README.md)
 - [Mock a REST API from OpenAPI](tutorials/mock-openapi-spec.md)
+- [React + MockForge Workflow](tutorials/react-workflow.md)
+- [Vue + MockForge Workflow](tutorials/vue-workflow.md)
 - [Admin UI Walkthrough](tutorials/admin-ui-walkthrough.md)
 - [Add a Custom Plugin](tutorials/add-custom-plugin.md)
 
@@ -94,5 +97,6 @@
 - [Request Chaining](reference/chaining.md)
 - [Fixtures and Smoke Testing](reference/fixtures.md)
 - [Troubleshooting](reference/troubleshooting.md)
+- [Common Issues & Solutions](reference/common-issues.md)
 - [FAQ](reference/faq.md)
 - [Changelog](reference/changelog.md)
