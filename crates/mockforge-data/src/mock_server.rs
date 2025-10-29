@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info};
+use tracing::info;
 
 /// Configuration for the mock server
 #[derive(Debug, Clone)]
@@ -139,10 +139,12 @@ impl MockServer {
 
         info!("Starting mock server on {}", addr);
 
-        let listener = TcpListener::bind(addr).await
+        let listener = TcpListener::bind(addr)
+            .await
             .map_err(|e| Error::generic(format!("Failed to bind to {}: {}", addr, e)))?;
 
-        axum::serve(listener, app).await
+        axum::serve(listener, app)
+            .await
             .map_err(|e| Error::generic(format!("Server error: {}", e)))?;
 
         Ok(())
@@ -235,7 +237,9 @@ impl MockServer {
             Ok(Json(response.body.clone()))
         } else {
             // Try to find a similar endpoint (for path parameters)
-            let similar_endpoint = state.handlers.keys()
+            let similar_endpoint = state
+                .handlers
+                .keys()
                 .find(|key| Self::endpoints_match(key, &endpoint_key))
                 .cloned();
 
@@ -260,7 +264,7 @@ impl MockServer {
 
     /// Check if two endpoints match (handles path parameters)
     #[allow(dead_code)]
-    fn endpoints_match(pattern: &str, request: &str) -> bool {
+    pub fn endpoints_match(pattern: &str, request: &str) -> bool {
         // Simple pattern matching - in a real implementation,
         // you'd want more sophisticated path parameter matching
         let pattern_parts: Vec<&str> = pattern.split(' ').collect();
@@ -348,17 +352,13 @@ impl MockServerBuilder {
 
 /// Quick function to start a mock server
 pub async fn start_mock_server(openapi_spec: Value, port: u16) -> Result<()> {
-    let server = MockServerBuilder::new(openapi_spec)
-        .port(port)
-        .build()?;
+    let server = MockServerBuilder::new(openapi_spec).port(port).build()?;
 
     server.start().await
 }
 
 /// Quick function to start a mock server with custom configuration
-pub async fn start_mock_server_with_config(
-    config: MockServerConfig,
-) -> Result<()> {
+pub async fn start_mock_server_with_config(config: MockServerConfig) -> Result<()> {
     let server = MockServer::new(config)?;
     server.start().await
 }

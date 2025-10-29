@@ -140,7 +140,8 @@ impl MockDataGenerator {
                     generated_data.insert(schema_name, data);
                 }
                 Err(e) => {
-                    let warning = format!("Failed to generate data for schema '{}': {}", schema_name, e);
+                    let warning =
+                        format!("Failed to generate data for schema '{}': {}", schema_name, e);
                     warn!("{}", warning);
                     warnings.push(warning);
                 }
@@ -207,7 +208,10 @@ impl MockDataGenerator {
     }
 
     /// Generate mock response for an OpenAPI operation
-    fn generate_endpoint_response(&mut self, operation: &openapiv3::Operation) -> Result<Option<MockResponse>> {
+    fn generate_endpoint_response(
+        &mut self,
+        operation: &openapiv3::Operation,
+    ) -> Result<Option<MockResponse>> {
         // Find the best response to mock (prefer 200, then 201, then any 2xx)
         let response_schema = self.find_best_response_schema(operation)?;
 
@@ -257,7 +261,10 @@ impl MockDataGenerator {
     }
 
     /// Extract schema from an OpenAPI response
-    fn extract_response_schema(&self, response: &openapiv3::ReferenceOr<openapiv3::Response>) -> Result<Option<Value>> {
+    fn extract_response_schema(
+        &self,
+        response: &openapiv3::ReferenceOr<openapiv3::Response>,
+    ) -> Result<Option<Value>> {
         match response {
             openapiv3::ReferenceOr::Item(response) => {
                 let content = &response.content;
@@ -386,34 +393,35 @@ impl MockDataGenerator {
     fn parse_openapi_spec(&self, spec: &Value) -> Result<OpenApiSpec> {
         // This is a simplified parser - in a real implementation,
         // you'd want to use a proper OpenAPI parser
-        let spec_obj = spec.as_object()
+        let spec_obj = spec
+            .as_object()
             .ok_or_else(|| Error::generic("Invalid OpenAPI specification"))?;
 
-        let info = spec_obj.get("info")
+        let info = spec_obj
+            .get("info")
             .ok_or_else(|| Error::generic("Missing 'info' section in OpenAPI spec"))?;
 
-        let title = info.get("title")
-            .and_then(|t| t.as_str())
-            .unwrap_or("Unknown API")
-            .to_string();
+        let title = info.get("title").and_then(|t| t.as_str()).unwrap_or("Unknown API").to_string();
 
-        let version = info.get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("1.0.0")
-            .to_string();
+        let version = info.get("version").and_then(|v| v.as_str()).unwrap_or("1.0.0").to_string();
 
-        let description = info.get("description")
-            .and_then(|d| d.as_str())
-            .map(|s| s.to_string());
+        let description = info.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
 
         Ok(OpenApiSpec {
-            info: OpenApiInfo { title, version, description },
+            info: OpenApiInfo {
+                title,
+                version,
+                description,
+            },
             paths: HashMap::new(), // Simplified for this example
         })
     }
 
     /// Extract schemas from OpenAPI specification
-    fn extract_schemas_from_spec(&mut self, spec: &Value) -> Result<HashMap<String, SchemaDefinition>> {
+    fn extract_schemas_from_spec(
+        &mut self,
+        spec: &Value,
+    ) -> Result<HashMap<String, SchemaDefinition>> {
         let mut schemas = HashMap::new();
 
         // Extract component schemas
@@ -438,13 +446,16 @@ impl MockDataGenerator {
                                 // Extract request body schemas
                                 if let Some(request_body) = op_obj.get("requestBody") {
                                     if let Some(content) = request_body.get("content") {
-                                        if let Some(json_content) = content.get("application/json") {
+                                        if let Some(json_content) = content.get("application/json")
+                                        {
                                             if let Some(schema) = json_content.get("schema") {
-                                                let schema_name = format!("{}_{}_request",
+                                                let schema_name = format!(
+                                                    "{}_{}_request",
                                                     path.replace("/", "_").trim_start_matches("_"),
                                                     method
                                                 );
-                                                let schema_def = SchemaDefinition::from_json_schema(schema)?;
+                                                let schema_def =
+                                                    SchemaDefinition::from_json_schema(schema)?;
                                                 schemas.insert(schema_name, schema_def);
                                             }
                                         }
@@ -456,14 +467,22 @@ impl MockDataGenerator {
                                     if let Some(resp_obj) = responses.as_object() {
                                         for (status_code, response) in resp_obj {
                                             if let Some(content) = response.get("content") {
-                                                if let Some(json_content) = content.get("application/json") {
-                                                    if let Some(schema) = json_content.get("schema") {
-                                                        let schema_name = format!("{}_{}_response_{}",
-                                                            path.replace("/", "_").trim_start_matches("_"),
+                                                if let Some(json_content) =
+                                                    content.get("application/json")
+                                                {
+                                                    if let Some(schema) = json_content.get("schema")
+                                                    {
+                                                        let schema_name = format!(
+                                                            "{}_{}_response_{}",
+                                                            path.replace("/", "_")
+                                                                .trim_start_matches("_"),
                                                             method,
                                                             status_code
                                                         );
-                                                        let schema_def = SchemaDefinition::from_json_schema(schema)?;
+                                                        let schema_def =
+                                                            SchemaDefinition::from_json_schema(
+                                                                schema,
+                                                            )?;
                                                         schemas.insert(schema_name, schema_def);
                                                     }
                                                 }
@@ -647,9 +666,7 @@ mod tests {
 
     #[test]
     fn test_mock_data_generator_with_config() {
-        let config = MockGeneratorConfig::new()
-            .realistic_mode(false)
-            .default_array_size(10);
+        let config = MockGeneratorConfig::new().realistic_mode(false).default_array_size(10);
 
         let generator = MockDataGenerator::with_config(config);
 

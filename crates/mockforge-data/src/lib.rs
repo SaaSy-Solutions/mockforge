@@ -29,7 +29,10 @@ pub use fake::Faker;
 pub use generator::DataGenerator;
 pub use intelligent_mock::{IntelligentMockConfig, IntelligentMockGenerator, ResponseMode};
 pub use mock_generator::{MockDataGenerator, MockDataResult, MockGeneratorConfig, MockResponse};
-pub use mock_server::{MockServer, MockServerBuilder, MockServerConfig, start_mock_server, start_mock_server_with_config};
+pub use mock_server::{
+    start_mock_server, start_mock_server_with_config, MockServer, MockServerBuilder,
+    MockServerConfig,
+};
 pub use rag::{EmbeddingProvider, LlmProvider, RagConfig, RagEngine, SearchResult};
 pub use replay_augmentation::{
     EventStrategy, GeneratedEvent, ReplayAugmentationConfig, ReplayAugmentationEngine, ReplayMode,

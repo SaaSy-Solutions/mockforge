@@ -87,7 +87,7 @@ pub struct SpecImportState {
 pub struct StoredSpec {
     pub metadata: SpecMetadata,
     pub content: String,
-    pub routes_json: String,  // Serialized routes/channels as JSON
+    pub routes_json: String, // Serialized routes/channels as JSON
 }
 
 impl SpecImportState {
@@ -144,8 +144,10 @@ async fn import_spec(
     // Import based on type
     let (metadata, openapi_result, asyncapi_result) = match spec_type {
         SpecType::OpenApi => {
-            let result = import_openapi_spec(&json_content, payload.base_url.as_deref())
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to import OpenAPI spec: {}", e)))?;
+            let result =
+                import_openapi_spec(&json_content, payload.base_url.as_deref()).map_err(|e| {
+                    (StatusCode::BAD_REQUEST, format!("Failed to import OpenAPI spec: {}", e))
+                })?;
 
             let metadata = SpecMetadata {
                 id: generate_spec_id(),
@@ -162,7 +164,9 @@ async fn import_spec(
         }
         SpecType::AsyncApi => {
             let result = import_asyncapi_spec(&payload.spec_content, payload.base_url.as_deref())
-                .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to import AsyncAPI spec: {}", e)))?;
+                .map_err(|e| {
+                (StatusCode::BAD_REQUEST, format!("Failed to import AsyncAPI spec: {}", e))
+            })?;
 
             let metadata = SpecMetadata {
                 id: generate_spec_id(),
@@ -182,24 +186,35 @@ async fn import_spec(
     let spec_id = metadata.id.clone();
 
     // Build response and serialize routes
-    let (routes_generated, warnings, coverage, routes_json) = if let Some(ref result) = openapi_result {
-        let coverage = calculate_openapi_coverage(result);
-        let routes_json = serde_json::to_string(&result.routes)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize routes: {}", e)))?;
-        (result.routes.len(), result.warnings.clone(), coverage, routes_json)
-    } else if let Some(ref result) = asyncapi_result {
-        let coverage = calculate_asyncapi_coverage(result);
-        let routes_json = serde_json::to_string(&result.channels)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize channels: {}", e)))?;
-        (result.channels.len(), result.warnings.clone(), coverage, routes_json)
-    } else {
-        (0, vec![], CoverageStats {
-            total_endpoints: 0,
-            mocked_endpoints: 0,
-            coverage_percentage: 0,
-            by_method: HashMap::new(),
-        }, "[]".to_string())
-    };
+    let (routes_generated, warnings, coverage, routes_json) =
+        if let Some(ref result) = openapi_result {
+            let coverage = calculate_openapi_coverage(result);
+            let routes_json = serde_json::to_string(&result.routes).map_err(|e| {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize routes: {}", e))
+            })?;
+            (result.routes.len(), result.warnings.clone(), coverage, routes_json)
+        } else if let Some(ref result) = asyncapi_result {
+            let coverage = calculate_asyncapi_coverage(result);
+            let routes_json = serde_json::to_string(&result.channels).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to serialize channels: {}", e),
+                )
+            })?;
+            (result.channels.len(), result.warnings.clone(), coverage, routes_json)
+        } else {
+            (
+                0,
+                vec![],
+                CoverageStats {
+                    total_endpoints: 0,
+                    mocked_endpoints: 0,
+                    coverage_percentage: 0,
+                    by_method: HashMap::new(),
+                },
+                "[]".to_string(),
+            )
+        };
 
     // Store the spec
     let stored_spec = StoredSpec {
@@ -233,32 +248,39 @@ async fn upload_spec_file(
     let mut name = None;
     let mut base_url = None;
 
-    while let Some(field) = multipart.next_field().await
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to read multipart field: {}", e)))? {
-
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to read multipart field: {}", e)))?
+    {
         let field_name = field.name().unwrap_or("").to_string();
 
         match field_name.as_str() {
             "file" => {
-                let data = field.bytes().await
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to read file: {}", e)))?;
-                spec_content = Some(String::from_utf8(data.to_vec())
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid UTF-8: {}", e)))?);
+                let data = field.bytes().await.map_err(|e| {
+                    (StatusCode::BAD_REQUEST, format!("Failed to read file: {}", e))
+                })?;
+                spec_content = Some(
+                    String::from_utf8(data.to_vec())
+                        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid UTF-8: {}", e)))?,
+                );
             }
             "name" => {
-                name = Some(field.text().await
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to read name: {}", e)))?);
+                name = Some(field.text().await.map_err(|e| {
+                    (StatusCode::BAD_REQUEST, format!("Failed to read name: {}", e))
+                })?);
             }
             "base_url" => {
-                base_url = Some(field.text().await
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to read base_url: {}", e)))?);
+                base_url = Some(field.text().await.map_err(|e| {
+                    (StatusCode::BAD_REQUEST, format!("Failed to read base_url: {}", e))
+                })?);
             }
             _ => {}
         }
     }
 
-    let spec_content = spec_content
-        .ok_or((StatusCode::BAD_REQUEST, "Missing 'file' field".to_string()))?;
+    let spec_content =
+        spec_content.ok_or((StatusCode::BAD_REQUEST, "Missing 'file' field".to_string()))?;
 
     // Call import_spec with the extracted data
     let request = ImportSpecRequest {
@@ -299,11 +321,7 @@ async fn list_specs(
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(100);
 
-    let paginated: Vec<SpecMetadata> = metadata_list
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
+    let paginated: Vec<SpecMetadata> = metadata_list.into_iter().skip(offset).take(limit).collect();
 
     Json(paginated)
 }
@@ -359,14 +377,12 @@ async fn get_spec_coverage(
                 by_method: HashMap::new(),
             }
         }
-        SpecType::AsyncApi => {
-            CoverageStats {
-                total_endpoints: spec.metadata.route_count,
-                mocked_endpoints: spec.metadata.route_count,
-                coverage_percentage: 100,
-                by_method: HashMap::new(),
-            }
-        }
+        SpecType::AsyncApi => CoverageStats {
+            total_endpoints: spec.metadata.route_count,
+            mocked_endpoints: spec.metadata.route_count,
+            coverage_percentage: 100,
+            by_method: HashMap::new(),
+        },
     };
 
     Ok(Json(coverage))
@@ -382,8 +398,8 @@ async fn get_spec_routes(
 
     let spec = specs.get(&id).ok_or(StatusCode::NOT_FOUND)?;
 
-    let routes: serde_json::Value = serde_json::from_str(&spec.routes_json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let routes: serde_json::Value =
+        serde_json::from_str(&spec.routes_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(routes))
 }
@@ -392,10 +408,7 @@ async fn get_spec_routes(
 
 fn generate_spec_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
     format!("spec-{}", timestamp)
 }
 
@@ -428,10 +441,9 @@ fn is_yaml(content: &str) -> bool {
 }
 
 fn yaml_to_json(yaml_content: &str) -> Result<String, String> {
-    let yaml_value: serde_json::Value = serde_yaml::from_str(yaml_content)
-        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
-    serde_json::to_string(&yaml_value)
-        .map_err(|e| format!("Failed to convert to JSON: {}", e))
+    let yaml_value: serde_json::Value =
+        serde_yaml::from_str(yaml_content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+    serde_json::to_string(&yaml_value).map_err(|e| format!("Failed to convert to JSON: {}", e))
 }
 
 fn calculate_openapi_coverage(result: &OpenApiImportResult) -> CoverageStats {

@@ -3308,6 +3308,20 @@ dependencies = [
 
 [[package]]
 name = "handlebars"
+version = "4.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faa67bab9ff362228eb3d00bd024a4965d8231bbb7921167f0cfa66c6626b225"
+dependencies = [
+ "log",
+ "pest 2.8.3",
+ "pest_derive 2.8.3",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "handlebars"
 version = "5.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d08485b96a0e6393e9e4d1b8d48cf74ad6c063cd905eb33f42c1ce3f0377539b"
@@ -5344,6 +5358,7 @@ dependencies = [
  "axum 0.8.6",
  "base64 0.22.1",
  "chrono",
+ "handlebars 4.5.0",
  "hyper 1.7.0",
  "rand 0.9.2",
  "regex",

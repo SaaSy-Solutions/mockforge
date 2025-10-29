@@ -104,10 +104,6 @@ async fn test_error_messages_are_helpful() {
             || lowercase_msg.contains("call")
             || lowercase_msg.contains("ensure");
 
-        assert!(
-            has_actionable_info,
-            "Error message lacks actionable advice: {}",
-            msg
-        );
+        assert!(has_actionable_info, "Error message lacks actionable advice: {}", msg);
     }
 }

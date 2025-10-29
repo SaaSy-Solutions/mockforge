@@ -204,6 +204,85 @@ docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
 
 See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment options.
 
+## 🎯 Multi-Framework Client Generation
+
+MockForge now supports generating client code for multiple frontend frameworks from your OpenAPI specifications. This enables seamless integration with your existing applications and reduces development time.
+
+### Supported Frameworks
+
+- **React** - Generate React hooks and TypeScript types
+- **Vue** - Generate Vue composables and Pinia stores
+- **Angular** - Generate Angular services and modules
+- **Svelte** - Generate Svelte stores and components
+
+### Quick Start with Client Generation
+
+```bash
+# Generate React client
+mockforge client generate --spec examples/user-management-api.json --framework react --output ./generated
+
+# Generate Vue client
+mockforge client generate --spec examples/user-management-api.json --framework vue --output ./generated
+
+# Generate Angular client
+mockforge client generate --spec examples/user-management-api.json --framework angular --output ./generated
+
+# Generate Svelte client
+mockforge client generate --spec examples/user-management-api.json --framework svelte --output ./generated
+```
+
+### Example Applications
+
+Complete example applications are available in the `examples/` directory:
+
+- **`react-demo/`** - React application with generated hooks
+- **`vue-demo/`** - Vue 3 application with generated composables
+- **`angular-demo/`** - Angular 17 application with generated services
+- **`svelte-demo/`** - SvelteKit application with generated stores
+
+Each demo includes:
+- ✅ Complete working application
+- ✅ Generated client integration
+- ✅ TypeScript type safety
+- ✅ Error handling and loading states
+- ✅ Form handling examples
+- ✅ Comprehensive documentation
+
+### Generated Code Features
+
+All generated clients include:
+
+- **TypeScript Types** - Full type safety from OpenAPI schemas
+- **API Clients** - Framework-specific HTTP clients
+- **Error Handling** - Built-in error management
+- **Loading States** - Reactive loading indicators
+- **Documentation** - Usage examples and API reference
+
+### Usage Example
+
+```typescript
+// React
+const { data: users, loading, error } = useGetUsers();
+
+// Vue
+const { data, loading, error } = useGetUsers();
+
+// Angular
+this.userService.getUsers().subscribe({
+  next: (users) => this.users = users,
+  error: (error) => this.error = error
+});
+
+// Svelte
+const usersStore = createGetUsersStore();
+usersStore.subscribe(state => {
+  users = state.data;
+  loading = state.loading;
+});
+```
+
+See [`examples/README.md`](examples/README.md) for detailed documentation on all framework examples.
+
 ### Basic Usage
 
 ```bash

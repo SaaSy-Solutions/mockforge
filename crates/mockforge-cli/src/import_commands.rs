@@ -83,7 +83,9 @@ pub enum ImportCommands {
 }
 
 /// Handle import commands
-pub async fn handle_import_command(command: ImportCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn handle_import_command(
+    command: ImportCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
         ImportCommands::Openapi {
             spec_path,
@@ -110,9 +112,10 @@ pub async fn handle_import_command(command: ImportCommands) -> Result<(), Box<dy
             )
             .await
         }
-        ImportCommands::Coverage { spec_path, spec_type } => {
-            handle_coverage_report(&spec_path, &spec_type).await
-        }
+        ImportCommands::Coverage {
+            spec_path,
+            spec_type,
+        } => handle_coverage_report(&spec_path, &spec_type).await,
     }
 }
 
@@ -131,8 +134,8 @@ async fn handle_openapi_import(
 
     // Convert YAML to JSON if needed
     let json_content = if spec_path.ends_with(".yaml") || spec_path.ends_with(".yml") {
-        let yaml_value: serde_json::Value = serde_yaml::from_str(&content)
-            .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+        let yaml_value: serde_json::Value =
+            serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
         serde_json::to_string(&yaml_value)?
     } else {
         content
@@ -181,9 +184,7 @@ async fn handle_asyncapi_import(
     // Filter by protocol if specified
     if let Some(protocol) = protocol_filter {
         result.channels.retain(|ch| {
-            format!("{:?}", ch.protocol)
-                .to_lowercase()
-                .contains(&protocol.to_lowercase())
+            format!("{:?}", ch.protocol).to_lowercase().contains(&protocol.to_lowercase())
         });
     }
 
@@ -196,13 +197,9 @@ async fn handle_asyncapi_import(
         println!();
         println!(
             "{}",
-            format!(
-                "✅ Saved {} channels to {}",
-                result.channels.len(),
-                output_path.display()
-            )
-            .green()
-            .bold()
+            format!("✅ Saved {} channels to {}", result.channels.len(), output_path.display())
+                .green()
+                .bold()
         );
     }
 
@@ -228,8 +225,8 @@ async fn handle_coverage_report(
 
     // Convert YAML to JSON if needed
     let json_content = if spec_path.ends_with(".yaml") || spec_path.ends_with(".yml") {
-        let yaml_value: serde_json::Value = serde_yaml::from_str(&content)
-            .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+        let yaml_value: serde_json::Value =
+            serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
         serde_json::to_string(&yaml_value)?
     } else {
         content.clone()
@@ -255,7 +252,9 @@ async fn handle_coverage_report(
 }
 
 /// Load specification content from file or URL
-async fn load_spec_content(spec_path: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+async fn load_spec_content(
+    spec_path: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     if spec_path.starts_with("http://") || spec_path.starts_with("https://") {
         // Fetch from URL
         println!("📥 Fetching specification from URL: {}", spec_path);
@@ -373,10 +372,7 @@ fn display_openapi_import_results(result: &OpenApiImportResult, verbose: bool) {
 }
 
 /// Display AsyncAPI import results
-fn display_asyncapi_import_results(
-    result: &AsyncApiImportResult,
-    verbose: bool,
-) {
+fn display_asyncapi_import_results(result: &AsyncApiImportResult, verbose: bool) {
     println!("{}", "📖 Specification Info:".bold());
     println!("  Title: {}", result.spec_info.title.cyan());
     println!("  Version: {}", result.spec_info.version.cyan());
@@ -394,17 +390,12 @@ fn display_asyncapi_import_results(
 
     println!();
     println!("{}", "✨ Generated Channels:".bold());
-    println!(
-        "  Total Channels: {}",
-        result.channels.len().to_string().green().bold()
-    );
+    println!("  Total Channels: {}", result.channels.len().to_string().green().bold());
 
     // Count by protocol
     let mut protocol_counts = std::collections::HashMap::new();
     for channel in &result.channels {
-        *protocol_counts
-            .entry(format!("{:?}", channel.protocol))
-            .or_insert(0) += 1;
+        *protocol_counts.entry(format!("{:?}", channel.protocol)).or_insert(0) += 1;
     }
 
     println!("\n{}", "  By Protocol:".bold());
@@ -415,12 +406,7 @@ fn display_asyncapi_import_results(
     // Display warnings if any
     if !result.warnings.is_empty() {
         println!();
-        println!(
-            "{}",
-            format!("⚠️  {} Warnings:", result.warnings.len())
-                .yellow()
-                .bold()
-        );
+        println!("{}", format!("⚠️  {} Warnings:", result.warnings.len()).yellow().bold());
         for warning in &result.warnings {
             println!("  • {}", warning.yellow());
         }
@@ -483,12 +469,7 @@ fn display_openapi_coverage(result: &OpenApiImportResult) {
     // Overall coverage score
     let coverage_score = 100; // We generate mocks for all endpoints
     println!();
-    println!(
-        "{}",
-        format!("✅ Overall Coverage: {}%", coverage_score)
-            .green()
-            .bold()
-    );
+    println!("{}", format!("✅ Overall Coverage: {}%", coverage_score).green().bold());
 }
 
 /// Display AsyncAPI coverage statistics
@@ -500,20 +481,12 @@ fn display_asyncapi_coverage(result: &AsyncApiImportResult) {
     let channels_with_schemas = result
         .channels
         .iter()
-        .filter(|ch| {
-            ch.operations
-                .iter()
-                .any(|op| op.message_schema.is_some())
-        })
+        .filter(|ch| ch.operations.iter().any(|op| op.message_schema.is_some()))
         .count();
     let channels_with_examples = result
         .channels
         .iter()
-        .filter(|ch| {
-            ch.operations
-                .iter()
-                .any(|op| op.example_message.is_some())
-        })
+        .filter(|ch| ch.operations.iter().any(|op| op.example_message.is_some()))
         .count();
 
     println!("  Total Channels: {}", total_channels.to_string().green().bold());
@@ -531,9 +504,7 @@ fn display_asyncapi_coverage(result: &AsyncApiImportResult) {
     // Coverage by protocol
     let mut protocol_coverage = std::collections::HashMap::new();
     for channel in &result.channels {
-        *protocol_coverage
-            .entry(format!("{:?}", channel.protocol))
-            .or_insert(0) += 1;
+        *protocol_coverage.entry(format!("{:?}", channel.protocol)).or_insert(0) += 1;
     }
 
     println!();
@@ -550,12 +521,7 @@ fn display_asyncapi_coverage(result: &AsyncApiImportResult) {
         0
     };
     println!();
-    println!(
-        "{}",
-        format!("✅ Overall Coverage: {}%", coverage_score)
-            .green()
-            .bold()
-    );
+    println!("{}", format!("✅ Overall Coverage: {}%", coverage_score).green().bold());
 }
 
 /// Calculate percentage

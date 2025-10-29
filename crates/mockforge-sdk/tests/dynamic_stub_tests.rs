@@ -98,8 +98,7 @@ async fn test_dynamic_stub_modify_headers() {
     // Add headers
     stub.add_header("Content-Type".to_string(), "application/json".to_string())
         .await;
-    stub.add_header("X-Custom".to_string(), "custom-value".to_string())
-        .await;
+    stub.add_header("X-Custom".to_string(), "custom-value".to_string()).await;
 
     let headers = stub.get_headers().await;
     assert_eq!(headers.len(), 2);
@@ -115,24 +114,22 @@ async fn test_dynamic_stub_modify_headers() {
 
 #[tokio::test]
 async fn test_dynamic_stub_with_latency() {
-    let stub = DynamicStub::new("GET", "/api/slow", |_ctx| json!({"message": "slow"}))
-        .with_latency(100);
+    let stub =
+        DynamicStub::new("GET", "/api/slow", |_ctx| json!({"message": "slow"})).with_latency(100);
 
     assert_eq!(stub.latency_ms, Some(100));
 }
 
 #[tokio::test]
 async fn test_dynamic_stub_request_body_access() {
-    let stub = DynamicStub::new("POST", "/api/echo", |ctx| {
-        match &ctx.body {
-            Some(body) => json!({
-                "echoed": body,
-                "message": "Body received"
-            }),
-            None => json!({
-                "error": "No body provided"
-            }),
-        }
+    let stub = DynamicStub::new("POST", "/api/echo", |ctx| match &ctx.body {
+        Some(body) => json!({
+            "echoed": body,
+            "message": "Body received"
+        }),
+        None => json!({
+            "error": "No body provided"
+        }),
     });
 
     // Test with body

@@ -122,9 +122,9 @@ impl MockServer {
 
     /// Build a simple router from stored routes
     fn build_simple_router(&self) -> Router {
-        use axum::routing::{delete, get, post, put};
-        use axum::{Json, response::IntoResponse};
         use axum::http::StatusCode;
+        use axum::routing::{delete, get, post, put};
+        use axum::{response::IntoResponse, Json};
 
         let mut router = Router::new();
 
@@ -141,7 +141,8 @@ impl MockServer {
                     *response.status_mut() = StatusCode::from_u16(status).unwrap();
 
                     for (key, value) in headers {
-                        if let Ok(header_name) = axum::http::HeaderName::from_bytes(key.as_bytes()) {
+                        if let Ok(header_name) = axum::http::HeaderName::from_bytes(key.as_bytes())
+                        {
                             if let Ok(header_value) = axum::http::HeaderValue::from_str(&value) {
                                 response.headers_mut().insert(header_name, header_value);
                             }

@@ -1,0 +1,24 @@
+{
+  "name": "svelte-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite dev",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "generate-client": "mockforge client generate --spec ../user-management-api.json --framework svelte --output ./generated"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-auto": "^2.0.0",
+    "@sveltejs/kit": "^1.20.4",
+    "@sveltejs/vite-plugin-svelte": "^2.4.2",
+    "@tsconfig/svelte": "^5.0.0",
+    "svelte": "^4.0.5",
+    "svelte-check": "^3.4.3",
+    "typescript": "^5.0.0",
+    "vite": "^4.4.2",
+    "mockforge-cli": "0.1.0"
+  },
+  "type": "module"
+}

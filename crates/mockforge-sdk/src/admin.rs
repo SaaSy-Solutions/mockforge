@@ -160,10 +160,7 @@ impl AdminClient {
         }
 
         if !response.status().is_success() {
-            return Err(Error::General(format!(
-                "Failed to get mock: HTTP {}",
-                response.status()
-            )));
+            return Err(Error::General(format!("Failed to get mock: HTTP {}", response.status())));
         }
 
         response
@@ -263,10 +260,7 @@ impl AdminClient {
             .map_err(|e| Error::General(format!("Failed to get stats: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::General(format!(
-                "Failed to get stats: HTTP {}",
-                response.status()
-            )));
+            return Err(Error::General(format!("Failed to get stats: HTTP {}", response.status())));
         }
 
         response

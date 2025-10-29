@@ -4,11 +4,7 @@ use mockforge_sdk::MockServer;
 
 #[tokio::test]
 async fn test_auto_port_discovery() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     // Port should be automatically assigned
     let port = server.port();
@@ -40,23 +36,14 @@ async fn test_custom_port_range() {
 #[tokio::test]
 async fn test_multiple_servers_auto_port() {
     // Start multiple servers with auto-port
-    let mut server1 = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server 1");
+    let mut server1 =
+        MockServer::new().auto_port().start().await.expect("Failed to start server 1");
 
-    let mut server2 = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server 2");
+    let mut server2 =
+        MockServer::new().auto_port().start().await.expect("Failed to start server 2");
 
-    let mut server3 = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server 3");
+    let mut server3 =
+        MockServer::new().auto_port().start().await.expect("Failed to start server 3");
 
     // All servers should have different ports
     let port1 = server1.port();

@@ -5,11 +5,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn test_admin_client_list_mocks() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -22,11 +18,7 @@ async fn test_admin_client_list_mocks() {
 
 #[tokio::test]
 async fn test_admin_client_create_mock() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -37,10 +29,7 @@ async fn test_admin_client_create_mock() {
         .body(json!({"message": "Hello, World!"}))
         .build();
 
-    let created = admin_client
-        .create_mock(mock_config)
-        .await
-        .expect("Failed to create mock");
+    let created = admin_client.create_mock(mock_config).await.expect("Failed to create mock");
 
     assert_eq!(created.method, "GET");
     assert_eq!(created.path, "/api/test");
@@ -56,11 +45,7 @@ async fn test_admin_client_create_mock() {
 
 #[tokio::test]
 async fn test_admin_client_get_mock() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -70,16 +55,10 @@ async fn test_admin_client_get_mock() {
         .body(json!([]))
         .build();
 
-    let created = admin_client
-        .create_mock(mock_config)
-        .await
-        .expect("Failed to create mock");
+    let created = admin_client.create_mock(mock_config).await.expect("Failed to create mock");
 
     // Get the mock by ID
-    let fetched = admin_client
-        .get_mock(&created.id)
-        .await
-        .expect("Failed to get mock");
+    let fetched = admin_client.get_mock(&created.id).await.expect("Failed to get mock");
 
     assert_eq!(fetched.id, created.id);
     assert_eq!(fetched.method, "GET");
@@ -90,11 +69,7 @@ async fn test_admin_client_get_mock() {
 
 #[tokio::test]
 async fn test_admin_client_update_mock() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -105,10 +80,7 @@ async fn test_admin_client_update_mock() {
         .body(json!({"value": 1}))
         .build();
 
-    let created = admin_client
-        .create_mock(mock_config)
-        .await
-        .expect("Failed to create mock");
+    let created = admin_client.create_mock(mock_config).await.expect("Failed to create mock");
 
     // Update the mock
     let updated_config = MockConfigBuilder::new("GET", "/api/data")
@@ -132,29 +104,18 @@ async fn test_admin_client_update_mock() {
 
 #[tokio::test]
 async fn test_admin_client_delete_mock() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
     // Create a mock
-    let mock_config = MockConfigBuilder::new("DELETE", "/api/delete-test")
-        .name("To Delete")
-        .build();
+    let mock_config =
+        MockConfigBuilder::new("DELETE", "/api/delete-test").name("To Delete").build();
 
-    let created = admin_client
-        .create_mock(mock_config)
-        .await
-        .expect("Failed to create mock");
+    let created = admin_client.create_mock(mock_config).await.expect("Failed to create mock");
 
     // Delete the mock
-    admin_client
-        .delete_mock(&created.id)
-        .await
-        .expect("Failed to delete mock");
+    admin_client.delete_mock(&created.id).await.expect("Failed to delete mock");
 
     // Verify it's deleted
     let result = admin_client.get_mock(&created.id).await;
@@ -165,11 +126,7 @@ async fn test_admin_client_delete_mock() {
 
 #[tokio::test]
 async fn test_admin_client_get_stats() {
-    let mut server = MockServer::new()
-        .auto_port()
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 

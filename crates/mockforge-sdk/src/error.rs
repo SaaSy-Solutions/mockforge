@@ -63,14 +63,14 @@ pub enum Error {
     #[error("Server failed to start within {timeout_secs} seconds.\nCheck logs for details or increase timeout.")]
     StartupTimeout {
         /// Number of seconds waited before timeout
-        timeout_secs: u64
+        timeout_secs: u64,
     },
 
     /// Server shutdown timeout
     #[error("Server failed to stop within {timeout_secs} seconds.\nSome connections may still be active.")]
     ShutdownTimeout {
         /// Number of seconds waited before timeout
-        timeout_secs: u64
+        timeout_secs: u64,
     },
 
     /// Admin API error
@@ -128,7 +128,11 @@ impl Error {
     ///     vec!["GET /api/users".to_string()]
     /// );
     /// ```
-    pub fn stub_not_found(method: impl Into<String>, path: impl Into<String>, available: Vec<String>) -> Self {
+    pub fn stub_not_found(
+        method: impl Into<String>,
+        path: impl Into<String>,
+        available: Vec<String>,
+    ) -> Self {
         Error::StubNotFound {
             method: method.into(),
             path: path.into(),

@@ -30,12 +30,7 @@ pub unsafe extern "C" fn mockforge_server_new(port: u16) -> *mut MockServerHandl
     };
 
     // Create and start the server
-    let server = runtime.block_on(async {
-        MockServer::new()
-            .port(port)
-            .start()
-            .await
-    });
+    let server = runtime.block_on(async { MockServer::new().port(port).start().await });
 
     let server = match server {
         Ok(s) => s,

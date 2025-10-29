@@ -4,7 +4,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use mockforge_http::spec_import::{spec_import_router, ImportSpecRequest, SpecImportState, SpecType};
+use mockforge_http::spec_import::{
+    spec_import_router, ImportSpecRequest, SpecImportState, SpecType,
+};
 use serde_json::json;
 use tower::ServiceExt;
 
@@ -64,9 +66,7 @@ async fn test_import_openapi_spec() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert!(json.get("spec_id").is_some());
@@ -131,9 +131,7 @@ async fn test_import_asyncapi_spec() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert!(json.get("spec_id").is_some());
@@ -197,9 +195,7 @@ async fn test_list_specs() {
 
     assert_eq!(list_response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
     let specs: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(specs.len(), 1);
@@ -252,9 +248,7 @@ async fn test_get_spec_routes() {
         .await
         .unwrap();
 
-    let body = axum::body::to_bytes(import_response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(import_response.into_body(), usize::MAX).await.unwrap();
     let import_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let spec_id = import_json["spec_id"].as_str().unwrap();
 
@@ -271,9 +265,7 @@ async fn test_get_spec_routes() {
 
     assert_eq!(routes_response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(routes_response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(routes_response.into_body(), usize::MAX).await.unwrap();
     let routes: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(routes.len(), 1);
@@ -327,9 +319,7 @@ async fn test_delete_spec() {
         .await
         .unwrap();
 
-    let body = axum::body::to_bytes(import_response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(import_response.into_body(), usize::MAX).await.unwrap();
     let import_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let spec_id = import_json["spec_id"].as_str().unwrap();
 
@@ -368,7 +358,7 @@ paths:
 
     let request_body = ImportSpecRequest {
         spec_content: openapi_yaml.to_string(),
-        spec_type: None,  // Auto-detect
+        spec_type: None, // Auto-detect
         name: None,
         base_url: None,
         auto_generate_mocks: Some(true),
@@ -388,9 +378,7 @@ paths:
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(json["spec_type"], "openapi");

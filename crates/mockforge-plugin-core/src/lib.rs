@@ -83,9 +83,11 @@
 
 // Public modules
 pub mod auth;
+pub mod client_generator;
 pub mod datasource;
 pub mod error;
 pub mod manifest;
+pub mod plugins;
 pub mod response;
 pub mod runtime;
 pub mod template;
@@ -97,9 +99,14 @@ pub use async_trait::TokenResolver;
 
 // Re-export types
 pub use auth::*;
+pub use client_generator::{
+    ClientGenerationResult, ClientGeneratorConfig, ClientGeneratorPlugin,
+    ClientGeneratorPluginConfig, GeneratedFile, GenerationMetadata, OpenApiSpec,
+};
 pub use datasource::{
     DataConnection, DataQuery, DataResult, DataSourcePlugin, DataSourcePluginConfig,
 };
+pub use plugins::{ReactClientGenerator, VueClientGenerator};
 pub use response::{
     ResponseData, ResponseModifierConfig, ResponseModifierPlugin, ResponsePlugin,
     ResponsePluginConfig, ResponseRequest,
@@ -193,3 +200,7 @@ mod tests {
         assert_eq!(request.headers.get("Accept"), Some(&"application/json".to_string()));
     }
 }
+
+// Include client generator tests
+#[cfg(test)]
+mod client_generator_tests;

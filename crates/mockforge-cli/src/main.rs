@@ -14,6 +14,7 @@ use tokio::net::TcpListener;
 
 #[cfg(feature = "amqp")]
 mod amqp_commands;
+mod client_generator;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
 mod import_commands;
@@ -635,6 +636,18 @@ enum Commands {
     Plugin {
         #[command(subcommand)]
         plugin_command: plugin_commands::PluginCommands,
+    },
+
+    /// Client code generation for frontend frameworks
+    ///
+    /// Examples:
+    ///   mockforge client generate --spec api.json --framework react --output ./generated
+    ///   mockforge client generate --spec api.yaml --framework vue --base-url https://api.example.com
+    ///   mockforge client list
+    #[command(verbatim_doc_comment)]
+    Client {
+        #[command(subcommand)]
+        client_command: client_generator::ClientCommand,
     },
 
     /// Multi-tenant workspace management
@@ -1631,6 +1644,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         Commands::Plugin { plugin_command } => {
             plugin_commands::handle_plugin_command(plugin_command).await?;
+        }
+        Commands::Client { client_command } => {
+            client_generator::execute_client_command(client_command).await?;
         }
         Commands::Workspace { workspace_command } => {
             workspace_commands::handle_workspace_command(workspace_command).await?;
@@ -2849,9 +2865,7 @@ async fn handle_serve(
                         }
                     }
                 }
-                Err(e) => {
-                    Err(format!("Failed to initialize Kafka broker: {:?}", e))
-                }
+                Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
             }
         }))
     } else {
@@ -2873,7 +2887,11 @@ async fn handle_serve(
             println!("🐰 AMQP broker listening on {}:{}", amqp_config.host, amqp_config.port);
 
             // Create spec registry
-            let spec_registry = Arc::new(AmqpSpecRegistry::new(amqp_config.clone()).await.map_err(|e| format!("Failed to create AMQP spec registry: {:?}", e))?);
+            let spec_registry = Arc::new(
+                AmqpSpecRegistry::new(amqp_config.clone())
+                    .await
+                    .map_err(|e| format!("Failed to create AMQP spec registry: {:?}", e))?,
+            );
 
             // Load fixtures if configured
             if let Some(ref fixtures_dir) = amqp_config.fixtures_dir {
@@ -3184,7 +3202,8 @@ async fn handle_data(
                 validate,
                 array_size,
                 max_array_size,
-            ).await?;
+            )
+            .await?;
 
             // Format and output the result
             output_mock_data_result(result, format, output).await?;
@@ -3232,7 +3251,8 @@ async fn handle_data(
                 realistic,
                 include_optional,
                 validate,
-            ).await?;
+            )
+            .await?;
         }
     }
 
@@ -3638,8 +3658,10 @@ async fn generate_mock_data_from_openapi(
     let spec_content = tokio::fs::read_to_string(spec_path).await?;
 
     // Parse JSON or YAML
-    let spec_json: serde_json::Value = if spec_path.extension().and_then(|s| s.to_str()) == Some("yaml")
-        || spec_path.extension().and_then(|s| s.to_str()) == Some("yml") {
+    let spec_json: serde_json::Value = if spec_path.extension().and_then(|s| s.to_str())
+        == Some("yaml")
+        || spec_path.extension().and_then(|s| s.to_str()) == Some("yml")
+    {
         serde_yaml::from_str(&spec_content)?
     } else {
         serde_json::from_str(&spec_content)?
@@ -3655,7 +3677,8 @@ async fn generate_mock_data_from_openapi(
 
     // Generate mock data
     let mut generator = mockforge_data::MockDataGenerator::with_config(config);
-    generator.generate_from_openapi_spec(&spec_json)
+    generator
+        .generate_from_openapi_spec(&spec_json)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 }
 
@@ -3704,7 +3727,8 @@ async fn output_mock_data_result(
 
             // Add schemas
             for (schema_name, schema_data) in &result.schemas {
-                csv_output.push_str(&format!("schema,{},\"\",\"\",{}\n",
+                csv_output.push_str(&format!(
+                    "schema,{},\"\",\"\",{}\n",
                     schema_name,
                     serde_json::to_string(schema_data)?.replace("\"", "\"\"")
                 ));
@@ -3712,7 +3736,8 @@ async fn output_mock_data_result(
 
             // Add responses
             for (endpoint, response) in &result.responses {
-                csv_output.push_str(&format!("response,\"\",{},{},{}\n",
+                csv_output.push_str(&format!(
+                    "response,\"\",{},{},{}\n",
                     endpoint.replace("\"", "\"\""),
                     response.status,
                     serde_json::to_string(&response.body)?.replace("\"", "\"\"")
@@ -3732,8 +3757,11 @@ async fn output_mock_data_result(
         println!("{}", output_content);
     }
 
-    println!("✅ Generated mock data for {} schemas and {} endpoints",
-        result.schemas.len(), result.responses.len());
+    println!(
+        "✅ Generated mock data for {} schemas and {} endpoints",
+        result.schemas.len(),
+        result.responses.len()
+    );
 
     if !result.warnings.is_empty() {
         println!("⚠️  Warnings:");
@@ -3761,8 +3789,10 @@ async fn start_mock_server_from_spec(
     let spec_content = tokio::fs::read_to_string(spec_path).await?;
 
     // Parse JSON or YAML
-    let spec_json: serde_json::Value = if spec_path.extension().and_then(|s| s.to_str()) == Some("yaml")
-        || spec_path.extension().and_then(|s| s.to_str()) == Some("yml") {
+    let spec_json: serde_json::Value = if spec_path.extension().and_then(|s| s.to_str())
+        == Some("yaml")
+        || spec_path.extension().and_then(|s| s.to_str()) == Some("yml")
+    {
         serde_yaml::from_str(&spec_content)?
     } else {
         serde_json::from_str(&spec_content)?
@@ -3778,7 +3808,7 @@ async fn start_mock_server_from_spec(
             mockforge_data::MockGeneratorConfig::new()
                 .realistic_mode(realistic)
                 .include_optional_fields(include_optional)
-                .validate_generated_data(validate)
+                .validate_generated_data(validate),
         );
 
     // Add response delays
@@ -3796,7 +3826,8 @@ async fn start_mock_server_from_spec(
     println!("📋 OpenAPI spec: {}", spec_path.display());
     println!("🛑 Press Ctrl+C to stop the server");
 
-    mockforge_data::start_mock_server_with_config(config).await
+    mockforge_data::start_mock_server_with_config(config)
+        .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 }
 

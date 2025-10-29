@@ -4,7 +4,7 @@
 //! including OpenAPI specification processing, schema validation, and mock server functionality.
 
 use crate::mock_generator::{MockDataGenerator, MockGeneratorConfig};
-use crate::mock_server::{MockServer, MockServerConfig, MockServerBuilder};
+use crate::mock_server::{MockServer, MockServerBuilder, MockServerConfig};
 use serde_json::{json, Value};
 
 /// Test OpenAPI specification for testing
@@ -276,9 +276,7 @@ mod mock_generator_tests {
 
     #[test]
     fn test_mock_data_generator_with_config() {
-        let config = MockGeneratorConfig::new()
-            .realistic_mode(false)
-            .default_array_size(10);
+        let config = MockGeneratorConfig::new().realistic_mode(false).default_array_size(10);
 
         let _generator = MockDataGenerator::with_config(config);
         // Test that generator can be created with custom config
@@ -443,9 +441,7 @@ mod mock_generator_tests {
 
     #[test]
     fn test_generate_from_openapi_spec_with_validation() {
-        let config = MockGeneratorConfig::new()
-            .validate_generated_data(true)
-            .realistic_mode(true);
+        let config = MockGeneratorConfig::new().validate_generated_data(true).realistic_mode(true);
 
         let mut generator = MockDataGenerator::with_config(config);
         let spec = create_test_openapi_spec();
@@ -483,8 +479,7 @@ mod mock_generator_tests {
 
     #[test]
     fn test_optional_fields_exclusion() {
-        let config = MockGeneratorConfig::new()
-            .include_optional_fields(false);
+        let config = MockGeneratorConfig::new().include_optional_fields(false);
 
         let mut generator = MockDataGenerator::with_config(config);
 
@@ -507,8 +502,7 @@ mod mock_generator_tests {
 
     #[test]
     fn test_optional_fields_inclusion() {
-        let config = MockGeneratorConfig::new()
-            .include_optional_fields(true);
+        let config = MockGeneratorConfig::new().include_optional_fields(true);
 
         let mut generator = MockDataGenerator::with_config(config);
 
@@ -746,8 +740,7 @@ mod integration_tests {
             "required": ["score", "name", "status"]
         });
 
-        let config = MockGeneratorConfig::new()
-            .validate_generated_data(true);
+        let config = MockGeneratorConfig::new().validate_generated_data(true);
 
         let mut generator = MockDataGenerator::with_config(config);
         let result = generator.generate_from_json_schema(&schema).unwrap();

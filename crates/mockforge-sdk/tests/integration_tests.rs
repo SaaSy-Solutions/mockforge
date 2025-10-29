@@ -19,11 +19,7 @@ async fn test_basic_server_start_stop() {
 
 #[tokio::test]
 async fn test_stub_get_request() {
-    let mut server = MockServer::new()
-        .port(0)
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
 
     // Add a stub
     server
@@ -58,11 +54,7 @@ async fn test_stub_get_request() {
 
 #[tokio::test]
 async fn test_stub_post_request() {
-    let mut server = MockServer::new()
-        .port(0)
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
 
     // Add a stub for POST
     server
@@ -97,11 +89,7 @@ async fn test_stub_post_request() {
 
 #[tokio::test]
 async fn test_multiple_stubs() {
-    let mut server = MockServer::new()
-        .port(0)
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
 
     // Add multiple stubs
     server
@@ -148,11 +136,7 @@ async fn test_multiple_stubs() {
 
 #[tokio::test]
 async fn test_clear_stubs() {
-    let mut server = MockServer::new()
-        .port(0)
-        .start()
-        .await
-        .expect("Failed to start server");
+    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
 
     // Add a stub
     server
