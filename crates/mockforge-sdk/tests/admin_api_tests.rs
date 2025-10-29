@@ -132,7 +132,7 @@ async fn test_admin_client_get_stats() {
 
     let stats = admin_client.get_stats().await.expect("Failed to get stats");
 
-    assert!(stats.uptime_seconds >= 0);
+    assert!(stats.uptime_seconds > 0);
     assert_eq!(stats.active_mocks, 0);
 
     server.stop().await.expect("Failed to stop server");

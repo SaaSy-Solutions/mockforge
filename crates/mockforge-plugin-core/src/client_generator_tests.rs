@@ -3,9 +3,7 @@
 //! This module contains comprehensive tests for the client generation
 //! system, including React and Vue generators.
 
-use crate::client_generator::{
-    ClientGeneratorConfig, ClientGeneratorPlugin, OpenApiSpec,
-};
+use crate::client_generator::{ClientGeneratorConfig, ClientGeneratorPlugin, OpenApiSpec};
 use crate::plugins::{ReactClientGenerator, VueClientGenerator};
 use serde_json::json;
 use std::collections::HashMap;

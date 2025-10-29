@@ -12,6 +12,7 @@ use std::net::SocketAddr;
 use tokio::task::JoinHandle;
 
 /// A mock server that can be embedded in tests
+#[derive(Debug)]
 pub struct MockServer {
     port: u16,
     address: SocketAddr,
