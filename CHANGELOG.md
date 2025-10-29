@@ -2,11 +2,18 @@
 
 ### Added
 
-- Nothing yet.
+- Output control features for MockForge generator with comprehensive configuration options
+- Unified spec parser with enhanced validation and error reporting
+- Multi-framework client generation with Angular and Svelte support
+- Enhanced mock data generation with OpenAPI support
+- Configuration file support for mock generation
+- Browser mobile proxy mode implementation
+- Comprehensive documentation and example workflows
 
 ### Changed
 
-- Nothing yet.
+- Enhanced CLI with progress indicators, error handling, and code quality improvements
+- Comprehensive plugin architecture documentation
 
 ### Deprecated
 
@@ -18,7 +25,14 @@
 
 ### Fixed
 
-- Nothing yet.
+- Remove tests that access private fields in mock data tests
+- Fix compilation issues in mockforge-collab and mockforge-ui
+- Update mockforge-plugin-core version to 0.1.6 in plugin-sdk
+- Enable SQLx offline mode for mockforge-collab publishing
+- Add description field to mockforge-analytics
+- Add version requirements to all mockforge path dependencies
+- Fix publish order dependencies (mockforge-chaos before mockforge-reporting)
+- Update Cargo.lock and format client generator tests
 
 ### Security
 
