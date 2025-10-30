@@ -40,7 +40,7 @@ cleanup_processes() {
     sleep 2
 
     # Kill any remaining processes on test ports (may require root, with timeout per port)
-    for port in 3000 3001 50051 9080 1025 1026; do
+    for port in 3000 3001 50051 9080 1025 1026 9092 1883 5672 2121; do
         timeout 5 fuser -k ${port}/tcp 2>/dev/null || true
     done
 
@@ -128,6 +128,31 @@ main() {
     # SMTP Email Testing
     if ! run_test_section "SMTP Email Testing" "$test_scripts_dir/test-smtp.sh"; then
         failed_sections+=("SMTP Email Testing")
+    fi
+
+    # Kafka Broker
+    if ! run_test_section "Kafka Broker" "$test_scripts_dir/test-kafka.sh"; then
+        failed_sections+=("Kafka Broker")
+    fi
+
+    # MQTT Broker
+    if ! run_test_section "MQTT Broker" "$test_scripts_dir/test-mqtt.sh"; then
+        failed_sections+=("MQTT Broker")
+    fi
+
+    # AMQP Broker
+    if ! run_test_section "AMQP Broker" "$test_scripts_dir/test-amqp.sh"; then
+        failed_sections+=("AMQP Broker")
+    fi
+
+    # FTP Server
+    if ! run_test_section "FTP Server" "$test_scripts_dir/test-ftp.sh"; then
+        failed_sections+=("FTP Server")
+    fi
+
+    # API Flight Recorder
+    if ! run_test_section "API Flight Recorder" "$test_scripts_dir/test-recorder.sh"; then
+        failed_sections+=("API Flight Recorder")
     fi
 
     # Data Generation
