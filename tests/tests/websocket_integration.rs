@@ -3,10 +3,10 @@
 //! Tests that verify WebSocket communication, reconnection, and
 //! collaboration features work correctly end-to-end.
 
+use futures_util::{SinkExt, StreamExt};
 use mockforge_test::MockForgeServer;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use futures_util::{SinkExt, StreamExt};
 
 /// Test basic WebSocket connection and messaging
 #[tokio::test]

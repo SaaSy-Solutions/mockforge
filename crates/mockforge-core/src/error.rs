@@ -68,7 +68,7 @@ pub enum Error {
         /// Protocol name that failed validation
         protocol: String,
         /// Validation error message
-        message: String
+        message: String,
     },
 
     /// I/O error (file read/write operations)

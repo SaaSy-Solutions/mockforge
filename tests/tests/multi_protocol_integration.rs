@@ -36,10 +36,7 @@ async fn test_http_server_health() {
 
     // Test HTTP endpoint directly
     let client = Client::new();
-    let response = client
-        .get(format!("{}/health", server.base_url()))
-        .send()
-        .await;
+    let response = client.get(format!("{}/health", server.base_url())).send().await;
 
     match response {
         Ok(resp) => {
@@ -82,10 +79,7 @@ async fn test_http_with_openapi_spec() {
 
     // Test an endpoint from the OpenAPI spec
     let client = Client::new();
-    let response = client
-        .get(format!("{}/ping", server.base_url()))
-        .send()
-        .await;
+    let response = client.get(format!("{}/ping", server.base_url())).send().await;
 
     if let Ok(resp) = response {
         assert!(resp.status().is_success());
@@ -114,10 +108,7 @@ async fn test_http_with_admin() {
 
     // Verify HTTP endpoint works
     let client = Client::new();
-    let http_response = client
-        .get(format!("{}/health", server.base_url()))
-        .send()
-        .await;
+    let http_response = client.get(format!("{}/health", server.base_url())).send().await;
 
     assert!(http_response.is_ok());
     assert!(http_response.unwrap().status().is_success());
@@ -147,10 +138,7 @@ async fn test_http_with_websocket() {
 
     // Verify HTTP endpoint works
     let client = Client::new();
-    let http_response = client
-        .get(format!("{}/health", server.base_url()))
-        .send()
-        .await;
+    let http_response = client.get(format!("{}/health", server.base_url())).send().await;
 
     assert!(http_response.is_ok());
     assert!(http_response.unwrap().status().is_success());
@@ -183,10 +171,7 @@ async fn test_all_protocols_simultaneous() {
 
     // Verify HTTP works
     let client = Client::new();
-    let http_response = client
-        .get(format!("{}/health", server.base_url()))
-        .send()
-        .await;
+    let http_response = client.get(format!("{}/health", server.base_url())).send().await;
 
     assert!(http_response.is_ok());
     assert!(http_response.unwrap().status().is_success());
@@ -227,10 +212,7 @@ async fn test_protocol_isolation() {
 
     // Make multiple HTTP requests while WebSocket is running
     for i in 0..5 {
-        let response = client
-            .get(format!("{}/health", base_url))
-            .send()
-            .await;
+        let response = client.get(format!("{}/health", base_url)).send().await;
 
         assert!(
             response.is_ok(),

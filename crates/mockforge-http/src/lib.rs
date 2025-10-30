@@ -483,7 +483,21 @@ pub async fn build_router_with_multi_tenant(
         "/health",
         axum::routing::get(|| async {
             use mockforge_core::server_utils::health::HealthStatus;
-            axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
+            {
+                // HealthStatus should always serialize, but handle errors gracefully
+                match serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")) {
+                    Ok(value) => axum::Json(value),
+                    Err(e) => {
+                        // Log error but return a simple healthy response
+                        tracing::error!("Failed to serialize health status: {}", e);
+                        axum::Json(serde_json::json!({
+                            "status": "healthy",
+                            "service": "mockforge-http",
+                            "uptime_seconds": 0
+                        }))
+                    }
+                }
+            }
         }),
     )
     // Add SSE endpoints
@@ -521,20 +535,26 @@ pub async fn build_router_with_multi_tenant(
     }
 
     // Add management API endpoints
-    let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
     #[cfg(feature = "smtp")]
-    let mut management_state = {
+    let management_state = {
         if let Some(smtp_reg) = smtp_registry {
-            let smtp_reg = smtp_reg
-                .downcast::<mockforge_smtp::SmtpSpecRegistry>()
-                .expect("Invalid SMTP registry type passed to HTTP management state");
-            management_state.with_smtp_registry(smtp_reg)
+            match smtp_reg.downcast::<mockforge_smtp::SmtpSpecRegistry>() {
+                Ok(smtp_reg) => management_state.with_smtp_registry(smtp_reg),
+                Err(e) => {
+                    error!(
+                        "Invalid SMTP registry type passed to HTTP management state: {:?}",
+                        e.type_id()
+                    );
+                    management_state
+                }
+            }
         } else {
             management_state
         }
     };
     #[cfg(not(feature = "smtp"))]
-    let mut management_state = management_state;
+    let management_state = management_state;
     #[cfg(not(feature = "smtp"))]
     let _ = smtp_registry;
     app = app.nest("/__mockforge/api", management_router(management_state));
@@ -751,7 +771,21 @@ pub async fn build_router_with_auth(
         "/health",
         axum::routing::get(|| async {
             use mockforge_core::server_utils::health::HealthStatus;
-            axum::Json(serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap())
+            {
+                // HealthStatus should always serialize, but handle errors gracefully
+                match serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")) {
+                    Ok(value) => axum::Json(value),
+                    Err(e) => {
+                        // Log error but return a simple healthy response
+                        tracing::error!("Failed to serialize health status: {}", e);
+                        axum::Json(serde_json::json!({
+                            "status": "healthy",
+                            "service": "mockforge-http",
+                            "uptime_seconds": 0
+                        }))
+                    }
+                }
+            }
         }),
     )
     // Add SSE endpoints
@@ -922,9 +956,21 @@ pub async fn build_router_with_chains_and_multi_tenant(
             "/health",
             axum::routing::get(|| async {
                 use mockforge_core::server_utils::health::HealthStatus;
-                axum::Json(
-                    serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")).unwrap(),
-                )
+                {
+                    // HealthStatus should always serialize, but handle errors gracefully
+                    match serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")) {
+                        Ok(value) => axum::Json(value),
+                        Err(e) => {
+                            // Log error but return a simple healthy response
+                            tracing::error!("Failed to serialize health status: {}", e);
+                            axum::Json(serde_json::json!({
+                                "status": "healthy",
+                                "service": "mockforge-http",
+                                "uptime_seconds": 0
+                            }))
+                        }
+                    }
+                }
             }),
         );
     }
@@ -936,10 +982,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
     #[cfg(feature = "smtp")]
     let management_state = {
         if let Some(smtp_reg) = smtp_registry {
-            let smtp_reg = smtp_reg
-                .downcast::<mockforge_smtp::SmtpSpecRegistry>()
-                .expect("Invalid SMTP registry type passed to HTTP management state");
-            management_state.with_smtp_registry(smtp_reg)
+            match smtp_reg.downcast::<mockforge_smtp::SmtpSpecRegistry>() {
+                Ok(smtp_reg) => management_state.with_smtp_registry(smtp_reg),
+                Err(e) => {
+                    error!(
+                        "Invalid SMTP registry type passed to HTTP management state: {:?}",
+                        e.type_id()
+                    );
+                    management_state
+                }
+            }
         } else {
             management_state
         }
@@ -952,10 +1004,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
     #[cfg(feature = "mqtt")]
     let management_state = {
         if let Some(broker) = mqtt_broker {
-            let broker = broker
-                .downcast::<mockforge_mqtt::MqttBroker>()
-                .expect("Invalid MQTT broker passed to HTTP management state");
-            management_state.with_mqtt_broker(broker)
+            match broker.downcast::<mockforge_mqtt::MqttBroker>() {
+                Ok(broker) => management_state.with_mqtt_broker(broker),
+                Err(e) => {
+                    error!(
+                        "Invalid MQTT broker passed to HTTP management state: {:?}",
+                        e.type_id()
+                    );
+                    management_state
+                }
+            }
         } else {
             management_state
         }

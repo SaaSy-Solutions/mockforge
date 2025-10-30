@@ -9,7 +9,6 @@ use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -43,27 +42,27 @@ pub struct ScriptContext {
 
 /// JavaScript scripting engine
 pub struct ScriptEngine {
-    _runtime: Rc<Runtime>,
     semaphore: Arc<Semaphore>,
+}
+
+impl std::fmt::Debug for ScriptEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScriptEngine")
+            .field("semaphore", &format!("Semaphore({})", self.semaphore.available_permits()))
+            .finish()
+    }
 }
 
 /// JavaScript script engine for request/response processing
 ///
-/// This is a placeholder implementation for future JavaScript scripting support.
-/// Currently not fully integrated into the request processing pipeline.
-///
-/// TODO: Complete JavaScript scripting integration for dynamic request/response handling
-#[allow(dead_code)] // TODO: Remove when JavaScript scripting feature is fully implemented
+/// Provides JavaScript scripting capabilities for executing custom logic
+/// before and after HTTP requests in request chains.
 impl ScriptEngine {
     /// Create a new script engine
     pub fn new() -> Self {
-        let runtime = Rc::new(Runtime::new().expect("Failed to create JavaScript runtime"));
         let semaphore = Arc::new(Semaphore::new(10)); // Limit concurrent script executions
 
-        Self {
-            _runtime: runtime,
-            semaphore,
-        }
+        Self { semaphore }
     }
 
     /// Execute a JavaScript script with access to the script context
@@ -149,8 +148,9 @@ impl ScriptEngine {
         script: &str,
         script_context: &ScriptContext,
     ) -> Result<ScriptResult> {
-        let runtime = &*self._runtime;
-        let context = Context::full(runtime)?;
+        // Create a new runtime for this execution
+        let runtime = Runtime::new()?;
+        let context = Context::full(&runtime)?;
 
         context.with(|ctx| self.execute_in_context(ctx, script, script_context, 0))
     }
@@ -215,7 +215,6 @@ impl ScriptEngine {
     }
 }
 
-#[allow(dead_code)]
 /// Extract return value from script execution
 fn extract_return_value<'js>(
     ctx: &Ctx<'js>,
@@ -256,7 +255,6 @@ fn extract_return_value_static<'js>(
     }
 }
 
-#[allow(dead_code)]
 /// Extract modified variables from the script context
 fn extract_modified_variables<'js>(
     ctx: &Ctx<'js>,
@@ -332,7 +330,6 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
     }
 }
 
-#[allow(dead_code)]
 /// Execute script with timeout
 fn eval_script_with_timeout<'js>(
     ctx: &Ctx<'js>,

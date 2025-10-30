@@ -205,9 +205,10 @@ impl EncryptionKey {
 
     fn encrypt_aes_gcm(&self, plaintext: &str, associated_data: Option<&[u8]>) -> Result<String> {
         // Convert key bytes to fixed-size array for Aes256Gcm::new()
-        let key_array: [u8; 32] = self.key_data.as_slice()
-            .try_into()
-            .map_err(|_| EncryptionError::InvalidKey("Key length must be 32 bytes".to_string()))?;
+        let key_array: [u8; 32] =
+            self.key_data.as_slice().try_into().map_err(|_| {
+                EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
+            })?;
         let cipher = Aes256Gcm::new(&key_array.into());
         let nonce: [u8; 12] = rng().random(); // 96-bit nonce
         let nonce = Nonce::from(nonce);
@@ -237,9 +238,9 @@ impl EncryptionKey {
         }
 
         // Extract nonce (first 12 bytes)
-        let nonce_array: [u8; 12] = data[0..12]
-            .try_into()
-            .map_err(|_| EncryptionError::InvalidCiphertext("Nonce must be 12 bytes".to_string()))?;
+        let nonce_array: [u8; 12] = data[0..12].try_into().map_err(|_| {
+            EncryptionError::InvalidCiphertext("Nonce must be 12 bytes".to_string())
+        })?;
         let nonce = Nonce::from(nonce_array);
 
         let ciphertext_len = if let Some(aad) = &associated_data {
@@ -253,9 +254,10 @@ impl EncryptionKey {
         let ciphertext = &data[12..12 + ciphertext_len];
 
         // Convert key bytes to fixed-size array for Aes256Gcm::new()
-        let key_array: [u8; 32] = self.key_data.as_slice()
-            .try_into()
-            .map_err(|_| EncryptionError::InvalidKey("Key length must be 32 bytes".to_string()))?;
+        let key_array: [u8; 32] =
+            self.key_data.as_slice().try_into().map_err(|_| {
+                EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
+            })?;
         let cipher = Aes256Gcm::new(&key_array.into());
 
         let plaintext = cipher

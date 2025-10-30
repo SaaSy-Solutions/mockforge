@@ -164,9 +164,7 @@ fn extract_request_body_schema(operation: &Operation) -> Option<Schema> {
     operation.request_body.as_ref().and_then(|body_ref| {
         body_ref.as_item().and_then(|body| {
             body.content.get("application/json").and_then(|content| {
-                content.schema.as_ref().and_then(|schema_ref| {
-                    schema_ref.as_item().cloned()
-                })
+                content.schema.as_ref().and_then(|schema_ref| schema_ref.as_item().cloned())
             })
         })
     })
@@ -217,7 +215,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-"#.to_string()
+"#
+    .to_string()
 }
 
 fn generate_server_struct() -> String {
@@ -226,7 +225,8 @@ pub struct GeneratedMockServer {
     port: u16,
 }
 
-"#.to_string()
+"#
+    .to_string()
 }
 
 fn generate_server_impl(routes: &[RouteInfo], config: &CodegenConfig) -> Result<String> {
@@ -255,16 +255,26 @@ fn generate_server_impl(routes: &[RouteInfo], config: &CodegenConfig) -> Result<
             route.path.clone()
         };
 
-        code.push_str(&format!("            .route(\"{}\", {}(handle_{}))\n", axum_path, method, handler_name));
+        code.push_str(&format!(
+            "            .route(\"{}\", {}(handle_{}))\n",
+            axum_path, method, handler_name
+        ));
     }
 
     code.push_str("    }\n\n");
 
     code.push_str("    /// Start the server\n");
-    code.push_str("    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {\n");
+    code.push_str(
+        "    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {\n",
+    );
     code.push_str("        let app = self.router();\n");
-    code.push_str(&format!("        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], {}));\n", config.port.unwrap_or(3000)));
-    code.push_str("        println!(\"🚀 Mock server started on http://localhost:{}\", self.port);\n");
+    code.push_str(&format!(
+        "        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], {}));\n",
+        config.port.unwrap_or(3000)
+    ));
+    code.push_str(
+        "        println!(\"🚀 Mock server started on http://localhost:{}\", self.port);\n",
+    );
     code.push_str("        let listener = tokio::net::TcpListener::bind(addr).await?;\n");
     code.push_str("        axum::serve(listener, app).await?;\n");
     code.push_str("        Ok(())\n");
@@ -274,7 +284,11 @@ fn generate_server_impl(routes: &[RouteInfo], config: &CodegenConfig) -> Result<
     Ok(code)
 }
 
-fn generate_handlers(routes: &[RouteInfo], _spec: &OpenApiSpec, config: &CodegenConfig) -> Result<String> {
+fn generate_handlers(
+    routes: &[RouteInfo],
+    _spec: &OpenApiSpec,
+    config: &CodegenConfig,
+) -> Result<String> {
     let mut code = String::new();
 
     for route in routes {
@@ -312,7 +326,9 @@ fn generate_handler(route: &RouteInfo, config: &CodegenConfig) -> Result<String>
     }
 
     // Add request body for POST/PUT/PATCH
-    if matches!(route.method.as_str(), "POST" | "PUT" | "PATCH") && route.request_body_schema.is_some() {
+    if matches!(route.method.as_str(), "POST" | "PUT" | "PATCH")
+        && route.request_body_schema.is_some()
+    {
         code.push_str("    Json(body): Json<Value>,\n");
     }
 
@@ -327,12 +343,18 @@ fn generate_handler(route: &RouteInfo, config: &CodegenConfig) -> Result<String>
 
     // Add delay if configured
     if let Some(delay_ms) = config.default_delay_ms {
-        code.push_str(&format!("    tokio::time::sleep(tokio::time::Duration::from_millis({})).await;\n", delay_ms));
+        code.push_str(&format!(
+            "    tokio::time::sleep(tokio::time::Duration::from_millis({})).await;\n",
+            delay_ms
+        ));
     }
 
     // Generate response
     let response_body = generate_response_body(route, config);
-    code.push_str(&format!("    (StatusCode::from_u16({}).unwrap(), Json({}))\n", route.response_status, response_body));
+    code.push_str(&format!(
+        "    (StatusCode::from_u16({}).unwrap(), Json({}))\n",
+        route.response_status, response_body
+    ));
     code.push_str("}\n");
 
     Ok(code)
@@ -390,7 +412,8 @@ fn generate_from_schema(schema: &openapiv3::Schema) -> String {
             r#"serde_json::json!({
                 "id": 1,
                 "created_at": "2024-01-01T00:00:00Z"
-            })"#.to_string()
+            })"#
+            .to_string()
         }
         openapiv3::SchemaKind::Type(openapiv3::Type::Array(_items)) => {
             // For array schemas, generate an empty array (or array with one item)
@@ -406,17 +429,11 @@ fn generate_from_schema(schema: &openapiv3::Schema) -> String {
 fn generate_handler_name(route: &RouteInfo) -> String {
     if let Some(ref op_id) = route.operation_id {
         // Sanitize operation ID (remove special chars, convert to snake_case)
-        op_id
-            .replace('-', "_")
-            .replace('.', "_")
-            .to_lowercase()
+        op_id.replace('-', "_").replace('.', "_").to_lowercase()
     } else {
         // Generate name from method + path
-        let path_part = route.path
-            .replace('/', "_")
-            .replace('{', "")
-            .replace('}', "")
-            .replace('-', "_");
+        let path_part =
+            route.path.replace('/', "_").replace('{', "").replace('}', "").replace('-', "_");
         format!("{}_{}", route.method.to_lowercase(), path_part)
             .trim_matches('_')
             .to_string()

@@ -1874,15 +1874,13 @@ struct ServeArgs {
     rag_api_key: Option<String>,
     network_profile: Option<String>,
     chaos_random: bool,
-    // Fine-grained chaos engineering controls (future feature)
-    // TODO: Implement fine-grained chaos controls when chaos engineering is enhanced
-    #[allow(dead_code)] // TODO: Remove when chaos error rate control is implemented
+    /// Random chaos: error injection rate (0.0-1.0)
     chaos_random_error_rate: f64,
-    #[allow(dead_code)] // TODO: Remove when chaos delay rate control is implemented
+    /// Random chaos: delay injection rate (0.0-1.0)
     chaos_random_delay_rate: f64,
-    #[allow(dead_code)] // TODO: Remove when chaos delay range control is implemented
+    /// Random chaos: minimum delay in milliseconds
     chaos_random_min_delay: u64,
-    #[allow(dead_code)] // TODO: Remove when chaos delay range control is implemented
+    /// Random chaos: maximum delay in milliseconds
     chaos_random_max_delay: u64,
     dry_run: bool,
     progress: bool,
@@ -2842,7 +2840,9 @@ async fn handle_serve(
                     "SMTP registry type mismatch - failed to downcast registry".to_string(),
                     ExitCode::ConfigurationError,
                 )
-                .with_suggestion("Ensure SMTP registry is properly configured and initialized".to_string())
+                .with_suggestion(
+                    "Ensure SMTP registry is properly configured and initialized".to_string(),
+                )
                 .display_and_exit();
             }
         };
@@ -2998,15 +2998,18 @@ async fn handle_serve(
                 Ok(addr) => addr,
                 Err(e) => return Err(format!("{}", e.message)),
             };
-            let http_addr = match parse_address(&format!("127.0.0.1:{}", http_port), "HTTP server") {
+            let http_addr = match parse_address(&format!("127.0.0.1:{}", http_port), "HTTP server")
+            {
                 Ok(addr) => Some(addr),
                 Err(e) => return Err(format!("{}", e.message)),
             };
-            let ws_addr = match parse_address(&format!("127.0.0.1:{}", ws_port), "WebSocket server") {
+            let ws_addr = match parse_address(&format!("127.0.0.1:{}", ws_port), "WebSocket server")
+            {
                 Ok(addr) => Some(addr),
                 Err(e) => return Err(format!("{}", e.message)),
             };
-            let grpc_addr = match parse_address(&format!("127.0.0.1:{}", grpc_port), "gRPC server") {
+            let grpc_addr = match parse_address(&format!("127.0.0.1:{}", grpc_port), "gRPC server")
+            {
                 Ok(addr) => Some(addr),
                 Err(e) => return Err(format!("{}", e.message)),
             };
@@ -3454,12 +3457,10 @@ async fn handle_quick(
     // Serve with graceful shutdown
     serve(listener, app)
         .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c()
-                .await
-                .unwrap_or_else(|e| {
-                    eprintln!("⚠️  Warning: Failed to install CTRL+C signal handler: {}", e);
-                    eprintln!("💡 Server may not shut down gracefully on SIGINT");
-                });
+            tokio::signal::ctrl_c().await.unwrap_or_else(|e| {
+                eprintln!("⚠️  Warning: Failed to install CTRL+C signal handler: {}", e);
+                eprintln!("💡 Server may not shut down gracefully on SIGINT");
+            });
         })
         .await?;
 
@@ -5269,7 +5270,9 @@ async fn handle_generate_tests(
             format!("Invalid database path: {}", database.display()),
             ExitCode::FileNotFound,
         )
-        .with_suggestion("Ensure the database path contains only valid UTF-8 characters".to_string())
+        .with_suggestion(
+            "Ensure the database path contains only valid UTF-8 characters".to_string(),
+        )
     })?;
     let db = RecorderDatabase::new(db_path).await?;
     println!("✅ Database opened successfully");

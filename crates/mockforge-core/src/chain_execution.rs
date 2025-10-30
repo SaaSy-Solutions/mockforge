@@ -7,6 +7,7 @@ use crate::request_chaining::{
     ChainConfig, ChainDefinition, ChainExecutionContext, ChainLink, ChainResponse,
     ChainTemplatingContext, RequestChainRegistry,
 };
+use crate::request_scripting::{ScriptContext, ScriptEngine};
 use crate::templating::{expand_str_with_context, TemplatingContext};
 use crate::{Error, Result};
 use chrono::Utc;
@@ -42,6 +43,8 @@ pub struct ChainExecutionEngine {
     config: ChainConfig,
     /// Execution history storage (chain_id -> Vec<ExecutionRecord>)
     execution_history: Arc<Mutex<HashMap<String, Vec<ExecutionRecord>>>>,
+    /// JavaScript scripting engine for pre/post request scripts
+    script_engine: ScriptEngine,
 }
 
 impl ChainExecutionEngine {
@@ -57,6 +60,7 @@ impl ChainExecutionEngine {
             registry,
             config,
             execution_history: Arc::new(Mutex::new(HashMap::new())),
+            script_engine: ScriptEngine::new(),
         }
     }
 
@@ -308,6 +312,40 @@ impl ChainExecutionEngine {
             request_builder = request_builder.timeout(Duration::from_secs(timeout_secs));
         }
 
+        // Execute pre-request script if configured
+        if let Some(scripting) = &link.request.scripting {
+            if let Some(pre_script) = &scripting.pre_script {
+                let script_context = ScriptContext {
+                    request: Some(link.request.clone()),
+                    response: None,
+                    chain_context: execution_context.templating.chain_context.variables.clone(),
+                    variables: HashMap::new(),
+                    env_vars: std::env::vars().collect(),
+                };
+
+                match self
+                    .script_engine
+                    .execute_script(pre_script, &script_context, scripting.timeout_ms)
+                    .await
+                {
+                    Ok(script_result) => {
+                        // Merge script-modified variables into chain context
+                        for (key, value) in script_result.modified_variables {
+                            execution_context.templating.chain_context.set_variable(key, value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Pre-script execution failed for request '{}': {}",
+                            link.request.id,
+                            e
+                        );
+                        // Continue execution even if script fails
+                    }
+                }
+            }
+        }
+
         // Execute the request
         let response_result =
             timeout(Duration::from_secs(self.config.global_timeout_secs), request_builder.send())
@@ -370,6 +408,40 @@ impl ChainExecutionEngine {
         for (var_name, extraction_path) in &link.extract {
             if let Some(value) = self.extract_from_response(&chain_response, extraction_path) {
                 execution_context.templating.chain_context.set_variable(var_name.clone(), value);
+            }
+        }
+
+        // Execute post-request script if configured
+        if let Some(scripting) = &link.request.scripting {
+            if let Some(post_script) = &scripting.post_script {
+                let script_context = ScriptContext {
+                    request: Some(link.request.clone()),
+                    response: Some(chain_response.clone()),
+                    chain_context: execution_context.templating.chain_context.variables.clone(),
+                    variables: HashMap::new(),
+                    env_vars: std::env::vars().collect(),
+                };
+
+                match self
+                    .script_engine
+                    .execute_script(post_script, &script_context, scripting.timeout_ms)
+                    .await
+                {
+                    Ok(script_result) => {
+                        // Merge script-modified variables into chain context
+                        for (key, value) in script_result.modified_variables {
+                            execution_context.templating.chain_context.set_variable(key, value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Post-script execution failed for request '{}': {}",
+                            link.request.id,
+                            e
+                        );
+                        // Continue execution even if script fails
+                    }
+                }
             }
         }
 

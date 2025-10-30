@@ -61,8 +61,8 @@ impl ConversionError {
 pub struct ProtobufJsonConverter {
     /// Descriptor pool containing protobuf definitions
     ///
-    /// TODO: Integrate descriptor pool when full protobuf-JSON conversion is implemented
-    #[allow(dead_code)] // TODO: Remove when descriptor pool integration is complete
+    /// Used for resolving message descriptors and schema information
+    /// during JSON/protobuf conversion operations.
     pool: DescriptorPool,
 }
 

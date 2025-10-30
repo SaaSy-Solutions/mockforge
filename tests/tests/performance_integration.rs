@@ -94,11 +94,7 @@ async fn test_concurrent_requests() {
     eprintln!("   Max response time: {:?}", max_duration);
 
     // Assert at least 95% success rate
-    assert!(
-        successes >= 95,
-        "Expected at least 95 successful requests, got {}",
-        successes
-    );
+    assert!(successes >= 95, "Expected at least 95 successful requests, got {}", successes);
 
     // Assert total duration is reasonable (should complete in under 10 seconds)
     assert!(
@@ -170,11 +166,7 @@ async fn test_response_time_consistency() {
     eprintln!("   P95 response time: {:?}", p95);
 
     // Assert P95 response time is reasonable (< 500ms for health endpoint)
-    assert!(
-        p95 < Duration::from_millis(500),
-        "P95 response time too high: {:?}",
-        p95
-    );
+    assert!(p95 < Duration::from_millis(500), "P95 response time too high: {:?}", p95);
 }
 
 /// Test that server can handle sustained load
@@ -233,18 +225,10 @@ async fn test_sustained_load() {
 
     // Assert success rate is high
     let success_rate = requests_succeeded as f64 / requests_sent as f64;
-    assert!(
-        success_rate > 0.95,
-        "Success rate too low: {:.2}%",
-        success_rate * 100.0
-    );
+    assert!(success_rate > 0.95, "Success rate too low: {:.2}%", success_rate * 100.0);
 
     // Assert reasonable throughput (> 10 req/s for health endpoint)
-    assert!(
-        throughput > 10.0,
-        "Throughput too low: {:.2} req/s",
-        throughput
-    );
+    assert!(throughput > 10.0, "Throughput too low: {:.2} req/s", throughput);
 }
 
 /// Test memory usage doesn't grow unbounded during load
@@ -281,9 +265,7 @@ async fn test_memory_usage_under_load() {
             .map(|_| {
                 let client = client.clone();
                 let url = format!("{}/health", base_url);
-                tokio::spawn(async move {
-                    client.get(&url).send().await
-                })
+                tokio::spawn(async move { client.get(&url).send().await })
             })
             .collect();
 
@@ -300,7 +282,12 @@ async fn test_memory_usage_under_load() {
             }
         }
 
-        eprintln!("Batch {}: {}/{} requests succeeded", batch + 1, batch_success, requests_per_batch);
+        eprintln!(
+            "Batch {}: {}/{} requests succeeded",
+            batch + 1,
+            batch_success,
+            requests_per_batch
+        );
 
         // Check server is still responsive
         match client.get(format!("{}/health", base_url)).send().await {
@@ -473,8 +460,5 @@ async fn test_concurrent_mixed_endpoints() {
     eprintln!("   Failed: {}", failures);
 
     // Assert reasonable success rate (some endpoints might not exist, that's OK)
-    assert!(
-        successes > 0,
-        "All requests failed - server may not be responding"
-    );
+    assert!(successes > 0, "All requests failed - server may not be responding");
 }

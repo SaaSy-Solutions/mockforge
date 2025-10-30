@@ -48,8 +48,8 @@ async fn test_generated_server_compiles() {
     };
 
     // Generate the code
-    let generated_code = generate_mock_server_code(&spec, "rs", &config)
-        .expect("Should generate code successfully");
+    let generated_code =
+        generate_mock_server_code(&spec, "rs", &config).expect("Should generate code successfully");
 
     // Verify basic structure
     assert!(generated_code.contains("pub struct GeneratedMockServer"));
@@ -94,8 +94,7 @@ fn test_generated_code_with_path_parameters() {
     });
 
     let spec = OpenApiSpec::from_json(spec_json).unwrap();
-    let code = generate_mock_server_code(&spec, "rs", &CodegenConfig::default())
-        .unwrap();
+    let code = generate_mock_server_code(&spec, "rs", &CodegenConfig::default()).unwrap();
 
     // Check that path parameters are properly handled
     assert!(code.contains("Path(params)") || code.contains("Path("));
@@ -134,8 +133,7 @@ fn test_generated_code_with_query_parameters() {
     });
 
     let spec = OpenApiSpec::from_json(spec_json).unwrap();
-    let code = generate_mock_server_code(&spec, "rs", &CodegenConfig::default())
-        .unwrap();
+    let code = generate_mock_server_code(&spec, "rs", &CodegenConfig::default()).unwrap();
 
     // Check that query parameters are handled
     assert!(code.contains("Query(") || code.contains("query"));
@@ -179,8 +177,7 @@ fn test_generated_code_with_request_body() {
     });
 
     let spec = OpenApiSpec::from_json(spec_json).unwrap();
-    let code = generate_mock_server_code(&spec, "rs", &CodegenConfig::default())
-        .unwrap();
+    let code = generate_mock_server_code(&spec, "rs", &CodegenConfig::default()).unwrap();
 
     // Check that request body is handled
     assert!(code.contains("Json(body)") || code.contains("body"));

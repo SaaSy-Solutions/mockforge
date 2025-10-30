@@ -1442,7 +1442,7 @@ pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig
             .map(|ext| ext == "ts")
             .unwrap_or(false)
         {
-            strip_typescript_types(&content)
+            strip_typescript_types(&content)?
         } else {
             content
         };
@@ -1469,32 +1469,45 @@ pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig
 
 /// Simple TypeScript type stripper (removes type annotations)
 /// Note: This is a basic implementation. For production use, consider using swc or esbuild
-fn strip_typescript_types(content: &str) -> String {
+///
+/// # Errors
+/// Returns an error if regex compilation fails. This should never happen with static patterns,
+/// but we handle it gracefully to prevent panics.
+fn strip_typescript_types(content: &str) -> Result<String> {
     use regex::Regex;
 
     let mut result = content.to_string();
 
+    // Compile regex patterns with error handling
+    // Note: These patterns are statically known and should never fail,
+    // but we handle errors to prevent panics in edge cases
+
     // Remove interface declarations (handles multi-line)
-    let interface_re = Regex::new(r"(?ms)interface\s+\w+\s*\{[^}]*\}\s*").unwrap();
+    let interface_re = Regex::new(r"(?ms)interface\s+\w+\s*\{[^}]*\}\s*")
+        .map_err(|e| Error::generic(format!("Failed to compile interface regex: {}", e)))?;
     result = interface_re.replace_all(&result, "").to_string();
 
     // Remove type aliases
-    let type_alias_re = Regex::new(r"(?m)^type\s+\w+\s*=\s*[^;]+;\s*").unwrap();
+    let type_alias_re = Regex::new(r"(?m)^type\s+\w+\s*=\s*[^;]+;\s*")
+        .map_err(|e| Error::generic(format!("Failed to compile type alias regex: {}", e)))?;
     result = type_alias_re.replace_all(&result, "").to_string();
 
     // Remove type annotations (: Type)
-    let type_annotation_re = Regex::new(r":\s*[A-Z]\w*(<[^>]+>)?(\[\])?").unwrap();
+    let type_annotation_re = Regex::new(r":\s*[A-Z]\w*(<[^>]+>)?(\[\])?")
+        .map_err(|e| Error::generic(format!("Failed to compile type annotation regex: {}", e)))?;
     result = type_annotation_re.replace_all(&result, "").to_string();
 
     // Remove type imports and exports
-    let type_import_re = Regex::new(r"(?m)^(import|export)\s+type\s+.*$").unwrap();
+    let type_import_re = Regex::new(r"(?m)^(import|export)\s+type\s+.*$")
+        .map_err(|e| Error::generic(format!("Failed to compile type import regex: {}", e)))?;
     result = type_import_re.replace_all(&result, "").to_string();
 
     // Remove as Type
-    let as_type_re = Regex::new(r"\s+as\s+\w+").unwrap();
+    let as_type_re = Regex::new(r"\s+as\s+\w+")
+        .map_err(|e| Error::generic(format!("Failed to compile 'as type' regex: {}", e)))?;
     result = as_type_re.replace_all(&result, "").to_string();
 
-    result
+    Ok(result)
 }
 
 /// Enhanced load_config that supports multiple formats including JS/TS
@@ -1617,7 +1630,7 @@ const config: Config = {
 } as Config;
 "#;
 
-        let stripped = strip_typescript_types(ts_code);
+        let stripped = strip_typescript_types(ts_code).expect("Should strip TypeScript types");
         assert!(!stripped.contains("interface"));
         assert!(!stripped.contains(": Config"));
         assert!(!stripped.contains("as Config"));

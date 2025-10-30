@@ -595,7 +595,10 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
                 .fetch_group_list(None, Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("List groups failed: {}", e))?;
 
-            let group = groups.groups().iter().find(|g| g.name() == group_id)
+            let group = groups
+                .groups()
+                .iter()
+                .find(|g| g.name() == group_id)
                 .ok_or_else(|| anyhow::anyhow!("Consumer group {} not found", group_id))?;
 
             println!("Consumer Group: {}", group_id);

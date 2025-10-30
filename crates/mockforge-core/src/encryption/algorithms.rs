@@ -222,10 +222,11 @@ impl EncryptionEngine {
         // Convert key bytes to fixed-size array for Aes256Gcm::new()
         // We validate key length in EncryptionKey::new(), so this is safe
         let key_bytes = key.as_bytes();
-        let key_array: [u8; 32] = key_bytes
-            .try_into()
-            .map_err(|_| EncryptionError::invalid_key(
-                "Key length mismatch during encryption (expected 32 bytes)".to_string()))?;
+        let key_array: [u8; 32] = key_bytes.try_into().map_err(|_| {
+            EncryptionError::invalid_key(
+                "Key length mismatch during encryption (expected 32 bytes)".to_string(),
+            )
+        })?;
         let cipher = Aes256Gcm::new(&key_array.into());
 
         // Encrypt the plaintext
@@ -270,10 +271,11 @@ impl EncryptionEngine {
         // Convert key bytes to fixed-size array for Aes256Gcm::new()
         // We validate key length in EncryptionKey::new(), so this is safe
         let key_bytes = key.as_bytes();
-        let key_array: [u8; 32] = key_bytes
-            .try_into()
-            .map_err(|_| EncryptionError::invalid_key(
-                "Key length mismatch during decryption (expected 32 bytes)".to_string()))?;
+        let key_array: [u8; 32] = key_bytes.try_into().map_err(|_| {
+            EncryptionError::invalid_key(
+                "Key length mismatch during decryption (expected 32 bytes)".to_string(),
+            )
+        })?;
         let cipher = Aes256Gcm::new(&key_array.into());
 
         let plaintext = match encrypted_data.aad_bytes() {

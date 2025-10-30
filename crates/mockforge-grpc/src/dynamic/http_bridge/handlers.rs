@@ -216,22 +216,18 @@ impl StreamHandler {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get the message descriptor for the method
         let registry = proxy.service_registry();
-        let service_opt = registry.get(service_name);
-        if service_opt.is_none() {
-            return Err(format!("Service '{}' not found", service_name).into());
-        }
+        let service = registry
+            .get(service_name)
+            .ok_or_else(|| format!("Service '{}' not found", service_name))?;
 
-        let service = service_opt.unwrap();
-        let method_opt = service.service().methods.iter().find(|m| m.name == method_name);
-        if method_opt.is_none() {
-            return Err(format!(
-                "Method '{}' not found in service '{}'",
-                method_name, service_name
-            )
-            .into());
-        }
-
-        let method_info = method_opt.unwrap();
+        let method_info = service
+            .service()
+            .methods
+            .iter()
+            .find(|m| m.name == method_name)
+            .ok_or_else(|| {
+                format!("Method '{}' not found in service '{}'", method_name, service_name)
+            })?;
         let input_descriptor = registry
             .descriptor_pool()
             .get_message_by_name(&method_info.input_type)
@@ -246,8 +242,8 @@ impl StreamHandler {
             super::converters::ProtobufJsonConverter::new(registry.descriptor_pool().clone());
 
         // Prepare client messages - initial_request can be a single message or array of messages
-        let client_messages: Vec<Value> = if initial_request.is_array() {
-            initial_request.as_array().unwrap().clone()
+        let client_messages: Vec<Value> = if let Some(arr) = initial_request.as_array() {
+            arr.clone()
         } else {
             vec![initial_request]
         };

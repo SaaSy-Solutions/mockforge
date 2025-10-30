@@ -4,8 +4,8 @@
 //! including server setup, test clients, and common assertions.
 
 use std::net::SocketAddr;
-use tokio::time::{sleep, Duration};
 use tokio::net::TcpListener;
+use tokio::time::{sleep, Duration};
 
 /// Test server configuration
 pub struct TestServerConfig {
@@ -88,20 +88,20 @@ impl TestHttpClient {
         self.client.get(&format!("{}{}", self.base_url, path)).send().await
     }
 
-    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Result<reqwest::Response, reqwest::Error> {
-        self.client
-            .post(&format!("{}{}", self.base_url, path))
-            .json(body)
-            .send()
-            .await
+    pub async fn post(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        self.client.post(&format!("{}{}", self.base_url, path)).json(body).send().await
     }
 
-    pub async fn put(&self, path: &str, body: &serde_json::Value) -> Result<reqwest::Response, reqwest::Error> {
-        self.client
-            .put(&format!("{}{}", self.base_url, path))
-            .json(body)
-            .send()
-            .await
+    pub async fn put(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        self.client.put(&format!("{}{}", self.base_url, path)).json(body).send().await
     }
 
     pub async fn delete(&self, path: &str) -> Result<reqwest::Response, reqwest::Error> {
@@ -123,7 +123,8 @@ pub fn assert_status(response: &reqwest::Response, expected: u16) {
 pub async fn assert_json_eq(response: &mut reqwest::Response, expected: &serde_json::Value) {
     let actual: serde_json::Value = response.json().await.expect("Failed to parse JSON");
     assert_eq!(
-        actual, *expected,
+        actual,
+        *expected,
         "JSON mismatch:\nExpected: {}\nActual: {}",
         serde_json::to_string_pretty(expected).unwrap(),
         serde_json::to_string_pretty(&actual).unwrap()

@@ -193,6 +193,95 @@ make clippy
 - Add documentation comments (`///`) for public APIs
 - Write descriptive variable names
 
+### Error Handling
+
+MockForge follows Rust best practices for error handling. When writing code:
+
+#### Avoid Panics in Production Code
+
+**❌ Don't use `unwrap()` or `expect()` in production paths:**
+
+```rust
+// BAD: Panics on invalid input
+let addr = format!("{}:{}", host, port).parse().unwrap();
+```
+
+**✅ Use proper error handling:**
+
+```rust
+// GOOD: Returns Result with context
+use mockforge_cli::progress::parse_address;
+
+let addr = parse_address(
+    &format!("{}:{}", host, port),
+    "server address"
+)?;
+
+// OR use existing error types
+let addr = format!("{}:{}", host, port)
+    .parse()
+    .map_err(|e| Error::Config(format!(
+        "Invalid server address '{}:{}': {}", host, port, e
+    )))?;
+```
+
+#### Error Handling Patterns
+
+1. **Use `Result<T, E>` for fallible operations**
+   - Always return `Result` for operations that can fail
+   - Use `?` operator for error propagation
+
+2. **Provide context in error messages**
+   - Include what failed and why
+   - Add actionable suggestions when possible
+
+3. **Use helper functions for common patterns**
+   - `parse_address()` - Parse socket addresses
+   - `require_config()` - Require configuration values
+   - Check `crates/mockforge-cli/src/progress.rs` for available helpers
+
+4. **Log errors before returning**
+   - Use `tracing::error!()` to log critical errors
+   - Include context in log messages
+
+5. **Handle type downcasting gracefully**
+   ```rust
+   // BAD: expect() on downcast
+   let registry = any.downcast::<Registry>().expect("wrong type");
+
+   // GOOD: Handle gracefully
+   match any.downcast::<Registry>() {
+       Ok(registry) => registry,
+       Err(e) => {
+           error!("Invalid type passed: {:?}", e.type_id());
+           return Err(Error::Config("Invalid registry type".to_string()));
+       }
+   }
+   ```
+
+6. **Test code can use `unwrap()`**
+   - In test code, `unwrap()` is acceptable for readability
+   - Still prefer explicit assertions when possible
+
+#### Example: Health Check Endpoint
+
+```rust
+// GOOD: Graceful error handling
+async fn health_check() -> axum::response::Response {
+    match serde_json::to_value(HealthStatus::healthy(0, "service")) {
+        Ok(value) => axum::Json(value).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to serialize health status: {}", e);
+            // Return fallback response instead of panicking
+            axum::Json(serde_json::json!({
+                "status": "healthy",
+                "service": "service"
+            })).into_response()
+        }
+    }
+}
+```
+
 ## Testing
 
 ### Running Tests

@@ -3,15 +3,15 @@
 //! Tests to verify that the MockForge proxy works correctly with browsers
 //! and mobile clients, including HTTPS certificate injection.
 
-use mockforge_core::proxy::config::ProxyConfig;
-use mockforge_http::proxy_server::{ProxyServer, get_proxy_stats};
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode, Uri},
     Router,
 };
-use tower::ServiceExt;
+use mockforge_core::proxy::config::ProxyConfig;
+use mockforge_http::proxy_server::{get_proxy_stats, ProxyServer};
 use std::net::SocketAddr;
+use tower::ServiceExt;
 
 /// Test configuration for proxy verification
 #[derive(Debug, Clone)]
@@ -36,7 +36,9 @@ impl Default for ProxyTestConfig {
 }
 
 /// Test helper for creating a mock target server
-pub async fn create_mock_target_server(port: u16) -> Result<Router, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn create_mock_target_server(
+    port: u16,
+) -> Result<Router, Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new()
         .route("/api/users", axum::routing::get(|| async {
             axum::Json(serde_json::json!([
@@ -67,7 +69,9 @@ pub async fn create_mock_target_server(port: u16) -> Result<Router, Box<dyn std:
 }
 
 /// Test helper for creating a proxy server
-pub async fn create_proxy_server(config: ProxyTestConfig) -> Result<ProxyServer, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn create_proxy_server(
+    config: ProxyTestConfig,
+) -> Result<ProxyServer, Box<dyn std::error::Error + Send + Sync>> {
     let mut proxy_config = ProxyConfig::default();
     proxy_config.enabled = true;
     proxy_config.target_url = Some(format!("http://127.0.0.1:{}", config.target_port));
@@ -270,7 +274,9 @@ async fn test_proxy_http_methods() {
             .unwrap();
 
         // All methods should work (target server handles them)
-        assert!(response.status().is_success() || response.status() == StatusCode::METHOD_NOT_ALLOWED);
+        assert!(
+            response.status().is_success() || response.status() == StatusCode::METHOD_NOT_ALLOWED
+        );
     }
 }
 

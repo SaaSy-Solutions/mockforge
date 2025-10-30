@@ -126,9 +126,21 @@ mod tests {
 
         // Check that routes are generated
         // Handler names are generated from operation IDs (snake_case) or method+path
-        assert!(code.contains("listusers") || code.contains("list_users") || code.contains("handle_get"));
-        assert!(code.contains("createuser") || code.contains("create_user") || code.contains("handle_post"));
-        assert!(code.contains("getuserbyid") || code.contains("get_user_by_id") || code.contains("users/:id"));
+        assert!(
+            code.contains("listusers")
+                || code.contains("list_users")
+                || code.contains("handle_get")
+        );
+        assert!(
+            code.contains("createuser")
+                || code.contains("create_user")
+                || code.contains("handle_post")
+        );
+        assert!(
+            code.contains("getuserbyid")
+                || code.contains("get_user_by_id")
+                || code.contains("users/:id")
+        );
 
         // Check that Axum imports are present
         assert!(code.contains("use axum::"));
@@ -164,7 +176,9 @@ mod tests {
         let code = result.unwrap();
 
         // Check that both GET and POST are present
-        assert!(code.contains(".route(\"/users\"") || code.contains("get(") || code.contains("post("));
+        assert!(
+            code.contains(".route(\"/users\"") || code.contains("get(") || code.contains("post(")
+        );
     }
 
     #[test]
@@ -193,6 +207,33 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_typescript_code_with_config() {
+        let spec = create_test_spec();
+        let config = CodegenConfig {
+            port: Some(8080),
+            enable_cors: true,
+            default_delay_ms: Some(100),
+            mock_data_strategy: MockDataStrategy::Examples,
+        };
+
+        let result = generate_mock_server_code(&spec, "ts", &config);
+        assert!(result.is_ok());
+
+        let code = result.unwrap();
+
+        // Check that port is set correctly
+        assert!(code.contains("8080"));
+
+        // Check that CORS is enabled
+        assert!(code.contains("Access-Control-Allow-Origin"));
+
+        // Check that delay is included if configured
+        if config.default_delay_ms.is_some() {
+            assert!(code.contains("setTimeout") || code.contains("delay"));
+        }
+    }
+
+    #[test]
     fn test_generate_typescript_code() {
         let spec = create_test_spec();
         let config = CodegenConfig::default();
@@ -202,9 +243,14 @@ mod tests {
 
         let code = result.unwrap();
 
-        // Check that TypeScript placeholder is present
-        assert!(code.contains("GeneratedMockServer"));
-        assert!(code.contains("class"));
+        // Check that TypeScript implementation is present
+        assert!(code.contains("export class GeneratedMockServer"));
+        assert!(code.contains("import express"));
+        assert!(code.contains("async start()"));
+        assert!(code.contains("setupRoutes"));
+        assert!(code.contains("private async handle_"));
+        // Check that routes are registered
+        assert!(code.contains(".get(") || code.contains(".post("));
     }
 
     #[test]

@@ -59,11 +59,15 @@ impl ProxyServer {
 
 /// Health check endpoint for the proxy
 async fn health_check() -> Result<Response<String>, StatusCode> {
-    Ok(Response::builder()
+    // Response builder should never fail with known-good values, but handle errors gracefully
+    Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/json")
         .body(r#"{"status":"healthy","service":"mockforge-proxy"}"#.to_string())
-        .unwrap())
+        .map_err(|e| {
+            tracing::error!("Failed to build health check response: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }
 
 /// Main proxy handler that intercepts and forwards requests

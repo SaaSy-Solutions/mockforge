@@ -149,7 +149,10 @@ impl ProtoParser {
             self.temp_dir = Some(TempDir::new()?);
         }
 
-        let temp_dir = self.temp_dir.as_ref().unwrap();
+        // Safe to unwrap here: we just created it above if it was None
+        let temp_dir = self.temp_dir.as_ref().ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from("Temp directory not initialized")
+        })?;
         let descriptor_path = temp_dir.path().join("descriptors.bin");
 
         // Try real protoc compilation first

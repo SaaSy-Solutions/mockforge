@@ -32,10 +32,7 @@ async fn test_metrics_recording() {
 
     // Generate some traffic by making HTTP requests
     for i in 0..5 {
-        let response = client
-            .get(format!("{}/health", base_url))
-            .send()
-            .await;
+        let response = client.get(format!("{}/health", base_url)).send().await;
 
         if response.is_err() {
             eprintln!("Failed to make request {}: {:?}", i, response);
@@ -64,10 +61,7 @@ async fn test_metrics_recording() {
                 );
                 eprintln!("✅ Analytics summary query successful: {:?}", body);
             } else {
-                eprintln!(
-                    "Warning: Analytics endpoint returned status {}",
-                    resp.status()
-                );
+                eprintln!("Warning: Analytics endpoint returned status {}", resp.status());
                 // Don't fail - Prometheus might not be configured
             }
         }
@@ -277,10 +271,7 @@ async fn test_analytics_system_metrics() {
                 // Verify response structure
                 if let Some(data) = body.get("data") {
                     // System metrics should have memory, cpu, etc.
-                    assert!(
-                        data.is_object(),
-                        "System metrics should be an object"
-                    );
+                    assert!(data.is_object(), "System metrics should be an object");
                 }
             } else {
                 eprintln!("Warning: System endpoint returned status {}", resp.status());

@@ -222,16 +222,13 @@ pub fn require_registry<'a, T>(opt: &'a Option<T>, registry_name: &str) -> Resul
 
 /// Helper function to get file name from path with error handling
 pub fn get_file_name(path: &PathBuf) -> Result<String, CliError> {
-    path.file_name()
-        .and_then(|n| n.to_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| {
-            CliError::new(
-                format!("Could not extract file name from path: {}", path.display()),
-                ExitCode::FileNotFound,
-            )
-            .with_suggestion("Ensure the path is valid and points to a file".to_string())
-        })
+    path.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()).ok_or_else(|| {
+        CliError::new(
+            format!("Could not extract file name from path: {}", path.display()),
+            ExitCode::FileNotFound,
+        )
+        .with_suggestion("Ensure the path is valid and points to a file".to_string())
+    })
 }
 
 /// Utility functions for common CLI operations

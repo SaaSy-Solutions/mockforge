@@ -3,7 +3,7 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{delete, get, post, put},
@@ -125,6 +125,7 @@ impl ManagementState {
     }
 
     #[cfg(feature = "smtp")]
+    /// Add SMTP registry to management state
     pub fn with_smtp_registry(
         mut self,
         smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>,
@@ -134,6 +135,7 @@ impl ManagementState {
     }
 
     #[cfg(feature = "mqtt")]
+    /// Add MQTT broker to management state
     pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
         self.mqtt_broker = Some(mqtt_broker);
         self
@@ -387,7 +389,7 @@ async fn clear_smtp_mailbox(State(state): State<ManagementState>) -> impl IntoRe
 /// Export SMTP mailbox
 #[cfg(feature = "smtp")]
 async fn export_smtp_mailbox(
-    Query(params): Query<std::collections::HashMap<String, String>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let format = params.get("format").unwrap_or(&"json".to_string()).clone();
     (
@@ -404,7 +406,7 @@ async fn export_smtp_mailbox(
 #[cfg(feature = "smtp")]
 async fn search_smtp_emails(
     State(state): State<ManagementState>,
-    Query(params): Query<std::collections::HashMap<String, String>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if let Some(ref smtp_registry) = state.smtp_registry {
         let filters = EmailSearchFilters {
@@ -449,9 +451,13 @@ async fn search_smtp_emails(
 #[cfg(feature = "mqtt")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttBrokerStats {
+    /// Number of connected MQTT clients
     pub connected_clients: usize,
+    /// Number of active MQTT topics
     pub active_topics: usize,
+    /// Number of retained messages
     pub retained_messages: usize,
+    /// Total number of subscriptions
     pub total_subscriptions: usize,
 }
 

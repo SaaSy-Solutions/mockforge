@@ -149,10 +149,7 @@ async fn test_plugin_listing_filters() {
 
                 // Verify response structure
                 if let Some(data) = body.get("data") {
-                    assert!(
-                        data.is_object(),
-                        "Filtered plugin list should return object"
-                    );
+                    assert!(data.is_object(), "Filtered plugin list should return object");
                 }
             } else {
                 eprintln!("Warning: Filtered plugin list returned status {}", resp.status());
@@ -199,15 +196,19 @@ async fn test_plugin_details() {
                 if let Some(data) = body.get("data") {
                     if let Some(plugins) = data.get("plugins").and_then(|p| p.as_array()) {
                         if let Some(first_plugin) = plugins.first() {
-                            if let Some(plugin_id) = first_plugin.get("id").and_then(|id| id.as_str()) {
+                            if let Some(plugin_id) =
+                                first_plugin.get("id").and_then(|id| id.as_str())
+                            {
                                 // Query plugin details
-                                let details_url = format!("{}/__mockforge/plugins/{}", base_url, plugin_id);
+                                let details_url =
+                                    format!("{}/__mockforge/plugins/{}", base_url, plugin_id);
                                 let details_response = client.get(&details_url).send().await;
 
                                 match details_response {
                                     Ok(details_resp) => {
                                         if details_resp.status().is_success() {
-                                            let details_body: Value = details_resp.json().await.unwrap_or(Value::Null);
+                                            let details_body: Value =
+                                                details_resp.json().await.unwrap_or(Value::Null);
                                             eprintln!("✅ Plugin details query successful");
 
                                             // Verify response has plugin information
@@ -218,7 +219,10 @@ async fn test_plugin_details() {
                                                 );
                                             }
                                         } else {
-                                            eprintln!("Warning: Plugin details returned status {}", details_resp.status());
+                                            eprintln!(
+                                                "Warning: Plugin details returned status {}",
+                                                details_resp.status()
+                                            );
                                         }
                                     }
                                     Err(e) => {
@@ -273,23 +277,23 @@ async fn test_plugin_reload() {
                 if let Some(data) = body.get("data") {
                     if let Some(plugins) = data.get("plugins").and_then(|p| p.as_array()) {
                         if let Some(first_plugin) = plugins.first() {
-                            if let Some(plugin_id) = first_plugin.get("id").and_then(|id| id.as_str()) {
+                            if let Some(plugin_id) =
+                                first_plugin.get("id").and_then(|id| id.as_str())
+                            {
                                 // Try to reload the plugin
                                 let reload_url = format!("{}/__mockforge/plugins/reload", base_url);
                                 let reload_payload = serde_json::json!({
                                     "plugin_id": plugin_id
                                 });
 
-                                let reload_response = client
-                                    .post(&reload_url)
-                                    .json(&reload_payload)
-                                    .send()
-                                    .await;
+                                let reload_response =
+                                    client.post(&reload_url).json(&reload_payload).send().await;
 
                                 match reload_response {
                                     Ok(r_resp) => {
                                         if r_resp.status().is_success() {
-                                            let reload_body: Value = r_resp.json().await.unwrap_or(Value::Null);
+                                            let reload_body: Value =
+                                                r_resp.json().await.unwrap_or(Value::Null);
                                             eprintln!("✅ Plugin reload request successful");
 
                                             // Verify response indicates reload
@@ -300,7 +304,10 @@ async fn test_plugin_reload() {
                                                 );
                                             }
                                         } else {
-                                            eprintln!("Warning: Plugin reload returned status {}", r_resp.status());
+                                            eprintln!(
+                                                "Warning: Plugin reload returned status {}",
+                                                r_resp.status()
+                                            );
                                         }
                                     }
                                     Err(e) => {
@@ -351,14 +358,14 @@ async fn test_plugin_error_handling() {
             // Should return error (404 or error response)
             if !resp.status().is_success() {
                 let body: Value = resp.json().await.unwrap_or(Value::Null);
-                eprintln!("✅ Non-existent plugin query handled correctly (status: {})", resp.status());
+                eprintln!(
+                    "✅ Non-existent plugin query handled correctly (status: {})",
+                    resp.status()
+                );
 
                 // Verify error response structure
                 if let Some(error) = body.get("error") {
-                    assert!(
-                        error.is_string(),
-                        "Error response should have error message"
-                    );
+                    assert!(error.is_string(), "Error response should have error message");
                 }
             } else {
                 // If it returns success, that's also valid (might return empty data)
@@ -438,15 +445,19 @@ async fn test_plugin_unload() {
                 if let Some(data) = body.get("data") {
                     if let Some(plugins) = data.get("plugins").and_then(|p| p.as_array()) {
                         if let Some(first_plugin) = plugins.first() {
-                            if let Some(plugin_id) = first_plugin.get("id").and_then(|id| id.as_str()) {
+                            if let Some(plugin_id) =
+                                first_plugin.get("id").and_then(|id| id.as_str())
+                            {
                                 // Test plugin deletion (unload)
-                                let delete_url = format!("{}/__mockforge/plugins/{}", base_url, plugin_id);
+                                let delete_url =
+                                    format!("{}/__mockforge/plugins/{}", base_url, plugin_id);
                                 let delete_response = client.delete(&delete_url).send().await;
 
                                 match delete_response {
                                     Ok(d_resp) => {
                                         if d_resp.status().is_success() {
-                                            let delete_body: Value = d_resp.json().await.unwrap_or(Value::Null);
+                                            let delete_body: Value =
+                                                d_resp.json().await.unwrap_or(Value::Null);
                                             eprintln!("✅ Plugin deletion successful");
 
                                             // Verify response indicates success
@@ -457,7 +468,10 @@ async fn test_plugin_unload() {
                                                 );
                                             }
                                         } else {
-                                            eprintln!("Warning: Plugin deletion returned status {}", d_resp.status());
+                                            eprintln!(
+                                                "Warning: Plugin deletion returned status {}",
+                                                d_resp.status()
+                                            );
                                         }
                                     }
                                     Err(e) => {

@@ -94,9 +94,7 @@ impl CollabClient {
     /// Create a new client and connect to server
     pub async fn connect(config: ClientConfig) -> Result<Self> {
         if config.server_url.is_empty() {
-            return Err(CollabError::InvalidInput(
-                "server_url cannot be empty".to_string(),
-            ));
+            return Err(CollabError::InvalidInput("server_url cannot be empty".to_string()));
         }
 
         let client = Self {
@@ -140,7 +138,16 @@ impl CollabClient {
                 }
 
                 // Attempt connection
-                match Self::try_connect(&config, &state, &ws_sender, &workspace_callbacks, &state_callbacks, &stop_signal).await {
+                match Self::try_connect(
+                    &config,
+                    &state,
+                    &ws_sender,
+                    &workspace_callbacks,
+                    &state_callbacks,
+                    &stop_signal,
+                )
+                .await
+                {
                     Ok(()) => {
                         // Connection successful, reset backoff
                         backoff_ms = config.initial_backoff_ms;
@@ -166,14 +173,19 @@ impl CollabClient {
                             if current_count >= max {
                                 tracing::error!("Max reconnect attempts ({}) reached", max);
                                 *state.write().await = ConnectionState::Disconnected;
-                                Self::notify_state_change(&state_callbacks, ConnectionState::Disconnected).await;
+                                Self::notify_state_change(
+                                    &state_callbacks,
+                                    ConnectionState::Disconnected,
+                                )
+                                .await;
                                 break;
                             }
                         }
 
                         *reconnect_count.write().await += 1;
                         *state.write().await = ConnectionState::Reconnecting;
-                        Self::notify_state_change(&state_callbacks, ConnectionState::Reconnecting).await;
+                        Self::notify_state_change(&state_callbacks, ConnectionState::Reconnecting)
+                            .await;
 
                         // Exponential backoff
                         sleep(Duration::from_millis(backoff_ms)).await;
@@ -310,8 +322,16 @@ impl CollabClient {
                     callback(event.clone());
                 }
             }
-            Ok(SyncMessage::StateResponse { workspace_id, version, state }) => {
-                tracing::debug!("Received state response for workspace {} (version {})", workspace_id, version);
+            Ok(SyncMessage::StateResponse {
+                workspace_id,
+                version,
+                state,
+            }) => {
+                tracing::debug!(
+                    "Received state response for workspace {} (version {})",
+                    workspace_id,
+                    version
+                );
                 // Could emit this as a separate event type if needed
             }
             Ok(SyncMessage::Error { message }) => {
