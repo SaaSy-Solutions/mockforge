@@ -7,32 +7,50 @@ use std::collections::HashMap;
 /// Mock resolver for GraphQL fields
 #[derive(Debug, Clone)]
 pub struct MockResolver {
+    /// Name of the GraphQL field
     pub field_name: String,
+    /// Type of the GraphQL field (e.g., "String", "Int", "User")
     pub field_type: String,
+    /// Static mock data value (if no generator)
     pub mock_data: Value,
+    /// Optional dynamic data generator
     pub generator: Option<MockDataGenerator>,
 }
 
 /// Data generator for dynamic mock data
 #[derive(Debug, Clone)]
 pub struct MockDataGenerator {
+    /// Type of generator to use
     pub generator_type: GeneratorType,
+    /// Generator-specific configuration options
     pub config: HashMap<String, serde_json::Value>,
 }
 
-/// Types of data generators
+/// Types of data generators for mock values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum GeneratorType {
     /// Generate random strings
     String {
+        /// Minimum string length
         min_length: usize,
+        /// Maximum string length
         max_length: usize,
     },
     /// Generate random integers
-    Int { min: i64, max: i64 },
+    Int {
+        /// Minimum integer value
+        min: i64,
+        /// Maximum integer value
+        max: i64,
+    },
     /// Generate random floats
-    Float { min: f64, max: f64 },
+    Float {
+        /// Minimum float value
+        min: f64,
+        /// Maximum float value
+        max: f64,
+    },
     /// Generate UUIDs
     Uuid,
     /// Generate email addresses
@@ -42,15 +60,22 @@ pub enum GeneratorType {
     /// Generate timestamps
     Timestamp,
     /// Generate from a list of values
-    FromList { values: Vec<serde_json::Value> },
+    FromList {
+        /// List of possible values to choose from
+        values: Vec<serde_json::Value>,
+    },
     /// Generate nested objects
     Object {
+        /// Map of field names to their generators
         fields: HashMap<String, Box<GeneratorType>>,
     },
     /// Generate arrays
     Array {
+        /// Generator for array items
         item_generator: Box<GeneratorType>,
+        /// Minimum array size
         min_items: usize,
+        /// Maximum array size
         max_items: usize,
     },
 }

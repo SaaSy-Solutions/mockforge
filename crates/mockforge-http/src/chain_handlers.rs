@@ -15,11 +15,17 @@ use mockforge_core::request_chaining::RequestChainRegistry;
 /// Shared state for chain management
 #[derive(Clone)]
 pub struct ChainState {
+    /// Request chain registry for storing and retrieving chains
     registry: Arc<RequestChainRegistry>,
+    /// Chain execution engine for running request chains
     engine: Arc<ChainExecutionEngine>,
 }
 
 /// Create the chain state with registry and engine
+///
+/// # Arguments
+/// * `registry` - Request chain registry for chain storage
+/// * `engine` - Chain execution engine for running chains
 pub fn create_chain_state(
     registry: Arc<RequestChainRegistry>,
     engine: Arc<ChainExecutionEngine>,
@@ -27,82 +33,119 @@ pub fn create_chain_state(
     ChainState { registry, engine }
 }
 
+/// Request body for executing a request chain
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainExecutionRequest {
+    /// Optional variables to pass to the chain execution
     pub variables: Option<serde_json::Value>,
 }
 
+/// Response from chain execution
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainExecutionResponse {
+    /// ID of the executed chain
     pub chain_id: String,
+    /// Execution status ("successful", "partial_success", "failed")
     pub status: String,
+    /// Total execution duration in milliseconds
     pub total_duration_ms: u64,
+    /// Results of individual requests in the chain
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_results: Option<serde_json::Value>,
+    /// Error message if execution failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
 }
 
+/// Response listing all available chains
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainListResponse {
+    /// List of chain summaries
     pub chains: Vec<ChainSummary>,
+    /// Total number of chains
     pub total: usize,
 }
 
+/// Summary information for a request chain
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainSummary {
+    /// Unique chain identifier
     pub id: String,
+    /// Human-readable chain name
     pub name: String,
+    /// Optional chain description
     pub description: Option<String>,
+    /// Tags associated with this chain
     pub tags: Vec<String>,
+    /// Whether this chain is enabled
     pub enabled: bool,
+    /// Number of links (requests) in this chain
     pub link_count: usize,
 }
 
+/// Request body for creating a new chain
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainCreateRequest {
-    pub definition: String, // YAML content
+    /// YAML definition of the chain
+    pub definition: String,
 }
 
+/// Response from chain creation
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainCreateResponse {
+    /// ID of the created chain
     pub id: String,
+    /// Success message
     pub message: String,
 }
 
+/// Response from chain validation
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainValidationResponse {
+    /// Whether the chain is valid
     pub valid: bool,
+    /// Validation error messages if any
     pub errors: Vec<String>,
+    /// Validation warnings if any
     pub warnings: Vec<String>,
 }
 
+/// Response containing chain execution history
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainExecutionHistoryResponse {
+    /// ID of the chain
     pub chain_id: String,
+    /// List of execution records
     pub executions: Vec<ChainExecutionRecord>,
+    /// Total number of executions
     pub total: usize,
 }
 
+/// Record of a single chain execution
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChainExecutionRecord {
+    /// ISO 8601 timestamp when execution started
     pub executed_at: String,
+    /// Execution status ("successful", "partial_success", "failed")
     pub status: String,
+    /// Total execution duration in milliseconds
     pub total_duration_ms: u64,
+    /// Number of requests in the chain
     pub request_count: usize,
+    /// Error message if execution failed
     pub error_message: Option<String>,
 }
 
-// GET /chains - List all chains
+/// GET /chains - List all available request chains
 pub async fn list_chains(State(state): State<ChainState>) -> impl IntoResponse {
     let chain_ids = state.registry.list_chains().await;
     let mut chains = Vec::new();
@@ -124,7 +167,7 @@ pub async fn list_chains(State(state): State<ChainState>) -> impl IntoResponse {
     Json(ChainListResponse { chains, total })
 }
 
-// GET /chains/:id - Get a specific chain
+/// GET /chains/:id - Get details for a specific chain
 pub async fn get_chain(Path(chain_id): Path<String>, State(state): State<ChainState>) -> Response {
     match state.registry.get_chain(&chain_id).await {
         Some(chain) => Json(chain).into_response(),
@@ -132,7 +175,7 @@ pub async fn get_chain(Path(chain_id): Path<String>, State(state): State<ChainSt
     }
 }
 
-// POST /chains - Create a new chain
+/// POST /chains - Create a new request chain from YAML definition
 pub async fn create_chain(
     State(state): State<ChainState>,
     Json(request): Json<ChainCreateRequest>,
@@ -149,7 +192,7 @@ pub async fn create_chain(
     }
 }
 
-// PUT /chains/:id - Update an existing chain
+/// PUT /chains/:id - Update an existing chain with new definition
 pub async fn update_chain(
     Path(chain_id): Path<String>,
     State(state): State<ChainState>,
@@ -179,7 +222,7 @@ pub async fn update_chain(
     }
 }
 
-// DELETE /chains/:id - Delete a chain
+/// DELETE /chains/:id - Delete a request chain
 pub async fn delete_chain(
     Path(chain_id): Path<String>,
     State(state): State<ChainState>,
@@ -195,7 +238,7 @@ pub async fn delete_chain(
     }
 }
 
-// POST /chains/:id/execute - Execute a chain
+/// POST /chains/:id/execute - Execute a request chain with optional variables
 pub async fn execute_chain(
     Path(chain_id): Path<String>,
     State(state): State<ChainState>,
@@ -225,7 +268,7 @@ pub async fn execute_chain(
     }
 }
 
-// POST /chains/:id/validate - Validate a chain
+/// POST /chains/:id/validate - Validate chain definition for correctness
 pub async fn validate_chain(
     Path(chain_id): Path<String>,
     State(state): State<ChainState>,
@@ -251,7 +294,7 @@ pub async fn validate_chain(
     }
 }
 
-// GET /chains/:id/history - Get execution history
+/// GET /chains/:id/history - Get execution history for a chain
 pub async fn get_chain_history(
     Path(chain_id): Path<String>,
     State(state): State<ChainState>,

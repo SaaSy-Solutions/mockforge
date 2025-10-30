@@ -17,6 +17,8 @@ pub struct MockForgeServer {
     health: HealthCheck,
     scenario: ScenarioManager,
     http_port: u16,
+    ws_port: Option<u16>,
+    grpc_port: Option<u16>,
 }
 
 impl MockForgeServer {
@@ -59,6 +61,8 @@ impl MockForgeServer {
             health,
             scenario,
             http_port,
+            ws_port: resolved_config.ws_port,
+            grpc_port: resolved_config.grpc_port,
         })
     }
 
@@ -67,9 +71,24 @@ impl MockForgeServer {
         self.http_port
     }
 
+    /// Get the WebSocket port if configured
+    pub fn ws_port(&self) -> Option<u16> {
+        self.ws_port
+    }
+
+    /// Get the gRPC port if configured
+    pub fn grpc_port(&self) -> Option<u16> {
+        self.grpc_port
+    }
+
     /// Get the base URL of the server
     pub fn base_url(&self) -> String {
         format!("http://localhost:{}", self.http_port)
+    }
+
+    /// Get the WebSocket URL if WebSocket is enabled
+    pub fn ws_url(&self) -> Option<String> {
+        self.ws_port.map(|port| format!("ws://localhost:{}/ws", port))
     }
 
     /// Get the process ID

@@ -27,6 +27,7 @@ impl Default for MethodMetrics {
 }
 
 impl MethodMetrics {
+    /// Create a new method metrics tracker
     pub fn new() -> Self {
         Self {
             success_count: AtomicU64::new(0),
@@ -80,12 +81,16 @@ impl MethodMetrics {
     }
 }
 
-/// Snapshot of method metrics
+/// Snapshot of method metrics at a point in time
 #[derive(Debug, Clone)]
 pub struct MethodMetricsSnapshot {
+    /// Total number of successful requests
     pub success_count: u64,
+    /// Total number of failed requests
     pub error_count: u64,
+    /// Sum of all request durations in milliseconds
     pub total_duration_ms: u64,
+    /// Current number of in-flight requests
     pub in_flight: usize,
 }
 

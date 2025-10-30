@@ -21,13 +21,21 @@ use tracing::*;
 /// Specification metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpecMetadata {
+    /// Unique identifier for the specification
     pub id: String,
+    /// Human-readable name of the specification
     pub name: String,
+    /// Type of specification (OpenAPI or AsyncAPI)
     pub spec_type: SpecType,
+    /// Specification version
     pub version: String,
+    /// Optional description from the spec
     pub description: Option<String>,
+    /// List of server URLs from the spec
     pub servers: Vec<String>,
+    /// ISO 8601 timestamp when the spec was uploaded
     pub uploaded_at: String,
+    /// Number of routes/channels generated from this spec
     pub route_count: usize,
 }
 
@@ -35,62 +43,86 @@ pub struct SpecMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SpecType {
+    /// OpenAPI/Swagger specification
     OpenApi,
+    /// AsyncAPI specification
     AsyncApi,
 }
 
-/// Import request body
+/// Import request body for uploading a specification
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImportSpecRequest {
+    /// Specification content (YAML or JSON)
     pub spec_content: String,
+    /// Optional specification type (auto-detected if not provided)
     pub spec_type: Option<SpecType>,
+    /// Optional custom name for the specification
     pub name: Option<String>,
+    /// Optional base URL override
     pub base_url: Option<String>,
+    /// Whether to automatically generate mock endpoints (default: true)
     pub auto_generate_mocks: Option<bool>,
 }
 
-/// Import response
+/// Response from specification import
 #[derive(Debug, Serialize)]
 pub struct ImportSpecResponse {
+    /// ID of the imported specification
     pub spec_id: String,
+    /// Type of specification that was imported
     pub spec_type: SpecType,
+    /// Number of routes/channels generated
     pub routes_generated: usize,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
+    /// Coverage statistics for the imported spec
     pub coverage: CoverageStats,
 }
 
-/// Coverage statistics
+/// Coverage statistics for imported specification
 #[derive(Debug, Serialize)]
 pub struct CoverageStats {
+    /// Total number of endpoints in the specification
     pub total_endpoints: usize,
+    /// Number of endpoints that were successfully mocked
     pub mocked_endpoints: usize,
+    /// Coverage percentage (0-100)
     pub coverage_percentage: u32,
+    /// Breakdown by HTTP method (for OpenAPI) or operation type (for AsyncAPI)
     pub by_method: HashMap<String, usize>,
 }
 
-/// List specs query parameters
+/// Query parameters for listing specifications
 #[derive(Debug, Deserialize)]
 pub struct ListSpecsQuery {
+    /// Optional filter by specification type
     pub spec_type: Option<SpecType>,
+    /// Maximum number of results to return
     pub limit: Option<usize>,
+    /// Offset for pagination
     pub offset: Option<usize>,
 }
 
 /// Shared state for spec import API
 #[derive(Clone)]
 pub struct SpecImportState {
+    /// Map of spec ID to stored specification
     pub specs: Arc<RwLock<HashMap<String, StoredSpec>>>,
 }
 
-/// Stored specification
+/// Stored specification with metadata and routes
 #[derive(Debug, Clone)]
 pub struct StoredSpec {
+    /// Specification metadata
     pub metadata: SpecMetadata,
+    /// Original specification content
     pub content: String,
-    pub routes_json: String, // Serialized routes/channels as JSON
+    /// Serialized routes/channels as JSON
+    pub routes_json: String,
 }
 
 impl SpecImportState {
+    /// Create a new specification import state
     pub fn new() -> Self {
         Self {
             specs: Arc::new(RwLock::new(HashMap::new())),

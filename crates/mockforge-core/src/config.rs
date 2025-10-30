@@ -764,6 +764,7 @@ impl Default for LoggingConfig {
     }
 }
 
+/// Request chaining configuration for multi-step request workflows
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ChainingConfig {
@@ -1030,45 +1031,67 @@ pub struct ChaosEngConfig {
     pub scenario: Option<String>,
 }
 
-/// Latency injection configuration
+/// Latency injection configuration for chaos engineering
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LatencyInjectionConfig {
+    /// Enable latency injection
     pub enabled: bool,
+    /// Fixed delay to inject (in milliseconds)
     pub fixed_delay_ms: Option<u64>,
+    /// Random delay range (min_ms, max_ms) in milliseconds
     pub random_delay_range_ms: Option<(u64, u64)>,
+    /// Jitter percentage to add variance to delays (0.0 to 1.0)
     pub jitter_percent: f64,
+    /// Probability of injecting latency (0.0 to 1.0)
     pub probability: f64,
 }
 
-/// Fault injection configuration
+/// Fault injection configuration for chaos engineering
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FaultConfig {
+    /// Enable fault injection
     pub enabled: bool,
+    /// HTTP status codes to randomly return (e.g., [500, 502, 503])
     pub http_errors: Vec<u16>,
+    /// Probability of returning HTTP errors (0.0 to 1.0)
     pub http_error_probability: f64,
+    /// Enable connection errors (connection refused, reset, etc.)
     pub connection_errors: bool,
+    /// Probability of connection errors (0.0 to 1.0)
     pub connection_error_probability: f64,
+    /// Enable timeout errors
     pub timeout_errors: bool,
+    /// Timeout duration in milliseconds
     pub timeout_ms: u64,
+    /// Probability of timeout errors (0.0 to 1.0)
     pub timeout_probability: f64,
 }
 
-/// Rate limiting configuration
+/// Rate limiting configuration for traffic control
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitingConfig {
+    /// Enable rate limiting
     pub enabled: bool,
+    /// Maximum requests per second allowed
     pub requests_per_second: u32,
+    /// Maximum burst size before rate limiting kicks in
     pub burst_size: u32,
+    /// Apply rate limiting per IP address
     pub per_ip: bool,
+    /// Apply rate limiting per endpoint/path
     pub per_endpoint: bool,
 }
 
-/// Network shaping configuration
+/// Network shaping configuration for simulating network conditions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkShapingConfig {
+    /// Enable network shaping
     pub enabled: bool,
+    /// Bandwidth limit in bits per second
     pub bandwidth_limit_bps: u64,
+    /// Packet loss percentage (0.0 to 1.0)
     pub packet_loss_percent: f64,
+    /// Maximum concurrent connections allowed
     pub max_connections: u32,
 }
 

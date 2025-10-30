@@ -118,7 +118,7 @@ pub async fn search_plugins(
             tags,
             category,
             downloads: plugin.downloads_total as u64,
-            rating: plugin.rating_avg.to_string().parse().unwrap_or(0.0),
+            rating: plugin.rating_avg,
             reviews_count: plugin.rating_count as u32,
             repository: plugin.repository,
             homepage: plugin.homepage,
@@ -315,6 +315,19 @@ pub async fn publish_plugin(
     // Decode WASM data
     let wasm_bytes = base64::decode(&request.wasm_data)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
+
+    // Verify checksum matches uploaded data
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(&wasm_bytes);
+    let calculated_checksum = hex::encode(hasher.finalize());
+
+    if calculated_checksum != request.checksum {
+        return Err(ApiError::InvalidRequest(format!(
+            "Checksum mismatch: expected {}, got {}",
+            request.checksum, calculated_checksum
+        )));
+    }
 
     // Upload to S3
     let download_url = state

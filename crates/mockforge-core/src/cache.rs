@@ -49,12 +49,18 @@ pub struct Cache<K, V> {
     stats: Arc<RwLock<CacheStats>>,
 }
 
+/// Statistics for cache performance tracking
 #[derive(Debug, Default, Clone)]
 pub struct CacheStats {
+    /// Number of cache hits (successful lookups)
     pub hits: u64,
+    /// Number of cache misses (failed lookups)
     pub misses: u64,
+    /// Number of entries evicted due to size limits
     pub evictions: u64,
+    /// Number of entries expired due to TTL
     pub expirations: u64,
+    /// Total number of insertions
     pub insertions: u64,
 }
 
@@ -238,11 +244,16 @@ pub struct ResponseCache {
     cache: Cache<String, CachedResponse>,
 }
 
+/// Cached HTTP response data
 #[derive(Debug, Clone)]
 pub struct CachedResponse {
+    /// HTTP status code
     pub status_code: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body content
     pub body: String,
+    /// Content-Type header value, if present
     pub content_type: Option<String>,
 }
 
@@ -304,10 +315,14 @@ pub struct TemplateCache {
     cache: Cache<String, CompiledTemplate>,
 }
 
+/// Compiled template with metadata for caching
 #[derive(Debug, Clone)]
 pub struct CompiledTemplate {
+    /// The compiled template string
     pub template: String,
+    /// List of variable names used in the template
     pub variables: Vec<String>,
+    /// Timestamp when the template was compiled
     pub compiled_at: Instant,
 }
 

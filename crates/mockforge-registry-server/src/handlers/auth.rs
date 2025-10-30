@@ -111,3 +111,41 @@ pub async fn login(
         username: user.username,
     }))
 }
+
+#[derive(Debug, Deserialize)]
+pub struct RefreshTokenRequest {
+    pub token: String,
+}
+
+pub async fn refresh_token(
+    State(state): State<AppState>,
+    Json(request): Json<RefreshTokenRequest>,
+) -> ApiResult<Json<AuthResponse>> {
+    use crate::auth::verify_token;
+
+    // Verify the existing token
+    let claims = verify_token(&request.token, &state.config.jwt_secret)
+        .map_err(|_| ApiError::InvalidRequest("Invalid token".to_string()))?;
+
+    let pool = state.db.pool();
+
+    // Parse user ID from claims
+    let user_id = uuid::Uuid::parse_str(&claims.sub)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+
+    // Find user
+    let user = User::find_by_id(pool, user_id)
+        .await
+        .map_err(|e| ApiError::Database(e))?
+        .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
+
+    // Generate new JWT token
+    let token = create_token(&user.id.to_string(), &state.config.jwt_secret)
+        .map_err(|e| ApiError::Internal(e))?;
+
+    Ok(Json(AuthResponse {
+        token,
+        user_id: user.id.to_string(),
+        username: user.username,
+    }))
+}

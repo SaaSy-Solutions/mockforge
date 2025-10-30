@@ -17,34 +17,42 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Common import route structure
+/// Common import route structure for unified workspace import
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportRoute {
+    /// HTTP method (GET, POST, PUT, etc.)
     pub method: String,
+    /// Request path
     pub path: String,
+    /// HTTP headers
     pub headers: HashMap<String, String>,
+    /// Optional request body
     pub body: Option<String>,
+    /// Mock response configuration
     pub response: ImportResponse,
 }
 
-/// Common import response structure
+/// Common import response structure for unified workspace import
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportResponse {
+    /// HTTP status code
     pub status: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body as JSON value
     pub body: Value,
 }
 
-/// Import configuration for workspace organization
+/// Configuration options for importing API definitions into workspace structures
 #[derive(Debug, Clone)]
 pub struct WorkspaceImportConfig {
-    /// Whether to create folders based on collection structure
+    /// Whether to create folders based on collection structure (Postman folders, etc.)
     pub create_folders: bool,
-    /// Base folder name for imported requests
+    /// Base folder name for imported requests (if None, uses collection name)
     pub base_folder_name: Option<String>,
-    /// Whether to preserve source hierarchy
+    /// Whether to preserve the source collection's folder hierarchy
     pub preserve_hierarchy: bool,
-    /// Maximum folder depth
+    /// Maximum folder nesting depth to prevent excessive nesting
     pub max_depth: usize,
 }
 
@@ -59,16 +67,16 @@ impl Default for WorkspaceImportConfig {
     }
 }
 
-/// Import result into workspace structure
+/// Result of importing API definitions into a workspace
 #[derive(Debug)]
 pub struct WorkspaceImportResult {
-    /// Created workspace
+    /// The workspace created or updated by the import
     pub workspace: Workspace,
-    /// Number of requests imported
+    /// Total number of requests imported
     pub request_count: usize,
-    /// Number of folders created
+    /// Total number of folders created during import
     pub folder_count: usize,
-    /// Import warnings
+    /// Warnings encountered during import (non-fatal issues)
     pub warnings: Vec<String>,
 }
 
@@ -147,7 +155,7 @@ fn har_route_to_import_route(route: HarRoute) -> ImportRoute {
     }
 }
 
-/// Import routes into a new workspace
+/// Import routes into a new workspace with folder organization
 pub fn import_postman_to_workspace(
     routes: Vec<ImportRoute>,
     workspace_name: String,
@@ -190,7 +198,7 @@ pub fn import_postman_to_workspace(
     Ok(result)
 }
 
-/// Import Postman routes into an existing workspace
+/// Import Postman routes into an existing workspace with folder organization
 pub fn import_postman_to_existing_workspace(
     registry: &mut WorkspaceRegistry,
     workspace_id: &str,
@@ -415,7 +423,7 @@ pub fn create_workspace_from_postman(
     import_postman_to_workspace(routes, name, config)
 }
 
-/// Create workspace from Insomnia export import
+/// Create a new workspace from an Insomnia import result
 pub fn create_workspace_from_insomnia(
     import_result: crate::import::InsomniaImportResult,
     workspace_name: Option<String>,
@@ -428,7 +436,7 @@ pub fn create_workspace_from_insomnia(
     import_postman_to_workspace(routes, name, config)
 }
 
-/// Create workspace from curl commands import
+/// Create a new workspace from a curl import result
 pub fn create_workspace_from_curl(
     import_result: crate::import::CurlImportResult,
     workspace_name: Option<String>,
@@ -444,7 +452,7 @@ pub fn create_workspace_from_curl(
     import_postman_to_workspace(routes, name, config)
 }
 
-/// Create workspace from OpenAPI specification import
+/// Create a new workspace from an OpenAPI import result
 pub fn create_workspace_from_openapi(
     import_result: crate::import::OpenApiImportResult,
     workspace_name: Option<String>,
@@ -457,7 +465,7 @@ pub fn create_workspace_from_openapi(
     import_postman_to_workspace(routes, name, config)
 }
 
-/// Create workspace from HAR archive import
+/// Create a new workspace from a HAR import result
 pub fn create_workspace_from_har(
     import_result: crate::import::HarImportResult,
     workspace_name: Option<String>,

@@ -10,24 +10,35 @@ use crate::import::postman_environment::is_postman_environment_json;
 use serde_json::Value;
 use std::path::Path;
 
-/// Detected import format
+/// Import format types supported by MockForge
 #[derive(Debug, Clone, PartialEq)]
 pub enum ImportFormat {
+    /// Postman Collection format (JSON)
     Postman,
+    /// Postman Environment format (JSON)
     PostmanEnvironment,
+    /// Insomnia export format (JSON/YAML)
     Insomnia,
+    /// cURL command format (text)
     Curl,
+    /// HAR (HTTP Archive) format (JSON)
     Har,
+    /// OpenAPI 3.x specification (JSON/YAML)
     OpenApi,
+    /// Swagger 2.0 specification (JSON/YAML)
     Swagger,
+    /// Format could not be determined
     Unknown,
 }
 
-/// Result of format detection
+/// Result of format detection with confidence score
 #[derive(Debug)]
 pub struct FormatDetection {
+    /// Detected import format
     pub format: ImportFormat,
-    pub confidence: f64, // 0.0 to 1.0
+    /// Confidence score from 0.0 to 1.0 (1.0 = very confident)
+    pub confidence: f64,
+    /// Human-readable description of the detection
     pub details: String,
 }
 

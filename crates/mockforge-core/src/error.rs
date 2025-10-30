@@ -3,60 +3,107 @@
 /// Result type alias for MockForge operations
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Core error types for MockForge
+/// Core error types for MockForge operations
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Validation error (schema/format validation failed)
     #[error("Validation error: {message}")]
-    Validation { message: String },
+    Validation {
+        /// Validation error message
+        message: String,
+    },
 
+    /// Routing error (route not found or invalid)
     #[error("Routing error: {message}")]
-    Routing { message: String },
+    Routing {
+        /// Routing error message
+        message: String,
+    },
 
+    /// Proxy error (proxy request failed)
     #[error("Proxy error: {message}")]
-    Proxy { message: String },
+    Proxy {
+        /// Proxy error message
+        message: String,
+    },
 
+    /// Latency simulation error (latency injection failed)
     #[error("Latency simulation error: {message}")]
-    Latency { message: String },
+    Latency {
+        /// Latency error message
+        message: String,
+    },
 
+    /// Configuration error (invalid config or missing required fields)
     #[error("Configuration error: {message}")]
-    Config { message: String },
+    Config {
+        /// Configuration error message
+        message: String,
+    },
 
+    /// Protocol not found (requested protocol is not registered)
     #[error("Protocol not found: {message}")]
-    ProtocolNotFound { message: String },
+    ProtocolNotFound {
+        /// Protocol not found error message
+        message: String,
+    },
 
+    /// Protocol disabled (protocol exists but is disabled)
     #[error("Protocol disabled: {message}")]
-    ProtocolDisabled { message: String },
+    ProtocolDisabled {
+        /// Protocol disabled error message
+        message: String,
+    },
 
+    /// Protocol handler in use (handler already registered)
     #[error("Protocol handler in use: {message}")]
-    ProtocolHandlerInUse { message: String },
+    ProtocolHandlerInUse {
+        /// Protocol handler conflict error message
+        message: String,
+    },
 
+    /// Protocol validation error (protocol-specific validation failed)
     #[error("Protocol validation error: {message}")]
-    ProtocolValidationError { protocol: String, message: String },
+    ProtocolValidationError {
+        /// Protocol name that failed validation
+        protocol: String,
+        /// Validation error message
+        message: String
+    },
 
+    /// I/O error (file read/write operations)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// JSON serialization/deserialization error
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// YAML serialization/deserialization error
     #[error("YAML error: {0}")]
     Yaml(#[from] serde_yaml::Error),
 
+    /// HTTP client request error
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
+    /// URL parsing error
     #[error("URL parse error: {0}")]
     UrlParse(#[from] url::ParseError),
 
+    /// Regular expression compilation error
     #[error("Regex error: {0}")]
     Regex(#[from] regex::Error),
 
+    /// Generic error with message string
     #[error("Generic error: {0}")]
     Generic(String),
 
+    /// Encryption/decryption operation error
     #[error("Encryption error: {0}")]
     Encryption(#[from] crate::encryption::EncryptionError),
 
+    /// JavaScript evaluation error (template engine, etc.)
     #[error("JavaScript error: {0}")]
     JavaScript(#[from] rquickjs::Error),
 }

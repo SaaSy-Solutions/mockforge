@@ -295,27 +295,44 @@ impl Default for ChaosEngine {
     }
 }
 
-/// Result of chaos processing
+/// Result of chaos engineering evaluation, indicating what effect to apply
 #[derive(Debug, Clone)]
 pub enum ChaosResult {
     /// No chaos effect - request should proceed normally
     Success,
     /// Inject an error response
-    Error { status_code: u16, message: String },
-    /// Inject a delay
-    Delay { delay_ms: u64 },
+    Error {
+        /// HTTP status code for the error
+        status_code: u16,
+        /// Error message to include
+        message: String,
+    },
+    /// Inject a delay before processing
+    Delay {
+        /// Delay duration in milliseconds
+        delay_ms: u64,
+    },
     /// Inject a timeout
-    Timeout { timeout_ms: u64 },
+    Timeout {
+        /// Timeout duration in milliseconds
+        timeout_ms: u64,
+    },
 }
 
-/// Chaos engine statistics
+/// Statistics for chaos engineering engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChaosStatistics {
+    /// Whether chaos engineering is enabled
     pub enabled: bool,
+    /// Error injection rate (0.0 to 1.0)
     pub error_rate: f64,
+    /// Delay injection rate (0.0 to 1.0)
     pub delay_rate: f64,
+    /// Minimum delay in milliseconds
     pub min_delay_ms: u64,
+    /// Maximum delay in milliseconds
     pub max_delay_ms: u64,
+    /// Whether to inject timeouts
     pub inject_timeouts: bool,
 }
 

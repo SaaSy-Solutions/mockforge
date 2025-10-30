@@ -188,18 +188,23 @@ pub struct WorkspaceSyncManager {
     last_sync_duration_ms: Option<u64>,
 }
 
-/// Synchronization event
+/// Synchronization event for tracking sync operations
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
-    /// Sync started
+    /// Sync operation started
     Started,
-    /// Sync progress update
-    Progress { current: usize, total: usize },
-    /// Sync completed successfully
+    /// Sync progress update with current and total items
+    Progress {
+        /// Current number of items processed
+        current: usize,
+        /// Total number of items to process
+        total: usize,
+    },
+    /// Sync completed successfully with result details
     Completed(SyncResult),
-    /// Sync failed
+    /// Sync failed with error message
     Failed(String),
-    /// Conflict detected
+    /// Conflict detected during synchronization
     ConflictDetected(SyncConflict),
 }
 

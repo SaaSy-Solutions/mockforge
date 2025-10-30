@@ -1874,13 +1874,15 @@ struct ServeArgs {
     rag_api_key: Option<String>,
     network_profile: Option<String>,
     chaos_random: bool,
-    #[allow(dead_code)]
+    // Fine-grained chaos engineering controls (future feature)
+    // TODO: Implement fine-grained chaos controls when chaos engineering is enhanced
+    #[allow(dead_code)] // TODO: Remove when chaos error rate control is implemented
     chaos_random_error_rate: f64,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: Remove when chaos delay rate control is implemented
     chaos_random_delay_rate: f64,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: Remove when chaos delay range control is implemented
     chaos_random_min_delay: u64,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: Remove when chaos delay range control is implemented
     chaos_random_max_delay: u64,
     dry_run: bool,
     progress: bool,
@@ -2685,7 +2687,7 @@ async fn handle_serve(
     };
 
     #[cfg(feature = "mqtt")]
-    let mqtt_broker = if let Some(ref _mqtt_registry) = mqtt_registry {
+    let mqtt_broker = if let Some(ref registry_ref) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
 
         // Convert core MqttConfig to mockforge_mqtt::MqttConfig
@@ -2698,9 +2700,10 @@ async fn handle_serve(
             version: mockforge_mqtt::broker::MqttVersion::default(),
         };
 
+        // MQTT registry is already Some, so we can safely clone it
         Some(Arc::new(mockforge_mqtt::MqttBroker::new(
             broker_config.clone(),
-            mqtt_registry.as_ref().unwrap().clone(),
+            registry_ref.clone(),
         )))
     } else {
         None
@@ -2830,9 +2833,19 @@ async fn handle_serve(
             tls_key_path: smtp_config.tls_key_path.clone(),
         };
 
-        // Downcast the registry
-        let smtp_reg =
-            smtp_registry.clone().downcast::<mockforge_smtp::SmtpSpecRegistry>().unwrap();
+        // Downcast the registry with proper error handling
+        let smtp_reg = match smtp_registry.clone().downcast::<mockforge_smtp::SmtpSpecRegistry>() {
+            Ok(reg) => reg,
+            Err(_) => {
+                use crate::progress::{CliError, ExitCode};
+                CliError::new(
+                    "SMTP registry type mismatch - failed to downcast registry".to_string(),
+                    ExitCode::ConfigurationError,
+                )
+                .with_suggestion("Ensure SMTP registry is properly configured and initialized".to_string())
+                .display_and_exit();
+            }
+        };
 
         Some(tokio::spawn(async move {
             println!("📧 SMTP server listening on {}:{}", smtp_config.host, smtp_config.port);
@@ -2978,13 +2991,32 @@ async fn handle_serve(
         let admin_shutdown = shutdown_token.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://localhost:{}", admin_port);
-            let addr = format!("127.0.0.1:{}", admin_port).parse().unwrap();
+
+            // Parse addresses with proper error handling
+            use crate::progress::parse_address;
+            let addr = match parse_address(&format!("127.0.0.1:{}", admin_port), "admin UI") {
+                Ok(addr) => addr,
+                Err(e) => return Err(format!("{}", e.message)),
+            };
+            let http_addr = match parse_address(&format!("127.0.0.1:{}", http_port), "HTTP server") {
+                Ok(addr) => Some(addr),
+                Err(e) => return Err(format!("{}", e.message)),
+            };
+            let ws_addr = match parse_address(&format!("127.0.0.1:{}", ws_port), "WebSocket server") {
+                Ok(addr) => Some(addr),
+                Err(e) => return Err(format!("{}", e.message)),
+            };
+            let grpc_addr = match parse_address(&format!("127.0.0.1:{}", grpc_port), "gRPC server") {
+                Ok(addr) => Some(addr),
+                Err(e) => return Err(format!("{}", e.message)),
+            };
+
             tokio::select! {
                 result = mockforge_ui::start_admin_server(
                     addr,
-                    Some(format!("127.0.0.1:{}", http_port).parse().unwrap()),
-                    Some(format!("127.0.0.1:{}", ws_port).parse().unwrap()),
-                    Some(format!("127.0.0.1:{}", grpc_port).parse().unwrap()),
+                    http_addr,
+                    ws_addr,
+                    grpc_addr,
                     None,
                     true,
                     prometheus_url,
@@ -3422,7 +3454,12 @@ async fn handle_quick(
     // Serve with graceful shutdown
     serve(listener, app)
         .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+            tokio::signal::ctrl_c()
+                .await
+                .unwrap_or_else(|e| {
+                    eprintln!("⚠️  Warning: Failed to install CTRL+C signal handler: {}", e);
+                    eprintln!("💡 Server may not shut down gracefully on SIGINT");
+                });
         })
         .await?;
 
@@ -4071,19 +4108,8 @@ async fn execute_generation(
     }
 
     // Step 4: Validate configuration
-    if config.input.spec.is_none() {
-        return Err(CliError::new(
-            "No input specification provided. Please set 'spec' in config file or use --spec flag."
-                .to_string(),
-            ExitCode::ConfigurationError,
-        )
-        .with_suggestion(
-            "Add 'spec' field to your configuration file or use --spec flag".to_string(),
-        )
-        .display_and_exit());
-    }
-
-    let spec = config.input.spec.as_ref().unwrap();
+    // Use require_registry helper (works with references) for better error handling
+    let spec = progress::require_registry(&config.input.spec, "spec")?;
 
     if !spec.exists() {
         return Err(CliError::new(
@@ -4339,20 +4365,22 @@ async fn execute_generation(
     // Build initial file path
     let mut output_file = config.output.path.join(format!("{}.{}", base_filename, extension));
 
-    // Raw mock code without banner (will be applied via process_generated_file)
-    let raw_mock_code = format!(
-        r#"pub struct GeneratedMockServer {{
-    // TODO: Implement mock server based on OpenAPI spec
-}}
+    // Generate mock server code using the codegen module
+    let codegen_config = mockforge_core::codegen::CodegenConfig {
+        mock_data_strategy: mockforge_core::codegen::MockDataStrategy::ExamplesOrRandom,
+        port: None, // Will use default 3000
+        enable_cors: false,
+        default_delay_ms: None,
+    };
 
-impl GeneratedMockServer {{
-    pub fn new() -> Self {{
-        Self {{
-        }}
-    }}
-}}
-"#
-    );
+    let raw_mock_code = mockforge_core::codegen::generate_mock_server_code(
+        &parsed_spec,
+        &extension,
+        &codegen_config,
+    )
+    .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Failed to generate mock server code: {}", e).into()
+    })?;
 
     // Create GeneratedFile for processing
     let mut generated_file = GeneratedFile {
@@ -4411,7 +4439,16 @@ mockforge serve --spec {}
         spec.display(),
         chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
         spec.display(),
-        output_file.file_name().unwrap().to_string_lossy()
+        {
+            use crate::progress::get_file_name;
+            get_file_name(&output_file).unwrap_or_else(|e| {
+                eprintln!("{}", e.message);
+                if let Some(suggestion) = e.suggestion {
+                    eprintln!("💡 {}", suggestion);
+                }
+                std::process::exit(e.exit_code as i32);
+            })
+        }
     );
 
     let readme_file = config.output.path.join("README.md");
@@ -5225,8 +5262,16 @@ async fn handle_generate_tests(
     println!("📝 Format: {}", format);
     println!("🎯 Suite name: {}", suite_name);
 
-    // Open database
-    let db = RecorderDatabase::new(database.to_str().unwrap()).await?;
+    // Open database with proper error handling for path conversion
+    use crate::progress::{CliError, ExitCode};
+    let db_path = database.to_str().ok_or_else(|| {
+        CliError::new(
+            format!("Invalid database path: {}", database.display()),
+            ExitCode::FileNotFound,
+        )
+        .with_suggestion("Ensure the database path contains only valid UTF-8 characters".to_string())
+    })?;
+    let db = RecorderDatabase::new(db_path).await?;
     println!("✅ Database opened successfully");
 
     // Parse test format

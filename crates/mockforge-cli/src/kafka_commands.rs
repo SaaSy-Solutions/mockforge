@@ -595,16 +595,14 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
                 .fetch_group_list(None, Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("List groups failed: {}", e))?;
 
-            let group = groups.groups().iter().find(|g| g.name() == group_id);
-            if group.is_none() {
-                return Err(anyhow::anyhow!("Consumer group {} not found", group_id));
-            }
+            let group = groups.groups().iter().find(|g| g.name() == group_id)
+                .ok_or_else(|| anyhow::anyhow!("Consumer group {} not found", group_id))?;
 
             println!("Consumer Group: {}", group_id);
-            println!("  State: {}", group.unwrap().state());
-            println!("  Protocol: {}", group.unwrap().protocol());
-            println!("  Protocol Type: {}", group.unwrap().protocol_type());
-            println!("  Members: {}", group.unwrap().members().len());
+            println!("  State: {}", group.state());
+            println!("  Protocol: {}", group.protocol());
+            println!("  Protocol Type: {}", group.protocol_type());
+            println!("  Members: {}", group.members().len());
 
             Ok(())
         }

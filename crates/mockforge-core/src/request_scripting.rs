@@ -47,7 +47,13 @@ pub struct ScriptEngine {
     semaphore: Arc<Semaphore>,
 }
 
-#[allow(dead_code)]
+/// JavaScript script engine for request/response processing
+///
+/// This is a placeholder implementation for future JavaScript scripting support.
+/// Currently not fully integrated into the request processing pipeline.
+///
+/// TODO: Complete JavaScript scripting integration for dynamic request/response handling
+#[allow(dead_code)] // TODO: Remove when JavaScript scripting feature is fully implemented
 impl ScriptEngine {
     /// Create a new script engine
     pub fn new() -> Self {

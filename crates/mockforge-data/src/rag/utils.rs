@@ -533,11 +533,16 @@ pub struct PerformanceMonitor {
     metrics: HashMap<String, MetricValue>,
 }
 
+/// Performance metric value types for monitoring RAG operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MetricValue {
+    /// Counter metric (monotonically increasing value)
     Counter(u64),
+    /// Gauge metric (can increase or decrease)
     Gauge(f64),
+    /// Histogram metric (distribution of values)
     Histogram(Vec<f64>),
+    /// Duration metric (time measurement)
     Duration(std::time::Duration),
 }
 

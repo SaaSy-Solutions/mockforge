@@ -360,7 +360,9 @@ impl HttpBridge {
     }
 
     /// Create a handler function for a specific gRPC method
-    #[allow(dead_code)] // Used in future HTTP bridge implementations
+    ///
+    /// TODO: Use when dynamic HTTP bridge handler creation is fully implemented
+    #[allow(dead_code)] // TODO: Remove when HTTP bridge handler factory is complete
     fn create_bridge_handler(
         &self,
         service_name: String,
@@ -432,7 +434,9 @@ impl HttpBridge {
     }
 
     /// Get bridge statistics (static method for handler)
-    #[allow(dead_code)] // Used in future HTTP bridge implementations
+    ///
+    /// TODO: Integrate into HTTP bridge admin endpoints when stats API is implemented
+    #[allow(dead_code)] // TODO: Remove when bridge stats endpoint is complete
     async fn get_stats_static(bridge: &Arc<HttpBridge>) -> axum::response::Json<serde_json::Value> {
         let stats = bridge.stats.lock().unwrap();
         axum::response::Json(serde_json::json!({

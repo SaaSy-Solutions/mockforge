@@ -244,11 +244,16 @@ pub fn apply_file_naming_template(template: &str, context: &HashMap<&str, &str>)
 }
 
 /// Context for file naming templates extracted from OpenAPI spec
+///
+/// This struct holds contextual information extracted from OpenAPI specifications
+/// that can be used to generate file names using template patterns.
 #[derive(Debug, Clone)]
 pub struct FileNamingContext {
     /// Mapping of file/operation names to their context values
+    /// Contains operation-specific values like tag, path, method, etc.
     context_map: HashMap<String, HashMap<String, String>>,
     /// Default context values when no specific mapping exists
+    /// Used as fallback when a name is not found in the context map
     defaults: HashMap<String, String>,
 }
 

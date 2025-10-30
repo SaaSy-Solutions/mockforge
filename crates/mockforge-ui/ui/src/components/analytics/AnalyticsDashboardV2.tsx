@@ -42,7 +42,22 @@ export const AnalyticsDashboardV2: React.FC = () => {
   });
 
   // Use WebSocket data if available, otherwise use REST API data
-  const currentMetrics = lastUpdate || overview;
+  // Note: MetricsUpdate from WebSocket has fewer fields than OverviewMetrics,
+  // so we prefer OverviewMetrics when available, but allow MetricsUpdate for live updates
+  const currentMetrics = overview || (lastUpdate ? {
+    total_requests: lastUpdate.total_requests,
+    total_errors: lastUpdate.total_errors,
+    error_rate: lastUpdate.error_rate,
+    avg_latency_ms: lastUpdate.avg_latency_ms,
+    p95_latency_ms: lastUpdate.p95_latency_ms,
+    p99_latency_ms: lastUpdate.p99_latency_ms,
+    active_connections: lastUpdate.active_connections,
+    total_bytes_sent: 0, // Not in MetricsUpdate
+    total_bytes_received: 0, // Not in MetricsUpdate
+    requests_per_second: lastUpdate.requests_per_second,
+    top_protocols: [], // Not in MetricsUpdate
+    top_endpoints: [], // Not in MetricsUpdate
+  } : null) as OverviewMetrics | null;
 
   return (
     <div className="space-y-6 p-6">

@@ -25,28 +25,28 @@ pub use streaming::{
     StreamingProtocolRegistry,
 };
 
-/// Protocol type enumeration
+/// Protocol type enumeration for multi-protocol support
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Protocol {
-    /// HTTP/REST protocol
+    /// HTTP/REST protocol for RESTful APIs
     Http,
-    /// GraphQL protocol
+    /// GraphQL protocol for GraphQL APIs
     GraphQL,
-    /// gRPC protocol
+    /// gRPC protocol for gRPC services
     Grpc,
-    /// WebSocket protocol
+    /// WebSocket protocol for real-time bidirectional communication
     WebSocket,
-    /// SMTP/Email protocol
+    /// SMTP/Email protocol for email communication
     Smtp,
-    /// MQTT protocol (IoT messaging)
+    /// MQTT protocol for IoT messaging and pub/sub
     Mqtt,
-    /// FTP protocol (file transfer)
+    /// FTP protocol for file transfer operations
     Ftp,
-    /// Kafka protocol (event streaming)
+    /// Kafka protocol for distributed event streaming
     Kafka,
-    /// RabbitMQ/AMQP protocol (message queuing)
+    /// RabbitMQ/AMQP protocol for message queuing
     RabbitMq,
-    /// AMQP protocol (advanced message queuing)
+    /// AMQP protocol for advanced message queuing scenarios
     Amqp,
 }
 
@@ -427,7 +427,12 @@ pub enum FixtureStatus {
     /// Generic success/failure
     Generic(bool),
     /// Custom status with code and message
-    Custom { code: i32, message: String },
+    Custom {
+        /// Custom status code
+        code: i32,
+        /// Custom status message
+        message: String,
+    },
 }
 
 fn default_true() -> bool {
@@ -689,8 +694,9 @@ impl UnifiedFixture {
     }
 }
 
-/// Middleware chain for composing multiple middleware
+/// Middleware chain for composing and executing multiple middleware in sequence
 pub struct MiddlewareChain {
+    /// Ordered list of middleware to execute
     middleware: Vec<Arc<dyn ProtocolMiddleware>>,
 }
 

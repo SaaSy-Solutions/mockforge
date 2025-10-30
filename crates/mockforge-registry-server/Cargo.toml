@@ -45,6 +45,7 @@ dotenvy = "0.15"
 ring = "0.17"
 hex = "0.4"
 base64 = "0.21"
+sha2 = "0.10"
 
 # Validation
 validator = { version = "0.18", features = ["derive"] }

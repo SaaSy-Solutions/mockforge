@@ -16,39 +16,55 @@ use std::collections::HashMap;
 static PATH_PARAM_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\{([^}]+)\}").expect("PATH_PARAM_RE regex is valid"));
 
-/// Import result for OpenAPI specs
+/// Result of importing an OpenAPI specification
 #[derive(Debug)]
 pub struct OpenApiImportResult {
+    /// Converted routes from OpenAPI paths/operations
     pub routes: Vec<MockForgeRoute>,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
+    /// Extracted specification metadata
     pub spec_info: OpenApiSpecInfo,
 }
 
 /// MockForge route structure for OpenAPI import
 #[derive(Debug, Serialize)]
 pub struct MockForgeRoute {
+    /// HTTP method
     pub method: String,
+    /// Request path (with Express-style path parameters)
     pub path: String,
+    /// Request headers
     pub headers: HashMap<String, String>,
+    /// Optional request body
     pub body: Option<String>,
+    /// Mock response for this route
     pub response: MockForgeResponse,
 }
 
 /// MockForge response structure
 #[derive(Debug, Serialize)]
 pub struct MockForgeResponse {
+    /// HTTP status code
     pub status: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body
     pub body: Value,
 }
 
 /// OpenAPI specification metadata
 #[derive(Debug)]
 pub struct OpenApiSpecInfo {
+    /// API title
     pub title: String,
+    /// API version
     pub version: String,
+    /// Optional API description
     pub description: Option<String>,
+    /// OpenAPI specification version (e.g., "3.0.3")
     pub openapi_version: String,
+    /// List of server URLs from the spec
     pub servers: Vec<String>,
 }
 

@@ -212,7 +212,12 @@ impl MockServer {
     }
 
     /// Generic endpoint handler that serves mock data based on the request
-    #[allow(dead_code)]
+    ///
+    /// This handler is kept for future use when implementing generic mock server
+    /// functionality that doesn't require pre-defined routes.
+    ///
+    /// TODO: Integrate into mock server when generic routing is implemented
+    #[allow(dead_code)] // TODO: Remove when generic handler is integrated
     async fn generic_handler(
         axum::extract::State(state): axum::extract::State<MockServerState>,
         method: axum::http::Method,
@@ -263,7 +268,9 @@ impl MockServer {
     }
 
     /// Check if two endpoints match (handles path parameters)
-    #[allow(dead_code)]
+    ///
+    /// TODO: Integrate into route matching system when advanced path parameter matching is implemented
+    #[allow(dead_code)] // TODO: Remove when route matching system is updated
     pub fn endpoints_match(pattern: &str, request: &str) -> bool {
         // Simple pattern matching - in a real implementation,
         // you'd want more sophisticated path parameter matching
@@ -288,9 +295,11 @@ impl MockServer {
 #[derive(Debug, Clone)]
 struct MockServerState {
     mock_data: Arc<MockDataResult>,
-    #[allow(dead_code)]
+    // These fields are reserved for future mock server configuration
+    // TODO: Integrate config and handlers when full mock server implementation is completed
+    #[allow(dead_code)] // TODO: Remove when config integration is complete
     config: Arc<MockServerConfig>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: Remove when handler registry is integrated
     handlers: Arc<HashMap<String, MockResponse>>,
 }
 

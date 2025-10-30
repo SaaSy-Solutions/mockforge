@@ -36,6 +36,9 @@ build-release: ## Build all crates in release mode
 test: ## Run all tests
 	cargo test --workspace
 
+test-integration: ## Run integration tests (including ignored tests)
+	cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
+
 test-coverage: ## Run tests with coverage report
 	cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 

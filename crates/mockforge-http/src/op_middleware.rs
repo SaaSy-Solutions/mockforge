@@ -7,23 +7,35 @@ use serde_json::Value;
 use crate::latency_profiles::LatencyProfiles;
 use mockforge_core::{FailureInjector, Overrides, TrafficShaper};
 
+/// Metadata for the current OpenAPI operation
 #[derive(Clone)]
 pub struct OperationMeta {
+    /// OpenAPI operation ID
     pub id: String,
+    /// Tags associated with this operation
     pub tags: Vec<String>,
+    /// API path pattern
     pub path: String,
 }
 
+/// Shared state for operation middleware
 #[derive(Clone)]
 pub struct Shared {
+    /// Latency profiles for request simulation
     pub profiles: LatencyProfiles,
+    /// Response overrides configuration
     pub overrides: Overrides,
+    /// Optional failure injector for chaos engineering
     pub failure_injector: Option<FailureInjector>,
+    /// Optional traffic shaper for bandwidth/loss simulation
     pub traffic_shaper: Option<TrafficShaper>,
+    /// Whether overrides are enabled
     pub overrides_enabled: bool,
+    /// Whether traffic shaping is enabled
     pub traffic_shaping_enabled: bool,
 }
 
+/// Middleware to add shared state to request extensions
 pub async fn add_shared_extension(
     State(shared): State<Shared>,
     mut req: Request<Body>,
@@ -33,6 +45,7 @@ pub async fn add_shared_extension(
     next.run(req).await
 }
 
+/// Middleware to apply fault injection before processing request
 pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
     let shared = req.extensions().get::<Shared>().unwrap().clone();
     let op = req.extensions().get::<OperationMeta>().cloned();
@@ -138,6 +151,12 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
     response
 }
 
+/// Apply response overrides to a JSON body based on operation metadata
+///
+/// # Arguments
+/// * `shared` - Shared middleware state containing override configuration
+/// * `op` - Optional operation metadata for override matching
+/// * `body` - JSON response body to modify in-place
 pub fn apply_overrides(shared: &Shared, op: Option<&OperationMeta>, body: &mut Value) {
     if shared.overrides_enabled {
         if let Some(op) = op {

@@ -135,7 +135,9 @@ struct ForeignKeyPattern {
     /// How to extract entity name from field name
     entity_extraction: EntityExtractionMethod,
     /// Confidence score for this pattern
-    #[allow(dead_code)] // Used in future relationship analysis
+    ///
+    /// TODO: Use confidence scoring when relationship analysis between protobuf messages is implemented
+    #[allow(dead_code)] // TODO: Remove when relationship confidence scoring is complete
     confidence: f64,
 }
 
@@ -145,10 +147,14 @@ enum EntityExtractionMethod {
     /// Remove suffix (user_id -> user)
     RemoveSuffix(String),
     /// Direct mapping
-    #[allow(dead_code)] // Used in future entity extraction
+    ///
+    /// TODO: Use when direct entity name mapping without transformation is needed
+    #[allow(dead_code)] // TODO: Remove when entity extraction feature is implemented
     Direct,
     /// Custom transform function
-    #[allow(dead_code)] // Used in future entity extraction
+    ///
+    /// TODO: Use for custom entity name transformation functions
+    #[allow(dead_code)] // TODO: Remove when custom entity extraction is implemented
     Custom(fn(&str) -> Option<String>),
 }
 

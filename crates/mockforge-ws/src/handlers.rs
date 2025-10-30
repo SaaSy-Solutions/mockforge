@@ -83,32 +83,43 @@ pub type HandlerResult<T> = Result<T, HandlerError>;
 /// Error type for handler operations
 #[derive(Debug, thiserror::Error)]
 pub enum HandlerError {
+    /// Failed to send WebSocket message
     #[error("Failed to send message: {0}")]
     SendError(String),
 
+    /// JSON parsing/serialization error
     #[error("Failed to parse JSON: {0}")]
     JsonError(#[from] serde_json::Error),
 
+    /// Pattern matching failure (e.g., route pattern)
     #[error("Pattern matching error: {0}")]
     PatternError(String),
 
+    /// Room/group operation failure
     #[error("Room operation failed: {0}")]
     RoomError(String),
 
+    /// WebSocket connection error
     #[error("Connection error: {0}")]
     ConnectionError(String),
 
+    /// Generic handler error
     #[error("Handler error: {0}")]
     Generic(String),
 }
 
-/// WebSocket message wrapper
+/// WebSocket message wrapper for different message types
 #[derive(Debug, Clone)]
 pub enum WsMessage {
+    /// Text message (UTF-8 string)
     Text(String),
+    /// Binary message (raw bytes)
     Binary(Vec<u8>),
+    /// Ping frame (connection keepalive)
     Ping(Vec<u8>),
+    /// Pong frame (response to ping)
     Pong(Vec<u8>),
+    /// Close frame (connection termination)
     Close,
 }
 

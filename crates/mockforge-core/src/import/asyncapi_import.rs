@@ -10,18 +10,26 @@ use std::collections::HashMap;
 /// Import result for AsyncAPI specs
 #[derive(Debug)]
 pub struct AsyncApiImportResult {
+    /// Converted channels from the AsyncAPI spec
     pub channels: Vec<MockForgeChannel>,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
+    /// Extracted specification metadata
     pub spec_info: AsyncApiSpecInfo,
 }
 
 /// MockForge channel structure for AsyncAPI import
 #[derive(Debug, Serialize)]
 pub struct MockForgeChannel {
+    /// Protocol used by this channel
     pub protocol: ChannelProtocol,
+    /// Channel name
     pub name: String,
+    /// Channel path/endpoint
     pub path: String,
+    /// Optional channel description
     pub description: Option<String>,
+    /// Operations available on this channel
     pub operations: Vec<ChannelOperation>,
 }
 
@@ -29,35 +37,49 @@ pub struct MockForgeChannel {
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ChannelProtocol {
+    /// WebSocket protocol
     Websocket,
+    /// MQTT protocol
     Mqtt,
+    /// Kafka protocol
     Kafka,
+    /// AMQP protocol
     Amqp,
 }
 
 /// Channel operation (subscribe/publish)
 #[derive(Debug, Serialize)]
 pub struct ChannelOperation {
+    /// Type of operation (subscribe or publish)
     pub operation_type: OperationType,
+    /// JSON schema for messages
     pub message_schema: Option<Value>,
+    /// Example message payload
     pub example_message: Option<Value>,
 }
 
-/// Operation type
+/// Operation type for channels
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OperationType {
+    /// Subscribe to messages
     Subscribe,
+    /// Publish messages
     Publish,
 }
 
 /// AsyncAPI specification metadata
 #[derive(Debug)]
 pub struct AsyncApiSpecInfo {
+    /// Specification title
     pub title: String,
+    /// Specification version
     pub version: String,
+    /// Optional specification description
     pub description: Option<String>,
+    /// AsyncAPI version used
     pub asyncapi_version: String,
+    /// List of server URLs
     pub servers: Vec<String>,
 }
 

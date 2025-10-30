@@ -150,11 +150,19 @@ paths:
 }
 
 impl OpenApiRouteRegistry {
-    /// Create a new registry from an OpenAPI spec
+    /// Create a new registry from an OpenAPI spec with default options
     pub fn new(spec: OpenApiSpec) -> Self {
         Self::new_with_env(spec)
     }
 
+    /// Create a new registry from an OpenAPI spec with environment-based options
+    ///
+    /// Options are read from environment variables:
+    /// - `MOCKFORGE_REQUEST_VALIDATION`: "off"/"warn"/"enforce" (default: "enforce")
+    /// - `MOCKFORGE_AGGREGATE_ERRORS`: "1"/"true" to aggregate errors (default: true)
+    /// - `MOCKFORGE_RESPONSE_VALIDATION`: "1"/"true" to validate responses (default: false)
+    /// - `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND`: "1"/"true" to expand templates (default: false)
+    /// - `MOCKFORGE_VALIDATION_STATUS`: HTTP status code for validation failures (optional)
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
         tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
@@ -191,7 +199,11 @@ impl OpenApiRouteRegistry {
         }
     }
 
-    /// Construct with explicit options
+    /// Create a new registry from an OpenAPI spec with explicit validation options
+    ///
+    /// # Arguments
+    /// * `spec` - OpenAPI specification
+    /// * `options` - Validation options to use
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
@@ -429,22 +441,22 @@ impl OpenApiRouteRegistry {
         segments.join("/")
     }
 
-    /// Get all routes
+    /// Get all generated routes
     pub fn routes(&self) -> &[OpenApiRoute] {
         &self.routes
     }
 
-    /// Get the OpenAPI specification
+    /// Get the OpenAPI specification used to generate routes
     pub fn spec(&self) -> &OpenApiSpec {
         &self.spec
     }
 
-    /// Get validation options
+    /// Get immutable reference to validation options
     pub fn options(&self) -> &ValidationOptions {
         &self.options
     }
 
-    /// Get mutable validation options
+    /// Get mutable reference to validation options for runtime configuration changes
     pub fn options_mut(&mut self) -> &mut ValidationOptions {
         &mut self.options
     }
@@ -506,7 +518,14 @@ impl OpenApiRouteRegistry {
         router
     }
 
-    /// Build router with injectors (latency, failure)
+    /// Build router with latency and failure injection support
+    ///
+    /// # Arguments
+    /// * `latency_injector` - Latency injector for simulating network delays
+    /// * `failure_injector` - Optional failure injector for simulating errors
+    ///
+    /// # Returns
+    /// Axum router with chaos engineering capabilities
     pub fn build_router_with_injectors(
         &self,
         latency_injector: crate::latency::LatencyInjector,
@@ -582,6 +601,13 @@ impl OpenApiRouteRegistry {
     }
 
     /// Extract path parameters from a request path by matching against known routes
+    ///
+    /// # Arguments
+    /// * `path` - Request path (e.g., "/users/123")
+    /// * `method` - HTTP method (e.g., "GET")
+    ///
+    /// # Returns
+    /// Map of parameter names to values extracted from the path
     pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {
         for route in &self.routes {
             if route.method != method {
@@ -626,7 +652,13 @@ impl OpenApiRouteRegistry {
         Some(params)
     }
 
-    /// Build router with AI generator support
+    /// Build router with AI generator support for dynamic response generation
+    ///
+    /// # Arguments
+    /// * `ai_generator` - Optional AI generator for creating dynamic responses based on request context
+    ///
+    /// # Returns
+    /// Axum router with AI-powered response generation
     pub fn build_router_with_ai(
         &self,
         ai_generator: Option<std::sync::Arc<dyn AiGenerator + Send + Sync>>,

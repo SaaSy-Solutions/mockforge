@@ -5,7 +5,8 @@
 import React from 'react';
 import { Card } from '../ui/Card';
 import { TrendingUp, TrendingDown, Activity, AlertTriangle, Zap, Database } from 'lucide-react';
-import type { OverviewMetrics, MetricsUpdate } from '@/hooks/useAnalyticsV2';
+import type { OverviewMetrics } from '@/hooks/useAnalyticsV2';
+import type { MetricsUpdate } from '@/hooks/useAnalyticsStream';
 
 interface OverviewCardsProps {
   data: OverviewMetrics | MetricsUpdate | null;

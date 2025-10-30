@@ -13,7 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-mockforge-core = "0.2.0"
+mockforge-core = { version = "0.2.0", path = "../mockforge-core" }
 tokio.workspace = true
 lapin = "2.3"
 serde.workspace = true

@@ -2,14 +2,26 @@
 use globwalk::GlobWalkerBuilder;
 use serde::Serialize;
 
+/// A single replay fixture item
 #[derive(Debug, Serialize)]
 pub struct ReplayItem {
+    /// Protocol name (http, grpc, ws)
     pub protocol: String,
+    /// OpenAPI operation ID
     pub operation_id: String,
+    /// Timestamp when the fixture was saved
     pub saved_at: String,
+    /// File system path to the fixture file
     pub path: String,
 }
 
+/// List all replay fixtures from the fixtures root directory
+///
+/// # Arguments
+/// * `fixtures_root` - Root directory containing protocol subdirectories (http, grpc, ws)
+///
+/// # Returns
+/// Vector of replay items sorted by timestamp (newest first)
 pub fn list_all(fixtures_root: &str) -> anyhow::Result<Vec<ReplayItem>> {
     let mut out = Vec::new();
     for proto in ["http", "grpc", "ws"] {

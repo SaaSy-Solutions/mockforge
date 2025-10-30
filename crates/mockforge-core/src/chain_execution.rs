@@ -25,7 +25,9 @@ use tokio::time::{timeout, Duration};
 /// Record of a chain execution with timestamp
 #[derive(Debug, Clone)]
 pub struct ExecutionRecord {
+    /// ISO 8601 timestamp when the chain was executed
     pub executed_at: String,
+    /// Result of the chain execution
     pub result: ChainExecutionResult,
 }
 
@@ -519,21 +521,29 @@ impl ChainExecutionEngine {
     }
 }
 
-/// Result of chain execution
+/// Result of executing a request chain
 #[derive(Debug, Clone)]
 pub struct ChainExecutionResult {
+    /// Unique identifier for the executed chain
     pub chain_id: String,
+    /// Overall execution status
     pub status: ChainExecutionStatus,
+    /// Total duration of chain execution in milliseconds
     pub total_duration_ms: u64,
+    /// Results of individual requests in the chain, keyed by request ID
     pub request_results: HashMap<String, ChainResponse>,
+    /// Error message if execution failed
     pub error_message: Option<String>,
 }
 
 /// Status of chain execution
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChainExecutionStatus {
+    /// All requests in the chain succeeded
     Successful,
+    /// Some requests succeeded but others failed
     PartialSuccess,
+    /// Chain execution failed
     Failed,
 }
 

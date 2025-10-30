@@ -54,6 +54,7 @@ impl Default for AuthClaims {
 }
 
 impl AuthClaims {
+    /// Create a new empty authentication claims structure
     pub fn new() -> Self {
         Self {
             sub: None,

@@ -19,26 +19,43 @@ use tracing::*;
 pub enum MockEvent {
     /// Mock was created
     MockCreated {
+        /// The created mock configuration
         mock: super::management::MockConfig,
+        /// ISO 8601 timestamp of the event
         timestamp: String,
     },
     /// Mock was updated
     MockUpdated {
+        /// The updated mock configuration
         mock: super::management::MockConfig,
+        /// ISO 8601 timestamp of the event
         timestamp: String,
     },
     /// Mock was deleted
-    MockDeleted { id: String, timestamp: String },
+    MockDeleted {
+        /// ID of the deleted mock
+        id: String,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
     /// Server statistics changed
     StatsUpdated {
+        /// Updated server statistics
         stats: super::management::ServerStats,
+        /// ISO 8601 timestamp of the event
         timestamp: String,
     },
     /// Connection established confirmation
-    Connected { message: String, timestamp: String },
+    Connected {
+        /// Connection confirmation message
+        message: String,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
 }
 
 impl MockEvent {
+    /// Create a mock created event
     pub fn mock_created(mock: super::management::MockConfig) -> Self {
         Self::MockCreated {
             mock,
@@ -46,6 +63,7 @@ impl MockEvent {
         }
     }
 
+    /// Create a mock updated event
     pub fn mock_updated(mock: super::management::MockConfig) -> Self {
         Self::MockUpdated {
             mock,
@@ -53,6 +71,7 @@ impl MockEvent {
         }
     }
 
+    /// Create a mock deleted event
     pub fn mock_deleted(id: String) -> Self {
         Self::MockDeleted {
             id,
@@ -60,6 +79,7 @@ impl MockEvent {
         }
     }
 
+    /// Create a stats updated event
     pub fn stats_updated(stats: super::management::ServerStats) -> Self {
         Self::StatsUpdated {
             stats,
@@ -67,6 +87,7 @@ impl MockEvent {
         }
     }
 
+    /// Create a connection established event
     pub fn connected(message: String) -> Self {
         Self::Connected {
             message,
@@ -83,6 +104,7 @@ pub struct WsManagementState {
 }
 
 impl WsManagementState {
+    /// Create a new WebSocket management state with broadcast channel
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(100);
         Self { tx }

@@ -83,11 +83,16 @@ pub struct BurstLossConfig {
     pub tag_overrides: HashMap<String, BurstLossOverride>,
 }
 
+/// Tag-specific burst loss configuration override
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct BurstLossOverride {
+    /// Probability of entering a loss burst (0.0 to 1.0)
     pub burst_probability: f64,
+    /// Duration of loss burst in milliseconds
     pub burst_duration_ms: u64,
+    /// Packet loss rate during burst (0.0 to 1.0)
     pub loss_rate_during_burst: f64,
+    /// Recovery time between bursts in milliseconds
     pub recovery_time_ms: u64,
 }
 
@@ -455,19 +460,25 @@ impl TrafficShaper {
     }
 }
 
-/// Bandwidth usage statistics
+/// Bandwidth usage statistics for the token bucket
 #[derive(Debug, Clone)]
 pub struct BandwidthStats {
+    /// Current number of available tokens (bytes that can be sent)
     pub current_tokens: u64,
+    /// Maximum token bucket capacity (burst allowance)
     pub capacity: u64,
+    /// Token refill rate in bytes per second
     pub refill_rate_bytes_per_sec: u64,
 }
 
 /// Burst loss state statistics
 #[derive(Debug, Clone)]
 pub struct BurstLossStats {
+    /// Whether currently in a loss burst period
     pub in_burst: bool,
+    /// Timestamp when the current burst started (if in burst)
     pub burst_start: Option<Instant>,
+    /// Timestamp when recovery period started (if recovering)
     pub recovery_start: Option<Instant>,
 }
 

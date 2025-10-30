@@ -113,7 +113,7 @@ impl TemplateEngine {
 /// Context for environment variables during template expansion
 #[derive(Debug, Clone)]
 pub struct EnvironmentTemplatingContext {
-    /// Environment variables available for substitution
+    /// Map of environment variable names to values
     pub variables: HashMap<String, String>,
 }
 
@@ -129,11 +129,14 @@ impl EnvironmentTemplatingContext {
     }
 }
 
-/// Combined templating context with both chain and environment variables
+/// Combined templating context with chain, environment, and time variables
 #[derive(Debug, Clone)]
 pub struct TemplatingContext {
+    /// Request chaining context for accessing previous request responses
     pub chain_context: Option<ChainTemplatingContext>,
+    /// Environment variable context for variable substitution
     pub env_context: Option<EnvironmentTemplatingContext>,
+    /// Virtual clock for time-based template tokens
     pub virtual_clock: Option<Arc<VirtualClock>>,
 }
 
@@ -193,12 +196,31 @@ impl TemplatingContext {
     }
 }
 
-/// Expand templating tokens in a JSON value recursively.
+/// Expand templating tokens in a JSON value recursively
+///
+/// Processes all string values in the JSON structure and expands template tokens
+/// like `{{uuid}}`, `{{now}}`, `{{faker.email}}`, etc.
+///
+/// # Arguments
+/// * `v` - JSON value to process
+///
+/// # Returns
+/// New JSON value with all template tokens expanded
 pub fn expand_tokens(v: &Value) -> Value {
     expand_tokens_with_context(v, &TemplatingContext::empty())
 }
 
-/// Expand templating tokens in a JSON value recursively with context.
+/// Expand templating tokens in a JSON value recursively with context
+///
+/// Similar to `expand_tokens` but uses the provided context for chain variables,
+/// environment variables, and virtual clock.
+///
+/// # Arguments
+/// * `v` - JSON value to process
+/// * `context` - Templating context with chain, environment, and time information
+///
+/// # Returns
+/// New JSON value with all template tokens expanded
 pub fn expand_tokens_with_context(v: &Value, context: &TemplatingContext) -> Value {
     match v {
         Value::String(s) => Value::String(expand_str_with_context(s, context)),
@@ -216,12 +238,31 @@ pub fn expand_tokens_with_context(v: &Value, context: &TemplatingContext) -> Val
     }
 }
 
-/// Expand templating tokens in a string.
+/// Expand templating tokens in a string
+///
+/// Processes template tokens in the input string and replaces them with generated values.
+/// Supports UUID, timestamps, random numbers, faker data, environment variables, and more.
+///
+/// # Arguments
+/// * `input` - String containing template tokens (e.g., "{{uuid}}", "{{now}}")
+///
+/// # Returns
+/// String with all template tokens replaced
 pub fn expand_str(input: &str) -> String {
     expand_str_with_context(input, &TemplatingContext::empty())
 }
 
 /// Expand templating tokens in a string with templating context
+///
+/// Similar to `expand_str` but uses the provided context for chain variables,
+/// environment variables, and virtual clock operations.
+///
+/// # Arguments
+/// * `input` - String containing template tokens
+/// * `context` - Templating context with chain, environment, and time information
+///
+/// # Returns
+/// String with all template tokens replaced
 pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> String {
     // Basic replacements first (fast paths)
     let mut out = input.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
@@ -289,45 +330,68 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
 // Provider wiring (optional)
 static FAKER_PROVIDER: OnceCell<Arc<dyn FakerProvider + Send + Sync>> = OnceCell::new();
 
+/// Provider trait for generating fake data in templates
+///
+/// Implement this trait to customize how fake data is generated for template tokens
+/// like `{{faker.email}}`, `{{faker.name}}`, etc.
 pub trait FakerProvider {
+    /// Generate a random UUID
     fn uuid(&self) -> String {
         uuid::Uuid::new_v4().to_string()
     }
+    /// Generate a fake email address
     fn email(&self) -> String {
         format!("user{}@example.com", rng().random_range(1000..=9999))
     }
+    /// Generate a fake person name
     fn name(&self) -> String {
         "Alex Smith".to_string()
     }
+    /// Generate a fake street address
     fn address(&self) -> String {
         "1 Main St".to_string()
     }
+    /// Generate a fake phone number
     fn phone(&self) -> String {
         "+1-555-0100".to_string()
     }
+    /// Generate a fake company name
     fn company(&self) -> String {
         "Example Inc".to_string()
     }
+    /// Generate a fake URL
     fn url(&self) -> String {
         "https://example.com".to_string()
     }
+    /// Generate a fake IP address
     fn ip(&self) -> String {
         "192.168.1.1".to_string()
     }
+    /// Generate a fake color name
     fn color(&self) -> String {
         "blue".to_string()
     }
+    /// Generate a fake word
     fn word(&self) -> String {
         "word".to_string()
     }
+    /// Generate a fake sentence
     fn sentence(&self) -> String {
         "A sample sentence.".to_string()
     }
+    /// Generate a fake paragraph
     fn paragraph(&self) -> String {
         "A sample paragraph.".to_string()
     }
 }
 
+/// Register a custom faker provider for template token generation
+///
+/// This allows you to replace the default faker implementation with a custom one
+/// that can generate more realistic or customized fake data.
+///
+/// # Arguments
+/// * `provider` - Custom faker provider implementation
 pub fn register_faker_provider(provider: Arc<dyn FakerProvider + Send + Sync>) {
     let _ = FAKER_PROVIDER.set(provider);
 }
@@ -350,7 +414,13 @@ fn replace_randint_ranges(input: &str) -> String {
     s
 }
 
-#[allow(dead_code)]
+/// Replace `{{ now+1d }}` style templates in input string
+///
+/// This is a convenience wrapper around `replace_now_offset_with_time` that uses the current time.
+/// Currently kept for future templating enhancements.
+///
+/// TODO: Integrate into full templating system when date/time placeholders are implemented
+#[allow(dead_code)] // TODO: Remove when date/time template feature is implemented
 fn replace_now_offset(input: &str) -> String {
     replace_now_offset_with_time(input, Utc::now())
 }

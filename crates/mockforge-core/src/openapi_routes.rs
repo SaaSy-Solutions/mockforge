@@ -47,25 +47,34 @@ pub struct OpenApiRouteRegistry {
     options: ValidationOptions,
 }
 
+/// Validation mode for request/response validation
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub enum ValidationMode {
+    /// Validation is disabled (no checks performed)
     Disabled,
+    /// Validation warnings are logged but do not fail requests
     #[default]
     Warn,
+    /// Validation failures return error responses
     Enforce,
 }
 
+/// Options for configuring validation behavior
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {
+    /// Validation mode for incoming requests
     pub request_mode: ValidationMode,
+    /// Whether to aggregate multiple validation errors into a single response
     pub aggregate_errors: bool,
+    /// Whether to validate outgoing responses against schemas
     pub validate_responses: bool,
+    /// Per-operation validation mode overrides (operation ID -> mode)
     pub overrides: std::collections::HashMap<String, ValidationMode>,
     /// Skip validation for request paths starting with any of these prefixes
     pub admin_skip_prefixes: Vec<String>,
-    /// Expand templating tokens in responses/examples
+    /// Expand templating tokens in responses/examples after generation
     pub response_template_expand: bool,
-    /// HTTP status for validation failures (e.g., 400 or 422)
+    /// HTTP status code to return for validation failures (e.g., 400 or 422)
     pub validation_status: Option<u16>,
 }
 
@@ -89,6 +98,14 @@ impl OpenApiRouteRegistry {
         Self::new_with_env(spec)
     }
 
+    /// Create a new registry from an OpenAPI spec with environment-based validation options
+    ///
+    /// Options are read from environment variables:
+    /// - `MOCKFORGE_REQUEST_VALIDATION`: "off"/"warn"/"enforce" (default: "enforce")
+    /// - `MOCKFORGE_AGGREGATE_ERRORS`: "1"/"true" to aggregate errors (default: true)
+    /// - `MOCKFORGE_RESPONSE_VALIDATION`: "1"/"true" to validate responses (default: false)
+    /// - `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND`: "1"/"true" to expand templates (default: false)
+    /// - `MOCKFORGE_VALIDATION_STATUS`: HTTP status code for validation failures (optional)
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
         tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
@@ -137,6 +154,10 @@ impl OpenApiRouteRegistry {
         }
     }
 
+    /// Clone this registry for validation purposes (creates an independent copy)
+    ///
+    /// This is useful when you need a separate registry instance for validation
+    /// that won't interfere with the main registry's state.
     pub fn clone_for_validation(&self) -> Self {
         OpenApiRouteRegistry {
             spec: self.spec.clone(),

@@ -5,86 +5,125 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Docker Compose service configuration
+/// Docker Compose configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockerComposeConfig {
+    /// Docker Compose file format version
     pub version: String,
+    /// Service definitions keyed by service name
     pub services: HashMap<String, ServiceConfig>,
+    /// Network definitions for service communication
     #[serde(skip_serializing_if = "Option::is_none")]
     pub networks: Option<HashMap<String, NetworkConfig>>,
+    /// Volume definitions for persistent storage
     #[serde(skip_serializing_if = "Option::is_none")]
     pub volumes: Option<HashMap<String, VolumeConfig>>,
 }
 
+/// Docker service configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceConfig {
+    /// Docker image to use for this service
     pub image: String,
+    /// Build configuration if building from source
     #[serde(skip_serializing_if = "Option::is_none")]
     pub build: Option<BuildConfig>,
+    /// Port mappings in format "host:container"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ports: Option<Vec<String>>,
+    /// Environment variables for the service
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<HashMap<String, String>>,
+    /// Volume mounts for persistent data
     #[serde(skip_serializing_if = "Option::is_none")]
     pub volumes: Option<Vec<String>>,
+    /// Networks this service is attached to
     #[serde(skip_serializing_if = "Option::is_none")]
     pub networks: Option<Vec<String>>,
+    /// Service dependencies (start order)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
+    /// Health check configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub healthcheck: Option<HealthCheckConfig>,
+    /// Override default command
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
 }
 
+/// Build configuration for building Docker images
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildConfig {
+    /// Build context directory
     pub context: String,
+    /// Path to Dockerfile (relative to context)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dockerfile: Option<String>,
+    /// Build arguments (ARG values)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub args: Option<HashMap<String, String>>,
 }
 
+/// Docker network configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
+    /// Network driver (bridge, host, overlay, etc.)
     pub driver: String,
+    /// Driver-specific options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub driver_opts: Option<HashMap<String, String>>,
 }
 
+/// Docker volume configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VolumeConfig {
+    /// Volume driver name (optional, defaults to local)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
+    /// Driver-specific options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub driver_opts: Option<HashMap<String, String>>,
 }
 
+/// Health check configuration for service monitoring
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthCheckConfig {
+    /// Health check test command (CMD format)
     pub test: Vec<String>,
+    /// Interval between health checks (e.g., "30s")
     pub interval: String,
+    /// Timeout for health check (e.g., "10s")
     pub timeout: String,
+    /// Number of consecutive failures before marking unhealthy
     pub retries: u32,
 }
 
 /// Mock service specification for docker-compose generation
 #[derive(Debug, Clone)]
 pub struct MockServiceSpec {
+    /// Service name identifier
     pub name: String,
+    /// Port number to expose
     pub port: u16,
+    /// Path to OpenAPI specification file (relative)
     pub spec_path: Option<String>,
+    /// Path to MockForge configuration file (relative)
     pub config_path: Option<String>,
 }
 
-/// Docker Compose generator
+/// Docker Compose file generator for mock services
 pub struct DockerComposeGenerator {
+    /// Name of the Docker network to create
     network_name: String,
+    /// Base Docker image to use for mock services
     base_image: String,
 }
 
 impl DockerComposeGenerator {
+    /// Create a new Docker Compose generator with a network name
+    ///
+    /// # Arguments
+    /// * `network_name` - Name of the Docker network to create
     pub fn new(network_name: String) -> Self {
         Self {
             network_name,
@@ -92,6 +131,10 @@ impl DockerComposeGenerator {
         }
     }
 
+    /// Set a custom base Docker image for generated services
+    ///
+    /// # Arguments
+    /// * `image` - Docker image name (e.g., "mockforge:1.0.0")
     pub fn with_image(mut self, image: String) -> Self {
         self.base_image = image;
         self

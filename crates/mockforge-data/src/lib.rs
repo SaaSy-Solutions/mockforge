@@ -13,7 +13,9 @@ pub mod generator;
 pub mod intelligent_mock;
 pub mod mock_generator;
 pub mod mock_server;
+/// Provider utilities for faker and data generation
 pub mod provider;
+/// RAG (Retrieval-Augmented Generation) utilities for intelligent mock data generation
 pub mod rag;
 pub mod replay_augmentation;
 pub mod schema;

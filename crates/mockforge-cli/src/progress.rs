@@ -5,6 +5,8 @@
 
 use console::{style, Style, Term};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -51,9 +53,10 @@ impl ProgressManager {
 
     /// Create a main progress bar for long-running operations
     pub fn create_main_progress(&mut self, total: u64, message: &str) -> ProgressBar {
+        // These templates are hardcoded and should never fail, but handle errors gracefully
         let style = ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-            .unwrap()
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
             .progress_chars("#>-");
 
         let progress = self.multi_progress.add(ProgressBar::new(total));
@@ -67,9 +70,11 @@ impl ProgressManager {
     /// Create a spinner for indeterminate operations
     pub fn create_spinner(&self, message: &str) -> ProgressBar {
         let spinner = self.multi_progress.add(ProgressBar::new_spinner());
-        spinner.set_style(
-            ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap(),
-        );
+        // Template is hardcoded and should never fail, but handle errors gracefully
+        let style = ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner());
+        spinner.set_style(style);
         spinner.set_message(message.to_string());
         spinner.enable_steady_tick(Duration::from_millis(100));
         spinner
@@ -123,6 +128,7 @@ pub enum LogLevel {
 }
 
 /// Enhanced error handling with structured messages
+#[derive(Debug)]
 pub struct CliError {
     pub message: String,
     pub exit_code: ExitCode,
@@ -159,10 +165,81 @@ impl CliError {
     }
 }
 
+impl std::error::Error for CliError {
+    // In modern Rust, description() is deprecated, use Display trait instead
+}
+
+impl std::fmt::Display for CliError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)?;
+        if let Some(ref suggestion) = self.suggestion {
+            write!(f, " {}", suggestion)?;
+        }
+        Ok(())
+    }
+}
+
+/// Helper function to parse socket addresses with better error messages
+pub fn parse_address(addr_str: &str, context: &str) -> Result<SocketAddr, CliError> {
+    addr_str.parse().map_err(|e| {
+        CliError::new(
+            format!("Invalid {} address '{}': {}", context, addr_str, e),
+            ExitCode::ConfigurationError,
+        )
+        .with_suggestion(format!(
+            "Ensure the address is in the correct format (e.g., '127.0.0.1:8080' or '0.0.0.0:3000')"
+        ))
+    })
+}
+
+/// Helper function to require a config value with a meaningful error
+pub fn require_config<T>(opt: Option<T>, field: &str) -> Result<T, CliError> {
+    opt.ok_or_else(|| {
+        CliError::new(
+            format!("Missing required configuration field: '{}'", field),
+            ExitCode::ConfigurationError,
+        )
+        .with_suggestion(format!(
+            "Add '{}' to your configuration file or provide it via command-line argument",
+            field
+        ))
+    })
+}
+
+/// Helper function to unwrap optional registry references with error context
+pub fn require_registry<'a, T>(opt: &'a Option<T>, registry_name: &str) -> Result<&'a T, CliError> {
+    opt.as_ref().ok_or_else(|| {
+        CliError::new(
+            format!("{} registry not available", registry_name),
+            ExitCode::ConfigurationError,
+        )
+        .with_suggestion(format!(
+            "Ensure {} is properly configured in your configuration file",
+            registry_name
+        ))
+    })
+}
+
+/// Helper function to get file name from path with error handling
+pub fn get_file_name(path: &PathBuf) -> Result<String, CliError> {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            CliError::new(
+                format!("Could not extract file name from path: {}", path.display()),
+                ExitCode::FileNotFound,
+            )
+            .with_suggestion("Ensure the path is valid and points to a file".to_string())
+        })
+}
+
 /// Utility functions for common CLI operations
 pub mod utils {
     use super::*;
+    use std::net::SocketAddr;
     use std::path::Path;
+    use std::path::PathBuf;
 
     /// Validate that a file exists and is readable
     pub fn validate_file_path(path: &Path) -> Result<(), CliError> {

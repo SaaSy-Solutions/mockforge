@@ -20,11 +20,17 @@ use tracing::*;
 /// Endpoint configuration for UI builder
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndpointConfig {
+    /// Unique identifier for the endpoint
     pub id: String,
+    /// Protocol type for this endpoint
     pub protocol: Protocol,
+    /// Human-readable endpoint name
     pub name: String,
+    /// Optional endpoint description
     pub description: Option<String>,
+    /// Whether this endpoint is currently enabled
     pub enabled: bool,
+    /// Protocol-specific configuration
     pub config: EndpointProtocolConfig,
 }
 
@@ -32,14 +38,23 @@ pub struct EndpointConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
+    /// HTTP/REST protocol
     Http,
+    /// gRPC protocol
     Grpc,
+    /// WebSocket protocol
     Websocket,
+    /// GraphQL protocol
     Graphql,
+    /// MQTT protocol
     Mqtt,
+    /// SMTP protocol
     Smtp,
+    /// Kafka protocol
     Kafka,
+    /// AMQP protocol
     Amqp,
+    /// FTP protocol
     Ftp,
 }
 
@@ -47,35 +62,50 @@ pub enum Protocol {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EndpointProtocolConfig {
+    /// HTTP endpoint configuration
     Http(HttpEndpointConfig),
+    /// gRPC endpoint configuration
     Grpc(GrpcEndpointConfig),
+    /// WebSocket endpoint configuration
     Websocket(WebsocketEndpointConfig),
 }
 
 /// HTTP endpoint configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpEndpointConfig {
+    /// HTTP method (GET, POST, PUT, etc.)
     pub method: String,
+    /// API path pattern
     pub path: String,
+    /// Optional request validation and schema configuration
     pub request: Option<HttpRequestConfig>,
+    /// Response configuration
     pub response: HttpResponseConfig,
+    /// Optional behavior configuration (latency, failure injection, etc.)
     pub behavior: Option<EndpointBehavior>,
 }
 
 /// HTTP request configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpRequestConfig {
+    /// Optional validation settings
     pub validation: Option<ValidationConfig>,
+    /// Optional custom request headers
     pub headers: Option<Vec<HeaderConfig>>,
+    /// Optional query parameter definitions
     pub query_params: Option<Vec<QueryParamConfig>>,
+    /// Optional JSON schema for request body
     pub body_schema: Option<serde_json::Value>,
 }
 
 /// HTTP response configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpResponseConfig {
+    /// HTTP status code to return
     pub status: u16,
+    /// Optional custom response headers
     pub headers: Option<Vec<HeaderConfig>>,
+    /// Response body configuration
     pub body: ResponseBody,
 }
 
@@ -83,31 +113,54 @@ pub struct HttpResponseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ResponseBody {
-    Static { content: serde_json::Value },
-    Template { template: String },
-    Faker { schema: serde_json::Value },
-    AI { prompt: String },
+    /// Static JSON response content
+    Static {
+        /// JSON value to return
+        content: serde_json::Value,
+    },
+    /// Template-based response with variable expansion
+    Template {
+        /// Template string with variables (e.g., "{{uuid}}", "{{now}}")
+        template: String,
+    },
+    /// Faker-generated response from schema
+    Faker {
+        /// JSON schema for data generation
+        schema: serde_json::Value,
+    },
+    /// AI-generated response
+    AI {
+        /// Prompt for AI generation
+        prompt: String,
+    },
 }
 
 /// Header configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeaderConfig {
+    /// Header name
     pub name: String,
+    /// Header value
     pub value: String,
 }
 
 /// Query parameter configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryParamConfig {
+    /// Parameter name
     pub name: String,
+    /// Whether this parameter is required
     pub required: bool,
+    /// Optional JSON schema for validation
     pub schema: Option<serde_json::Value>,
 }
 
 /// Validation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationConfig {
+    /// Validation mode (off, warn, or enforce)
     pub mode: ValidationMode,
+    /// Optional JSON schema for validation
     pub schema: Option<serde_json::Value>,
 }
 
@@ -115,113 +168,176 @@ pub struct ValidationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ValidationMode {
+    /// Validation disabled
     Off,
+    /// Validation enabled but only warns on errors
     Warn,
+    /// Validation enabled and rejects invalid requests
     Enforce,
 }
 
 /// Endpoint behavior configuration (chaos engineering)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndpointBehavior {
+    /// Optional latency injection configuration
     pub latency: Option<LatencyConfig>,
+    /// Optional failure injection configuration
     pub failure: Option<FailureConfig>,
+    /// Optional traffic shaping configuration
     pub traffic_shaping: Option<TrafficShapingConfig>,
 }
 
 /// Latency configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LatencyConfig {
+    /// Base latency in milliseconds
     pub base_ms: u64,
+    /// Random jitter to add to base latency (milliseconds)
     pub jitter_ms: u64,
+    /// Distribution type for latency simulation
     pub distribution: LatencyDistribution,
 }
 
-/// Latency distribution
+/// Latency distribution type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LatencyDistribution {
+    /// Fixed latency (base + uniform jitter)
     Fixed,
-    Normal { std_dev_ms: f64 },
-    Pareto { shape: f64 },
+    /// Normal/Gaussian distribution
+    Normal {
+        /// Standard deviation in milliseconds
+        std_dev_ms: f64,
+    },
+    /// Pareto distribution (for realistic network simulation)
+    Pareto {
+        /// Shape parameter for Pareto distribution
+        shape: f64,
+    },
 }
 
 /// Failure configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailureConfig {
+    /// Error injection rate (0.0 to 1.0, where 1.0 = 100%)
     pub error_rate: f64,
+    /// List of HTTP status codes to randomly return on failure
     pub status_codes: Vec<u16>,
+    /// Optional custom error message
     pub error_message: Option<String>,
 }
 
 /// Traffic shaping configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrafficShapingConfig {
+    /// Optional bandwidth limit in bytes per second
     pub bandwidth_limit_bps: Option<u64>,
+    /// Optional packet loss rate (0.0 to 1.0)
     pub packet_loss_rate: Option<f64>,
 }
 
 /// gRPC endpoint configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcEndpointConfig {
+    /// gRPC service name
     pub service: String,
+    /// gRPC method name
     pub method: String,
+    /// Path to proto file
     pub proto_file: String,
+    /// Request message type name
     pub request_type: String,
+    /// Response message type name
     pub response_type: String,
+    /// Response configuration
     pub response: GrpcResponseConfig,
+    /// Optional behavior configuration
     pub behavior: Option<EndpointBehavior>,
 }
 
 /// gRPC response configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcResponseConfig {
+    /// Response body configuration
     pub body: ResponseBody,
+    /// Optional metadata (gRPC headers)
     pub metadata: Option<Vec<HeaderConfig>>,
 }
 
 /// WebSocket endpoint configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebsocketEndpointConfig {
+    /// WebSocket connection path
     pub path: String,
+    /// Action to perform when connection is established
     pub on_connect: Option<WebsocketAction>,
+    /// Action to perform when message is received
     pub on_message: Option<WebsocketAction>,
+    /// Action to perform when connection is closed
     pub on_disconnect: Option<WebsocketAction>,
+    /// Optional behavior configuration
     pub behavior: Option<EndpointBehavior>,
 }
 
-/// WebSocket action
+/// WebSocket action type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WebsocketAction {
-    Send { message: ResponseBody },
-    Broadcast { message: ResponseBody },
+    /// Send a message to the client
+    Send {
+        /// Message body to send
+        message: ResponseBody,
+    },
+    /// Broadcast a message to all connected clients
+    Broadcast {
+        /// Message body to broadcast
+        message: ResponseBody,
+    },
+    /// Echo received messages back to sender
     Echo,
-    Close { code: u16, reason: String },
+    /// Close the connection
+    Close {
+        /// WebSocket close code
+        code: u16,
+        /// Close reason message
+        reason: String,
+    },
 }
 
 /// Configuration validation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
+    /// Whether the configuration is valid
     pub valid: bool,
+    /// List of validation errors if any
     pub errors: Vec<ValidationError>,
+    /// List of validation warnings if any
     pub warnings: Vec<String>,
 }
 
 /// Validation error
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationError {
+    /// Field name that failed validation
     pub field: String,
+    /// Error message describing the issue
     pub message: String,
 }
 
 /// UI Builder state
 #[derive(Clone)]
 pub struct UIBuilderState {
+    /// Collection of endpoint configurations
     pub endpoints: Arc<RwLock<Vec<EndpointConfig>>>,
+    /// Server configuration
     pub server_config: Arc<RwLock<ServerConfig>>,
 }
 
 impl UIBuilderState {
+    /// Create a new UI builder state
+    ///
+    /// # Arguments
+    /// * `server_config` - Server configuration for the mock server
     pub fn new(server_config: ServerConfig) -> Self {
         Self {
             endpoints: Arc::new(RwLock::new(Vec::new())),

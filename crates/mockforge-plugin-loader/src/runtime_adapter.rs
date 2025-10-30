@@ -47,12 +47,16 @@ pub struct RemoteRuntimeConfig {
     pub auth: Option<RemoteAuthConfig>,
 }
 
+/// Protocol for remote plugin communication
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoteProtocol {
+    /// HTTP/REST protocol
     Http,
+    /// gRPC protocol
     Grpc,
 }
 
+/// Authentication configuration for remote plugin runtime
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteAuthConfig {
     /// Authentication type (bearer, api_key, etc.)
@@ -176,6 +180,7 @@ impl RuntimeAdapterFactory {
 // Rust Runtime Adapter (Existing Implementation)
 // ============================================================================
 
+/// WASM runtime adapter for plugins compiled from Rust
 pub struct RustAdapter {
     plugin_id: PluginId,
     engine: Arc<Engine>,
@@ -190,6 +195,14 @@ struct WasmRuntime {
 }
 
 impl RustAdapter {
+    /// Create a new Rust runtime adapter
+    ///
+    /// # Arguments
+    /// * `plugin_id` - Unique identifier for the plugin
+    /// * `wasm_bytes` - WebAssembly binary bytes
+    ///
+    /// # Returns
+    /// `Ok(RustAdapter)` on success, `Err(PluginError)` if WASM module cannot be loaded
     pub fn new(plugin_id: PluginId, wasm_bytes: Vec<u8>) -> Result<Self, PluginError> {
         let engine = Arc::new(Engine::default());
         let module = Module::from_binary(&engine, &wasm_bytes)
@@ -406,6 +419,7 @@ impl RuntimeAdapter for RustAdapter {
 // TinyGo Runtime Adapter
 // ============================================================================
 
+/// WASM runtime adapter for plugins compiled from TinyGo
 pub struct TinyGoAdapter {
     plugin_id: PluginId,
     engine: Arc<Engine>,
@@ -414,6 +428,14 @@ pub struct TinyGoAdapter {
 }
 
 impl TinyGoAdapter {
+    /// Create a new TinyGo runtime adapter
+    ///
+    /// # Arguments
+    /// * `plugin_id` - Unique identifier for the plugin
+    /// * `wasm_bytes` - WebAssembly binary bytes from TinyGo compilation
+    ///
+    /// # Returns
+    /// `Ok(TinyGoAdapter)` on success, `Err(PluginError)` if WASM module cannot be loaded
     pub fn new(plugin_id: PluginId, wasm_bytes: Vec<u8>) -> Result<Self, PluginError> {
         let engine = Arc::new(Engine::default());
         let module = Module::from_binary(&engine, &wasm_bytes).map_err(|e| {
@@ -638,6 +660,7 @@ impl RuntimeAdapter for TinyGoAdapter {
 // AssemblyScript Runtime Adapter
 // ============================================================================
 
+/// WASM runtime adapter for plugins compiled from AssemblyScript
 pub struct AssemblyScriptAdapter {
     plugin_id: PluginId,
     engine: Arc<Engine>,
@@ -646,6 +669,14 @@ pub struct AssemblyScriptAdapter {
 }
 
 impl AssemblyScriptAdapter {
+    /// Create a new AssemblyScript runtime adapter
+    ///
+    /// # Arguments
+    /// * `plugin_id` - Unique identifier for the plugin
+    /// * `wasm_bytes` - WebAssembly binary bytes from AssemblyScript compilation
+    ///
+    /// # Returns
+    /// `Ok(AssemblyScriptAdapter)` on success, `Err(PluginError)` if WASM module cannot be loaded
     pub fn new(plugin_id: PluginId, wasm_bytes: Vec<u8>) -> Result<Self, PluginError> {
         let engine = Arc::new(Engine::default());
         let module = Module::from_binary(&engine, &wasm_bytes).map_err(|e| {
@@ -878,6 +909,7 @@ impl RuntimeAdapter for AssemblyScriptAdapter {
 // Remote Runtime Adapter (HTTP/gRPC)
 // ============================================================================
 
+/// Runtime adapter for plugins running on remote servers (HTTP or gRPC)
 pub struct RemoteAdapter {
     plugin_id: PluginId,
     config: RemoteRuntimeConfig,
@@ -885,6 +917,14 @@ pub struct RemoteAdapter {
 }
 
 impl RemoteAdapter {
+    /// Create a new remote runtime adapter
+    ///
+    /// # Arguments
+    /// * `plugin_id` - Unique identifier for the plugin
+    /// * `config` - Remote runtime configuration (URL, protocol, auth, etc.)
+    ///
+    /// # Returns
+    /// `Ok(RemoteAdapter)` on success, `Err(PluginError)` if HTTP client cannot be created
     pub fn new(plugin_id: PluginId, config: RemoteRuntimeConfig) -> Result<Self, PluginError> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(config.timeout_ms))

@@ -12,9 +12,12 @@ keywords = ["plugin", "loader", "wasm", "security", "sandbox"]
 categories = ["development-tools", "api-bindings"]
 description = "Plugin loader with security sandboxing and validation for MockForge"
 
+[lints.rust]
+missing_docs = "deny"
+
 [dependencies]
 # Plugin core types and traits
-mockforge-plugin-core = "0.2.0"
+mockforge-plugin-core = { version = "0.2.0", path = "../mockforge-plugin-core" }
 
 # Serialization
 serde.workspace = true

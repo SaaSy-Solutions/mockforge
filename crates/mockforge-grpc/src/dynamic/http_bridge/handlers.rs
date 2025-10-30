@@ -17,10 +17,14 @@ use tracing::warn;
 /// Stream handler for server-sent events
 pub struct StreamHandler;
 
+/// Message for streaming responses (SSE)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StreamingMessage {
+    /// Type of event (e.g., "message", "error", "complete")
     pub event_type: String,
+    /// Event data payload
     pub data: Value,
+    /// Optional metadata key-value pairs
     pub metadata: std::collections::HashMap<String, String>,
 }
 

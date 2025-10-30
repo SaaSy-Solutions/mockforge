@@ -11,6 +11,9 @@ documentation.workspace = true
 keywords = ["faker", "data-generation", "synthetic-data", "testing", "mock"]
 categories = ["development-tools::testing", "data-structures"]
 
+[lints.rust]
+missing_docs = "deny"
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

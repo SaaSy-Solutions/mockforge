@@ -205,10 +205,14 @@ pub mod ai_response;
 pub mod cache;
 pub mod chain_execution;
 pub mod chaos_utilities;
+pub mod codegen;
+/// Collection export utilities for exporting mock data in various formats
 pub mod collection_export;
 pub mod conditions;
 pub mod config;
+/// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
+/// Docker Compose integration for containerized mock deployments
 pub mod docker_compose;
 pub mod encryption;
 pub mod error;

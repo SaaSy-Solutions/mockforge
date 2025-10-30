@@ -11,6 +11,9 @@ documentation.workspace = true
 keywords = ["websocket", "ws", "api", "mock", "testing"]
 categories = ["development-tools::testing", "web-programming::websocket"]
 
+[lints.rust]
+missing_docs = "deny"
+
 [dependencies]
 axum = { workspace = true }
 tokio = { workspace = true }
@@ -25,8 +28,8 @@ chrono = { workspace = true }
 fastrand = "2.0"
 async-trait = { workspace = true }
 thiserror = "2.0"
-mockforge-core = "0.2.0"
-mockforge-data = "0.2.0"
+mockforge-core = { version = "0.2.0", path = "../mockforge-core" }
+mockforge-data = { version = "0.2.0", path = "../mockforge-data" }
 mockforge-observability = { version = "0.2.0", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }
 opentelemetry = "0.21"

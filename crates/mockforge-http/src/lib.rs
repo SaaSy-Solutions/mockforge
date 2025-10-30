@@ -167,19 +167,29 @@ pub mod auth;
 pub mod chain_handlers;
 pub mod coverage;
 pub mod http_tracing_middleware;
+/// Latency profile configuration for HTTP request simulation
 pub mod latency_profiles;
+/// Management API for server control and monitoring
 pub mod management;
+/// WebSocket-based management API for real-time updates
 pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
 pub mod op_middleware;
+/// Quick mock generation utilities
 pub mod quick_mock;
+/// RAG-powered AI response generation
 pub mod rag_ai_generator;
+/// Replay listing and fixture management
 pub mod replay_listing;
 pub mod request_logging;
+/// Specification import API for OpenAPI and AsyncAPI
 pub mod spec_import;
+/// Server-Sent Events for streaming logs and metrics
 pub mod sse;
+/// Token response utilities
 pub mod token_response;
+/// UI Builder API for low-code mock endpoint creation
 pub mod ui_builder;
 
 // Re-export AI handler utilities
@@ -227,18 +237,26 @@ use tracing::*;
 /// Route info for storing in state
 #[derive(Clone)]
 pub struct RouteInfo {
+    /// HTTP method (GET, POST, PUT, etc.)
     pub method: String,
+    /// API path pattern (e.g., "/api/users/{id}")
     pub path: String,
+    /// OpenAPI operation ID if available
     pub operation_id: Option<String>,
+    /// Operation summary from OpenAPI spec
     pub summary: Option<String>,
+    /// Operation description from OpenAPI spec
     pub description: Option<String>,
+    /// List of parameter names for this route
     pub parameters: Vec<String>,
 }
 
 /// Shared state for tracking OpenAPI routes
 #[derive(Clone)]
 pub struct HttpServerState {
+    /// List of registered routes from OpenAPI spec
     pub routes: Vec<RouteInfo>,
+    /// Optional global rate limiter for request throttling
     pub rate_limiter: Option<std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>>,
 }
 
@@ -249,6 +267,7 @@ impl Default for HttpServerState {
 }
 
 impl HttpServerState {
+    /// Create a new empty HTTP server state
     pub fn new() -> Self {
         Self {
             routes: Vec::new(),
@@ -256,6 +275,7 @@ impl HttpServerState {
         }
     }
 
+    /// Create HTTP server state with pre-configured routes
     pub fn with_routes(routes: Vec<RouteInfo>) -> Self {
         Self {
             routes,
@@ -263,6 +283,7 @@ impl HttpServerState {
         }
     }
 
+    /// Add a rate limiter to the HTTP server state
     pub fn with_rate_limiter(
         mut self,
         rate_limiter: std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>,

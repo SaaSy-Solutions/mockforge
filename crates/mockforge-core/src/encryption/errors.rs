@@ -251,32 +251,32 @@ impl EncryptionError {
     }
 }
 
-/// Error severity levels
+/// Error severity levels for encryption operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ErrorSeverity {
-    /// Informational messages
+    /// Informational messages (non-fatal)
     Info,
-    /// Low severity errors
+    /// Low severity errors (minor issues)
     Low,
-    /// Medium severity errors
+    /// Medium severity errors (issues that should be addressed)
     Medium,
-    /// High severity errors
+    /// High severity errors (significant problems)
     High,
-    /// Critical severity errors
+    /// Critical severity errors (blocks operation)
     Critical,
 }
 
 /// Result type alias for encryption operations
 pub type EncryptionResult<T> = Result<T, EncryptionError>;
 
-/// Error context for better debugging
+/// Error context for enhanced debugging and error reporting
 #[derive(Debug, Clone)]
 pub struct ErrorContext {
-    /// Operation that failed
+    /// Name of the encryption operation that failed
     pub operation: String,
-    /// Additional context information
+    /// Additional context information (key-value pairs)
     pub context: HashMap<String, String>,
-    /// Timestamp when error occurred
+    /// Timestamp when the error occurred
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
@@ -297,12 +297,12 @@ impl ErrorContext {
     }
 }
 
-/// Enhanced error with context
+/// Enhanced encryption error with additional debugging context
 #[derive(Debug)]
 pub struct ContextualError {
-    /// The underlying encryption error
+    /// The underlying encryption error that occurred
     pub error: EncryptionError,
-    /// Additional context information
+    /// Additional context information for debugging
     pub context: ErrorContext,
 }
 
@@ -322,21 +322,23 @@ impl std::error::Error for ContextualError {
     }
 }
 
-/// Error recovery strategies
+/// Error recovery strategies for handling encryption failures
 #[derive(Debug, Clone)]
 pub enum ErrorRecoveryStrategy {
     /// Retry with exponential backoff
     RetryWithBackoff {
+        /// Maximum number of retry attempts
         max_attempts: usize,
+        /// Base delay in milliseconds between retries
         base_delay_ms: u64,
     },
-    /// Use fallback encryption method
+    /// Use fallback encryption method (e.g., different algorithm)
     FallbackMethod,
-    /// Skip encryption for this operation
+    /// Skip encryption for this operation (data stored unencrypted)
     SkipEncryption,
-    /// Request user intervention
+    /// Request user intervention to resolve the error
     ManualIntervention,
-    /// Fail fast
+    /// Fail fast and return error immediately (no retry)
     FailFast,
 }
 

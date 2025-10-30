@@ -20,14 +20,22 @@ use tracing::*;
 /// Mock configuration representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MockConfig {
+    /// Unique identifier for the mock
     pub id: String,
+    /// Human-readable name for the mock
     pub name: String,
+    /// HTTP method (GET, POST, etc.)
     pub method: String,
+    /// API path pattern to match
     pub path: String,
+    /// Response configuration
     pub response: MockResponse,
+    /// Whether this mock is currently enabled
     pub enabled: bool,
+    /// Optional latency to inject in milliseconds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<u64>,
+    /// Optional HTTP status code override
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_code: Option<u16>,
 }
@@ -35,7 +43,9 @@ pub struct MockConfig {
 /// Mock response configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MockResponse {
+    /// Response body as JSON
     pub body: serde_json::Value,
+    /// Optional custom response headers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<std::collections::HashMap<String, String>>,
 }
@@ -43,19 +53,28 @@ pub struct MockResponse {
 /// Server statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerStats {
+    /// Server uptime in seconds
     pub uptime_seconds: u64,
+    /// Total number of requests processed
     pub total_requests: u64,
+    /// Number of active mock configurations
     pub active_mocks: usize,
+    /// Number of currently enabled mocks
     pub enabled_mocks: usize,
+    /// Number of registered API routes
     pub registered_routes: usize,
 }
 
 /// Server configuration info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
+    /// MockForge version string
     pub version: String,
+    /// Server port number
     pub port: u16,
+    /// Whether an OpenAPI spec is loaded
     pub has_openapi_spec: bool,
+    /// Optional path to the OpenAPI spec file
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_path: Option<String>,
 }
@@ -63,19 +82,33 @@ pub struct ServerConfig {
 /// Shared state for the management API
 #[derive(Clone)]
 pub struct ManagementState {
+    /// Collection of mock configurations
     pub mocks: Arc<RwLock<Vec<MockConfig>>>,
+    /// Optional OpenAPI specification
     pub spec: Option<Arc<OpenApiSpec>>,
+    /// Optional path to the OpenAPI spec file
     pub spec_path: Option<String>,
+    /// Server port number
     pub port: u16,
+    /// Server start time for uptime calculation
     pub start_time: std::time::Instant,
+    /// Counter for total requests processed
     pub request_counter: Arc<RwLock<u64>>,
+    /// Optional SMTP registry for email mocking
     #[cfg(feature = "smtp")]
     pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
+    /// Optional MQTT broker for message mocking
     #[cfg(feature = "mqtt")]
     pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
 }
 
 impl ManagementState {
+    /// Create a new management state
+    ///
+    /// # Arguments
+    /// * `spec` - Optional OpenAPI specification
+    /// * `spec_path` - Optional path to the OpenAPI spec file
+    /// * `port` - Server port number
     pub fn new(spec: Option<Arc<OpenApiSpec>>, spec_path: Option<String>, port: u16) -> Self {
         Self {
             mocks: Arc::new(RwLock::new(Vec::new())),
@@ -219,7 +252,9 @@ async fn health_check() -> Json<serde_json::Value> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ExportFormat {
+    /// JSON format
     Json,
+    /// YAML format
     Yaml,
 }
 

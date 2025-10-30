@@ -27,8 +27,11 @@ members = [
     "crates/mockforge-kafka",
     "examples/plugins/response-graphql",
     "examples/test-integration",
-    "test_openapi_demo"
-, "crates/mockforge-analytics", "crates/mockforge-sdk"]
+    "test_openapi_demo",
+    "crates/mockforge-analytics",
+    "crates/mockforge-sdk",
+    "tests"  # Integration tests package
+]
 exclude = [
     "crates/mockforge-registry-server",
     "temp-publish"

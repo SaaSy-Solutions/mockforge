@@ -175,7 +175,17 @@ pub mod dynamic;
 pub mod reflection;
 pub mod registry;
 
-// Include generated proto code
+/// Generated Protocol Buffer code from .proto files
+///
+/// This module contains auto-generated Rust code from Protocol Buffer definitions.
+/// The generated code provides message types and service stubs for gRPC operations.
+///
+/// # Note
+///
+/// The generated code in this module is excluded from missing documentation checks
+/// as it is automatically generated from `.proto` files and documentation should
+/// be added to the source `.proto` files instead.
+#[allow(missing_docs)]
 pub mod generated {
     // Include all generated proto files
     tonic::include_proto!("mockforge.greeter");

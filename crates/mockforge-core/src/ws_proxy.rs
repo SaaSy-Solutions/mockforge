@@ -152,9 +152,10 @@ fn tungstenite_to_axum(msg: TungsteniteMessage) -> AxumMessage {
     }
 }
 
-/// WebSocket proxy handler for tunneling connections to upstream
+/// WebSocket proxy handler for tunneling connections to upstream services
 #[derive(Clone)]
 pub struct WsProxyHandler {
+    /// WebSocket proxy configuration
     pub config: WsProxyConfig,
 }
 
