@@ -98,9 +98,9 @@ dependencies = [
 
 [[package]]
 name = "aho-corasick"
-version = "1.1.3"
+version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e60d3430d3a69478ad0993f19238d2df97c507009a52b3c10addcd7f6bcb916"
+checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
 dependencies = [
  "memchr",
 ]
@@ -395,13 +395,12 @@ dependencies = [
 
 [[package]]
 name = "assert_cmd"
-version = "2.0.17"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bd389a4b2970a01282ee455294913c0a43724daedcd1a24c3eb0ec1c1320b66"
+checksum = "bcbb6924530aa9e0432442af08bbcafdad182db80d2e560da42a6d442535bf85"
 dependencies = [
  "anstyle",
  "bstr",
- "doc-comment",
  "libc",
  "predicates",
  "predicates-core",
@@ -1098,9 +1097,9 @@ dependencies = [
 
 [[package]]
 name = "borrow-or-share"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eeab4423108c5d7c744f4d234de88d18d636100093ae04caf4825134b9c3a32"
+checksum = "8fa326467c5d528c03e479661320269e7716d6b7d5d49bafd30890ce0c725696"
 
 [[package]]
 name = "brotli"
@@ -1284,9 +1283,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.43"
+version = "1.2.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "739eb0f94557554b3ca9a86d2d37bebd49c5e6d0c1d2bda35ba5bdac830befc2"
+checksum = "37521ac7aabe3d13122dc382493e20c9416f299d2ccd5b3a5340a2570cdeb0f3"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1436,9 +1435,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.50"
+version = "4.5.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c2cfd7bf8a6017ddaa4e32ffe7403d547790db06bd171c1c53926faab501623"
+checksum = "4c26d721170e0295f191a69bd9a1f93efcdb0aff38684b61ab5750468972e5f5"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1446,9 +1445,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.50"
+version = "4.5.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a4c05b9e80c5ccd3a7ef080ad7b6ba7d6fc00a985b8b157197075677c82c7a0"
+checksum = "75835f0c7bf681bfd05abe44e965760fea999a5286c6eb2d59883634fd02011a"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1458,9 +1457,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.5.59"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2348487adcd4631696ced64ccdb40d38ac4d31cae7f2eec8817fcea1b9d1c43c"
+checksum = "8e602857739c5a4291dfa33b5a298aeac9006185229a700e5810a3ef7272d971"
 dependencies = [
  "clap",
 ]
@@ -3870,9 +3869,9 @@ dependencies = [
 
 [[package]]
 name = "ignore"
-version = "0.4.24"
+version = "0.4.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81776e6f9464432afcc28d03e52eb101c93b6f0566f52aef2427663e700f0403"
+checksum = "d3d782a365a015e0f5c04902246139249abf769125006fbe7649e2ee88169b4a"
 dependencies = [
  "crossbeam-deque",
  "globset",
@@ -4268,9 +4267,9 @@ dependencies = [
 
 [[package]]
 name = "lazy-regex"
-version = "3.4.1"
+version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60c7310b93682b36b98fa7ea4de998d3463ccbebd94d935d6b48ba5b6ffa7126"
+checksum = "191898e17ddee19e60bccb3945aa02339e81edd4a8c50e21fd4d48cdecda7b29"
 dependencies = [
  "lazy-regex-proc_macros",
  "once_cell",
@@ -4279,9 +4278,9 @@ dependencies = [
 
 [[package]]
 name = "lazy-regex-proc_macros"
-version = "3.4.1"
+version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba01db5ef81e17eb10a5e0f2109d1b3a3e29bac3070fdbd7d156bf7dbd206a1"
+checksum = "c35dc8b0da83d1a9507e12122c80dea71a9c7c613014347392483a83ea593e04"
 dependencies = [
  "proc-macro2",
  "quote 1.0.41",
@@ -4762,14 +4761,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "criterion",
  "futures",
  "lapin",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "regex",
  "serde",
  "serde_json",
@@ -4781,7 +4780,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4802,14 +4801,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "colored 2.2.0",
  "handlebars 6.3.2",
  "indicatif",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-recorder",
  "mockito",
  "openapiv3",
@@ -4826,7 +4825,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4861,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4879,8 +4878,8 @@ dependencies = [
  "lapin",
  "mockforge-amqp",
  "mockforge-bench",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-ftp",
  "mockforge-graphql",
  "mockforge-grpc",
@@ -4888,7 +4887,7 @@ dependencies = [
  "mockforge-kafka",
  "mockforge-mqtt",
  "mockforge-observability",
- "mockforge-plugin-core 0.2.1",
+ "mockforge-plugin-core 0.2.2",
  "mockforge-plugin-loader",
  "mockforge-recorder",
  "mockforge-smtp",
@@ -4915,7 +4914,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "argon2",
@@ -4928,7 +4927,7 @@ dependencies = [
  "futures",
  "hyper 1.7.0",
  "jsonwebtoken",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "parking_lot",
  "serde",
  "serde_json",
@@ -5001,7 +5000,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -5085,7 +5084,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5117,7 +5116,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5127,7 +5126,7 @@ dependencies = [
  "handlebars 6.3.2",
  "libunftp",
  "mime_guess",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "rand 0.9.2",
  "regex",
  "serde",
@@ -5143,7 +5142,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -5151,8 +5150,8 @@ dependencies = [
  "async-trait",
  "axum 0.8.6",
  "indexmap 2.12.0",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-observability",
  "mockforge-tracing",
  "notify 7.0.0",
@@ -5174,7 +5173,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum 0.8.6",
  "base64 0.22.1",
@@ -5183,8 +5182,8 @@ dependencies = [
  "futures",
  "futures-util",
  "http 1.3.1",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-observability",
  "mockforge-tracing",
  "once_cell",
@@ -5214,7 +5213,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5234,11 +5233,11 @@ dependencies = [
  "jsonpath",
  "jsonwebtoken",
  "mime_guess",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-mqtt",
  "mockforge-observability",
- "mockforge-plugin-core 0.2.1",
+ "mockforge-plugin-core 0.2.2",
  "mockforge-smtp",
  "mockforge-tracing",
  "mockforge-ws",
@@ -5274,7 +5273,7 @@ version = "0.1.0"
 dependencies = [
  "axum 0.8.6",
  "futures-util",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "mockforge-http",
  "mockforge-test",
  "reqwest 0.12.24",
@@ -5287,13 +5286,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "criterion",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "rand 0.9.2",
  "rdkafka",
  "regex",
@@ -5309,13 +5308,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "criterion",
  "futures",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "regex",
  "rumqttc",
  "rumqttd",
@@ -5331,7 +5330,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum 0.8.6",
  "once_cell",
@@ -5349,7 +5348,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5400,7 +5399,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5429,7 +5428,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5440,7 +5439,7 @@ dependencies = [
  "git2",
  "hex",
  "indicatif",
- "mockforge-plugin-core 0.2.1",
+ "mockforge-plugin-core 0.2.2",
  "rand 0.9.2",
  "regex",
  "reqwest 0.12.24",
@@ -5467,7 +5466,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -5491,7 +5490,7 @@ dependencies = [
  "chrono",
  "graphql-parser",
  "http 1.3.1",
- "mockforge-plugin-core 0.2.1",
+ "mockforge-plugin-core 0.2.2",
  "rand 0.9.2",
  "regex",
  "serde",
@@ -5503,7 +5502,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5528,7 +5527,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum 0.8.6",
@@ -5555,7 +5554,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5575,13 +5574,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum 0.8.6",
  "libc",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-graphql",
  "mockforge-grpc",
  "mockforge-http",
@@ -5600,14 +5599,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "criterion",
  "mail-parser",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "regex",
  "rustls 0.21.12",
  "rustls-pemfile 1.0.4",
@@ -5624,14 +5623,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
  "async-trait",
  "futures",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-http",
  "openapiv3",
  "parking_lot",
@@ -5662,7 +5661,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum 0.8.6",
  "http 1.3.1",
@@ -5681,7 +5680,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum 0.8.6",
@@ -5690,10 +5689,10 @@ dependencies = [
  "html-escape",
  "mime_guess",
  "mockforge-analytics",
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "mockforge-grpc",
  "mockforge-http",
- "mockforge-plugin-core 0.2.1",
+ "mockforge-plugin-core 0.2.2",
  "mockforge-plugin-loader",
  "mockforge-ws",
  "once_cell",
@@ -5713,7 +5712,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "async-trait",
  "axum 0.8.6",
@@ -5722,8 +5721,8 @@ dependencies = [
  "futures",
  "futures-util",
  "jsonpath",
- "mockforge-core 0.2.1",
- "mockforge-data 0.2.1",
+ "mockforge-core 0.2.2",
+ "mockforge-data 0.2.2",
  "mockforge-observability",
  "mockforge-tracing",
  "opentelemetry",
@@ -9246,9 +9245,9 @@ dependencies = [
 
 [[package]]
 name = "tera"
-version = "1.20.0"
+version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab9d851b45e865f178319da0abdbfe6acbc4328759ff18dafc3a41c16b4cd2ee"
+checksum = "e8004bca281f2d32df3bacd59bc67b312cb4c70cea46cbd79dbe8ac5ed206722"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -9263,7 +9262,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slug",
- "unic-segment",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -9285,7 +9284,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 name = "test-openapi"
 version = "0.2.0"
 dependencies = [
- "mockforge-core 0.2.1",
+ "mockforge-core 0.2.2",
  "serde_json",
  "tokio",
 ]
@@ -10104,56 +10103,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
 
 [[package]]
-name = "unic-char-property"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8c57a407d9b6fa02b4795eb81c5b6652060a15a7903ea981f3d723e6c0be221"
-dependencies = [
- "unic-char-range",
-]
-
-[[package]]
-name = "unic-char-range"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0398022d5f700414f6b899e10b8348231abf9173fa93144cbc1a43b9793c1fbc"
-
-[[package]]
-name = "unic-common"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d7ff825a6a654ee85a63e80f92f054f904f21e7d12da4e22f9834a4aaa35bc"
-
-[[package]]
-name = "unic-segment"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4ed5d26be57f84f176157270c112ef57b86debac9cd21daaabbe56db0f88f23"
-dependencies = [
- "unic-ucd-segment",
-]
-
-[[package]]
-name = "unic-ucd-segment"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2079c122a62205b421f499da10f3ee0f7697f012f55b675e002483c73ea34700"
-dependencies = [
- "unic-char-property",
- "unic-char-range",
- "unic-ucd-version",
-]
-
-[[package]]
-name = "unic-ucd-version"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96bd2f2237fe450fcd0a1d2f5f4e91711124f7857ba2e964247776ebeeb7b0c4"
-dependencies = [
- "unic-common",
-]
-
-[[package]]
 name = "unicase"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10167,24 +10116,24 @@ checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.20"
+version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "462eeb75aeb73aea900253ce739c8e18a67423fadf006037cd3ff27e82748a06"
+checksum = "9312f7c4f6ff9069b165498234ce8be658059c6728633667c526e27dc2cf1df5"
 
 [[package]]
 name = "unicode-normalization"
-version = "0.1.24"
+version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5033c97c4262335cded6d6fc3e5c18ab755e1a3dc96376350f3d8e9f009ad956"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
 dependencies = [
  "tinyvec",
 ]
 
 [[package]]
 name = "unicode-properties"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e70f2a8b45122e719eb623c01822704c4e0907e7e426a05927e1a1cfff5b75d0"
+checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
 
 [[package]]
 name = "unicode-segmentation"
@@ -11937,9 +11886,9 @@ dependencies = [
 
 [[package]]
 name = "zopfli"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edfc5ee405f504cd4984ecc6f14d02d55cfda60fa4b689434ef4102aae150cd7"
+checksum = "f05cd8797d63865425ff89b5c4a48804f35ba0ce8d125800027ad6017d2b5249"
 dependencies = [
  "bumpalo",
  "crc32fast",
