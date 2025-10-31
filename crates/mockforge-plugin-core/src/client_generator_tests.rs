@@ -498,12 +498,12 @@ mod react_tests {
 
         // Verify that request type is generated
         assert!(
-            types_file.content.contains("export interface CreateUserRequest") || 
+            types_file.content.contains("export interface CreateUserRequest") ||
             types_file.content.contains("CreateUserRequest"),
             "Request type CreateUserRequest should be generated. First 2000 chars of content: {}",
             &types_file.content[..std::cmp::min(2000, types_file.content.len())]
         );
-        
+
         // Verify that request type includes the required properties
         // The properties might be formatted differently, so we check more flexibly
         // Check if either "name" appears in the file (could be in a property or comment)
@@ -515,13 +515,13 @@ mod react_tests {
                 &types_file.content[start..std::cmp::min(start + 500, types_file.content.len())]
             }
         );
-        
+
         // Check if "email" appears in the file
         assert!(
             types_file.content.matches("email").count() >= 1,
             "Request type should reference 'email' property"
         );
-        
+
         // Verify response type is also generated
         assert!(
             types_file.content.contains("export interface CreateUserResponse"),
@@ -560,7 +560,7 @@ mod react_tests {
     /// Create a test spec with PUT, PATCH, and DELETE endpoints that have request bodies
     fn create_test_spec_with_mutating_methods() -> OpenApiSpec {
         let mut paths = HashMap::new();
-        
+
         // Helper to create a request body schema
         let create_request_body = || {
             Some(crate::client_generator::RequestBody {
@@ -608,7 +608,7 @@ mod react_tests {
 
         // Create a single path item with PUT, PATCH, and DELETE operations
         let mut all_operations = HashMap::new();
-        
+
         // Common response for PUT and PATCH
         let common_responses = {
             let mut responses = HashMap::new();
@@ -765,7 +765,7 @@ mod react_tests {
                 tags: Some(vec!["Users".to_string()]),
             },
         );
-        
+
         paths.insert("/users/{id}".to_string(), crate::client_generator::PathItem { operations: all_operations });
 
         OpenApiSpec {
@@ -845,8 +845,8 @@ mod react_tests {
         // DELETE method should include optional data parameter
         assert!(
             hooks_file.content.contains("async deleteUser(id: string, data?: DeleteUserRequest)") ||
-            (hooks_file.content.contains("async deleteUser(") && 
-             (hooks_file.content.contains("data?: DeleteUserRequest") || 
+            (hooks_file.content.contains("async deleteUser(") &&
+             (hooks_file.content.contains("data?: DeleteUserRequest") ||
               hooks_file.content.contains("data: DeleteUserRequest"))),
             "DELETE method should include data parameter (may be optional)"
         );
@@ -1042,7 +1042,7 @@ mod react_tests {
             types_file.content.contains("requiredField") || types_file.content.contains("  requiredField"),
             "Required field should be present in request type"
         );
-        
+
         // Verify that optional field exists (should be marked with ? if template logic is correct)
         assert!(
             types_file.content.contains("optionalField") || types_file.content.contains("  optionalField"),

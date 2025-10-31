@@ -50,4 +50,3 @@ Run a single test to verify:
 cd crates/mockforge-ui/ui
 npm run test:e2e -- e2e/dashboard.spec.ts --timeout=30000
 ```
-

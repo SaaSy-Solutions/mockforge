@@ -452,7 +452,7 @@ export async function waitForDashboardLoad(page: Page): Promise<void> {
 
   for (const selector of dashboardSelectors) {
     if (page.isClosed()) break;
-    
+
     try {
       if (await isVisible(page, selector, 1500)) { // Reduced from 2000
         // Try to wait for API response, but don't wait too long
@@ -491,4 +491,3 @@ export async function getApiResponse<T>(
   const data = await response.json();
   return (data.data || data) as T;
 }
-

@@ -216,4 +216,3 @@ export async function checkAnyVisible(
   }
   return false;
 }
-

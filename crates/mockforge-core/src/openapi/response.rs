@@ -369,7 +369,7 @@ impl ResponseGenerator {
     }
 
     /// Generate example data from an OpenAPI schema
-    /// 
+    ///
     /// Priority order:
     /// 1. Schema-level example (schema.schema_data.example)
     /// 2. Property-level examples when generating objects
@@ -438,7 +438,7 @@ impl ResponseGenerator {
                 // Note: This check is actually redundant since we check at the top,
                 // but keeping it here for clarity and defensive programming
                 // If the array schema itself has an example, it's already handled at the top
-                
+
                 match &arr.items {
                     Some(item_schema) => {
                         let example_item = match item_schema {
