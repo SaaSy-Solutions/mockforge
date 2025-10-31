@@ -25,6 +25,17 @@ import {
   FolderOpen,
   Import,
   Link2,
+  GitBranch,
+  Radio,
+  Zap,
+  Shield,
+  Eye,
+  Code2,
+  PlayCircle,
+  Network,
+  Layers,
+  Store,
+  Package,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -35,17 +46,46 @@ interface AppShellProps {
 }
 
 const navItems = [
+  // Core
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'workspaces', label: 'Workspaces', icon: FolderOpen },
-  { id: 'chains', label: 'Chains', icon: Link2 },
+  
+  // Services & Data
   { id: 'services', label: 'Services', icon: Server },
   { id: 'fixtures', label: 'Fixtures', icon: Database },
+  
+  // Orchestration
+  { id: 'chains', label: 'Chains', icon: Link2 },
+  { id: 'orchestration-builder', label: 'Orchestration Builder', icon: GitBranch },
+  { id: 'orchestration-execution', label: 'Orchestration Execution', icon: PlayCircle },
+  
+  // Observability & Monitoring
+  { id: 'observability', label: 'Observability', icon: Eye },
   { id: 'logs', label: 'Logs', icon: FileText },
+  { id: 'traces', label: 'Traces', icon: Network },
   { id: 'metrics', label: 'Metrics', icon: Activity },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  
+  // Testing
   { id: 'testing', label: 'Testing', icon: TestTube },
+  { id: 'test-generator', label: 'Test Generator', icon: Code2 },
+  { id: 'test-execution', label: 'Test Execution', icon: PlayCircle },
+  { id: 'integration-test-builder', label: 'Integration Tests', icon: Layers },
+  
+  // Chaos & Resilience
+  { id: 'chaos', label: 'Chaos Engineering', icon: Zap },
+  { id: 'resilience', label: 'Resilience', icon: Shield },
+  { id: 'recorder', label: 'Recorder', icon: Radio },
+  
+  // Import & Templates
   { id: 'import', label: 'Import', icon: Import },
+  { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
+  
+  // Plugins
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
+  { id: 'plugin-registry', label: 'Plugin Registry', icon: Package },
+  
+  // Configuration
   { id: 'config', label: 'Config', icon: Settings },
 ];
 
@@ -116,7 +156,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                       'animate-slide-in-up',
                       activeTab === item.id
                         ? 'bg-brand text-white shadow-md'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-muted/50'
+                        : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                     onClick={() => {
@@ -153,7 +193,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                       'w-full justify-start gap-3 h-11 transition-all duration-200 nav-item-hover focus-ring spring-hover',
                       activeTab === item.id
                         ? 'bg-brand text-white hover:bg-brand-600 shadow-lg'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-muted/50'
+                        : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
                     )}
                     onClick={() => onTabChange(item.id)}
                   >

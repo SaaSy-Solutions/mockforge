@@ -469,8 +469,8 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Building router from {} routes", self.routes.len());
 
         for route in &self.routes {
-            println!("Adding route: {} {}", route.method, route.path);
-            println!(
+            tracing::debug!("Adding route: {} {}", route.method, route.path);
+            tracing::debug!(
                 "Route operation responses: {:?}",
                 route.operation.responses.responses.keys().collect::<Vec<_>>()
             );
@@ -479,9 +479,9 @@ impl OpenApiRouteRegistry {
             let handler = move || {
                 let route = route_clone.clone();
                 async move {
-                    println!("Handling request for route: {} {}", route.method, route.path);
+                    tracing::debug!("Handling request for route: {} {}", route.method, route.path);
                     let (status, response) = route.mock_response_with_status();
-                    println!("Generated response with status: {}", status);
+                    tracing::debug!("Generated response with status: {}", status);
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
@@ -492,26 +492,26 @@ impl OpenApiRouteRegistry {
 
             match route.method.as_str() {
                 "GET" => {
-                    println!("Registering GET route: {}", route.path);
+                    tracing::debug!("Registering GET route: {}", route.path);
                     router = router.route(&route.path, get(handler));
                 }
                 "POST" => {
-                    println!("Registering POST route: {}", route.path);
+                    tracing::debug!("Registering POST route: {}", route.path);
                     router = router.route(&route.path, post(handler));
                 }
                 "PUT" => {
-                    println!("Registering PUT route: {}", route.path);
+                    tracing::debug!("Registering PUT route: {}", route.path);
                     router = router.route(&route.path, put(handler));
                 }
                 "DELETE" => {
-                    println!("Registering DELETE route: {}", route.path);
+                    tracing::debug!("Registering DELETE route: {}", route.path);
                     router = router.route(&route.path, delete(handler));
                 }
                 "PATCH" => {
-                    println!("Registering PATCH route: {}", route.path);
+                    tracing::debug!("Registering PATCH route: {}", route.path);
                     router = router.route(&route.path, patch(handler));
                 }
-                _ => println!("Unsupported HTTP method: {}", route.method),
+                _ => tracing::warn!("Unsupported HTTP method: {}", route.method),
             }
         }
 

@@ -35,11 +35,13 @@ fn main() {
     let ui_dist_path = Path::new(&crate_dir).join("ui/dist");
 
     println!("cargo:rerun-if-changed={}", ui_dist_path.join("manifest.json").display());
+    println!("cargo:rerun-if-changed={}", ui_dist_path.join("assets").display());
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("asset_paths.rs");
 
     let manifest_path = ui_dist_path.join("manifest.json");
+    let assets_dir = ui_dist_path.join("assets");
 
     if manifest_path.exists() {
         let manifest_content = fs::read_to_string(&manifest_path).unwrap();
@@ -71,11 +73,50 @@ fn main() {
         );
 
         fs::write(&dest_path, format!("{}\n\n{}", css_content, js_content)).unwrap();
+    } else if assets_dir.exists() {
+        // Fallback: scan assets directory and generate lookup map for all JS/CSS files
+        // Note: HashMap is already imported in assets.rs, so don't import it here
+        let mut asset_map = String::from("pub fn get_asset_map() -> std::collections::HashMap<&'static str, &'static str> {\n");
+        asset_map.push_str("    let mut map = std::collections::HashMap::new();\n");
+
+        // Read all files in assets directory
+        if let Ok(entries) = fs::read_dir(&assets_dir) {
+            for entry in entries.flatten() {
+                if let Some(filename) = entry.path().file_name().and_then(|n| n.to_str()) {
+                    if filename.ends_with(".js") || filename.ends_with(".css") {
+                        let asset_path = entry.path();
+                        asset_map.push_str(&format!(
+                            "    map.insert(\"{}\", include_str!(r\"{}\"));\n",
+                            filename,
+                            asset_path.display()
+                        ));
+                    }
+                }
+            }
+        }
+
+        asset_map.push_str("    map\n");
+        asset_map.push_str("}\n");
+
+        // Also generate the CSS and JS functions
+        let css_content = format!(
+            "pub fn get_admin_css() -> &'static str {{    include_str!(r\"{}\")\n}}",
+            ui_dist_path.join("assets/index.css").display()
+        );
+        let js_content = format!(
+            "pub fn get_admin_js() -> &'static str {{    include_str!(r\"{}\")\n}}",
+            ui_dist_path.join("assets/index.js").display()
+        );
+
+        fs::write(&dest_path, format!("{}\n\n{}\n\n{}", css_content, js_content, asset_map)).unwrap();
     } else {
         // UI not built, create dummy functions
         let content = "
             pub fn get_admin_css() -> &'static str { \"\" }
             pub fn get_admin_js() -> &'static str { \"\" }
+            pub fn get_asset_map() -> std::collections::HashMap<&'static str, &'static str> {
+                std::collections::HashMap::new()
+            }
         ";
         fs::write(&dest_path, content).unwrap();
     }

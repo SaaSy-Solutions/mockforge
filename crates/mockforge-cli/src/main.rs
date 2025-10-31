@@ -2989,29 +2989,35 @@ async fn handle_serve(
         let grpc_port = config.grpc.port;
         let prometheus_url = config.admin.prometheus_url.clone();
         let admin_shutdown = shutdown_token.clone();
+        // Clone all host values before the async move closure
+        let admin_host = config.admin.host.clone();
+        let http_host = config.http.host.clone();
+        let ws_host = config.websocket.host.clone();
+        let grpc_host = config.grpc.host.clone();
         Some(tokio::spawn(async move {
-            println!("🎛️ Admin UI listening on http://localhost:{}", admin_port);
+            println!("🎛️ Admin UI listening on http://{}:{}", admin_host, admin_port);
 
             // Parse addresses with proper error handling
             use crate::progress::parse_address;
-            let addr = match parse_address(&format!("127.0.0.1:{}", admin_port), "admin UI") {
+            let addr = match parse_address(&format!("{}:{}", admin_host, admin_port), "admin UI") {
                 Ok(addr) => addr,
-                Err(e) => return Err(format!("{}", e.message)),
+                Err(e) => return Err(format!("Failed to bind Admin UI to {}:{}: {}", admin_host, admin_port, e.message)),
             };
-            let http_addr = match parse_address(&format!("127.0.0.1:{}", http_port), "HTTP server")
+
+            let http_addr = match parse_address(&format!("{}:{}", http_host, http_port), "HTTP server")
             {
                 Ok(addr) => Some(addr),
-                Err(e) => return Err(format!("{}", e.message)),
+                Err(e) => return Err(format!("Failed to parse HTTP server address {}:{}: {}", http_host, http_port, e.message)),
             };
-            let ws_addr = match parse_address(&format!("127.0.0.1:{}", ws_port), "WebSocket server")
+            let ws_addr = match parse_address(&format!("{}:{}", ws_host, ws_port), "WebSocket server")
             {
                 Ok(addr) => Some(addr),
-                Err(e) => return Err(format!("{}", e.message)),
+                Err(e) => return Err(format!("Failed to parse WebSocket server address {}:{}: {}", ws_host, ws_port, e.message)),
             };
-            let grpc_addr = match parse_address(&format!("127.0.0.1:{}", grpc_port), "gRPC server")
+            let grpc_addr = match parse_address(&format!("{}:{}", grpc_host, grpc_port), "gRPC server")
             {
                 Ok(addr) => Some(addr),
-                Err(e) => return Err(format!("{}", e.message)),
+                Err(e) => return Err(format!("Failed to parse gRPC server address {}:{}: {}", grpc_host, grpc_port, e.message)),
             };
 
             tokio::select! {
@@ -4956,15 +4962,19 @@ async fn handle_config_validate(
     }
 }
 
-/// Format YAML parsing errors with line numbers
+/// Format YAML parsing errors with line numbers and better field path extraction
 fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
-    let mut message = String::from("Invalid YAML syntax:\n");
+    let mut message = String::from("❌ Configuration parsing error:\n\n");
+
+    // Extract field path from error message if possible
+    let error_str = error.to_string();
+    let field_path = extract_field_path(&error_str);
 
     if let Some(location) = error.location() {
         let line = location.line();
         let column = location.column();
 
-        message.push_str(&format!("  at line {}, column {}\n\n", line, column));
+        message.push_str(&format!("📍 Location: line {}, column {}\n\n", line, column));
 
         // Show the problematic line with context
         let lines: Vec<&str> = content.lines().collect();
@@ -4975,43 +4985,79 @@ fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
             let line_num = start + idx + 1;
             if line_num == line {
                 message.push_str(&format!("  > {} | {}\n", line_num, line_content));
-                message.push_str(&format!(
-                    "  {}^\n",
-                    " ".repeat(column + 5 + line_num.to_string().len())
-                ));
+                if column > 0 {
+                    message.push_str(&format!(
+                        "    {}^\n",
+                        " ".repeat(column + 5 + line_num.to_string().len())
+                    ));
+                }
             } else {
                 message.push_str(&format!("    {} | {}\n", line_num, line_content));
             }
         }
 
-        message.push_str(&format!("\n  Error: {}\n", error));
-    } else {
-        message.push_str(&format!("  {}\n", error));
+        message.push_str("\n");
     }
 
-    // Add helpful suggestions based on common errors
-    let error_str = error.to_string();
-    if error_str.contains("duplicate key") {
-        message.push_str("\n💡 Tip: You have a duplicate key in your YAML. Each key must be unique within its section.\n");
-    } else if error_str.contains("invalid type") {
-        message.push_str("\n💡 Tip: Check that your values match the expected types (strings, numbers, booleans, arrays, objects).\n");
-    } else if error_str.contains("missing field") {
-        message.push_str("\n💡 Tip: A required field is missing. Check the documentation for required configuration fields.\n");
-    } else if error_str.contains("unknown field") {
-        message.push_str("\n💡 Tip: You may have a typo in a field name. Check the spelling against the documentation.\n");
+    // Show the error with field path if extracted
+    if let Some(path) = &field_path {
+        message.push_str(&format!("🔍 Field path: {}\n", path));
+        message.push_str(&format!("❌ Error: {}\n\n", error));
+    } else {
+        message.push_str(&format!("❌ Error: {}\n\n", error));
     }
+
+    // Add helpful suggestions based on error type and field path
+    if error_str.contains("duplicate key") {
+        message.push_str("💡 Tip: You have a duplicate key in your YAML. Each key must be unique within its section.\n");
+    } else if error_str.contains("invalid type") {
+        message.push_str("💡 Tip: Check that your values match the expected types (strings, numbers, booleans, arrays, objects).\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   Check the type for field: {}\n", path));
+        }
+    } else if error_str.contains("missing field") {
+        // Most fields in MockForge are optional with defaults
+        message.push_str("💡 Tip: This field is usually optional and has a default value.\n");
+        message.push_str("   Most configuration fields can be omitted - MockForge will use sensible defaults.\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   \n   To fix: Either add the field at path '{}' or remove it entirely (defaults will be used).\n", path));
+            message.push_str("   See config.template.yaml for all available options and their defaults.\n");
+        } else {
+            message.push_str("   See config.template.yaml for all available options and their defaults.\n");
+        }
+    } else if error_str.contains("unknown field") {
+        message.push_str("💡 Tip: You may have a typo in a field name.\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   Unknown field at path: {}\n", path));
+            message.push_str("   Check the spelling against the documentation or config.template.yaml.\n");
+        } else {
+            message.push_str("   Check the spelling against the documentation or config.template.yaml.\n");
+        }
+    } else if error_str.contains("expected") {
+        message.push_str("💡 Tip: There's a type mismatch or syntax error.\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   Check the value type for field: {}\n", path));
+        }
+    }
+
+    message.push_str("\n📚 For a complete example configuration, see: config.template.yaml\n");
+    message.push_str("   Or run: mockforge init .\n");
 
     message
 }
 
-/// Format JSON parsing errors with line numbers
+/// Format JSON parsing errors with line numbers and better field path extraction
 fn format_json_error(content: &str, error: serde_json::Error) -> String {
-    let mut message = String::from("Invalid JSON syntax:\n");
+    let mut message = String::from("❌ Configuration parsing error:\n\n");
+
+    // Extract field path from error message if possible
+    let error_str = error.to_string();
+    let field_path = extract_field_path(&error_str);
 
     let line = error.line();
     let column = error.column();
 
-    message.push_str(&format!("  at line {}, column {}\n\n", line, column));
+    message.push_str(&format!("📍 Location: line {}, column {}\n\n", line, column));
 
     // Show the problematic line with context
     let lines: Vec<&str> = content.lines().collect();
@@ -5022,32 +5068,98 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
         let line_num = start + idx + 1;
         if line_num == line {
             message.push_str(&format!("  > {} | {}\n", line_num, line_content));
-            message
-                .push_str(&format!("  {}^\n", " ".repeat(column + 5 + line_num.to_string().len())));
+            if column > 0 {
+                message.push_str(&format!(
+                    "    {}^\n",
+                    " ".repeat(column + 5 + line_num.to_string().len())
+                ));
+            }
         } else {
             message.push_str(&format!("    {} | {}\n", line_num, line_content));
         }
     }
 
-    message.push_str(&format!("\n  Error: {}\n", error));
+    message.push_str("\n");
 
-    // Add helpful suggestions
-    let error_str = error.to_string();
-    if error_str.contains("trailing comma") {
-        message.push_str(
-            "\n💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n",
-        );
-    } else if error_str.contains("expected") {
-        message.push_str(
-            "\n💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n",
-        );
-    } else if error_str.contains("duplicate field") {
-        message.push_str(
-            "\n💡 Tip: You have a duplicate key. Each key must be unique within its object.\n",
-        );
+    // Show the error with field path if extracted
+    if let Some(path) = &field_path {
+        message.push_str(&format!("🔍 Field path: {}\n", path));
+        message.push_str(&format!("❌ Error: {}\n\n", error));
+    } else {
+        message.push_str(&format!("❌ Error: {}\n\n", error));
     }
 
+    // Add helpful suggestions based on error type
+    if error_str.contains("trailing comma") {
+        message.push_str("💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n");
+    } else if error_str.contains("missing field") {
+        message.push_str("💡 Tip: This field is usually optional and has a default value.\n");
+        message.push_str("   Most configuration fields can be omitted - MockForge will use sensible defaults.\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   \n   To fix: Either add the field at path '{}' or remove it entirely (defaults will be used).\n", path));
+        }
+        message.push_str("   See config.template.yaml for all available options and their defaults.\n");
+    } else if error_str.contains("duplicate field") {
+        message.push_str("💡 Tip: You have a duplicate key. Each key must be unique within its object.\n");
+    } else if error_str.contains("expected") {
+        message.push_str("💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   Or check the value type for field: {}\n", path));
+        }
+    } else if error_str.contains("unknown field") {
+        message.push_str("💡 Tip: You may have a typo in a field name.\n");
+        if let Some(path) = &field_path {
+            message.push_str(&format!("   Unknown field at path: {}\n", path));
+        }
+        message.push_str("   Check the spelling against the documentation or config.template.yaml.\n");
+    }
+
+    message.push_str("\n📚 For a complete example configuration, see: config.template.yaml\n");
+    message.push_str("   Or run: mockforge init .\n");
+
     message
+}
+
+/// Extract field path from serde error messages
+/// Examples:
+///   "missing field `host` at line 2 column 1" -> Some("host")
+///   "unknown field `foo`, expected one of `bar`, `baz`" -> Some("foo")
+///   "invalid type: string \"x\", expected u16 at line 5" -> None (type error, not field path)
+fn extract_field_path(error_msg: &str) -> Option<String> {
+    // Try to extract field name from "missing field `X`" or "unknown field `X`"
+    if let Some(start) = error_msg.find("field `") {
+        let after_field = &error_msg[start + 7..];
+        if let Some(end) = after_field.find('`') {
+            let field_name = &after_field[..end];
+            
+            // Try to find parent path context if available
+            // Serde errors sometimes include path context like "http.host"
+            if let Some(path_context_start) = error_msg.rfind(" at ") {
+                let path_context = &error_msg[..path_context_start];
+                // Look for common patterns like "http.host" or "admin.port"
+                for section in ["http", "admin", "websocket", "grpc", "core", "logging"] {
+                    if path_context.contains(section) {
+                        return Some(format!("{}.{}", section, field_name));
+                    }
+                }
+            }
+            
+            return Some(field_name.to_string());
+        }
+    }
+    
+    // Try to extract from "invalid type" with context
+    if let Some(start) = error_msg.find("invalid type") {
+        // Look backwards for field context
+        if let Some(field_start) = error_msg[..start].rfind("field `") {
+            let after_field = &error_msg[field_start + 7..];
+            if let Some(end) = after_field.find('`') {
+                return Some(after_field[..end].to_string());
+            }
+        }
+    }
+    
+    None
 }
 
 /// Discover configuration file in current directory and parents

@@ -4,9 +4,14 @@
 //! files for the admin UI.
 
 use axum::{
-    http::{self},
+    extract::Path,
+    http::{self, StatusCode},
     response::{Html, IntoResponse, Redirect},
 };
+use std::collections::HashMap;
+
+// Include the generated asset map from build.rs
+include!(concat!(env!("OUT_DIR"), "/asset_paths.rs"));
 
 /// Serve the main admin HTML page
 pub async fn serve_admin_html() -> Html<&'static str> {
@@ -27,6 +32,46 @@ pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'stati
         [(http::header::CONTENT_TYPE, "application/javascript")],
         include_str!("../../ui/dist/assets/index.js"),
     )
+}
+
+/// Serve vendor JavaScript files dynamically
+/// This handler uses a build-time generated asset map that includes all files
+/// from the assets directory, so it automatically handles files with changing hashes
+pub async fn serve_vendor_asset(
+    Path(filename): Path<String>,
+) -> impl IntoResponse {
+    // Determine content type based on file extension
+    let content_type = if filename.ends_with(".js") {
+        "application/javascript"
+    } else if filename.ends_with(".css") {
+        "text/css"
+    } else if filename.ends_with(".png") {
+        "image/png"
+    } else if filename.ends_with(".svg") {
+        "image/svg+xml"
+    } else if filename.ends_with(".woff") || filename.ends_with(".woff2") {
+        "font/woff2"
+    } else {
+        "application/octet-stream"
+    };
+
+    // Look up the asset in the dynamically generated map (built at compile time)
+    let asset_map = get_asset_map();
+    if let Some(content) = asset_map.get(filename.as_str()) {
+        (
+            [(http::header::CONTENT_TYPE, content_type)],
+            *content,
+        )
+            .into_response()
+    } else {
+        // Return 404 for unknown files
+        (
+            StatusCode::NOT_FOUND,
+            [(http::header::CONTENT_TYPE, "text/plain")],
+            "Asset not found",
+        )
+            .into_response()
+    }
 }
 
 /// Serve icon files

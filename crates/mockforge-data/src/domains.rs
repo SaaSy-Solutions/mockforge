@@ -329,17 +329,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(deprecated)]
-    fn test_domain_parse_deprecated() {
-        assert_eq!(Domain::parse("finance"), Some(Domain::Finance));
-        assert_eq!(Domain::parse("iot"), Some(Domain::Iot));
-        assert_eq!(Domain::parse("healthcare"), Some(Domain::Healthcare));
-        assert_eq!(Domain::parse("ecommerce"), Some(Domain::Ecommerce));
-        assert_eq!(Domain::parse("social"), Some(Domain::Social));
-        assert_eq!(Domain::parse("invalid"), None);
-    }
-
-    #[test]
     fn test_domain_from_str() {
         assert_eq!("finance".parse::<Domain>().unwrap(), Domain::Finance);
         assert_eq!("iot".parse::<Domain>().unwrap(), Domain::Iot);
@@ -352,6 +341,9 @@ mod tests {
         // Case insensitive
         assert_eq!("FINANCE".parse::<Domain>().unwrap(), Domain::Finance);
         assert_eq!("Finance".parse::<Domain>().unwrap(), Domain::Finance);
+        
+        // Test invalid domain returns error
+        assert!("invalid".parse::<Domain>().is_err());
     }
 
     #[test]

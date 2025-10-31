@@ -153,6 +153,20 @@ impl ProtobufJsonConverter {
     ) -> Result<Value, ConversionError> {
         use prost_reflect::Kind::*;
 
+        // Handle repeated fields (protobuf lists) - if field is a list and JSON value is an array
+        if field.is_list() {
+            if let JsonValue::Array(json_array) = json_value {
+                return self.convert_json_array_to_protobuf_list(field, json_array);
+            } else {
+                // For repeated fields, we expect an array
+                return Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "array".to_string(),
+                    actual: self.json_type_name(json_value),
+                });
+            }
+        }
+
         match field.kind() {
             Message(ref message_descriptor) => {
                 match json_value {
@@ -559,8 +573,8 @@ impl ProtobufJsonConverter {
 
     /// Handle repeated field conversion for JSON arrays
     ///
-    /// TODO: Use this method when JSON array to protobuf list conversion is fully implemented
-    #[allow(dead_code)] // TODO: Remove when repeated field conversion is complete
+    /// Converts a JSON array to a protobuf repeated field (list) by converting each
+    /// array element according to the field's type.
     fn convert_json_array_to_protobuf_list(
         &self,
         field: &FieldDescriptor,

@@ -73,6 +73,22 @@ test-mutants-report: ## Generate mutation testing report
 test-mutants-core: ## Run mutation testing on core crate only
 	cargo mutants -p mockforge-core
 
+# UI E2E Testing (Playwright)
+test-ui-e2e: ## Run Playwright E2E tests for Admin UI
+	cd crates/mockforge-ui/ui && npm run test:e2e
+
+test-ui-e2e-ui: ## Run Playwright E2E tests in UI mode (interactive)
+	cd crates/mockforge-ui/ui && npm run test:e2e:ui
+
+test-ui-e2e-debug: ## Run Playwright E2E tests in debug mode
+	cd crates/mockforge-ui/ui && npx playwright test --debug
+
+test-ui-e2e-headed: ## Run Playwright E2E tests in headed mode (see browser)
+	cd crates/mockforge-ui/ui && npx playwright test --headed
+
+test-ui-e2e-report: ## Show Playwright test report
+	cd crates/mockforge-ui/ui && npx playwright show-report
+
 # Code quality
 fmt: ## Format code
 	cargo fmt --all

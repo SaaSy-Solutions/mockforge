@@ -43,6 +43,7 @@ pub fn create_admin_router(
         .route("/", get(serve_admin_html))
         .route("/assets/index.css", get(serve_admin_css))
         .route("/assets/index.js", get(serve_admin_js))
+        .route("/assets/{filename}", get(serve_vendor_asset))
         .route("/api-docs", get(serve_api_docs))
         .route("/mockforge-icon.png", get(serve_icon))
         .route("/mockforge-icon-32.png", get(serve_icon_32))
@@ -75,7 +76,13 @@ pub fn create_admin_router(
         .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
         .route("/__mockforge/fixtures/{id}/rename", post(rename_fixture))
         .route("/__mockforge/fixtures/{id}/move", post(move_fixture))
+        // Import routes
+        .route("/__mockforge/import/postman", post(import_postman))
         .route("/__mockforge/import/insomnia", post(import_insomnia))
+        .route("/__mockforge/import/curl", post(import_curl))
+        .route("/__mockforge/import/preview", post(preview_import))
+        .route("/__mockforge/import/history", get(get_import_history))
+        .route("/__mockforge/import/history/clear", post(clear_import_history))
         // Plugin management routes
         .route("/__mockforge/plugins", get(get_plugins))
         .route("/__mockforge/plugins/status", get(get_plugin_status))

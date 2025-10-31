@@ -722,10 +722,21 @@ pub struct AdminConfig {
 
 impl Default for AdminConfig {
     fn default() -> Self {
+        // Default to 0.0.0.0 if running in Docker (detected via common Docker env vars)
+        // This makes Admin UI accessible from outside the container by default
+        let default_host = if std::env::var("DOCKER_CONTAINER").is_ok()
+            || std::env::var("container").is_ok()
+            || std::path::Path::new("/.dockerenv").exists()
+        {
+            "0.0.0.0".to_string()
+        } else {
+            "127.0.0.1".to_string()
+        };
+
         Self {
             enabled: false,
             port: 9080,
-            host: "127.0.0.1".to_string(),
+            host: default_host,
             auth_required: false,
             username: None,
             password: None,
@@ -1101,14 +1112,45 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
         .await
         .map_err(|e| Error::generic(format!("Failed to read config file: {}", e)))?;
 
+    // Parse config with improved error messages
     let config: ServerConfig = if path.as_ref().extension().and_then(|s| s.to_str()) == Some("yaml")
         || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml")
     {
-        serde_yaml::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to parse YAML config: {}", e)))?
+        serde_yaml::from_str(&content).map_err(|e| {
+            // Improve error message with field path context
+            let error_msg = e.to_string();
+            let mut full_msg = format!("Failed to parse YAML config: {}", error_msg);
+            
+            // Add helpful context for common errors
+            if error_msg.contains("missing field") {
+                full_msg.push_str("\n\n💡 Most configuration fields are optional with defaults.");
+                full_msg.push_str("\n   Omit fields you don't need - MockForge will use sensible defaults.");
+                full_msg.push_str("\n   See config.template.yaml for all available options.");
+            } else if error_msg.contains("unknown field") {
+                full_msg.push_str("\n\n💡 Check for typos in field names.");
+                full_msg.push_str("\n   See config.template.yaml for valid field names.");
+            }
+            
+            Error::generic(full_msg)
+        })?
     } else {
-        serde_json::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to parse JSON config: {}", e)))?
+        serde_json::from_str(&content).map_err(|e| {
+            // Improve error message with field path context
+            let error_msg = e.to_string();
+            let mut full_msg = format!("Failed to parse JSON config: {}", error_msg);
+            
+            // Add helpful context for common errors
+            if error_msg.contains("missing field") {
+                full_msg.push_str("\n\n💡 Most configuration fields are optional with defaults.");
+                full_msg.push_str("\n   Omit fields you don't need - MockForge will use sensible defaults.");
+                full_msg.push_str("\n   See config.template.yaml for all available options.");
+            } else if error_msg.contains("unknown field") {
+                full_msg.push_str("\n\n💡 Check for typos in field names.");
+                full_msg.push_str("\n   See config.template.yaml for valid field names.");
+            }
+            
+            Error::generic(full_msg)
+        })?
     };
 
     Ok(config)
@@ -1213,6 +1255,11 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
 
     if std::env::var("MOCKFORGE_ADMIN_ENABLED").unwrap_or_default() == "true" {
         config.admin.enabled = true;
+    }
+
+    // Admin UI host override - critical for Docker deployments
+    if let Ok(host) = std::env::var("MOCKFORGE_ADMIN_HOST") {
+        config.admin.host = host;
     }
 
     if let Ok(mount_path) = std::env::var("MOCKFORGE_ADMIN_MOUNT_PATH") {

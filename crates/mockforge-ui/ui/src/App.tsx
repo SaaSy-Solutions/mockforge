@@ -21,6 +21,28 @@ const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ defaul
 const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
+// Observability & Monitoring
+const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage').then(m => ({ default: m.ObservabilityPage })));
+const TracesPage = lazy(() => import('./pages/TracesPage').then(m => ({ default: m.TracesPage })));
+
+// Testing
+const TestGeneratorPage = lazy(() => import('./pages/TestGeneratorPage'));
+const TestExecutionDashboard = lazy(() => import('./pages/TestExecutionDashboard'));
+const IntegrationTestBuilder = lazy(() => import('./pages/IntegrationTestBuilder'));
+
+// Chaos & Resilience
+const ChaosPage = lazy(() => import('./pages/ChaosPage').then(m => ({ default: m.ChaosPage })));
+const ResiliencePage = lazy(() => import('./pages/ResiliencePage').then(m => ({ default: m.ResiliencePage })));
+const RecorderPage = lazy(() => import('./pages/RecorderPage').then(m => ({ default: m.RecorderPage })));
+
+// Orchestration
+const OrchestrationBuilder = lazy(() => import('./pages/OrchestrationBuilder'));
+const OrchestrationExecutionView = lazy(() => import('./pages/OrchestrationExecutionView'));
+
+// Plugins & Templates
+const PluginRegistryPage = lazy(() => import('./pages/PluginRegistryPage'));
+const TemplateMarketplacePage = lazy(() => import('./pages/TemplateMarketplacePage'));
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
@@ -39,30 +61,75 @@ function App() {
 
   const renderPage = () => {
     switch (activeTab) {
+      // Core
       case 'dashboard':
         return <DashboardPage />;
+      case 'workspaces':
+        return <WorkspacesPage />;
+      
+      // Services & Data
       case 'services':
         return <ServicesPage />;
+      case 'fixtures':
+        return <FixturesPage />;
+      
+      // Orchestration
       case 'chains':
         return <ChainsPage />;
+      case 'orchestration-builder':
+        return <OrchestrationBuilder />;
+      case 'orchestration-execution':
+        // OrchestrationExecutionView requires an orchestrationId prop
+        // For navigation, we'll show it with an empty ID (it will handle loading state)
+        // In a real app, this would typically be accessed via a link from Orchestration Builder
+        return <OrchestrationExecutionView orchestrationId="default" />;
+      
+      // Observability & Monitoring
+      case 'observability':
+        return <ObservabilityPage />;
       case 'logs':
         return <LogsPage />;
+      case 'traces':
+        return <TracesPage />;
       case 'metrics':
         return <MetricsPage />;
       case 'analytics':
         return <AnalyticsPage />;
-      case 'fixtures':
-        return <FixturesPage />;
-      case 'import':
-        return <ImportPage />;
-      case 'workspaces':
-        return <WorkspacesPage />;
+      
+      // Testing
       case 'testing':
         return <TestingPage />;
-      case 'config':
-        return <ConfigPage />;
+      case 'test-generator':
+        return <TestGeneratorPage />;
+      case 'test-execution':
+        return <TestExecutionDashboard />;
+      case 'integration-test-builder':
+        return <IntegrationTestBuilder />;
+      
+      // Chaos & Resilience
+      case 'chaos':
+        return <ChaosPage />;
+      case 'resilience':
+        return <ResiliencePage />;
+      case 'recorder':
+        return <RecorderPage />;
+      
+      // Import & Templates
+      case 'import':
+        return <ImportPage />;
+      case 'template-marketplace':
+        return <TemplateMarketplacePage />;
+      
+      // Plugins
       case 'plugins':
         return <PluginsPage />;
+      case 'plugin-registry':
+        return <PluginRegistryPage />;
+      
+      // Configuration
+      case 'config':
+        return <ConfigPage />;
+      
       default:
         return (
           <div className="space-y-8">

@@ -1,0 +1,7 @@
+curl -sS http://localhost:3000/health
+
+curl -sS http://localhost:3000/hello
+
+curl -sS -X POST http://localhost:3000/echo \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello from curl"}'

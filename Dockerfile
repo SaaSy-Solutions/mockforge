@@ -2,11 +2,14 @@
 # Stage 1: Build the Rust application
 FROM rust:1.90-slim AS builder
 
-# Install required dependencies for building
+# Install required dependencies for building (including C++ for Kafka support)
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     protobuf-compiler \
+    build-essential \
+    g++ \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
@@ -15,8 +18,12 @@ WORKDIR /app
 # Copy the workspace configuration files
 COPY Cargo.toml Cargo.lock ./
 
-# Remove test_openapi_demo from workspace members for Docker build
-RUN sed -i '/"test_openapi_demo"/d' Cargo.toml
+# Remove test_openapi_demo and tests from workspace members for Docker build
+# Use more robust sed patterns that handle various formatting
+RUN sed -i '/\s*"test_openapi_demo"\s*,/d' Cargo.toml && \
+    sed -i '/\s*"test_openapi_demo"\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*$/d' Cargo.toml || true
 
 # Copy the crates directory
 COPY crates/ ./crates/
@@ -68,6 +75,10 @@ EXPOSE 3000 3001 50051 9080
 ENV MOCKFORGE_LATENCY_ENABLED=true
 ENV MOCKFORGE_FAILURES_ENABLED=false
 ENV MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+# Mark that we're running in Docker (for Admin UI host detection)
+ENV DOCKER_CONTAINER=true
+# Default Admin UI to be accessible from outside container
+ENV MOCKFORGE_ADMIN_HOST=0.0.0.0
 
 # Default command
 CMD ["mockforge", "serve", "--admin"]

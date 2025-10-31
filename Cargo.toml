@@ -34,8 +34,7 @@ members = [
 ]
 exclude = [
     "crates/mockforge-registry-server",
-    "temp-publish"
-  ]
+]
 resolver = "2"
 
 # Workspace-wide package metadata

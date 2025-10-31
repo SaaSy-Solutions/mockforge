@@ -175,7 +175,12 @@ impl ProtoParser {
                 }
             }
             Err(e) => {
-                warn!("Failed to compile with protoc, falling back to mock: {}", e);
+                // This is expected behavior if protoc is not installed or proto files don't require compilation
+                // MockForge will use fallback mock services, which is fine for basic usage
+                warn!(
+                    "protoc not available or compilation failed (this is OK for basic usage, using fallback): {}",
+                    e
+                );
             }
         }
 
