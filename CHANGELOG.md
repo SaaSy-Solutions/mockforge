@@ -24,6 +24,16 @@
 
 - Nothing yet.
 
+## [0.2.3] - 2025-01-27
+
+### Fixed
+
+- Fix OpenAPI example extraction to prioritize explicit examples from schema and properties
+- Fix request body parameter generation in React client generator for POST, PUT, PATCH, DELETE methods
+- Fix Handlebars template logic for request body type generation in client code
+- Fix useCallback dependency array formatting in React hooks template
+- Add comprehensive test coverage for request body parameter scenarios
+
 ## [0.2.0] - 2025-10-29
 
 ### Added
