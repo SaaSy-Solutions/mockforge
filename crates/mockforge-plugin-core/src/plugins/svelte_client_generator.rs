@@ -60,7 +60,13 @@ export interface {{operation_id}}Response {
 {{#each this.content}}
 {{#if (eq @key "application/json")}}
 {{#if this.schema}}
+{{#if this.schema.properties}}
+{{#each this.schema.properties}}
+  {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
+{{/each}}
+{{else}}
 {{> typescript_type this.schema}}
+{{/if}}
 {{/if}}
 {{/if}}
 {{/each}}

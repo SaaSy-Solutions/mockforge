@@ -76,6 +76,7 @@ struct RouteInfo {
     query_params: Vec<QueryParam>,
     request_body_schema: Option<Schema>,
     response_schema: Option<Schema>,
+    response_example: Option<serde_json::Value>,
     response_status: u16,
 }
 
@@ -101,8 +102,8 @@ fn extract_route_info(
     // Extract request body schema (if any)
     let request_body_schema = extract_request_body_schema(operation);
 
-    // Extract response schema (prefer 200, fallback to first success response)
-    let (response_schema, response_status) = extract_response_schema(operation)?;
+    // Extract response schema and example (prefer 200, fallback to first success response)
+    let (response_schema, response_example, response_status) = extract_response_schema_and_example(operation)?;
 
     Ok(RouteInfo {
         method: method.to_string(),
@@ -112,6 +113,7 @@ fn extract_route_info(
         query_params,
         request_body_schema,
         response_schema,
+        response_example,
         response_status,
     })
 }
@@ -170,7 +172,9 @@ fn extract_request_body_schema(operation: &Operation) -> Option<Schema> {
     })
 }
 
-fn extract_response_schema(operation: &Operation) -> Result<(Option<Schema>, u16)> {
+/// Extract response schema and example from OpenAPI operation
+/// Returns (schema, example, status_code)
+fn extract_response_schema_and_example(operation: &Operation) -> Result<(Option<Schema>, Option<serde_json::Value>, u16)> {
     // Look for 200 response first
     for (status_code, response_ref) in &operation.responses.responses {
         let status = match status_code {
@@ -182,20 +186,39 @@ fn extract_response_schema(operation: &Operation) -> Result<(Option<Schema>, u16
         if (200..300).contains(&status) {
             if let Some(response) = response_ref.as_item() {
                 if let Some(content) = response.content.get("application/json") {
-                    if let Some(schema_ref) = &content.schema {
+                    // First, check for explicit example in content
+                    let example = if let Some(example) = &content.example {
+                        Some(example.clone())
+                    } else if !content.examples.is_empty() {
+                        // Use the first example from the examples map
+                        content.examples.iter().next().and_then(|(_, example_ref)| {
+                            example_ref.as_item().and_then(|example_item| example_item.value.clone())
+                        })
+                    } else {
+                        None
+                    };
+
+                    // Extract schema if available
+                    let schema = if let Some(schema_ref) = &content.schema {
                         if let ReferenceOr::Item(schema) = schema_ref {
-                            return Ok((Some(schema.clone()), status));
+                            Some(schema.clone())
+                        } else {
+                            None
                         }
-                    }
+                    } else {
+                        None
+                    };
+
+                    return Ok((schema, example, status));
                 }
-                // Found success response, return even if no schema
-                return Ok((None, status));
+                // Found success response, return even if no schema or example
+                return Ok((None, None, status));
             }
         }
     }
 
     // Default to 200 if no response found
-    Ok((None, 200))
+    Ok((None, None, 200))
 }
 
 fn generate_header() -> String {
@@ -363,7 +386,21 @@ fn generate_handler(route: &RouteInfo, config: &CodegenConfig) -> Result<String>
 fn generate_response_body(route: &RouteInfo, config: &CodegenConfig) -> String {
     match config.mock_data_strategy {
         MockDataStrategy::Examples | MockDataStrategy::ExamplesOrRandom => {
-            // Try to generate from schema if available
+            // Priority 1: Use explicit example from OpenAPI spec if available
+            if let Some(ref example) = route.response_example {
+                // Serialize the example value to JSON string and parse it at runtime
+                let example_str = serde_json::to_string(example).unwrap_or_else(|_| "{}".to_string());
+                // Escape for use in Rust code - need to escape backslashes and quotes
+                let escaped = example_str
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
+                // Use a regular string literal with proper escaping
+                return format!("serde_json::from_str(\"{}\").unwrap()", escaped);
+            }
+            // Priority 2: Generate from schema if available
             if let Some(ref schema) = route.response_schema {
                 generate_from_schema(schema)
             } else {
@@ -371,7 +408,7 @@ fn generate_response_body(route: &RouteInfo, config: &CodegenConfig) -> String {
             }
         }
         MockDataStrategy::Random => {
-            // Always generate from schema structure
+            // Always generate from schema structure (don't use examples for random)
             if let Some(ref schema) = route.response_schema {
                 generate_from_schema(schema)
             } else {
@@ -379,7 +416,7 @@ fn generate_response_body(route: &RouteInfo, config: &CodegenConfig) -> String {
             }
         }
         MockDataStrategy::Defaults => {
-            // Use schema defaults
+            // Use schema defaults (don't use examples for defaults strategy)
             if let Some(ref schema) = route.response_schema {
                 generate_from_schema(schema)
             } else {
@@ -402,7 +439,7 @@ fn generate_basic_mock_response(route: &RouteInfo) -> String {
 }
 
 /// Generate a mock response based on the OpenAPI schema
-/// 
+///
 /// This function implements sophisticated schema-aware generation that:
 /// - Extracts and generates all object properties based on their types
 /// - Handles nested objects and arrays recursively
@@ -457,11 +494,11 @@ fn generate_object_from_schema(obj_type: &openapiv3::ObjectType, depth: usize) -
     }
 
     let mut properties = Vec::new();
-    
+
     for (prop_name, prop_schema_ref) in &obj_type.properties {
         // Check if property is required
         let is_required = obj_type.required.iter().any(|req| req == prop_name);
-        
+
         // Generate property value based on schema
         let prop_value = match prop_schema_ref {
             openapiv3::ReferenceOr::Item(prop_schema) => {
@@ -480,7 +517,7 @@ fn generate_object_from_schema(obj_type: &openapiv3::ObjectType, depth: usize) -
         // Include property (always include required, include optional sometimes)
         if is_required || depth == 0 {
             // Escape property name if needed
-            let safe_name = prop_name.replace('\\', "\\\\").replace('"', "\\\"");
+            let safe_name = prop_name.replace("\\", "\\\\").replace("\"", "\\\"");
             properties.push(format!(r#""{}": {}"#, safe_name, prop_value));
         }
     }

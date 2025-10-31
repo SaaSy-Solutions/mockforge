@@ -19,11 +19,10 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 
 # Remove test_openapi_demo and tests from workspace members for Docker build
-# Use more robust sed patterns that handle various formatting
-RUN sed -i '/\s*"test_openapi_demo"\s*,/d' Cargo.toml && \
-    sed -i '/\s*"test_openapi_demo"\s*$/d' Cargo.toml && \
-    sed -i '/\s*"tests"\s*,/d' Cargo.toml && \
-    sed -i '/\s*"tests"\s*$/d' Cargo.toml || true
+# Handle both quoted and unquoted formats, with/without trailing commas
+RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/# Integration tests package/d' Cargo.toml
 
 # Copy the crates directory
 COPY crates/ ./crates/

@@ -47,11 +47,16 @@ print_error() {
 
 # Function to check if crates.io token is set
 check_token() {
-    if [ -z "$CRATES_IO_TOKEN" ]; then
-        print_error "CRATES_IO_TOKEN environment variable is not set!"
+    if [ -z "$CRATES_IO_TOKEN" ] && [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+        print_error "CRATES_IO_TOKEN or CARGO_REGISTRY_TOKEN environment variable is not set!"
         print_status "Please set it with: export CRATES_IO_TOKEN=your_token_here"
+        print_status "Or use: export CARGO_REGISTRY_TOKEN=your_token_here"
         print_status "Get your token from: https://crates.io/me"
         exit 1
+    fi
+    # Use CARGO_REGISTRY_TOKEN if CRATES_IO_TOKEN is not set
+    if [ -z "$CRATES_IO_TOKEN" ] && [ -n "$CARGO_REGISTRY_TOKEN" ]; then
+        export CRATES_IO_TOKEN="$CARGO_REGISTRY_TOKEN"
     fi
 }
 
@@ -73,16 +78,63 @@ crate_exists() {
     return 1
 }
 
+# Function to handle publish errors
+handle_publish_error() {
+    local crate_name=$1
+    local dry_run_flag=$2
+
+    # Check if the error is because the crate already exists
+    if [ "$DRY_RUN" = "false" ] && cargo publish -p "$crate_name" --dry-run --allow-dirty 2>&1 | grep -q "already exists"; then
+        print_warning "$crate_name already exists on crates.io, skipping..."
+        return 0
+    else
+        print_error "Failed to publish $crate_name"
+        print_status "This might be due to authentication. Make sure you have:"
+        print_status "1. Run 'cargo login' with your token, OR"
+        print_status "2. Set CRATES_IO_TOKEN environment variable"
+        exit 1
+    fi
+}
+
+# Function to check if crate directory exists
+crate_dir_exists() {
+    local crate_name=$1
+    if [ -d "crates/$crate_name" ] && [ -f "crates/$crate_name/Cargo.toml" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to check if crate is in workspace
+crate_in_workspace() {
+    local crate_name=$1
+    if cargo metadata --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate_name\""; then
+        return 0
+    fi
+    return 1
+}
+
 # Function to publish a crate
 publish_crate() {
     local crate_name=$1
     local dry_run_flag=""
 
+    # Check if crate directory exists and is in workspace
+    if ! crate_dir_exists "$crate_name"; then
+        print_warning "$crate_name directory not found, skipping..."
+        return 0
+    fi
+
+    if ! crate_in_workspace "$crate_name"; then
+        print_warning "$crate_name is not in workspace, skipping..."
+        return 0
+    fi
+
     if [ "$DRY_RUN" = "true" ]; then
         dry_run_flag="--dry-run"
         print_status "DRY RUN: Would publish $crate_name"
     else
-        # Check if crate already exists
+        # Check if crate already exists on crates.io
         if crate_exists "$crate_name"; then
             print_warning "$crate_name already exists on crates.io, skipping..."
             return 0
@@ -91,16 +143,37 @@ publish_crate() {
         print_status "Publishing $crate_name..."
     fi
 
-    if cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
-        print_success "Successfully published $crate_name"
-    else
-        # Check if the error is because the crate already exists
-        if [ "$DRY_RUN" = "false" ] && cargo publish -p "$crate_name" --dry-run --allow-dirty 2>&1 | grep -q "already exists"; then
-            print_warning "$crate_name already exists on crates.io, skipping..."
-            return 0
+    # Set token for cargo publish if available
+    local publish_env=""
+    if [ -n "$CRATES_IO_TOKEN" ]; then
+        publish_env="CARGO_REGISTRY_TOKEN=$CRATES_IO_TOKEN"
+    elif [ -n "$CARGO_REGISTRY_TOKEN" ]; then
+        publish_env="CARGO_REGISTRY_TOKEN=$CARGO_REGISTRY_TOKEN"
+    fi
+
+    if [ -n "$publish_env" ]; then
+        if env $publish_env cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
+            print_success "Successfully published $crate_name"
         else
-            print_error "Failed to publish $crate_name"
-            exit 1
+            # Check if it's a "package not found" error
+            if env $publish_env cargo publish -p "$crate_name" --dry-run --allow-dirty 2>&1 | grep -q "package ID specification.*did not match"; then
+                print_warning "$crate_name not found in workspace or not publishable, skipping..."
+                return 0
+            else
+                handle_publish_error "$crate_name" "$dry_run_flag"
+            fi
+        fi
+    else
+        if cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
+            print_success "Successfully published $crate_name"
+        else
+            # Check if it's a "package not found" error
+            if cargo publish -p "$crate_name" --dry-run --allow-dirty 2>&1 | grep -q "package ID specification.*did not match"; then
+                print_warning "$crate_name not found in workspace or not publishable, skipping..."
+                return 0
+            else
+                handle_publish_error "$crate_name" "$dry_run_flag"
+            fi
         fi
     fi
 }
@@ -108,6 +181,18 @@ publish_crate() {
 # Function to convert dependencies for a specific crate
 convert_crate_dependencies() {
     local crate_name=$1
+
+    # Check if crate directory exists and is in workspace
+    if ! crate_dir_exists "$crate_name"; then
+        print_warning "$crate_name directory not found, skipping dependency conversion..."
+        return 0
+    fi
+
+    if ! crate_in_workspace "$crate_name"; then
+        print_warning "$crate_name is not in workspace, skipping dependency conversion..."
+        return 0
+    fi
+
     local cargo_toml="crates/$crate_name/Cargo.toml"
 
     if [ -f "$cargo_toml" ]; then
@@ -352,8 +437,12 @@ main() {
     fi
 
     # Check for crates.io token if not in dry-run mode
-    if [ "$DRY_RUN" = "false" ]; then
-        check_token
+    # Note: cargo publish can also use credentials from `cargo login`, so we only warn
+    if [ "$DRY_RUN" = "false" ] && [ -z "$CRATES_IO_TOKEN" ] && [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+        print_warning "No CRATES_IO_TOKEN or CARGO_REGISTRY_TOKEN set."
+        print_status "Attempting to use cargo's stored credentials (from 'cargo login')..."
+        print_status "If this fails, set: export CRATES_IO_TOKEN=your_token_here"
+        print_status "Get your token from: https://crates.io/me"
     fi
 
     # Phase 1: Publish base crates (no internal dependencies)

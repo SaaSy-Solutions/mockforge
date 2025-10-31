@@ -320,9 +320,30 @@ pub mod helpers {
             };
 
             if words_to_use.len() >= 2 {
-                // Capitalize each word and join
-                let camel_case: String = words_to_use.iter().map(|w| capitalize_first(w)).collect();
-                return format!("{}{}", method.to_lowercase(), camel_case);
+                // Check if the first word is already the HTTP method verb
+                // (case-insensitive check to avoid redundant prefixes like "getGet...")
+                let method_lower = method.to_lowercase();
+                let first_word_lower = words_to_use[0].to_lowercase();
+
+                // Common HTTP method verbs that might appear in summaries
+                let method_verbs = ["get", "post", "put", "patch", "delete", "head", "options"];
+
+                // If first word matches the method verb, skip it to avoid redundancy
+                let words_to_capitalize = if method_verbs.contains(&first_word_lower.as_str())
+                    && first_word_lower == method_lower {
+                    // Skip the first word if it matches the method
+                    &words_to_use[1..]
+                } else {
+                    // Use all words
+                    &words_to_use
+                };
+
+                // Only proceed if we have words left after potentially skipping the verb
+                if !words_to_capitalize.is_empty() {
+                    // Capitalize each word and join
+                    let camel_case: String = words_to_capitalize.iter().map(|w| capitalize_first(w)).collect();
+                    return format!("{}{}", method.to_lowercase(), camel_case);
+                }
             }
         }
 
@@ -747,6 +768,30 @@ mod tests {
         assert!(op_id.starts_with("post"));
         // Should only contain first 3 words: "This", "Is", "Very"
         assert!(op_id.contains("This") || op_id.contains("Is") || op_id.contains("Very"));
+    }
+
+    #[test]
+    fn test_generate_camel_case_operation_id_with_redundant_verb() {
+        // Test that summaries starting with the method verb don't create redundant prefixes
+        // e.g., "Get apiary by ID" with GET method should become "getApiaryById", not "getGetApiaryById"
+        let summary = Some("Get apiary by ID".to_string());
+        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/v1/apiaries/{id}", &summary);
+        assert_eq!(op_id, "getApiaryById");
+
+        // Test with POST
+        let summary = Some("Post new user".to_string());
+        let op_id = helpers::generate_camel_case_operation_id("POST", "/api/users", &summary);
+        assert_eq!(op_id, "postNewUser");
+
+        // Test with PUT
+        let summary = Some("Put update user".to_string());
+        let op_id = helpers::generate_camel_case_operation_id("PUT", "/api/users/{id}", &summary);
+        assert_eq!(op_id, "putUpdateUser");
+
+        // Test that non-matching verbs still work (e.g., "Create" with GET)
+        let summary = Some("Create user".to_string());
+        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/users", &summary);
+        assert_eq!(op_id, "getCreateUser"); // Should include "Create" since it doesn't match "GET"
     }
 
     #[test]

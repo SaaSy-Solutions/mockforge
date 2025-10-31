@@ -60,7 +60,13 @@ export interface {{response_type_name}} {
 {{#each this.content}}
 {{#if (eq @key "application/json")}}
 {{#if this.schema}}
+{{#if this.schema.properties}}
+{{#each this.schema.properties}}
+  {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
+{{/each}}
+{{else}}
 {{> typescript_type this.schema}}
+{{/if}}
 {{/if}}
 {{/if}}
 {{/each}}
@@ -381,7 +387,12 @@ export * from './types';"#,
                 }
 
                 // Add request body if present (not for GET requests)
-                if normalized_op.request_body.is_some() && normalized_op.method != "GET" {
+                // Check that request body exists and has application/json content
+                let has_json_request_body = normalized_op.request_body.as_ref().map_or(false, |rb| {
+                    rb.content.contains_key("application/json")
+                });
+
+                if has_json_request_body && normalized_op.method != "GET" {
                     let type_name = crate::client_generator::helpers::generate_type_name(
                         &normalized_op.operation_id,
                         "Request",
@@ -401,7 +412,8 @@ export * from './types';"#,
                     &normalized_op.operation_id,
                     "Response",
                 );
-                let request_type_name = if normalized_op.request_body.is_some() {
+
+                let request_type_name = if has_json_request_body {
                     Some(crate::client_generator::helpers::generate_type_name(
                         &normalized_op.operation_id,
                         "Request",
@@ -437,7 +449,7 @@ export * from './types';"#,
                     "query_params": query_params,
                     "query_param_types": query_param_types,
                     "method_params": method_params,
-                    "request_body": normalized_op.request_body,
+                    "request_body": if has_json_request_body { normalized_op.request_body.clone() } else { None },
                     "responses": normalized_op.responses,
                     "tags": normalized_op.tags,
                 }));
