@@ -26,11 +26,11 @@ export async function setupTest(
   // Set page timeout
   page.setDefaultTimeout(options?.timeout || TIMEOUTS.TEST);
 
-  // Navigate to the app with error handling
+  // Navigate to the app with error handling - shorter timeout
   try {
     await page.goto('/', {
       waitUntil: 'domcontentloaded',
-      timeout: TIMEOUTS.NAVIGATION,
+      timeout: Math.min(TIMEOUTS.NAVIGATION, 10000), // Max 10 seconds for navigation
     });
   } catch (error) {
     // If navigation fails, check if page is accessible
@@ -38,19 +38,25 @@ export async function setupTest(
       throw error;
     }
     // Try to continue - page might be partially loaded
-    await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
   }
 
-  // Wait for app to load and log in with timeout protection
-  await Promise.race([
-    waitForAppLoad(page),
-    new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error('waitForAppLoad timeout')), TIMEOUTS.APP_LOAD)
-    ),
-  ]).catch((error) => {
-    // Log but continue - page might still be usable
-    // In production, you might want to fail fast here
-  });
+  // Wait for app to load and log in with timeout protection (aggressive timeout)
+  const APP_LOAD_TIMEOUT = 10000; // Max 10 seconds for app load
+  try {
+    await Promise.race([
+      waitForAppLoad(page),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('waitForAppLoad timeout')), APP_LOAD_TIMEOUT)
+      ),
+    ]);
+  } catch (error) {
+    // If page is closed, don't continue
+    if (page.isClosed()) {
+      throw error;
+    }
+    // Otherwise continue - page might still be usable even if login/app load failed
+  }
 
   // Navigate to specific tab if requested
   if (options?.tabName) {

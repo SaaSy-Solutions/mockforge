@@ -89,7 +89,9 @@ export interface {{request_type_name}} {
   {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
 {{/each}}
 {{else}}
+{{#if this.schema.type}}
 {{> typescript_type this.schema}}
+{{/if}}
 {{/if}}
 {{/if}}
 {{/if}}
@@ -207,7 +209,7 @@ export function use{{hook_name}}({{#if method_params}}{{method_params}}{{/if}}) 
     } finally {
       setLoading(false);
     }
-  }, [{{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if query_params}}{{#if path_params}}, {{/if}}queryParams{{/if}}{{#if request_body}}{{#if path_params}}, {{else if query_params}}, {{/if}}data{{/if}}]);
+  }, [{{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if query_params}}{{#if path_params}}, {{/if}}queryParams{{/if}}{{#if request_body}}{{#unless path_params}}{{#if query_params}}, {{/if}}{{/unless}}{{#if path_params}}, {{/if}}data{{/if}}]);
 
   {{#if (eq method "GET")}}
   useEffect(() => {
@@ -386,12 +388,14 @@ export * from './types';"#,
                         .push(format!("queryParams?: {{ {} }}", query_param_types.join(", ")));
                 }
 
-                // Add request body if present (not for GET requests)
+                // Add request body parameter if present (for POST, PUT, PATCH, DELETE, etc.)
                 // Check that request body exists and has application/json content
                 let has_json_request_body = normalized_op.request_body.as_ref().map_or(false, |rb| {
                     rb.content.contains_key("application/json")
                 });
 
+                // Add data parameter for non-GET methods that have JSON request bodies
+                // This ensures POST/PUT/PATCH/DELETE methods can send request bodies
                 if has_json_request_body && normalized_op.method != "GET" {
                     let type_name = crate::client_generator::helpers::generate_type_name(
                         &normalized_op.operation_id,
@@ -413,13 +417,16 @@ export * from './types';"#,
                     "Response",
                 );
 
+                // Generate request type name - always generate it when request body exists
+                // This ensures the type is always available in the template context
                 let request_type_name = if has_json_request_body {
-                    Some(crate::client_generator::helpers::generate_type_name(
+                    crate::client_generator::helpers::generate_type_name(
                         &normalized_op.operation_id,
                         "Request",
-                    ))
+                    )
                 } else {
-                    None
+                    // Use empty string when no request body (template will check request_body anyway)
+                    String::new()
                 };
 
                 // Capitalize first letter of operation_id for hook names (React convention)
@@ -449,6 +456,8 @@ export * from './types';"#,
                     "query_params": query_params,
                     "query_param_types": query_param_types,
                     "method_params": method_params,
+                    // Always include request_body in context when it has JSON content
+                    // Template will check {{#if request_body}} to decide whether to render
                     "request_body": if has_json_request_body { normalized_op.request_body.clone() } else { None },
                     "responses": normalized_op.responses,
                     "tags": normalized_op.tags,

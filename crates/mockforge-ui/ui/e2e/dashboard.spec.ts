@@ -16,11 +16,18 @@ test.describe('Dashboard Page', () => {
   test.beforeEach(async ({ page }) => {
     await setupTest(page, { tabName: 'Dashboard' });
     
-    // Wait for dashboard-specific content to load
+    // Wait for dashboard-specific content to load with aggressive timeout
     try {
-      await waitForDashboardLoad(page);
+      await Promise.race([
+        waitForDashboardLoad(page),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Dashboard load timeout')), 8000) // Reduced from 15000
+        )
+      ]);
     } catch {
-      // Dashboard load failed but continue test
+      // Dashboard load failed but continue test - page might still be usable
+      // Just wait a brief moment for page to stabilize
+      await page.waitForLoadState('domcontentloaded', { timeout: 2000 }).catch(() => {});
     }
   });
 

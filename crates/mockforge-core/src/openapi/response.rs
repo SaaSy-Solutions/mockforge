@@ -369,7 +369,22 @@ impl ResponseGenerator {
     }
 
     /// Generate example data from an OpenAPI schema
+    /// 
+    /// Priority order:
+    /// 1. Schema-level example (schema.schema_data.example)
+    /// 2. Property-level examples when generating objects
+    /// 3. Generated values based on schema type
     fn generate_example_from_schema(spec: &OpenApiSpec, schema: &Schema) -> Value {
+        // First, check for schema-level example in schema_data
+        // OpenAPI v3 stores examples in schema_data.example
+        if let Some(example) = schema.schema_data.example.as_ref() {
+            tracing::debug!("Using schema-level example: {:?}", example);
+            return example.clone();
+        }
+
+        // Note: schema-level example check happens at the top of the function (line 380-383)
+        // At this point, if we have a schema-level example, we've already returned it
+        // So we only generate defaults when no example exists
         match &schema.schema_kind {
             openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
                 // Use faker for string fields based on field name hints
@@ -385,12 +400,27 @@ impl ResponseGenerator {
                 for (prop_name, prop_schema) in &obj.properties {
                     let value = match prop_schema {
                         ReferenceOr::Item(prop_schema) => {
-                            Self::generate_example_from_schema(spec, prop_schema.as_ref())
+                            // Check for property-level example first
+                            if let Some(prop_example) = prop_schema.schema_data.example.as_ref() {
+                                tracing::debug!("Using example for property '{}': {:?}", prop_name, prop_example);
+                                prop_example.clone()
+                            } else {
+                                Self::generate_example_from_schema(spec, prop_schema.as_ref())
+                            }
                         }
-                        ReferenceOr::Reference { reference } => spec
-                            .get_schema(reference)
-                            .map(|schema| Self::generate_example_from_schema(spec, &schema.schema))
-                            .unwrap_or_else(|| Self::generate_example_for_property(prop_name)),
+                        ReferenceOr::Reference { reference } => {
+                            // Try to resolve reference and check for example
+                            if let Some(resolved_schema) = spec.get_schema(reference) {
+                                if let Some(ref_example) = resolved_schema.schema.schema_data.example.as_ref() {
+                                    tracing::debug!("Using example from referenced schema '{}': {:?}", reference, ref_example);
+                                    ref_example.clone()
+                                } else {
+                                    Self::generate_example_from_schema(spec, &resolved_schema.schema)
+                                }
+                            } else {
+                                Self::generate_example_for_property(prop_name)
+                            }
+                        }
                     };
                     let value = match value {
                         Value::Null => Self::generate_example_for_property(prop_name),
@@ -403,20 +433,34 @@ impl ResponseGenerator {
                 }
                 Value::Object(map)
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) => match &arr.items {
-                Some(item_schema) => {
-                    let example_item = match item_schema {
-                        ReferenceOr::Item(item_schema) => {
-                            Self::generate_example_from_schema(spec, item_schema.as_ref())
-                        }
-                        ReferenceOr::Reference { reference } => spec
-                            .get_schema(reference)
-                            .map(|schema| Self::generate_example_from_schema(spec, &schema.schema))
-                            .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
-                    };
-                    Value::Array(vec![example_item])
+            openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) => {
+                // Check for array-level example (schema.schema_data.example contains the full array)
+                // Note: This check is actually redundant since we check at the top,
+                // but keeping it here for clarity and defensive programming
+                // If the array schema itself has an example, it's already handled at the top
+                
+                match &arr.items {
+                    Some(item_schema) => {
+                        let example_item = match item_schema {
+                            ReferenceOr::Item(item_schema) => {
+                                // Recursively generate example for array item
+                                // This will check for item-level examples
+                                Self::generate_example_from_schema(spec, item_schema.as_ref())
+                            }
+                            ReferenceOr::Reference { reference } => {
+                                // Try to resolve reference and generate example
+                                // This will check for examples in referenced schema
+                                if let Some(resolved_schema) = spec.get_schema(reference) {
+                                    Self::generate_example_from_schema(spec, &resolved_schema.schema)
+                                } else {
+                                    Value::Object(serde_json::Map::new())
+                                }
+                            }
+                        };
+                        Value::Array(vec![example_item])
+                    }
+                    None => Value::Array(vec![Value::String("item".to_string())]),
                 }
-                None => Value::Array(vec![Value::String("item".to_string())]),
             },
             _ => Value::Object(serde_json::Map::new()),
         }

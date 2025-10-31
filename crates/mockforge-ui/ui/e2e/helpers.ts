@@ -13,12 +13,12 @@ import { Page } from '@playwright/test';
  * Also ensures user is logged in
  */
 export async function waitForAppLoad(page: Page): Promise<void> {
-  const MAX_WAIT_TIME = 20000; // Max 20 seconds total
+  const MAX_WAIT_TIME = 12000; // Reduced to 12 seconds total
   const startTime = Date.now();
 
   try {
     // Wait for the page to load first (shorter timeout)
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
 
     // Quick check if page is still alive
     if (page.isClosed()) {
@@ -26,7 +26,7 @@ export async function waitForAppLoad(page: Page): Promise<void> {
     }
 
     // Wait briefly for React to hydrate
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500); // Reduced from 1000
 
     // Check if we're on the login screen (quick check)
     const isLoginScreen = await Promise.race([
@@ -35,11 +35,11 @@ export async function waitForAppLoad(page: Page): Promise<void> {
     ]);
 
     if (isLoginScreen) {
-      // Need to log in first - but with timeout
+      // Need to log in first - but with shorter timeout
       await Promise.race([
         loginAsAdmin(page),
         new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Login timeout')), 15000)
+          setTimeout(() => reject(new Error('Login timeout')), 8000) // Reduced from 15000
         )
       ]);
     }
@@ -50,14 +50,14 @@ export async function waitForAppLoad(page: Page): Promise<void> {
     }
 
     // Wait for navigation (quick check, don't wait too long)
-    const navSelectors = ['#main-navigation', 'nav[role="navigation"]', 'aside nav', 'nav[role="navigation"]', 'body'];
+    const navSelectors = ['#main-navigation', 'nav[role="navigation"]', 'aside nav', 'body'];
 
     for (const selector of navSelectors) {
       if (page.isClosed()) break;
       if (Date.now() - startTime > MAX_WAIT_TIME) break;
 
       try {
-        await page.waitForSelector(selector, { timeout: 3000, state: 'attached' });
+        await page.waitForSelector(selector, { timeout: 2000, state: 'attached' }); // Reduced from 3000
         break; // Found one, we're good
       } catch {
         continue;
@@ -67,7 +67,7 @@ export async function waitForAppLoad(page: Page): Promise<void> {
     // Skip networkidle - it's often too slow and not needed
     // Just a brief wait for React to finish rendering
     if (!page.isClosed() && (Date.now() - startTime) < MAX_WAIT_TIME) {
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(300); // Reduced from 500
     }
   } catch (error) {
     // If page was closed, throw a clearer error
@@ -168,8 +168,8 @@ export async function navigateToTab(
     return false;
   }
 
-  // Wait for React to render - give it more time
-  await page.waitForTimeout(3000);
+  // Wait for React to render - reduced time
+  await page.waitForTimeout(1000);
 
   // Debug: Check if debug mode is enabled (via page context or environment)
   // Note: process.env is not available in browser context, so we'll skip debug logging
@@ -441,18 +441,31 @@ export async function takeDebugScreenshot(
  * Specific helper for dashboard page
  */
 export async function waitForDashboardLoad(page: Page): Promise<void> {
-  // Wait for common dashboard elements
+  // Wait for common dashboard elements with timeout
   const dashboardSelectors = [
     '[data-testid="dashboard"]',
     'h1:has-text("Dashboard")',
     'h2:has-text("Dashboard")',
     '[class*="dashboard"]',
+    'body', // Fallback to body if nothing else found
   ];
 
   for (const selector of dashboardSelectors) {
+    if (page.isClosed()) break;
+    
     try {
-      if (await isVisible(page, selector, 2000)) {
-        await waitForApiResponse(page, '/__mockforge/dashboard');
+      if (await isVisible(page, selector, 1500)) { // Reduced from 2000
+        // Try to wait for API response, but don't wait too long
+        try {
+          await Promise.race([
+            waitForApiResponse(page, '/__mockforge/dashboard'),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error('API timeout')), 3000)
+            )
+          ]);
+        } catch {
+          // API didn't respond in time, but dashboard element is visible, so continue
+        }
         return;
       }
     } catch {
@@ -460,8 +473,8 @@ export async function waitForDashboardLoad(page: Page): Promise<void> {
     }
   }
 
-  // Fallback: just wait for network idle
-  await page.waitForLoadState('networkidle');
+  // Fallback: just wait for domcontentloaded (faster than networkidle)
+  await page.waitForLoadState('domcontentloaded', { timeout: 2000 }).catch(() => {});
 }
 
 /**
