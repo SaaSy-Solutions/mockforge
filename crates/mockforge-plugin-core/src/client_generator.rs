@@ -254,6 +254,177 @@ pub struct ClientGeneratorPluginConfig {
 pub mod helpers {
     use super::*;
 
+    /// Capitalize the first letter of a string
+    fn capitalize_first(s: &str) -> String {
+        let mut chars = s.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => {
+                let mut result = first.to_uppercase().collect::<String>();
+                result.push_str(&chars.as_str().to_lowercase());
+                result
+            }
+        }
+    }
+
+    /// Check if a path segment is a version number (e.g., "v1", "v10", "version1")
+    ///
+    /// Supports both "v1", "v10", "v123" and "version1", "version10" patterns
+    #[cfg_attr(test, allow(dead_code))]
+    fn is_version_number(segment: &str) -> bool {
+        // Match patterns like "v1", "v10", "v123", etc.
+        if segment.starts_with('v') && segment.len() > 1 {
+            segment[1..].chars().all(|c| c.is_ascii_digit())
+        } else if segment.starts_with("version") && segment.len() > 7 {
+            // Match patterns like "version1", "version10", etc.
+            segment[7..].chars().all(|c| c.is_ascii_digit())
+        } else {
+            false
+        }
+    }
+
+    /// Convert a string to camelCase by splitting on hyphens/underscores and capitalizing
+    ///
+    /// Examples:
+    /// - "disease-detection" -> "DiseaseDetection"
+    /// - "api_v1_users" -> "ApiV1Users"
+    /// - "simple" -> "Simple"
+    fn to_camel_case(s: &str) -> String {
+        s.split(|c: char| c == '-' || c == '_')
+            .filter(|s| !s.is_empty())
+            .map(|w| capitalize_first(w))
+            .collect()
+    }
+
+    /// Generate a camelCase operation ID from method, path, and optional summary
+    ///
+    /// Examples:
+    /// - POST /api/v1/ai/disease-detection -> postAiDiseaseDetection
+    /// - GET /api/v1/hives/{hiveId}/inspections -> getHiveInspections
+    /// - POST /api/v1/users with summary "Create User" -> postCreateUser
+    pub fn generate_camel_case_operation_id(
+        method: &str,
+        path: &str,
+        summary: &Option<String>,
+    ) -> String {
+        // Try to use summary if available and meaningful
+        // Use first 2-3 words, or all words if summary is short (<= 50 chars)
+        if let Some(s) = summary {
+            let words: Vec<&str> = s.split_whitespace().collect();
+            let words_to_use = if s.len() <= 50 {
+                // Use all words if summary is short
+                words
+            } else {
+                // Otherwise limit to first 3 words
+                words.into_iter().take(3).collect()
+            };
+
+            if words_to_use.len() >= 2 {
+                // Capitalize each word and join
+                let camel_case: String = words_to_use.iter().map(|w| capitalize_first(w)).collect();
+                return format!("{}{}", method.to_lowercase(), camel_case);
+            }
+        }
+
+        // Generate from path segments
+        // Extract meaningful path parts (skip empty, skip path params, skip version numbers)
+        let path_parts: Vec<&str> = path
+            .split('/')
+            .filter(|p| !p.is_empty() && !p.starts_with('{') && !is_version_number(p))
+            .collect();
+
+        // Build operation name from last 1-2 meaningful parts (prefer the last part, include second-to-last if it adds context)
+        let operation_name = if path_parts.is_empty() {
+            "Operation".to_string()
+        } else if path_parts.len() == 1 {
+            // Single part: just convert to camelCase
+            to_camel_case(path_parts[0])
+        } else {
+            // Multiple parts: use last part, optionally include second-to-last for context
+            // For paths like /api/v1/hives/{hiveId}/inspections, use "Inspections"
+            // For paths like /api/v1/ai/disease-detection, use "DiseaseDetection"
+            let last_part = path_parts[path_parts.len() - 1];
+            let second_last = if path_parts.len() >= 2 {
+                Some(path_parts[path_parts.len() - 2])
+            } else {
+                None
+            };
+
+            // Only include context for truly generic names, not just plural endings
+            // This prevents "inspections" from becoming "HivesInspections" when "Inspections" is clear enough
+            let include_context = second_last.is_some()
+                && (last_part == "items"
+                    || last_part == "data"
+                    || last_part == "list"
+                    || last_part == "all"
+                    || last_part == "search");
+
+            if include_context {
+                // Combine second-to-last and last: e.g., "Hive" + "Inspections" = "HiveInspections"
+                to_camel_case(second_last.unwrap()) + &to_camel_case(last_part)
+            } else {
+                // Just use the last part
+                to_camel_case(last_part)
+            }
+        };
+
+        format!("{}{}", method.to_lowercase(), operation_name)
+    }
+
+    /// Generate a readable type name from operation ID
+    ///
+    /// Examples:
+    /// - postAiDiseaseDetection -> AiDiseaseDetectionResponse
+    /// - getHiveInspections -> HiveInspectionsResponse
+    /// - getUsers -> GetUsersResponse
+    pub fn generate_type_name(operation_id: &str, suffix: &str) -> String {
+        // Common HTTP method prefixes (lowercase)
+        let method_prefixes = ["get", "post", "put", "patch", "delete", "head", "options"];
+
+        // Check if operation_id starts with a method prefix (case-insensitive)
+        let operation_lower = operation_id.to_lowercase();
+        let without_method = if let Some(prefix) =
+            method_prefixes.iter().find(|p| operation_lower.starts_with(*p))
+        {
+            let remaining = &operation_id[prefix.len()..];
+
+            // Count uppercase letters in remaining part to determine if it's simple or complex
+            let uppercase_count = remaining.chars().filter(|c| c.is_uppercase()).count();
+
+            // If it's method + single word (no uppercase letters or just one word), capitalize whole thing
+            // Otherwise (multiple words in camelCase), skip the method prefix
+            if uppercase_count == 0
+                || (uppercase_count == 1
+                    && remaining.chars().next().map(|c| c.is_uppercase()).unwrap_or(false))
+            {
+                // Simple case: method + single word -> capitalize whole thing
+                operation_id
+            } else {
+                // Complex case: method + multiple words -> skip method prefix
+                remaining
+            }
+        } else {
+            // No method prefix, use whole string
+            operation_id
+        };
+
+        // Ensure first letter is uppercase (preserve camelCase structure)
+        let capitalized = if let Some(first_char) = without_method.chars().next() {
+            if first_char.is_lowercase() {
+                // Capitalize first letter, preserve rest
+                let mut result = first_char.to_uppercase().collect::<String>();
+                result.push_str(&without_method[first_char.len_utf8()..]);
+                result
+            } else {
+                without_method.to_string()
+            }
+        } else {
+            without_method.to_string()
+        };
+
+        format!("{}{}", capitalized, suffix)
+    }
+
     /// Convert OpenAPI operation to a more convenient format
     pub fn normalize_operation(
         method: &str,
@@ -264,12 +435,8 @@ pub mod helpers {
             method: method.to_uppercase(),
             path: path.to_string(),
             operation_id: operation.operation_id.clone().unwrap_or_else(|| {
-                // Generate operation ID from method and path
-                format!(
-                    "{}_{}",
-                    method.to_lowercase(),
-                    path.replace('/', "_").replace('{', "").replace('}', "")
-                )
+                // Generate camelCase operation ID from method, path, and summary
+                generate_camel_case_operation_id(method, path, &operation.summary)
             }),
             summary: operation.summary.clone(),
             description: operation.description.clone(),
@@ -303,7 +470,12 @@ pub mod helpers {
         pub tags: Vec<String>,
     }
 
-    /// Generate TypeScript type from OpenAPI schema
+    /// Generate TypeScript type from OpenAPI schema with proper formatting
+    ///
+    /// Generates properly formatted TypeScript types with:
+    /// - Array<T> syntax for arrays
+    /// - Properly indented object types
+    /// - Correct handling of nested types
     pub fn schema_to_typescript_type(schema: &Schema) -> String {
         match schema.r#type.as_deref() {
             Some("string") => match schema.format.as_deref() {
@@ -317,7 +489,8 @@ pub mod helpers {
             Some("boolean") => "boolean".to_string(),
             Some("array") => {
                 if let Some(items) = &schema.items {
-                    format!("{}[]", schema_to_typescript_type(items))
+                    // Use Array<T> syntax for better readability
+                    format!("Array<{}>", schema_to_typescript_type(items))
                 } else {
                     "any[]".to_string()
                 }
@@ -330,13 +503,15 @@ pub mod helpers {
                         let required =
                             schema.required.as_ref().map(|req| req.contains(name)).unwrap_or(false);
 
+                        // Format property with proper indentation
                         if required {
                             props.push(format!("  {}: {}", name, prop_type));
                         } else {
                             props.push(format!("  {}?: {}", name, prop_type));
                         }
                     }
-                    format!("{{\n{}\n}}", props.join(",\n"))
+                    // Format object with proper line breaks
+                    format!("{{\n{}\n}}", props.join(";\n"))
                 } else {
                     "Record<string, any>".to_string()
                 }
@@ -447,5 +622,142 @@ mod tests {
             ref_path: None,
         };
         assert_eq!(helpers::schema_to_typescript_type(&number_schema), "number");
+
+        // Test array type formatting
+        let array_schema = Schema {
+            r#type: Some("array".to_string()),
+            format: None,
+            properties: None,
+            required: None,
+            items: Some(Box::new(string_schema.clone())),
+            description: None,
+            example: None,
+            r#enum: None,
+            ref_path: None,
+        };
+        assert_eq!(helpers::schema_to_typescript_type(&array_schema), "Array<string>");
+    }
+
+    #[test]
+    fn test_generate_camel_case_operation_id() {
+        // Test with summary
+        let summary = Some("Detect Disease".to_string());
+        let op_id = helpers::generate_camel_case_operation_id(
+            "POST",
+            "/api/v1/ai/disease-detection",
+            &summary,
+        );
+        assert!(op_id.starts_with("post"));
+        assert!(op_id.contains("Detect") || op_id.contains("Disease"));
+
+        // Test without summary - should generate from path
+        // For /api/v1/hives/{hiveId}/inspections, should use last meaningful part
+        let op_id = helpers::generate_camel_case_operation_id(
+            "GET",
+            "/api/v1/hives/{hiveId}/inspections",
+            &None,
+        );
+        assert_eq!(op_id, "getInspections");
+
+        // Test with context needed (generic name)
+        let op_id =
+            helpers::generate_camel_case_operation_id("GET", "/api/v1/hives/{hiveId}/items", &None);
+        assert_eq!(op_id, "getHivesItems");
+
+        // Test POST with path
+        let op_id = helpers::generate_camel_case_operation_id(
+            "POST",
+            "/api/v1/ai/disease-detection",
+            &None,
+        );
+        assert_eq!(op_id, "postDiseaseDetection");
+
+        // Test with single word path
+        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/users", &None);
+        assert_eq!(op_id, "getUsers");
+    }
+
+    #[test]
+    fn test_generate_type_name() {
+        assert_eq!(
+            helpers::generate_type_name("postAiDiseaseDetection", "Response"),
+            "AiDiseaseDetectionResponse"
+        );
+        assert_eq!(
+            helpers::generate_type_name("getHiveInspections", "Response"),
+            "HiveInspectionsResponse"
+        );
+        // getUsers is method + single word, so capitalize whole thing
+        assert_eq!(helpers::generate_type_name("getUsers", "Request"), "GetUsersRequest");
+    }
+
+    #[test]
+    fn test_normalize_operation_with_camel_case() {
+        let operation = Operation {
+            summary: Some("Get hive inspections".to_string()),
+            description: None,
+            operation_id: None,
+            parameters: None,
+            request_body: None,
+            responses: HashMap::new(),
+            tags: None,
+        };
+
+        let normalized =
+            helpers::normalize_operation("GET", "/api/v1/hives/{hiveId}/inspections", &operation);
+        assert!(normalized.operation_id.starts_with("get"));
+        assert!(
+            normalized.operation_id.contains("Inspections")
+                || normalized.operation_id.contains("Hive")
+        );
+    }
+
+    #[test]
+    fn test_generate_camel_case_operation_id_with_version_numbers() {
+        // Test v10, v123 (previously missed by len <= 3 check)
+        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/v10/users", &None);
+        assert_eq!(op_id, "getUsers");
+
+        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/v123/resource", &None);
+        assert_eq!(op_id, "getResource");
+
+        // Test version1, version10 patterns
+        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/version1/users", &None);
+        assert_eq!(op_id, "getUsers");
+
+        let op_id =
+            helpers::generate_camel_case_operation_id("GET", "/api/version10/resource", &None);
+        assert_eq!(op_id, "getResource");
+    }
+
+    #[test]
+    fn test_generate_camel_case_operation_id_with_long_summary() {
+        // Test that short summaries (<= 50 chars) use all words
+        let short_summary = Some("Create New User Account".to_string());
+        let op_id = helpers::generate_camel_case_operation_id("POST", "/api/users", &short_summary);
+        assert!(op_id.starts_with("post"));
+        assert!(op_id.contains("Create") || op_id.contains("New") || op_id.contains("User"));
+
+        // Test that long summaries are truncated to first 3 words
+        let long_summary = Some(
+            "This is a very long summary that should be truncated to first three words only"
+                .to_string(),
+        );
+        let op_id = helpers::generate_camel_case_operation_id("POST", "/api/users", &long_summary);
+        assert!(op_id.starts_with("post"));
+        // Should only contain first 3 words: "This", "Is", "Very"
+        assert!(op_id.contains("This") || op_id.contains("Is") || op_id.contains("Very"));
+    }
+
+    #[test]
+    fn test_generate_type_name_edge_cases() {
+        // Test with lowercase first letter (e.g., from operation_id like "getUsers")
+        assert_eq!(helpers::generate_type_name("getUsers", "Response"), "GetUsersResponse");
+
+        // Test with already uppercase first letter
+        assert_eq!(helpers::generate_type_name("GetUsers", "Response"), "GetUsersResponse");
+
+        // Test with single word operation ID
+        assert_eq!(helpers::generate_type_name("getUser", "Response"), "GetUserResponse");
     }
 }

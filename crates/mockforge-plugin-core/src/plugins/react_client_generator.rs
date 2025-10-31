@@ -53,7 +53,7 @@ export interface {{@key}} {
 
 // API Response types
 {{#each operations}}
-export interface {{operation_id}}Response {
+export interface {{response_type_name}} {
 {{#each responses}}
 {{#if (eq @key "200")}}
 {{#if this.content}}
@@ -74,11 +74,17 @@ export interface {{operation_id}}Response {
 // API Request types
 {{#each operations}}
 {{#if request_body}}
-export interface {{operation_id}}Request {
+export interface {{request_type_name}} {
 {{#each request_body.content}}
 {{#if (eq @key "application/json")}}
 {{#if this.schema}}
+{{#if this.schema.properties}}
+{{#each this.schema.properties}}
+  {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
+{{/each}}
+{{else}}
 {{> typescript_type this.schema}}
+{{/if}}
 {{/if}}
 {{/if}}
 {{/each}}
@@ -139,13 +145,29 @@ class ApiClient {
 
   {{#each operations}}
   // {{summary}}
-  async {{operation_id}}({{#if request_body}}data: {{operation_id}}Request{{/if}}): Promise<{{operation_id}}Response> {
-    const endpoint = '{{path}}'{{#if (eq method "GET")}}{{#if request_body}} + '?' + new URLSearchParams(data as any).toString(){{/if}}{{/if}};
-
-    return this.request<{{operation_id}}Response>(endpoint, {
+  async {{operation_id}}({{method_params}}): Promise<{{response_type_name}}> {
+    {{#if path_params}}
+    const endpoint = `{{endpoint_path}}`;
+    {{else}}
+    const endpoint = '{{endpoint_path}}';
+    {{/if}}
+    {{#if (eq method "GET")}}
+    {{#if query_params}}
+    const queryString = queryParams ? '?' + new URLSearchParams(queryParams as any).toString() : '';
+    return this.request<{{response_type_name}}>(endpoint + queryString, {
       method: '{{method}}',
-      {{#if request_body}}{{#unless (eq method "GET")}}body: JSON.stringify(data),{{/unless}}{{/if}}
     });
+    {{else}}
+    return this.request<{{response_type_name}}>(endpoint, {
+      method: '{{method}}',
+    });
+    {{/if}}
+    {{else}}
+    return this.request<{{response_type_name}}>(endpoint, {
+      method: '{{method}}',
+      {{#if request_body}}body: JSON.stringify(data),{{/if}}
+    });
+    {{/if}}
   }
 
   {{/each}}
@@ -153,30 +175,38 @@ class ApiClient {
 
 // React hooks for each operation
 {{#each operations}}
-export function use{{operation_id}}({{#if request_body}}data?: {{operation_id}}Request{{/if}}) {
-  const [result, setResult] = useState<{{operation_id}}Response | null>(null);
+export function use{{hook_name}}({{#if method_params}}{{method_params}}{{/if}}) {
+  const [result, setResult] = useState<{{response_type_name}} | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const execute = useCallback(async ({{#if request_body}}requestData?: {{operation_id}}Request{{/if}}) => {
+  const execute = useCallback(async ({{#if method_params}}{{method_params}}{{/if}}) => {
     setLoading(true);
     setError(null);
 
     try {
       const client = new ApiClient(defaultConfig);
-      const response = await client.{{operation_id}}({{#if request_body}}requestData || data{{/if}});
+      {{#if (eq method "GET")}}
+      {{#if query_params}}
+      const response = await client.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}, {{/if}}queryParams);
+      {{else}}
+      const response = await client.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}});
+      {{/if}}
+      {{else}}
+      const response = await client.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}{{#if request_body}}, {{/if}}{{/if}}{{#if request_body}}data{{/if}});
+      {{/if}}
       setResult(response);
     } catch (err) {
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  }, [{{#if request_body}}data{{/if}}]);
+  }, [{{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if query_params}}{{#if path_params}}, {{/if}}queryParams{{/if}}{{#if request_body}}{{#if path_params}}, {{else if query_params}}, {{/if}}data{{/if}}]);
 
   {{#if (eq method "GET")}}
   useEffect(() => {
-    execute();
-  }, [execute]);
+    execute({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if query_params}}{{#if path_params}}, {{/if}}queryParams{{/if}});
+  }, [execute{{#if query_params}}, queryParams{{/if}}]);
   {{/if}}
 
   return {
@@ -198,9 +228,15 @@ export * from './types';"#,
         ).map_err(|e| PluginError::execution(format!("Failed to register hooks template: {}", e)))?;
 
         // TypeScript type helper template
+        // Generates properly formatted TypeScript types with Array<T> syntax and proper indentation
         templates.register_template_string(
             "typescript_type",
-            r#"{{#if (eq type "string")}}string{{/if}}{{#if (eq type "integer")}}number{{/if}}{{#if (eq type "number")}}number{{/if}}{{#if (eq type "boolean")}}boolean{{/if}}{{#if (eq type "array")}}{{#if items}}{{> typescript_type items}}[]{{else}}any[]{{/if}}{{/if}}{{#if (eq type "object")}}{{#if properties}}{ {{#each properties}}{{@key}}: {{> typescript_type this}}{{#unless @last}}, {{/unless}}{{/each}} }{{else}}Record<string, any>{{/if}}{{/if}}{{#unless type}}any{{/unless}}"#,
+            r#"{{#if (eq type "string")}}string{{/if}}{{#if (eq type "integer")}}number{{/if}}{{#if (eq type "number")}}number{{/if}}{{#if (eq type "boolean")}}boolean{{/if}}{{#if (eq type "array")}}{{#if items}}Array<{{> typescript_type items}}>{{else}}any[]{{/if}}{{/if}}{{#if (eq type "object")}}{{#if properties}}{
+  {{#each properties}}
+  {{@key}}{{#unless (lookup ../required @key)}}?{{/unless}}: {{> typescript_type this}};{{#unless @last}}
+
+{{/unless}}{{/each}}
+}{{else}}Record<string, any>{{/if}}{{/if}}{{#unless type}}any{{/unless}}"#,
         ).map_err(|e| PluginError::execution(format!("Failed to register typescript_type template: {}", e)))?;
 
         Ok(())
@@ -287,13 +323,120 @@ export * from './types';"#,
                 let normalized_op =
                     crate::client_generator::helpers::normalize_operation(method, path, operation);
 
+                // Extract path parameters from the path
+                let path_params = crate::client_generator::helpers::extract_path_parameters(path);
+
+                // Generate endpoint path with template literals for path parameters
+                // Replace {param} with ${param} for TypeScript template literals
+                // Note: OpenAPI spec requires parameter names to be valid identifiers,
+                // so we can safely assume they don't contain { or } characters
+                let mut endpoint_path = normalized_op.path.clone();
+                for param in &path_params {
+                    // Validate parameter name (OpenAPI spec requires valid identifier)
+                    // Per OpenAPI 3.0 spec, parameter names must match [A-Za-z0-9_-]+
+                    // If somehow invalid, still attempt replacement (malformed spec)
+                    endpoint_path = endpoint_path
+                        .replace(&format!("{{{}}}", param), &format!("${{{}}}", param));
+                }
+
+                // Extract query parameters and build query param types
+                let mut query_params = Vec::new();
+                let mut query_param_types = Vec::new();
+
+                for param in &normalized_op.parameters {
+                    if param.r#in == "query" {
+                        let param_type = if let Some(schema) = &param.schema {
+                            crate::client_generator::helpers::schema_to_typescript_type(schema)
+                        } else {
+                            "string".to_string()
+                        };
+
+                        let required = param.required.unwrap_or(false);
+                        query_params.push(json!({
+                            "name": param.name,
+                            "required": required,
+                            "type": param_type.clone(),
+                        }));
+
+                        if required {
+                            query_param_types.push(format!("{}: {}", param.name, param_type));
+                        } else {
+                            query_param_types.push(format!("{}?: {}", param.name, param_type));
+                        }
+                    }
+                }
+
+                // Build method parameter list
+                let mut method_params_parts = Vec::new();
+
+                // Add path parameters (all required)
+                for param in &path_params {
+                    method_params_parts.push(format!("{}: string", param));
+                }
+
+                // Add query parameters (as an object)
+                if !query_params.is_empty() {
+                    method_params_parts
+                        .push(format!("queryParams?: {{ {} }}", query_param_types.join(", ")));
+                }
+
+                // Add request body if present (not for GET requests)
+                if normalized_op.request_body.is_some() && normalized_op.method != "GET" {
+                    let type_name = crate::client_generator::helpers::generate_type_name(
+                        &normalized_op.operation_id,
+                        "Request",
+                    );
+                    method_params_parts.push(format!("data: {}", type_name));
+                }
+
+                // Join parameters - if empty, use empty string (for methods with no params)
+                let method_params = if method_params_parts.is_empty() {
+                    String::new()
+                } else {
+                    method_params_parts.join(", ")
+                };
+
+                // Generate type names for response and request
+                let response_type_name = crate::client_generator::helpers::generate_type_name(
+                    &normalized_op.operation_id,
+                    "Response",
+                );
+                let request_type_name = if normalized_op.request_body.is_some() {
+                    Some(crate::client_generator::helpers::generate_type_name(
+                        &normalized_op.operation_id,
+                        "Request",
+                    ))
+                } else {
+                    None
+                };
+
+                // Capitalize first letter of operation_id for hook names (React convention)
+                let hook_name = if let Some(first_char) = normalized_op.operation_id.chars().next()
+                {
+                    format!(
+                        "{}{}",
+                        first_char.to_uppercase(),
+                        &normalized_op.operation_id[first_char.len_utf8()..]
+                    )
+                } else {
+                    normalized_op.operation_id.clone()
+                };
+
                 operations.push(json!({
                     "method": normalized_op.method,
                     "path": normalized_op.path,
+                    "endpoint_path": endpoint_path,
                     "operation_id": normalized_op.operation_id,
+                    "hook_name": hook_name,
+                    "response_type_name": response_type_name,
+                    "request_type_name": request_type_name,
                     "summary": normalized_op.summary,
                     "description": normalized_op.description,
                     "parameters": normalized_op.parameters,
+                    "path_params": path_params,
+                    "query_params": query_params,
+                    "query_param_types": query_param_types,
+                    "method_params": method_params,
                     "request_body": normalized_op.request_body,
                     "responses": normalized_op.responses,
                     "tags": normalized_op.tags,
