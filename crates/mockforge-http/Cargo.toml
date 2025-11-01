@@ -52,8 +52,8 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { version = "0.2.3", path = "../mockforge-core" }
-mockforge-data = { version = "0.2.3", path = "../mockforge-data" }
+mockforge-core = { version = "0.2.4", path = "../mockforge-core" }
+mockforge-data = { version = "0.2.4", path = "../mockforge-data" }
 mockforge-observability = { version = "0.2.0", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }
 mockforge-mqtt = { version = "0.2.0", path = "../mockforge-mqtt", optional = true }
@@ -75,7 +75,7 @@ tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
 mockforge-ws = { version = "0.2.0", path = "../mockforge-ws" }
-mockforge-plugin-core = { version = "0.2.3", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.2.4", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }
