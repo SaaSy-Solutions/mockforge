@@ -15,7 +15,7 @@ categories = ["development-tools::testing", "network-programming"]
 mockforge-core = { version = "0.2.4", path = "../mockforge-core" }
 tokio = { workspace = true }
 rumqttd = "0.18"
-rumqttc = "0.24"
+rumqttc = "0.25"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
