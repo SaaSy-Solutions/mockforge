@@ -29,6 +29,31 @@ impl ReactClientGenerator {
         Ok(Self { templates })
     }
 
+    /// Process a schema JSON value to add required flags to properties
+    /// This makes it easier for Handlebars templates to check required fields
+    fn process_schema_with_required_flags(mut schema: Value) -> Value {
+        // First, extract and clone required fields list (to avoid borrow conflicts)
+        let required_fields: Vec<String> = schema
+            .get("required")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+            .unwrap_or_default();
+
+        // Then, modify properties (mutable borrow)
+        if let Some(properties) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
+            for (prop_name, prop_value) in properties.iter_mut() {
+                // Add required flag to each property
+                if let Some(prop_obj) = prop_value.as_object_mut() {
+                    prop_obj.insert(
+                        "required".to_string(),
+                        serde_json::Value::Bool(required_fields.contains(prop_name)),
+                    );
+                }
+            }
+        }
+        schema
+    }
+
     /// Register Handlebars templates for React code generation
     fn register_templates(templates: &mut Handlebars<'static>) -> Result<()> {
         // TypeScript types template
@@ -62,7 +87,7 @@ export interface {{response_type_name}} {
 {{#if this.schema}}
 {{#if this.schema.properties}}
 {{#each this.schema.properties}}
-  {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
+  {{@key}}{{#unless this.required}}?{{/unless}}: {{> typescript_type this}};
 {{/each}}
 {{else}}
 {{> typescript_type this.schema}}
@@ -86,7 +111,7 @@ export interface {{request_type_name}} {
 {{#if this.schema}}
 {{#if this.schema.properties}}
 {{#each this.schema.properties}}
-  {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
+  {{@key}}{{#unless this.required}}?{{/unless}}: {{> typescript_type this}};
 {{/each}}
 {{else}}
 {{#if this.schema.type}}
@@ -390,9 +415,10 @@ export * from './types';"#,
 
                 // Add request body parameter if present (for POST, PUT, PATCH, DELETE, etc.)
                 // Check that request body exists and has application/json content
-                let has_json_request_body = normalized_op.request_body.as_ref().map_or(false, |rb| {
-                    rb.content.contains_key("application/json")
-                });
+                let has_json_request_body = normalized_op
+                    .request_body
+                    .as_ref()
+                    .map_or(false, |rb| rb.content.contains_key("application/json"));
 
                 // Add data parameter for non-GET methods that have JSON request bodies
                 // This ensures POST/PUT/PATCH/DELETE methods can send request bodies
@@ -441,6 +467,46 @@ export * from './types';"#,
                     normalized_op.operation_id.clone()
                 };
 
+                // Pre-process request body schema to add required flags to properties
+                // This makes it easier for Handlebars templates to check required fields
+                let processed_request_body = if has_json_request_body {
+                    if let Some(ref rb) = normalized_op.request_body {
+                        // Clone and transform the request body structure
+                        let mut processed_rb = json!(rb);
+                        if let Some(content) = processed_rb.get_mut("content") {
+                            if let Some(json_content) = content.get_mut("application/json") {
+                                if let Some(schema) = json_content.get_mut("schema") {
+                                    // Process schema to add required flags to properties
+                                    *schema =
+                                        Self::process_schema_with_required_flags(schema.take());
+                                }
+                            }
+                        }
+                        Some(processed_rb)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Pre-process response schemas to add required flags to properties
+                // Convert Response structs to JSON for processing
+                let mut processed_responses: HashMap<String, Value> =
+                    normalized_op.responses.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+                for (_status_code, response) in processed_responses.iter_mut() {
+                    if let Some(content) =
+                        response.get_mut("content").and_then(|c| c.as_object_mut())
+                    {
+                        if let Some(json_content) = content.get_mut("application/json") {
+                            if let Some(schema) = json_content.get_mut("schema") {
+                                // Process schema to add required flags to properties
+                                *schema = Self::process_schema_with_required_flags(schema.take());
+                            }
+                        }
+                    }
+                }
+
                 operations.push(json!({
                     "method": normalized_op.method,
                     "path": normalized_op.path,
@@ -458,8 +524,10 @@ export * from './types';"#,
                     "method_params": method_params,
                     // Always include request_body in context when it has JSON content
                     // Template will check {{#if request_body}} to decide whether to render
-                    "request_body": if has_json_request_body { normalized_op.request_body.clone() } else { None },
-                    "responses": normalized_op.responses,
+                    // Properties now have a "required" boolean flag for easier template checking
+                    "request_body": processed_request_body,
+                    // Responses are processed to include required flags in properties
+                    "responses": processed_responses,
                     "tags": normalized_op.tags,
                 }));
             }

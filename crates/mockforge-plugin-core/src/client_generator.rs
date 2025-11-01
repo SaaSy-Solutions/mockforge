@@ -84,10 +84,12 @@ pub struct Operation {
     /// Operation description
     pub description: Option<String>,
     /// Operation ID
+    #[serde(rename = "operationId")]
     pub operation_id: Option<String>,
     /// Request parameters
     pub parameters: Option<Vec<Parameter>>,
     /// Request body
+    #[serde(rename = "requestBody")]
     pub request_body: Option<RequestBody>,
     /// Responses
     pub responses: HashMap<String, Response>,
@@ -330,7 +332,8 @@ pub mod helpers {
 
                 // If first word matches the method verb, skip it to avoid redundancy
                 let words_to_capitalize = if method_verbs.contains(&first_word_lower.as_str())
-                    && first_word_lower == method_lower {
+                    && first_word_lower == method_lower
+                {
                     // Skip the first word if it matches the method
                     &words_to_use[1..]
                 } else {
@@ -341,7 +344,8 @@ pub mod helpers {
                 // Only proceed if we have words left after potentially skipping the verb
                 if !words_to_capitalize.is_empty() {
                     // Capitalize each word and join
-                    let camel_case: String = words_to_capitalize.iter().map(|w| capitalize_first(w)).collect();
+                    let camel_case: String =
+                        words_to_capitalize.iter().map(|w| capitalize_first(w)).collect();
                     return format!("{}{}", method.to_lowercase(), camel_case);
                 }
             }
@@ -775,7 +779,8 @@ mod tests {
         // Test that summaries starting with the method verb don't create redundant prefixes
         // e.g., "Get apiary by ID" with GET method should become "getApiaryById", not "getGetApiaryById"
         let summary = Some("Get apiary by ID".to_string());
-        let op_id = helpers::generate_camel_case_operation_id("GET", "/api/v1/apiaries/{id}", &summary);
+        let op_id =
+            helpers::generate_camel_case_operation_id("GET", "/api/v1/apiaries/{id}", &summary);
         assert_eq!(op_id, "getApiaryById");
 
         // Test with POST

@@ -29,6 +29,31 @@ impl VueClientGenerator {
         Ok(Self { templates })
     }
 
+    /// Process a schema JSON value to add required flags to properties
+    /// This makes it easier for Handlebars templates to check required fields
+    fn process_schema_with_required_flags(mut schema: Value) -> Value {
+        // First, extract and clone required fields list (to avoid borrow conflicts)
+        let required_fields: Vec<String> = schema
+            .get("required")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+            .unwrap_or_default();
+
+        // Then, modify properties (mutable borrow)
+        if let Some(properties) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
+            for (prop_name, prop_value) in properties.iter_mut() {
+                // Add required flag to each property
+                if let Some(prop_obj) = prop_value.as_object_mut() {
+                    prop_obj.insert(
+                        "required".to_string(),
+                        serde_json::Value::Bool(required_fields.contains(prop_name)),
+                    );
+                }
+            }
+        }
+        schema
+    }
+
     /// Register Handlebars templates for Vue code generation
     fn register_templates(templates: &mut Handlebars<'static>) -> Result<()> {
         // TypeScript types template (same as React)
@@ -62,7 +87,7 @@ export interface {{operation_id}}Response {
 {{#if this.schema}}
 {{#if this.schema.properties}}
 {{#each this.schema.properties}}
-  {{@key}}{{#unless (lookup ../this.schema.required @key)}}?{{/unless}}: {{> typescript_type this}};
+  {{@key}}{{#unless this.required}}?{{/unless}}: {{> typescript_type this}};
 {{/each}}
 {{else}}
 {{> typescript_type this.schema}}
@@ -84,7 +109,13 @@ export interface {{operation_id}}Request {
 {{#each request_body.content}}
 {{#if (eq @key "application/json")}}
 {{#if this.schema}}
+{{#if this.schema.properties}}
+{{#each this.schema.properties}}
+  {{@key}}{{#unless this.required}}?{{/unless}}: {{> typescript_type this}};
+{{/each}}
+{{else}}
 {{> typescript_type this.schema}}
+{{/if}}
 {{/if}}
 {{/if}}
 {{/each}}
@@ -378,6 +409,47 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
                 let normalized_op =
                     crate::client_generator::helpers::normalize_operation(method, path, operation);
 
+                // Check if request body has JSON content
+                let has_json_request_body = normalized_op
+                    .request_body
+                    .as_ref()
+                    .map_or(false, |rb| rb.content.contains_key("application/json"));
+
+                // Pre-process request body schema to add required flags to properties
+                let processed_request_body = if has_json_request_body {
+                    if let Some(ref rb) = normalized_op.request_body {
+                        let mut processed_rb = json!(rb);
+                        if let Some(content) = processed_rb.get_mut("content") {
+                            if let Some(json_content) = content.get_mut("application/json") {
+                                if let Some(schema) = json_content.get_mut("schema") {
+                                    *schema =
+                                        Self::process_schema_with_required_flags(schema.take());
+                                }
+                            }
+                        }
+                        Some(processed_rb)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Pre-process response schemas to add required flags to properties
+                let mut processed_responses: HashMap<String, Value> =
+                    normalized_op.responses.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+                for (_status_code, response) in processed_responses.iter_mut() {
+                    if let Some(content) =
+                        response.get_mut("content").and_then(|c| c.as_object_mut())
+                    {
+                        if let Some(json_content) = content.get_mut("application/json") {
+                            if let Some(schema) = json_content.get_mut("schema") {
+                                *schema = Self::process_schema_with_required_flags(schema.take());
+                            }
+                        }
+                    }
+                }
+
                 operations.push(json!({
                     "method": normalized_op.method,
                     "path": normalized_op.path,
@@ -385,8 +457,8 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
                     "summary": normalized_op.summary,
                     "description": normalized_op.description,
                     "parameters": normalized_op.parameters,
-                    "request_body": normalized_op.request_body,
-                    "responses": normalized_op.responses,
+                    "request_body": processed_request_body,
+                    "responses": processed_responses,
                     "tags": normalized_op.tags,
                 }));
             }

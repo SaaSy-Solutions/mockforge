@@ -4768,7 +4768,7 @@ dependencies = [
  "criterion",
  "futures",
  "lapin",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "regex",
  "serde",
  "serde_json",
@@ -4807,8 +4807,8 @@ dependencies = [
  "colored 2.2.0",
  "handlebars 6.3.2",
  "indicatif",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "mockforge-data 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
+ "mockforge-data 0.2.3",
  "mockforge-recorder",
  "mockito",
  "openapiv3",
@@ -4878,8 +4878,8 @@ dependencies = [
  "lapin",
  "mockforge-amqp",
  "mockforge-bench",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "mockforge-data 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
+ "mockforge-data 0.2.3",
  "mockforge-ftp",
  "mockforge-graphql",
  "mockforge-grpc",
@@ -4887,7 +4887,7 @@ dependencies = [
  "mockforge-kafka",
  "mockforge-mqtt",
  "mockforge-observability",
- "mockforge-plugin-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-plugin-core 0.2.3",
  "mockforge-plugin-loader",
  "mockforge-recorder",
  "mockforge-smtp",
@@ -5055,60 +5055,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-core"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba193d7d64fafe0f867d940b274c048c8bf910cb590cf1b6a5fe5a1a2b0a791a"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "async-trait",
- "axum 0.8.6",
- "base32",
- "base64 0.22.1",
- "blake3",
- "chacha20poly1305",
- "chrono",
- "futures",
- "globwalk",
- "hex",
- "hmac",
- "indexmap 2.12.0",
- "json-patch",
- "jsonpath",
- "jsonptr",
- "jsonschema",
- "jsonwebtoken",
- "notify 8.2.0",
- "once_cell",
- "openapiv3",
- "pbkdf2",
- "prost 0.14.1",
- "prost-reflect 0.16.2",
- "prost-types 0.14.1",
- "rand 0.9.2",
- "regex",
- "reqwest 0.12.24",
- "roxmltree",
- "rquickjs",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-tungstenite 0.28.0",
- "toml 0.8.23",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "windows 0.62.2",
-]
-
-[[package]]
 name = "mockforge-data"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5169,39 +5115,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-data"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cde2f717023317dfb10e983d1599a0ea9e891e5f63b91cf8cf24a7a7dddbc80"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.6",
- "chrono",
- "fake",
- "fastrand 2.3.0",
- "hex",
- "itertools 0.14.0",
- "jsonschema",
- "mockforge-core 0.1.6",
- "ndarray 0.16.1",
- "ndarray-stats",
- "openapiv3",
- "rand 0.9.2",
- "regex",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
- "tower 0.5.2",
- "tower-http",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "mockforge-ftp"
 version = "0.2.3"
 dependencies = [
@@ -5213,7 +5126,7 @@ dependencies = [
  "handlebars 6.3.2",
  "libunftp",
  "mime_guess",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "rand 0.9.2",
  "regex",
  "serde",
@@ -5237,7 +5150,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.6",
  "indexmap 2.12.0",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "mockforge-data 0.2.3",
  "mockforge-observability",
  "mockforge-tracing",
@@ -5269,7 +5182,7 @@ dependencies = [
  "futures",
  "futures-util",
  "http 1.3.1",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "mockforge-data 0.2.3",
  "mockforge-observability",
  "mockforge-tracing",
@@ -5320,11 +5233,11 @@ dependencies = [
  "jsonpath",
  "jsonwebtoken",
  "mime_guess",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "mockforge-data 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
+ "mockforge-data 0.2.3",
  "mockforge-mqtt",
  "mockforge-observability",
- "mockforge-plugin-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-plugin-core 0.2.3",
  "mockforge-smtp",
  "mockforge-tracing",
  "mockforge-ws",
@@ -5379,7 +5292,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "criterion",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "rand 0.9.2",
  "rdkafka",
  "regex",
@@ -5401,7 +5314,7 @@ dependencies = [
  "async-trait",
  "criterion",
  "futures",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "regex",
  "rumqttc",
  "rumqttd",
@@ -5514,36 +5427,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-plugin-core"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30dccad7f169447e4d63dc7abb9f9b21fdf3512373c45ad4b92570e396f1db29"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.6",
- "base64 0.22.1",
- "chrono",
- "handlebars 4.5.0",
- "hyper 1.7.0",
- "rand 0.9.2",
- "regex",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "wasmtime",
- "wasmtime-wasi",
- "wit-bindgen",
-]
-
-[[package]]
 name = "mockforge-plugin-loader"
 version = "0.2.3"
 dependencies = [
@@ -5556,7 +5439,7 @@ dependencies = [
  "git2",
  "hex",
  "indicatif",
- "mockforge-plugin-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-plugin-core 0.2.3",
  "rand 0.9.2",
  "regex",
  "reqwest 0.12.24",
@@ -5696,8 +5579,8 @@ dependencies = [
  "anyhow",
  "axum 0.8.6",
  "libc",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "mockforge-data 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
+ "mockforge-data 0.2.3",
  "mockforge-graphql",
  "mockforge-grpc",
  "mockforge-http",
@@ -5723,7 +5606,7 @@ dependencies = [
  "chrono",
  "criterion",
  "mail-parser",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "regex",
  "rustls 0.21.12",
  "rustls-pemfile 1.0.4",
@@ -5806,10 +5689,10 @@ dependencies = [
  "html-escape",
  "mime_guess",
  "mockforge-analytics",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
  "mockforge-grpc",
  "mockforge-http",
- "mockforge-plugin-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-plugin-core 0.2.3",
  "mockforge-plugin-loader",
  "mockforge-ws",
  "once_cell",
@@ -5838,8 +5721,8 @@ dependencies = [
  "futures",
  "futures-util",
  "jsonpath",
- "mockforge-core 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "mockforge-data 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-core 0.2.3",
+ "mockforge-data 0.2.3",
  "mockforge-observability",
  "mockforge-tracing",
  "opentelemetry",

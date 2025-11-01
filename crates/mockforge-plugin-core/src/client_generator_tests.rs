@@ -341,7 +341,10 @@ mod react_tests {
                                                 );
                                                 props
                                             }),
-                                            required: Some(vec!["name".to_string(), "email".to_string()]),
+                                            required: Some(vec![
+                                                "name".to_string(),
+                                                "email".to_string(),
+                                            ]),
                                             items: None,
                                             description: None,
                                             example: None,
@@ -437,10 +440,8 @@ mod react_tests {
                     },
                 );
 
-                paths.insert(
-                    "/users".to_string(),
-                    crate::client_generator::PathItem { operations },
-                );
+                paths
+                    .insert("/users".to_string(), crate::client_generator::PathItem { operations });
 
                 paths
             },
@@ -498,8 +499,8 @@ mod react_tests {
 
         // Verify that request type is generated
         assert!(
-            types_file.content.contains("export interface CreateUserRequest") ||
-            types_file.content.contains("CreateUserRequest"),
+            types_file.content.contains("export interface CreateUserRequest")
+                || types_file.content.contains("CreateUserRequest"),
             "Request type CreateUserRequest should be generated. First 2000 chars of content: {}",
             &types_file.content[..std::cmp::min(2000, types_file.content.len())]
         );
@@ -546,10 +547,7 @@ mod react_tests {
 
         // Verify that GET method does NOT include data parameter
         // Method signature should be: async getUsers() or async getUsers(queryParams?: ...)
-        assert!(
-            hooks_file.content.contains("async getUsers("),
-            "GET method should be generated"
-        );
+        assert!(hooks_file.content.contains("async getUsers("), "GET method should be generated");
         // Should NOT have data parameter for GET methods
         assert!(
             !hooks_file.content.contains("async getUsers(data:"),
@@ -766,7 +764,12 @@ mod react_tests {
             },
         );
 
-        paths.insert("/users/{id}".to_string(), crate::client_generator::PathItem { operations: all_operations });
+        paths.insert(
+            "/users/{id}".to_string(),
+            crate::client_generator::PathItem {
+                operations: all_operations,
+            },
+        );
 
         OpenApiSpec {
             openapi: "3.0.0".to_string(),
@@ -800,8 +803,11 @@ mod react_tests {
 
         // PUT method should include data parameter
         assert!(
-            hooks_file.content.contains("async updateUser(id: string, data: UpdateUserRequest)") ||
-            hooks_file.content.contains("async updateUser(") && hooks_file.content.contains("data: UpdateUserRequest"),
+            hooks_file
+                .content
+                .contains("async updateUser(id: string, data: UpdateUserRequest)")
+                || hooks_file.content.contains("async updateUser(")
+                    && hooks_file.content.contains("data: UpdateUserRequest"),
             "PUT method should include data parameter with UpdateUserRequest type"
         );
     }
@@ -822,8 +828,11 @@ mod react_tests {
 
         // PATCH method should include data parameter
         assert!(
-            hooks_file.content.contains("async patchUser(id: string, data: PatchUserRequest)") ||
-            hooks_file.content.contains("async patchUser(") && hooks_file.content.contains("data: PatchUserRequest"),
+            hooks_file
+                .content
+                .contains("async patchUser(id: string, data: PatchUserRequest)")
+                || hooks_file.content.contains("async patchUser(")
+                    && hooks_file.content.contains("data: PatchUserRequest"),
             "PATCH method should include data parameter with PatchUserRequest type"
         );
     }
@@ -844,10 +853,12 @@ mod react_tests {
 
         // DELETE method should include optional data parameter
         assert!(
-            hooks_file.content.contains("async deleteUser(id: string, data?: DeleteUserRequest)") ||
-            (hooks_file.content.contains("async deleteUser(") &&
-             (hooks_file.content.contains("data?: DeleteUserRequest") ||
-              hooks_file.content.contains("data: DeleteUserRequest"))),
+            hooks_file
+                .content
+                .contains("async deleteUser(id: string, data?: DeleteUserRequest)")
+                || (hooks_file.content.contains("async deleteUser(")
+                    && (hooks_file.content.contains("data?: DeleteUserRequest")
+                        || hooks_file.content.contains("data: DeleteUserRequest"))),
             "DELETE method should include data parameter (may be optional)"
         );
     }
@@ -897,7 +908,9 @@ mod react_tests {
                                                         properties: None,
                                                         required: None,
                                                         items: None,
-                                                        description: Some("Required string".to_string()),
+                                                        description: Some(
+                                                            "Required string".to_string(),
+                                                        ),
                                                         example: None,
                                                         r#enum: None,
                                                         ref_path: None,
@@ -912,7 +925,9 @@ mod react_tests {
                                                         properties: None,
                                                         required: None,
                                                         items: None,
-                                                        description: Some("Optional string".to_string()),
+                                                        description: Some(
+                                                            "Optional string".to_string(),
+                                                        ),
                                                         example: None,
                                                         r#enum: None,
                                                         ref_path: None,
@@ -929,12 +944,16 @@ mod react_tests {
                                                             nested_props.insert(
                                                                 "nestedValue".to_string(),
                                                                 crate::client_generator::Schema {
-                                                                    r#type: Some("number".to_string()),
+                                                                    r#type: Some(
+                                                                        "number".to_string(),
+                                                                    ),
                                                                     format: None,
                                                                     properties: None,
                                                                     required: None,
                                                                     items: None,
-                                                                    description: Some("Nested number".to_string()),
+                                                                    description: Some(
+                                                                        "Nested number".to_string(),
+                                                                    ),
                                                                     example: None,
                                                                     r#enum: None,
                                                                     ref_path: None,
@@ -942,9 +961,13 @@ mod react_tests {
                                                             );
                                                             nested_props
                                                         }),
-                                                        required: Some(vec!["nestedValue".to_string()]),
+                                                        required: Some(vec![
+                                                            "nestedValue".to_string()
+                                                        ]),
                                                         items: None,
-                                                        description: Some("Nested object".to_string()),
+                                                        description: Some(
+                                                            "Nested object".to_string(),
+                                                        ),
                                                         example: None,
                                                         r#enum: None,
                                                         ref_path: None,
@@ -1015,11 +1038,165 @@ mod react_tests {
                         tags: Some(vec!["Complex".to_string()]),
                     },
                 );
-                paths.insert("/complex".to_string(), crate::client_generator::PathItem { operations });
+                paths.insert(
+                    "/complex".to_string(),
+                    crate::client_generator::PathItem { operations },
+                );
                 paths
             },
             components: None,
         }
+    }
+
+    #[tokio::test]
+    async fn test_react_request_body_with_required_fields() {
+        let generator = ReactClientGenerator::new().unwrap();
+
+        // Create a spec with required and optional fields
+        let spec = OpenApiSpec {
+            openapi: "3.0.0".to_string(),
+            info: crate::client_generator::ApiInfo {
+                title: "Test API".to_string(),
+                version: "1.0.0".to_string(),
+                description: Some("Test API".to_string()),
+            },
+            servers: Some(vec![crate::client_generator::Server {
+                url: "http://localhost:3000".to_string(),
+                description: Some("Test server".to_string()),
+            }]),
+            paths: {
+                let mut paths = HashMap::new();
+                let mut operations = HashMap::new();
+                operations.insert(
+                    "post".to_string(),
+                    crate::client_generator::Operation {
+                        summary: Some("Create item".to_string()),
+                        description: None,
+                        operation_id: Some("createItem".to_string()),
+                        parameters: None,
+                        request_body: Some(crate::client_generator::RequestBody {
+                            description: None,
+                            content: {
+                                let mut content = HashMap::new();
+                                content.insert(
+                                    "application/json".to_string(),
+                                    crate::client_generator::MediaType {
+                                        schema: Some(crate::client_generator::Schema {
+                                            r#type: Some("object".to_string()),
+                                            format: None,
+                                            properties: Some({
+                                                let mut props = HashMap::new();
+                                                props.insert(
+                                                    "name".to_string(),
+                                                    crate::client_generator::Schema {
+                                                        r#type: Some("string".to_string()),
+                                                        format: None,
+                                                        properties: None,
+                                                        required: None,
+                                                        items: None,
+                                                        description: None,
+                                                        example: None,
+                                                        r#enum: None,
+                                                        ref_path: None,
+                                                    },
+                                                );
+                                                props.insert(
+                                                    "email".to_string(),
+                                                    crate::client_generator::Schema {
+                                                        r#type: Some("string".to_string()),
+                                                        format: None,
+                                                        properties: None,
+                                                        required: None,
+                                                        items: None,
+                                                        description: None,
+                                                        example: None,
+                                                        r#enum: None,
+                                                        ref_path: None,
+                                                    },
+                                                );
+                                                props.insert(
+                                                    "age".to_string(),
+                                                    crate::client_generator::Schema {
+                                                        r#type: Some("number".to_string()),
+                                                        format: None,
+                                                        properties: None,
+                                                        required: None,
+                                                        items: None,
+                                                        description: None,
+                                                        example: None,
+                                                        r#enum: None,
+                                                        ref_path: None,
+                                                    },
+                                                );
+                                                props
+                                            }),
+                                            required: Some(vec![
+                                                "name".to_string(),
+                                                "email".to_string(),
+                                            ]),
+                                            items: None,
+                                            description: None,
+                                            example: None,
+                                            r#enum: None,
+                                            ref_path: None,
+                                        }),
+                                    },
+                                );
+                                content
+                            },
+                            required: Some(true),
+                        }),
+                        responses: {
+                            let mut responses = HashMap::new();
+                            responses.insert(
+                                "200".to_string(),
+                                crate::client_generator::Response {
+                                    description: "Success".to_string(),
+                                    content: None,
+                                    headers: None,
+                                },
+                            );
+                            responses
+                        },
+                        tags: None,
+                    },
+                );
+                paths
+                    .insert("/items".to_string(), crate::client_generator::PathItem { operations });
+                paths
+            },
+            components: None,
+        };
+
+        let config = create_test_config();
+        let result = generator.generate_client(&spec, &config).await.unwrap();
+
+        let types_file = result
+            .files
+            .iter()
+            .find(|f| f.path == "types.ts")
+            .expect("types.ts file should be generated");
+
+        // Verify required fields (name and email) do NOT have optional marker
+        // Required field should be: "name: string" not "name?: string"
+        assert!(
+            types_file.content.contains("name:") && !types_file.content.contains("name?:"),
+            "Required field 'name' should not have optional marker. Content: {}",
+            types_file.content
+        );
+
+        assert!(
+            types_file.content.contains("email:") && !types_file.content.contains("email?:"),
+            "Required field 'email' should not have optional marker"
+        );
+
+        // Verify optional field (age) HAS optional marker
+        // Optional field should be: "age?: number"
+        assert!(
+            types_file.content.contains("age?:"),
+            "Optional field 'age' should have optional marker. Content: {}",
+            types_file.content
+        );
     }
 
     #[tokio::test]
@@ -1039,13 +1216,15 @@ mod react_tests {
         // Verify that required field exists (may or may not have optional marker based on template)
         // The template uses lookup to determine required status, so check for presence
         assert!(
-            types_file.content.contains("requiredField") || types_file.content.contains("  requiredField"),
+            types_file.content.contains("requiredField")
+                || types_file.content.contains("  requiredField"),
             "Required field should be present in request type"
         );
 
         // Verify that optional field exists (should be marked with ? if template logic is correct)
         assert!(
-            types_file.content.contains("optionalField") || types_file.content.contains("  optionalField"),
+            types_file.content.contains("optionalField")
+                || types_file.content.contains("  optionalField"),
             "Optional field should be present in request type"
         );
     }
@@ -1072,6 +1251,237 @@ mod react_tests {
         assert!(
             types_file.content.contains("nested:") || types_file.content.contains("nested?:"),
             "Nested object property should be included"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_react_request_body_with_ref_schema() {
+        let generator = ReactClientGenerator::new().unwrap();
+
+        // Create a spec with a $ref schema in request body
+        let spec = OpenApiSpec {
+            openapi: "3.0.0".to_string(),
+            info: crate::client_generator::ApiInfo {
+                title: "Test API".to_string(),
+                version: "1.0.0".to_string(),
+                description: Some("Test API with $ref".to_string()),
+            },
+            servers: Some(vec![crate::client_generator::Server {
+                url: "http://localhost:3000".to_string(),
+                description: Some("Test server".to_string()),
+            }]),
+            paths: {
+                let mut paths = HashMap::new();
+                let mut operations = HashMap::new();
+                operations.insert(
+                    "post".to_string(),
+                    crate::client_generator::Operation {
+                        summary: Some("Create item".to_string()),
+                        description: None,
+                        operation_id: Some("createItem".to_string()),
+                        parameters: None,
+                        request_body: Some(crate::client_generator::RequestBody {
+                            description: None,
+                            content: {
+                                let mut content = HashMap::new();
+                                content.insert(
+                                    "application/json".to_string(),
+                                    crate::client_generator::MediaType {
+                                        schema: Some(crate::client_generator::Schema {
+                                            r#type: None,
+                                            format: None,
+                                            properties: None,
+                                            required: None,
+                                            items: None,
+                                            description: None,
+                                            example: None,
+                                            r#enum: None,
+                                            ref_path: Some("#/components/schemas/Item".to_string()),
+                                        }),
+                                    },
+                                );
+                                content
+                            },
+                            required: Some(true),
+                        }),
+                        responses: {
+                            let mut responses = HashMap::new();
+                            responses.insert(
+                                "200".to_string(),
+                                crate::client_generator::Response {
+                                    description: "Success".to_string(),
+                                    content: None,
+                                    headers: None,
+                                },
+                            );
+                            responses
+                        },
+                        tags: None,
+                    },
+                );
+                paths
+                    .insert("/items".to_string(), crate::client_generator::PathItem { operations });
+                paths
+            },
+            components: Some(crate::client_generator::Components {
+                schemas: Some({
+                    let mut schemas = HashMap::new();
+                    schemas.insert(
+                        "Item".to_string(),
+                        crate::client_generator::Schema {
+                            r#type: Some("object".to_string()),
+                            format: None,
+                            properties: Some({
+                                let mut props = HashMap::new();
+                                props.insert(
+                                    "name".to_string(),
+                                    crate::client_generator::Schema {
+                                        r#type: Some("string".to_string()),
+                                        format: None,
+                                        properties: None,
+                                        required: None,
+                                        items: None,
+                                        description: None,
+                                        example: None,
+                                        r#enum: None,
+                                        ref_path: None,
+                                    },
+                                );
+                                props
+                            }),
+                            required: Some(vec!["name".to_string()]),
+                            items: None,
+                            description: None,
+                            example: None,
+                            r#enum: None,
+                            ref_path: None,
+                        },
+                    );
+                    schemas
+                }),
+                responses: None,
+                parameters: None,
+            }),
+        };
+
+        let config = create_test_config();
+        let result = generator.generate_client(&spec, &config).await.unwrap();
+
+        // Should not crash when processing $ref schemas
+        // Note: Full $ref resolution would require schema resolution logic,
+        // but the generator should handle $ref gracefully
+        assert!(!result.files.is_empty(), "Should generate files even with $ref schemas");
+    }
+
+    #[tokio::test]
+    async fn test_react_yaml_spec_generation() {
+        // Test that YAML specs work correctly by creating a JSON spec that would be equivalent
+        // to a YAML spec (since serde handles both the same way)
+        let generator = ReactClientGenerator::new().unwrap();
+
+        let spec = OpenApiSpec {
+            openapi: "3.0.0".to_string(),
+            info: crate::client_generator::ApiInfo {
+                title: "YAML Test API".to_string(),
+                version: "1.0.0".to_string(),
+                description: Some("Test API for YAML support".to_string()),
+            },
+            servers: Some(vec![crate::client_generator::Server {
+                url: "http://localhost:3000".to_string(),
+                description: Some("Test server".to_string()),
+            }]),
+            paths: {
+                let mut paths = HashMap::new();
+                let mut operations = HashMap::new();
+                operations.insert(
+                    "post".to_string(),
+                    crate::client_generator::Operation {
+                        summary: Some("Create resource".to_string()),
+                        description: None,
+                        operation_id: Some("createResource".to_string()),
+                        parameters: None,
+                        request_body: Some(crate::client_generator::RequestBody {
+                            description: None,
+                            content: {
+                                let mut content = HashMap::new();
+                                content.insert(
+                                    "application/json".to_string(),
+                                    crate::client_generator::MediaType {
+                                        schema: Some(crate::client_generator::Schema {
+                                            r#type: Some("object".to_string()),
+                                            format: None,
+                                            properties: Some({
+                                                let mut props = HashMap::new();
+                                                props.insert(
+                                                    "title".to_string(),
+                                                    crate::client_generator::Schema {
+                                                        r#type: Some("string".to_string()),
+                                                        format: None,
+                                                        properties: None,
+                                                        required: None,
+                                                        items: None,
+                                                        description: None,
+                                                        example: None,
+                                                        r#enum: None,
+                                                        ref_path: None,
+                                                    },
+                                                );
+                                                props
+                                            }),
+                                            required: Some(vec!["title".to_string()]),
+                                            items: None,
+                                            description: None,
+                                            example: None,
+                                            r#enum: None,
+                                            ref_path: None,
+                                        }),
+                                    },
+                                );
+                                content
+                            },
+                            required: Some(true),
+                        }),
+                        responses: {
+                            let mut responses = HashMap::new();
+                            responses.insert(
+                                "200".to_string(),
+                                crate::client_generator::Response {
+                                    description: "Success".to_string(),
+                                    content: None,
+                                    headers: None,
+                                },
+                            );
+                            responses
+                        },
+                        tags: None,
+                    },
+                );
+                paths.insert(
+                    "/resources".to_string(),
+                    crate::client_generator::PathItem { operations },
+                );
+                paths
+            },
+            components: None,
+        };
+
+        let config = create_test_config();
+        let result = generator.generate_client(&spec, &config).await.unwrap();
+
+        // Verify that the generator works correctly (YAML and JSON are handled the same by serde)
+        let types_file = result
+            .files
+            .iter()
+            .find(|f| f.path == "types.ts")
+            .expect("types.ts file should be generated");
+
+        assert!(
+            types_file.content.contains("export interface CreateResourceRequest"),
+            "Request type should be generated from YAML-equivalent spec"
+        );
+        assert!(
+            types_file.content.contains("title:") && !types_file.content.contains("title?:"),
+            "Required field 'title' should not have optional marker"
         );
     }
 }
