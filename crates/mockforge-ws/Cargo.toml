@@ -39,7 +39,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.28", features=["rustls-tls-native-roots"] }
 axum = { version = "0.8" }
-opentelemetry_sdk = "0.21"
+opentelemetry_sdk = "0.31"
 
 [features]
 default = []

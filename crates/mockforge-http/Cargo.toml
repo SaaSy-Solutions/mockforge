@@ -76,6 +76,6 @@ tokio-tungstenite = "0.28"
 futures-util = "0.3"
 mockforge-ws = { version = "0.2.0", path = "../mockforge-ws" }
 mockforge-plugin-core = { version = "0.2.4", path = "../mockforge-plugin-core" }
-opentelemetry_sdk = "0.21"
+opentelemetry_sdk = "0.31"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }
