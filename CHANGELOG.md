@@ -1,8 +1,138 @@
+## [0.2.5] - 2025-01-27
+
+### Added
+
+- **OAuth2 Flow Support**: Complete OAuth2 implementation with all standard flows
+  - Authorization Code flow with PKCE (RFC 7636 compliant, SHA256 hash)
+  - Client Credentials flow for server-side applications
+  - Password flow for trusted clients
+  - Implicit flow support
+  - Automatic token refresh and expiration management
+  - State parameter for CSRF protection
+  - PKCE code verifier/challenge generation helpers
+  - Token storage with expiration tracking (localStorage)
+
+- **Enterprise Error Handling**: Structured error handling for generated clients
+  - `ApiError` class with status codes, statusText, and error body
+  - `RequiredError` class for missing required fields
+  - Helper methods: `isClientError()`, `isServerError()`, `getErrorDetails()`, `getVerboseMessage()`
+  - Optional verbose error messages with detailed validation information
+
+- **Request/Response Validation**: Built-in validation support
+  - Required field validation before sending requests
+  - Basic response structure validation (type checking, object validation)
+  - Configurable via `validateRequests` flag
+  - Detailed validation error messages
+
+- **Request/Response Interceptors**: Custom request/response/error transformation
+  - Request interceptor: Modify requests before sending
+  - Response interceptor: Transform responses after receiving
+  - Error interceptor: Global error handling
+  - Support for async interceptors
+
+- **Enhanced Authentication**: Multiple authentication methods
+  - Bearer token (static or dynamic function)
+  - API key authentication (static or dynamic)
+  - Basic authentication (username/password)
+  - OAuth2 (all flows, takes priority over other methods)
+
+- **PKCE Helper Functions**: Exported utilities for PKCE implementation
+  - `generatePKCECodeVerifier()`: Generate cryptographically random code verifier
+  - `generatePKCECodeChallenge()`: Generate SHA256 code challenge from verifier
+
+- **Security Best Practices**: Comprehensive security warnings and guidance
+  - Client secret warnings for browser-based applications
+  - XSS vulnerability warnings for localStorage token storage
+  - CSRF protection via state parameter validation
+  - Token expiration checking
+  - Security documentation in generated README
+
+- **Request Timeout Handling**: Configurable request timeouts
+  - Default 30-second timeout (configurable)
+  - AbortController-based timeout implementation
+  - Proper timeout error handling
+
+- **React Query Integration Documentation**: Comprehensive examples for @tanstack/react-query integration
+
+### Changed
+
+- **React Client Generator**: Major enhancements to generated React client code
+  - Replaced placeholder PKCE implementation with full SHA256-based solution
+  - Implemented proper response validation (previously placeholder)
+  - Enhanced README with comprehensive feature documentation
+  - Improved error messages and validation details
+  - Better security documentation and best practices
+
+- **Operation ID Sanitization**: Improved identifier generation
+  - Enhanced `sanitize_identifier` function to handle complex operation IDs
+  - Better handling of parentheses, slashes, hyphens in operation IDs
+  - Proper camelCase conversion with word boundary detection
+
+### Fixed
+
+- **TypeScript Empty Object Types**: Fixed formatting issue where empty object schemas generated invalid TypeScript
+  - Empty objects now correctly generate as `[key: string]: any;` instead of malformed `Record<string, any>}`
+
+- **DELETE Operations with Query Params**: Fixed missing query parameter support in DELETE operations
+
+- **Duplicate Operation IDs**: Fixed duplicate operation ID handling by appending numeric suffixes
+
+- **PKCE Code Challenge**: Fixed PKCE implementation to use proper SHA256 hash instead of plain encoding
+
+- **Response Validation**: Replaced placeholder with actual implementation (type checking, structure validation)
+
+### Security
+
+- Added comprehensive security warnings for OAuth2 client secrets in browser code
+- Added XSS vulnerability warnings for localStorage token storage
+- Implemented CSRF protection via state parameter validation
+- Added token expiration checking to prevent use of expired tokens
+- Documented security best practices in generated client README
+
 ## [Unreleased]
 
 ### Added
 
-- Nothing yet.
+- **Automatic API Sync & Change Detection**: Implemented periodic polling and automatic sync for detecting upstream API changes
+  - Periodic sync service with configurable intervals (default: 1 hour)
+  - Automatic change detection using deep response comparison (status, headers, body)
+  - Optional automatic fixture updates when changes detected
+  - Manual sync trigger via API (`POST /api/recorder/sync/now`)
+  - Sync status tracking and change history
+  - Configurable sync settings: upstream URL, interval, headers, timeout, max requests
+  - Support for GET-only or all-methods sync
+  - Detailed change reports with before/after comparisons
+  - Database update method for refreshing recorded responses
+  - API endpoints: `/api/recorder/sync/status`, `/api/recorder/sync/config`, `/api/recorder/sync/changes`
+
+- **TCP Protocol Support**: Added raw TCP server mocking support via new `mockforge-tcp` crate
+  - Raw TCP connection handling with fixture-based matching
+  - Echo mode for testing TCP clients
+  - TLS/SSL support for encrypted connections
+  - Delimiter-based message framing (optional)
+  - Configurable buffer sizes and connection limits
+  - CLI flag `--tcp-port` for custom TCP server port
+  - Configuration via `config.tcp` in YAML/JSON config files
+
+- **Response Selection Modes**: Added support for sequential (round-robin) and random response selection when multiple examples are available
+  - Sequential mode: Cycles through available examples in order (round-robin)
+  - Random mode: Randomly selects from available examples
+  - Weighted random mode: Random selection with custom weights per example
+  - Configuration via `x-mockforge-response-selection` OpenAPI extension
+  - Environment variable support: `MOCKFORGE_RESPONSE_SELECTION_MODE` (global) and `MOCKFORGE_RESPONSE_SELECTION_<OPERATION_ID>` (per-operation)
+  - State tracking for sequential mode ensures round-robin behavior across requests
+
+- **Webhook HTTP Execution**: Implemented actual HTTP request execution in chaos orchestration hooks
+  - `HookAction::HttpRequest` now executes real outbound HTTP requests (previously only logged)
+  - Supports GET, POST, PUT, DELETE, PATCH methods
+  - Configurable request body and headers
+  - Error handling and logging for webhook failures
+  - Fire-and-forget execution (failures don't block orchestration)
+
+- **CRUD & Webhook Documentation**: Added comprehensive documentation guides
+  - `docs/CRUD_SIMULATION.md`: Complete guide for simulating CRUD operations with stateful data store
+  - `docs/WEBHOOKS_CALLBACKS.md`: Full documentation of webhook capabilities via hooks, chains, and scripts
+  - Examples demonstrating realistic workflows and integrations
 
 ### Changed
 

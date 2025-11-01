@@ -103,7 +103,8 @@ fn extract_route_info(
     let request_body_schema = extract_request_body_schema(operation);
 
     // Extract response schema and example (prefer 200, fallback to first success response)
-    let (response_schema, response_example, response_status) = extract_response_schema_and_example(operation)?;
+    let (response_schema, response_example, response_status) =
+        extract_response_schema_and_example(operation)?;
 
     Ok(RouteInfo {
         method: method.to_string(),
@@ -174,7 +175,9 @@ fn extract_request_body_schema(operation: &Operation) -> Option<Schema> {
 
 /// Extract response schema and example from OpenAPI operation
 /// Returns (schema, example, status_code)
-fn extract_response_schema_and_example(operation: &Operation) -> Result<(Option<Schema>, Option<serde_json::Value>, u16)> {
+fn extract_response_schema_and_example(
+    operation: &Operation,
+) -> Result<(Option<Schema>, Option<serde_json::Value>, u16)> {
     // Look for 200 response first
     for (status_code, response_ref) in &operation.responses.responses {
         let status = match status_code {
@@ -192,7 +195,9 @@ fn extract_response_schema_and_example(operation: &Operation) -> Result<(Option<
                     } else if !content.examples.is_empty() {
                         // Use the first example from the examples map
                         content.examples.iter().next().and_then(|(_, example_ref)| {
-                            example_ref.as_item().and_then(|example_item| example_item.value.clone())
+                            example_ref
+                                .as_item()
+                                .and_then(|example_item| example_item.value.clone())
                         })
                     } else {
                         None
@@ -389,7 +394,8 @@ fn generate_response_body(route: &RouteInfo, config: &CodegenConfig) -> String {
             // Priority 1: Use explicit example from OpenAPI spec if available
             if let Some(ref example) = route.response_example {
                 // Serialize the example value to JSON string and parse it at runtime
-                let example_str = serde_json::to_string(example).unwrap_or_else(|_| "{}".to_string());
+                let example_str =
+                    serde_json::to_string(example).unwrap_or_else(|_| "{}".to_string());
                 // Escape for use in Rust code - need to escape backslashes and quotes
                 let escaped = example_str
                     .replace("\\", "\\\\")
@@ -525,7 +531,10 @@ fn generate_object_from_schema(obj_type: &openapiv3::ObjectType, depth: usize) -
     if properties.is_empty() {
         r#"serde_json::json!({})"#.to_string()
     } else {
-        format!("serde_json::json!({{\n            {}\n        }})", properties.join(",\n            "))
+        format!(
+            "serde_json::json!({{\n            {}\n        }})",
+            properties.join(",\n            ")
+        )
     }
 }
 
@@ -558,13 +567,15 @@ fn generate_string_from_schema(string_type: &openapiv3::StringType) -> String {
     if let openapiv3::VariantOrUnknownOrEmpty::Item(format) = &string_type.format {
         match format {
             openapiv3::StringFormat::Date => r#"serde_json::json!("2024-01-01")"#.to_string(),
-            openapiv3::StringFormat::DateTime => r#"serde_json::json!("2024-01-01T00:00:00Z")"#.to_string(),
+            openapiv3::StringFormat::DateTime => {
+                r#"serde_json::json!("2024-01-01T00:00:00Z")"#.to_string()
+            }
             _ => r#"serde_json::json!("mock string")"#.to_string(),
         }
     } else {
         // Check enum values (Vec<Option<String>>)
         let enum_values = &string_type.enumeration;
-            if !enum_values.is_empty() {
+        if !enum_values.is_empty() {
             if let Some(first) = enum_values.iter().find_map(|v| v.as_ref()) {
                 let first_escaped = first.replace('\\', "\\\\").replace('"', "\\\"");
                 return format!(r#"serde_json::json!("{}")"#, first_escaped);
@@ -578,7 +589,7 @@ fn generate_string_from_schema(string_type: &openapiv3::StringType) -> String {
 fn generate_integer_from_schema(integer_type: &openapiv3::IntegerType) -> String {
     // Check for enum values (Vec<Option<i64>>)
     let enum_values = &integer_type.enumeration;
-        if !enum_values.is_empty() {
+    if !enum_values.is_empty() {
         if let Some(first) = enum_values.iter().flatten().next() {
             return format!("serde_json::json!({})", first);
         }
@@ -608,7 +619,7 @@ fn generate_integer_from_schema(integer_type: &openapiv3::IntegerType) -> String
 fn generate_number_from_schema(number_type: &openapiv3::NumberType) -> String {
     // Check for enum values (Vec<Option<f64>>)
     let enum_values = &number_type.enumeration;
-        if !enum_values.is_empty() {
+    if !enum_values.is_empty() {
         if let Some(first) = enum_values.iter().flatten().next() {
             return format!("serde_json::json!({})", first);
         }

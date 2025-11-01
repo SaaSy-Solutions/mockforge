@@ -214,6 +214,39 @@ impl RecorderDatabase {
         }
     }
 
+    /// Update an existing response
+    pub async fn update_response(
+        &self,
+        request_id: &str,
+        status_code: i32,
+        headers: &str,
+        body: &str,
+        size_bytes: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE responses
+            SET status_code = ?,
+                headers = ?,
+                body = ?,
+                body_encoding = 'base64',
+                size_bytes = ?,
+                timestamp = datetime('now')
+            WHERE request_id = ?
+            "#,
+        )
+        .bind(status_code)
+        .bind(headers)
+        .bind(body)
+        .bind(size_bytes)
+        .bind(request_id)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Updated response for request {}", request_id);
+        Ok(())
+    }
+
     /// List recent requests
     pub async fn list_recent(&self, limit: i32) -> Result<Vec<RecordedRequest>> {
         let requests = sqlx::query_as::<_, RecordedRequest>(

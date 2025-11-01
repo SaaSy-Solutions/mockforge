@@ -9,6 +9,7 @@
 
 // Re-export sub-modules for backward compatibility
 pub mod response;
+pub mod response_selection;
 pub mod route;
 pub mod schema;
 pub mod spec;
@@ -16,6 +17,7 @@ pub mod validation;
 
 // Re-export commonly used types (avoiding conflicts)
 pub use response::*;
+pub use response_selection::*;
 pub use route::*;
 pub use schema::*;
 pub use spec::*;

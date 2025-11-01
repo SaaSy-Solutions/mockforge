@@ -76,7 +76,9 @@ fn main() {
     } else if assets_dir.exists() {
         // Fallback: scan assets directory and generate lookup map for all JS/CSS files
         // Note: HashMap is already imported in assets.rs, so don't import it here
-        let mut asset_map = String::from("pub fn get_asset_map() -> std::collections::HashMap<&'static str, &'static str> {\n");
+        let mut asset_map = String::from(
+            "pub fn get_asset_map() -> std::collections::HashMap<&'static str, &'static str> {\n",
+        );
         asset_map.push_str("    let mut map = std::collections::HashMap::new();\n");
 
         // Read all files in assets directory
@@ -108,7 +110,8 @@ fn main() {
             ui_dist_path.join("assets/index.js").display()
         );
 
-        fs::write(&dest_path, format!("{}\n\n{}\n\n{}", css_content, js_content, asset_map)).unwrap();
+        fs::write(&dest_path, format!("{}\n\n{}\n\n{}", css_content, js_content, asset_map))
+            .unwrap();
     } else {
         // UI not built, create dummy functions
         let content = "

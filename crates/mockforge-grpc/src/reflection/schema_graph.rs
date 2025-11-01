@@ -342,8 +342,9 @@ impl ProtoSchemaGraphExtractor {
                     // Check if target entity exists
                     if all_entities.contains_key(target) {
                         // Calculate confidence score based on pattern match and entity existence
-                        let confidence = self.calculate_confidence_score(field, target, all_entities);
-                        
+                        let confidence =
+                            self.calculate_confidence_score(field, target, all_entities);
+
                         mappings.push(ForeignKeyMapping {
                             field_name: field.name.clone(),
                             target_entity: target.clone(),
@@ -359,7 +360,7 @@ impl ProtoSchemaGraphExtractor {
     }
 
     /// Calculate confidence score for a detected relationship
-    /// 
+    ///
     /// Confidence is calculated based on:
     /// - Pattern match quality (higher for common patterns like _id)
     /// - Entity existence validation (target entity exists)

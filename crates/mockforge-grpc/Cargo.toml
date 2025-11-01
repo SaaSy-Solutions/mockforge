@@ -36,7 +36,7 @@ tracing-subscriber = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-core = { version = "0.2.3", path = "../mockforge-core" }
+mockforge-core = { version = "0.2.4", path = "../mockforge-core" }
 mockforge-data = { version = "0.2.0", path = "../mockforge-data", optional = true }
 mockforge-observability = { version = "0.2.0", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }

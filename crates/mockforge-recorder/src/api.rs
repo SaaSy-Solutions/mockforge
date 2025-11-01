@@ -8,6 +8,7 @@ use crate::{
     query::{execute_query, QueryFilter, QueryResult},
     recorder::Recorder,
     replay::ReplayEngine,
+    sync::{SyncConfig, SyncService, SyncStatus},
     test_generation::{LlmConfig, TestFormat, TestGenerationConfig, TestGenerator},
 };
 use axum::{
@@ -25,11 +26,18 @@ use tracing::{debug, error};
 #[derive(Clone)]
 pub struct ApiState {
     pub recorder: Arc<Recorder>,
+    pub sync_service: Option<Arc<SyncService>>,
 }
 
 /// Create the management API router
-pub fn create_api_router(recorder: Arc<Recorder>) -> Router {
-    let state = ApiState { recorder };
+pub fn create_api_router(
+    recorder: Arc<Recorder>,
+    sync_service: Option<Arc<SyncService>>,
+) -> Router {
+    let state = ApiState {
+        recorder,
+        sync_service,
+    };
 
     Router::new()
         // Query endpoints
@@ -61,6 +69,13 @@ pub fn create_api_router(recorder: Arc<Recorder>) -> Router {
         .route("/api/recorder/workflows", post(create_workflow))
         .route("/api/recorder/workflows/:id", get(get_workflow))
         .route("/api/recorder/workflows/:id/generate", post(generate_integration_test))
+
+        // Sync endpoints
+        .route("/api/recorder/sync/status", get(get_sync_status))
+        .route("/api/recorder/sync/config", get(get_sync_config))
+        .route("/api/recorder/sync/config", post(update_sync_config))
+        .route("/api/recorder/sync/now", post(sync_now))
+        .route("/api/recorder/sync/changes", get(get_sync_changes))
 
         .with_state(state)
 }
@@ -552,5 +567,78 @@ async fn generate_integration_test(
         "format": request.format,
         "test_code": test_code,
         "message": "Integration test generated successfully"
+    })))
+}
+
+// Sync endpoints
+
+/// Get sync status
+async fn get_sync_status(State(state): State<ApiState>) -> Result<Json<SyncStatus>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    let status = sync_service.get_status().await;
+    Ok(Json(status))
+}
+
+/// Get sync configuration
+async fn get_sync_config(State(state): State<ApiState>) -> Result<Json<SyncConfig>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    let config = sync_service.get_config().await;
+    Ok(Json(config))
+}
+
+/// Update sync configuration
+async fn update_sync_config(
+    State(state): State<ApiState>,
+    Json(config): Json<SyncConfig>,
+) -> Result<Json<SyncConfig>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    sync_service.update_config(config.clone()).await;
+    Ok(Json(config))
+}
+
+/// Trigger sync now
+async fn sync_now(State(state): State<ApiState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    match sync_service.sync_now().await {
+        Ok((changes, updated)) => Ok(Json(serde_json::json!({
+            "success": true,
+            "changes_detected": changes.len(),
+            "fixtures_updated": updated,
+            "changes": changes,
+            "message": format!("Sync complete: {} changes detected, {} fixtures updated", changes.len(), updated)
+        }))),
+        Err(e) => Err(ApiError::Recorder(e)),
+    }
+}
+
+/// Get sync changes (from last sync)
+async fn get_sync_changes(
+    State(state): State<ApiState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    let status = sync_service.get_status().await;
+
+    Ok(Json(serde_json::json!({
+        "last_sync": status.last_sync,
+        "last_changes_detected": status.last_changes_detected,
+        "last_fixtures_updated": status.last_fixtures_updated,
+        "last_error": status.last_error,
+        "total_syncs": status.total_syncs,
+        "is_running": status.is_running,
     })))
 }

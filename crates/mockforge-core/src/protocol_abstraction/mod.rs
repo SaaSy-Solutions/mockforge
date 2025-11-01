@@ -48,6 +48,8 @@ pub enum Protocol {
     RabbitMq,
     /// AMQP protocol for advanced message queuing scenarios
     Amqp,
+    /// TCP protocol for raw TCP connections
+    Tcp,
 }
 
 impl fmt::Display for Protocol {
@@ -63,6 +65,7 @@ impl fmt::Display for Protocol {
             Protocol::Kafka => write!(f, "Kafka"),
             Protocol::RabbitMq => write!(f, "RabbitMQ"),
             Protocol::Amqp => write!(f, "AMQP"),
+            Protocol::Tcp => write!(f, "TCP"),
         }
     }
 }
@@ -170,6 +173,8 @@ pub enum ResponseStatus {
     AmqpStatus(u16),
     /// FTP status code
     FtpStatus(u16),
+    /// TCP status (true = success, false = error/close)
+    TcpStatus(bool),
 }
 
 impl ResponseStatus {
@@ -185,6 +190,7 @@ impl ResponseStatus {
             ResponseStatus::KafkaStatus(code) => *code == 0, // Kafka OK = 0
             ResponseStatus::AmqpStatus(code) => (200..300).contains(code), // AMQP success codes
             ResponseStatus::FtpStatus(code) => (200..300).contains(code), // FTP success codes
+            ResponseStatus::TcpStatus(success) => *success,  // TCP success flag
         }
     }
 
@@ -197,6 +203,7 @@ impl ResponseStatus {
             ResponseStatus::KafkaStatus(code) => Some(*code as i32),
             ResponseStatus::AmqpStatus(code) => Some(*code as i32),
             ResponseStatus::FtpStatus(code) => Some(*code as i32),
+            ResponseStatus::TcpStatus(_) => None, // TCP uses boolean status
             ResponseStatus::GraphQLStatus(_)
             | ResponseStatus::WebSocketStatus(_)
             | ResponseStatus::MqttStatus(_) => None,
@@ -761,6 +768,7 @@ mod tests {
         assert_eq!(Protocol::Kafka.to_string(), "Kafka");
         assert_eq!(Protocol::RabbitMq.to_string(), "RabbitMQ");
         assert_eq!(Protocol::Amqp.to_string(), "AMQP");
+        assert_eq!(Protocol::Tcp.to_string(), "TCP");
     }
 
     #[test]

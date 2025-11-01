@@ -37,9 +37,7 @@ pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'stati
 /// Serve vendor JavaScript files dynamically
 /// This handler uses a build-time generated asset map that includes all files
 /// from the assets directory, so it automatically handles files with changing hashes
-pub async fn serve_vendor_asset(
-    Path(filename): Path<String>,
-) -> impl IntoResponse {
+pub async fn serve_vendor_asset(Path(filename): Path<String>) -> impl IntoResponse {
     // Determine content type based on file extension
     let content_type = if filename.ends_with(".js") {
         "application/javascript"
@@ -58,11 +56,7 @@ pub async fn serve_vendor_asset(
     // Look up the asset in the dynamically generated map (built at compile time)
     let asset_map = get_asset_map();
     if let Some(content) = asset_map.get(filename.as_str()) {
-        (
-            [(http::header::CONTENT_TYPE, content_type)],
-            *content,
-        )
-            .into_response()
+        ([(http::header::CONTENT_TYPE, content_type)], *content).into_response()
     } else {
         // Return 404 for unknown files
         (

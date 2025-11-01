@@ -208,6 +208,21 @@ impl ProtocolMiddleware for LoggingMiddleware {
                     None
                 },
             ),
+            Protocol::Tcp => crate::create_http_log_entry(
+                "TCP",
+                &request.path,
+                response.status.as_code().unwrap_or(0) as u16,
+                duration_ms as u64,
+                request.client_ip.clone(),
+                None,
+                request.metadata.clone(),
+                response.body.len() as u64,
+                if !response.status.is_success() {
+                    Some(format!("TCP Error: {:?}", response.status))
+                } else {
+                    None
+                },
+            ),
         };
 
         // Log to centralized logger

@@ -159,6 +159,8 @@ pub struct ProtocolsConfig {
     pub rabbitmq: ProtocolConfig,
     /// AMQP protocol configuration
     pub amqp: ProtocolConfig,
+    /// TCP protocol configuration
+    pub tcp: ProtocolConfig,
 }
 
 impl Default for ProtocolsConfig {
@@ -174,6 +176,7 @@ impl Default for ProtocolsConfig {
             kafka: ProtocolConfig { enabled: false },
             rabbitmq: ProtocolConfig { enabled: false },
             amqp: ProtocolConfig { enabled: false },
+            tcp: ProtocolConfig { enabled: false },
         }
     }
 }
@@ -200,6 +203,8 @@ pub struct ServerConfig {
     pub kafka: KafkaConfig,
     /// AMQP server configuration
     pub amqp: AmqpConfig,
+    /// TCP server configuration
+    pub tcp: TcpConfig,
     /// Admin UI configuration
     pub admin: AdminConfig,
     /// Request chaining configuration
@@ -256,6 +261,9 @@ pub struct ProfileConfig {
     /// AMQP server configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amqp: Option<AmqpConfig>,
+    /// TCP server configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tcp: Option<TcpConfig>,
     /// Admin UI configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub admin: Option<AdminConfig>,
@@ -696,6 +704,49 @@ impl Default for AmqpConfig {
     }
 }
 
+/// TCP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TcpConfig {
+    /// Enable TCP server
+    pub enabled: bool,
+    /// Server port
+    pub port: u16,
+    /// Host address
+    pub host: String,
+    /// Maximum connections
+    pub max_connections: usize,
+    /// Connection timeout in seconds
+    pub timeout_secs: u64,
+    /// Directory containing fixture files
+    pub fixtures_dir: Option<std::path::PathBuf>,
+    /// Enable echo mode (echo received data back)
+    pub echo_mode: bool,
+    /// Enable TLS support
+    pub enable_tls: bool,
+    /// Path to TLS certificate file
+    pub tls_cert_path: Option<std::path::PathBuf>,
+    /// Path to TLS private key file
+    pub tls_key_path: Option<std::path::PathBuf>,
+}
+
+impl Default for TcpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 9999,
+            host: "0.0.0.0".to_string(),
+            max_connections: 1000,
+            timeout_secs: 300,
+            fixtures_dir: Some(std::path::PathBuf::from("./fixtures/tcp")),
+            echo_mode: true,
+            enable_tls: false,
+            tls_cert_path: None,
+            tls_key_path: None,
+        }
+    }
+}
+
 /// Admin UI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -1120,17 +1171,19 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
             // Improve error message with field path context
             let error_msg = e.to_string();
             let mut full_msg = format!("Failed to parse YAML config: {}", error_msg);
-            
+
             // Add helpful context for common errors
             if error_msg.contains("missing field") {
                 full_msg.push_str("\n\n💡 Most configuration fields are optional with defaults.");
-                full_msg.push_str("\n   Omit fields you don't need - MockForge will use sensible defaults.");
+                full_msg.push_str(
+                    "\n   Omit fields you don't need - MockForge will use sensible defaults.",
+                );
                 full_msg.push_str("\n   See config.template.yaml for all available options.");
             } else if error_msg.contains("unknown field") {
                 full_msg.push_str("\n\n💡 Check for typos in field names.");
                 full_msg.push_str("\n   See config.template.yaml for valid field names.");
             }
-            
+
             Error::generic(full_msg)
         })?
     } else {
@@ -1138,17 +1191,19 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
             // Improve error message with field path context
             let error_msg = e.to_string();
             let mut full_msg = format!("Failed to parse JSON config: {}", error_msg);
-            
+
             // Add helpful context for common errors
             if error_msg.contains("missing field") {
                 full_msg.push_str("\n\n💡 Most configuration fields are optional with defaults.");
-                full_msg.push_str("\n   Omit fields you don't need - MockForge will use sensible defaults.");
+                full_msg.push_str(
+                    "\n   Omit fields you don't need - MockForge will use sensible defaults.",
+                );
                 full_msg.push_str("\n   See config.template.yaml for all available options.");
             } else if error_msg.contains("unknown field") {
                 full_msg.push_str("\n\n💡 Check for typos in field names.");
                 full_msg.push_str("\n   See config.template.yaml for valid field names.");
             }
-            
+
             Error::generic(full_msg)
         })?
     };
@@ -1244,6 +1299,21 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
 
     if let Ok(hostname) = std::env::var("MOCKFORGE_SMTP_HOSTNAME") {
         config.smtp.hostname = hostname;
+    }
+
+    // TCP server overrides
+    if let Ok(port) = std::env::var("MOCKFORGE_TCP_PORT") {
+        if let Ok(port_num) = port.parse() {
+            config.tcp.port = port_num;
+        }
+    }
+
+    if let Ok(host) = std::env::var("MOCKFORGE_TCP_HOST") {
+        config.tcp.host = host;
+    }
+
+    if let Ok(enabled) = std::env::var("MOCKFORGE_TCP_ENABLED") {
+        config.tcp.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
     }
 
     // Admin UI overrides
@@ -1424,6 +1494,7 @@ pub fn apply_profile(mut base: ServerConfig, profile: ProfileConfig) -> ServerCo
     merge_field!(ftp);
     merge_field!(kafka);
     merge_field!(amqp);
+    merge_field!(tcp);
     merge_field!(admin);
     merge_field!(chaining);
     merge_field!(core);

@@ -6,11 +6,29 @@
 use crate::scenario_orchestrator::{OrchestratedScenario, ScenarioStep};
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
+use reqwest::Client;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
+
+/// Deserialize body field - accepts both JSON strings and JSON objects
+fn deserialize_body_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Option<JsonValue> = Option::deserialize(deserializer)?;
+    match value {
+        None => Ok(None),
+        Some(JsonValue::String(s)) => Ok(Some(s)),
+        Some(json_obj) => {
+            // Serialize JSON object to string
+            serde_json::to_string(&json_obj).map_err(serde::de::Error::custom).map(Some)
+        }
+    }
+}
 
 /// Orchestration errors
 #[derive(Error, Debug)]
@@ -215,10 +233,13 @@ pub enum HookAction {
     SetVariable { name: String, value: JsonValue },
     /// Log message
     Log { message: String, level: LogLevel },
-    /// HTTP request
+    /// HTTP request (webhook)
     HttpRequest {
         url: String,
         method: String,
+        /// Request body as JSON string (can include templates like {{variables.xyz}})
+        /// If a JSON object is provided in YAML, it will be serialized to a string
+        #[serde(default, deserialize_with = "deserialize_body_string")]
         body: Option<String>,
     },
     /// Execute command
@@ -291,10 +312,65 @@ impl Hook {
                 Ok(())
             }
             HookAction::HttpRequest { url, method, body } => {
-                // In production, this would make actual HTTP requests
-                // For now, just log
-                tracing::info!("[Hook: {}] HTTP {} {} (body: {:?})", self.name, method, url, body);
-                Ok(())
+                // Execute actual HTTP request for webhook simulation
+                let client =
+                    Client::builder().timeout(Duration::from_secs(30)).build().map_err(|e| {
+                        OrchestrationError::HookFailed(format!(
+                            "Failed to create HTTP client: {}",
+                            e
+                        ))
+                    })?;
+
+                let http_method = method.parse::<reqwest::Method>().map_err(|e| {
+                    OrchestrationError::HookFailed(format!(
+                        "Invalid HTTP method '{}': {}",
+                        method, e
+                    ))
+                })?;
+
+                let mut request_builder = client.request(http_method.clone(), url);
+
+                // Add body if present (body is already a String)
+                if let Some(body_value) = body {
+                    request_builder =
+                        request_builder.header("Content-Type", "application/json").body(body_value.clone());
+                }
+
+                // Execute the request
+                match request_builder.send().await {
+                    Ok(response) => {
+                        let status = response.status();
+                        let response_body = response.text().await.unwrap_or_default();
+                        tracing::info!(
+                            "[Hook: {}] HTTP {} {} → {} (body: {})",
+                            self.name,
+                            http_method,
+                            url,
+                            status,
+                            if response_body.len() > 100 {
+                                format!("{}...", &response_body[..100])
+                            } else {
+                                response_body
+                            }
+                        );
+
+                        // Optionally store response in context
+                        // This could be enhanced to extract data from response
+                        Ok(())
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "[Hook: {}] HTTP {} {} failed: {}",
+                            self.name,
+                            http_method,
+                            url,
+                            e
+                        );
+                        // Don't fail the entire orchestration on webhook failure
+                        // Just log and continue
+                        Ok(())
+                    }
+                }
             }
             HookAction::Command { command, args } => {
                 // In production, this would execute commands

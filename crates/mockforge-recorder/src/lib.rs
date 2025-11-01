@@ -15,6 +15,7 @@ pub mod query;
 pub mod recorder;
 pub mod replay;
 pub mod scrubbing;
+pub mod sync;
 pub mod test_generation;
 
 pub use api::create_api_router;
@@ -33,6 +34,7 @@ pub use replay::ReplayEngine;
 pub use scrubbing::{
     CaptureFilter, CaptureFilterConfig, ScrubConfig, ScrubRule, ScrubTarget, Scrubber,
 };
+pub use sync::{SyncConfig, SyncService, SyncStatus};
 pub use test_generation::{
     GeneratedTest, LlmConfig, TestFormat, TestGenerationConfig, TestGenerationResult,
     TestGenerator, TestSuiteMetadata,

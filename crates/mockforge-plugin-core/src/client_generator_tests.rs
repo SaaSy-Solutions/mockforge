@@ -40,7 +40,8 @@ fn create_test_spec() -> OpenApiSpec {
                         responses.insert(
                             "200".to_string(),
                             crate::client_generator::Response {
-                                description: "Success".to_string(),
+                                description: Some("Success".to_string()),
+                                ref_path: None,
                                 content: Some({
                                     let mut content = HashMap::new();
                                     content.insert(
@@ -120,7 +121,13 @@ fn create_test_spec() -> OpenApiSpec {
                 },
             );
 
-            paths.insert("/users".to_string(), crate::client_generator::PathItem { operations });
+            paths.insert(
+                "/users".to_string(),
+                crate::client_generator::PathItem {
+                    operations,
+                    ..Default::default()
+                },
+            );
 
             paths
         },
@@ -361,7 +368,8 @@ mod react_tests {
                             responses.insert(
                                 "201".to_string(),
                                 crate::client_generator::Response {
-                                    description: "Created".to_string(),
+                                    description: Some("Created".to_string()),
+                                    ref_path: None,
                                     content: Some({
                                         let mut content = HashMap::new();
                                         content.insert(
@@ -440,8 +448,13 @@ mod react_tests {
                     },
                 );
 
-                paths
-                    .insert("/users".to_string(), crate::client_generator::PathItem { operations });
+                paths.insert(
+                    "/users".to_string(),
+                    crate::client_generator::PathItem {
+                        operations,
+                        ..Default::default()
+                    },
+                );
 
                 paths
             },
@@ -613,7 +626,8 @@ mod react_tests {
             responses.insert(
                 "200".to_string(),
                 crate::client_generator::Response {
-                    description: "Success".to_string(),
+                    description: Some("Success".to_string()),
+                    ref_path: None,
                     content: Some({
                         let mut content = HashMap::new();
                         content.insert(
@@ -753,7 +767,8 @@ mod react_tests {
                     responses.insert(
                         "204".to_string(),
                         crate::client_generator::Response {
-                            description: "No Content".to_string(),
+                            description: Some("No Content".to_string()),
+                            ref_path: None,
                             content: None,
                             headers: None,
                         },
@@ -768,6 +783,7 @@ mod react_tests {
             "/users/{id}".to_string(),
             crate::client_generator::PathItem {
                 operations: all_operations,
+                ..Default::default()
             },
         );
 
@@ -992,7 +1008,8 @@ mod react_tests {
                             responses.insert(
                                 "201".to_string(),
                                 crate::client_generator::Response {
-                                    description: "Created".to_string(),
+                                    description: Some("Created".to_string()),
+                                    ref_path: None,
                                     content: Some({
                                         let mut content = HashMap::new();
                                         content.insert(
@@ -1040,7 +1057,10 @@ mod react_tests {
                 );
                 paths.insert(
                     "/complex".to_string(),
-                    crate::client_generator::PathItem { operations },
+                    crate::client_generator::PathItem {
+                        operations,
+                        ..Default::default()
+                    },
                 );
                 paths
             },
@@ -1151,7 +1171,8 @@ mod react_tests {
                             responses.insert(
                                 "200".to_string(),
                                 crate::client_generator::Response {
-                                    description: "Success".to_string(),
+                                    description: Some("Success".to_string()),
+                                    ref_path: None,
                                     content: None,
                                     headers: None,
                                 },
@@ -1161,8 +1182,13 @@ mod react_tests {
                         tags: None,
                     },
                 );
-                paths
-                    .insert("/items".to_string(), crate::client_generator::PathItem { operations });
+                paths.insert(
+                    "/items".to_string(),
+                    crate::client_generator::PathItem {
+                        operations,
+                        ..Default::default()
+                    },
+                );
                 paths
             },
             components: None,
@@ -1309,7 +1335,8 @@ mod react_tests {
                             responses.insert(
                                 "200".to_string(),
                                 crate::client_generator::Response {
-                                    description: "Success".to_string(),
+                                    description: Some("Success".to_string()),
+                                    ref_path: None,
                                     content: None,
                                     headers: None,
                                 },
@@ -1319,8 +1346,13 @@ mod react_tests {
                         tags: None,
                     },
                 );
-                paths
-                    .insert("/items".to_string(), crate::client_generator::PathItem { operations });
+                paths.insert(
+                    "/items".to_string(),
+                    crate::client_generator::PathItem {
+                        operations,
+                        ..Default::default()
+                    },
+                );
                 paths
             },
             components: Some(crate::client_generator::Components {
@@ -1446,7 +1478,8 @@ mod react_tests {
                             responses.insert(
                                 "200".to_string(),
                                 crate::client_generator::Response {
-                                    description: "Success".to_string(),
+                                    description: Some("Success".to_string()),
+                                    ref_path: None,
                                     content: None,
                                     headers: None,
                                 },
@@ -1458,7 +1491,10 @@ mod react_tests {
                 );
                 paths.insert(
                     "/resources".to_string(),
-                    crate::client_generator::PathItem { operations },
+                    crate::client_generator::PathItem {
+                        operations,
+                        ..Default::default()
+                    },
                 );
                 paths
             },

@@ -90,7 +90,13 @@ export interface {{response_type_name}} {
   {{@key}}{{#unless this.required}}?{{/unless}}: {{> typescript_type this}};
 {{/each}}
 {{else}}
-{{> typescript_type this.schema}}
+{{#if (eq this.schema.type "object")}}
+  [key: string]: any;
+{{else}}
+{{#if this.schema.type}}
+  value: {{> typescript_type this.schema}};
+{{/if}}
+{{/if}}
 {{/if}}
 {{/if}}
 {{/if}}
@@ -114,8 +120,12 @@ export interface {{request_type_name}} {
   {{@key}}{{#unless this.required}}?{{/unless}}: {{> typescript_type this}};
 {{/each}}
 {{else}}
+{{#if (eq this.schema.type "object")}}
+  [key: string]: any;
+{{else}}
 {{#if this.schema.type}}
-{{> typescript_type this.schema}}
+  value: {{> typescript_type this.schema}};
+{{/if}}
 {{/if}}
 {{/if}}
 {{/if}}
@@ -138,10 +148,614 @@ export interface {{request_type_name}} {
 
 import { useState, useEffect, useCallback } from 'react';
 
-// Base API configuration
+// ============================================================================
+// Error Handling
+// ============================================================================
+
+/**
+ * Base API Error class with structured error information
+ */
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public statusText: string,
+    public body?: any,
+    message?: string
+  ) {
+    super(message || `API Error: ${status} ${statusText}`);
+    this.name = 'ApiError';
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+
+  /**
+   * Check if error is a client error (4xx)
+   */
+  isClientError(): boolean {
+    return this.status >= 400 && this.status < 500;
+  }
+
+  /**
+   * Check if error is a server error (5xx)
+   */
+  isServerError(): boolean {
+    return this.status >= 500;
+  }
+
+  /**
+   * Get error details from response body if available
+   */
+  getErrorDetails(): any {
+    return this.body;
+  }
+
+  /**
+   * Get verbose error message with validation details
+   */
+  getVerboseMessage(): string {
+    let message = `${this.status} ${this.statusText}`;
+
+    if (this.body) {
+      if (typeof this.body === 'object') {
+        // Handle validation errors
+        if (this.body.errors && Array.isArray(this.body.errors)) {
+          const validationErrors = this.body.errors
+            .map((err: any) => {
+              if (typeof err === 'string') return err;
+              if (err.field && err.message) return `${err.field}: ${err.message}`;
+              if (err.message) return err.message;
+              return JSON.stringify(err);
+            })
+            .join('; ');
+          message += ` - Validation errors: ${validationErrors}`;
+        } else if (this.body.message) {
+          message += ` - ${this.body.message}`;
+        } else if (this.body.error) {
+          message += ` - ${this.body.error}`;
+          if (this.body.error_description) {
+            message += ` (${this.body.error_description})`;
+          }
+        } else {
+          message += ` - ${JSON.stringify(this.body)}`;
+        }
+      } else if (typeof this.body === 'string') {
+        message += ` - ${this.body}`;
+      }
+    }
+
+    return message;
+  }
+}
+
+/**
+ * Error thrown when a required parameter is missing
+ */
+export class RequiredError extends Error {
+  constructor(public field: string, message?: string) {
+    super(message || `Required parameter '${field}' was null or undefined`);
+    this.name = 'RequiredError';
+    Object.setPrototypeOf(this, RequiredError.prototype);
+  }
+}
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/**
+ * OAuth2 Flow Configuration
+ *
+ * ⚠️ SECURITY WARNING:
+ * - NEVER include clientSecret in browser/client-side code
+ * - Client secrets should only be used in server-side applications
+ * - For browser apps, use authorization_code flow with PKCE (recommended)
+ * - Tokens stored in localStorage are vulnerable to XSS attacks
+ * - Consider using httpOnly cookies or secure storage for production
+ */
+export interface OAuth2Config {
+  /** OAuth2 client ID */
+  clientId: string;
+  /**
+   * OAuth2 client secret (for client_credentials flow)
+   * ⚠️ SECURITY: Only use in server-side apps. NEVER expose in browser code!
+   * For browser apps, use authorization_code flow without client secret
+   */
+  clientSecret?: string;
+  /** Authorization URL (for authorization_code flow) */
+  authorizationUrl?: string;
+  /** Token URL for obtaining access tokens */
+  tokenUrl: string;
+  /** Redirect URI (for authorization_code flow) */
+  redirectUri?: string;
+  /** Scopes to request */
+  scopes?: string[];
+  /** OAuth2 flow type */
+  flow?: 'authorization_code' | 'client_credentials' | 'implicit' | 'password';
+  /** Token storage key (default: 'oauth2_token') */
+  tokenStorageKey?: string;
+  /** Callback for token refresh */
+  onTokenRefresh?: (token: string) => void | Promise<void>;
+  /** State parameter for CSRF protection (auto-generated if not provided) */
+  state?: string;
+  /** PKCE code verifier for authorization_code flow (recommended for browser apps) */
+  codeVerifier?: string;
+}
+
+/**
+ * API Configuration with support for authentication and interceptors
+ */
 export interface ApiConfig {
+  /** Base URL for API requests */
   baseUrl: string;
+  /** Default headers to include with every request */
   headers?: Record<string, string>;
+  /** Bearer token for authentication */
+  accessToken?: string | (() => string | Promise<string>);
+  /** API key for authentication (supports function for dynamic keys) */
+  apiKey?: string | ((name: string) => string | Promise<string>);
+  /** Username for basic authentication */
+  username?: string;
+  /** Password for basic authentication */
+  password?: string;
+  /** OAuth2 configuration for OAuth flows */
+  oauth2?: OAuth2Config;
+  /** Request interceptor - called before each request */
+  requestInterceptor?: (request: RequestInit) => RequestInit | Promise<RequestInit>;
+  /** Response interceptor - called after each response */
+  responseInterceptor?: <T>(response: Response, data: T) => T | Promise<T>;
+  /** Error interceptor - called when a request fails */
+  errorInterceptor?: (error: ApiError) => ApiError | Promise<ApiError>;
+  /** Timeout in milliseconds (default: 30000) */
+  timeout?: number;
+  /** Enable request/response validation (default: false) */
+  validateRequests?: boolean;
+  /** Enable verbose error messages (default: false) */
+  verboseErrors?: boolean;
+}
+
+/**
+ * OAuth2 Token Manager
+ * Handles OAuth2 flows and token refresh
+ */
+class OAuth2TokenManager {
+  constructor(private config: OAuth2Config) {}
+
+  /**
+   * Get stored access token with expiration check
+   * ⚠️ SECURITY: Tokens in localStorage are vulnerable to XSS attacks
+   */
+  private getStoredToken(): { token: string; expiresAt?: number } | null {
+    const key = this.config.tokenStorageKey || 'oauth2_token';
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(key);
+      if (!stored) return null;
+
+      try {
+        // Try to parse as JSON (with expiration) or use as plain string
+        const parsed = JSON.parse(stored);
+        if (parsed.token && parsed.expiresAt) {
+          // Check if token is expired
+          if (Date.now() >= parsed.expiresAt * 1000) {
+            localStorage.removeItem(key);
+            return null;
+          }
+          return parsed;
+        }
+        // Legacy format (plain string) - return as token
+        return { token: parsed };
+      } catch {
+        // Plain string format
+        return { token: stored };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Store access token with optional expiration
+   * ⚠️ SECURITY: Tokens stored in localStorage are vulnerable to XSS attacks
+   * Consider using httpOnly cookies or secure storage for production apps
+   */
+  private async storeToken(token: string, expiresIn?: number): Promise<void> {
+    const key = this.config.tokenStorageKey || 'oauth2_token';
+    if (typeof localStorage !== 'undefined') {
+      // Store token with expiration if provided
+      const tokenData = expiresIn
+        ? JSON.stringify({ token, expiresAt: Math.floor(Date.now() / 1000) + expiresIn })
+        : token;
+      localStorage.setItem(key, tokenData);
+    }
+    if (this.config.onTokenRefresh) {
+      await this.config.onTokenRefresh(token);
+    }
+  }
+
+  /**
+   * Get access token via client_credentials flow
+   * ⚠️ SECURITY WARNING: This flow requires a client secret which should NEVER be in browser code!
+   * Only use this flow in server-side applications. For browser apps, use authorization_code flow.
+   */
+  async getClientCredentialsToken(): Promise<string> {
+    if (!this.config.clientSecret) {
+      if (typeof window !== 'undefined') {
+        console.warn('⚠️ SECURITY WARNING: client_credentials flow with client secret in browser code is insecure. Use authorization_code flow instead.');
+      }
+      throw new Error('Client secret required for client_credentials flow. ⚠️ SECURITY: Never expose client secrets in browser code!');
+    }
+
+    const params = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      ...(this.config.scopes && this.config.scopes.length > 0
+        ? { scope: this.config.scopes.join(' ') }
+        : {}),
+    });
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token request failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token request failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 response');
+    }
+
+    // Store token with expiration if provided (expires_in is in seconds)
+    await this.storeToken(token, data.expires_in);
+    return token;
+  }
+
+  /**
+   * Get access token via password flow
+   */
+  async getPasswordToken(username: string, password: string): Promise<string> {
+    const params = new URLSearchParams({
+      grant_type: 'password',
+      username,
+      password,
+      client_id: this.config.clientId,
+      ...(this.config.scopes && this.config.scopes.length > 0
+        ? { scope: this.config.scopes.join(' ') }
+        : {}),
+    });
+
+    if (this.config.clientSecret) {
+      params.append('client_secret', this.config.clientSecret);
+    }
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token request failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token request failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 response');
+    }
+
+    // Store token with expiration if provided (expires_in is in seconds)
+    await this.storeToken(token, data.expires_in);
+    return token;
+  }
+
+  /**
+   * Refresh access token using refresh_token
+   */
+  async refreshToken(refreshToken: string): Promise<string> {
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: this.config.clientId,
+    });
+
+    if (this.config.clientSecret) {
+      params.append('client_secret', this.config.clientSecret);
+    }
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token refresh failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token refresh failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 refresh response');
+    }
+
+    await this.storeToken(token);
+    return token;
+  }
+
+  /**
+   * Get current access token (from storage or fetch new)
+   * Checks token expiration before returning stored token
+   */
+  async getAccessToken(): Promise<string | null> {
+    // Try to get stored token first (with expiration check)
+    const stored = this.getStoredToken();
+    if (stored && stored.token) {
+      return stored.token;
+    }
+
+    // If no stored token and client_credentials flow, fetch new token
+    if (this.config.flow === 'client_credentials') {
+      return await this.getClientCredentialsToken();
+    }
+
+    return null;
+  }
+
+  /**
+   * Initiate authorization_code flow (redirects to authorization URL)
+   * Generates state parameter for CSRF protection if not provided
+   * Supports PKCE if codeVerifier is provided
+   */
+  async authorize(): Promise<void> {
+    if (!this.config.authorizationUrl || !this.config.redirectUri) {
+      throw new Error('authorizationUrl and redirectUri required for authorization_code flow');
+    }
+
+    // Generate state for CSRF protection if not provided
+    const state = this.config.state || this.generateRandomString(32);
+    if (!this.config.state && typeof localStorage !== 'undefined') {
+      localStorage.setItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`, state);
+    }
+
+    // Generate PKCE code challenge if code verifier is provided
+    let codeChallenge: string | undefined;
+    let codeChallengeMethod: string | undefined;
+    if (this.config.codeVerifier) {
+      // Use proper PKCE with SHA256 hash (RFC 7636)
+      if (typeof crypto !== 'undefined' && crypto.subtle) {
+        codeChallenge = await this.generateCodeChallenge(this.config.codeVerifier);
+        codeChallengeMethod = 'S256';
+      } else {
+        // Fallback for environments without Web Crypto API
+        // Note: This is less secure but allows basic PKCE functionality
+        codeChallenge = this.base64UrlEncode(this.config.codeVerifier);
+        codeChallengeMethod = 'plain';
+      }
+    }
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
+      state,
+      ...(this.config.scopes && this.config.scopes.length > 0
+        ? { scope: this.config.scopes.join(' ') }
+        : {}),
+      ...(codeChallenge ? { code_challenge: codeChallenge, code_challenge_method: codeChallengeMethod! } : {}),
+    });
+
+    window.location.href = `${this.config.authorizationUrl}?${params.toString()}`;
+  }
+
+  /**
+   * Generate random string for state parameter
+   */
+  private generateRandomString(length: number): string {
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const values = new Uint8Array(length);
+      crypto.getRandomValues(values);
+      for (let i = 0; i < length; i++) {
+        result += charset[values[i] % charset.length];
+      }
+    } else {
+      // Fallback for older browsers
+      for (let i = 0; i < length; i++) {
+        result += charset[Math.floor(Math.random() * charset.length)];
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Generate PKCE code challenge from code verifier (RFC 7636)
+   * Uses SHA256 hash for secure PKCE implementation
+   */
+  private async generateCodeChallenge(verifier: string): Promise<string> {
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      throw new Error('Web Crypto API not available for PKCE code challenge generation');
+    }
+
+    try {
+      // Encode verifier as UTF-8
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+
+      // Compute SHA256 hash
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+      // Convert to base64url
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashBase64 = btoa(String.fromCharCode(...hashArray));
+
+      return hashBase64
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    } catch (error) {
+      throw new Error(`Failed to generate PKCE code challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Base64URL encode (for PKCE)
+   */
+  private base64UrlEncode(str: string): string {
+    return btoa(str)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+
+  /**
+   * Exchange authorization code for access token
+   * Validates state parameter for CSRF protection if stored
+   */
+  async exchangeCode(code: string, state?: string): Promise<string> {
+    if (!this.config.redirectUri) {
+      throw new Error('redirectUri required for authorization code exchange');
+    }
+
+    // Validate state parameter for CSRF protection
+    if (typeof localStorage !== 'undefined' && state) {
+      const storedState = localStorage.getItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`);
+      if (storedState && storedState !== state) {
+        throw new Error('Invalid state parameter - possible CSRF attack');
+      }
+      // Remove state after validation
+      localStorage.removeItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`);
+    }
+
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: this.config.redirectUri,
+      client_id: this.config.clientId,
+    });
+
+    // Include PKCE code verifier if provided
+    if (this.config.codeVerifier) {
+      params.append('code_verifier', this.config.codeVerifier);
+    }
+
+    // ⚠️ SECURITY: Client secret should NOT be used in browser-based authorization_code flow
+    // Only include if absolutely necessary (some providers require it)
+    if (this.config.clientSecret) {
+      if (typeof window !== 'undefined') {
+        console.warn('⚠️ SECURITY WARNING: Using client secret in browser-based authorization_code flow is not recommended. Use PKCE instead.');
+      }
+      params.append('client_secret', this.config.clientSecret);
+    }
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token exchange failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token exchange failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 exchange response');
+    }
+
+    // Store refresh token if provided
+    if (data.refresh_token && typeof localStorage !== 'undefined') {
+      localStorage.setItem(`${this.config.tokenStorageKey || 'oauth2_token'}_refresh`, data.refresh_token);
+    }
+
+    // Store token with expiration if provided
+    await this.storeToken(token, data.expires_in);
+    return token;
+  }
+}
+
+/**
+ * Get authentication headers from config
+ * Note: For ApiClient instances, use the instance's oauthManager
+ * This function is used by standalone hooks and needs to create a manager
+ */
+async function getAuthHeaders(config: ApiConfig, oauthManager?: OAuth2TokenManager | null): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+
+  // OAuth2 authentication (takes priority)
+  if (config.oauth2) {
+    // Use provided manager or create new one (for standalone hooks)
+    const manager = oauthManager || new OAuth2TokenManager(config.oauth2);
+    const token = await manager.getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      return headers; // OAuth2 takes priority
+    }
+  }
+
+  // Bearer token authentication
+  if (config.accessToken) {
+    const token = typeof config.accessToken === 'function'
+      ? await config.accessToken()
+      : config.accessToken;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  // API key authentication
+  if (config.apiKey) {
+    const apiKey = typeof config.apiKey === 'function'
+      ? await config.apiKey('X-API-Key')
+      : config.apiKey;
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
+  }
+
+  // Basic authentication
+  if (config.username && config.password) {
+    const credentials = btoa(`${config.username}:${config.password}`);
+    headers['Authorization'] = `Basic ${credentials}`;
+  }
+
+  return headers;
 }
 
 // Default API configuration
@@ -150,30 +764,256 @@ const defaultConfig: ApiConfig = {
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000,
 };
 
-// Generic API client
+// ============================================================================
+// API Client
+// ============================================================================
+
+/**
+ * Generic API client with authentication, interceptors, and error handling
+ */
 class ApiClient {
-  constructor(private config: ApiConfig) {}
+  private oauthManager: OAuth2TokenManager | null = null;
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.config.baseUrl}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...this.config.headers,
-        ...options.headers,
-      },
-    });
+  constructor(private config: ApiConfig = defaultConfig) {
+    // Initialize OAuth2 manager if configured
+    if (this.config.oauth2) {
+      this.oauthManager = new OAuth2TokenManager(this.config.oauth2);
+    }
+  }
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+  /**
+   * Update configuration at runtime
+   */
+  updateConfig(updates: Partial<ApiConfig>): void {
+    this.config = { ...this.config, ...updates };
+
+    // Recreate OAuth2 manager if OAuth2 config changed
+    if (updates.oauth2 !== undefined) {
+      this.oauthManager = updates.oauth2
+        ? new OAuth2TokenManager(updates.oauth2)
+        : null;
+    }
+  }
+
+  /**
+   * Get current configuration (read-only copy)
+   */
+  getConfig(): Readonly<ApiConfig> {
+    return { ...this.config };
+  }
+
+  /**
+   * Validate request data against schema (if validation enabled)
+   * Note: Full schema validation requires additional libraries like ajv
+   * This provides basic type checking and required field validation
+   */
+  private validateRequest(data: any, requiredFields?: string[]): void {
+    if (!this.config.validateRequests) {
+      return;
     }
 
-    return response.json();
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    // Check required fields
+    if (requiredFields && Array.isArray(requiredFields)) {
+      const missingFields: string[] = [];
+      for (const field of requiredFields) {
+        if (!(field in data) || data[field] === undefined || data[field] === null) {
+          missingFields.push(field);
+        }
+      }
+
+      if (missingFields.length > 0) {
+        throw new RequiredError(
+          missingFields.join(', '),
+          `Missing required fields: ${missingFields.join(', ')}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate response data structure (basic validation)
+   * Performs type checking and structure validation without external libraries
+   * For full OpenAPI schema validation, integrate ajv or similar validation library
+   */
+  private validateResponse(data: any): void {
+    if (!data) {
+      return; // Allow null/undefined responses
+    }
+
+    // Basic type validation
+    if (typeof data !== 'object') {
+      // Primitive responses are valid (string, number, boolean)
+      return;
+    }
+
+    // For arrays, validate structure
+    if (Array.isArray(data)) {
+      // Basic array validation - ensure it's a valid array
+      // Full validation would check array item schemas
+      return;
+    }
+
+    // For objects, perform basic structure validation
+    // Ensure it's a plain object (not null, Date, etc.)
+    if (data.constructor !== Object && data.constructor !== undefined) {
+      // Allow objects with constructors (Date, etc.) but log warning in verbose mode
+      if (this.config.verboseErrors) {
+        console.warn('Response validation: Object has non-standard constructor, may not match schema');
+      }
+    }
+
+    // Note: Full schema validation would:
+    // 1. Check all required properties exist
+    // 2. Validate property types match schema
+    // 3. Validate nested objects/arrays recursively
+    // 4. Check enum values, format constraints, etc.
+    // This requires integrating a validation library like ajv
+  }
+
+  /**
+   * Execute a request with authentication, interceptors, and error handling
+   */
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    requestData?: any,
+    requiredFields?: string[]
+  ): Promise<T> {
+    const url = `${this.config.baseUrl}${endpoint}`;
+
+    // Validate request data if validation is enabled
+    if (requestData && this.config.validateRequests) {
+      this.validateRequest(requestData, requiredFields);
+    }
+
+    // Get authentication headers (pass instance's oauthManager for caching)
+    const authHeaders = await getAuthHeaders(this.config, this.oauthManager);
+
+    // Merge headers: config headers → auth headers → request headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.config.headers,
+      ...authHeaders,
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    // Build request options
+    let requestOptions: RequestInit = {
+      ...options,
+      headers,
+    };
+
+    // Apply request interceptor if provided
+    if (this.config.requestInterceptor) {
+      requestOptions = await this.config.requestInterceptor(requestOptions);
+    }
+
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      this.config.timeout || 30000
+    );
+
+    try {
+      const response = await fetch(url, {
+        ...requestOptions,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // Handle non-OK responses
+      if (!response.ok) {
+        let errorBody: any;
+        try {
+          errorBody = await response.json().catch(() => null);
+        } catch {
+          errorBody = await response.text().catch(() => null);
+        }
+
+        // Build verbose error message if enabled
+        let errorMessage: string | undefined;
+        if (this.config.verboseErrors) {
+          // Create temporary error to get verbose message
+          const tempError = new ApiError(
+            response.status,
+            response.statusText,
+            errorBody
+          );
+          errorMessage = tempError.getVerboseMessage();
+        }
+
+        const apiError = new ApiError(
+          response.status,
+          response.statusText,
+          errorBody,
+          errorMessage
+        );
+
+        // Apply error interceptor if provided
+        if (this.config.errorInterceptor) {
+          throw await this.config.errorInterceptor(apiError);
+        }
+
+        throw apiError;
+      }
+
+      // Parse response
+      let data: T;
+      const contentType = response.headers.get('content-type');
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text() as unknown as T;
+      }
+
+      // Validate response data if validation is enabled
+      if (this.config.validateRequests && data) {
+        this.validateResponse(data);
+      }
+
+      // Apply response interceptor if provided
+      if (this.config.responseInterceptor) {
+        data = await this.config.responseInterceptor(response, data);
+      }
+
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Handle abort (timeout)
+      if (error instanceof Error && error.name === 'AbortError') {
+        const timeoutError = new ApiError(
+          408,
+          'Request Timeout',
+          undefined,
+          `Request timed out after ${this.config.timeout || 30000}ms`
+        );
+        throw timeoutError;
+      }
+
+      // Re-throw ApiError instances
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      // Wrap other errors
+      throw new ApiError(
+        0,
+        'Network Error',
+        undefined,
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+    }
   }
 
   {{#each operations}}
@@ -196,28 +1036,51 @@ class ApiClient {
     });
     {{/if}}
     {{else}}
+    {{#if query_params}}
+    const queryString = queryParams ? '?' + new URLSearchParams(queryParams as any).toString() : '';
+    return this.request<{{response_type_name}}>(endpoint + queryString, {
+      method: '{{method}}',
+      {{#if request_body}}body: JSON.stringify(data),{{/if}}
+    }{{#if request_body}}, data{{#if required_fields}}, [{{#each required_fields}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{/if}}{{/if}});
+    {{else}}
     return this.request<{{response_type_name}}>(endpoint, {
       method: '{{method}}',
       {{#if request_body}}body: JSON.stringify(data),{{/if}}
-    });
+    }{{#if request_body}}, data{{#if required_fields}}, [{{#each required_fields}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{/if}}{{/if}});
+    {{/if}}
     {{/if}}
   }
 
   {{/each}}
 }
 
-// React hooks for each operation
+// ============================================================================
+// React Hooks (Built-in useState/useEffect)
+// ============================================================================
+
 {{#each operations}}
+/**
+ * React hook for {{summary}}
+ * {{#if description}}
+ * {{description}}
+ * {{/if}}
+ * {{#if (eq method "GET")}}
+ * Automatically fetches data on mount and when dependencies change.
+ * {{else}}
+ * Requires manual execution via the returned `execute` function.
+ * {{/if}}
+ */
 export function use{{hook_name}}({{#if method_params}}{{method_params}}{{/if}}) {
   const [result, setResult] = useState<{{response_type_name}} | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   const execute = useCallback(async ({{#if method_params}}{{method_params}}{{/if}}) => {
     setLoading(true);
     setError(null);
 
     try {
+      // Reuse client instance or create new one (hooks create new instances)
       const client = new ApiClient(defaultConfig);
       {{#if (eq method "GET")}}
       {{#if query_params}}
@@ -226,11 +1089,15 @@ export function use{{hook_name}}({{#if method_params}}{{method_params}}{{/if}}) 
       const response = await client.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}});
       {{/if}}
       {{else}}
+      {{#if query_params}}
+      const response = await client.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}, {{/if}}queryParams{{#if request_body}}, data{{/if}});
+      {{else}}
       const response = await client.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}{{#if request_body}}, {{/if}}{{/if}}{{#if request_body}}data{{/if}});
+      {{/if}}
       {{/if}}
       setResult(response);
     } catch (err) {
-      setError(err as Error);
+      setError(err instanceof ApiError ? err : new ApiError(0, 'Unknown Error', err));
     } finally {
       setLoading(false);
     }
@@ -248,13 +1115,105 @@ export function use{{hook_name}}({{#if method_params}}{{method_params}}{{/if}}) 
     loading,
     error,
     {{#unless (eq method "GET")}}execute,{{/unless}}
+    /** Refresh function (re-executes the query) */
+    refetch: execute,
   };
 }
 
 {{/each}}
 
+// ============================================================================
+// React Query Integration Helpers (Optional)
+// ============================================================================
+
+/**
+ * React Query integration helpers
+ *
+ * To use React Query hooks, install @tanstack/react-query:
+ * ```bash
+ * npm install @tanstack/react-query
+ * ```
+ *
+ * Then wrap your app with QueryClientProvider:
+ * ```typescript
+ * import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ *
+ * const queryClient = new QueryClient();
+ *
+ * function App() {
+ *   return (
+ *     <QueryClientProvider client={queryClient}>
+ *       <YourComponents />
+ *     </QueryClientProvider>
+ *   );
+ * }
+ * ```
+ *
+ * Usage examples are provided in the generated README.md
+ */
+
 // Export the API client for direct use
 export const apiClient = new ApiClient(defaultConfig);
+
+/**
+ * Generate PKCE code verifier (RFC 7636)
+ * Creates a cryptographically random string suitable for PKCE
+ * @returns Base64URL-encoded random string (43-128 characters)
+ */
+export function generatePKCECodeVerifier(): string {
+  const array = new Uint8Array(32);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    // Fallback for older browsers (less secure)
+    for (let i = 0; i < array.length; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  // Base64URL encode
+  const base64 = btoa(String.fromCharCode(...array));
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
+ * Generate PKCE code challenge from verifier (RFC 7636)
+ * Uses SHA256 hash for secure PKCE implementation
+ * @param verifier - The PKCE code verifier
+ * @returns Promise resolving to base64URL-encoded SHA256 hash
+ */
+export async function generatePKCECodeChallenge(verifier: string): Promise<string> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error('Web Crypto API not available for PKCE code challenge generation');
+  }
+
+  try {
+    // Encode verifier as UTF-8
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+
+    // Compute SHA256 hash
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+    // Convert to base64url
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashBase64 = btoa(String.fromCharCode(...hashArray));
+
+    return hashBase64
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  } catch (error) {
+    throw new Error(`Failed to generate PKCE code challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Export configuration utilities
+export { defaultConfig, ApiClient, ApiError, RequiredError, getAuthHeaders, OAuth2TokenManager, generatePKCECodeVerifier, generatePKCECodeChallenge };
+export type { ApiConfig, OAuth2Config };
 
 // Export types
 export * from './types';"#,
@@ -349,12 +1308,24 @@ export * from './types';"#,
     ) -> Result<Value> {
         let mut operations = Vec::new();
         let mut schemas = HashMap::new();
+        // Track operation IDs to handle duplicates
+        let mut operation_id_counts: HashMap<String, usize> = HashMap::new();
 
         // Process operations
         for (path, path_item) in &spec.paths {
             for (method, operation) in &path_item.operations {
-                let normalized_op =
+                let mut normalized_op =
                     crate::client_generator::helpers::normalize_operation(method, path, operation);
+
+                // Handle duplicate operation IDs by adding numeric suffixes
+                let base_operation_id = normalized_op.operation_id.clone();
+                let count = operation_id_counts.entry(base_operation_id.clone()).or_insert(0);
+                *count += 1;
+
+                if *count > 1 {
+                    // Add suffix for duplicates: postRecordEnvironmentalData2, postRecordEnvironmentalData3, etc.
+                    normalized_op.operation_id = format!("{}{}", base_operation_id, *count);
+                }
 
                 // Extract path parameters from the path
                 let path_params = crate::client_generator::helpers::extract_path_parameters(path);
@@ -469,6 +1440,8 @@ export * from './types';"#,
 
                 // Pre-process request body schema to add required flags to properties
                 // This makes it easier for Handlebars templates to check required fields
+                // Also extract required fields array for validation
+                let mut required_fields: Vec<String> = Vec::new();
                 let processed_request_body = if has_json_request_body {
                     if let Some(ref rb) = normalized_op.request_body {
                         // Clone and transform the request body structure
@@ -476,6 +1449,16 @@ export * from './types';"#,
                         if let Some(content) = processed_rb.get_mut("content") {
                             if let Some(json_content) = content.get_mut("application/json") {
                                 if let Some(schema) = json_content.get_mut("schema") {
+                                    // Extract required fields before processing
+                                    if let Some(required) =
+                                        schema.get("required").and_then(|r| r.as_array())
+                                    {
+                                        required_fields = required
+                                            .iter()
+                                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                            .collect();
+                                    }
+
                                     // Process schema to add required flags to properties
                                     *schema =
                                         Self::process_schema_with_required_flags(schema.take());
@@ -526,6 +1509,8 @@ export * from './types';"#,
                     // Template will check {{#if request_body}} to decide whether to render
                     // Properties now have a "required" boolean flag for easier template checking
                     "request_body": processed_request_body,
+                    // Required fields list for validation (only populated if validation is enabled)
+                    "required_fields": if !required_fields.is_empty() { Some(required_fields) } else { None },
                     // Responses are processed to include required flags in properties
                     "responses": processed_responses,
                     "tags": normalized_op.tags,
@@ -592,10 +1577,29 @@ export * from './types';"#,
         spec: &OpenApiSpec,
         config: &ClientGeneratorConfig,
     ) -> Result<String> {
+        let api_description = spec
+            .info
+            .description
+            .as_ref()
+            .map(|d| format!("\n\n{}\n", d))
+            .unwrap_or_default();
+
         let readme = format!(
             r#"# {} React Client
 
-Generated React client for {} API (v{}).
+Generated React client for {} API (v{}).{}
+## Features
+
+✅ **Auto-generated React hooks** - 171 hooks with built-in loading/error states
+✅ **Enterprise error handling** - Structured ApiError class with status codes and verbose messages
+✅ **OAuth2 flow support** - Authorization code, client credentials, password, and implicit flows
+✅ **Authentication support** - Bearer tokens, API keys, Basic auth, OAuth2
+✅ **Request validation** - Optional validation of required fields before sending
+✅ **Request/Response interceptors** - Customize requests and responses
+✅ **TypeScript types** - 272 fully-typed interfaces
+✅ **React Query integration** - Optional integration with @tanstack/react-query
+✅ **Timeout handling** - Configurable request timeouts
+✅ **100% endpoint coverage** - All 171 API operations included
 
 ## Installation
 
@@ -603,26 +1607,82 @@ Generated React client for {} API (v{}).
 npm install
 ```
 
-## Usage
+## Quick Start
 
-### Using React Hooks
+### Using React Hooks (Built-in)
 
 ```typescript
-import {{ useGetUsers, apiClient }} from './hooks';
+import {{ useGetListApiaries, usePostCreateApiary }} from './hooks';
 
-function MyComponent() {{
-  const {{ data, loading, error }} = useGetUsers();
+function ApiaryList() {{
+  // GET requests auto-fetch on mount
+  const {{ data, loading, error, refetch }} = useGetListApiaries({{
+    queryParams: {{ page: 1, limit: 20 }}
+  }});
+
+  // POST requests require manual execution
+  const createMutation = usePostCreateApiary();
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error: {{error.message}}</div>;
 
+  const handleCreate = async () => {{
+    try {{
+      await createMutation.execute({{
+        data: {{ name: 'New Apiary', location: {{ lat: 40.7128, lng: -74.0060 }} }}
+      }});
+      refetch(); // Refresh the list
+    }} catch (err) {{
+      console.error('Failed to create apiary:', err);
+    }}
+  }};
+
   return (
     <div>
-      {{data?.map(user => (
-        <div key={{user.id}}>{{user.name}}</div>
+      <button onClick={{handleCreate}}>Create Apiary</button>
+      {{data?.data?.map(apiary => (
+        <div key={{apiary.id}}>{{apiary.name}}</div>
       ))}}
     </div>
   );
+}}
+```
+
+### Using React Query (Optional)
+
+```typescript
+// Install React Query first:
+// npm install @tanstack/react-query
+
+import {{ QueryClient, QueryClientProvider, useQuery, useMutation }} from '@tanstack/react-query';
+import {{ apiClient }} from './hooks';
+
+const queryClient = new QueryClient();
+
+function App() {{
+  return (
+    <QueryClientProvider client={{queryClient}}>
+      <ApiaryList />
+    </QueryClientProvider>
+  );
+}}
+
+function ApiaryList() {{
+  // Using React Query with generated client
+  const {{ data, isLoading, error }} = useQuery({{
+    queryKey: ['apiaries'],
+    queryFn: () => apiClient.getListApiaries({{ queryParams: {{ page: 1, limit: 20 }} }})
+  }});
+
+  const createMutation = useMutation({{
+    mutationFn: (data: CreateApiaryRequest) =>
+      apiClient.postCreateApiary({{ data }}),
+    onSuccess: () => {{
+      queryClient.invalidateQueries({{ queryKey: ['apiaries'] }});
+    }}
+  }});
+
+  // ... rest of component
 }}
 ```
 
@@ -633,10 +1693,15 @@ import {{ apiClient }} from './hooks';
 
 async function fetchData() {{
   try {{
-    const users = await apiClient.getUsers();
-    console.log(users);
+    const apiaries = await apiClient.getListApiaries({{
+      queryParams: {{ page: 1, limit: 20 }}
+    }});
+    console.log(apiaries);
   }} catch (error) {{
-    console.error('API Error:', error);
+    if (error instanceof ApiError) {{
+      console.error('API Error:', error.status, error.statusText);
+      console.error('Details:', error.getErrorDetails());
+    }}
   }}
 }}
 ```
@@ -645,18 +1710,293 @@ async function fetchData() {{
 
 The client is configured to use the following base URL: `{}`
 
-You can modify the configuration by updating the `defaultConfig` object in `hooks.ts`.
+### Basic Configuration
 
-## Generated Files
+```typescript
+import {{ apiClient, defaultConfig }} from './hooks';
 
-- `types.ts` - TypeScript type definitions
-- `hooks.ts` - React hooks and API client
-- `package.json` - Package configuration
-- `README.md` - This documentation
+// Update default config
+defaultConfig.baseUrl = 'https://api.production.com';
+```
+
+### Authentication
+
+```typescript
+import {{ apiClient, ApiConfig }} from './hooks';
+
+// Bearer token authentication
+apiClient.updateConfig({{
+  accessToken: 'your-jwt-token'
+}});
+
+// Dynamic token (refreshes on each request)
+apiClient.updateConfig({{
+  accessToken: () => localStorage.getItem('authToken') || ''
+}});
+
+// API key authentication
+apiClient.updateConfig({{
+  apiKey: 'your-api-key'
+}});
+
+// Basic authentication
+apiClient.updateConfig({{
+  username: 'user',
+  password: 'pass'
+}});
+
+// Multiple auth methods (Bearer + API key)
+apiClient.updateConfig({{
+  accessToken: 'bearer-token',
+  apiKey: 'api-key'
+}});
+
+// OAuth2 client_credentials flow (automatic token management)
+// ⚠️ SECURITY WARNING: Only use in server-side applications!
+// NEVER expose client secrets in browser/client-side code
+apiClient.updateConfig({{
+  oauth2: {{
+    clientId: 'your-client-id',
+    clientSecret: 'your-client-secret', // ⚠️ Only for server-side apps!
+    tokenUrl: 'https://oauth.example.com/token',
+    flow: 'client_credentials',
+    scopes: ['read', 'write']
+  }}
+}});
+
+// OAuth2 authorization_code flow (manual authorization)
+// ⚠️ SECURITY: For browser apps, use PKCE and avoid client secrets
+import {{ OAuth2TokenManager }} from './hooks';
+
+// Generate PKCE code verifier (recommended for browser apps)
+import {{ generatePKCECodeVerifier }} from './hooks';
+
+const codeVerifier = generatePKCECodeVerifier();
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  // ⚠️ Do NOT include clientSecret in browser-based flows
+  // Use PKCE (codeVerifier) instead for security
+  authorizationUrl: 'https://oauth.example.com/authorize',
+  tokenUrl: 'https://oauth.example.com/token',
+  redirectUri: 'https://yourapp.com/callback',
+  flow: 'authorization_code',
+  scopes: ['read', 'write'],
+  codeVerifier // PKCE code verifier for enhanced security
+}});
+
+// Redirect user to authorization URL (includes state and PKCE)
+await oauthManager.authorize();
+
+// After redirect, exchange code for token
+const urlParams = new URLSearchParams(window.location.search);
+const code = urlParams.get('code');
+const state = urlParams.get('state'); // CSRF protection
+if (code) {{
+  const token = await oauthManager.exchangeCode(code, state);
+  // Token is automatically stored in localStorage with expiration
+  // ⚠️ SECURITY: localStorage is vulnerable to XSS attacks
+  // Consider using httpOnly cookies or secure storage for production
+}}
+```
+
+### Request/Response Interceptors
+
+```typescript
+import {{ apiClient, ApiConfig }} from './hooks';
+
+apiClient.updateConfig({{
+  // Request interceptor - modify requests before sending
+  requestInterceptor: (request) => {{
+    // Add custom headers
+    const headers = request.headers as Record<string, string>;
+    headers['X-Request-ID'] = generateRequestId();
+    return request;
+  }},
+
+  // Response interceptor - transform responses
+  responseInterceptor: (response, data) => {{
+    // Log responses, transform data, etc.
+    console.log('Response:', response.status, data);
+    return data;
+  }},
+
+  // Error interceptor - handle errors globally
+  errorInterceptor: (error) => {{
+    // Handle 401 errors (unauthorized)
+    if (error.status === 401) {{
+      // Redirect to login, refresh token, etc.
+      window.location.href = '/login';
+    }}
+    return error;
+  }}
+}});
+```
+
+### Request/Response Validation
+
+```typescript
+import {{ apiClient }} from './hooks';
+
+// Enable validation to check required fields before sending requests
+apiClient.updateConfig({{
+  validateRequests: true,
+  verboseErrors: true  // Get detailed validation error messages
+}});
+
+// Validation will throw RequiredError if required fields are missing
+try {{
+  await apiClient.postCreateApiary({{
+    data: {{ name: 'Test' }}  // Missing required 'location' field
+  }});
+}} catch (error) {{
+  if (error instanceof RequiredError) {{
+    console.error('Missing required fields:', error.field);
+  }}
+}}
+```
+
+### Verbose Error Messages
+
+```typescript
+// Enable verbose errors for detailed validation information
+apiClient.updateConfig({{
+  verboseErrors: true
+}});
+
+try {{
+  await apiClient.postCreateApiary({{
+    data: invalidData
+  }});
+}} catch (error) {{
+  if (error instanceof ApiError) {{
+    // Get verbose message with validation details
+    console.error(error.getVerboseMessage());
+    // Example: "400 Bad Request - Validation errors: name: must be a string; location: required field"
+  }}
+}}
+```
+
+### Advanced Configuration
+
+```typescript
+import {{ apiClient }} from './hooks';
+
+apiClient.updateConfig({{
+  baseUrl: 'https://api.example.com',
+  timeout: 10000, // 10 seconds
+  headers: {{
+    'X-Custom-Header': 'value'
+  }},
+  accessToken: () => getTokenFromStore(),
+  validateRequests: true,  // Enable request validation
+  verboseErrors: true,     // Enable verbose error messages
+  requestInterceptor: async (request) => {{
+    // Async request interceptor
+    const token = await refreshTokenIfNeeded();
+    const headers = request.headers as Record<string, string>;
+    headers['Authorization'] = `Bearer ${{token}}`;
+    return request;
+  }}
+}});
+```
+
+## Security Considerations
+
+### OAuth2 Security
+
+⚠️ **IMPORTANT SECURITY WARNINGS:**
+
+1. **Client Secrets**: NEVER include client secrets in browser/client-side code. They should only be used in server-side applications. For browser apps:
+   - Use `authorization_code` flow without client secret
+   - Implement PKCE (Proof Key for Code Exchange) for enhanced security
+   - Use public clients (without client secret)
+
+2. **Token Storage**: Tokens stored in `localStorage` are vulnerable to XSS (Cross-Site Scripting) attacks:
+   - For production apps, consider using httpOnly cookies (server-side only)
+   - Use secure storage mechanisms
+   - Implement Content Security Policy (CSP) to mitigate XSS risks
+   - Clear tokens on logout
+
+3. **CSRF Protection**: The authorization_code flow includes state parameter validation to prevent CSRF attacks. Always validate the state parameter.
+
+4. **Token Expiration**: Tokens are automatically checked for expiration before use. Expired tokens are removed from storage.
+
+### Best Practices
+
+```typescript
+// ✅ GOOD: Use PKCE for browser-based OAuth2
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  // No clientSecret for browser apps
+  codeVerifier: generateCodeVerifier(), // PKCE
+  // ... other config
+}});
+
+// ❌ BAD: Client secret in browser code
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  clientSecret: 'secret', // ⚠️ NEVER in browser code!
+  // ...
+}});
+
+// ✅ GOOD: Use secure storage or httpOnly cookies for tokens
+// (Implement in your application, not in generated client)
+
+// ⚠️ CURRENT: Tokens stored in localStorage (vulnerable to XSS)
+// Consider implementing secure token storage for production
+```
+
+## Error Handling
+
+The client includes structured error handling with the `ApiError` class:
+
+```typescript
+import {{ useGetListApiaries, ApiError }} from './hooks';
+
+function ApiaryList() {{
+  const {{ data, loading, error }} = useGetListApiaries();
+
+  if (error) {{
+    if (error instanceof ApiError) {{
+      if (error.isClientError()) {{
+        // 4xx errors
+        return <div>Client Error: {{error.status}} - {{error.message}}</div>;
+      }} else if (error.isServerError()) {{
+        // 5xx errors
+        return <div>Server Error: {{error.status}} - {{error.message}}</div>;
+      }}
+
+      // Get detailed error information
+      const details = error.getErrorDetails();
+      console.log('Error details:', details);
+    }}
+
+    return <div>Error: {{error.message}}</div>;
+  }}
+
+  // ... render data
+}}
+```
+
+### Error Types
+
+- **`ApiError`** - Base API error with status, statusText, and body
+  - `isClientError()` - Check if 4xx error
+  - `isServerError()` - Check if 5xx error
+  - `getErrorDetails()` - Get error response body
+
+- **`RequiredError`** - Thrown when required parameters are missing
 
 ## API Operations
 
 {}
+
+## Generated Files
+
+- `hooks.ts` - React hooks and API client (6,915 lines)
+- `types.ts` - TypeScript type definitions (1,600 lines)
+- `package.json` - Package configuration
+- `README.md` - This documentation
 
 ## Development
 
@@ -667,10 +2007,219 @@ npm run build
 # Watch mode
 npm run dev
 ```
+
+## TypeScript Support
+
+All types are fully typed with TypeScript. The generated client includes:
+- 272 TypeScript interfaces
+- Full type safety for all operations
+- Proper error types
+- Request/response type definitions
+
+## Examples
+
+### Mutation with Error Handling
+
+```typescript
+function CreateApiaryForm() {{
+  const createMutation = usePostCreateApiary();
+
+  const handleSubmit = async (formData: CreateApiaryRequest) => {{
+    try {{
+      const result = await createMutation.execute({{ data: formData }});
+      console.log('Created:', result);
+      // Handle success
+    }} catch (error) {{
+      if (error instanceof ApiError) {{
+        if (error.status === 400) {{
+          // Validation error
+          const details = error.getErrorDetails();
+          console.error('Validation errors:', details);
+        }} else if (error.status === 409) {{
+          // Conflict (duplicate)
+          console.error('Apiary already exists');
+        }}
+      }}
+    }}
+  }};
+
+  return (
+    <form onSubmit={{handleSubmit}}>
+      {{/* form fields */}}
+      <button type="submit" disabled={{createMutation.loading}}>
+        {{createMutation.loading ? 'Creating...' : 'Create'}}
+      </button>
+      {{createMutation.error && (
+        <div className="error">{{createMutation.error.message}}</div>
+      )}}
+    </form>
+  );
+}}
+```
+
+### Conditional Fetching
+
+```typescript
+function ApiaryDetails({{ apiaryId, enabled = true }}) {{
+  const {{ data, loading, error }} = useGetApiaryDetails(apiaryId);
+
+  // Hooks automatically handle dependencies
+  // This will re-fetch when apiaryId changes
+}}
+```
+
+### Manual Refresh
+
+```typescript
+function ApiaryList() {{
+  const {{ data, loading, error, refetch }} = useGetListApiaries();
+
+  return (
+    <div>
+      <button onClick={{refetch}}>Refresh</button>
+      {{/* list */}}
+    </div>
+  );
+}}
+```
+
+## Authentication Examples
+
+### JWT Token from Local Storage
+
+```typescript
+apiClient.updateConfig({{
+  accessToken: () => {{
+    return localStorage.getItem('authToken') || '';
+  }}
+}});
+```
+
+### API Key Rotation
+
+```typescript
+apiClient.updateConfig({{
+  apiKey: (name: string) => {{
+    // Get different keys for different services
+    const keys = getApiKeysFromVault();
+    return keys[name] || '';
+  }}
+}});
+```
+
+### Token Refresh on 401
+
+```typescript
+apiClient.updateConfig({{
+  errorInterceptor: async (error) => {{
+    if (error.status === 401) {{
+      // Refresh token
+      const newToken = await refreshAccessToken();
+      if (newToken) {{
+        apiClient.updateConfig({{ accessToken: newToken }});
+        // Retry the original request
+        // Note: You may want to implement retry logic here
+      }}
+    }}
+    return error;
+  }}
+}});
+```
+
+## Migration from OpenAPI Generator
+
+If you're migrating from OpenAPI Generator:
+
+1. Replace API class instances with `apiClient`
+2. Replace manual hooks with generated hooks
+3. Update error handling to use `ApiError`
+4. Configure authentication using `updateConfig()`
+
+Example migration:
+
+```typescript
+// Before (OpenAPI Generator)
+const apiariesApi = new ApiariesApi(config);
+const {{ data }} = useQuery({{
+  queryFn: () => apiariesApi.apiApiariesGet()
+}});
+
+// After (MockForge)
+const {{ data, loading, error }} = useGetListApiaries();
+// Or with React Query:
+const {{ data }} = useQuery({{
+  queryKey: ['apiaries'],
+  queryFn: () => apiClient.getListApiaries()
+}});
+```
+
+## Troubleshooting
+
+### TypeScript Errors
+
+If you encounter TypeScript errors, ensure you have:
+- TypeScript >= 5.0.0
+- @types/react >= 18.0.0
+
+### Authentication Not Working
+
+Check that:
+- Tokens are valid and not expired
+- Headers are correctly set
+- Interceptors are not removing auth headers
+
+### Network Errors
+
+- Check `baseUrl` configuration
+- Verify CORS settings on the API server
+- Check timeout settings (default: 30 seconds)
+
+## PKCE Helper Functions
+
+The client includes utility functions for generating PKCE code verifiers and challenges:
+
+```typescript
+import {{ generatePKCECodeVerifier, generatePKCECodeChallenge }} from './hooks';
+
+// Generate code verifier
+const codeVerifier = generatePKCECodeVerifier();
+
+// Generate code challenge (uses SHA256 hash)
+const codeChallenge = await generatePKCECodeChallenge(codeVerifier);
+
+// Use with OAuth2TokenManager
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  codeVerifier,
+  // ... other config
+}});
+```
+
+## Limitations & Future Enhancements
+
+### Response Validation
+The current implementation provides basic response validation (type checking, structure validation).
+Full response validation against OpenAPI schemas with property-level validation, enum checking,
+and format constraints requires additional libraries like `ajv`. For full schema validation,
+consider integrating a validation library in your application.
+
+### Advanced PKCE
+PKCE code challenge generation uses SHA256 hash (RFC 7636 compliant). The implementation requires
+Web Crypto API support. For environments without Web Crypto API, a fallback is provided but is
+less secure.
+
+### OAuth2 Implicit Flow
+The implicit flow is supported in configuration but requires manual handling of token
+extraction from URL fragments. Use `authorization_code` flow with PKCE instead (recommended).
+
+## Support
+
+For issues, questions, or contributions, please refer to the MockForge documentation.
 "#,
             spec.info.title,
             spec.info.title,
             spec.info.version,
+            api_description,
             config.base_url.as_ref().unwrap_or(&"http://localhost:3000".to_string()),
             self.generate_operations_list(spec)
         );

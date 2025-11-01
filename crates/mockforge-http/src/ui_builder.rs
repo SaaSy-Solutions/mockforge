@@ -960,7 +960,10 @@ pub async fn resolve_response_body_tokens(
 pub fn create_ui_builder_router(state: UIBuilderState) -> Router {
     Router::new()
         .route("/endpoints", get(list_endpoints).post(create_endpoint))
-        .route("/endpoints/{id}", get(get_endpoint).put(update_endpoint).delete(delete_endpoint))
+        .route(
+            "/endpoints/{id}",
+            get(get_endpoint).put(update_endpoint).delete(delete_endpoint),
+        )
         .route("/endpoints/validate", post(validate_endpoint))
         .route("/config", get(get_config).put(update_config))
         .route("/config/export", get(export_config))

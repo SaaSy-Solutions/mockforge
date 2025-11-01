@@ -86,7 +86,7 @@ impl ScriptEngine {
         // Create a helper function that returns Result instead of panicking
         let script_clone = script.clone();
         let script_context_clone = script_context.clone();
-        
+
         let timeout_duration = std::time::Duration::from_millis(timeout_ms);
         let timeout_result = tokio::time::timeout(
             timeout_duration,
@@ -196,14 +196,11 @@ fn extract_return_value<'js>(
 
 /// Execute script in a new JavaScript runtime (blocking helper)
 /// This function is used by spawn_blocking to avoid panics
-fn execute_script_in_runtime(
-    script: &str,
-    script_context: &ScriptContext,
-) -> Result<ScriptResult> {
+fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Result<ScriptResult> {
     // Create JavaScript runtime with proper error handling
     let runtime = Runtime::new()
         .map_err(|e| Error::generic(format!("Failed to create JavaScript runtime: {:?}", e)))?;
-    
+
     let context = Context::full(&runtime)
         .map_err(|e| Error::generic(format!("Failed to create JavaScript context: {:?}", e)))?;
 
@@ -218,21 +215,25 @@ fn execute_script_in_runtime(
             .map_err(|e| Error::generic(format!("Failed to expose script context: {:?}", e)))?;
 
         // Add the mockforge object to global scope
-        global.set("mockforge", mockforge_obj)
-            .map_err(|e| Error::generic(format!("Failed to set global mockforge object: {:?}", e)))?;
+        global.set("mockforge", mockforge_obj).map_err(|e| {
+            Error::generic(format!("Failed to set global mockforge object: {:?}", e))
+        })?;
 
         // Add utility functions
         add_global_functions_static(ctx.clone(), &global, script_context)
             .map_err(|e| Error::generic(format!("Failed to add global functions: {:?}", e)))?;
 
         // Execute the script
-        let result = ctx.eval(script)
+        let result = ctx
+            .eval(script)
             .map_err(|e| Error::generic(format!("Script execution failed: {:?}", e)))?;
 
         // Extract modified variables and return value
-        let modified_vars = extract_modified_variables_static(&ctx, script_context)
-            .map_err(|e| Error::generic(format!("Failed to extract modified variables: {:?}", e)))?;
-        
+        let modified_vars =
+            extract_modified_variables_static(&ctx, script_context).map_err(|e| {
+                Error::generic(format!("Failed to extract modified variables: {:?}", e))
+            })?;
+
         let return_value = extract_return_value_static(&ctx, &result)
             .map_err(|e| Error::generic(format!("Failed to extract return value: {:?}", e)))?;
 

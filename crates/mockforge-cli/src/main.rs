@@ -95,6 +95,10 @@ enum Commands {
         #[arg(long, help_heading = "Server Ports")]
         amqp_port: Option<u16>,
 
+        /// TCP server port (defaults to config or 9999)
+        #[arg(long, help_heading = "Server Ports")]
+        tcp_port: Option<u16>,
+
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
         admin: bool,
@@ -1468,6 +1472,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             mqtt_port,
             kafka_port,
             amqp_port,
+            tcp_port,
             admin,
             admin_port,
             metrics,
@@ -1554,6 +1559,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 ws_port,
                 grpc_port,
                 _smtp_port,
+                tcp_port,
                 admin,
                 admin_port,
                 metrics,
@@ -1835,6 +1841,7 @@ struct ServeArgs {
     http_port: Option<u16>,
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
+    tcp_port: Option<u16>,
     admin: bool,
     admin_port: Option<u16>,
     metrics: bool,
@@ -2033,6 +2040,11 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     // gRPC configuration
     if let Some(grpc_port) = serve_args.grpc_port {
         config.grpc.port = grpc_port;
+    }
+
+    // TCP configuration
+    if let Some(tcp_port) = serve_args.tcp_port {
+        config.tcp.port = tcp_port;
     }
 
     // Protocol-specific configurations are handled by their respective modules
@@ -2319,6 +2331,7 @@ async fn handle_serve(
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
     _smtp_port: Option<u16>,
+    tcp_port: Option<u16>,
     admin: bool,
     admin_port: Option<u16>,
     metrics: bool,
@@ -2400,6 +2413,7 @@ async fn handle_serve(
         http_port,
         ws_port,
         grpc_port,
+        tcp_port,
         admin,
         admin_port,
         metrics,
@@ -2557,6 +2571,9 @@ async fn handle_serve(
     println!("📡 HTTP server on port {}", config.http.port);
     println!("🔌 WebSocket server on port {}", config.websocket.port);
     println!("⚡ gRPC server on port {}", config.grpc.port);
+    if config.tcp.enabled {
+        println!("🔌 TCP server on port {}", config.tcp.port);
+    }
 
     if config.admin.enabled {
         println!("🎛️ Admin UI on port {}", config.admin.port);
@@ -2981,6 +2998,73 @@ async fn handle_serve(
     #[cfg(not(feature = "amqp"))]
     let _amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
+    // Start TCP server (if enabled)
+    #[cfg(feature = "tcp")]
+    let _tcp_handle = if config.tcp.enabled {
+        use mockforge_tcp::{TcpConfig as TcpServerConfig, TcpServer, TcpSpecRegistry};
+        use std::sync::Arc;
+
+        let tcp_config = config.tcp.clone();
+        let tcp_shutdown = shutdown_token.clone();
+
+        // Convert core TcpConfig to mockforge_tcp::TcpConfig
+        let server_config = TcpServerConfig {
+            port: tcp_config.port,
+            host: tcp_config.host.clone(),
+            max_connections: tcp_config.max_connections,
+            timeout_secs: tcp_config.timeout_secs,
+            fixtures_dir: tcp_config.fixtures_dir.clone(),
+            echo_mode: tcp_config.echo_mode,
+            enable_tls: tcp_config.enable_tls,
+            tls_cert_path: tcp_config.tls_cert_path.clone(),
+            tls_key_path: tcp_config.tls_key_path.clone(),
+            read_buffer_size: 8192, // Default buffer sizes
+            write_buffer_size: 8192,
+            delimiter: None, // Stream mode by default
+        };
+
+        Some(tokio::spawn(async move {
+            let mut registry = TcpSpecRegistry::new();
+
+            // Load fixtures if configured
+            if let Some(ref fixtures_dir) = server_config.fixtures_dir {
+                if fixtures_dir.exists() {
+                    if let Err(e) = registry.load_fixtures(fixtures_dir) {
+                        eprintln!(
+                            "⚠️  Warning: Failed to load TCP fixtures from {:?}: {}",
+                            fixtures_dir, e
+                        );
+                    } else {
+                        println!("   Loaded TCP fixtures from {:?}", fixtures_dir);
+                    }
+                }
+            }
+
+            let registry_arc = Arc::new(registry);
+
+            println!("🔌 TCP server listening on {}:{}", server_config.host, server_config.port);
+
+            match TcpServer::new(server_config, registry_arc) {
+                Ok(server) => {
+                    tokio::select! {
+                        result = server.start() => {
+                            result.map_err(|e| format!("TCP server error: {}", e))
+                        }
+                        _ = tcp_shutdown.cancelled() => {
+                            println!("🛑 Shutting down TCP server...");
+                            Ok(())
+                        }
+                    }
+                }
+                Err(e) => Err(format!("Failed to initialize TCP server: {}", e)),
+            }
+        }))
+    } else {
+        None
+    };
+    #[cfg(not(feature = "tcp"))]
+    let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {
         let admin_port = config.admin.port;
@@ -3001,24 +3085,44 @@ async fn handle_serve(
             use crate::progress::parse_address;
             let addr = match parse_address(&format!("{}:{}", admin_host, admin_port), "admin UI") {
                 Ok(addr) => addr,
-                Err(e) => return Err(format!("Failed to bind Admin UI to {}:{}: {}", admin_host, admin_port, e.message)),
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to bind Admin UI to {}:{}: {}",
+                        admin_host, admin_port, e.message
+                    ))
+                }
             };
 
-            let http_addr = match parse_address(&format!("{}:{}", http_host, http_port), "HTTP server")
-            {
-                Ok(addr) => Some(addr),
-                Err(e) => return Err(format!("Failed to parse HTTP server address {}:{}: {}", http_host, http_port, e.message)),
-            };
-            let ws_addr = match parse_address(&format!("{}:{}", ws_host, ws_port), "WebSocket server")
-            {
-                Ok(addr) => Some(addr),
-                Err(e) => return Err(format!("Failed to parse WebSocket server address {}:{}: {}", ws_host, ws_port, e.message)),
-            };
-            let grpc_addr = match parse_address(&format!("{}:{}", grpc_host, grpc_port), "gRPC server")
-            {
-                Ok(addr) => Some(addr),
-                Err(e) => return Err(format!("Failed to parse gRPC server address {}:{}: {}", grpc_host, grpc_port, e.message)),
-            };
+            let http_addr =
+                match parse_address(&format!("{}:{}", http_host, http_port), "HTTP server") {
+                    Ok(addr) => Some(addr),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to parse HTTP server address {}:{}: {}",
+                            http_host, http_port, e.message
+                        ))
+                    }
+                };
+            let ws_addr =
+                match parse_address(&format!("{}:{}", ws_host, ws_port), "WebSocket server") {
+                    Ok(addr) => Some(addr),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to parse WebSocket server address {}:{}: {}",
+                            ws_host, ws_port, e.message
+                        ))
+                    }
+                };
+            let grpc_addr =
+                match parse_address(&format!("{}:{}", grpc_host, grpc_port), "gRPC server") {
+                    Ok(addr) => Some(addr),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to parse gRPC server address {}:{}: {}",
+                            grpc_host, grpc_port, e.message
+                        ))
+                    }
+                };
 
             tokio::select! {
                 result = mockforge_ui::start_admin_server(
@@ -5018,20 +5122,30 @@ fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
     } else if error_str.contains("missing field") {
         // Most fields in MockForge are optional with defaults
         message.push_str("💡 Tip: This field is usually optional and has a default value.\n");
-        message.push_str("   Most configuration fields can be omitted - MockForge will use sensible defaults.\n");
+        message.push_str(
+            "   Most configuration fields can be omitted - MockForge will use sensible defaults.\n",
+        );
         if let Some(path) = &field_path {
             message.push_str(&format!("   \n   To fix: Either add the field at path '{}' or remove it entirely (defaults will be used).\n", path));
-            message.push_str("   See config.template.yaml for all available options and their defaults.\n");
+            message.push_str(
+                "   See config.template.yaml for all available options and their defaults.\n",
+            );
         } else {
-            message.push_str("   See config.template.yaml for all available options and their defaults.\n");
+            message.push_str(
+                "   See config.template.yaml for all available options and their defaults.\n",
+            );
         }
     } else if error_str.contains("unknown field") {
         message.push_str("💡 Tip: You may have a typo in a field name.\n");
         if let Some(path) = &field_path {
             message.push_str(&format!("   Unknown field at path: {}\n", path));
-            message.push_str("   Check the spelling against the documentation or config.template.yaml.\n");
+            message.push_str(
+                "   Check the spelling against the documentation or config.template.yaml.\n",
+            );
         } else {
-            message.push_str("   Check the spelling against the documentation or config.template.yaml.\n");
+            message.push_str(
+                "   Check the spelling against the documentation or config.template.yaml.\n",
+            );
         }
     } else if error_str.contains("expected") {
         message.push_str("💡 Tip: There's a type mismatch or syntax error.\n");
@@ -5091,18 +5205,27 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
 
     // Add helpful suggestions based on error type
     if error_str.contains("trailing comma") {
-        message.push_str("💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n");
+        message.push_str(
+            "💡 Tip: JSON doesn't allow trailing commas. Remove the comma after the last item.\n",
+        );
     } else if error_str.contains("missing field") {
         message.push_str("💡 Tip: This field is usually optional and has a default value.\n");
-        message.push_str("   Most configuration fields can be omitted - MockForge will use sensible defaults.\n");
+        message.push_str(
+            "   Most configuration fields can be omitted - MockForge will use sensible defaults.\n",
+        );
         if let Some(path) = &field_path {
             message.push_str(&format!("   \n   To fix: Either add the field at path '{}' or remove it entirely (defaults will be used).\n", path));
         }
-        message.push_str("   See config.template.yaml for all available options and their defaults.\n");
+        message.push_str(
+            "   See config.template.yaml for all available options and their defaults.\n",
+        );
     } else if error_str.contains("duplicate field") {
-        message.push_str("💡 Tip: You have a duplicate key. Each key must be unique within its object.\n");
+        message.push_str(
+            "💡 Tip: You have a duplicate key. Each key must be unique within its object.\n",
+        );
     } else if error_str.contains("expected") {
-        message.push_str("💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n");
+        message
+            .push_str("💡 Tip: Check for missing or extra brackets, braces, quotes, or commas.\n");
         if let Some(path) = &field_path {
             message.push_str(&format!("   Or check the value type for field: {}\n", path));
         }
@@ -5111,7 +5234,8 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
         if let Some(path) = &field_path {
             message.push_str(&format!("   Unknown field at path: {}\n", path));
         }
-        message.push_str("   Check the spelling against the documentation or config.template.yaml.\n");
+        message
+            .push_str("   Check the spelling against the documentation or config.template.yaml.\n");
     }
 
     message.push_str("\n📚 For a complete example configuration, see: config.template.yaml\n");
@@ -5131,7 +5255,7 @@ fn extract_field_path(error_msg: &str) -> Option<String> {
         let after_field = &error_msg[start + 7..];
         if let Some(end) = after_field.find('`') {
             let field_name = &after_field[..end];
-            
+
             // Try to find parent path context if available
             // Serde errors sometimes include path context like "http.host"
             if let Some(path_context_start) = error_msg.rfind(" at ") {
@@ -5143,11 +5267,11 @@ fn extract_field_path(error_msg: &str) -> Option<String> {
                     }
                 }
             }
-            
+
             return Some(field_name.to_string());
         }
     }
-    
+
     // Try to extract from "invalid type" with context
     if let Some(start) = error_msg.find("invalid type") {
         // Look backwards for field context
@@ -5158,7 +5282,7 @@ fn extract_field_path(error_msg: &str) -> Option<String> {
             }
         }
     }
-    
+
     None
 }
 

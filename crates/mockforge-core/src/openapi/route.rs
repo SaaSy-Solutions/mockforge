@@ -3,6 +3,7 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
+use crate::openapi::response_selection::{ResponseSelectionMode, ResponseSelector};
 use crate::{ai_response::AiResponseConfig, openapi::spec::OpenApiSpec, Result};
 use openapiv3::{Operation, PathItem, ReferenceOr};
 use std::collections::BTreeMap;
@@ -53,6 +54,10 @@ pub struct OpenApiRoute {
     pub spec: Arc<OpenApiSpec>,
     /// AI response configuration (parsed from x-mockforge-ai extension)
     pub ai_config: Option<AiResponseConfig>,
+    /// Response selection mode (parsed from x-mockforge-response-selection extension)
+    pub response_selection_mode: ResponseSelectionMode,
+    /// Response selector for sequential/random modes (shared across requests)
+    pub response_selector: Arc<ResponseSelector>,
 }
 
 impl OpenApiRoute {
@@ -63,6 +68,10 @@ impl OpenApiRoute {
         // Parse AI configuration from x-mockforge-ai vendor extension
         let ai_config = Self::parse_ai_config(&operation);
 
+        // Parse response selection mode from x-mockforge-response-selection extension
+        let response_selection_mode = Self::parse_response_selection_mode(&operation);
+        let response_selector = Arc::new(ResponseSelector::new(response_selection_mode));
+
         Self {
             method,
             path,
@@ -71,6 +80,8 @@ impl OpenApiRoute {
             parameters,
             spec,
             ai_config,
+            response_selection_mode,
+            response_selector,
         }
     }
 
@@ -101,6 +112,71 @@ impl OpenApiRoute {
             }
         }
         None
+    }
+
+    /// Parse response selection mode from OpenAPI operation's vendor extensions
+    fn parse_response_selection_mode(operation: &Operation) -> ResponseSelectionMode {
+        // Check for environment variable override (per-operation or global)
+        let op_id = operation.operation_id.as_deref().unwrap_or("unknown");
+
+        // Try operation-specific env var first: MOCKFORGE_RESPONSE_SELECTION_<OPERATION_ID>
+        if let Some(op_env_var) = std::env::var(format!(
+            "MOCKFORGE_RESPONSE_SELECTION_{}",
+            op_id.to_uppercase().replace('-', "_")
+        ))
+        .ok()
+        {
+            if let Some(mode) = ResponseSelectionMode::from_str(&op_env_var) {
+                tracing::debug!(
+                    "Using response selection mode from env var for operation {}: {:?}",
+                    op_id,
+                    mode
+                );
+                return mode;
+            }
+        }
+
+        // Check global env var: MOCKFORGE_RESPONSE_SELECTION_MODE
+        if let Some(global_mode_str) = std::env::var("MOCKFORGE_RESPONSE_SELECTION_MODE").ok() {
+            if let Some(mode) = ResponseSelectionMode::from_str(&global_mode_str) {
+                tracing::debug!("Using global response selection mode from env var: {:?}", mode);
+                return mode;
+            }
+        }
+
+        // Check for x-mockforge-response-selection extension
+        if let Some(selection_value) = operation.extensions.get("x-mockforge-response-selection") {
+            // Try to parse as string first
+            if let Some(mode_str) = selection_value.as_str() {
+                if let Some(mode) = ResponseSelectionMode::from_str(mode_str) {
+                    tracing::debug!(
+                        "Parsed response selection mode for operation {}: {:?}",
+                        op_id,
+                        mode
+                    );
+                    return mode;
+                }
+            }
+            // Try to parse as object with mode field
+            if let Some(obj) = selection_value.as_object() {
+                if let Some(mode_str) = obj.get("mode").and_then(|v| v.as_str()) {
+                    if let Some(mode) = ResponseSelectionMode::from_str(mode_str) {
+                        tracing::debug!(
+                            "Parsed response selection mode for operation {}: {:?}",
+                            op_id,
+                            mode
+                        );
+                        return mode;
+                    }
+                }
+            }
+            tracing::warn!(
+                "Failed to parse x-mockforge-response-selection extension for operation {}",
+                op_id
+            );
+        }
+        // Default to First mode
+        ResponseSelectionMode::First
     }
 
     /// Create an OpenApiRoute from an operation
@@ -182,12 +258,18 @@ impl OpenApiRoute {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
-        match ResponseGenerator::generate_response_with_expansion(
+        // Use response selection mode for multiple examples
+        let mode = Some(self.response_selection_mode);
+        let selector = Some(self.response_selector.as_ref());
+
+        match ResponseGenerator::generate_response_with_expansion_and_mode(
             &self.spec,
             &self.operation,
             status_code,
             Some("application/json"),
             expand_tokens,
+            mode,
+            selector,
         ) {
             Ok(response_body) => {
                 tracing::debug!(
@@ -249,13 +331,19 @@ impl OpenApiRoute {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
-        match ResponseGenerator::generate_response_with_scenario(
+        // Use response selection mode for multiple examples
+        let mode = Some(self.response_selection_mode);
+        let selector = Some(self.response_selector.as_ref());
+
+        match ResponseGenerator::generate_response_with_scenario_and_mode(
             &self.spec,
             &self.operation,
             status_code,
             Some("application/json"),
             expand_tokens,
             scenario,
+            mode,
+            selector,
         ) {
             Ok(response_body) => {
                 tracing::debug!(

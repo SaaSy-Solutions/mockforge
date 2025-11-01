@@ -49,9 +49,9 @@ pub struct ChainExecutionEngine {
 
 impl ChainExecutionEngine {
     /// Create a new chain execution engine
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// This method will panic if the HTTP client cannot be created, which typically
     /// indicates a system configuration issue. For better error handling, use `try_new()`.
     pub fn new(registry: Arc<RequestChainRegistry>, config: ChainConfig) -> Self {
@@ -66,17 +66,19 @@ impl ChainExecutionEngine {
     }
 
     /// Try to create a new chain execution engine
-    /// 
+    ///
     /// Returns an error if the HTTP client cannot be created.
     pub fn try_new(registry: Arc<RequestChainRegistry>, config: ChainConfig) -> Result<Self> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(config.global_timeout_secs))
             .build()
-            .map_err(|e| Error::generic(format!(
-                "Failed to create HTTP client: {}. \
+            .map_err(|e| {
+                Error::generic(format!(
+                    "Failed to create HTTP client: {}. \
                 Check that the timeout value ({}) is valid.",
-                e, config.global_timeout_secs
-            )))?;
+                    e, config.global_timeout_secs
+                ))
+            })?;
 
         Ok(Self {
             http_client,

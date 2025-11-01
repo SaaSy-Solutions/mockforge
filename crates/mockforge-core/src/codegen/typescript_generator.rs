@@ -103,7 +103,8 @@ fn extract_route_info(
     let request_body_schema = extract_request_body_schema(operation);
 
     // Extract response schema and example (prefer 200, fallback to first success response)
-    let (response_schema, response_example, response_status) = extract_response_schema_and_example(operation)?;
+    let (response_schema, response_example, response_status) =
+        extract_response_schema_and_example(operation)?;
 
     Ok(RouteInfo {
         method: method.to_string(),
@@ -174,7 +175,9 @@ fn extract_request_body_schema(operation: &Operation) -> Option<Schema> {
 
 /// Extract response schema and example from OpenAPI operation
 /// Returns (schema, example, status_code)
-fn extract_response_schema_and_example(operation: &Operation) -> Result<(Option<Schema>, Option<serde_json::Value>, u16)> {
+fn extract_response_schema_and_example(
+    operation: &Operation,
+) -> Result<(Option<Schema>, Option<serde_json::Value>, u16)> {
     // Look for 200 response first
     for (status_code, response_ref) in &operation.responses.responses {
         let status = match status_code {
@@ -192,7 +195,9 @@ fn extract_response_schema_and_example(operation: &Operation) -> Result<(Option<
                     } else if !content.examples.is_empty() {
                         // Use the first example from the examples map
                         content.examples.iter().next().and_then(|(_, example_ref)| {
-                            example_ref.as_item().and_then(|example_item| example_item.value.clone())
+                            example_ref
+                                .as_item()
+                                .and_then(|example_item| example_item.value.clone())
                         })
                     } else {
                         None
@@ -580,9 +585,11 @@ fn generate_response_body(route: &RouteInfo, config: &CodegenConfig) -> String {
             // Priority 1: Use explicit example from OpenAPI spec if available
             if let Some(ref example) = route.response_example {
                 // Serialize the example value to JSON string
-                let example_str = serde_json::to_string(example).unwrap_or_else(|_| "{}".to_string());
+                let example_str =
+                    serde_json::to_string(example).unwrap_or_else(|_| "{}".to_string());
                 // Escape backticks and ${} for template literals in TypeScript
-                let escaped = example_str.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${");
+                let escaped =
+                    example_str.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${");
                 // Use template literal to embed JSON directly
                 return format!("JSON.parse(`{}`)", escaped);
             }

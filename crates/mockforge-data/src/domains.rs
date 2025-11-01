@@ -341,7 +341,7 @@ mod tests {
         // Case insensitive
         assert_eq!("FINANCE".parse::<Domain>().unwrap(), Domain::Finance);
         assert_eq!("Finance".parse::<Domain>().unwrap(), Domain::Finance);
-        
+
         // Test invalid domain returns error
         assert!("invalid".parse::<Domain>().is_err());
     }

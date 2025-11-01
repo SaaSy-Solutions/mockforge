@@ -69,11 +69,30 @@ pub struct Server {
 }
 
 /// Path item containing operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Note: We use #[serde(flatten)] for operations to handle HTTP methods (get, post, etc.)
+/// as dynamic keys, while explicitly handling other OpenAPI PathItem fields
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PathItem {
-    /// HTTP operations
+    /// HTTP operations (get, post, put, delete, patch, head, options, trace)
+    /// These are flattened from the OpenAPI spec where HTTP methods appear as top-level keys
     #[serde(flatten)]
     pub operations: HashMap<String, Operation>,
+    /// Optional summary for the path (OpenAPI PathItem field)
+    /// This field is rarely used but must be handled to avoid deserialization errors
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub summary: Option<String>,
+    /// Optional description for the path (OpenAPI PathItem field)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub description: Option<String>,
+    /// Optional parameters shared across all operations (OpenAPI PathItem field)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub parameters: Option<Vec<serde_json::Value>>,
+    /// Optional servers override (OpenAPI PathItem field)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub servers: Option<Vec<serde_json::Value>>,
+    /// Optional $ref (OpenAPI PathItem field) - when present, the path item is a reference
+    #[serde(rename = "$ref", skip_serializing_if = "Option::is_none", default)]
+    pub ref_path: Option<String>,
 }
 
 /// API operation
@@ -131,14 +150,28 @@ pub struct MediaType {
 }
 
 /// API response
+/// Can be either a full Response object or a $ref to a component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Response {
-    /// Response description
-    pub description: String,
+    /// Response description (required in OpenAPI but we make it optional for leniency)
+    /// This is None when the response is a $ref
+    #[serde(
+        default = "default_response_description",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub description: Option<String>,
     /// Response content
     pub content: Option<HashMap<String, MediaType>>,
     /// Response headers
     pub headers: Option<HashMap<String, Header>>,
+    /// Reference to another response component (when present, other fields may be None)
+    #[serde(rename = "$ref", skip_serializing_if = "Option::is_none")]
+    pub ref_path: Option<String>,
+}
+
+/// Default description for responses that don't have one
+fn default_response_description() -> Option<String> {
+    Some("Response".to_string())
 }
 
 /// Response header
@@ -283,6 +316,126 @@ pub mod helpers {
         } else {
             false
         }
+    }
+
+    /// Sanitize an identifier to be a valid TypeScript/JavaScript identifier
+    ///
+    /// Removes or replaces invalid characters:
+    /// - Preserves content inside parentheses and converts to camelCase: "(csv)" -> "Csv"
+    /// - Replaces slashes with "Or": "/" -> "Or"
+    /// - Removes other invalid characters: spaces, special chars
+    /// - Ensures it starts with a letter or underscore
+    ///
+    /// Examples:
+    /// - "getDownloadExport(csv)" -> "getDownloadExportCsv"
+    /// - "getUser/organizationSettings" -> "getUserOrOrganizationSettings"
+    /// - "postSolveRoutes(aliasOf/routes/plan)" -> "postSolveRoutesAliasOfOrRoutesOrPlan"
+    pub fn sanitize_identifier(id: &str) -> String {
+        let mut result = String::new();
+        let mut chars = id.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            match ch {
+                // Preserve content inside parentheses as camelCase
+                '(' => {
+                    // Extract content and convert to camelCase
+                    let mut paren_content = String::new();
+                    let mut depth = 1;
+                    while let Some(next_ch) = chars.next() {
+                        match next_ch {
+                            '(' => {
+                                depth += 1;
+                                paren_content.push(' ');
+                            }
+                            ')' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    break;
+                                }
+                                paren_content.push(' ');
+                            }
+                            '/' => paren_content.push(' '), // Convert slashes to spaces for word separation
+                            '-' => paren_content.push(' '), // Convert hyphens to spaces
+                            c => paren_content.push(c),
+                        }
+                    }
+
+                    // Convert paren content to camelCase and append
+                    // Split on whitespace and process each word, preserving camelCase structure
+                    if !paren_content.is_empty() {
+                        let words: Vec<&str> = paren_content.split_whitespace().collect();
+                        for word in words {
+                            if word.is_empty() {
+                                continue;
+                            }
+                            // If word already looks like camelCase (has uppercase in middle), preserve it
+                            // Otherwise, capitalize first letter and lowercase rest
+                            let mut chars_iter = word.chars();
+                            if let Some(first) = chars_iter.next() {
+                                result.push(first.to_uppercase().next().unwrap());
+                                // Check if rest has uppercase - if so, preserve it
+                                let rest: String = chars_iter.collect();
+                                if rest.chars().any(|c| c.is_uppercase()) {
+                                    // Preserve camelCase structure
+                                    result.push_str(&rest);
+                                } else {
+                                    // Lowercase the rest
+                                    result.push_str(&rest.to_lowercase());
+                                }
+                            }
+                        }
+                    }
+                }
+                ')' => {
+                    // Shouldn't happen if we handle opening parens correctly, but skip if it does
+                    continue;
+                }
+                // Replace slashes with "Or" (capitalize next char)
+                '/' => {
+                    if let Some(&next_ch) = chars.peek() {
+                        if next_ch.is_alphanumeric() {
+                            result.push_str("Or");
+                            // Capitalize the next character
+                            let next = chars.next().unwrap();
+                            result.push(next.to_uppercase().next().unwrap());
+                        } else {
+                            result.push_str("Or");
+                        }
+                    } else {
+                        result.push_str("Or");
+                    }
+                }
+                // Keep valid identifier characters
+                c if c.is_alphanumeric() || c == '_' => {
+                    result.push(c);
+                }
+                // Convert hyphens and spaces to word boundaries (capitalize next)
+                '-' | ' ' => {
+                    if let Some(&next_ch) = chars.peek() {
+                        if next_ch.is_alphanumeric() {
+                            // Capitalize next char (effectively creates camelCase boundary)
+                            let next = chars.next().unwrap();
+                            result.push(next.to_uppercase().next().unwrap());
+                        }
+                    }
+                }
+                // Skip other invalid characters
+                _ => {}
+            }
+        }
+
+        // Ensure result starts with a letter (not a number)
+        if let Some(first_char) = result.chars().next() {
+            if first_char.is_ascii_digit() {
+                // Prepend underscore if starts with digit
+                result = format!("_{}", result);
+            }
+        } else {
+            // Empty result - provide fallback
+            result = "operation".to_string();
+        }
+
+        result
     }
 
     /// Convert a string to camelCase by splitting on hyphens/underscores and capitalizing
@@ -451,18 +604,25 @@ pub mod helpers {
     }
 
     /// Convert OpenAPI operation to a more convenient format
+    ///
+    /// Sanitizes operation IDs to ensure they are valid TypeScript identifiers
     pub fn normalize_operation(
         method: &str,
         path: &str,
         operation: &Operation,
     ) -> NormalizedOperation {
+        let raw_operation_id = operation.operation_id.clone().unwrap_or_else(|| {
+            // Generate camelCase operation ID from method, path, and summary
+            generate_camel_case_operation_id(method, path, &operation.summary)
+        });
+
+        // Sanitize the operation ID to ensure it's a valid identifier
+        let sanitized_id = sanitize_identifier(&raw_operation_id);
+
         NormalizedOperation {
             method: method.to_uppercase(),
             path: path.to_string(),
-            operation_id: operation.operation_id.clone().unwrap_or_else(|| {
-                // Generate camelCase operation ID from method, path, and summary
-                generate_camel_case_operation_id(method, path, &operation.summary)
-            }),
+            operation_id: sanitized_id,
             summary: operation.summary.clone(),
             description: operation.description.clone(),
             parameters: operation.parameters.clone().unwrap_or_default(),
@@ -809,5 +969,39 @@ mod tests {
 
         // Test with single word operation ID
         assert_eq!(helpers::generate_type_name("getUser", "Response"), "GetUserResponse");
+    }
+
+    #[test]
+    fn test_sanitize_identifier() {
+        // Test parentheses removal - preserve content as camelCase
+        assert_eq!(helpers::sanitize_identifier("getDownloadExport(csv)"), "getDownloadExportCsv");
+
+        // Test slash replacement
+        assert_eq!(
+            helpers::sanitize_identifier("getUser/organizationSettings"),
+            "getUserOrOrganizationSettings"
+        );
+
+        // Test complex case with both parentheses and slashes
+        // Inside parentheses, slashes become word separators (spaces), then converted to camelCase
+        assert_eq!(
+            helpers::sanitize_identifier("postSolveRoutes(aliasOf/routes/plan)"),
+            "postSolveRoutesAliasOfRoutesPlan"
+        );
+
+        // Test parentheses with content
+        assert_eq!(
+            helpers::sanitize_identifier("getViewPollinationJob(growerPortal)"),
+            "getViewPollinationJobGrowerPortal"
+        );
+
+        // Test normal identifier (should pass through)
+        assert_eq!(helpers::sanitize_identifier("getUsers"), "getUsers");
+
+        // Test with hyphens
+        assert_eq!(helpers::sanitize_identifier("get-disease-detection"), "getDiseaseDetection");
+
+        // Test with spaces
+        assert_eq!(helpers::sanitize_identifier("get user settings"), "getUserSettings");
     }
 }

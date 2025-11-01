@@ -188,10 +188,33 @@ impl ClientGeneratorManager {
                 PluginError::execution(format!("Failed to parse JSON specification: {}", e))
             })?
         } else {
+            // Parse YAML with better error messages
             serde_yaml::from_str(&content).map_err(|e| {
-                PluginError::execution(format!("Failed to parse YAML specification: {}", e))
+                PluginError::execution(format!(
+                    "Failed to parse YAML specification: {}. This might indicate issues with path definitions. \
+                     Note: If only some paths are missing, check for malformed path items or unsupported OpenAPI features.",
+                    e
+                ))
             })?
         };
+
+        // Validate that we parsed paths correctly
+        let path_count = spec.paths.len();
+        if path_count == 0 {
+            return Err(PluginError::execution(
+                "No paths found in OpenAPI specification. Check that the 'paths' section is properly formatted."
+            ));
+        }
+
+        // Count total operations
+        let total_operations: usize =
+            spec.paths.values().map(|path_item| path_item.operations.len()).sum();
+
+        if total_operations == 0 {
+            return Err(PluginError::execution(
+                "No operations found in OpenAPI specification paths. Check that HTTP methods (get, post, etc.) are properly defined."
+            ));
+        }
 
         Ok(spec)
     }
