@@ -24,6 +24,21 @@
 
 - Nothing yet.
 
+## [0.2.4] - 2025-01-27
+
+### Fixed
+
+- Fix request body parameter generation in React/Vue/Svelte client generators - request bodies now correctly generate `data` parameter and `body: JSON.stringify(data)` in API client methods
+- Fix required vs optional field handling in generated TypeScript interfaces - required fields no longer incorrectly marked with optional marker (`?`)
+- Fix OpenAPI serde deserialization by adding `#[serde(rename)]` attributes for `operationId` and `requestBody` fields
+- Apply required fields processing consistently across all client generators (React, Vue, Svelte)
+
+### Added
+
+- Comprehensive test coverage for request body parameter scenarios (POST, PUT, PATCH, DELETE)
+- Test cases for `$ref` schemas in request bodies
+- Test cases for YAML spec support verification
+
 ## [0.2.3] - 2025-01-27
 
 ### Fixed
