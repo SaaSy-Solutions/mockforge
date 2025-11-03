@@ -424,7 +424,7 @@ gh issue list --label bug --state open --limit 10
 
 - **GitHub Issues**: Bug reports and feature requests
 - **GitHub Discussions**: General questions and support
-- **Discord/Slack**: Real-time community support
+- **Discord**: [Join our community chat](https://discord.gg/2FxXqKpa) - Real-time community support
 - **Documentation**: Self-service troubleshooting
 
 ### 3. Follow-up Releases

@@ -29,6 +29,8 @@ mockforge --version
 - **[Node.js/TypeScript SDK](#nodejs-sdk)** - JavaScript/TypeScript support
 - **[Python SDK](#python-sdk)** - Python support
 - **[Go SDK](#go-sdk)** - Go support
+- **[Java SDK](#java-sdk)** - Java support
+- **[.NET SDK](#net-sdk)** - C#/.NET support
 
 ## Features
 
@@ -36,7 +38,7 @@ mockforge --version
 - ✅ **`stopMock()`** - Stop and cleanup servers
 - ✅ **`stubResponse()`** - Define mock responses programmatically
 - ✅ **Offline Mode** - Works without network dependencies (local mode)
-- ✅ **Multi-Language** - Tested in Rust, Node.js, Python, and Go
+- ✅ **Multi-Language** - Tested in Rust, Node.js, Python, Go, Java, and .NET
 
 ---
 
@@ -308,6 +310,153 @@ Creates a new mock server.
 
 ---
 
+## Java SDK
+
+### Installation
+
+Add to your `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>com.mockforge</groupId>
+    <artifactId>mockforge-sdk</artifactId>
+    <version>0.1.0</version>
+    <scope>test</scope>
+</dependency>
+```
+
+Or for Gradle:
+
+```gradle
+testImplementation 'com.mockforge:mockforge-sdk:0.1.0'
+```
+
+### Usage
+
+```java
+import com.mockforge.sdk.MockServer;
+import com.mockforge.sdk.MockServerConfig;
+import com.mockforge.sdk.MockServerException;
+
+public class UserApiTest {
+    @Test
+    public void testUserApi() throws MockServerException {
+        MockServer server = MockServer.start(MockServerConfig.builder()
+            .port(3000)
+            .build());
+
+        try {
+            server.stubResponse("GET", "/api/users/123", Map.of(
+                "id", 123,
+                "name", "John Doe",
+                "email", "john@example.com"
+            ));
+
+            // Make requests to http://localhost:3000/api/users/123
+        } finally {
+            server.stop();
+        }
+    }
+}
+```
+
+### API Reference
+
+#### `MockServer.start(config)`
+Starts a mock server with the given configuration.
+
+**Config Options:**
+- `port` - Port to listen on (default: 0 = random)
+- `host` - Host to bind to (default: 127.0.0.1)
+- `configFile` - Path to MockForge config file
+- `openApiSpec` - Path to OpenAPI specification
+
+#### Methods
+- `stubResponse(method, path, body)` - Add a response stub
+- `stubResponse(method, path, body, status, headers, latencyMs)` - Add stub with options
+- `clearStubs()` - Remove all stubs
+- `stop()` - Stop the server
+- `getUrl()` - Get the server URL
+- `getPort()` - Get the server port
+- `isRunning()` - Check if server is running
+
+**Full Documentation:** See [Java SDK README](java/README.md)
+
+---
+
+## .NET SDK
+
+### Installation
+
+```bash
+dotnet add package MockForge.Sdk
+```
+
+Or via NuGet Package Manager:
+
+```bash
+Install-Package MockForge.Sdk
+```
+
+### Usage
+
+```csharp
+using MockForge.Sdk;
+
+public class UserApiTests
+{
+    [Fact]
+    public async Task TestUserApi()
+    {
+        var server = await MockServer.StartAsync(new MockServerConfig
+        {
+            Port = 3000
+        });
+
+        try
+        {
+            await server.StubResponseAsync("GET", "/api/users/123", new
+            {
+                id = 123,
+                name = "John Doe",
+                email = "john@example.com"
+            });
+
+            // Make requests to http://localhost:3000/api/users/123
+        }
+        finally
+        {
+            server.Dispose();
+        }
+    }
+}
+```
+
+### API Reference
+
+#### `MockServer.StartAsync(config)`
+Starts a mock server with the given configuration asynchronously.
+
+**Config Options:**
+- `Port` - Port to listen on (default: 0 = random)
+- `Host` - Host to bind to (default: 127.0.0.1)
+- `ConfigFile` - Path to MockForge config file
+- `OpenApiSpec` - Path to OpenAPI specification
+
+#### Methods
+- `StubResponseAsync(method, path, body)` - Add a response stub
+- `StubResponseAsync(method, path, body, status, headers, latencyMs)` - Add stub with options
+- `ClearStubsAsync()` - Remove all stubs
+- `Stop()` - Stop the server
+- `Dispose()` - Stop and cleanup (implements IDisposable)
+- `GetUrl()` - Get the server URL
+- `GetPort()` - Get the server port
+- `IsRunning()` - Check if server is running
+
+**Full Documentation:** See [.NET SDK README](dotnet/README.md)
+
+---
+
 ## Advanced Features
 
 ### Template Support
@@ -353,6 +502,27 @@ server.StubResponse("GET", "/api/users/{id}", map[string]interface{}{
     "email":      "{{faker.email}}",
     "created_at": "{{now}}",
 })
+```
+
+```java
+// Java
+server.stubResponse("GET", "/api/users/{id}", Map.of(
+    "id", "{{uuid}}",
+    "name", "{{faker.name}}",
+    "email", "{{faker.email}}",
+    "created_at", "{{now}}"
+));
+```
+
+```csharp
+// C#/.NET
+await server.StubResponseAsync("GET", "/api/users/{id}", new
+{
+    id = "{{uuid}}",
+    name = "{{faker.name}}",
+    email = "{{faker.email}}",
+    created_at = "{{now}}"
+});
 ```
 
 ### Response Options
@@ -404,6 +574,32 @@ server.StubResponseWithOptions(
 )
 ```
 
+```java
+// Java
+Map<String, String> headers = new HashMap<>();
+headers.put("X-Request-ID", "{{uuid}}");
+server.stubResponse("POST", "/api/users",
+    Map.of("status", "created"),
+    201,
+    headers,
+    500
+);
+```
+
+```csharp
+// C#/.NET
+var headers = new Dictionary<string, string>
+{
+    { "X-Request-ID", "{{uuid}}" }
+};
+await server.StubResponseAsync("POST", "/api/users",
+    new { status = "created" },
+    status: 201,
+    headers: headers,
+    latencyMs: 500
+);
+```
+
 ---
 
 ## Examples
@@ -414,6 +610,8 @@ See the `examples/` directory for complete working examples:
 - [Node.js example](../examples/sdk-nodejs/)
 - [Python example](../examples/sdk-python/)
 - [Go example](../examples/sdk-go/)
+- [Java example](../examples/sdk-java/)
+- [.NET example](../examples/sdk-dotnet/)
 
 ---
 

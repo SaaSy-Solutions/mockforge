@@ -67,7 +67,7 @@ Check out the [`examples/`](../examples/) directory for sample configurations an
 
 - [GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues) - Report bugs and request features
 - [GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions) - Ask questions and share ideas
-- [Discord](https://discord.gg/mockforge) - Join our community chat
+- [Discord](https://discord.gg/2FxXqKpa) - Join our community chat
 
 ## License
 

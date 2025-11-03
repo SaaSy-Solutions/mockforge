@@ -18,6 +18,17 @@ http:
   #   ca_file: "./certs/ca.crt"           # Path to CA certificate for mTLS (optional)
   #   min_version: "1.2"                  # Minimum TLS version ("1.2" or "1.3")
   #   require_client_cert: false          # Require client certificates (mutual TLS)
+  #
+  # Example: Enable mTLS (mutual TLS)
+  # tls:
+  #   enabled: true
+  #   cert_file: "./certs/server.crt"
+  #   key_file: "./certs/server.key"
+  #   ca_file: "./certs/ca.crt"           # Required for mTLS
+  #   require_client_cert: true           # Enable mTLS - requires client certificates
+  #   min_version: "1.3"                  # Use TLS 1.3 for best security
+  #
+  # See docs/mTLS_CONFIGURATION.md for complete mTLS setup guide
 
   # OpenAPI Integration
   openapi_spec: "./examples/openapi.json" # OpenAPI spec file for HTTP server (local file or URL)

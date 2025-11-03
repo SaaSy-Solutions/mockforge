@@ -113,7 +113,8 @@ All commands, options, and features documented in each protocol section (HTTP, g
 - **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
 - **Cross-Endpoint Validation**: Ensure referential integrity across different endpoints
 - **Admin UI v2**: Modern React-based interface with:
-  - **Role-Based Authentication**: _(Planned for v1.1)_ Admin and viewer access control (frontend UI components ready, backend authentication to be implemented)
+  - **Role-Based Authentication**: ✅ Complete JWT-based authentication with Admin, Editor, and Viewer roles
+  - **Real-time Collaboration**: ✅ WebSocket-based collaborative editing with presence awareness and cursor tracking
   - **Real-time Monitoring**: Live logs via Server-Sent Events (SSE), metrics, and performance tracking
   - **Visual Configuration**: Drag-and-drop fixture management with tree view
   - **Advanced Search**: Full-text search across services and logs
@@ -1576,6 +1577,7 @@ See the [complete troubleshooting guide](https://docs.mockforge.dev/reference/tr
 
 - **[GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues)** - Report bugs or request features
 - **[GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)** - Ask questions and share ideas
+- **[Discord](https://discord.gg/2FxXqKpa)** - Join our community chat
 - **[Contributing Guide](CONTRIBUTING.md)** - Contribute to MockForge development
 
 ### Need Help?
