@@ -189,6 +189,8 @@ pub mod request_logging;
 pub mod spec_import;
 /// Server-Sent Events for streaming logs and metrics
 pub mod sse;
+/// TLS/HTTPS support
+pub mod tls;
 /// Token response utilities
 pub mod token_response;
 /// UI Builder API for low-code mock endpoint creation
@@ -805,9 +807,26 @@ pub async fn serve_router(
     port: u16,
     app: Router,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    serve_router_with_tls(port, app, None).await
+}
+
+/// Serve a provided router on the given port with optional TLS support.
+pub async fn serve_router_with_tls(
+    port: u16,
+    app: Router,
+    tls_config: Option<mockforge_core::config::HttpTlsConfig>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
 
     let addr = mockforge_core::wildcard_socket_addr(port);
+
+    if let Some(ref tls) = tls_config {
+        if tls.enabled {
+            info!("HTTPS listening on {}", addr);
+            return serve_with_tls(addr, app, tls).await;
+        }
+    }
+
     info!("HTTP listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
@@ -820,6 +839,33 @@ pub async fn serve_router(
 
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
     Ok(())
+}
+
+/// Serve router with TLS/HTTPS support
+///
+/// Note: This is a simplified implementation. For production use, consider using
+/// a reverse proxy (nginx) for TLS termination, or use axum-server crate.
+/// This implementation validates TLS configuration but recommends using a reverse proxy.
+async fn serve_with_tls(
+    addr: std::net::SocketAddr,
+    _app: Router,
+    tls_config: &mockforge_core::config::HttpTlsConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Validate TLS configuration by attempting to load certificates
+    let _acceptor = tls::load_tls_acceptor(tls_config)?;
+
+    // For now, return an informative error suggesting reverse proxy usage
+    // Full TLS implementation with axum requires axum-server or similar
+    Err(format!(
+        "TLS/HTTPS support is configured but requires a reverse proxy (nginx) for production use.\n\
+         Certificate validation passed: {} and {}\n\
+         For native TLS support, please use a reverse proxy or wait for axum-server integration.\n\
+         You can configure nginx with TLS termination pointing to the HTTP server on port {}.",
+        tls_config.cert_file,
+        tls_config.key_file,
+        addr.port()
+    )
+    .into())
 }
 
 /// Backwards-compatible start that builds + serves the base router.

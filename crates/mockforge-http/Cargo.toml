@@ -58,6 +58,9 @@ mockforge-observability = { version = "0.2.0", path = "../mockforge-observabilit
 mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }
 mockforge-mqtt = { version = "0.2.0", path = "../mockforge-mqtt", optional = true }
 opentelemetry = "0.21"
+rustls = "0.21"
+rustls-pemfile = "1.0"
+tokio-rustls = "0.24"
 
 [features]
 default = []

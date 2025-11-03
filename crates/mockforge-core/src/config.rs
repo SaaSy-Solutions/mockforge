@@ -350,6 +350,9 @@ pub struct HttpConfig {
     pub skip_admin_validation: bool,
     /// Authentication configuration
     pub auth: Option<AuthConfig>,
+    /// TLS/HTTPS configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<HttpTlsConfig>,
 }
 
 impl Default for HttpConfig {
@@ -383,6 +386,48 @@ impl Default for HttpConfig {
             validation_overrides: std::collections::HashMap::new(),
             skip_admin_validation: true,
             auth: None,
+            tls: None,
+        }
+    }
+}
+
+/// HTTP TLS/HTTPS configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpTlsConfig {
+    /// Enable TLS/HTTPS
+    pub enabled: bool,
+    /// Path to TLS certificate file (PEM format)
+    pub cert_file: String,
+    /// Path to TLS private key file (PEM format)
+    pub key_file: String,
+    /// Path to CA certificate file for mutual TLS (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ca_file: Option<String>,
+    /// Minimum TLS version (default: "1.2")
+    #[serde(default = "default_tls_min_version")]
+    pub min_version: String,
+    /// Cipher suites to use (default: safe defaults)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cipher_suites: Vec<String>,
+    /// Require client certificate (mutual TLS)
+    #[serde(default)]
+    pub require_client_cert: bool,
+}
+
+fn default_tls_min_version() -> String {
+    "1.2".to_string()
+}
+
+impl Default for HttpTlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            cert_file: String::new(),
+            key_file: String::new(),
+            ca_file: None,
+            min_version: "1.2".to_string(),
+            cipher_suites: Vec::new(),
+            require_client_cert: false,
         }
     }
 }

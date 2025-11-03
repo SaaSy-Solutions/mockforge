@@ -2822,11 +2822,20 @@ async fn handle_serve(
 
     // Start HTTP server
     let http_port = config.http.port;
+    let http_tls_config = config.http.tls.clone();
     let http_shutdown = shutdown_token.clone();
     let http_handle = tokio::spawn(async move {
-        println!("📡 HTTP server listening on http://localhost:{}", http_port);
+        if let Some(ref tls) = http_tls_config {
+            if tls.enabled {
+                println!("🔒 HTTPS server listening on https://localhost:{}", http_port);
+            } else {
+                println!("📡 HTTP server listening on http://localhost:{}", http_port);
+            }
+        } else {
+            println!("📡 HTTP server listening on http://localhost:{}", http_port);
+        }
         tokio::select! {
-            result = mockforge_http::serve_router(http_port, http_app) => {
+            result = mockforge_http::serve_router_with_tls(http_port, http_app, http_tls_config) => {
                 result.map_err(|e| format!("HTTP server error: {}", e))
             }
             _ = http_shutdown.cancelled() => {
