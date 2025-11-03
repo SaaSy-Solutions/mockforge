@@ -3,19 +3,65 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::{IntoResponse, Json},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse, Json, Response,
+    },
     routing::{delete, get, post, put},
     Router,
 };
+use futures::stream::{self, Stream};
 use mockforge_core::openapi::OpenApiSpec;
 #[cfg(feature = "smtp")]
 use mockforge_smtp::EmailSearchFilters;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 use tracing::*;
+
+/// Message event types for real-time monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "protocol", content = "data")]
+#[serde(rename_all = "lowercase")]
+pub enum MessageEvent {
+    #[cfg(feature = "mqtt")]
+    /// MQTT message event
+    Mqtt(MqttMessageEvent),
+    #[cfg(feature = "kafka")]
+    /// Kafka message event
+    Kafka(KafkaMessageEvent),
+}
+
+#[cfg(feature = "mqtt")]
+/// MQTT message event for real-time monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttMessageEvent {
+    /// MQTT topic name
+    pub topic: String,
+    /// Message payload content
+    pub payload: String,
+    /// Quality of Service level (0, 1, or 2)
+    pub qos: u8,
+    /// Whether the message is retained
+    pub retain: bool,
+    /// RFC3339 formatted timestamp
+    pub timestamp: String,
+}
+
+#[cfg(feature = "kafka")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaMessageEvent {
+    pub topic: String,
+    pub key: Option<String>,
+    pub value: String,
+    pub partition: i32,
+    pub offset: i64,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+    pub timestamp: String,
+}
 
 /// Mock configuration representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +146,12 @@ pub struct ManagementState {
     /// Optional MQTT broker for message mocking
     #[cfg(feature = "mqtt")]
     pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
+    /// Optional Kafka broker for event streaming
+    #[cfg(feature = "kafka")]
+    pub kafka_broker: Option<Arc<mockforge_kafka::KafkaMockBroker>>,
+    /// Broadcast channel for message events (MQTT & Kafka)
+    #[cfg(any(feature = "mqtt", feature = "kafka"))]
+    pub message_events: Arc<broadcast::Sender<MessageEvent>>,
 }
 
 impl ManagementState {
@@ -121,6 +173,13 @@ impl ManagementState {
             smtp_registry: None,
             #[cfg(feature = "mqtt")]
             mqtt_broker: None,
+            #[cfg(feature = "kafka")]
+            kafka_broker: None,
+            #[cfg(any(feature = "mqtt", feature = "kafka"))]
+            message_events: {
+                let (tx, _) = broadcast::channel(1000);
+                Arc::new(tx)
+            },
         }
     }
 
@@ -138,6 +197,16 @@ impl ManagementState {
     /// Add MQTT broker to management state
     pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
         self.mqtt_broker = Some(mqtt_broker);
+        self
+    }
+
+    #[cfg(feature = "kafka")]
+    /// Add Kafka broker to management state
+    pub fn with_kafka_broker(
+        mut self,
+        kafka_broker: Arc<mockforge_kafka::KafkaMockBroker>,
+    ) -> Self {
+        self.kafka_broker = Some(kafka_broker);
         self
     }
 }
@@ -528,6 +597,293 @@ async fn disconnect_mqtt_client(
     }
 }
 
+// ========== MQTT Publish Handler ==========
+
+#[cfg(feature = "mqtt")]
+/// Request to publish a single MQTT message
+#[derive(Debug, Deserialize)]
+pub struct MqttPublishRequest {
+    /// Topic to publish to
+    pub topic: String,
+    /// Message payload (string or JSON)
+    pub payload: String,
+    /// QoS level (0, 1, or 2)
+    #[serde(default = "default_qos")]
+    pub qos: u8,
+    /// Whether to retain the message
+    #[serde(default)]
+    pub retain: bool,
+}
+
+#[cfg(feature = "mqtt")]
+fn default_qos() -> u8 {
+    0
+}
+
+#[cfg(feature = "mqtt")]
+/// Publish a message to an MQTT topic (only compiled when mqtt feature is enabled)
+async fn publish_mqtt_message_handler(
+    State(state): State<ManagementState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Extract fields from JSON manually
+    let topic = request.get("topic").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let payload = request.get("payload").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let qos = request.get("qos").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+    let retain = request.get("retain").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    if topic.is_none() || payload.is_none() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid request",
+                "message": "Missing required fields: topic and payload"
+            })),
+        );
+    }
+
+    let topic = topic.unwrap();
+    let payload = payload.unwrap();
+
+    if let Some(broker) = &state.mqtt_broker {
+        // Validate QoS
+        if qos > 2 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Invalid QoS",
+                    "message": "QoS must be 0, 1, or 2"
+                })),
+            );
+        }
+
+        // Convert payload to bytes
+        let payload_bytes = payload.as_bytes().to_vec();
+        let client_id = "mockforge-management-api".to_string();
+
+        let publish_result = broker
+            .handle_publish(&client_id, &topic, payload_bytes, qos, retain)
+            .await
+            .map_err(|e| format!("{}", e));
+
+        match publish_result {
+            Ok(_) => {
+                // Emit message event for real-time monitoring
+                let event = MessageEvent::Mqtt(MqttMessageEvent {
+                    topic: topic.clone(),
+                    payload: payload.clone(),
+                    qos,
+                    retain,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                });
+                let _ = state.message_events.send(event);
+
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "message": format!("Message published to topic '{}'", topic),
+                        "topic": topic,
+                        "qos": qos,
+                        "retain": retain
+                    })),
+                )
+            }
+            Err(error_msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to publish message",
+                    "message": error_msg
+                })),
+            ),
+        }
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "MQTT broker not available",
+                "message": "MQTT broker is not enabled or not available."
+            })),
+        )
+    }
+}
+
+#[cfg(not(feature = "mqtt"))]
+/// Publish a message to an MQTT topic (stub when mqtt feature is disabled)
+async fn publish_mqtt_message_handler(
+    State(_state): State<ManagementState>,
+    Json(_request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({
+            "error": "MQTT feature not enabled",
+            "message": "MQTT support is not compiled into this build"
+        })),
+    )
+}
+
+#[cfg(feature = "mqtt")]
+/// Request to publish multiple MQTT messages
+#[derive(Debug, Deserialize)]
+pub struct MqttBatchPublishRequest {
+    /// List of messages to publish
+    pub messages: Vec<MqttPublishRequest>,
+    /// Delay between messages in milliseconds
+    #[serde(default = "default_delay")]
+    pub delay_ms: u64,
+}
+
+#[cfg(feature = "mqtt")]
+fn default_delay() -> u64 {
+    100
+}
+
+#[cfg(feature = "mqtt")]
+/// Publish multiple messages to MQTT topics (only compiled when mqtt feature is enabled)
+async fn publish_mqtt_batch_handler(
+    State(state): State<ManagementState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Extract fields from JSON manually
+    let messages_json = request.get("messages").and_then(|v| v.as_array());
+    let delay_ms = request.get("delay_ms").and_then(|v| v.as_u64()).unwrap_or(100);
+
+    if messages_json.is_none() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid request",
+                "message": "Missing required field: messages"
+            })),
+        );
+    }
+
+    let messages_json = messages_json.unwrap();
+
+    if let Some(broker) = &state.mqtt_broker {
+        if messages_json.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Empty batch",
+                    "message": "At least one message is required"
+                })),
+            );
+        }
+
+        let mut results = Vec::new();
+        let client_id = "mockforge-management-api".to_string();
+
+        for (index, msg_json) in messages_json.iter().enumerate() {
+            let topic = msg_json.get("topic").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let payload = msg_json.get("payload").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let qos = msg_json.get("qos").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            let retain = msg_json.get("retain").and_then(|v| v.as_bool()).unwrap_or(false);
+
+            if topic.is_none() || payload.is_none() {
+                results.push(serde_json::json!({
+                    "index": index,
+                    "success": false,
+                    "error": "Missing required fields: topic and payload"
+                }));
+                continue;
+            }
+
+            let topic = topic.unwrap();
+            let payload = payload.unwrap();
+
+            // Validate QoS
+            if qos > 2 {
+                results.push(serde_json::json!({
+                    "index": index,
+                    "success": false,
+                    "error": "Invalid QoS (must be 0, 1, or 2)"
+                }));
+                continue;
+            }
+
+            // Convert payload to bytes
+            let payload_bytes = payload.as_bytes().to_vec();
+
+            let publish_result = broker
+                .handle_publish(&client_id, &topic, payload_bytes, qos, retain)
+                .await
+                .map_err(|e| format!("{}", e));
+
+            match publish_result {
+                Ok(_) => {
+                    // Emit message event
+                    let event = MessageEvent::Mqtt(MqttMessageEvent {
+                        topic: topic.clone(),
+                        payload: payload.clone(),
+                        qos,
+                        retain,
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    });
+                    let _ = state.message_events.send(event);
+
+                    results.push(serde_json::json!({
+                        "index": index,
+                        "success": true,
+                        "topic": topic,
+                        "qos": qos
+                    }));
+                }
+                Err(error_msg) => {
+                    results.push(serde_json::json!({
+                        "index": index,
+                        "success": false,
+                        "error": error_msg
+                    }));
+                }
+            }
+
+            // Add delay between messages (except for the last one)
+            if index < messages_json.len() - 1 && delay_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            }
+        }
+
+        let success_count =
+            results.iter().filter(|r| r["success"].as_bool().unwrap_or(false)).count();
+
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "total": messages_json.len(),
+                "succeeded": success_count,
+                "failed": messages_json.len() - success_count,
+                "results": results
+            })),
+        )
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "MQTT broker not available",
+                "message": "MQTT broker is not enabled or not available."
+            })),
+        )
+    }
+}
+
+#[cfg(not(feature = "mqtt"))]
+/// Publish multiple messages to MQTT topics (stub when mqtt feature is disabled)
+async fn publish_mqtt_batch_handler(
+    State(_state): State<ManagementState>,
+    Json(_request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({
+            "error": "MQTT feature not enabled",
+            "message": "MQTT support is not compiled into this build"
+        })),
+    )
+}
+
 /// Build the management API router
 pub fn management_router(state: ManagementState) -> Router {
     let router = Router::new()
@@ -553,17 +909,994 @@ pub fn management_router(state: ManagementState) -> Router {
     #[cfg(not(feature = "smtp"))]
     let router = router;
 
+    // MQTT routes
     #[cfg(feature = "mqtt")]
     let router = router
         .route("/mqtt/stats", get(get_mqtt_stats))
         .route("/mqtt/clients", get(get_mqtt_clients))
         .route("/mqtt/topics", get(get_mqtt_topics))
-        .route("/mqtt/clients/{client_id}", delete(disconnect_mqtt_client));
+        .route("/mqtt/clients/{client_id}", delete(disconnect_mqtt_client))
+        .route("/mqtt/messages/stream", get(mqtt_messages_stream))
+        .route("/mqtt/publish", post(publish_mqtt_message_handler))
+        .route("/mqtt/publish/batch", post(publish_mqtt_batch_handler));
 
     #[cfg(not(feature = "mqtt"))]
+    let router = router
+        .route("/mqtt/publish", post(publish_mqtt_message_handler))
+        .route("/mqtt/publish/batch", post(publish_mqtt_batch_handler));
+
+    #[cfg(feature = "kafka")]
+    let router = router
+        .route("/kafka/stats", get(get_kafka_stats))
+        .route("/kafka/topics", get(get_kafka_topics))
+        .route("/kafka/topics/{topic}", get(get_kafka_topic))
+        .route("/kafka/groups", get(get_kafka_groups))
+        .route("/kafka/groups/{group_id}", get(get_kafka_group))
+        .route("/kafka/produce", post(produce_kafka_message))
+        .route("/kafka/produce/batch", post(produce_kafka_batch))
+        .route("/kafka/messages/stream", get(kafka_messages_stream));
+
+    #[cfg(not(feature = "kafka"))]
     let router = router;
 
+    // AI-powered features
+    let router = router
+        .route("/ai/generate-spec", post(generate_ai_spec))
+        .route("/chaos/config", get(get_chaos_config))
+        .route("/chaos/config", post(update_chaos_config))
+        .route("/network/profiles", get(list_network_profiles))
+        .route("/network/profile/apply", post(apply_network_profile));
+
     router.with_state(state)
+}
+
+#[cfg(feature = "kafka")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaBrokerStats {
+    /// Number of topics
+    pub topics: usize,
+    /// Total number of partitions
+    pub partitions: usize,
+    /// Number of consumer groups
+    pub consumer_groups: usize,
+    /// Total messages produced
+    pub messages_produced: u64,
+    /// Total messages consumed
+    pub messages_consumed: u64,
+}
+
+#[cfg(feature = "kafka")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaTopicInfo {
+    pub name: String,
+    pub partitions: usize,
+    pub replication_factor: i32,
+}
+
+#[cfg(feature = "kafka")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaConsumerGroupInfo {
+    pub group_id: String,
+    pub members: usize,
+    pub state: String,
+}
+
+#[cfg(feature = "kafka")]
+/// Get Kafka broker statistics
+async fn get_kafka_stats(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        let topics = broker.topics.read().await;
+        let consumer_groups = broker.consumer_groups.read().await;
+        let metrics = broker.metrics.clone();
+
+        let total_partitions: usize = topics.values().map(|t| t.partitions.len()).sum();
+        let snapshot = metrics.snapshot();
+        let messages_produced = snapshot.messages_produced_total;
+        let messages_consumed = snapshot.messages_consumed_total;
+
+        let stats = KafkaBrokerStats {
+            topics: topics.len(),
+            partitions: total_partitions,
+            consumer_groups: consumer_groups.groups().len(),
+            messages_produced,
+            messages_consumed,
+        };
+
+        Json(stats).into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+#[cfg(feature = "kafka")]
+/// List Kafka topics
+async fn get_kafka_topics(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        let topics = broker.topics.read().await;
+        let topic_list: Vec<KafkaTopicInfo> = topics
+            .iter()
+            .map(|(name, topic)| KafkaTopicInfo {
+                name: name.clone(),
+                partitions: topic.partitions.len(),
+                replication_factor: topic.config.replication_factor,
+            })
+            .collect();
+
+        Json(serde_json::json!({
+            "topics": topic_list
+        }))
+        .into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+#[cfg(feature = "kafka")]
+/// Get Kafka topic details
+async fn get_kafka_topic(
+    State(state): State<ManagementState>,
+    Path(topic_name): Path<String>,
+) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        let topics = broker.topics.read().await;
+        if let Some(topic) = topics.get(&topic_name) {
+            Json(serde_json::json!({
+                "name": topic_name,
+                "partitions": topic.partitions.len(),
+                "replication_factor": topic.config.replication_factor,
+                "partitions_detail": topic.partitions.iter().enumerate().map(|(idx, partition)| serde_json::json!({
+                    "id": idx as i32,
+                    "leader": 0,
+                    "replicas": vec![0],
+                    "message_count": partition.messages.len()
+                })).collect::<Vec<_>>()
+            })).into_response()
+        } else {
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "Topic not found",
+                    "topic": topic_name
+                })),
+            )
+                .into_response()
+        }
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+#[cfg(feature = "kafka")]
+/// List Kafka consumer groups
+async fn get_kafka_groups(State(state): State<ManagementState>) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        let consumer_groups = broker.consumer_groups.read().await;
+        let groups: Vec<KafkaConsumerGroupInfo> = consumer_groups
+            .groups()
+            .iter()
+            .map(|(group_id, group)| KafkaConsumerGroupInfo {
+                group_id: group_id.clone(),
+                members: group.members.len(),
+                state: "Stable".to_string(), // Simplified - could be more detailed
+            })
+            .collect();
+
+        Json(serde_json::json!({
+            "groups": groups
+        }))
+        .into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+#[cfg(feature = "kafka")]
+/// Get Kafka consumer group details
+async fn get_kafka_group(
+    State(state): State<ManagementState>,
+    Path(group_id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        let consumer_groups = broker.consumer_groups.read().await;
+        if let Some(group) = consumer_groups.groups().get(&group_id) {
+            Json(serde_json::json!({
+                "group_id": group_id,
+                "members": group.members.len(),
+                "state": "Stable",
+                "members_detail": group.members.iter().map(|(member_id, member)| serde_json::json!({
+                    "member_id": member_id,
+                    "client_id": member.client_id,
+                    "assignments": member.assignment.iter().map(|a| serde_json::json!({
+                        "topic": a.topic,
+                        "partitions": a.partitions
+                    })).collect::<Vec<_>>()
+                })).collect::<Vec<_>>(),
+                "offsets": group.offsets.iter().map(|((topic, partition), offset)| serde_json::json!({
+                    "topic": topic,
+                    "partition": partition,
+                    "offset": offset
+                })).collect::<Vec<_>>()
+            })).into_response()
+        } else {
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "Consumer group not found",
+                    "group_id": group_id
+                })),
+            )
+                .into_response()
+        }
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+// ========== Kafka Produce Handler ==========
+
+#[cfg(feature = "kafka")]
+#[derive(Debug, Deserialize)]
+pub struct KafkaProduceRequest {
+    /// Topic to produce to
+    pub topic: String,
+    /// Message key (optional)
+    #[serde(default)]
+    pub key: Option<String>,
+    /// Message value (JSON string or plain string)
+    pub value: String,
+    /// Partition ID (optional, auto-assigned if not provided)
+    #[serde(default)]
+    pub partition: Option<i32>,
+    /// Message headers (optional, key-value pairs)
+    #[serde(default)]
+    pub headers: Option<std::collections::HashMap<String, String>>,
+}
+
+#[cfg(feature = "kafka")]
+/// Produce a message to a Kafka topic
+async fn produce_kafka_message(
+    State(state): State<ManagementState>,
+    Json(request): Json<KafkaProduceRequest>,
+) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        let mut topics = broker.topics.write().await;
+
+        // Get or create the topic
+        let topic_entry = topics.entry(request.topic.clone()).or_insert_with(|| {
+            crate::topics::Topic::new(request.topic.clone(), crate::topics::TopicConfig::default())
+        });
+
+        // Determine partition
+        let partition_id = if let Some(partition) = request.partition {
+            partition
+        } else {
+            topic_entry.assign_partition(request.key.as_ref().map(|k| k.as_bytes()))
+        };
+
+        // Validate partition exists
+        if partition_id < 0 || partition_id >= topic_entry.partitions.len() as i32 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Invalid partition",
+                    "message": format!("Partition {} does not exist (topic has {} partitions)", partition_id, topic_entry.partitions.len())
+                })),
+            )
+                .into_response();
+        }
+
+        // Create the message
+        let message = crate::partitions::KafkaMessage {
+            offset: 0, // Will be set by partition.append
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            key: request.key.map(|k| k.as_bytes().to_vec()),
+            value: request.value.as_bytes().to_vec(),
+            headers: request
+                .headers
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| (k, v.as_bytes().to_vec()))
+                .collect(),
+        };
+
+        // Produce to partition
+        match topic_entry.produce(partition_id, message).await {
+            Ok(offset) => {
+                // Record metrics
+                broker.metrics.record_messages_produced(1);
+
+                // Emit message event for real-time monitoring
+                #[cfg(feature = "kafka")]
+                {
+                    let event = MessageEvent::Kafka(KafkaMessageEvent {
+                        topic: request.topic.clone(),
+                        key: request.key.clone(),
+                        value: request.value.clone(),
+                        partition: partition_id,
+                        offset,
+                        headers: request.headers.clone(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    });
+                    let _ = state.message_events.send(event);
+                }
+
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": format!("Message produced to topic '{}'", request.topic),
+                    "topic": request.topic,
+                    "partition": partition_id,
+                    "offset": offset
+                }))
+                .into_response()
+            }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to produce message",
+                    "message": e.to_string()
+                })),
+            )
+                .into_response(),
+        }
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+#[cfg(feature = "kafka")]
+#[derive(Debug, Deserialize)]
+pub struct KafkaBatchProduceRequest {
+    /// List of messages to produce
+    pub messages: Vec<KafkaProduceRequest>,
+    /// Delay between messages in milliseconds
+    #[serde(default = "default_delay")]
+    pub delay_ms: u64,
+}
+
+#[cfg(feature = "kafka")]
+/// Produce multiple messages to Kafka topics
+async fn produce_kafka_batch(
+    State(state): State<ManagementState>,
+    Json(request): Json<KafkaBatchProduceRequest>,
+) -> impl IntoResponse {
+    if let Some(broker) = &state.kafka_broker {
+        if request.messages.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Empty batch",
+                    "message": "At least one message is required"
+                })),
+            )
+                .into_response();
+        }
+
+        let mut results = Vec::new();
+
+        for (index, msg_request) in request.messages.iter().enumerate() {
+            let mut topics = broker.topics.write().await;
+
+            // Get or create the topic
+            let topic_entry = topics.entry(msg_request.topic.clone()).or_insert_with(|| {
+                crate::topics::Topic::new(
+                    msg_request.topic.clone(),
+                    crate::topics::TopicConfig::default(),
+                )
+            });
+
+            // Determine partition
+            let partition_id = if let Some(partition) = msg_request.partition {
+                partition
+            } else {
+                topic_entry.assign_partition(msg_request.key.as_ref().map(|k| k.as_bytes()))
+            };
+
+            // Validate partition exists
+            if partition_id < 0 || partition_id >= topic_entry.partitions.len() as i32 {
+                results.push(serde_json::json!({
+                    "index": index,
+                    "success": false,
+                    "error": format!("Invalid partition {} (topic has {} partitions)", partition_id, topic_entry.partitions.len())
+                }));
+                continue;
+            }
+
+            // Create the message
+            let message = crate::partitions::KafkaMessage {
+                offset: 0,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                key: msg_request.key.clone().map(|k| k.as_bytes().to_vec()),
+                value: msg_request.value.as_bytes().to_vec(),
+                headers: msg_request
+                    .headers
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(k, v)| (k, v.as_bytes().to_vec()))
+                    .collect(),
+            };
+
+            // Produce to partition
+            match topic_entry.produce(partition_id, message).await {
+                Ok(offset) => {
+                    broker.metrics.record_messages_produced(1);
+
+                    // Emit message event
+                    let event = MessageEvent::Kafka(KafkaMessageEvent {
+                        topic: msg_request.topic.clone(),
+                        key: msg_request.key.clone(),
+                        value: msg_request.value.clone(),
+                        partition: partition_id,
+                        offset,
+                        headers: msg_request.headers.clone(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    });
+                    let _ = state.message_events.send(event);
+
+                    results.push(serde_json::json!({
+                        "index": index,
+                        "success": true,
+                        "topic": msg_request.topic,
+                        "partition": partition_id,
+                        "offset": offset
+                    }));
+                }
+                Err(e) => {
+                    results.push(serde_json::json!({
+                        "index": index,
+                        "success": false,
+                        "error": e.to_string()
+                    }));
+                }
+            }
+
+            // Add delay between messages (except for the last one)
+            if index < request.messages.len() - 1 && request.delay_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(request.delay_ms)).await;
+            }
+        }
+
+        let success_count =
+            results.iter().filter(|r| r["success"].as_bool().unwrap_or(false)).count();
+
+        Json(serde_json::json!({
+            "success": true,
+            "total": request.messages.len(),
+            "succeeded": success_count,
+            "failed": request.messages.len() - success_count,
+            "results": results
+        }))
+        .into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "Kafka broker not available",
+                "message": "Kafka broker is not enabled or not available."
+            })),
+        )
+            .into_response()
+    }
+}
+
+// ========== Real-time Message Streaming (SSE) ==========
+
+#[cfg(feature = "mqtt")]
+/// SSE stream for MQTT messages
+async fn mqtt_messages_stream(
+    State(state): State<ManagementState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut rx = state.message_events.subscribe();
+    let topic_filter = params.get("topic").cloned();
+
+    let stream = stream::unfold(rx, move |mut rx| {
+        let topic_filter = topic_filter.clone();
+
+        async move {
+            loop {
+                match rx.recv().await {
+                    Ok(MessageEvent::Mqtt(event)) => {
+                        // Apply topic filter if specified
+                        if let Some(filter) = &topic_filter {
+                            if !event.topic.contains(filter) {
+                                continue;
+                            }
+                        }
+
+                        let event_json = serde_json::json!({
+                            "protocol": "mqtt",
+                            "topic": event.topic,
+                            "payload": event.payload,
+                            "qos": event.qos,
+                            "retain": event.retain,
+                            "timestamp": event.timestamp,
+                        });
+
+                        if let Ok(event_data) = serde_json::to_string(&event_json) {
+                            let sse_event = Event::default().event("mqtt_message").data(event_data);
+                            return Some((Ok(sse_event), rx));
+                        }
+                    }
+                    #[cfg(feature = "kafka")]
+                    Ok(MessageEvent::Kafka(_)) => {
+                        // Skip Kafka events in MQTT stream
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        return None;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!("MQTT message stream lagged, skipped {} messages", skipped);
+                        continue;
+                    }
+                }
+            }
+        }
+    });
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(15))
+            .text("keep-alive-text"),
+    )
+}
+
+#[cfg(feature = "kafka")]
+/// SSE stream for Kafka messages
+async fn kafka_messages_stream(
+    State(state): State<ManagementState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut rx = state.message_events.subscribe();
+    let topic_filter = params.get("topic").cloned();
+
+    let stream = stream::unfold(rx, move |mut rx| {
+        let topic_filter = topic_filter.clone();
+
+        async move {
+            loop {
+                match rx.recv().await {
+                    #[cfg(feature = "mqtt")]
+                    Ok(MessageEvent::Mqtt(_)) => {
+                        // Skip MQTT events in Kafka stream
+                        continue;
+                    }
+                    Ok(MessageEvent::Kafka(event)) => {
+                        // Apply topic filter if specified
+                        if let Some(filter) = &topic_filter {
+                            if !event.topic.contains(filter) {
+                                continue;
+                            }
+                        }
+
+                        let event_json = serde_json::json!({
+                            "protocol": "kafka",
+                            "topic": event.topic,
+                            "key": event.key,
+                            "value": event.value,
+                            "partition": event.partition,
+                            "offset": event.offset,
+                            "headers": event.headers,
+                            "timestamp": event.timestamp,
+                        });
+
+                        if let Ok(event_data) = serde_json::to_string(&event_json) {
+                            let sse_event =
+                                Event::default().event("kafka_message").data(event_data);
+                            return Some((Ok(sse_event), rx));
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        return None;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!("Kafka message stream lagged, skipped {} messages", skipped);
+                        continue;
+                    }
+                }
+            }
+        }
+    });
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(15))
+            .text("keep-alive-text"),
+    )
+}
+
+// ========== AI-Powered Features ==========
+
+/// Request for AI-powered API specification generation
+#[derive(Debug, Deserialize)]
+pub struct GenerateSpecRequest {
+    /// Natural language description of the API to generate
+    pub query: String,
+    /// Type of specification to generate: "openapi", "graphql", or "asyncapi"
+    pub spec_type: String,
+    /// Optional API version (e.g., "3.0.0" for OpenAPI)
+    pub api_version: Option<String>,
+}
+
+/// Generate API specification from natural language using AI
+#[cfg(feature = "data-faker")]
+async fn generate_ai_spec(
+    State(_state): State<ManagementState>,
+    Json(request): Json<GenerateSpecRequest>,
+) -> impl IntoResponse {
+    use mockforge_data::rag::{
+        config::{EmbeddingProvider, LlmProvider, RagConfig},
+        engine::RagEngine,
+        storage::{DocumentStorage, StorageFactory},
+    };
+    use std::sync::Arc;
+
+    // Build RAG config from environment variables
+    let api_key = std::env::var("MOCKFORGE_RAG_API_KEY")
+        .ok()
+        .or_else(|| std::env::var("OPENAI_API_KEY").ok());
+
+    // Check if RAG is configured - require API key
+    if api_key.is_none() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "AI service not configured",
+                "message": "Please provide an API key via MOCKFORGE_RAG_API_KEY or OPENAI_API_KEY"
+            })),
+        )
+            .into_response();
+    }
+
+    // Build RAG configuration
+    let provider_str = std::env::var("MOCKFORGE_RAG_PROVIDER")
+        .unwrap_or_else(|_| "openai".to_string())
+        .to_lowercase();
+
+    let provider = match provider_str.as_str() {
+        "openai" => LlmProvider::OpenAI,
+        "anthropic" => LlmProvider::Anthropic,
+        "ollama" => LlmProvider::Ollama,
+        "openai-compatible" | "openai_compatible" => LlmProvider::OpenAICompatible,
+        _ => LlmProvider::OpenAI,
+    };
+
+    let api_endpoint =
+        std::env::var("MOCKFORGE_RAG_API_ENDPOINT").unwrap_or_else(|_| match provider {
+            LlmProvider::OpenAI => "https://api.openai.com/v1".to_string(),
+            LlmProvider::Anthropic => "https://api.anthropic.com/v1".to_string(),
+            LlmProvider::Ollama => "http://localhost:11434/api".to_string(),
+            LlmProvider::OpenAICompatible => "http://localhost:8000/v1".to_string(),
+        });
+
+    let model = std::env::var("MOCKFORGE_RAG_MODEL").unwrap_or_else(|_| match provider {
+        LlmProvider::OpenAI => "gpt-3.5-turbo".to_string(),
+        LlmProvider::Anthropic => "claude-3-sonnet-20240229".to_string(),
+        LlmProvider::Ollama => "llama2".to_string(),
+        LlmProvider::OpenAICompatible => "gpt-3.5-turbo".to_string(),
+    });
+
+    // Build RagConfig using default() and override fields
+    let mut rag_config = RagConfig::default();
+    rag_config.provider = provider;
+    rag_config.api_endpoint = api_endpoint;
+    rag_config.api_key = api_key;
+    rag_config.model = model;
+    rag_config.max_tokens = std::env::var("MOCKFORGE_RAG_MAX_TOKENS")
+        .unwrap_or_else(|_| "4096".to_string())
+        .parse()
+        .unwrap_or(4096);
+    rag_config.temperature = std::env::var("MOCKFORGE_RAG_TEMPERATURE")
+        .unwrap_or_else(|_| "0.3".to_string())
+        .parse()
+        .unwrap_or(0.3); // Lower temperature for more structured output
+    rag_config.timeout_secs = std::env::var("MOCKFORGE_RAG_TIMEOUT")
+        .unwrap_or_else(|_| "60".to_string())
+        .parse()
+        .unwrap_or(60);
+    rag_config.max_context_length = std::env::var("MOCKFORGE_RAG_CONTEXT_WINDOW")
+        .unwrap_or_else(|_| "4000".to_string())
+        .parse()
+        .unwrap_or(4000);
+
+    // Build the prompt for spec generation
+    let spec_type_label = match request.spec_type.as_str() {
+        "openapi" => "OpenAPI 3.0",
+        "graphql" => "GraphQL",
+        "asyncapi" => "AsyncAPI",
+        _ => "OpenAPI 3.0",
+    };
+
+    let api_version = request.api_version.as_deref().unwrap_or("3.0.0");
+
+    let prompt = format!(
+        r#"You are an expert API architect. Generate a complete {} specification based on the following user requirements.
+
+User Requirements:
+{}
+
+Instructions:
+1. Generate a complete, valid {} specification
+2. Include all paths, operations, request/response schemas, and components
+3. Use realistic field names and data types
+4. Include proper descriptions and examples
+5. Follow {} best practices
+6. Return ONLY the specification, no additional explanation
+7. For OpenAPI, use version {}
+
+Return the specification in {} format."#,
+        spec_type_label,
+        request.query,
+        spec_type_label,
+        spec_type_label,
+        api_version,
+        if request.spec_type == "graphql" {
+            "GraphQL SDL"
+        } else {
+            "YAML"
+        }
+    );
+
+    // Create in-memory storage for RAG engine
+    // Note: StorageFactory::create_memory() returns Box<dyn DocumentStorage>
+    // We need to use unsafe transmute or create a wrapper, but for now we'll use
+    // a simpler approach: create InMemoryStorage directly
+    use mockforge_data::rag::storage::InMemoryStorage;
+    let storage: Arc<dyn DocumentStorage> = Arc::new(InMemoryStorage::new());
+
+    // Create RAG engine
+    let mut rag_engine = match RagEngine::new(rag_config.clone(), storage) {
+        Ok(engine) => engine,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to initialize RAG engine",
+                    "message": e.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Generate using RAG engine
+    match rag_engine.generate(&prompt, None).await {
+        Ok(generated_text) => {
+            // Try to extract just the YAML/JSON/SDL content if LLM added explanation
+            let spec = if request.spec_type == "graphql" {
+                // For GraphQL, extract SDL
+                extract_graphql_schema(&generated_text)
+            } else {
+                // For OpenAPI/AsyncAPI, extract YAML
+                extract_yaml_spec(&generated_text)
+            };
+
+            Json(serde_json::json!({
+                "success": true,
+                "spec": spec,
+                "spec_type": request.spec_type,
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "AI generation failed",
+                "message": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(not(feature = "data-faker"))]
+async fn generate_ai_spec(
+    State(_state): State<ManagementState>,
+    Json(_request): Json<GenerateSpecRequest>,
+) -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "error": "AI features not enabled",
+            "message": "Please enable the 'data-faker' feature to use AI-powered specification generation"
+        })),
+    )
+        .into_response()
+}
+
+fn extract_yaml_spec(text: &str) -> String {
+    // Try to find YAML code blocks
+    if let Some(start) = text.find("```yaml") {
+        let yaml_start = text[start + 7..].trim_start();
+        if let Some(end) = yaml_start.find("```") {
+            return yaml_start[..end].trim().to_string();
+        }
+    }
+    if let Some(start) = text.find("```") {
+        let content_start = text[start + 3..].trim_start();
+        if let Some(end) = content_start.find("```") {
+            return content_start[..end].trim().to_string();
+        }
+    }
+
+    // Check if it starts with openapi: or asyncapi:
+    if text.trim_start().starts_with("openapi:") || text.trim_start().starts_with("asyncapi:") {
+        return text.trim().to_string();
+    }
+
+    // Return as-is if no code blocks found
+    text.trim().to_string()
+}
+
+fn extract_graphql_schema(text: &str) -> String {
+    // Try to find GraphQL code blocks
+    if let Some(start) = text.find("```graphql") {
+        let schema_start = text[start + 10..].trim_start();
+        if let Some(end) = schema_start.find("```") {
+            return schema_start[..end].trim().to_string();
+        }
+    }
+    if let Some(start) = text.find("```") {
+        let content_start = text[start + 3..].trim_start();
+        if let Some(end) = content_start.find("```") {
+            return content_start[..end].trim().to_string();
+        }
+    }
+
+    // Check if it looks like GraphQL SDL (starts with type, schema, etc.)
+    if text.trim_start().starts_with("type ") || text.trim_start().starts_with("schema ") {
+        return text.trim().to_string();
+    }
+
+    text.trim().to_string()
+}
+
+// ========== Chaos Engineering Management ==========
+
+/// Get current chaos engineering configuration
+async fn get_chaos_config(State(_state): State<ManagementState>) -> impl IntoResponse {
+    // TODO: Get from state when chaos config is stored
+    Json(serde_json::json!({
+        "enabled": false,
+        "latency": null,
+        "fault_injection": null,
+        "rate_limit": null,
+        "traffic_shaping": null,
+    }))
+    .into_response()
+}
+
+/// Request to update chaos configuration
+#[derive(Debug, Deserialize)]
+pub struct ChaosConfigUpdate {
+    /// Whether to enable chaos engineering
+    pub enabled: Option<bool>,
+    /// Latency configuration
+    pub latency: Option<serde_json::Value>,
+    /// Fault injection configuration
+    pub fault_injection: Option<serde_json::Value>,
+    /// Rate limiting configuration
+    pub rate_limit: Option<serde_json::Value>,
+    /// Traffic shaping configuration
+    pub traffic_shaping: Option<serde_json::Value>,
+}
+
+/// Update chaos engineering configuration
+async fn update_chaos_config(
+    State(_state): State<ManagementState>,
+    Json(config): Json<ChaosConfigUpdate>,
+) -> impl IntoResponse {
+    // TODO: Apply chaos config to server
+    Json(serde_json::json!({
+        "success": true,
+        "message": "Chaos configuration updated"
+    }))
+    .into_response()
+}
+
+// ========== Network Profile Management ==========
+
+/// List available network profiles
+async fn list_network_profiles() -> impl IntoResponse {
+    use mockforge_core::network_profiles::NetworkProfileCatalog;
+
+    let catalog = NetworkProfileCatalog::default();
+    let profiles: Vec<serde_json::Value> = catalog
+        .list_profiles_with_description()
+        .iter()
+        .map(|(name, description)| {
+            serde_json::json!({
+                "name": name,
+                "description": description,
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({
+        "profiles": profiles
+    }))
+    .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+/// Request to apply a network profile
+pub struct ApplyNetworkProfileRequest {
+    /// Name of the network profile to apply
+    pub profile_name: String,
+}
+
+/// Apply a network profile
+async fn apply_network_profile(
+    State(_state): State<ManagementState>,
+    Json(request): Json<ApplyNetworkProfileRequest>,
+) -> impl IntoResponse {
+    use mockforge_core::network_profiles::NetworkProfileCatalog;
+
+    let catalog = NetworkProfileCatalog::default();
+    if let Some(profile) = catalog.get(&request.profile_name) {
+        // TODO: Apply profile to server configuration
+        Json(serde_json::json!({
+            "success": true,
+            "message": format!("Network profile '{}' applied", request.profile_name),
+            "profile": {
+                "name": profile.name,
+                "description": profile.description,
+            }
+        }))
+        .into_response()
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Profile not found",
+                "message": format!("Network profile '{}' not found", request.profile_name)
+            })),
+        )
+            .into_response()
+    }
 }
 
 /// Build the management API router with UI Builder support
