@@ -176,6 +176,8 @@ pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
 pub mod op_middleware;
+/// Browser/Mobile Proxy Server
+pub mod proxy_server;
 /// Quick mock generation utilities
 pub mod quick_mock;
 /// RAG-powered AI response generation

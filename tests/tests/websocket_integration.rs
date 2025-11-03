@@ -70,6 +70,10 @@ async fn test_websocket_connection() {
             // Server closed connection - this is also valid
             assert!(true);
         }
+        Ok(Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)))) => {
+            // Control frames - connection is working
+            assert!(true);
+        }
         Ok(Some(Err(e))) => {
             eprintln!("WebSocket error: {}", e);
             // Don't fail test - server might not support all message types

@@ -4,7 +4,7 @@
 //! certificate injection, and comprehensive request/response logging.
 
 use axum::{
-    extract::{ConnectInfo, Request},
+    extract::Request,
     http::{HeaderMap, Method, StatusCode, Uri},
     middleware::Next,
     response::Response,
@@ -45,15 +45,15 @@ impl ProxyServer {
     /// Get the Axum router for the proxy server
     pub fn router(self) -> Router {
         let state = Arc::new(self);
+        let state_for_middleware = state.clone();
 
         Router::new()
             // Health check endpoint
             .route("/proxy/health", get(health_check))
-            // Catch-all proxy handler
-            .route("/proxy/*path", any(proxy_handler))
-            .route("/*path", any(proxy_handler))
+            // Catch-all proxy handler - use fallback for all methods
+            .fallback(proxy_handler)
             .with_state(state)
-            .layer(axum::middleware::from_fn(logging_middleware))
+            .layer(axum::middleware::from_fn_with_state(state_for_middleware, logging_middleware))
     }
 }
 
@@ -72,13 +72,20 @@ async fn health_check() -> Result<Response<String>, StatusCode> {
 
 /// Main proxy handler that intercepts and forwards requests
 async fn proxy_handler(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    method: Method,
-    uri: Uri,
-    headers: HeaderMap,
-    mut request: Request,
     axum::extract::State(state): axum::extract::State<Arc<ProxyServer>>,
+    request: axum::http::Request<axum::body::Body>,
 ) -> Result<Response<String>, StatusCode> {
+    // Extract client address from request extensions (set by ConnectInfo middleware)
+    let client_addr = request
+        .extensions()
+        .get::<SocketAddr>()
+        .copied()
+        .unwrap_or_else(|| std::net::SocketAddr::from(([0, 0, 0, 0], 0)));
+
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let headers = request.headers().clone();
+
     let config = state.config.read().await;
 
     // Check if proxy is enabled
@@ -91,9 +98,27 @@ async fn proxy_handler(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    // Get the upstream URL
-    let upstream_url = config.get_upstream_url(uri.path());
+    // Get the stripped path (without proxy prefix)
     let stripped_path = config.strip_prefix(uri.path());
+
+    // Get the base upstream URL and construct the full URL
+    let base_upstream_url = config.get_upstream_url(uri.path());
+    let full_upstream_url =
+        if stripped_path.starts_with("http://") || stripped_path.starts_with("https://") {
+            stripped_path.clone()
+        } else {
+            let base = base_upstream_url.trim_end_matches('/');
+            let path = stripped_path.trim_start_matches('/');
+            let query = uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
+            if path.is_empty() || path == "/" {
+                format!("{}{}", base, query)
+            } else {
+                format!("{}/{}", base, path) + &query
+            }
+        };
+
+    // Create a new URI with the full upstream URL for the proxy handler
+    let modified_uri = full_upstream_url.parse::<axum::http::Uri>().unwrap_or_else(|_| uri.clone());
 
     // Log the request if enabled
     if state.log_requests {
@@ -105,8 +130,8 @@ async fn proxy_handler(
             request_id = request_id,
             method = %method,
             path = %uri.path(),
-            upstream = %upstream_url,
-            client_ip = %addr.ip(),
+            upstream = %full_upstream_url,
+            client_ip = %client_addr.ip(),
             "Proxy request intercepted"
         );
     }
@@ -119,8 +144,8 @@ async fn proxy_handler(
         }
     }
 
-    // Read request body
-    let body_bytes = match axum::body::to_bytes(request.body_mut(), usize::MAX).await {
+    // Read request body (consume the request)
+    let body_bytes = match axum::body::to_bytes(request.into_body(), usize::MAX).await {
         Ok(bytes) => Some(bytes.to_vec()),
         Err(e) => {
             error!("Failed to read request body: {}", e);
@@ -128,39 +153,80 @@ async fn proxy_handler(
         }
     };
 
-    // Create proxy handler and process the request
-    let proxy_handler = ProxyHandler::new(config.clone());
+    // Use ProxyClient directly with the full upstream URL to bypass ProxyHandler's URL construction
+    use mockforge_core::proxy::client::ProxyClient;
+    let proxy_client = ProxyClient::new();
 
-    match proxy_handler
-        .proxy_request(&method, &uri, &headers, body_bytes.as_deref())
+    // Convert headers to HashMap
+    let mut header_map = std::collections::HashMap::new();
+    for (key, value) in &headers {
+        if let Ok(value_str) = value.to_str() {
+            header_map.insert(key.to_string(), value_str.to_string());
+        }
+    }
+
+    // Convert method to reqwest method
+    let reqwest_method = match method.as_str() {
+        "GET" => reqwest::Method::GET,
+        "POST" => reqwest::Method::POST,
+        "PUT" => reqwest::Method::PUT,
+        "DELETE" => reqwest::Method::DELETE,
+        "HEAD" => reqwest::Method::HEAD,
+        "OPTIONS" => reqwest::Method::OPTIONS,
+        "PATCH" => reqwest::Method::PATCH,
+        _ => {
+            error!("Unsupported HTTP method: {}", method);
+            return Err(StatusCode::METHOD_NOT_ALLOWED);
+        }
+    };
+
+    // Add any configured headers
+    for (key, value) in &config.headers {
+        header_map.insert(key.clone(), value.clone());
+    }
+
+    match proxy_client
+        .send_request(reqwest_method, &full_upstream_url, &header_map, body_bytes.as_deref())
         .await
     {
-        Ok(proxy_response) => {
+        Ok(response) => {
+            let status = StatusCode::from_u16(response.status().as_u16())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
             // Log the response if enabled
             if state.log_responses {
                 info!(
                     method = %method,
                     path = %uri.path(),
-                    status = proxy_response.status_code,
+                    status = status.as_u16(),
                     "Proxy response sent"
                 );
             }
 
-            // Convert proxy response to Axum response
-            let mut response_builder = Response::builder().status(proxy_response.status_code);
-
-            // Add response headers
-            for (key, value) in proxy_response.headers {
-                if let Ok(header_name) = axum::http::HeaderName::try_from(key.as_str()) {
-                    response_builder = response_builder.header(header_name, value);
+            // Convert response headers
+            let mut response_headers = axum::http::HeaderMap::new();
+            for (name, value) in response.headers() {
+                if let (Ok(header_name), Ok(header_value)) = (
+                    axum::http::HeaderName::try_from(name.as_str()),
+                    axum::http::HeaderValue::try_from(value.as_bytes()),
+                ) {
+                    response_headers.insert(header_name, header_value);
                 }
             }
 
-            // Convert body to string
-            let body_string = match proxy_response.body {
-                Some(body_bytes) => String::from_utf8_lossy(&body_bytes).to_string(),
-                None => String::new(),
-            };
+            // Read response body
+            let body_bytes = response.bytes().await.map_err(|e| {
+                error!("Failed to read proxy response body: {}", e);
+                StatusCode::BAD_GATEWAY
+            })?;
+
+            let body_string = String::from_utf8_lossy(&body_bytes).to_string();
+
+            // Build Axum response
+            let mut response_builder = Response::builder().status(status);
+            for (name, value) in response_headers.iter() {
+                response_builder = response_builder.header(name, value);
+            }
 
             response_builder
                 .body(body_string)
@@ -175,7 +241,7 @@ async fn proxy_handler(
 
 /// Middleware for logging requests and responses
 async fn logging_middleware(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    axum::extract::State(_state): axum::extract::State<Arc<ProxyServer>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -183,10 +249,17 @@ async fn logging_middleware(
     let method = request.method().clone();
     let uri = request.uri().clone();
 
+    // Extract client address from request extensions
+    let client_addr = request
+        .extensions()
+        .get::<SocketAddr>()
+        .copied()
+        .unwrap_or_else(|| std::net::SocketAddr::from(([0, 0, 0, 0], 0)));
+
     debug!(
         method = %method,
         uri = %uri,
-        client_ip = %addr.ip(),
+        client_ip = %client_addr.ip(),
         "Request received"
     );
 
@@ -237,7 +310,6 @@ mod tests {
     use axum::http::StatusCode;
     use mockforge_core::proxy::config::ProxyConfig;
     use std::net::SocketAddr;
-    use tokio_test;
 
     #[tokio::test]
     async fn test_proxy_server_creation() {
@@ -254,10 +326,8 @@ mod tests {
         let response = health_check().await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = String::from_utf8(
-            axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec(),
-        )
-        .unwrap();
+        // Response body is already a String
+        let body = response.into_body();
 
         assert!(body.contains("healthy"));
         assert!(body.contains("mockforge-proxy"));

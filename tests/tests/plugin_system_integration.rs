@@ -356,12 +356,10 @@ async fn test_plugin_error_handling() {
     match response {
         Ok(resp) => {
             // Should return error (404 or error response)
-            if !resp.status().is_success() {
+            let status = resp.status();
+            if !status.is_success() {
                 let body: Value = resp.json().await.unwrap_or(Value::Null);
-                eprintln!(
-                    "✅ Non-existent plugin query handled correctly (status: {})",
-                    resp.status()
-                );
+                eprintln!("✅ Non-existent plugin query handled correctly (status: {})", status);
 
                 // Verify error response structure
                 if let Some(error) = body.get("error") {

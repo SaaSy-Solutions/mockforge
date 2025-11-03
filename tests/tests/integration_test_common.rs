@@ -120,8 +120,10 @@ pub fn assert_status(response: &reqwest::Response, expected: u16) {
 }
 
 /// Assert response JSON matches expected value
-pub async fn assert_json_eq(response: &mut reqwest::Response, expected: &serde_json::Value) {
-    let actual: serde_json::Value = response.json().await.expect("Failed to parse JSON");
+pub async fn assert_json_eq(response: reqwest::Response, expected: &serde_json::Value) {
+    // Read response body bytes (this consumes the response body)
+    let bytes = response.bytes().await.expect("Failed to read response body");
+    let actual: serde_json::Value = serde_json::from_slice(&bytes).expect("Failed to parse JSON");
     assert_eq!(
         actual,
         *expected,
