@@ -630,16 +630,16 @@ fn generate_number_from_schema(number_type: &openapiv3::NumberType) -> String {
         if minimum > 0.0 {
             minimum
         } else {
-            3.14
+            std::f64::consts::PI
         }
     } else if let Some(maximum) = number_type.maximum {
         if maximum > 0.0 {
             maximum.min(1000.0)
         } else {
-            3.14
+            std::f64::consts::PI
         }
     } else {
-        3.14
+        std::f64::consts::PI
     };
 
     format!("serde_json::json!({})", value)

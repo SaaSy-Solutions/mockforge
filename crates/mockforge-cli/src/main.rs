@@ -17,6 +17,7 @@ use tokio::net::TcpListener;
 
 #[cfg(feature = "amqp")]
 mod amqp_commands;
+mod backend_generator;
 mod client_generator;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
@@ -29,6 +30,7 @@ mod plugin_commands;
 mod progress;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
+mod tunnel_commands;
 mod workspace_commands;
 
 #[cfg(test)]
@@ -681,6 +683,18 @@ enum Commands {
         client_command: client_generator::ClientCommand,
     },
 
+    /// Backend server code generation from OpenAPI specifications
+    ///
+    /// Examples:
+    ///   mockforge backend generate --spec api.json --backend rust --output ./my-backend
+    ///   mockforge backend generate --spec api.yaml --backend rust --port 8080 --database postgres
+    ///   mockforge backend list
+    #[command(verbatim_doc_comment)]
+    Backend {
+        #[command(subcommand)]
+        backend_command: backend_generator::BackendCommand,
+    },
+
     /// Multi-tenant workspace management
     ///
     /// Examples:
@@ -692,6 +706,20 @@ enum Commands {
     Workspace {
         #[command(subcommand)]
         workspace_command: workspace_commands::WorkspaceCommands,
+    },
+
+    /// Expose local MockForge server via public URL (tunneling)
+    ///
+    /// Examples:
+    ///   mockforge tunnel start --local-url http://localhost:3000
+    ///   mockforge tunnel start --local-url http://localhost:3000 --subdomain my-api
+    ///   mockforge tunnel status
+    ///   mockforge tunnel stop
+    ///   mockforge tunnel list
+    #[command(verbatim_doc_comment)]
+    Tunnel {
+        #[command(subcommand)]
+        tunnel_command: tunnel_commands::TunnelSubcommand,
     },
 
     /// Chaos experiment orchestration
@@ -1698,8 +1726,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Client { client_command } => {
             client_generator::execute_client_command(client_command).await?;
         }
+        Commands::Backend { backend_command } => {
+            backend_generator::handle_backend_command(backend_command).await?;
+        }
         Commands::Workspace { workspace_command } => {
             workspace_commands::handle_workspace_command(workspace_command).await?;
+        }
+
+        Commands::Tunnel { tunnel_command } => {
+            tunnel_commands::handle_tunnel_command(tunnel_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Tunnel command failed: {}", e))?;
         }
 
         Commands::Orchestrate {

@@ -83,6 +83,7 @@
 
 // Public modules
 pub mod auth;
+pub mod backend_generator;
 pub mod client_generator;
 pub mod datasource;
 pub mod error;
@@ -99,6 +100,10 @@ pub use async_trait::TokenResolver;
 
 // Re-export types
 pub use auth::*;
+pub use backend_generator::{
+    BackendGenerationMetadata, BackendGenerationResult, BackendGeneratorConfig,
+    BackendGeneratorPlugin, BackendGeneratorPluginConfig, Complexity, TodoCategory, TodoItem,
+};
 pub use client_generator::{
     ClientGenerationResult, ClientGeneratorConfig, ClientGeneratorPlugin,
     ClientGeneratorPluginConfig, GeneratedFile, GenerationMetadata, OpenApiSpec,

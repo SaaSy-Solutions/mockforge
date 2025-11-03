@@ -3,6 +3,7 @@
 //! This module provides functionality for generating executable mock server code
 //! from OpenAPI specifications, supporting multiple output languages and frameworks.
 
+pub mod backend_generator;
 pub mod rust_generator;
 pub mod typescript_generator;
 

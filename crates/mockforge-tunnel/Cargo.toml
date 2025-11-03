@@ -1,0 +1,44 @@
+[package]
+name = "mockforge-tunnel"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Tunneling service for exposing local MockForge servers via public URLs"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+publish = false
+
+[[bin]]
+name = "tunnel-server"
+path = "src/bin/tunnel-server.rs"
+required-features = ["server"]
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+tokio-tungstenite = "0.23"
+axum = { workspace = true }
+hyper = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+tracing = { workspace = true }
+anyhow = "1.0"
+async-trait = "0.1"
+bytes = "1.5"
+futures = "0.3"
+tokio-util = { version = "0.7", features = ["codec"] }
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+[features]
+default = []
+server = ["tracing-subscriber"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

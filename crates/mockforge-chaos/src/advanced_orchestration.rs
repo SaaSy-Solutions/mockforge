@@ -332,8 +332,9 @@ impl Hook {
 
                 // Add body if present (body is already a String)
                 if let Some(body_value) = body {
-                    request_builder =
-                        request_builder.header("Content-Type", "application/json").body(body_value.clone());
+                    request_builder = request_builder
+                        .header("Content-Type", "application/json")
+                        .body(body_value.clone());
                 }
 
                 // Execute the request

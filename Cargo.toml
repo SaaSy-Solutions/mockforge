@@ -31,6 +31,7 @@ members = [
     "test_openapi_demo",
     "crates/mockforge-analytics",
     "crates/mockforge-sdk",
+    "crates/mockforge-tunnel",
     "tests"  # Integration tests package
 ]
 exclude = [
