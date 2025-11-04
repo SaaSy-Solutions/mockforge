@@ -74,7 +74,7 @@ flate2 = "1.0"
 tar = "0.4"
 
 # Git repository cloning
-git2 = { version = "0.19", optional = true }
+git2 = { version = "0.20", optional = true }
 
 # Progress tracking
 indicatif = "0.17"
