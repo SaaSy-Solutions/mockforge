@@ -1,3 +1,8 @@
+//! End-to-end tests for WebSocket message templating.
+//!
+//! These tests verify that template tokens in WebSocket messages are correctly
+//! expanded with dynamic values during replay and response generation.
+
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::protocol::Message;
 

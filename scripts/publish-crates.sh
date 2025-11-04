@@ -261,8 +261,10 @@ convert_dependencies() {
         "mockforge-amqp"
         "mockforge-kafka"
         "mockforge-ftp"
+        "mockforge-tcp"
         "mockforge-sdk"
         "mockforge-bench"
+        "mockforge-test"
         "mockforge-plugin-loader"
         "mockforge-k8s-operator"
         "mockforge-registry-server"
@@ -300,8 +302,10 @@ restore_dependencies() {
         "mockforge-amqp"
         "mockforge-kafka"
         "mockforge-ftp"
+        "mockforge-tcp"
         "mockforge-sdk"
         "mockforge-bench"
+        "mockforge-test"
         "mockforge-plugin-loader"
         "mockforge-k8s-operator"
         "mockforge-registry-server"
@@ -545,6 +549,10 @@ main() {
     publish_crate "mockforge-ftp"
     wait_for_processing
 
+    convert_crate_dependencies "mockforge-tcp"
+    publish_crate "mockforge-tcp"
+    wait_for_processing
+
     # Publish SDK (depends on protocol crates)
     convert_crate_dependencies "mockforge-sdk"
     publish_crate "mockforge-sdk"
@@ -553,6 +561,10 @@ main() {
     # Publish utility crates
     convert_crate_dependencies "mockforge-bench"
     publish_crate "mockforge-bench"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-test"
+    publish_crate "mockforge-test"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-k8s-operator"

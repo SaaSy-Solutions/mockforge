@@ -1,3 +1,9 @@
+//! End-to-end tests for response example expansion.
+//!
+//! These tests verify that OpenAPI response examples are correctly expanded
+//! with template variables and that the expansion works with different
+//! validation modes.
+
 use axum::Router;
 use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use mockforge_http::build_router;

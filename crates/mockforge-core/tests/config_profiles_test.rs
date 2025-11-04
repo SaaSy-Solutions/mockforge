@@ -1,3 +1,8 @@
+//! Tests for configuration profile functionality.
+//!
+//! These tests verify that configuration profiles can be loaded, validated,
+//! and merged correctly with proper precedence handling.
+
 use mockforge_core::config::*;
 use std::fs;
 use tempfile::TempDir;

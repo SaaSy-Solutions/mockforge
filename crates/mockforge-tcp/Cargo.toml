@@ -8,13 +8,12 @@ description = "TCP protocol mocking support for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mockforge"
-readme = "README.md"
 keywords = ["tcp", "mock", "testing", "api", "network"]
 categories = ["development-tools", "network-programming"]
 
 [dependencies]
 # MockForge core
-mockforge-core = { version = "0.2.4", path = "../mockforge-core" }
+mockforge-core = { version = "0.2.6", path = "../mockforge-core" }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }

@@ -1,3 +1,8 @@
+//! Tests for request and response validation functionality.
+//!
+//! These tests verify that validators correctly enforce schema constraints,
+//! validate request bodies, and provide appropriate error messages.
+
 use mockforge_core::validation::Validator;
 use mockforge_core::validation::*;
 use mockforge_core::workspace::request::RequestProcessor;

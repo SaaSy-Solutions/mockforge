@@ -1,3 +1,8 @@
+//! Property-based tests for core functionality.
+//!
+//! These tests use property-based testing to verify correctness of templating
+//! and validation logic across a wide range of inputs.
+
 use mockforge_core::templating::{expand_str, expand_tokens};
 use mockforge_core::validation::validate_json_schema;
 use proptest::prelude::*;

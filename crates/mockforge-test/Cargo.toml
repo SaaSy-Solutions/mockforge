@@ -14,8 +14,8 @@ publish = true
 
 [dependencies]
 # Core MockForge dependencies
-mockforge-core = { version = "0.2.0", path = "../mockforge-core" }
-mockforge-http = { version = "0.2.0", path = "../mockforge-http" }
+mockforge-core = { version = "0.2.6", path = "../mockforge-core" }
+mockforge-http = { version = "0.2.6", path = "../mockforge-http" }
 mockforge-data = { version = "0.2.0", path = "../mockforge-data", optional = true }
 
 # Async runtime

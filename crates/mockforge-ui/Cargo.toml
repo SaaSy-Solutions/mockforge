@@ -37,13 +37,13 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
-mockforge-core = { version = "0.2.4", path = "../mockforge-core" }
-mockforge-http = { version = "0.2.0", path = "../mockforge-http", features = ["smtp", "mqtt"] }
-mockforge-ws = { version = "0.2.0", path = "../mockforge-ws" }
-mockforge-grpc = { version = "0.2.0", path = "../mockforge-grpc" }
-mockforge-plugin-core = { version = "0.2.4", path = "../mockforge-plugin-core" }
-mockforge-plugin-loader = { version = "0.2.0", path = "../mockforge-plugin-loader" }
-mockforge-analytics = { version = "0.2.0", path = "../mockforge-analytics" }
+mockforge-core = { version = "0.2.6", path = "../mockforge-core" }
+mockforge-http = { version = "0.2.6", path = "../mockforge-http", features = ["smtp", "mqtt"] }
+mockforge-ws = { version = "0.2.6", path = "../mockforge-ws" }
+mockforge-grpc = { version = "0.2.6", path = "../mockforge-grpc" }
+mockforge-plugin-core = { version = "0.2.6", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.2.6", path = "../mockforge-plugin-loader" }
+mockforge-analytics = { version = "0.2.6", path = "../mockforge-analytics" }
 
 [build-dependencies]
 serde = { workspace = true }
