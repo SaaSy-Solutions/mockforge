@@ -4,12 +4,20 @@
 //! without requiring cloud deployment. Supports multiple tunneling backends
 //! and provides a unified API for tunnel management.
 
+#[cfg(feature = "server")]
+pub mod audit;
 pub mod client;
 pub mod config;
 pub mod manager;
 pub mod provider;
 #[cfg(feature = "server")]
+pub mod rate_limit;
+#[cfg(feature = "server")]
 pub mod server;
+#[cfg(feature = "server")]
+pub mod server_config;
+#[cfg(feature = "server")]
+pub mod storage;
 
 pub use client::TunnelClient;
 pub use config::{TunnelConfig, TunnelProvider};

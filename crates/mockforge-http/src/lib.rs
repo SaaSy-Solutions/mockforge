@@ -166,6 +166,8 @@ pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
 pub mod coverage;
+/// Kubernetes-native health check endpoints (liveness, readiness, startup probes)
+pub mod health;
 pub mod http_tracing_middleware;
 /// Latency profile configuration for HTTP request simulation
 pub mod latency_profiles;
@@ -198,6 +200,8 @@ pub mod ui_builder;
 
 // Re-export AI handler utilities
 pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
+// Re-export health check utilities
+pub use health::{HealthManager, ServiceStatus};
 
 // Re-export management API utilities
 pub use management::{
@@ -935,6 +939,7 @@ pub async fn build_router_with_chains(
         None,
         None,
         false,
+        None, // health_manager
     )
     .await
 }
@@ -955,6 +960,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     mqtt_broker: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,
     traffic_shaping_enabled: bool,
+    health_manager: Option<std::sync::Arc<health::HealthManager>>,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
@@ -999,7 +1005,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
     }
 
-    if include_default_health {
+    // Add health check endpoints
+    if let Some(health) = health_manager {
+        // Use comprehensive health check router with all probe endpoints
+        app = app.merge(health::health_router(health));
+        info!(
+            "Health check endpoints enabled: /health, /health/live, /health/ready, /health/startup"
+        );
+    } else if include_default_health {
+        // Fallback to basic health endpoint for backwards compatibility
         app = app.route(
             "/health",
             axum::routing::get(|| async {

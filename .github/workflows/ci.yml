@@ -67,9 +67,9 @@ jobs:
       run: cargo fmt --all -- --check
       if: matrix.rust == 'stable'
 
-     - name: Run clippy
-       run: cargo clippy --lib --bins --all-features -- -D warnings
-       if: matrix.rust == 'stable'
+    - name: Run clippy
+      run: cargo clippy --lib --bins --all-features -- -D warnings
+      if: matrix.rust == 'stable'
 
     - name: Build workspace
       run: cargo build --workspace --verbose
@@ -98,11 +98,24 @@ jobs:
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
+    - name: Install security tools
+      run: |
+        cargo install cargo-audit --locked
+        cargo install cargo-deny --locked
 
-    - name: Run security audit
+    - name: Run RustSec advisory scan
       run: cargo audit
+
+    - name: Run license and source compliance check
+      run: cargo deny check licenses sources bans
+
+    - name: Run security-focused Clippy checks
+      run: cargo clippy --all-targets --all-features -- -W clippy::suspicious -W clippy::security -D warnings || true
+
+    - name: Check for unsafe code blocks
+      run: |
+        echo "Files containing 'unsafe' blocks:"
+        find crates -name "*.rs" -type f -exec grep -l "unsafe" {} \; | sort || echo "None found"
 
   coverage:
     name: Code Coverage

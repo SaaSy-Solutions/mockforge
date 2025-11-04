@@ -2768,6 +2768,14 @@ async fn handle_serve(
     #[cfg(not(feature = "mqtt"))]
     let mqtt_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
+    // Create health manager for Kubernetes-native health checks
+    use mockforge_http::HealthManager;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let health_manager = Arc::new(HealthManager::with_init_timeout(Duration::from_secs(60)));
+    let health_manager_for_router = health_manager.clone();
+
     // Use standard router (traffic shaping temporarily disabled)
     let http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
@@ -2779,13 +2787,14 @@ async fn handle_serve(
         None, // ai_generator
         smtp_registry.as_ref().cloned(),
         mqtt_broker_for_http,
-        None,  // traffic_shaper
-        false, // traffic_shaping_enabled
+        None,                            // traffic_shaper
+        false,                           // traffic_shaping_enabled
+        Some(health_manager_for_router), // health_manager
     )
     .await;
 
     println!(
-        "✅ HTTP server configured with health check at http://localhost:{}/health",
+        "✅ HTTP server configured with health checks at http://localhost:{}/health (live, ready, startup)",
         config.http.port
     );
     if !config.routes.is_empty() {
@@ -2819,6 +2828,14 @@ async fn handle_serve(
     // Create a cancellation token for graceful shutdown
     use tokio_util::sync::CancellationToken;
     let shutdown_token = CancellationToken::new();
+
+    // Set up graceful shutdown integration with health manager
+    let health_manager_for_shutdown = health_manager.clone();
+    let shutdown_token_for_health = shutdown_token.clone();
+    tokio::spawn(async move {
+        shutdown_token_for_health.cancelled().await;
+        health_manager_for_shutdown.trigger_shutdown().await;
+    });
 
     // Start HTTP server
     let http_port = config.http.port;
@@ -3219,6 +3236,11 @@ async fn handle_serve(
         None
     };
 
+    // Give servers a moment to start, then mark service as ready
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    health_manager.set_ready().await;
+    tracing::info!("Service marked as ready - all servers initialized");
+
     // Wait for all servers or shutdown signal, handling errors properly
     let result = tokio::select! {
         result = http_handle => {
@@ -3322,6 +3344,8 @@ async fn handle_serve(
         }
         _ = tokio::signal::ctrl_c() => {
             println!("🛑 Received shutdown signal");
+            // Trigger health manager shutdown
+            health_manager.trigger_shutdown().await;
             None
         }
     };

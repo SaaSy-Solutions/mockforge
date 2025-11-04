@@ -217,13 +217,52 @@ impl OpenApiRouteRegistry {
 
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
-        let mut routes = Vec::new();
         tracing::debug!(
             "Generating routes from OpenAPI spec with {} paths",
             spec.spec.paths.paths.len()
         );
         let base_paths = Self::collect_base_paths(spec);
 
+        // Optimize: Use parallel iteration for route generation when beneficial
+        #[cfg(feature = "rayon")]
+        {
+            use rayon::prelude::*;
+            let path_items: Vec<_> = spec.spec.paths.paths.iter().collect();
+
+            // Use parallel processing for large specs (100+ paths)
+            if path_items.len() > 100 {
+                tracing::debug!("Using parallel route generation for {} paths", path_items.len());
+                let routes: Vec<Vec<OpenApiRoute>> = path_items
+                    .par_iter()
+                    .map(|(path, path_item)| {
+                        let mut routes = Vec::new();
+                        let mut visited = HashSet::new();
+                        if let Some(item) = Self::resolve_path_item(path_item, spec, &mut visited) {
+                            Self::collect_routes_for_path(&mut routes, path, &item, spec, &base_paths);
+                        } else {
+                            tracing::warn!(
+                                "Skipping path {} because the referenced PathItem could not be resolved",
+                                path
+                            );
+                        }
+                        routes
+                    })
+                    .collect();
+
+                let mut all_routes = Vec::new();
+                for route_batch in routes {
+                    all_routes.extend(route_batch);
+                }
+                tracing::debug!(
+                    "Generated {} total routes from OpenAPI spec (parallel)",
+                    all_routes.len()
+                );
+                return all_routes;
+            }
+        }
+
+        // Sequential processing for smaller specs or when rayon is not available
+        let mut routes = Vec::new();
         for (path, path_item) in &spec.spec.paths.paths {
             tracing::debug!("Processing path: {}", path);
             let mut visited = HashSet::new();

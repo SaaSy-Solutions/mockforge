@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc
 
 # Default target
 help: ## Show this help message
@@ -12,7 +12,8 @@ setup: ## Install development dependencies
 	cargo install cargo-watch
 	cargo install cargo-edit
 	cargo install cargo-release
-	cargo install cargo-audit
+	cargo install cargo-audit --locked
+	cargo install cargo-deny --locked
 	cargo install cargo-llvm-cov
 	cargo install mdbook
 	cargo install mdbook-toc
@@ -116,8 +117,42 @@ book-deploy: ## Deploy documentation to GitHub Pages
 	@echo "Documentation built. Use GitHub Actions to deploy to Pages."
 
 # Security
-audit: ## Run security audit
+audit: ## Run RustSec security audit
 	cargo audit
+
+# Load Testing
+load-test: ## Run standard load tests (all protocols)
+	./tests/load/run_all_load_tests.sh
+
+load-test-high-scale: ## Run high-scale load test (10,000+ concurrent connections)
+	./tests/load/run_high_scale_load.sh
+
+load-test-http: ## Run HTTP load test only
+	./tests/load/run_http_load.sh
+
+load-test-websocket: ## Run WebSocket load test only
+	./tests/load/run_websocket_load.sh
+
+load-test-grpc: ## Run gRPC load test only
+	./tests/load/run_grpc_load.sh
+
+security-scan: ## Run comprehensive security scan (RustSec, licenses, static analysis)
+	./scripts/security-scan.sh
+
+security-check: ## Quick security check (audit + clippy)
+	cargo audit
+	cargo clippy --all-targets --all-features -- -D warnings
+
+security-deny: ## Check licenses and sources with cargo-deny
+	cargo deny check licenses sources bans
+
+security-unsafe: ## List all unsafe code blocks
+	@echo "Files containing 'unsafe' blocks:"
+	@find crates -name "*.rs" -type f -exec grep -l "unsafe" {} \; | sort || true
+
+security-secrets: ## Scan for potential hardcoded secrets (warning only)
+	@echo "Scanning for potential secrets..."
+	@grep -r -i -E "(password|api[_-]?key|secret|token)\s*=\s*[\"'][^\"']+[\"']" crates/ --include="*.rs" --exclude-dir=target 2>/dev/null | grep -v "test\|example\|mock" | head -10 || echo "No obvious secrets found"
 
 # Release management
 release: ## Create a new release (interactive)
@@ -148,7 +183,7 @@ dev: ## Start development mode with watch
 dev-full: ## Start both Rust backend and UI dev server
 	./scripts/dev.sh
 
-check-all: fmt-check clippy audit test ## Run all checks
+check-all: fmt-check clippy audit security-deny test ## Run all checks (including security)
 
 # Install CLI tool locally
 install: ## Install the CLI tool locally

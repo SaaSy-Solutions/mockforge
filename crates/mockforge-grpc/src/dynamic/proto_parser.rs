@@ -93,11 +93,22 @@ impl ProtoParser {
 
         info!("Found {} proto files: {:?}", proto_files.len(), proto_files);
 
-        // Parse each proto file
-        for proto_file in proto_files {
-            if let Err(e) = self.parse_proto_file(&proto_file).await {
-                error!("Failed to parse proto file {}: {}", proto_file, e);
-                // Continue with other files
+        // Optimize: Batch compile all proto files in a single protoc invocation
+        if proto_files.len() > 1 {
+            if let Err(e) = self.compile_protos_batch(&proto_files).await {
+                warn!("Batch compilation failed, falling back to individual compilation: {}", e);
+                // Fall back to individual compilation
+                for proto_file in proto_files {
+                    if let Err(e) = self.parse_proto_file(&proto_file).await {
+                        error!("Failed to parse proto file {}: {}", proto_file, e);
+                        // Continue with other files
+                    }
+                }
+            }
+        } else if !proto_files.is_empty() {
+            // Single file - use existing method
+            if let Err(e) = self.parse_proto_file(&proto_files[0]).await {
+                error!("Failed to parse proto file {}: {}", proto_files[0], e);
             }
         }
 
@@ -191,6 +202,98 @@ impl ProtoParser {
         }
 
         Ok(())
+    }
+
+    /// Batch compile multiple proto files in a single protoc invocation
+    /// This is significantly faster than compiling files individually
+    async fn compile_protos_batch(
+        &mut self,
+        proto_files: &[String],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if proto_files.is_empty() {
+            return Ok(());
+        }
+
+        info!("Batch compiling {} proto files", proto_files.len());
+
+        // Create temporary directory for compilation artifacts if not exists
+        if self.temp_dir.is_none() {
+            self.temp_dir = Some(TempDir::new()?);
+        }
+
+        let temp_dir = self.temp_dir.as_ref().ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from("Temp directory not initialized")
+        })?;
+        let descriptor_path = temp_dir.path().join("descriptors_batch.bin");
+
+        // Build protoc command
+        let mut cmd = Command::new("protoc");
+
+        // Collect unique parent directories for include paths
+        let mut parent_dirs = std::collections::HashSet::new();
+        for proto_file in proto_files {
+            if let Some(parent_dir) = Path::new(proto_file).parent() {
+                parent_dirs.insert(parent_dir.to_path_buf());
+            }
+        }
+
+        // Add include paths
+        for include_path in &self.include_paths {
+            cmd.arg("-I").arg(include_path);
+        }
+
+        // Add proto file parent directories as include paths
+        for parent_dir in &parent_dirs {
+            cmd.arg("-I").arg(parent_dir);
+        }
+
+        // Add well-known types include path (common protoc installation paths)
+        let well_known_paths = [
+            "/usr/local/include",
+            "/usr/include",
+            "/opt/homebrew/include",
+        ];
+
+        for path in &well_known_paths {
+            if Path::new(path).exists() {
+                cmd.arg("-I").arg(path);
+            }
+        }
+
+        // Set output path and format
+        cmd.arg("--descriptor_set_out")
+            .arg(&descriptor_path)
+            .arg("--include_imports")
+            .arg("--include_source_info");
+
+        // Add all proto files to compile
+        for proto_file in proto_files {
+            cmd.arg(proto_file);
+        }
+
+        debug!("Running batch protoc command for {} files", proto_files.len());
+
+        // Execute protoc
+        let output = cmd.output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Batch protoc compilation failed: {}", stderr).into());
+        }
+
+        // Load the compiled descriptor set into the pool
+        let descriptor_bytes = fs::read(&descriptor_path)?;
+        match self.pool.decode_file_descriptor_set(&*descriptor_bytes) {
+            Ok(()) => {
+                info!("Successfully batch compiled and loaded {} proto files", proto_files.len());
+                // Extract services from the descriptor pool if successful
+                if self.pool.services().count() > 0 {
+                    self.extract_services()?;
+                }
+                Ok(())
+            }
+            Err(e) => Err(format!("Failed to decode batch descriptor set: {}", e).into()),
+        }
     }
 
     /// Compile proto file using protoc

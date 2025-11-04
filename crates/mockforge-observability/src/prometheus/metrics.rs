@@ -72,6 +72,13 @@ pub struct MetricsRegistry {
     // Scenario metrics (for Phase 4)
     pub active_scenario_mode: IntGauge,
     pub chaos_triggers_total: IntCounter,
+
+    // Business/SLO metrics
+    pub service_availability: GaugeVec,
+    pub slo_compliance: GaugeVec,
+    pub successful_request_rate: GaugeVec,
+    pub p95_latency_slo_compliance: GaugeVec,
+    pub error_budget_remaining: GaugeVec,
 }
 
 impl MetricsRegistry {
@@ -353,6 +360,52 @@ impl MetricsRegistry {
         )
         .expect("Failed to create chaos_triggers_total metric");
 
+        // Business/SLO metrics
+        let service_availability = GaugeVec::new(
+            Opts::new(
+                "mockforge_service_availability",
+                "Service availability percentage (0.0 to 1.0) by protocol",
+            ),
+            &["protocol"],
+        )
+        .expect("Failed to create service_availability metric");
+
+        let slo_compliance = GaugeVec::new(
+            Opts::new(
+                "mockforge_slo_compliance",
+                "SLO compliance percentage (0.0 to 1.0) by protocol and slo_type",
+            ),
+            &["protocol", "slo_type"],
+        )
+        .expect("Failed to create slo_compliance metric");
+
+        let successful_request_rate = GaugeVec::new(
+            Opts::new(
+                "mockforge_successful_request_rate",
+                "Successful request rate (0.0 to 1.0) by protocol",
+            ),
+            &["protocol"],
+        )
+        .expect("Failed to create successful_request_rate metric");
+
+        let p95_latency_slo_compliance = GaugeVec::new(
+            Opts::new(
+                "mockforge_p95_latency_slo_compliance",
+                "P95 latency SLO compliance (1.0 = compliant, 0.0 = non-compliant) by protocol",
+            ),
+            &["protocol"],
+        )
+        .expect("Failed to create p95_latency_slo_compliance metric");
+
+        let error_budget_remaining = GaugeVec::new(
+            Opts::new(
+                "mockforge_error_budget_remaining",
+                "Remaining error budget percentage (0.0 to 1.0) by protocol",
+            ),
+            &["protocol"],
+        )
+        .expect("Failed to create error_budget_remaining metric");
+
         // Register all metrics
         registry
             .register(Box::new(requests_total.clone()))
@@ -474,6 +527,21 @@ impl MetricsRegistry {
         registry
             .register(Box::new(chaos_triggers_total.clone()))
             .expect("Failed to register chaos_triggers_total");
+        registry
+            .register(Box::new(service_availability.clone()))
+            .expect("Failed to register service_availability");
+        registry
+            .register(Box::new(slo_compliance.clone()))
+            .expect("Failed to register slo_compliance");
+        registry
+            .register(Box::new(successful_request_rate.clone()))
+            .expect("Failed to register successful_request_rate");
+        registry
+            .register(Box::new(p95_latency_slo_compliance.clone()))
+            .expect("Failed to register p95_latency_slo_compliance");
+        registry
+            .register(Box::new(error_budget_remaining.clone()))
+            .expect("Failed to register error_budget_remaining");
 
         debug!("Initialized Prometheus metrics registry");
 
@@ -519,6 +587,11 @@ impl MetricsRegistry {
             uptime_seconds,
             active_scenario_mode,
             chaos_triggers_total,
+            service_availability,
+            slo_compliance,
+            successful_request_rate,
+            p95_latency_slo_compliance,
+            error_budget_remaining,
         }
     }
 
