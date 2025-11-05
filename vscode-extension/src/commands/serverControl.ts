@@ -27,7 +27,7 @@ export function registerStartServerCommand(
             terminal.sendText('mockforge serve');
             terminal.show();
             vscode.window.showInformationMessage('Starting MockForge server in terminal...');
-            
+
             // Wait a bit and then try to connect
             setTimeout(async () => {
                 try {
@@ -68,7 +68,7 @@ export function registerStopServerCommand(
             } catch {
                 vscode.window.showInformationMessage('MockForge server is not running');
             }
-            
+
             // Disconnect the client
             client.disconnect();
             mocksProvider.refresh();
@@ -88,7 +88,7 @@ export function registerRestartServerCommand(
         vscode.commands.registerCommand('mockforge.restartServer', async () => {
             // Disconnect first
             client.disconnect();
-            
+
             // Show message about restarting
             vscode.window.showInformationMessage(
                 'To restart the server, stop the running "mockforge serve" process and start it again.',
@@ -100,7 +100,7 @@ export function registerRestartServerCommand(
                     terminal.show();
                 }
             });
-            
+
             // Wait and try to reconnect
             setTimeout(async () => {
                 try {
@@ -115,4 +115,3 @@ export function registerRestartServerCommand(
         })
     );
 }
-

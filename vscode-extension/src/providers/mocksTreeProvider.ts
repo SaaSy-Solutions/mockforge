@@ -5,7 +5,7 @@ import { MockEvent } from '../types/events';
 
 /**
  * Tree data provider for displaying mocks in the VS Code explorer
- * 
+ *
  * Performance optimizations:
  * - Caches mock list to avoid repeated API calls
  * - Debounces refresh events to prevent rapid-fire updates
@@ -91,7 +91,7 @@ export class MocksTreeDataProvider implements vscode.TreeDataProvider<MockTreeIt
         try {
             // Check if cache is still valid
             const now = Date.now();
-            const cacheValid = this.cachedMocks !== null && 
+            const cacheValid = this.cachedMocks !== null &&
                               (now - this.lastCacheTime) < this.cacheTimeoutMs;
 
             let mocks: MockConfig[];

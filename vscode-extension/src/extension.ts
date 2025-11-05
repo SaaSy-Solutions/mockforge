@@ -27,14 +27,14 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Get configuration
     const config = vscode.workspace.getConfiguration('mockforge');
-    
+
     // Validate configuration
     const validationResult = validateConfiguration(config);
     if (!validationResult.valid) {
         Logger.warn('Configuration validation failed:', validationResult.error);
         vscode.window.showWarningMessage(`MockForge configuration issue: ${validationResult.error}`);
     }
-    
+
     const serverUrl = config.get<string>('serverUrl', 'http://localhost:3000');
 
     // Initialize MockForge client
@@ -54,24 +54,24 @@ export function activate(context: vscode.ExtensionContext) {
             if (e.affectsConfiguration('mockforge.serverUrl')) {
                 // Server URL changed - reconnect with new URL
                 const newServerUrl = config.get<string>('serverUrl', 'http://localhost:3000');
-                
+
                 // Disconnect old client
                 client.disconnect();
-                
+
                 // Create new client with new URL
                 client = new MockForgeClient(newServerUrl);
-                
+
                 // Recreate providers with new client
                 mocksProvider = new MocksTreeDataProvider(client);
                 serverProvider = new ServerControlProvider(client);
-                
+
                 // Re-register tree views
                 vscode.window.registerTreeDataProvider('mockforge-explorer', mocksProvider);
                 vscode.window.registerTreeDataProvider('mockforge-server', serverProvider);
-                
+
                 // Re-register all commands with new client and providers
                 registerAllCommands(context, client, mocksProvider);
-                
+
                 // Auto-connect if enabled
                 if (config.get<boolean>('autoConnect', true)) {
                     try {

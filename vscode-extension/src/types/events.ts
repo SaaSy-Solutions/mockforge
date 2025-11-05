@@ -1,6 +1,6 @@
 /**
  * WebSocket event types matching the server's MockEvent enum.
- * 
+ *
  * The server uses serde's internally tagged enum format with snake_case renaming:
  * #[serde(tag = "type", rename_all = "snake_case")]
  */
@@ -71,4 +71,3 @@ export interface ConnectedEvent extends BaseMockEvent {
  * Discriminated union of all possible WebSocket events
  */
 export type MockEvent = MockCreatedEvent | MockUpdatedEvent | MockDeletedEvent | StatsUpdatedEvent | ConnectedEvent;
-

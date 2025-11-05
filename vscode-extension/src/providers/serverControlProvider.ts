@@ -30,10 +30,10 @@ export class ServerControlProvider implements vscode.TreeDataProvider<ServerTree
 
         // Get connection state
         const connectionState = this.client.connectionState;
-        
+
         // Show connection status based on state
         const statusItems: ServerTreeItem[] = [];
-        
+
         switch (connectionState) {
             case 'connected':
                 try {

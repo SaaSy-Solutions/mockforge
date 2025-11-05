@@ -68,4 +68,3 @@ export interface ServerConfig {
  * Connection state for WebSocket
  */
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
-

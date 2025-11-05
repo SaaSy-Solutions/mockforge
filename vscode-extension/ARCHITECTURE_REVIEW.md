@@ -313,4 +313,3 @@ Add a configuration validation function that checks:
 - The `axios` HTTP client is a good choice, but consider adding request interceptors for logging and error handling.
 - The tree view providers are well-structured but could benefit from better error state handling.
 - Consider adding a welcome/onboarding experience for first-time users.
-

@@ -25,7 +25,7 @@ export function validateServerUrl(url: string): ValidationResult {
 
     try {
         const parsed = new URL(url);
-        
+
         // Must be HTTP or HTTPS
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
             return {
@@ -216,4 +216,3 @@ export function validateConfiguration(config: vscode.WorkspaceConfiguration): Va
 
     return { valid: true };
 }
-

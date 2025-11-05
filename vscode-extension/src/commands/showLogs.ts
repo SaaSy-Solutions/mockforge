@@ -11,4 +11,3 @@ export function registerShowLogsCommand(context: vscode.ExtensionContext): void 
         })
     );
 }
-

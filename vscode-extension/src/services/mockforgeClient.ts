@@ -16,13 +16,13 @@ export class MockForgeClient {
     private ws?: WebSocket;
     private listeners: ((event: MockEvent) => void)[] = [];
     private stateListeners: ((state: ConnectionState) => void)[] = [];
-    
+
     // Connection state management
     private _connectionState: ConnectionState = 'disconnected';
     private reconnectTimer?: NodeJS.Timeout;
     private reconnectAttempts = 0;
     private manualDisconnect = false;
-    
+
     // Reconnection configuration (will be loaded from VS Code config)
     private reconnectEnabled = true;
     private reconnectInitialDelay = 1000;
@@ -32,19 +32,19 @@ export class MockForgeClient {
     constructor(private serverUrl: string) {
         // Load configuration
         this.loadConfiguration();
-        
+
         // Get HTTP timeout from config
         const config = vscode.workspace.getConfiguration('mockforge');
         const httpTimeout = config.get<number>('http.timeout', 5000);
-        
+
         this.http = axios.create({
             baseURL: `${serverUrl}/__mockforge/api`,
             timeout: httpTimeout
         });
-        
+
         // Add HTTP retry interceptor
         this.setupHttpRetry();
-        
+
         // Listen for configuration changes
         vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
             if (e.affectsConfiguration('mockforge')) {
@@ -75,12 +75,12 @@ export class MockForgeClient {
             (response: AxiosResponse) => response,
             async (error: AxiosError) => {
                 const config = error.config;
-                
+
                 // Don't retry if config doesn't exist
                 if (!config) {
                     return Promise.reject(error);
                 }
-                
+
                 // Track retry count on the config object (extend type for retry tracking)
                 interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
                     __retryCount?: number;
@@ -89,22 +89,22 @@ export class MockForgeClient {
                 const retryCount = extendedConfig.__retryCount || 0;
 
                 // Check if we should retry (only retry on server errors)
-                const shouldRetry = 
+                const shouldRetry =
                     retryCount < retryAttempts &&
                     error.response &&
                     error.response.status >= 500;
 
                 if (shouldRetry) {
                     extendedConfig.__retryCount = retryCount + 1;
-                    
+
                     // Calculate delay with exponential backoff
                     const delay = retryDelay * Math.pow(2, retryCount);
-                    
+
                     Logger.debug(`HTTP request failed, retrying in ${delay}ms (attempt ${retryCount + 1}/${retryAttempts})`);
-                    
+
                     // Wait before retrying
                     await new Promise(resolve => setTimeout(resolve, delay));
-                    
+
                     return this.http(extendedConfig);
                 }
 
@@ -163,7 +163,7 @@ export class MockForgeClient {
         // Reset manual disconnect flag
         this.manualDisconnect = false;
         this.reconnectAttempts = 0;
-        
+
         // Connect WebSocket
         await this.connectWebSocket();
     }
@@ -185,7 +185,7 @@ export class MockForgeClient {
         }
 
         this.setConnectionState('connecting');
-        
+
         const wsUrl = this.serverUrl.replace('http', 'ws') + '/__mockforge/ws';
         this.ws = new WebSocket(wsUrl);
 
@@ -217,7 +217,7 @@ export class MockForgeClient {
         this.ws.on('close', (code: number, reason: Buffer) => {
             Logger.info(`WebSocket disconnected (code: ${code}, reason: ${reason.toString()})`);
             this.setConnectionState('disconnected');
-            
+
             // Attempt reconnection if not manually disconnected and reconnection is enabled
             if (!this.manualDisconnect && this.reconnectEnabled) {
                 this.attemptReconnect();
@@ -261,20 +261,20 @@ export class MockForgeClient {
      */
     disconnect(): void {
         this.manualDisconnect = true;
-        
+
         // Clear reconnection timer
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = undefined;
         }
-        
+
         // Close WebSocket
         if (this.ws) {
             this.ws.removeAllListeners();
             this.ws.close();
             this.ws = undefined;
         }
-        
+
         this.setConnectionState('disconnected');
         this.reconnectAttempts = 0;
     }
@@ -340,7 +340,7 @@ export class MockForgeClient {
      */
     async importMocks(data: string, format: string, merge: boolean): Promise<void> {
         let mocks: MockConfig[];
-        
+
         try {
             if (format === 'json' || format === 'yaml' || format === 'yml') {
                 // Parse the file content into MockConfig array
@@ -357,12 +357,12 @@ export class MockForgeClient {
                         throw new Error('YAML parsing not yet supported. Please use JSON format or install a YAML parser.');
                     }
                 }
-                
+
                 // Validate that we have an array
                 if (!Array.isArray(mocks)) {
                     throw new Error('Invalid file format: expected an array of mock configurations');
                 }
-                
+
                 // Send as JSON array with proper Content-Type
                 await this.http.post(`/import?format=${format}&merge=${merge}`, mocks, {
                     // eslint-disable-next-line @typescript-eslint/naming-convention
