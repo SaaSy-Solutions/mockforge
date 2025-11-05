@@ -238,6 +238,109 @@ export class RequiredError extends Error {
 }
 
 // ============================================================================
+// Token Storage Interface
+// ============================================================================
+
+/**
+ * Token storage interface for secure token management
+ * Allows different storage backends (localStorage, httpOnly cookies, secure storage)
+ */
+export interface TokenStorage {
+  /** Get access token from storage */
+  getAccessToken(): string | null | Promise<string | null>;
+  /** Store access token with optional expiration (in seconds) */
+  setAccessToken(token: string, expiresIn?: number): void | Promise<void>;
+  /** Get refresh token from storage */
+  getRefreshToken(): string | null | Promise<string | null>;
+  /** Store refresh token */
+  setRefreshToken(token: string): void | Promise<void>;
+  /** Clear all tokens from storage */
+  clearTokens(): void | Promise<void>;
+}
+
+/**
+ * LocalStorage-based token storage implementation
+ * ⚠️ SECURITY: localStorage is vulnerable to XSS attacks
+ * Consider using httpOnly cookies or secure storage for production apps
+ */
+export class LocalStorageTokenStorage implements TokenStorage {
+  private accessTokenKey: string;
+  private refreshTokenKey: string;
+
+  constructor(
+    accessTokenKey: string = 'access_token',
+    refreshTokenKey: string = 'refresh_token'
+  ) {
+    this.accessTokenKey = accessTokenKey;
+    this.refreshTokenKey = refreshTokenKey;
+  }
+
+  getAccessToken(): string | null {
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
+
+    const stored = localStorage.getItem(this.accessTokenKey);
+    if (!stored) return null;
+
+    try {
+      // Try to parse as JSON (with expiration) or use as plain string
+      const parsed = JSON.parse(stored);
+      if (parsed.token && parsed.expiresAt) {
+        // Check if token is expired
+        if (Date.now() >= parsed.expiresAt * 1000) {
+          localStorage.removeItem(this.accessTokenKey);
+          return null;
+        }
+        return parsed.token;
+      }
+      // Legacy format (plain string) - return as token
+      return typeof parsed === 'string' ? parsed : parsed.token || parsed;
+    } catch {
+      // Plain string format
+      return stored;
+    }
+  }
+
+  setAccessToken(token: string, expiresIn?: number): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+
+    // Store token with expiration if provided (expiresIn is in seconds)
+    const tokenData = expiresIn
+      ? JSON.stringify({
+          token,
+          expiresAt: Math.floor(Date.now() / 1000) + expiresIn,
+        })
+      : token;
+    localStorage.setItem(this.accessTokenKey, tokenData);
+  }
+
+  getRefreshToken(): string | null {
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
+    return localStorage.getItem(this.refreshTokenKey);
+  }
+
+  setRefreshToken(token: string): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.setItem(this.refreshTokenKey, token);
+  }
+
+  clearTokens(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.removeItem(this.accessTokenKey);
+    localStorage.removeItem(this.refreshTokenKey);
+  }
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -281,6 +384,42 @@ export interface OAuth2Config {
 }
 
 /**
+ * JWT Token Configuration
+ * Handles JWT token refresh on 401 errors
+ */
+export interface JwtConfig {
+  /** Refresh endpoint URL (default: '/api/v1/auth/refresh') */
+  refreshEndpoint?: string;
+  /** Refresh token (static or dynamic function) */
+  refreshToken?: string | (() => string | Promise<string>);
+  /** Callback invoked when token is refreshed */
+  onTokenRefresh?: (token: string) => void | Promise<void>;
+  /** Callback invoked when authentication fails (refresh token invalid/expired) */
+  onAuthError?: () => void | Promise<void>;
+  /** Refresh token if it expires within this many seconds (default: 300) */
+  refreshThreshold?: number;
+  /** Check token expiration before making requests (default: true) */
+  checkExpirationBeforeRequest?: boolean;
+}
+
+/**
+ * Retry Configuration
+ * Configures automatic retry behavior for failed requests
+ */
+export interface RetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxRetries?: number;
+  /** Base delay in milliseconds for exponential backoff (default: 1000) */
+  baseDelay?: number;
+  /** Maximum delay in milliseconds (default: 10000) */
+  maxDelay?: number;
+  /** HTTP status codes that should be retried (default: [408, 429, 500, 502, 503, 504]) */
+  retryableStatusCodes?: number[];
+  /** Whether to retry on network errors (default: true) */
+  retryOnNetworkError?: boolean;
+}
+
+/**
  * API Configuration with support for authentication and interceptors
  */
 export interface ApiConfig {
@@ -298,6 +437,12 @@ export interface ApiConfig {
   password?: string;
   /** OAuth2 configuration for OAuth flows */
   oauth2?: OAuth2Config;
+  /** JWT token configuration for automatic refresh on 401 */
+  jwt?: JwtConfig;
+  /** Retry configuration for automatic retry on failures */
+  retry?: RetryConfig;
+  /** Token storage implementation (default: LocalStorageTokenStorage) */
+  tokenStorage?: TokenStorage;
   /** Request interceptor - called before each request */
   requestInterceptor?: (request: RequestInit) => RequestInit | Promise<RequestInit>;
   /** Response interceptor - called after each response */
@@ -310,6 +455,8 @@ export interface ApiConfig {
   validateRequests?: boolean;
   /** Enable verbose error messages (default: false) */
   verboseErrors?: boolean;
+  /** Automatically unwrap ApiResponse<T> format to return data directly (default: false) */
+  unwrapResponse?: boolean;
 }
 
 /**
@@ -317,37 +464,32 @@ export interface ApiConfig {
  * Handles OAuth2 flows and token refresh
  */
 class OAuth2TokenManager {
-  constructor(private config: OAuth2Config) {}
+  private tokenStorage: TokenStorage;
+
+  constructor(
+    private config: OAuth2Config,
+    tokenStorage?: TokenStorage
+  ) {
+    // Use provided token storage or create one with OAuth2-specific keys
+    if (tokenStorage) {
+      this.tokenStorage = tokenStorage;
+    } else {
+      const storageKey = this.config.tokenStorageKey || 'oauth2_token';
+      this.tokenStorage = new LocalStorageTokenStorage(
+        storageKey,
+        `${storageKey}_refresh`
+      );
+    }
+  }
 
   /**
    * Get stored access token with expiration check
    * ⚠️ SECURITY: Tokens in localStorage are vulnerable to XSS attacks
    */
   private getStoredToken(): { token: string; expiresAt?: number } | null {
-    const key = this.config.tokenStorageKey || 'oauth2_token';
-    if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(key);
-      if (!stored) return null;
-
-      try {
-        // Try to parse as JSON (with expiration) or use as plain string
-        const parsed = JSON.parse(stored);
-        if (parsed.token && parsed.expiresAt) {
-          // Check if token is expired
-          if (Date.now() >= parsed.expiresAt * 1000) {
-            localStorage.removeItem(key);
-            return null;
-          }
-          return parsed;
-        }
-        // Legacy format (plain string) - return as token
-        return { token: parsed };
-      } catch {
-        // Plain string format
-        return { token: stored };
-      }
-    }
-    return null;
+    const token = this.tokenStorage.getAccessToken();
+    if (!token) return null;
+    return { token };
   }
 
   /**
@@ -356,14 +498,7 @@ class OAuth2TokenManager {
    * Consider using httpOnly cookies or secure storage for production apps
    */
   private async storeToken(token: string, expiresIn?: number): Promise<void> {
-    const key = this.config.tokenStorageKey || 'oauth2_token';
-    if (typeof localStorage !== 'undefined') {
-      // Store token with expiration if provided
-      const tokenData = expiresIn
-        ? JSON.stringify({ token, expiresAt: Math.floor(Date.now() / 1000) + expiresIn })
-        : token;
-      localStorage.setItem(key, tokenData);
-    }
+    await this.tokenStorage.setAccessToken(token, expiresIn);
     if (this.config.onTokenRefresh) {
       await this.config.onTokenRefresh(token);
     }
@@ -541,6 +676,7 @@ class OAuth2TokenManager {
     // Generate state for CSRF protection if not provided
     const state = this.config.state || this.generateRandomString(32);
     if (!this.config.state && typeof localStorage !== 'undefined') {
+      // Store state for CSRF validation (using localStorage directly for state, not tokens)
       localStorage.setItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`, state);
     }
 
@@ -700,8 +836,8 @@ class OAuth2TokenManager {
     }
 
     // Store refresh token if provided
-    if (data.refresh_token && typeof localStorage !== 'undefined') {
-      localStorage.setItem(`${this.config.tokenStorageKey || 'oauth2_token'}_refresh`, data.refresh_token);
+    if (data.refresh_token) {
+      await this.tokenStorage.setRefreshToken(data.refresh_token);
     }
 
     // Store token with expiration if provided
@@ -776,11 +912,20 @@ const defaultConfig: ApiConfig = {
  */
 class ApiClient {
   private oauthManager: OAuth2TokenManager | null = null;
+  private tokenStorage: TokenStorage;
+  private refreshPromise: Promise<string> | null = null;
+  private pendingRequests: Array<{
+    resolve: (token: string) => void;
+    reject: (error: Error) => void;
+  }> = [];
 
   constructor(private config: ApiConfig = defaultConfig) {
-    // Initialize OAuth2 manager if configured
+    // Initialize token storage (default to LocalStorageTokenStorage)
+    this.tokenStorage = this.config.tokenStorage || new LocalStorageTokenStorage();
+
+    // Initialize OAuth2 manager if configured (share token storage if available)
     if (this.config.oauth2) {
-      this.oauthManager = new OAuth2TokenManager(this.config.oauth2);
+      this.oauthManager = new OAuth2TokenManager(this.config.oauth2, this.tokenStorage);
     }
   }
 
@@ -790,10 +935,15 @@ class ApiClient {
   updateConfig(updates: Partial<ApiConfig>): void {
     this.config = { ...this.config, ...updates };
 
-    // Recreate OAuth2 manager if OAuth2 config changed
+    // Update token storage if provided
+    if (updates.tokenStorage !== undefined) {
+      this.tokenStorage = updates.tokenStorage;
+    }
+
+    // Recreate OAuth2 manager if OAuth2 config changed (share token storage)
     if (updates.oauth2 !== undefined) {
       this.oauthManager = updates.oauth2
-        ? new OAuth2TokenManager(updates.oauth2)
+        ? new OAuth2TokenManager(updates.oauth2, this.tokenStorage)
         : null;
     }
   }
@@ -838,6 +988,178 @@ class ApiClient {
   }
 
   /**
+   * Check if token is expired or will expire soon
+   * Returns true if token should be refreshed
+   */
+  private async shouldRefreshToken(token: string | null): Promise<boolean> {
+    if (!token || !this.config.jwt?.checkExpirationBeforeRequest) {
+      return false;
+    }
+
+    try {
+      // Try to decode JWT exp claim (basic base64 decode, no verification)
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(parts[1]));
+      if (payload.exp) {
+        const expiresAt = payload.exp * 1000; // Convert to milliseconds
+        const threshold = (this.config.jwt.refreshThreshold || 300) * 1000;
+        return Date.now() + threshold >= expiresAt;
+      }
+    } catch {
+      // If we can't decode, tokenStorage.getAccessToken() already handles expiration
+      // Return false as we can't determine expiration from JWT payload
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Refresh JWT token using refresh token
+   * Implements promise deduplication to prevent concurrent refresh requests
+   * Supports ApiResponse<T> wrapper format and both camelCase/snake_case token formats
+   */
+  private async refreshJwtToken(): Promise<string> {
+    // If refresh is already in progress, return the existing promise
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    // Create new refresh promise
+    this.refreshPromise = (async () => {
+      try {
+        const jwtConfig = this.config.jwt;
+        if (!jwtConfig) {
+          throw new Error('JWT configuration not found');
+        }
+
+        // Get refresh token
+        const refreshTokenValue = typeof jwtConfig.refreshToken === 'function'
+          ? await jwtConfig.refreshToken()
+          : jwtConfig.refreshToken || await Promise.resolve(this.tokenStorage.getRefreshToken());
+
+        if (!refreshTokenValue) {
+          throw new Error('Refresh token not available');
+        }
+
+        // Get refresh endpoint
+        const refreshEndpoint = jwtConfig.refreshEndpoint || '/api/v1/auth/refresh';
+        const refreshUrl = `${this.config.baseUrl}${refreshEndpoint}`;
+
+        // Make refresh request
+        const response = await fetch(refreshUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.config.headers,
+          },
+          body: JSON.stringify({ refreshToken: refreshTokenValue }),
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new ApiError(
+            response.status,
+            response.statusText,
+            errorBody,
+            `JWT refresh failed: ${response.status} ${response.statusText}`
+          );
+        }
+
+        // Parse response (support ApiResponse wrapper and direct format)
+        const responseData = await response.json();
+        let tokenData: any;
+
+        // Check if response is wrapped in ApiResponse format
+        if (responseData.success === true && responseData.data) {
+          tokenData = responseData.data;
+        } else {
+          tokenData = responseData;
+        }
+
+        // Extract tokens (support both camelCase and snake_case)
+        const accessToken = tokenData.accessToken || tokenData.access_token;
+        const refreshToken = tokenData.refreshToken || tokenData.refresh_token;
+        const expiresIn = tokenData.expiresIn || tokenData.expires_in;
+
+        if (!accessToken) {
+          throw new Error('No access token in refresh response');
+        }
+
+        // Store tokens
+        await this.tokenStorage.setAccessToken(accessToken, expiresIn);
+        if (refreshToken) {
+          await this.tokenStorage.setRefreshToken(refreshToken);
+        }
+
+        // Call onTokenRefresh callback if provided
+        if (jwtConfig.onTokenRefresh) {
+          await jwtConfig.onTokenRefresh(accessToken);
+        }
+
+        // Resolve all pending requests
+        this.pendingRequests.forEach(({ resolve }) => resolve(accessToken));
+        this.pendingRequests = [];
+
+        return accessToken;
+      } catch (error) {
+        // Clear tokens on failure
+        await this.tokenStorage.clearTokens();
+
+        // Call onAuthError callback if provided
+        if (this.config.jwt?.onAuthError) {
+          await this.config.jwt.onAuthError();
+        }
+
+        // Reject all pending requests
+        this.pendingRequests.forEach(({ reject }) => reject(error instanceof Error ? error : new Error(String(error))));
+        this.pendingRequests = [];
+
+        throw error;
+      } finally {
+        // Clear refresh promise
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
+  /**
+   * Wait for token refresh to complete (for queued requests)
+   */
+  private async waitForTokenRefresh(): Promise<string> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    // If no refresh in progress, create a promise that will be resolved/rejected by refresh
+    return new Promise<string>((resolve, reject) => {
+      this.pendingRequests.push({ resolve, reject });
+    });
+  }
+
+  /**
+   * Unwrap ApiResponse<T> format if configured
+   * Supports both wrapped and unwrapped responses for backward compatibility
+   */
+  private unwrapApiResponse<T>(data: any): T {
+    if (!this.config.unwrapResponse) {
+      return data;
+    }
+
+    // Check if response matches ApiResponse<T> format
+    if (data && typeof data === 'object' && data.success === true && 'data' in data) {
+      return data.data;
+    }
+
+    // Return as-is if not wrapped
+    return data;
+  }
+
+  /**
    * Validate response data structure (basic validation)
    * Performs type checking and structure validation without external libraries
    * For full OpenAPI schema validation, integrate ajv or similar validation library
@@ -878,7 +1200,45 @@ class ApiClient {
   }
 
   /**
-   * Execute a request with authentication, interceptors, and error handling
+   * Calculate exponential backoff delay with jitter
+   */
+  private calculateBackoffDelay(retryCount: number): number {
+    const retryConfig = this.config.retry || {};
+    const baseDelay = retryConfig.baseDelay || 1000;
+    const maxDelay = retryConfig.maxDelay || 10000;
+
+    // Exponential backoff: baseDelay * 2^retryCount
+    const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+
+    // Add jitter: random(0, 0.3 * delay)
+    const jitter = Math.random() * 0.3 * exponentialDelay;
+
+    return Math.floor(exponentialDelay + jitter);
+  }
+
+  /**
+   * Check if status code is retryable
+   */
+  private isRetryableStatusCode(status: number): boolean {
+    const retryConfig = this.config.retry || {};
+    const retryableStatusCodes = retryConfig.retryableStatusCodes || [408, 429, 500, 502, 503, 504];
+    return retryableStatusCodes.includes(status);
+  }
+
+  /**
+   * Check if error is a network error
+   */
+  private isNetworkError(error: any): boolean {
+    if (!(error instanceof Error)) return false;
+    return error instanceof TypeError && (
+      error.message.includes('fetch') ||
+      error.message.includes('network') ||
+      error.message.includes('Failed to fetch')
+    );
+  }
+
+  /**
+   * Execute a request with authentication, interceptors, retry logic, and error handling
    */
   private async request<T>(
     endpoint: string,
@@ -887,133 +1247,233 @@ class ApiClient {
     requiredFields?: string[]
   ): Promise<T> {
     const url = `${this.config.baseUrl}${endpoint}`;
+    const retryConfig = this.config.retry || {};
+    const maxRetries = retryConfig.maxRetries ?? 3;
+    let retryCount = 0;
+    let lastError: Error | null = null;
 
     // Validate request data if validation is enabled
     if (requestData && this.config.validateRequests) {
       this.validateRequest(requestData, requiredFields);
     }
 
-    // Get authentication headers (pass instance's oauthManager for caching)
-    const authHeaders = await getAuthHeaders(this.config, this.oauthManager);
-
-    // Merge headers: config headers → auth headers → request headers
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...this.config.headers,
-      ...authHeaders,
-      ...(options.headers as Record<string, string> || {}),
-    };
-
-    // Build request options
-    let requestOptions: RequestInit = {
-      ...options,
-      headers,
-    };
-
-    // Apply request interceptor if provided
-    if (this.config.requestInterceptor) {
-      requestOptions = await this.config.requestInterceptor(requestOptions);
-    }
-
-    // Create abort controller for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      this.config.timeout || 30000
-    );
-
-    try {
-      const response = await fetch(url, {
-        ...requestOptions,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Handle non-OK responses
-      if (!response.ok) {
-        let errorBody: any;
-        try {
-          errorBody = await response.json().catch(() => null);
-        } catch {
-          errorBody = await response.text().catch(() => null);
+    // Helper function to execute a single request attempt
+    const executeRequest = async (): Promise<T> => {
+      // Check token expiration before request (proactive refresh)
+      if (this.config.jwt?.checkExpirationBeforeRequest) {
+        const currentToken = await Promise.resolve(this.tokenStorage.getAccessToken());
+        if (await this.shouldRefreshToken(currentToken)) {
+          try {
+            await this.refreshJwtToken();
+          } catch (error) {
+            // If proactive refresh fails, continue with request (will trigger 401 refresh)
+            console.warn('Proactive token refresh failed, continuing with request:', error);
+          }
         }
+      }
 
-        // Build verbose error message if enabled
-        let errorMessage: string | undefined;
-        if (this.config.verboseErrors) {
-          // Create temporary error to get verbose message
-          const tempError = new ApiError(
+      // Get authentication headers (pass instance's oauthManager for caching)
+      const authHeaders = await getAuthHeaders(this.config, this.oauthManager);
+
+      // If using JWT, get token from storage and add to headers
+      if (this.config.jwt && !authHeaders['Authorization']) {
+        const token = await Promise.resolve(this.tokenStorage.getAccessToken());
+        if (token) {
+          authHeaders['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
+      // Merge headers: config headers → auth headers → request headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...this.config.headers,
+        ...authHeaders,
+        ...(options.headers as Record<string, string> || {}),
+      };
+
+      // Build request options
+      let requestOptions: RequestInit = {
+        ...options,
+        headers,
+      };
+
+      // Apply request interceptor if provided
+      if (this.config.requestInterceptor) {
+        requestOptions = await this.config.requestInterceptor(requestOptions);
+      }
+
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        this.config.timeout || 30000
+      );
+
+      try {
+        const response = await fetch(url, {
+          ...requestOptions,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        // Handle non-OK responses
+        if (!response.ok) {
+          let errorBody: any;
+          try {
+            errorBody = await response.json().catch(() => null);
+          } catch {
+            errorBody = await response.text().catch(() => null);
+          }
+
+          // Handle ApiErrorResponse format
+          if (errorBody && typeof errorBody === 'object' && errorBody.success === false && errorBody.error) {
+            errorBody = errorBody.error;
+          }
+
+          // Build verbose error message if enabled
+          let errorMessage: string | undefined;
+          if (this.config.verboseErrors) {
+            // Create temporary error to get verbose message
+            const tempError = new ApiError(
+              response.status,
+              response.statusText,
+              errorBody
+            );
+            errorMessage = tempError.getVerboseMessage();
+          }
+
+          const apiError = new ApiError(
             response.status,
             response.statusText,
-            errorBody
+            errorBody,
+            errorMessage
           );
-          errorMessage = tempError.getVerboseMessage();
+
+          // Handle 401 errors with JWT refresh
+          if (response.status === 401 && this.config.jwt) {
+            try {
+              // Refresh token
+              await this.refreshJwtToken();
+
+              // Retry original request with new token (do not count as retry)
+              return executeRequest();
+            } catch (refreshError) {
+              // Refresh failed, throw auth error
+              if (this.config.jwt.onAuthError) {
+                await this.config.jwt.onAuthError();
+              }
+              throw apiError;
+            }
+          }
+
+          // Apply error interceptor if provided (before retry logic)
+          if (this.config.errorInterceptor) {
+            const interceptedError = await this.config.errorInterceptor(apiError);
+            throw interceptedError;
+          }
+
+          throw apiError;
         }
 
-        const apiError = new ApiError(
-          response.status,
-          response.statusText,
-          errorBody,
-          errorMessage
-        );
+        // Parse response
+        let data: T;
+        const contentType = response.headers.get('content-type');
 
-        // Apply error interceptor if provided
-        if (this.config.errorInterceptor) {
-          throw await this.config.errorInterceptor(apiError);
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          data = await response.text() as unknown as T;
         }
 
-        throw apiError;
-      }
+        // Unwrap ApiResponse format if configured
+        data = this.unwrapApiResponse(data);
 
-      // Parse response
-      let data: T;
-      const contentType = response.headers.get('content-type');
+        // Validate response data if validation is enabled
+        if (this.config.validateRequests && data) {
+          this.validateResponse(data);
+        }
 
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        data = await response.text() as unknown as T;
-      }
+        // Apply response interceptor if provided
+        if (this.config.responseInterceptor) {
+          data = await this.config.responseInterceptor(response, data);
+        }
 
-      // Validate response data if validation is enabled
-      if (this.config.validateRequests && data) {
-        this.validateResponse(data);
-      }
+        return data;
+      } catch (error) {
+        clearTimeout(timeoutId);
 
-      // Apply response interceptor if provided
-      if (this.config.responseInterceptor) {
-        data = await this.config.responseInterceptor(response, data);
-      }
+        // Handle abort (timeout)
+        if (error instanceof Error && error.name === 'AbortError') {
+          const timeoutError = new ApiError(
+            408,
+            'Request Timeout',
+            undefined,
+            `Request timed out after ${this.config.timeout || 30000}ms`
+          );
+          throw timeoutError;
+        }
 
-      return data;
-    } catch (error) {
-      clearTimeout(timeoutId);
+        // Store error for retry logic
+        lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Handle abort (timeout)
-      if (error instanceof Error && error.name === 'AbortError') {
-        const timeoutError = new ApiError(
-          408,
-          'Request Timeout',
+        // Re-throw ApiError instances (will be caught by retry logic if retryable)
+        if (error instanceof ApiError) {
+          throw error;
+        }
+
+        // Wrap other errors
+        throw new ApiError(
+          0,
+          'Network Error',
           undefined,
-          `Request timed out after ${this.config.timeout || 30000}ms`
+          error instanceof Error ? error.message : 'Unknown error occurred'
         );
-        throw timeoutError;
       }
+    };
 
-      // Re-throw ApiError instances
-      if (error instanceof ApiError) {
-        throw error;
+    // Retry loop
+    while (retryCount <= maxRetries) {
+      try {
+        return await executeRequest();
+      } catch (error) {
+        // If this is the last retry attempt, throw the error
+        if (retryCount >= maxRetries) {
+          throw error;
+        }
+
+        // Check if error is retryable
+        const isRetryable = error instanceof ApiError
+          ? this.isRetryableStatusCode(error.status)
+          : (retryConfig.retryOnNetworkError !== false && this.isNetworkError(error));
+
+        // Don't retry non-retryable errors
+        if (!isRetryable) {
+          throw error;
+        }
+
+        // Don't retry 401 errors (handled by JWT refresh)
+        if (error instanceof ApiError && error.status === 401) {
+          throw error;
+        }
+
+        // Don't retry 403 errors (authorization failure)
+        if (error instanceof ApiError && error.status === 403) {
+          throw error;
+        }
+
+        // Calculate backoff delay
+        const delay = this.calculateBackoffDelay(retryCount);
+
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        retryCount++;
       }
-
-      // Wrap other errors
-      throw new ApiError(
-        0,
-        'Network Error',
-        undefined,
-        error instanceof Error ? error.message : 'Unknown error occurred'
-      );
     }
+
+    // Should never reach here, but TypeScript needs it
+    throw lastError || new Error('Request failed after retries');
   }
 
   {{#each operations}}
@@ -1212,8 +1672,8 @@ export async function generatePKCECodeChallenge(verifier: string): Promise<strin
 }
 
 // Export configuration utilities
-export { defaultConfig, ApiClient, ApiError, RequiredError, getAuthHeaders, OAuth2TokenManager, generatePKCECodeVerifier, generatePKCECodeChallenge };
-export type { ApiConfig, OAuth2Config };
+export { defaultConfig, ApiClient, ApiError, RequiredError, getAuthHeaders, OAuth2TokenManager, generatePKCECodeVerifier, generatePKCECodeChallenge, TokenStorage, LocalStorageTokenStorage };
+export type { ApiConfig, OAuth2Config, JwtConfig, RetryConfig };
 
 // Export types
 export * from './types';"#,

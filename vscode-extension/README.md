@@ -71,8 +71,7 @@ View server statistics in the "Server Control" panel:
 
 ## Known Issues
 
-- WebSocket reconnection not yet implemented
-- Large mock lists may slow down the tree view
+- Large mock lists may slow down the tree view (performance optimizations with caching and debouncing are in place)
 
 ## Release Notes
 

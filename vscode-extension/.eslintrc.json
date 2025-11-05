@@ -11,8 +11,16 @@
     "plugin:@typescript-eslint/recommended"
   ],
   "rules": {
-    "@typescript-eslint/naming-convention": "warn",
+    "@typescript-eslint/naming-convention": ["warn", {
+      "selector": "objectLiteralProperty",
+      "format": ["camelCase", "PascalCase", "UPPER_CASE", "snake_case"],
+      "filter": {
+        "regex": "^(GET|POST|PUT|DELETE|PATCH|Content-Type|JSON/YAML)$",
+        "match": false
+      }
+    }],
     "@typescript-eslint/semi": "warn",
+    "@typescript-eslint/no-explicit-any": "warn",
     "curly": "warn",
     "eqeqeq": "warn",
     "no-throw-literal": "warn",

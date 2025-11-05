@@ -4,7 +4,12 @@
   "description": "Visual Studio Code extension for MockForge - Control and visualize your API mocks directly from VS Code",
   "version": "0.1.0",
   "publisher": "saasy-solutions",
-  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SaaSy-Solutions/mockforge.git"
+  },
+  "license": "MIT OR Apache-2.0",
+  "icon": "media/mockforge-icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -28,7 +33,7 @@
         {
           "id": "mockforge",
           "title": "MockForge",
-          "icon": "media/mockforge-icon.svg"
+          "icon": "media/mockforge-icon.png"
         }
       ]
     },
@@ -91,6 +96,10 @@
       {
         "command": "mockforge.viewStats",
         "title": "View Server Statistics"
+      },
+      {
+        "command": "mockforge.showLogs",
+        "title": "Show Extension Logs"
       }
     ],
     "menus": {
@@ -138,6 +147,41 @@
           "type": "boolean",
           "default": true,
           "description": "Show notifications for mock changes"
+        },
+        "mockforge.reconnect.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic WebSocket reconnection"
+        },
+        "mockforge.reconnect.initialDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Initial reconnection delay in milliseconds"
+        },
+        "mockforge.reconnect.maxDelay": {
+          "type": "number",
+          "default": 30000,
+          "description": "Maximum reconnection delay in milliseconds"
+        },
+        "mockforge.reconnect.maxRetries": {
+          "type": "number",
+          "default": 10,
+          "description": "Maximum number of reconnection attempts (0 = infinite)"
+        },
+        "mockforge.http.retryAttempts": {
+          "type": "number",
+          "default": 3,
+          "description": "Number of HTTP request retry attempts"
+        },
+        "mockforge.http.retryDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "HTTP request retry delay in milliseconds"
+        },
+        "mockforge.http.timeout": {
+          "type": "number",
+          "default": 5000,
+          "description": "HTTP request timeout in milliseconds"
         }
       }
     }

@@ -4,8 +4,21 @@ interface UseWebSocketOptions {
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (error: Event) => void;
-  reconnectInterval?: number;
-  maxReconnectAttempts?: number;
+  /**
+   * Initial delay for reconnection in milliseconds (default: 1000)
+   * Used as base for exponential backoff calculation
+   */
+  reconnectInitialDelay?: number;
+  /**
+   * Maximum delay between reconnection attempts in milliseconds (default: 30000)
+   * Exponential backoff will cap at this value
+   */
+  reconnectMaxDelay?: number;
+  /**
+   * Maximum number of reconnection attempts (default: 10)
+   * Set to 0 for infinite retries
+   */
+  reconnectMaxRetries?: number;
 }
 
 export function useWebSocket(
@@ -16,17 +29,35 @@ export function useWebSocket(
     onOpen,
     onClose,
     onError,
-    reconnectInterval = 3000,
-    maxReconnectAttempts = 5,
+    reconnectInitialDelay = 1000,
+    reconnectMaxDelay = 30000,
+    reconnectMaxRetries = 10,
   } = options;
 
   const [lastMessage, setLastMessage] = useState<string | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CONNECTING);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectCount = useRef(0);
+  const reconnectAttempts = useRef(0);
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
+  const manualDisconnect = useRef(false);
 
   const connect = () => {
+    // Clear any existing reconnection timer
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current);
+      reconnectTimeout.current = null;
+    }
+
+    // Close existing connection if any
+    if (wsRef.current) {
+      // Clear event handlers to prevent memory leaks
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
+
     try {
       // Convert HTTP URL to WebSocket URL
       const wsUrl = url.startsWith('ws')
@@ -38,7 +69,8 @@ export function useWebSocket(
       ws.onopen = () => {
         console.log('WebSocket connected:', url);
         setReadyState(WebSocket.OPEN);
-        reconnectCount.current = 0;
+        reconnectAttempts.current = 0; // Reset on successful connection
+        manualDisconnect.current = false;
         onOpen?.();
       };
 
@@ -56,14 +88,9 @@ export function useWebSocket(
         setReadyState(WebSocket.CLOSED);
         onClose?.();
 
-        // Attempt to reconnect
-        if (reconnectCount.current < maxReconnectAttempts) {
-          reconnectCount.current++;
-          console.log(`Reconnecting (${reconnectCount.current}/${maxReconnectAttempts})...`);
-
-          reconnectTimeout.current = setTimeout(() => {
-            connect();
-          }, reconnectInterval);
+        // Attempt reconnection if not manually disconnected and reconnection is enabled
+        if (!manualDisconnect.current) {
+          attemptReconnect();
         }
       };
 
@@ -73,16 +100,53 @@ export function useWebSocket(
     }
   };
 
+  /**
+   * Attempt to reconnect with exponential backoff
+   * Matches the pattern used in VS Code extension's MockForgeClient
+   */
+  const attemptReconnect = () => {
+    // Check if we've exceeded max retries (0 means infinite)
+    if (reconnectMaxRetries > 0 && reconnectAttempts.current >= reconnectMaxRetries) {
+      console.warn(
+        `Max reconnection attempts (${reconnectMaxRetries}) reached. Stopping reconnection.`
+      );
+      return;
+    }
+
+    reconnectAttempts.current++;
+
+    // Calculate delay with exponential backoff
+    // Formula: delay = min(initialDelay * 2^(attempt - 1), maxDelay)
+    const delay = Math.min(
+      reconnectInitialDelay * Math.pow(2, reconnectAttempts.current - 1),
+      reconnectMaxDelay
+    );
+
+    console.log(
+      `Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current}/${reconnectMaxRetries || '∞'})`
+    );
+
+    reconnectTimeout.current = setTimeout(() => {
+      connect();
+    }, delay);
+  };
+
   const disconnect = () => {
+    manualDisconnect.current = true;
+
+    // Clear reconnection timer
     if (reconnectTimeout.current) {
       clearTimeout(reconnectTimeout.current);
       reconnectTimeout.current = null;
     }
 
+    // Close WebSocket
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+
+    reconnectAttempts.current = 0;
   };
 
   const send = (data: string | object) => {

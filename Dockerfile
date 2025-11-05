@@ -1,5 +1,6 @@
 # Multi-stage Docker build for MockForge
 # Stage 1: Build the Rust application
+# Use rust:1.90-slim (Trixie/testing-based) which has GLIBC 2.39+ required by native dependencies
 FROM rust:1.90-slim AS builder
 
 # Install required dependencies for building (including C++ for Kafka support)
@@ -36,12 +37,14 @@ COPY config.example.yaml ./
 RUN cargo build --release --package mockforge-cli
 
 # Stage 2: Create the runtime image
+# Use debian:trixie-slim to match builder's GLIBC version (2.39+)
 FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
@@ -80,4 +83,5 @@ ENV DOCKER_CONTAINER=true
 ENV MOCKFORGE_ADMIN_HOST=0.0.0.0
 
 # Default command
-CMD ["mockforge", "serve", "--admin"]
+# Use full path to ensure binary is found regardless of PATH
+CMD ["/usr/local/bin/mockforge", "serve", "--admin"]

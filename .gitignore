@@ -146,3 +146,5 @@ examples/test-integration/playwright/test-results/
 crates/mockforge-collab/*.db
 crates/mockforge-collab/*.db-shm
 crates/mockforge-collab/*.db-wal
+vscode-extension/out/
+vscode-extension/*.vsix

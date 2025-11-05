@@ -31,6 +31,21 @@ export interface UseAnalyticsStreamOptions {
   onError?: (error: Event) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  /**
+   * Initial delay for reconnection in milliseconds (default: 1000)
+   * Used as base for exponential backoff calculation
+   */
+  reconnectInitialDelay?: number;
+  /**
+   * Maximum delay between reconnection attempts in milliseconds (default: 30000)
+   * Exponential backoff will cap at this value
+   */
+  reconnectMaxDelay?: number;
+  /**
+   * Maximum number of reconnection attempts (default: 10)
+   * Set to 0 for infinite retries
+   */
+  reconnectMaxRetries?: number;
 }
 
 export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
@@ -41,6 +56,9 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     onError,
     onConnect,
     onDisconnect,
+    reconnectInitialDelay = 1000,
+    reconnectMaxDelay = 30000,
+    reconnectMaxRetries = 10,
   } = options;
 
   const [isConnected, setIsConnected] = useState(false);
@@ -50,13 +68,59 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const manualDisconnectRef = useRef(false);
 
-  const MAX_RECONNECT_ATTEMPTS = 5;
-  const RECONNECT_DELAY = 3000; // 3 seconds
+  /**
+   * Attempt to reconnect with exponential backoff
+   * Matches the pattern used in VS Code extension's MockForgeClient
+   */
+  const attemptReconnect = () => {
+    // Check if we've exceeded max retries (0 means infinite)
+    if (reconnectMaxRetries > 0 && reconnectAttemptsRef.current >= reconnectMaxRetries) {
+      console.warn(
+        `Max reconnection attempts (${reconnectMaxRetries}) reached. Stopping reconnection.`
+      );
+      setError('Max reconnection attempts reached');
+      return;
+    }
+
+    reconnectAttemptsRef.current++;
+
+    // Calculate delay with exponential backoff
+    // Formula: delay = min(initialDelay * 2^(attempt - 1), maxDelay)
+    const delay = Math.min(
+      reconnectInitialDelay * Math.pow(2, reconnectAttemptsRef.current - 1),
+      reconnectMaxDelay
+    );
+
+    console.log(
+      `Attempting to reconnect analytics stream in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${reconnectMaxRetries || '∞'})`
+    );
+
+    reconnectTimeoutRef.current = setTimeout(() => {
+      connect();
+    }, delay);
+  };
 
   const connect = () => {
     if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) {
       return;
+    }
+
+    // Clear any existing reconnection timer
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Close existing connection if any
+    if (wsRef.current) {
+      // Clear event handlers to prevent memory leaks
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
+      wsRef.current.close();
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -69,7 +133,8 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
       console.log('Analytics stream connected');
       setIsConnected(true);
       setError(null);
-      reconnectAttemptsRef.current = 0;
+      reconnectAttemptsRef.current = 0; // Reset on successful connection
+      manualDisconnectRef.current = false;
 
       // Send configuration if provided
       if (config) {
@@ -101,18 +166,9 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
       setIsConnected(false);
       onDisconnect?.();
 
-      // Attempt reconnection if enabled
-      if (enabled && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttemptsRef.current++;
-        console.log(
-          `Reconnecting... (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
-        );
-
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, RECONNECT_DELAY);
-      } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-        setError('Max reconnection attempts reached');
+      // Attempt reconnection if not manually disconnected and enabled
+      if (!manualDisconnectRef.current && enabled) {
+        attemptReconnect();
       }
     };
 
@@ -120,17 +176,27 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   };
 
   const disconnect = () => {
+    manualDisconnectRef.current = true;
+
+    // Clear reconnection timer
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
+    // Close WebSocket
     if (wsRef.current) {
+      // Clear event handlers to prevent memory leaks
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
       wsRef.current.close();
       wsRef.current = null;
     }
 
     setIsConnected(false);
+    reconnectAttemptsRef.current = 0;
   };
 
   const updateConfig = (newConfig: StreamConfig) => {
