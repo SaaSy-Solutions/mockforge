@@ -269,6 +269,7 @@ convert_dependencies() {
         "mockforge-k8s-operator"
         "mockforge-registry-server"
         "mockforge-ui"
+        "mockforge-tunnel"
         "mockforge-cli"
     )
 
@@ -310,6 +311,7 @@ restore_dependencies() {
         "mockforge-k8s-operator"
         "mockforge-registry-server"
         "mockforge-ui"
+        "mockforge-tunnel"
         "mockforge-cli"
     )
 
@@ -575,9 +577,13 @@ main() {
     publish_crate "mockforge-registry-server"
     wait_for_processing
 
-    # CLI binary (needs mockforge-ui published first)
+    # CLI binary (needs mockforge-ui and mockforge-tunnel published first)
     convert_crate_dependencies "mockforge-ui"
     publish_crate "mockforge-ui"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-tunnel"
+    publish_crate "mockforge-tunnel"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-cli"
