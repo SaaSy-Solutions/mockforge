@@ -89,7 +89,50 @@
 - Added token expiration checking to prevent use of expired tokens
 - Documented security best practices in generated client README
 
-## [Unreleased]
+## [0.2.6] - 2025-11-04
+
+### Added
+
+- **TLS/HTTPS and mTLS Support**: Added TLS/HTTPS and mutual TLS (mTLS) support for HTTP server
+  - Configurable TLS certificate and key paths
+  - Client certificate authentication support
+  - Secure connection handling for production deployments
+
+- **Built-in Tunneling Service**: Added built-in tunneling service for exposing local servers via public URLs
+  - Automatic tunnel creation for local development
+  - Public URL generation for testing and demos
+  - Integration with popular tunneling services
+
+- **SDK Implementation**: Completed Phase 1 & 2 of SDK implementation
+  - Comprehensive documentation and examples
+  - Production-ready client generators
+
+### Changed
+
+- **Version Bumps**: Updated all workspace crates from 0.2.5 to 0.2.6
+  - Updated all dependency versions across the workspace
+  - Fixed version mismatches in mockforge-ui and mockforge-plugin-loader
+
+- **Publishing Improvements**: Enhanced crate publishing process
+  - Added mockforge-tcp and mockforge-test to publish script
+  - Enabled publishing for mockforge-test crate
+  - Fixed mockforge-tcp to remove README requirement
+
+### Fixed
+
+- **Documentation**: Fixed missing module-level documentation in test files
+  - Added comprehensive module documentation to all test modules
+  - Improved code documentation consistency
+
+- **Axum Compatibility**: Fixed Axum 0.8 compatibility issues in proxy server module
+  - Updated proxy server to work with latest Axum version
+  - Resolved breaking changes from Axum upgrade
+
+- **MQTT Error Types**: Fixed MQTT publish handlers error types to be Send + Sync
+  - Updated error types for proper async/await compatibility
+  - Ensured thread-safety in MQTT handlers
+
+## [0.2.7] - 2025-11-05
 
 ### Added
 
@@ -133,6 +176,32 @@
   - `docs/CRUD_SIMULATION.md`: Complete guide for simulating CRUD operations with stateful data store
   - `docs/WEBHOOKS_CALLBACKS.md`: Full documentation of webhook capabilities via hooks, chains, and scripts
   - Examples demonstrating realistic workflows and integrations
+
+### Changed
+
+- Nothing yet.
+
+### Deprecated
+
+- Nothing yet.
+
+### Removed
+
+- Nothing yet.
+
+### Fixed
+
+- Nothing yet.
+
+### Security
+
+- Nothing yet.
+
+## [Unreleased]
+
+### Added
+
+- Nothing yet.
 
 ### Changed
 
