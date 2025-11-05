@@ -1,7 +1,7 @@
 [package]
 name = "mockforge-plugin-sdk"
-version = "0.2.5"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
 description = "Official SDK for developing MockForge plugins with helper macros and testing utilities"
