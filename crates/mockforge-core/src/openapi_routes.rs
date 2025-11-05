@@ -282,12 +282,45 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Body: try JSON when present
-                let body_json: Option<Value> = if !body.is_empty() {
-                    serde_json::from_slice(&body).ok()
+                // Check if this is a multipart request
+                let is_multipart = headers
+                    .get(axum::http::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.starts_with("multipart/form-data"))
+                    .unwrap_or(false);
+
+                // Extract multipart data if applicable
+                let mut multipart_fields = std::collections::HashMap::new();
+                let mut multipart_files = std::collections::HashMap::new();
+                let mut body_json: Option<Value> = None;
+
+                if is_multipart {
+                    // For multipart requests, extract fields and files
+                    match extract_multipart_from_bytes(&body, &headers).await {
+                        Ok((fields, files)) => {
+                            multipart_fields = fields;
+                            multipart_files = files;
+                            // Also create a JSON representation for validation
+                            let mut body_obj = serde_json::Map::new();
+                            for (k, v) in &multipart_fields {
+                                body_obj.insert(k.clone(), v.clone());
+                            }
+                            if !body_obj.is_empty() {
+                                body_json = Some(Value::Object(body_obj));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse multipart data: {}", e);
+                        }
+                    }
                 } else {
-                    None
-                };
+                    // Body: try JSON when present
+                    body_json = if !body.is_empty() {
+                        serde_json::from_slice(&body).ok()
+                    } else {
+                        None
+                    };
+                }
 
                 if let Err(e) = validator.validate_request_with_all(
                     &path_template,
@@ -552,12 +585,45 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Body: try JSON when present
-                let body_json: Option<Value> = if !body.is_empty() {
-                    serde_json::from_slice(&body).ok()
+                // Check if this is a multipart request
+                let is_multipart = headers
+                    .get(axum::http::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.starts_with("multipart/form-data"))
+                    .unwrap_or(false);
+
+                // Extract multipart data if applicable
+                let mut multipart_fields = std::collections::HashMap::new();
+                let mut multipart_files = std::collections::HashMap::new();
+                let mut body_json: Option<Value> = None;
+
+                if is_multipart {
+                    // For multipart requests, extract fields and files
+                    match extract_multipart_from_bytes(&body, &headers).await {
+                        Ok((fields, files)) => {
+                            multipart_fields = fields;
+                            multipart_files = files;
+                            // Also create a JSON representation for validation
+                            let mut body_obj = serde_json::Map::new();
+                            for (k, v) in &multipart_fields {
+                                body_obj.insert(k.clone(), v.clone());
+                            }
+                            if !body_obj.is_empty() {
+                                body_json = Some(Value::Object(body_obj));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse multipart data: {}", e);
+                        }
+                    }
                 } else {
-                    None
-                };
+                    // Body: try JSON when present
+                    body_json = if !body.is_empty() {
+                        serde_json::from_slice(&body).ok()
+                    } else {
+                        None
+                    };
+                }
 
                 if let Err(e) = validator.validate_request_with_all(
                     &path_template,
@@ -1088,6 +1154,158 @@ impl OpenApiRouteRegistry {
 }
 
 // Note: templating helpers are now in core::templating (shared across modules)
+
+/// Extract multipart form data from request body bytes
+/// Returns (form_fields, file_paths) where file_paths maps field names to stored file paths
+async fn extract_multipart_from_bytes(
+    body: &axum::body::Bytes,
+    headers: &HeaderMap,
+) -> Result<(
+    std::collections::HashMap<String, Value>,
+    std::collections::HashMap<String, String>,
+)> {
+    // Get boundary from Content-Type header
+    let boundary = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|ct| {
+            ct.split(';').find_map(|part| {
+                let part = part.trim();
+                if part.starts_with("boundary=") {
+                    Some(part.strip_prefix("boundary=").unwrap_or("").trim_matches('"'))
+                } else {
+                    None
+                }
+            })
+        })
+        .ok_or_else(|| Error::generic("Missing boundary in Content-Type header"))?;
+
+    let mut fields = std::collections::HashMap::new();
+    let mut files = std::collections::HashMap::new();
+
+    // Parse multipart data using bytes directly (not string conversion)
+    // Multipart format: --boundary\r\n...\r\n--boundary\r\n...\r\n--boundary--\r\n
+    let boundary_prefix = format!("--{}", boundary).into_bytes();
+    let boundary_line = format!("\r\n--{}\r\n", boundary).into_bytes();
+    let end_boundary = format!("\r\n--{}--\r\n", boundary).into_bytes();
+
+    // Find all boundary positions
+    let mut pos = 0;
+    let mut parts = Vec::new();
+
+    // Skip initial boundary if present
+    if body.starts_with(&boundary_prefix) {
+        if let Some(first_crlf) = body.iter().position(|&b| b == b'\r') {
+            pos = first_crlf + 2; // Skip --boundary\r\n
+        }
+    }
+
+    // Find all middle boundaries
+    while let Some(boundary_pos) = body[pos..]
+        .windows(boundary_line.len())
+        .position(|window| window == boundary_line.as_slice())
+    {
+        let actual_pos = pos + boundary_pos;
+        if actual_pos > pos {
+            parts.push((pos, actual_pos));
+        }
+        pos = actual_pos + boundary_line.len();
+    }
+
+    // Find final boundary
+    if let Some(end_pos) = body[pos..]
+        .windows(end_boundary.len())
+        .position(|window| window == end_boundary.as_slice())
+    {
+        let actual_end = pos + end_pos;
+        if actual_end > pos {
+            parts.push((pos, actual_end));
+        }
+    } else if pos < body.len() {
+        // No final boundary found, treat rest as last part
+        parts.push((pos, body.len()));
+    }
+
+    // Process each part
+    for (start, end) in parts {
+        let part_data = &body[start..end];
+
+        // Find header/body separator (CRLF CRLF)
+        let separator = b"\r\n\r\n";
+        if let Some(sep_pos) =
+            part_data.windows(separator.len()).position(|window| window == separator)
+        {
+            let header_bytes = &part_data[..sep_pos];
+            let body_start = sep_pos + separator.len();
+            let body_data = &part_data[body_start..];
+
+            // Parse headers (assuming UTF-8)
+            let header_str = String::from_utf8_lossy(header_bytes);
+            let mut field_name = None;
+            let mut filename = None;
+
+            for header_line in header_str.lines() {
+                if header_line.starts_with("Content-Disposition:") {
+                    // Extract field name
+                    if let Some(name_start) = header_line.find("name=\"") {
+                        let name_start = name_start + 6;
+                        if let Some(name_end) = header_line[name_start..].find('"') {
+                            field_name =
+                                Some(header_line[name_start..name_start + name_end].to_string());
+                        }
+                    }
+
+                    // Extract filename if present
+                    if let Some(file_start) = header_line.find("filename=\"") {
+                        let file_start = file_start + 10;
+                        if let Some(file_end) = header_line[file_start..].find('"') {
+                            filename =
+                                Some(header_line[file_start..file_start + file_end].to_string());
+                        }
+                    }
+                }
+            }
+
+            if let Some(name) = field_name {
+                if let Some(file) = filename {
+                    // This is a file upload - store to temp directory
+                    let temp_dir = std::env::temp_dir().join("mockforge-uploads");
+                    std::fs::create_dir_all(&temp_dir).map_err(|e| {
+                        Error::generic(format!("Failed to create temp directory: {}", e))
+                    })?;
+
+                    let file_path = temp_dir.join(format!("{}_{}", uuid::Uuid::new_v4(), file));
+                    std::fs::write(&file_path, body_data)
+                        .map_err(|e| Error::generic(format!("Failed to write file: {}", e)))?;
+
+                    let file_path_str = file_path.to_string_lossy().to_string();
+                    files.insert(name.clone(), file_path_str.clone());
+                    fields.insert(name, Value::String(file_path_str));
+                } else {
+                    // This is a regular form field - try to parse as UTF-8 string
+                    // Trim trailing CRLF
+                    let body_str = body_data
+                        .strip_suffix(b"\r\n")
+                        .or_else(|| body_data.strip_suffix(b"\n"))
+                        .unwrap_or(body_data);
+
+                    if let Ok(field_value) = String::from_utf8(body_str.to_vec()) {
+                        fields.insert(name, Value::String(field_value.trim().to_string()));
+                    } else {
+                        // Non-UTF-8 field value - store as base64 encoded string
+                        use base64::{engine::general_purpose, Engine as _};
+                        fields.insert(
+                            name,
+                            Value::String(general_purpose::STANDARD.encode(body_str)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((fields, files))
+}
 
 static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));

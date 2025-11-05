@@ -166,6 +166,10 @@ pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
 pub mod coverage;
+/// File generation service for creating mock PDF, CSV, JSON files
+pub mod file_generator;
+/// File serving for generated mock files
+pub mod file_server;
 /// Kubernetes-native health check endpoints (liveness, readiness, startup probes)
 pub mod health;
 pub mod http_tracing_middleware;
@@ -509,7 +513,9 @@ pub async fn build_router_with_multi_tenant(
         }),
     )
     // Add SSE endpoints
-    .merge(sse::sse_router());
+    .merge(sse::sse_router())
+    // Add file serving endpoints for generated mock files
+    .merge(file_server::file_serving_router());
 
     // Clone state for routes_router since we'll use it for middleware too
     let state_for_routes = state.clone();
@@ -798,6 +804,8 @@ pub async fn build_router_with_auth(
     )
     // Add SSE endpoints
     .merge(sse::sse_router())
+    // Add file serving endpoints for generated mock files
+    .merge(file_server::file_serving_router())
     // Add authentication middleware (before logging)
     .layer(axum::middleware::from_fn_with_state(auth_state.clone(), auth_middleware))
     // Add request logging middleware
@@ -1038,6 +1046,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     app = app.merge(sse::sse_router());
+    // Add file serving endpoints for generated mock files
+    app = app.merge(file_server::file_serving_router());
 
     // Add management API endpoints
     let management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port

@@ -119,6 +119,10 @@ pub struct RequestContext {
     pub headers: HashMap<String, Value>,
     /// Request body (if JSON)
     pub body: Option<Value>,
+    /// Multipart form fields (for multipart/form-data requests)
+    pub multipart_fields: HashMap<String, Value>,
+    /// Multipart file uploads (filename -> file path)
+    pub multipart_files: HashMap<String, String>,
 }
 
 impl RequestContext {
@@ -154,6 +158,18 @@ impl RequestContext {
         self.body = Some(body);
         self
     }
+
+    /// Set multipart form fields
+    pub fn with_multipart_fields(mut self, fields: HashMap<String, Value>) -> Self {
+        self.multipart_fields = fields;
+        self
+    }
+
+    /// Set multipart file uploads
+    pub fn with_multipart_files(mut self, files: HashMap<String, String>) -> Self {
+        self.multipart_files = files;
+        self
+    }
 }
 
 /// Expand template variables in a prompt string using request context
@@ -179,6 +195,9 @@ pub fn expand_prompt_template(template: &str, context: &RequestContext) -> Strin
 
     // Replace {{headers.*}} variables
     result = expand_map_variables(&result, "headers", &context.headers);
+
+    // Replace {{multipart.*}} variables for form fields
+    result = expand_map_variables(&result, "multipart", &context.multipart_fields);
 
     result
 }

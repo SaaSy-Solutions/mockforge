@@ -8,7 +8,7 @@ description = "Admin UI for MockForge - web-based interface for managing mock se
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # UI component used by mockforge-cli
+publish = true  # UI component used by mockforge-cli
 include = [
     "src/**/*",
     "ui/dist/**/*",
@@ -37,11 +37,11 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
-mockforge-core = { version = "0.2.7", path = "../mockforge-core" }
+mockforge-core = "0.2.7"
 mockforge-http = { version = "0.2.7", path = "../mockforge-http", features = ["smtp", "mqtt"] }
 mockforge-ws = { version = "0.2.7", path = "../mockforge-ws" }
 mockforge-grpc = { version = "0.2.7", path = "../mockforge-grpc" }
-mockforge-plugin-core = { version = "0.2.7", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = "0.2.7"
 mockforge-plugin-loader = { version = "0.2.7", path = "../mockforge-plugin-loader" }
 mockforge-analytics = { version = "0.2.7", path = "../mockforge-analytics" }
 
