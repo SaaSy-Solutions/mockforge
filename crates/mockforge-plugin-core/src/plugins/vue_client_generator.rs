@@ -128,18 +128,760 @@ export interface {{operation_id}}Request {
                 PluginError::execution(format!("Failed to register types template: {}", e))
             })?;
 
-        // Vue composables template
+        // Vue composables template - Enhanced with all production features
+        // This template includes all infrastructure from React (ApiError, TokenStorage, OAuth2, etc.)
+        // but uses Vue's reactivity system (ref, computed, onMounted) instead of React hooks
         templates.register_template_string(
             "composables",
             r#"// Generated Vue 3 composables for {{api_title}}
 // API Version: {{api_version}}
 
-import { ref, computed, type Ref } from 'vue';
+import { ref, computed, onMounted, watch, type Ref } from 'vue';
 
-// Base API configuration
+// ============================================================================
+// Error Handling
+// ============================================================================
+
+/**
+ * Base API Error class with structured error information
+ */
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public statusText: string,
+    public body?: any,
+    message?: string
+  ) {
+    super(message || `API Error: ${status} ${statusText}`);
+    this.name = 'ApiError';
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+
+  /**
+   * Check if error is a client error (4xx)
+   */
+  isClientError(): boolean {
+    return this.status >= 400 && this.status < 500;
+  }
+
+  /**
+   * Check if error is a server error (5xx)
+   */
+  isServerError(): boolean {
+    return this.status >= 500;
+  }
+
+  /**
+   * Get error details from response body if available
+   */
+  getErrorDetails(): any {
+    return this.body;
+  }
+
+  /**
+   * Get verbose error message with validation details
+   */
+  getVerboseMessage(): string {
+    let message = `${this.status} ${this.statusText}`;
+
+    if (this.body) {
+      if (typeof this.body === 'object') {
+        // Handle validation errors
+        if (this.body.errors && Array.isArray(this.body.errors)) {
+          const validationErrors = this.body.errors
+            .map((err: any) => {
+              if (typeof err === 'string') return err;
+              if (err.field && err.message) return `${err.field}: ${err.message}`;
+              if (err.message) return err.message;
+              return JSON.stringify(err);
+            })
+            .join('; ');
+          message += ` - Validation errors: ${validationErrors}`;
+        } else if (this.body.message) {
+          message += ` - ${this.body.message}`;
+        } else if (this.body.error) {
+          message += ` - ${this.body.error}`;
+          if (this.body.error_description) {
+            message += ` (${this.body.error_description})`;
+          }
+        } else {
+          message += ` - ${JSON.stringify(this.body)}`;
+        }
+      } else if (typeof this.body === 'string') {
+        message += ` - ${this.body}`;
+      }
+    }
+
+    return message;
+  }
+}
+
+/**
+ * Error thrown when a required parameter is missing
+ */
+export class RequiredError extends Error {
+  constructor(public field: string, message?: string) {
+    super(message || `Required parameter '${field}' was null or undefined`);
+    this.name = 'RequiredError';
+    Object.setPrototypeOf(this, RequiredError.prototype);
+  }
+}
+
+// ============================================================================
+// Token Storage Interface
+// ============================================================================
+
+/**
+ * Token storage interface for secure token management
+ * Allows different storage backends (localStorage, httpOnly cookies, secure storage)
+ */
+export interface TokenStorage {
+  /** Get access token from storage */
+  getAccessToken(): string | null | Promise<string | null>;
+  /** Store access token with optional expiration (in seconds) */
+  setAccessToken(token: string, expiresIn?: number): void | Promise<void>;
+  /** Get refresh token from storage */
+  getRefreshToken(): string | null | Promise<string | null>;
+  /** Store refresh token */
+  setRefreshToken(token: string): void | Promise<void>;
+  /** Clear all tokens from storage */
+  clearTokens(): void | Promise<void>;
+}
+
+/**
+ * LocalStorage-based token storage implementation
+ * ⚠️ SECURITY: localStorage is vulnerable to XSS attacks
+ * Consider using httpOnly cookies or secure storage for production apps
+ */
+export class LocalStorageTokenStorage implements TokenStorage {
+  private accessTokenKey: string;
+  private refreshTokenKey: string;
+
+  constructor(
+    accessTokenKey: string = 'access_token',
+    refreshTokenKey: string = 'refresh_token'
+  ) {
+    this.accessTokenKey = accessTokenKey;
+    this.refreshTokenKey = refreshTokenKey;
+  }
+
+  getAccessToken(): string | null {
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
+
+    const stored = localStorage.getItem(this.accessTokenKey);
+    if (!stored) return null;
+
+    try {
+      // Try to parse as JSON (with expiration) or use as plain string
+      const parsed = JSON.parse(stored);
+      if (parsed.token && parsed.expiresAt) {
+        // Check if token is expired
+        if (Date.now() >= parsed.expiresAt * 1000) {
+          localStorage.removeItem(this.accessTokenKey);
+          return null;
+        }
+        return parsed.token;
+      }
+      // Legacy format (plain string) - return as token
+      return typeof parsed === 'string' ? parsed : parsed.token || parsed;
+    } catch {
+      // Plain string format
+      return stored;
+    }
+  }
+
+  setAccessToken(token: string, expiresIn?: number): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+
+    // Store token with expiration if provided (expiresIn is in seconds)
+    const tokenData = expiresIn
+      ? JSON.stringify({
+          token,
+          expiresAt: Math.floor(Date.now() / 1000) + expiresIn,
+        })
+      : token;
+    localStorage.setItem(this.accessTokenKey, tokenData);
+  }
+
+  getRefreshToken(): string | null {
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
+    return localStorage.getItem(this.refreshTokenKey);
+  }
+
+  setRefreshToken(token: string): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.setItem(this.refreshTokenKey, token);
+  }
+
+  clearTokens(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.removeItem(this.accessTokenKey);
+    localStorage.removeItem(this.refreshTokenKey);
+  }
+}
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/**
+ * OAuth2 Flow Configuration
+ *
+ * ⚠️ SECURITY WARNING:
+ * - NEVER include clientSecret in browser/client-side code
+ * - Client secrets should only be used in server-side applications
+ * - For browser apps, use authorization_code flow with PKCE (recommended)
+ * - Tokens stored in localStorage are vulnerable to XSS attacks
+ * - Consider using httpOnly cookies or secure storage for production
+ */
+export interface OAuth2Config {
+  /** OAuth2 client ID */
+  clientId: string;
+  /**
+   * OAuth2 client secret (for client_credentials flow)
+   * ⚠️ SECURITY: Only use in server-side apps. NEVER expose in browser code!
+   * For browser apps, use authorization_code flow without client secret
+   */
+  clientSecret?: string;
+  /** Authorization URL (for authorization_code flow) */
+  authorizationUrl?: string;
+  /** Token URL for obtaining access tokens */
+  tokenUrl: string;
+  /** Redirect URI (for authorization_code flow) */
+  redirectUri?: string;
+  /** Scopes to request */
+  scopes?: string[];
+  /** OAuth2 flow type */
+  flow?: 'authorization_code' | 'client_credentials' | 'implicit' | 'password';
+  /** Token storage key (default: 'oauth2_token') */
+  tokenStorageKey?: string;
+  /** Callback for token refresh */
+  onTokenRefresh?: (token: string) => void | Promise<void>;
+  /** State parameter for CSRF protection (auto-generated if not provided) */
+  state?: string;
+  /** PKCE code verifier for authorization_code flow (recommended for browser apps) */
+  codeVerifier?: string;
+}
+
+/**
+ * JWT Token Configuration
+ * Handles JWT token refresh on 401 errors
+ */
+export interface JwtConfig {
+  /** Refresh endpoint URL (default: '/api/v1/auth/refresh') */
+  refreshEndpoint?: string;
+  /** Refresh token (static or dynamic function) */
+  refreshToken?: string | (() => string | Promise<string>);
+  /** Callback invoked when token is refreshed */
+  onTokenRefresh?: (token: string) => void | Promise<void>;
+  /** Callback invoked when authentication fails (refresh token invalid/expired) */
+  onAuthError?: () => void | Promise<void>;
+  /** Refresh token if it expires within this many seconds (default: 300) */
+  refreshThreshold?: number;
+  /** Check token expiration before making requests (default: true) */
+  checkExpirationBeforeRequest?: boolean;
+}
+
+/**
+ * Retry Configuration
+ * Configures automatic retry behavior for failed requests
+ */
+export interface RetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxRetries?: number;
+  /** Base delay in milliseconds for exponential backoff (default: 1000) */
+  baseDelay?: number;
+  /** Maximum delay in milliseconds (default: 10000) */
+  maxDelay?: number;
+  /** HTTP status codes that should be retried (default: [408, 429, 500, 502, 503, 504]) */
+  retryableStatusCodes?: number[];
+  /** Whether to retry on network errors (default: true) */
+  retryOnNetworkError?: boolean;
+}
+
+/**
+ * API Configuration with support for authentication and interceptors
+ */
 export interface ApiConfig {
+  /** Base URL for API requests */
   baseUrl: string;
+  /** Default headers to include with every request */
   headers?: Record<string, string>;
+  /** Bearer token for authentication */
+  accessToken?: string | (() => string | Promise<string>);
+  /** API key for authentication (supports function for dynamic keys) */
+  apiKey?: string | ((name: string) => string | Promise<string>);
+  /** Username for basic authentication */
+  username?: string;
+  /** Password for basic authentication */
+  password?: string;
+  /** OAuth2 configuration for OAuth flows */
+  oauth2?: OAuth2Config;
+  /** JWT token configuration for automatic refresh on 401 */
+  jwt?: JwtConfig;
+  /** Retry configuration for automatic retry on failures */
+  retry?: RetryConfig;
+  /** Token storage implementation (default: LocalStorageTokenStorage) */
+  tokenStorage?: TokenStorage;
+  /** Request interceptor - called before each request */
+  requestInterceptor?: (request: RequestInit) => RequestInit | Promise<RequestInit>;
+  /** Response interceptor - called after each response */
+  responseInterceptor?: <T>(response: Response, data: T) => T | Promise<T>;
+  /** Error interceptor - called when a request fails */
+  errorInterceptor?: (error: ApiError) => ApiError | Promise<ApiError>;
+  /** Timeout in milliseconds (default: 30000) */
+  timeout?: number;
+  /** Enable request/response validation (default: false) */
+  validateRequests?: boolean;
+  /** Enable verbose error messages (default: false) */
+  verboseErrors?: boolean;
+  /** Automatically unwrap ApiResponse<T> format to return data directly (default: false) */
+  unwrapResponse?: boolean;
+}
+
+/**
+ * OAuth2 Token Manager
+ * Handles OAuth2 flows and token refresh
+ */
+class OAuth2TokenManager {
+  private tokenStorage: TokenStorage;
+
+  constructor(
+    private config: OAuth2Config,
+    tokenStorage?: TokenStorage
+  ) {
+    // Use provided token storage or create one with OAuth2-specific keys
+    if (tokenStorage) {
+      this.tokenStorage = tokenStorage;
+    } else {
+      const storageKey = this.config.tokenStorageKey || 'oauth2_token';
+      this.tokenStorage = new LocalStorageTokenStorage(
+        storageKey,
+        `${storageKey}_refresh`
+      );
+    }
+  }
+
+  /**
+   * Get stored access token with expiration check
+   * ⚠️ SECURITY: Tokens in localStorage are vulnerable to XSS attacks
+   */
+  private getStoredToken(): { token: string; expiresAt?: number } | null {
+    const token = this.tokenStorage.getAccessToken();
+    if (!token) return null;
+    return { token };
+  }
+
+  /**
+   * Store access token with optional expiration
+   * ⚠️ SECURITY: Tokens stored in localStorage are vulnerable to XSS attacks
+   * Consider using httpOnly cookies or secure storage for production apps
+   */
+  private async storeToken(token: string, expiresIn?: number): Promise<void> {
+    await this.tokenStorage.setAccessToken(token, expiresIn);
+    if (this.config.onTokenRefresh) {
+      await this.config.onTokenRefresh(token);
+    }
+  }
+
+  /**
+   * Get access token via client_credentials flow
+   * ⚠️ SECURITY WARNING: This flow requires a client secret which should NEVER be in browser code!
+   * Only use this flow in server-side applications. For browser apps, use authorization_code flow.
+   */
+  async getClientCredentialsToken(): Promise<string> {
+    if (!this.config.clientSecret) {
+      if (typeof window !== 'undefined') {
+        console.warn('⚠️ SECURITY WARNING: client_credentials flow with client secret in browser code is insecure. Use authorization_code flow instead.');
+      }
+      throw new Error('Client secret required for client_credentials flow. ⚠️ SECURITY: Never expose client secrets in browser code!');
+    }
+
+    const params = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      ...(this.config.scopes && this.config.scopes.length > 0
+        ? { scope: this.config.scopes.join(' ') }
+        : {}),
+    });
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token request failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token request failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 response');
+    }
+
+    // Store token with expiration if provided (expires_in is in seconds)
+    await this.storeToken(token, data.expires_in);
+    return token;
+  }
+
+  /**
+   * Get access token via password flow
+   */
+  async getPasswordToken(username: string, password: string): Promise<string> {
+    const params = new URLSearchParams({
+      grant_type: 'password',
+      username,
+      password,
+      client_id: this.config.clientId,
+      ...(this.config.scopes && this.config.scopes.length > 0
+        ? { scope: this.config.scopes.join(' ') }
+        : {}),
+    });
+
+    if (this.config.clientSecret) {
+      params.append('client_secret', this.config.clientSecret);
+    }
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token request failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token request failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 response');
+    }
+
+    // Store token with expiration if provided (expires_in is in seconds)
+    await this.storeToken(token, data.expires_in);
+    return token;
+  }
+
+  /**
+   * Refresh access token using refresh_token
+   */
+  async refreshToken(refreshToken: string): Promise<string> {
+    const params = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: this.config.clientId,
+    });
+
+    if (this.config.clientSecret) {
+      params.append('client_secret', this.config.clientSecret);
+    }
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token refresh failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token refresh failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 refresh response');
+    }
+
+    await this.storeToken(token);
+    return token;
+  }
+
+  /**
+   * Get current access token (from storage or fetch new)
+   * Checks token expiration before returning stored token
+   */
+  async getAccessToken(): Promise<string | null> {
+    // Try to get stored token first (with expiration check)
+    const stored = this.getStoredToken();
+    if (stored && stored.token) {
+      return stored.token;
+    }
+
+    // If no stored token and client_credentials flow, fetch new token
+    if (this.config.flow === 'client_credentials') {
+      return await this.getClientCredentialsToken();
+    }
+
+    return null;
+  }
+
+  /**
+   * Initiate authorization_code flow (redirects to authorization URL)
+   * Generates state parameter for CSRF protection if not provided
+   * Supports PKCE if codeVerifier is provided
+   */
+  async authorize(): Promise<void> {
+    if (!this.config.authorizationUrl || !this.config.redirectUri) {
+      throw new Error('authorizationUrl and redirectUri required for authorization_code flow');
+    }
+
+    // Generate state for CSRF protection if not provided
+    const state = this.config.state || this.generateRandomString(32);
+    if (!this.config.state && typeof localStorage !== 'undefined') {
+      // Store state for CSRF validation (using localStorage directly for state, not tokens)
+      localStorage.setItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`, state);
+    }
+
+    // Generate PKCE code challenge if code verifier is provided
+    let codeChallenge: string | undefined;
+    let codeChallengeMethod: string | undefined;
+    if (this.config.codeVerifier) {
+      // Use proper PKCE with SHA256 hash (RFC 7636)
+      if (typeof crypto !== 'undefined' && crypto.subtle) {
+        codeChallenge = await this.generateCodeChallenge(this.config.codeVerifier);
+        codeChallengeMethod = 'S256';
+      } else {
+        // Fallback for environments without Web Crypto API
+        // Note: This is less secure but allows basic PKCE functionality
+        codeChallenge = this.base64UrlEncode(this.config.codeVerifier);
+        codeChallengeMethod = 'plain';
+      }
+    }
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
+      state,
+      ...(this.config.scopes && this.config.scopes.length > 0
+        ? { scope: this.config.scopes.join(' ') }
+        : {}),
+      ...(codeChallenge ? { code_challenge: codeChallenge, code_challenge_method: codeChallengeMethod! } : {}),
+    });
+
+    window.location.href = `${this.config.authorizationUrl}?${params.toString()}`;
+  }
+
+  /**
+   * Generate random string for state parameter
+   */
+  private generateRandomString(length: number): string {
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const values = new Uint8Array(length);
+      crypto.getRandomValues(values);
+      for (let i = 0; i < length; i++) {
+        result += charset[values[i] % charset.length];
+      }
+    } else {
+      // Fallback for older browsers
+      for (let i = 0; i < length; i++) {
+        result += charset[Math.floor(Math.random() * charset.length)];
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Generate PKCE code challenge from code verifier (RFC 7636)
+   * Uses SHA256 hash for secure PKCE implementation
+   */
+  private async generateCodeChallenge(verifier: string): Promise<string> {
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      throw new Error('Web Crypto API not available for PKCE code challenge generation');
+    }
+
+    try {
+      // Encode verifier as UTF-8
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+
+      // Compute SHA256 hash
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+      // Convert to base64url
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashBase64 = btoa(String.fromCharCode(...hashArray));
+
+      return hashBase64
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    } catch (error) {
+      throw new Error(`Failed to generate PKCE code challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Base64URL encode (for PKCE)
+   */
+  private base64UrlEncode(str: string): string {
+    return btoa(str)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+
+  /**
+   * Exchange authorization code for access token
+   * Validates state parameter for CSRF protection if stored
+   */
+  async exchangeCode(code: string, state?: string): Promise<string> {
+    if (!this.config.redirectUri) {
+      throw new Error('redirectUri required for authorization code exchange');
+    }
+
+    // Validate state parameter for CSRF protection
+    if (typeof localStorage !== 'undefined' && state) {
+      const storedState = localStorage.getItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`);
+      if (storedState && storedState !== state) {
+        throw new Error('Invalid state parameter - possible CSRF attack');
+      }
+      // Remove state after validation
+      localStorage.removeItem(`${this.config.tokenStorageKey || 'oauth2_token'}_state`);
+    }
+
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: this.config.redirectUri,
+      client_id: this.config.clientId,
+    });
+
+    // Include PKCE code verifier if provided
+    if (this.config.codeVerifier) {
+      params.append('code_verifier', this.config.codeVerifier);
+    }
+
+    // ⚠️ SECURITY: Client secret should NOT be used in browser-based authorization_code flow
+    // Only include if absolutely necessary (some providers require it)
+    if (this.config.clientSecret) {
+      if (typeof window !== 'undefined') {
+        console.warn('⚠️ SECURITY WARNING: Using client secret in browser-based authorization_code flow is not recommended. Use PKCE instead.');
+      }
+      params.append('client_secret', this.config.clientSecret);
+    }
+
+    const response = await fetch(this.config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Token exchange failed' }));
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        error,
+        `OAuth2 token exchange failed: ${error.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    const token = data.access_token;
+    if (!token) {
+      throw new Error('No access_token in OAuth2 exchange response');
+    }
+
+    // Store refresh token if provided
+    if (data.refresh_token) {
+      await this.tokenStorage.setRefreshToken(data.refresh_token);
+    }
+
+    // Store token with expiration if provided
+    await this.storeToken(token, data.expires_in);
+    return token;
+  }
+}
+
+/**
+ * Get authentication headers from config
+ * Note: For ApiClient instances, use the instance's oauthManager
+ * This function is used by standalone composables and needs to create a manager
+ */
+async function getAuthHeaders(config: ApiConfig, oauthManager?: OAuth2TokenManager | null): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+
+  // OAuth2 authentication (takes priority)
+  if (config.oauth2) {
+    // Use provided manager or create new one (for standalone composables)
+    const manager = oauthManager || new OAuth2TokenManager(config.oauth2);
+    const token = await manager.getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      return headers; // OAuth2 takes priority
+    }
+  }
+
+  // Bearer token authentication
+  if (config.accessToken) {
+    const token = typeof config.accessToken === 'function'
+      ? await config.accessToken()
+      : config.accessToken;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  // API key authentication
+  if (config.apiKey) {
+    const apiKey = typeof config.apiKey === 'function'
+      ? await config.apiKey('X-API-Key')
+      : config.apiKey;
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
+  }
+
+  // Basic authentication
+  if (config.username && config.password) {
+    const credentials = btoa(`${config.username}:${config.password}`);
+    headers['Authorization'] = `Basic ${credentials}`;
+  }
+
+  return headers;
 }
 
 // Default API configuration
@@ -148,71 +890,682 @@ const defaultConfig: ApiConfig = {
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000,
 };
 
-// Generic API client
+// ============================================================================
+// API Client
+// ============================================================================
+
+/**
+ * Generic API client with authentication, interceptors, and error handling
+ */
 class ApiClient {
-  constructor(private config: ApiConfig) {}
+  private oauthManager: OAuth2TokenManager | null = null;
+  private tokenStorage: TokenStorage;
+  private refreshPromise: Promise<string> | null = null;
+  private pendingRequests: Array<{
+    resolve: (token: string) => void;
+    reject: (error: Error) => void;
+  }> = [];
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.config.baseUrl}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...this.config.headers,
-        ...options.headers,
-      },
-    });
+  constructor(private config: ApiConfig = defaultConfig) {
+    // Initialize token storage (default to LocalStorageTokenStorage)
+    this.tokenStorage = this.config.tokenStorage || new LocalStorageTokenStorage();
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    // Initialize OAuth2 manager if configured (share token storage if available)
+    if (this.config.oauth2) {
+      this.oauthManager = new OAuth2TokenManager(this.config.oauth2, this.tokenStorage);
+    }
+  }
+
+  /**
+   * Update configuration at runtime
+   */
+  updateConfig(updates: Partial<ApiConfig>): void {
+    this.config = { ...this.config, ...updates };
+
+    // Update token storage if provided
+    if (updates.tokenStorage !== undefined) {
+      this.tokenStorage = updates.tokenStorage;
     }
 
-    return response.json();
+    // Recreate OAuth2 manager if OAuth2 config changed (share token storage)
+    if (updates.oauth2 !== undefined) {
+      this.oauthManager = updates.oauth2
+        ? new OAuth2TokenManager(updates.oauth2, this.tokenStorage)
+        : null;
+    }
+  }
+
+  /**
+   * Get current configuration (read-only copy)
+   */
+  getConfig(): Readonly<ApiConfig> {
+    return { ...this.config };
+  }
+
+  /**
+   * Validate request data against schema (if validation enabled)
+   * Note: Full schema validation requires additional libraries like ajv
+   * This provides basic type checking and required field validation
+   */
+  private validateRequest(data: any, requiredFields?: string[]): void {
+    if (!this.config.validateRequests) {
+      return;
+    }
+
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+
+    // Check required fields
+    if (requiredFields && Array.isArray(requiredFields)) {
+      const missingFields: string[] = [];
+      for (const field of requiredFields) {
+        if (!(field in data) || data[field] === undefined || data[field] === null) {
+          missingFields.push(field);
+        }
+      }
+
+      if (missingFields.length > 0) {
+        throw new RequiredError(
+          missingFields.join(', '),
+          `Missing required fields: ${missingFields.join(', ')}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Check if token is expired or will expire soon
+   * Returns true if token should be refreshed
+   */
+  private async shouldRefreshToken(token: string | null): Promise<boolean> {
+    if (!token || !this.config.jwt?.checkExpirationBeforeRequest) {
+      return false;
+    }
+
+    try {
+      // Try to decode JWT exp claim (basic base64 decode, no verification)
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(parts[1]));
+      if (payload.exp) {
+        const expiresAt = payload.exp * 1000; // Convert to milliseconds
+        const threshold = (this.config.jwt.refreshThreshold || 300) * 1000;
+        return Date.now() + threshold >= expiresAt;
+      }
+    } catch {
+      // If we can't decode, tokenStorage.getAccessToken() already handles expiration
+      // Return false as we can't determine expiration from JWT payload
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Refresh JWT token using refresh token
+   * Implements promise deduplication to prevent concurrent refresh requests
+   * Supports ApiResponse<T> wrapper format and both camelCase/snake_case token formats
+   */
+  private async refreshJwtToken(): Promise<string> {
+    // If refresh is already in progress, return the existing promise
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    // Create new refresh promise
+    this.refreshPromise = (async () => {
+      try {
+        const jwtConfig = this.config.jwt;
+        if (!jwtConfig) {
+          throw new Error('JWT configuration not found');
+        }
+
+        // Get refresh token
+        const refreshTokenValue = typeof jwtConfig.refreshToken === 'function'
+          ? await jwtConfig.refreshToken()
+          : jwtConfig.refreshToken || await Promise.resolve(this.tokenStorage.getRefreshToken());
+
+        if (!refreshTokenValue) {
+          throw new Error('Refresh token not available');
+        }
+
+        // Get refresh endpoint
+        const refreshEndpoint = jwtConfig.refreshEndpoint || '/api/v1/auth/refresh';
+        const refreshUrl = `${this.config.baseUrl}${refreshEndpoint}`;
+
+        // Make refresh request
+        const response = await fetch(refreshUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.config.headers,
+          },
+          body: JSON.stringify({ refreshToken: refreshTokenValue }),
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new ApiError(
+            response.status,
+            response.statusText,
+            errorBody,
+            `JWT refresh failed: ${response.status} ${response.statusText}`
+          );
+        }
+
+        // Parse response (support ApiResponse wrapper and direct format)
+        const responseData = await response.json();
+        let tokenData: any;
+
+        // Check if response is wrapped in ApiResponse format
+        if (responseData.success === true && responseData.data) {
+          tokenData = responseData.data;
+        } else {
+          tokenData = responseData;
+        }
+
+        // Extract tokens (support both camelCase and snake_case)
+        const accessToken = tokenData.accessToken || tokenData.access_token;
+        const refreshToken = tokenData.refreshToken || tokenData.refresh_token;
+        const expiresIn = tokenData.expiresIn || tokenData.expires_in;
+
+        if (!accessToken) {
+          throw new Error('No access token in refresh response');
+        }
+
+        // Store tokens
+        await this.tokenStorage.setAccessToken(accessToken, expiresIn);
+        if (refreshToken) {
+          await this.tokenStorage.setRefreshToken(refreshToken);
+        }
+
+        // Call onTokenRefresh callback if provided
+        if (jwtConfig.onTokenRefresh) {
+          await jwtConfig.onTokenRefresh(accessToken);
+        }
+
+        // Resolve all pending requests
+        this.pendingRequests.forEach(({ resolve }) => resolve(accessToken));
+        this.pendingRequests = [];
+
+        return accessToken;
+      } catch (error) {
+        // Clear tokens on failure
+        await this.tokenStorage.clearTokens();
+
+        // Call onAuthError callback if provided
+        if (this.config.jwt?.onAuthError) {
+          await this.config.jwt.onAuthError();
+        }
+
+        // Reject all pending requests
+        this.pendingRequests.forEach(({ reject }) => reject(error instanceof Error ? error : new Error(String(error))));
+        this.pendingRequests = [];
+
+        throw error;
+      } finally {
+        // Clear refresh promise
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
+  /**
+   * Wait for token refresh to complete (for queued requests)
+   */
+  private async waitForTokenRefresh(): Promise<string> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    // If no refresh in progress, create a promise that will be resolved/rejected by refresh
+    return new Promise<string>((resolve, reject) => {
+      this.pendingRequests.push({ resolve, reject });
+    });
+  }
+
+  /**
+   * Unwrap ApiResponse<T> format if configured
+   * Supports both wrapped and unwrapped responses for backward compatibility
+   */
+  private unwrapApiResponse<T>(data: any): T {
+    if (!this.config.unwrapResponse) {
+      return data;
+    }
+
+    // Check if response matches ApiResponse<T> format
+    if (data && typeof data === 'object' && data.success === true && 'data' in data) {
+      return data.data;
+    }
+
+    // Return as-is if not wrapped
+    return data;
+  }
+
+  /**
+   * Validate response data structure (basic validation)
+   * Performs type checking and structure validation without external libraries
+   * For full OpenAPI schema validation, integrate ajv or similar validation library
+   */
+  private validateResponse(data: any): void {
+    if (!data) {
+      return; // Allow null/undefined responses
+    }
+
+    // Basic type validation
+    if (typeof data !== 'object') {
+      // Primitive responses are valid (string, number, boolean)
+      return;
+    }
+
+    // For arrays, validate structure
+    if (Array.isArray(data)) {
+      // Basic array validation - ensure it's a valid array
+      // Full validation would check array item schemas
+      return;
+    }
+
+    // For objects, perform basic structure validation
+    // Ensure it's a plain object (not null, Date, etc.)
+    if (data.constructor !== Object && data.constructor !== undefined) {
+      // Allow objects with constructors (Date, etc.) but log warning in verbose mode
+      if (this.config.verboseErrors) {
+        console.warn('Response validation: Object has non-standard constructor, may not match schema');
+      }
+    }
+
+    // Note: Full schema validation would:
+    // 1. Check all required properties exist
+    // 2. Validate property types match schema
+    // 3. Validate nested objects/arrays recursively
+    // 4. Check enum values, format constraints, etc.
+    // This requires integrating a validation library like ajv
+  }
+
+  /**
+   * Calculate exponential backoff delay with jitter
+   */
+  private calculateBackoffDelay(retryCount: number): number {
+    const retryConfig = this.config.retry || {};
+    const baseDelay = retryConfig.baseDelay || 1000;
+    const maxDelay = retryConfig.maxDelay || 10000;
+
+    // Exponential backoff: baseDelay * 2^retryCount
+    const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+
+    // Add jitter: random(0, 0.3 * delay)
+    const jitter = Math.random() * 0.3 * exponentialDelay;
+
+    return Math.floor(exponentialDelay + jitter);
+  }
+
+  /**
+   * Check if status code is retryable
+   */
+  private isRetryableStatusCode(status: number): boolean {
+    const retryConfig = this.config.retry || {};
+    const retryableStatusCodes = retryConfig.retryableStatusCodes || [408, 429, 500, 502, 503, 504];
+    return retryableStatusCodes.includes(status);
+  }
+
+  /**
+   * Check if error is a network error
+   */
+  private isNetworkError(error: any): boolean {
+    if (!(error instanceof Error)) return false;
+    return error instanceof TypeError && (
+      error.message.includes('fetch') ||
+      error.message.includes('network') ||
+      error.message.includes('Failed to fetch')
+    );
+  }
+
+  /**
+   * Execute a request with authentication, interceptors, retry logic, and error handling
+   */
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    requestData?: any,
+    requiredFields?: string[]
+  ): Promise<T> {
+    const url = `${this.config.baseUrl}${endpoint}`;
+    const retryConfig = this.config.retry || {};
+    const maxRetries = retryConfig.maxRetries ?? 3;
+    let retryCount = 0;
+    let lastError: Error | null = null;
+
+    // Validate request data if validation is enabled
+    if (requestData && this.config.validateRequests) {
+      this.validateRequest(requestData, requiredFields);
+    }
+
+    // Helper function to execute a single request attempt
+    const executeRequest = async (): Promise<T> => {
+      // Check token expiration before request (proactive refresh)
+      if (this.config.jwt?.checkExpirationBeforeRequest) {
+        const currentToken = await Promise.resolve(this.tokenStorage.getAccessToken());
+        if (await this.shouldRefreshToken(currentToken)) {
+          try {
+            await this.refreshJwtToken();
+          } catch (error) {
+            // If proactive refresh fails, continue with request (will trigger 401 refresh)
+            console.warn('Proactive token refresh failed, continuing with request:', error);
+          }
+        }
+      }
+
+      // Get authentication headers (pass instance's oauthManager for caching)
+      const authHeaders = await getAuthHeaders(this.config, this.oauthManager);
+
+      // If using JWT, get token from storage and add to headers
+      if (this.config.jwt && !authHeaders['Authorization']) {
+        const token = await Promise.resolve(this.tokenStorage.getAccessToken());
+        if (token) {
+          authHeaders['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
+      // Merge headers: config headers → auth headers → request headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...this.config.headers,
+        ...authHeaders,
+        ...(options.headers as Record<string, string> || {}),
+      };
+
+      // Build request options
+      let requestOptions: RequestInit = {
+        ...options,
+        headers,
+      };
+
+      // Apply request interceptor if provided
+      if (this.config.requestInterceptor) {
+        requestOptions = await this.config.requestInterceptor(requestOptions);
+      }
+
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        this.config.timeout || 30000
+      );
+
+      try {
+        const response = await fetch(url, {
+          ...requestOptions,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        // Handle non-OK responses
+        if (!response.ok) {
+          let errorBody: any;
+          try {
+            errorBody = await response.json().catch(() => null);
+          } catch {
+            errorBody = await response.text().catch(() => null);
+          }
+
+          // Handle ApiErrorResponse format
+          if (errorBody && typeof errorBody === 'object' && errorBody.success === false && errorBody.error) {
+            errorBody = errorBody.error;
+          }
+
+          // Build verbose error message if enabled
+          let errorMessage: string | undefined;
+          if (this.config.verboseErrors) {
+            // Create temporary error to get verbose message
+            const tempError = new ApiError(
+              response.status,
+              response.statusText,
+              errorBody
+            );
+            errorMessage = tempError.getVerboseMessage();
+          }
+
+          const apiError = new ApiError(
+            response.status,
+            response.statusText,
+            errorBody,
+            errorMessage
+          );
+
+          // Handle 401 errors with JWT refresh
+          if (response.status === 401 && this.config.jwt) {
+            try {
+              // Refresh token
+              await this.refreshJwtToken();
+
+              // Retry original request with new token (do not count as retry)
+              return executeRequest();
+            } catch (refreshError) {
+              // Refresh failed, throw auth error
+              if (this.config.jwt.onAuthError) {
+                await this.config.jwt.onAuthError();
+              }
+              throw apiError;
+            }
+          }
+
+          // Apply error interceptor if provided (before retry logic)
+          if (this.config.errorInterceptor) {
+            const interceptedError = await this.config.errorInterceptor(apiError);
+            throw interceptedError;
+          }
+
+          throw apiError;
+        }
+
+        // Parse response
+        let data: T;
+        const contentType = response.headers.get('content-type');
+
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          data = await response.text() as unknown as T;
+        }
+
+        // Unwrap ApiResponse format if configured
+        data = this.unwrapApiResponse(data);
+
+        // Validate response data if validation is enabled
+        if (this.config.validateRequests && data) {
+          this.validateResponse(data);
+        }
+
+        // Apply response interceptor if provided
+        if (this.config.responseInterceptor) {
+          data = await this.config.responseInterceptor(response, data);
+        }
+
+        return data;
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        // Handle abort (timeout)
+        if (error instanceof Error && error.name === 'AbortError') {
+          const timeoutError = new ApiError(
+            408,
+            'Request Timeout',
+            undefined,
+            `Request timed out after ${this.config.timeout || 30000}ms`
+          );
+          throw timeoutError;
+        }
+
+        // Store error for retry logic
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Re-throw ApiError instances (will be caught by retry logic if retryable)
+        if (error instanceof ApiError) {
+          throw error;
+        }
+
+        // Wrap other errors
+        throw new ApiError(
+          0,
+          'Network Error',
+          undefined,
+          error instanceof Error ? error.message : 'Unknown error occurred'
+        );
+      }
+    };
+
+    // Retry loop
+    while (retryCount <= maxRetries) {
+      try {
+        return await executeRequest();
+      } catch (error) {
+        // If this is the last retry attempt, throw the error
+        if (retryCount >= maxRetries) {
+          throw error;
+        }
+
+        // Check if error is retryable
+        const isRetryable = error instanceof ApiError
+          ? this.isRetryableStatusCode(error.status)
+          : (retryConfig.retryOnNetworkError !== false && this.isNetworkError(error));
+
+        // Don't retry non-retryable errors
+        if (!isRetryable) {
+          throw error;
+        }
+
+        // Don't retry 401 errors (handled by JWT refresh)
+        if (error instanceof ApiError && error.status === 401) {
+          throw error;
+        }
+
+        // Don't retry 403 errors (authorization failure)
+        if (error instanceof ApiError && error.status === 403) {
+          throw error;
+        }
+
+        // Calculate backoff delay
+        const delay = this.calculateBackoffDelay(retryCount);
+
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        retryCount++;
+      }
+    }
+
+    // Should never reach here, but TypeScript needs it
+    throw lastError || new Error('Request failed after retries');
   }
 
   {{#each operations}}
   // {{summary}}
-  async {{operation_id}}({{#if request_body}}data: {{operation_id}}Request{{/if}}): Promise<{{operation_id}}Response> {
-    const endpoint = '{{path}}'{{#if (eq method "GET")}}{{#if request_body}} + '?' + new URLSearchParams(data as any).toString(){{/if}}{{/if}};
-
-    return this.request<{{operation_id}}Response>(endpoint, {
+  async {{operation_id}}({{method_params}}): Promise<{{response_type_name}}> {
+    {{#if path_params}}
+    const endpoint = `{{endpoint_path}}`;
+    {{else}}
+    const endpoint = '{{endpoint_path}}';
+    {{/if}}
+    {{#if (eq method "GET")}}
+    {{#if query_params}}
+    const queryString = queryParams ? '?' + new URLSearchParams(queryParams as any).toString() : '';
+    return this.request<{{response_type_name}}>(endpoint + queryString, {
       method: '{{method}}',
-      {{#if request_body}}{{#unless (eq method "GET")}}body: JSON.stringify(data),{{/unless}}{{/if}}
     });
+    {{else}}
+    return this.request<{{response_type_name}}>(endpoint, {
+      method: '{{method}}',
+    });
+    {{/if}}
+    {{else}}
+    {{#if query_params}}
+    const queryString = queryParams ? '?' + new URLSearchParams(queryParams as any).toString() : '';
+    return this.request<{{response_type_name}}>(endpoint + queryString, {
+      method: '{{method}}',
+      {{#if request_body}}body: JSON.stringify(data),{{/if}}
+    }{{#if request_body}}, data{{#if required_fields}}, [{{#each required_fields}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{/if}}{{/if}});
+    {{else}}
+    return this.request<{{response_type_name}}>(endpoint, {
+      method: '{{method}}',
+      {{#if request_body}}body: JSON.stringify(data),{{/if}}
+    }{{#if request_body}}, data{{#if required_fields}}, [{{#each required_fields}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{/if}}{{/if}});
+    {{/if}}
+    {{/if}}
   }
 
   {{/each}}
 }
 
-// Vue composables for each operation
-{{#each operations}}
-export function use{{operation_id}}({{#if request_body}}data?: Ref<{{operation_id}}Request> | {{operation_id}}Request{{/if}}) {
-  const result = ref<{{operation_id}}Response | null>(null);
-  const loading = ref(false);
-  const error = ref<Error | null>(null);
+// ============================================================================
+// Vue Composables (Built-in ref/computed/onMounted)
+// ============================================================================
 
-  const execute = async ({{#if request_body}}requestData?: {{operation_id}}Request{{/if}}) => {
+// Singleton API client instance (shared across all composables)
+const apiClient = new ApiClient(defaultConfig);
+
+{{#each operations}}
+/**
+ * Vue composable for {{summary}}
+ * {{#if description}}
+ * {{description}}
+ * {{/if}}
+ * {{#if (eq method "GET")}}
+ * Automatically fetches data on mount and when dependencies change.
+ * {{else}}
+ * Requires manual execution via the returned `execute` function.
+ * {{/if}}
+ */
+export function use{{hook_name}}({{#if method_params}}{{method_params}}{{/if}}) {
+  const result = ref<{{response_type_name}} | null>(null);
+  const loading = ref(false);
+  const error = ref<ApiError | null>(null);
+
+  const execute = async ({{#if method_params}}{{method_params}}{{/if}}) => {
     loading.value = true;
     error.value = null;
 
     try {
-      const client = new ApiClient(defaultConfig);
-      const response = await client.{{operation_id}}({{#if request_body}}requestData || (data && 'value' in data ? data.value : data){{/if}});
+      {{#if (eq method "GET")}}
+      {{#if query_params}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}, {{/if}}queryParams);
+      {{else}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}});
+      {{/if}}
+      {{else}}
+      {{#if query_params}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}, {{/if}}queryParams{{#if request_body}}, data{{/if}});
+      {{else}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}{{#if request_body}}, {{/if}}{{/if}}{{#if request_body}}data{{/if}});
+      {{/if}}
+      {{/if}}
       result.value = response;
     } catch (err) {
-      error.value = err as Error;
+      error.value = err instanceof ApiError ? err : new ApiError(0, 'Unknown Error', err);
     } finally {
       loading.value = false;
     }
   };
 
   {{#if (eq method "GET")}}
-  // Auto-execute for GET requests
-  execute();
+  // Auto-execute on mount and watch dependencies
+  onMounted(() => {
+    execute({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if query_params}}{{#if path_params}}, {{/if}}queryParams{{/if}});
+  });
+
+  {{#if query_params}}
+  // Watch queryParams for changes
+  watch(queryParams, () => {
+    execute({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}, queryParams);
+  }, { deep: true });
+  {{/if}}
   {{/if}}
 
   return {
@@ -221,13 +1574,72 @@ export function use{{operation_id}}({{#if request_body}}data?: Ref<{{operation_i
     loading: computed(() => loading.value),
     error: computed(() => error.value),
     {{#unless (eq method "GET")}}execute,{{/unless}}
+    /** Refresh function (re-executes the query) */
+    refetch: execute,
   };
 }
 
 {{/each}}
 
-// Export the API client for direct use
-export const apiClient = new ApiClient(defaultConfig);
+/**
+ * Generate PKCE code verifier (RFC 7636)
+ * Creates a cryptographically random string suitable for PKCE
+ * @returns Base64URL-encoded random string (43-128 characters)
+ */
+export function generatePKCECodeVerifier(): string {
+  const array = new Uint8Array(32);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    // Fallback for older browsers (less secure)
+    for (let i = 0; i < array.length; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  // Base64URL encode
+  const base64 = btoa(String.fromCharCode(...array));
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
+ * Generate PKCE code challenge from verifier (RFC 7636)
+ * Uses SHA256 hash for secure PKCE implementation
+ * @param verifier - The PKCE code verifier
+ * @returns Promise resolving to base64URL-encoded SHA256 hash
+ */
+export async function generatePKCECodeChallenge(verifier: string): Promise<string> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error('Web Crypto API not available for PKCE code challenge generation');
+  }
+
+  try {
+    // Encode verifier as UTF-8
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+
+    // Compute SHA256 hash
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+    // Convert to base64url
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashBase64 = btoa(String.fromCharCode(...hashArray));
+
+    return hashBase64
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  } catch (error) {
+    throw new Error(`Failed to generate PKCE code challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Export configuration utilities
+export { defaultConfig, ApiClient, ApiError, RequiredError, getAuthHeaders, OAuth2TokenManager, generatePKCECodeVerifier, generatePKCECodeChallenge, TokenStorage, LocalStorageTokenStorage, apiClient };
+export type { ApiConfig, OAuth2Config, JwtConfig, RetryConfig };
 
 // Export types
 export * from './types';"#,
@@ -241,13 +1653,13 @@ export * from './types';"#,
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { apiClient } from './composables';
+import { apiClient, ApiError } from './composables';
 
 export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
   // State
   const data = ref<Record<string, any>>({});
   const loading = ref(false);
-  const error = ref<Error | null>(null);
+  const error = ref<ApiError | null>(null);
 
   // Getters
   const isLoading = computed(() => loading.value);
@@ -259,7 +1671,7 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
     loading.value = value;
   };
 
-  const setError = (err: Error | null) => {
+  const setError = (err: ApiError | null) => {
     error.value = err;
   };
 
@@ -272,19 +1684,32 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
   };
 
   {{#each operations}}
-  const {{operation_id}} = async ({{#if request_body}}requestData: {{operation_id}}Request{{/if}}) => {
+  const {{operation_id}} = async ({{#if method_params}}{{method_params}}{{/if}}) => {
     setLoading(true);
     clearError();
 
     try {
-      const response = await apiClient.{{operation_id}}({{#if request_body}}requestData{{/if}});
+      {{#if (eq method "GET")}}
+      {{#if query_params}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}, {{/if}}queryParams);
+      {{else}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}});
+      {{/if}}
+      {{else}}
+      {{#if query_params}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}, {{/if}}queryParams{{#if request_body}}, data{{/if}});
+      {{else}}
+      const response = await apiClient.{{operation_id}}({{#if path_params}}{{#each path_params}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}{{#if path_params}}{{#if request_body}}, {{/if}}{{/if}}{{#if request_body}}data{{/if}});
+      {{/if}}
+      {{/if}}
       {{#if (eq method "GET")}}
       setData('{{operation_id}}', response);
       {{/if}}
       return response;
     } catch (err) {
-      setError(err as Error);
-      throw err;
+      const apiError = err instanceof ApiError ? err : new ApiError(0, 'Unknown Error', err);
+      setError(apiError);
+      throw apiError;
     } finally {
       setLoading(false);
     }
@@ -395,6 +1820,7 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
     }
 
     /// Prepare template context from OpenAPI spec
+    /// This matches the React generator's structure to support all enhanced features
     fn prepare_template_context(
         &self,
         spec: &OpenApiSpec,
@@ -402,12 +1828,75 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
     ) -> Result<Value> {
         let mut operations = Vec::new();
         let mut schemas = HashMap::new();
+        let mut operation_id_counts = HashMap::new();
 
         // Process operations
         for (path, path_item) in &spec.paths {
             for (method, operation) in &path_item.operations {
-                let normalized_op =
+                let mut normalized_op =
                     crate::client_generator::helpers::normalize_operation(method, path, operation);
+
+                // Handle duplicate operation IDs by adding numeric suffixes
+                let base_operation_id = normalized_op.operation_id.clone();
+                let count = operation_id_counts.entry(base_operation_id.clone()).or_insert(0);
+                *count += 1;
+
+                if *count > 1 {
+                    // Add suffix for duplicates: postRecordEnvironmentalData2, postRecordEnvironmentalData3, etc.
+                    normalized_op.operation_id = format!("{}{}", base_operation_id, *count);
+                }
+
+                // Extract path parameters from the path
+                let path_params = crate::client_generator::helpers::extract_path_parameters(path);
+
+                // Generate endpoint path with template literals for path parameters
+                // Replace {param} with ${param} for TypeScript template literals
+                let mut endpoint_path = normalized_op.path.clone();
+                for param in &path_params {
+                    endpoint_path = endpoint_path
+                        .replace(&format!("{{{}}}", param), &format!("${{{}}}", param));
+                }
+
+                // Extract query parameters and build query param types
+                let mut query_params = Vec::new();
+                let mut query_param_types = Vec::new();
+
+                for param in &normalized_op.parameters {
+                    if param.r#in == "query" {
+                        let param_type = if let Some(schema) = &param.schema {
+                            crate::client_generator::helpers::schema_to_typescript_type(schema)
+                        } else {
+                            "string".to_string()
+                        };
+
+                        let required = param.required.unwrap_or(false);
+                        query_params.push(json!({
+                            "name": param.name,
+                            "required": required,
+                            "type": param_type.clone(),
+                        }));
+
+                        if required {
+                            query_param_types.push(format!("{}: {}", param.name, param_type));
+                        } else {
+                            query_param_types.push(format!("{}?: {}", param.name, param_type));
+                        }
+                    }
+                }
+
+                // Build method parameter list
+                let mut method_params_parts = Vec::new();
+
+                // Add path parameters (all required)
+                for param in &path_params {
+                    method_params_parts.push(format!("{}: string", param));
+                }
+
+                // Add query parameters (as an object)
+                if !query_params.is_empty() {
+                    method_params_parts
+                        .push(format!("queryParams?: {{ {} }}", query_param_types.join(", ")));
+                }
 
                 // Check if request body has JSON content
                 let has_json_request_body = normalized_op
@@ -415,13 +1904,70 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
                     .as_ref()
                     .map_or(false, |rb| rb.content.contains_key("application/json"));
 
+                // Add request body parameter if present (for POST, PUT, PATCH, DELETE, etc.)
+                if has_json_request_body && normalized_op.method != "GET" {
+                    let type_name = crate::client_generator::helpers::generate_type_name(
+                        &normalized_op.operation_id,
+                        "Request",
+                    );
+                    method_params_parts.push(format!("data: {}", type_name));
+                }
+
+                // Join parameters - if empty, use empty string (for methods with no params)
+                let method_params = if method_params_parts.is_empty() {
+                    String::new()
+                } else {
+                    method_params_parts.join(", ")
+                };
+
+                // Generate type names for response and request
+                let response_type_name = crate::client_generator::helpers::generate_type_name(
+                    &normalized_op.operation_id,
+                    "Response",
+                );
+
+                // Generate request type name - always generate it when request body exists
+                let request_type_name = if has_json_request_body {
+                    crate::client_generator::helpers::generate_type_name(
+                        &normalized_op.operation_id,
+                        "Request",
+                    )
+                } else {
+                    String::new()
+                };
+
+                // Capitalize first letter of operation_id for hook/composable names (Vue convention)
+                let hook_name = if let Some(first_char) = normalized_op.operation_id.chars().next()
+                {
+                    format!(
+                        "{}{}",
+                        first_char.to_uppercase(),
+                        &normalized_op.operation_id[first_char.len_utf8()..]
+                    )
+                } else {
+                    normalized_op.operation_id.clone()
+                };
+
                 // Pre-process request body schema to add required flags to properties
+                // Also extract required fields array for validation
+                let mut required_fields: Vec<String> = Vec::new();
                 let processed_request_body = if has_json_request_body {
                     if let Some(ref rb) = normalized_op.request_body {
                         let mut processed_rb = json!(rb);
                         if let Some(content) = processed_rb.get_mut("content") {
                             if let Some(json_content) = content.get_mut("application/json") {
                                 if let Some(schema) = json_content.get_mut("schema") {
+                                    // Extract required fields before processing
+                                    if let Some(required) =
+                                        schema.get("required").and_then(|r| r.as_array())
+                                    {
+                                        required_fields = required
+                                            .iter()
+                                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                            .collect();
+                                    }
+
+                                    // Process schema to add required flags to properties
                                     *schema =
                                         Self::process_schema_with_required_flags(schema.take());
                                 }
@@ -453,11 +1999,20 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
                 operations.push(json!({
                     "method": normalized_op.method,
                     "path": normalized_op.path,
+                    "endpoint_path": endpoint_path,
                     "operation_id": normalized_op.operation_id,
+                    "hook_name": hook_name,
+                    "response_type_name": response_type_name,
+                    "request_type_name": request_type_name,
                     "summary": normalized_op.summary,
                     "description": normalized_op.description,
                     "parameters": normalized_op.parameters,
+                    "path_params": path_params,
+                    "query_params": query_params,
+                    "query_param_types": query_param_types,
+                    "method_params": method_params,
                     "request_body": processed_request_body,
+                    "required_fields": if !required_fields.is_empty() { Some(required_fields) } else { None },
                     "responses": processed_responses,
                     "tags": normalized_op.tags,
                 }));
@@ -524,10 +2079,36 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
         spec: &OpenApiSpec,
         config: &ClientGeneratorConfig,
     ) -> Result<String> {
+        let api_description = spec
+            .info
+            .description
+            .as_ref()
+            .map(|d| format!("\n\n{}\n", d))
+            .unwrap_or_default();
+
+        let operation_count = self.count_operations(spec);
+        let schema_count = self.count_schemas(spec);
+        let store_name = spec.info.title.replace(' ', "");
+
         let readme = format!(
             r#"# {} Vue Client
 
-Generated Vue 3 client for {} API (v{}).
+Generated Vue 3 client for {} API (v{}).{}
+## Features
+
+✅ **Auto-generated Vue composables** - {} composables with built-in loading/error states
+✅ **Enterprise error handling** - Structured ApiError class with status codes and verbose messages
+✅ **OAuth2 flow support** - Authorization code, client credentials, password, and implicit flows
+✅ **Authentication support** - Bearer tokens, API keys, Basic auth, OAuth2
+✅ **JWT token refresh** - Automatic refresh on 401 with promise deduplication
+✅ **Retry logic** - Exponential backoff with jitter for resilient requests
+✅ **Token storage interface** - Secure, extensible token management
+✅ **Request validation** - Optional validation of required fields before sending
+✅ **Request/Response interceptors** - Customize requests and responses
+✅ **TypeScript types** - {} fully-typed interfaces
+✅ **Timeout handling** - Configurable request timeouts
+✅ **ApiResponse wrapper** - Support for unwrapping wrapped API responses
+✅ **100% endpoint coverage** - All {} API operations included
 
 ## Installation
 
@@ -535,9 +2116,9 @@ Generated Vue 3 client for {} API (v{}).
 npm install
 ```
 
-## Usage
+## Quick Start
 
-### Using Vue Composables
+### Using Vue Composables (Built-in)
 
 ```vue
 <template>
@@ -545,17 +2126,35 @@ npm install
     <div v-if="loading">Loading...</div>
     <div v-else-if="error">Error: {{error.message}}</div>
     <div v-else>
-      <div v-for="user in data" :key="user.id">
-        {{user.name}}
+      <div v-for="item in data" :key="item.id">
+        {{item.name}}
       </div>
     </div>
+    <button @click="refetch">Refresh</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import {{ useGetUsers }} from './composables';
+import {{ useGetListApiaries, usePostCreateApiary }} from './composables';
 
-const {{ data, loading, error }} = useGetUsers();
+// GET requests auto-fetch on mount
+const {{ data, loading, error, refetch }} = useGetListApiaries({{
+  queryParams: {{ page: 1, limit: 20 }}
+}});
+
+// POST requests require manual execution
+const createMutation = usePostCreateApiary();
+
+const handleCreate = async () => {{
+  try {{
+    await createMutation.execute({{
+      data: {{ name: 'New Apiary', location: {{ lat: 40.7128, lng: -74.0060 }} }}
+    }});
+    refetch(); // Refresh the list
+  }} catch (err) {{
+    console.error('Failed to create:', err);
+  }}
+}};
 </script>
 ```
 
@@ -564,38 +2163,57 @@ const {{ data, loading, error }} = useGetUsers();
 ```vue
 <template>
   <div>
-    <div v-if="loading">Loading...</div>
-    <div v-else-if="error">Error: {{errorMessage}}</div>
+    <div v-if="store.loading">Loading...</div>
+    <div v-else-if="store.error">Error: {{store.errorMessage}}</div>
     <div v-else>
-      <div v-for="user in data" :key="user.id">
-        {{user.name}}
+      <div v-for="item in store.data" :key="item.id">
+        {{item.name}}
       </div>
     </div>
+    <button @click="handleCreate">Create</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import {{ use{}Store }} from './store';
+import {{ {}Store }} from './store';
+import {{ storeToRefs }} from 'pinia';
 
-const store = use{}Store();
-const {{ data, loading, error, errorMessage }} = storeToRefs(store);
+const store = {}Store();
+const {{ loading, error, errorMessage }} = storeToRefs(store);
 
 // Execute operations
-await store.getUsers();
+await store.getListApiaries({{ queryParams: {{ page: 1, limit: 20 }} }});
+
+const handleCreate = async () => {{
+  try {{
+    await store.postCreateApiary({{
+      data: {{ name: 'New Apiary' }}
+    }});
+    // Refresh list
+    await store.getListApiaries({{ queryParams: {{ page: 1, limit: 20 }} }});
+  }} catch (err) {{
+    console.error('Failed:', err);
+  }}
+}};
 </script>
 ```
 
 ### Using API Client Directly
 
 ```typescript
-import {{ apiClient }} from './composables';
+import {{ apiClient, ApiError }} from './composables';
 
 async function fetchData() {{
   try {{
-    const users = await apiClient.getUsers();
-    console.log(users);
+    const apiaries = await apiClient.getListApiaries({{
+      queryParams: {{ page: 1, limit: 20 }}
+    }});
+    console.log(apiaries);
   }} catch (error) {{
-    console.error('API Error:', error);
+    if (error instanceof ApiError) {{
+      console.error('API Error:', error.status, error.statusText);
+      console.error('Details:', error.getErrorDetails());
+    }}
   }}
 }}
 ```
@@ -604,19 +2222,306 @@ async function fetchData() {{
 
 The client is configured to use the following base URL: `{}`
 
-You can modify the configuration by updating the `defaultConfig` object in `composables.ts`.
+### Basic Configuration
 
-## Generated Files
+```typescript
+import {{ apiClient, defaultConfig }} from './composables';
 
-- `types.ts` - TypeScript type definitions
-- `composables.ts` - Vue 3 composables and API client
-- `store.ts` - Pinia store for state management
-- `package.json` - Package configuration
-- `README.md` - This documentation
+// Update default config
+defaultConfig.baseUrl = 'https://api.production.com';
+```
+
+### Authentication
+
+```typescript
+import {{ apiClient }} from './composables';
+
+// Bearer token authentication
+apiClient.updateConfig({{
+  accessToken: 'your-jwt-token'
+}});
+
+// Dynamic token (refreshes on each request)
+apiClient.updateConfig({{
+  accessToken: () => localStorage.getItem('authToken') || ''
+}});
+
+// API key authentication
+apiClient.updateConfig({{
+  apiKey: 'your-api-key'
+}});
+
+// Basic authentication
+apiClient.updateConfig({{
+  username: 'user',
+  password: 'pass'
+}});
+
+// Multiple auth methods (Bearer + API key)
+apiClient.updateConfig({{
+  accessToken: 'bearer-token',
+  apiKey: 'api-key'
+}});
+
+// OAuth2 client_credentials flow (automatic token management)
+// ⚠️ SECURITY WARNING: Only use in server-side applications!
+// NEVER expose client secrets in browser/client-side code
+apiClient.updateConfig({{
+  oauth2: {{
+    clientId: 'your-client-id',
+    clientSecret: 'your-client-secret', // ⚠️ Only for server-side apps!
+    tokenUrl: 'https://oauth.example.com/token',
+    flow: 'client_credentials',
+    scopes: ['read', 'write']
+  }}
+}});
+
+// OAuth2 authorization_code flow (manual authorization)
+// ⚠️ SECURITY: For browser apps, use PKCE and avoid client secrets
+import {{ OAuth2TokenManager, generatePKCECodeVerifier }} from './composables';
+
+// Generate PKCE code verifier (recommended for browser apps)
+const codeVerifier = generatePKCECodeVerifier();
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  // ⚠️ Do NOT include clientSecret in browser-based flows
+  // Use PKCE (codeVerifier) instead for security
+  authorizationUrl: 'https://oauth.example.com/authorize',
+  tokenUrl: 'https://oauth.example.com/token',
+  redirectUri: 'https://yourapp.com/callback',
+  flow: 'authorization_code',
+  scopes: ['read', 'write'],
+  codeVerifier // PKCE code verifier for enhanced security
+}});
+
+// Redirect user to authorization URL (includes state and PKCE)
+await oauthManager.authorize();
+
+// After redirect, exchange code for token
+const urlParams = new URLSearchParams(window.location.search);
+const code = urlParams.get('code');
+const state = urlParams.get('state'); // CSRF protection
+if (code) {{
+  const token = await oauthManager.exchangeCode(code, state);
+  // Token is automatically stored in localStorage with expiration
+  // ⚠️ SECURITY: localStorage is vulnerable to XSS attacks
+  // Consider using httpOnly cookies or secure storage for production
+}}
+```
+
+### JWT Token Refresh
+
+```typescript
+import {{ apiClient }} from './composables';
+
+// Configure JWT token refresh
+apiClient.updateConfig({{
+  jwt: {{
+    refreshEndpoint: '/api/v1/auth/refresh',
+    refreshToken: () => localStorage.getItem('refreshToken') || '',
+    onTokenRefresh: (token) => {{
+      console.log('Token refreshed:', token);
+    }},
+    onAuthError: () => {{
+      // Redirect to login on auth failure
+      window.location.href = '/login';
+    }},
+    refreshThreshold: 300, // Refresh if expires within 5 minutes
+    checkExpirationBeforeRequest: true // Proactive refresh
+  }}
+}});
+```
+
+### Retry Logic
+
+```typescript
+import {{ apiClient }} from './composables';
+
+// Configure retry behavior
+apiClient.updateConfig({{
+  retry: {{
+    maxRetries: 3,
+    baseDelay: 1000, // 1 second
+    maxDelay: 10000, // 10 seconds
+    retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+    retryOnNetworkError: true
+  }}
+}});
+```
+
+### Request/Response Interceptors
+
+```typescript
+import {{ apiClient, ApiError }} from './composables';
+
+apiClient.updateConfig({{
+  // Request interceptor - modify requests before sending
+  requestInterceptor: (request) => {{
+    // Add custom headers
+    const headers = request.headers as Record<string, string>;
+    headers['X-Request-ID'] = generateRequestId();
+    return request;
+  }},
+
+  // Response interceptor - transform responses
+  responseInterceptor: (response, data) => {{
+    // Log responses, transform data, etc.
+    console.log('Response:', response.status, data);
+    return data;
+  }},
+
+  // Error interceptor - handle errors globally
+  errorInterceptor: (error: ApiError) => {{
+    // Handle 401 errors (unauthorized)
+    if (error.status === 401) {{
+      // Redirect to login, refresh token, etc.
+      window.location.href = '/login';
+    }}
+    return error;
+  }}
+}});
+```
+
+### Request/Response Validation
+
+```typescript
+import {{ apiClient, RequiredError }} from './composables';
+
+// Enable validation to check required fields before sending requests
+apiClient.updateConfig({{
+  validateRequests: true,
+  verboseErrors: true  // Get detailed validation error messages
+}});
+
+// Validation will throw RequiredError if required fields are missing
+try {{
+  await apiClient.postCreateApiary({{
+    data: {{ name: 'Test' }}  // Missing required 'location' field
+  }});
+}} catch (error) {{
+  if (error instanceof RequiredError) {{
+    console.error('Missing required fields:', error.field);
+  }}
+}}
+```
+
+### ApiResponse Wrapper Support
+
+```typescript
+import {{ apiClient }} from './composables';
+
+// Enable automatic unwrapping of ApiResponse<T> format
+apiClient.updateConfig({{
+  unwrapResponse: true
+}});
+
+// If API returns {{ success: true, data: {{ ... }} }}
+// Client will automatically return just the data
+const result = await apiClient.getListApiaries();
+// result is the unwrapped data, not {{ success: true, data: ... }}
+```
+
+## Security Considerations
+
+### OAuth2 Security
+
+⚠️ **IMPORTANT SECURITY WARNINGS:**
+
+1. **Client Secrets**: NEVER include client secrets in browser/client-side code. They should only be used in server-side applications. For browser apps:
+   - Use `authorization_code` flow without client secret
+   - Implement PKCE (Proof Key for Code Exchange) for enhanced security
+   - Use public clients (without client secret)
+
+2. **Token Storage**: Tokens stored in `localStorage` are vulnerable to XSS (Cross-Site Scripting) attacks:
+   - For production apps, consider using httpOnly cookies (server-side only)
+   - Use secure storage mechanisms
+   - Implement Content Security Policy (CSP) to mitigate XSS risks
+   - Clear tokens on logout
+
+3. **CSRF Protection**: The authorization_code flow includes state parameter validation to prevent CSRF attacks. Always validate the state parameter.
+
+4. **Token Expiration**: Tokens are automatically checked for expiration before use. Expired tokens are removed from storage.
+
+### Best Practices
+
+```typescript
+// ✅ GOOD: Use PKCE for browser-based OAuth2
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  // No clientSecret for browser apps
+  codeVerifier: generatePKCECodeVerifier(), // PKCE
+  // ... other config
+}});
+
+// ❌ BAD: Client secret in browser code
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  clientSecret: 'secret', // ⚠️ NEVER in browser code!
+  // ...
+}});
+
+// ✅ GOOD: Use secure storage or httpOnly cookies for tokens
+// (Implement in your application, not in generated client)
+
+// ⚠️ CURRENT: Tokens stored in localStorage (vulnerable to XSS)
+// Consider implementing secure token storage for production
+```
+
+## Error Handling
+
+The client includes structured error handling with the `ApiError` class:
+
+```vue
+<template>
+  <div>
+    <div v-if="error">
+      <div v-if="error.isClientError()">
+        Client Error: {{error.status}} - {{error.message}}
+      </div>
+      <div v-else-if="error.isServerError()">
+        Server Error: {{error.status}} - {{error.message}}
+      </div>
+      <div v-else>
+        Error: {{error.message}}
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {{ useGetListApiaries, ApiError }} from './composables';
+
+const {{ data, loading, error }} = useGetListApiaries();
+
+// Access error details
+if (error.value) {{
+  const details = error.value.getErrorDetails();
+  console.log('Error details:', details);
+}}
+</script>
+```
+
+### Error Types
+
+- **`ApiError`** - Base API error with status, statusText, and body
+  - `isClientError()` - Check if 4xx error
+  - `isServerError()` - Check if 5xx error
+  - `getErrorDetails()` - Get error response body
+  - `getVerboseMessage()` - Get detailed error message with validation info
+
+- **`RequiredError`** - Thrown when required parameters are missing
 
 ## API Operations
 
 {}
+
+## Generated Files
+
+- `composables.ts` - Vue 3 composables and API client
+- `store.ts` - Pinia store for state management
+- `types.ts` - TypeScript type definitions
+- `package.json` - Package configuration
+- `README.md` - This documentation
 
 ## Development
 
@@ -627,14 +2532,189 @@ npm run build
 # Watch mode
 npm run dev
 ```
+
+## TypeScript Support
+
+All types are fully typed with TypeScript. The generated client includes:
+- {} TypeScript interfaces
+- Full type safety for all operations
+- Proper error types
+- Request/response type definitions
+
+## Examples
+
+### Mutation with Error Handling
+
+```vue
+<template>
+  <form @submit.prevent="handleSubmit">
+    <input v-model="formData.name" />
+    <button type="submit" :disabled="createMutation.loading">
+      {{createMutation.loading ? 'Creating...' : 'Create'}}
+    </button>
+    <div v-if="createMutation.error" class="error">
+      {{createMutation.error.message}}
+    </div>
+  </form>
+</template>
+
+<script setup lang="ts">
+import {{ usePostCreateApiary, ApiError }} from './composables';
+
+const createMutation = usePostCreateApiary();
+const formData = ref({{ name: '' }});
+
+const handleSubmit = async () => {{
+  try {{
+    const result = await createMutation.execute({{ data: formData.value }});
+    console.log('Created:', result);
+  }} catch (error) {{
+    if (error instanceof ApiError) {{
+      if (error.status === 400) {{
+        const details = error.getErrorDetails();
+        console.error('Validation errors:', details);
+      }} else if (error.status === 409) {{
+        console.error('Already exists');
+      }}
+    }}
+  }}
+}};
+</script>
+```
+
+### Conditional Fetching
+
+```vue
+<script setup lang="ts">
+import {{ useGetApiaryDetails }} from './composables';
+
+const props = defineProps<{{ apiaryId: string }}>();
+
+// Composable automatically re-fetches when apiaryId changes
+const {{ data, loading, error }} = useGetApiaryDetails(props.apiaryId);
+</script>
+```
+
+### Manual Refresh
+
+```vue
+<template>
+  <div>
+    <button @click="refetch">Refresh</button>
+    <!-- list -->
+  </div>
+</template>
+
+<script setup lang="ts">
+import {{ useGetListApiaries }} from './composables';
+
+const {{ data, loading, error, refetch }} = useGetListApiaries();
+</script>
+```
+
+## Authentication Examples
+
+### JWT Token from Local Storage
+
+```typescript
+apiClient.updateConfig({{
+  accessToken: () => {{
+    return localStorage.getItem('authToken') || '';
+  }}
+}});
+```
+
+### API Key Rotation
+
+```typescript
+apiClient.updateConfig({{
+  apiKey: (name: string) => {{
+    // Get different keys for different services
+    const keys = getApiKeysFromVault();
+    return keys[name] || '';
+  }}
+}});
+```
+
+### JWT Token Refresh with Token Storage
+
+```typescript
+import {{ apiClient, LocalStorageTokenStorage }} from './composables';
+
+// Use custom token storage
+const tokenStorage = new LocalStorageTokenStorage(
+  'my_access_token',
+  'my_refresh_token'
+);
+
+apiClient.updateConfig({{
+  tokenStorage,
+  jwt: {{
+    refreshEndpoint: '/api/v1/auth/refresh',
+    onTokenRefresh: (token) => {{
+      console.log('Token refreshed:', token);
+    }},
+    onAuthError: () => {{
+      window.location.href = '/login';
+    }}
+  }}
+}});
+```
+
+## PKCE Helper Functions
+
+The client includes utility functions for generating PKCE code verifiers and challenges:
+
+```typescript
+import {{ generatePKCECodeVerifier, generatePKCECodeChallenge }} from './composables';
+
+// Generate code verifier
+const codeVerifier = generatePKCECodeVerifier();
+
+// Generate code challenge (uses SHA256 hash)
+const codeChallenge = await generatePKCECodeChallenge(codeVerifier);
+
+// Use with OAuth2TokenManager
+const oauthManager = new OAuth2TokenManager({{
+  clientId: 'your-client-id',
+  codeVerifier,
+  // ... other config
+}});
+```
+
+## Limitations & Future Enhancements
+
+### Response Validation
+The current implementation provides basic response validation (type checking, structure validation).
+Full response validation against OpenAPI schemas with property-level validation, enum checking,
+and format constraints requires additional libraries like `ajv`. For full schema validation,
+consider integrating a validation library in your application.
+
+### Advanced PKCE
+PKCE code challenge generation uses SHA256 hash (RFC 7636 compliant). The implementation requires
+Web Crypto API support. For environments without Web Crypto API, a fallback is provided but is
+less secure.
+
+### OAuth2 Implicit Flow
+The implicit flow is supported in configuration but requires manual handling of token
+extraction from URL fragments. Use `authorization_code` flow with PKCE instead (recommended).
+
+## Support
+
+For issues, questions, or contributions, please refer to the MockForge documentation.
 "#,
             spec.info.title,
             spec.info.title,
             spec.info.version,
-            spec.info.title,
-            spec.info.title,
+            api_description,
+            operation_count,
+            schema_count,
+            operation_count,
+            store_name,
+            store_name,
             config.base_url.as_ref().unwrap_or(&"http://localhost:3000".to_string()),
-            self.generate_operations_list(spec)
+            self.generate_operations_list(spec),
+            schema_count
         );
 
         Ok(readme)
