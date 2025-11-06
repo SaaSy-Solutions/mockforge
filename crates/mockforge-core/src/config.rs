@@ -916,6 +916,15 @@ pub struct DataConfig {
     pub templates: HashMap<String, String>,
     /// RAG configuration
     pub rag: RagConfig,
+    /// Active persona profile domain (e.g., "finance", "ecommerce", "healthcare")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persona_domain: Option<String>,
+    /// Enable persona-based consistency
+    #[serde(default = "default_false")]
+    pub persona_consistency_enabled: bool,
+    /// Persona registry configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persona_registry: Option<PersonaRegistryConfig>,
 }
 
 impl Default for DataConfig {
@@ -926,6 +935,9 @@ impl Default for DataConfig {
             locale: "en".to_string(),
             templates: HashMap::new(),
             rag: RagConfig::default(),
+            persona_domain: None,
+            persona_consistency_enabled: false,
+            persona_registry: None,
         }
     }
 }
@@ -991,6 +1003,10 @@ fn default_max_retries() -> usize {
     3
 }
 
+fn default_false() -> bool {
+    false
+}
+
 impl Default for RagConfig {
     fn default() -> Self {
         Self {
@@ -1006,6 +1022,31 @@ impl Default for RagConfig {
             cache_ttl_secs: default_cache_ttl(),
             timeout_secs: default_timeout(),
             max_retries: default_max_retries(),
+        }
+    }
+}
+
+/// Persona registry configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PersonaRegistryConfig {
+    /// Enable persistence (save personas to disk)
+    #[serde(default = "default_false")]
+    pub persistent: bool,
+    /// Storage path for persistent personas
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_path: Option<String>,
+    /// Default traits for new personas
+    #[serde(default)]
+    pub default_traits: HashMap<String, String>,
+}
+
+impl Default for PersonaRegistryConfig {
+    fn default() -> Self {
+        Self {
+            persistent: false,
+            storage_path: None,
+            default_traits: HashMap::new(),
         }
     }
 }

@@ -5,11 +5,13 @@
 
 use mockforge_core::Result;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::str::FromStr;
 
 /// Domain type for specialized data generation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Domain {
     /// Financial data (transactions, accounts, currencies)
     Finance,
@@ -85,14 +87,38 @@ impl FromStr for Domain {
 }
 
 /// Domain-specific data generator
+#[derive(Debug)]
 pub struct DomainGenerator {
     domain: Domain,
+    /// Optional persona traits to influence generation
+    persona_traits: Option<std::collections::HashMap<String, String>>,
 }
 
 impl DomainGenerator {
     /// Create a new domain generator
     pub fn new(domain: Domain) -> Self {
-        Self { domain }
+        Self {
+            domain,
+            persona_traits: None,
+        }
+    }
+
+    /// Create a new domain generator with persona traits
+    pub fn with_traits(domain: Domain, traits: std::collections::HashMap<String, String>) -> Self {
+        Self {
+            domain,
+            persona_traits: Some(traits),
+        }
+    }
+
+    /// Set persona traits for this generator
+    pub fn set_traits(&mut self, traits: std::collections::HashMap<String, String>) {
+        self.persona_traits = Some(traits);
+    }
+
+    /// Get persona traits
+    pub fn get_trait(&self, name: &str) -> Option<&String> {
+        self.persona_traits.as_ref().and_then(|traits| traits.get(name))
     }
 
     /// Generate data for a specific field type in the domain

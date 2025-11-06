@@ -5,6 +5,8 @@
 // Re-export error types from mockforge-core
 pub use mockforge_core::{Error, Result};
 
+/// Consistency engine for entity ID → persona mappings
+pub mod consistency;
 pub mod dataset;
 pub mod domains;
 pub mod drift;
@@ -13,6 +15,10 @@ pub mod generator;
 pub mod intelligent_mock;
 pub mod mock_generator;
 pub mod mock_server;
+/// Persona profile system for consistent data generation
+pub mod persona;
+/// Domain-specific persona templates
+pub mod persona_templates;
 /// Provider utilities for faker and data generation
 pub mod provider;
 /// RAG (Retrieval-Augmented Generation) utilities for intelligent mock data generation
@@ -24,6 +30,10 @@ pub mod token_resolver;
 #[cfg(test)]
 mod mock_data_tests;
 
+#[cfg(test)]
+mod integration_tests;
+
+pub use consistency::{ConsistencyStore, EntityIdExtractor};
 pub use dataset::{Dataset, DatasetValidationResult};
 pub use domains::{Domain, DomainGenerator, ParseDomainError};
 pub use drift::{DataDriftConfig, DataDriftEngine, DriftStrategy};
@@ -34,6 +44,11 @@ pub use mock_generator::{MockDataGenerator, MockDataResult, MockGeneratorConfig,
 pub use mock_server::{
     start_mock_server, start_mock_server_with_config, MockServer, MockServerBuilder,
     MockServerConfig,
+};
+pub use persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
+pub use persona_templates::{
+    EcommercePersonaTemplate, FinancePersonaTemplate, HealthcarePersonaTemplate, PersonaTemplate,
+    PersonaTemplateRegistry,
 };
 pub use rag::{EmbeddingProvider, LlmProvider, RagConfig, RagEngine, SearchResult};
 pub use replay_augmentation::{

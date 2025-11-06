@@ -4,11 +4,15 @@
 //! the basic schema generator, offering intelligent data generation based on OpenAPI
 //! specifications with type safety and realistic data patterns.
 
+use crate::consistency::ConsistencyStore;
+use crate::domains::Domain;
 use crate::faker::EnhancedFaker;
+use crate::persona::PersonaRegistry;
 use crate::schema::{FieldDefinition, SchemaDefinition};
 use crate::{Error, Result};
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 /// Configuration for mock data generation
@@ -96,6 +100,12 @@ pub struct MockDataGenerator {
     schema_registry: HashMap<String, SchemaDefinition>,
     /// Field name patterns for intelligent mapping
     field_patterns: HashMap<String, String>,
+    /// Persona registry for consistent persona-based generation
+    persona_registry: Option<Arc<PersonaRegistry>>,
+    /// Consistency store for entity ID → persona mappings
+    consistency_store: Option<Arc<ConsistencyStore>>,
+    /// Active domain for persona-based generation
+    active_domain: Option<Domain>,
 }
 
 impl MockDataGenerator {
@@ -111,11 +121,52 @@ impl MockDataGenerator {
             faker: EnhancedFaker::new(),
             schema_registry: HashMap::new(),
             field_patterns: Self::create_field_patterns(),
+            persona_registry: None,
+            consistency_store: None,
+            active_domain: None,
         };
 
         // Initialize with common schema patterns
         generator.initialize_common_schemas();
         generator
+    }
+
+    /// Create a new mock data generator with persona support
+    pub fn with_persona_support(config: MockGeneratorConfig, domain: Option<Domain>) -> Self {
+        let persona_registry = Arc::new(PersonaRegistry::new());
+        let consistency_store =
+            Arc::new(ConsistencyStore::with_registry_and_domain(persona_registry.clone(), domain));
+
+        let mut generator = Self {
+            config,
+            faker: EnhancedFaker::new(),
+            schema_registry: HashMap::new(),
+            field_patterns: Self::create_field_patterns(),
+            persona_registry: Some(persona_registry),
+            consistency_store: Some(consistency_store),
+            active_domain: domain,
+        };
+
+        // Initialize with common schema patterns
+        generator.initialize_common_schemas();
+        generator
+    }
+
+    /// Set the active domain for persona-based generation
+    pub fn set_active_domain(&mut self, domain: Option<Domain>) {
+        self.active_domain = domain;
+        // Note: ConsistencyStore doesn't have a setter for default domain,
+        // so we just update the active_domain field which is used when generating values
+    }
+
+    /// Get the persona registry
+    pub fn persona_registry(&self) -> Option<&Arc<PersonaRegistry>> {
+        self.persona_registry.as_ref()
+    }
+
+    /// Get the consistency store
+    pub fn consistency_store(&self) -> Option<&Arc<ConsistencyStore>> {
+        self.consistency_store.as_ref()
     }
 
     /// Generate mock data from an OpenAPI specification
@@ -313,6 +364,11 @@ impl MockDataGenerator {
 
     /// Generate a value for a specific field
     fn generate_field_value(&mut self, field: &FieldDefinition, faker_type: &str) -> Result<Value> {
+        // Note: Automatic persona-based generation from field names would require
+        // entity ID values from request context (path params, query params, body).
+        // For now, use explicit generate_with_persona() for persona-based generation.
+        // Automatic detection can be enhanced in the future when request context is available.
+
         // Use faker template if provided
         if let Some(template) = &field.faker_template {
             return Ok(self.faker.generate_by_type(template));
@@ -323,6 +379,53 @@ impl MockDataGenerator {
 
         // Apply constraints if present
         self.apply_constraints(&value, field)
+    }
+
+    /// Generate data with explicit persona support
+    ///
+    /// Generates data for a schema using a specific entity ID and domain.
+    /// This ensures the same entity ID always generates the same data pattern.
+    pub fn generate_with_persona(
+        &mut self,
+        entity_id: &str,
+        domain: Domain,
+        schema: &SchemaDefinition,
+    ) -> Result<Value> {
+        // Ensure consistency store is available
+        let store = self.consistency_store.as_ref().ok_or_else(|| {
+            Error::generic("Persona support not enabled. Use with_persona_support() to create generator with persona support.")
+        })?;
+
+        let mut object = serde_json::Map::new();
+
+        for field in &schema.fields {
+            // Skip optional fields if configured to do so
+            if !field.required && !self.config.include_optional_fields {
+                continue;
+            }
+
+            // Determine the best faker type for this field
+            let faker_type = self.determine_faker_type(field);
+
+            // Generate value using persona-based generation
+            let value = match store.generate_consistent_value(entity_id, &faker_type, Some(domain))
+            {
+                Ok(v) => v,
+                Err(_) => {
+                    // Fallback to regular generation
+                    self.faker.generate_by_type(&faker_type)
+                }
+            };
+
+            // Validate the generated value if configured
+            if self.config.validate_generated_data {
+                field.validate_value(&value)?;
+            }
+
+            object.insert(field.name.clone(), value);
+        }
+
+        Ok(Value::Object(object))
     }
 
     /// Apply constraints to a generated value
