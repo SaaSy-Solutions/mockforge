@@ -41,6 +41,7 @@ mockforge-kafka = { version = "0.2.0", path = "../mockforge-kafka", optional = t
 mockforge-amqp = { version = "0.2.0", path = "../mockforge-amqp", optional = true }
 mockforge-tcp = { version = "0.2.0", path = "../mockforge-tcp", optional = true }
 mockforge-tunnel = { version = "0.2.7", path = "../mockforge-tunnel" }
+mockforge-vbr = { version = "0.2.7", path = "../mockforge-vbr" }
 mockforge-plugin-core = "0.2.7"
 mockforge-plugin-loader = { version = "0.2.0", path = "../mockforge-plugin-loader" }
 # mockforge-chaos = { path = "../mockforge-chaos" }  # Temporarily disabled due to compilation errors

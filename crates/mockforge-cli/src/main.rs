@@ -31,6 +31,7 @@ mod progress;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
 mod tunnel_commands;
+mod vbr_commands;
 mod workspace_commands;
 
 #[cfg(test)]
@@ -720,6 +721,21 @@ enum Commands {
     Tunnel {
         #[command(subcommand)]
         tunnel_command: tunnel_commands::TunnelSubcommand,
+    },
+
+    /// Virtual Backend Reality (VBR) engine management
+    ///
+    /// Create stateful mock servers with persistent databases, auto-generated
+    /// CRUD APIs, and relationship endpoints.
+    ///
+    /// Examples:
+    ///   mockforge vbr create entity User --fields id:string,name:string,email:string
+    ///   mockforge vbr serve --port 3000 --storage sqlite
+    ///   mockforge vbr manage entities list
+    #[command(verbatim_doc_comment)]
+    Vbr {
+        #[command(subcommand)]
+        vbr_command: vbr_commands::VbrCommands,
     },
 
     /// Chaos experiment orchestration
@@ -1737,6 +1753,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             tunnel_commands::handle_tunnel_command(tunnel_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("Tunnel command failed: {}", e))?;
+        }
+
+        Commands::Vbr { vbr_command } => {
+            vbr_commands::execute_vbr_command(vbr_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("VBR command failed: {}", e))?;
         }
 
         Commands::Orchestrate {

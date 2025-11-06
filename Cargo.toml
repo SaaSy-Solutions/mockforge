@@ -32,6 +32,7 @@ members = [
     "crates/mockforge-analytics",
     "crates/mockforge-sdk",
     "crates/mockforge-tunnel",
+    "crates/mockforge-vbr",
     "tests"  # Integration tests package
 ]
 exclude = [

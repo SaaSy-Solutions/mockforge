@@ -13,11 +13,14 @@ path = "src/lib.rs"
 mockforge-test = { path = "../crates/mockforge-test" }
 mockforge-core = { path = "../crates/mockforge-core" }
 mockforge-http = { path = "../crates/mockforge-http" }
+mockforge-vbr = { path = "../crates/mockforge-vbr" }
+mockforge-data = { path = "../crates/mockforge-data" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
+tower-http = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 # WebSocket client dependencies
 tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
