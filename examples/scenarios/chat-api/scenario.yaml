@@ -1,0 +1,45 @@
+manifest_version: "1.0"
+name: chat-api
+version: "1.0.0"
+title: Chat API with Typing Indicators
+description: |
+  Real-time chat API with typing indicators, message history, and user presence.
+  Includes WebSocket support for real-time messaging and typing status updates.
+author: community
+author_email: null
+category: chat
+tags:
+  - chat
+  - messaging
+  - websocket
+  - real-time
+  - typing-indicators
+compatibility:
+  min_version: "0.2.0"
+  max_version: null
+  required_features: []
+  protocols:
+    - http
+    - websocket
+files:
+  - scenario.yaml
+  - config.yaml
+  - openapi.json
+  - README.md
+  - fixtures/
+  - examples/
+readme: README.md
+example_usage: |
+  # Install the scenario
+  mockforge scenario install ./examples/scenarios/chat-api
+
+  # Apply to workspace
+  mockforge scenario use chat-api
+
+  # Start the server
+  mockforge serve --config config.yaml
+required_features: []
+plugin_dependencies: []
+metadata: {}
+created_at: "2025-01-27T00:00:00Z"
+updated_at: "2025-01-27T00:00:00Z"

@@ -1,6 +1,6 @@
 /**
  * Request Interceptor
- * 
+ *
  * Intercepts fetch and XMLHttpRequest calls to capture requests/responses
  */
 
@@ -87,7 +87,7 @@ export class RequestInterceptor {
      */
     private interceptFetch(): void {
         const self = this;
-        
+
         window.fetch = async function(
             input: RequestInfo | URL,
             init?: RequestInit
@@ -108,7 +108,7 @@ export class RequestInterceptor {
                     type: err instanceof TypeError && err.message.includes('Failed to fetch') ? 'network' : 'network',
                     message: err instanceof Error ? err.message : 'Unknown network error',
                 };
-                
+
                 // Create a mock response for the error
                 response = new Response(null, {
                     status: 502,
@@ -178,7 +178,7 @@ export class RequestInterceptor {
             password?: string | null
         ): void {
             const urlString = typeof url === 'string' ? url : url.toString();
-            
+
             xhrInstances.set(this, {
                 method,
                 url: urlString,
@@ -214,7 +214,7 @@ export class RequestInterceptor {
 
             // Set up response capture
             const originalOnReadyStateChange = this.onreadystatechange;
-            
+
             this.onreadystatechange = function(event: Event): void {
                 // Call original handler first
                 if (originalOnReadyStateChange) {
@@ -303,4 +303,3 @@ export class RequestInterceptor {
         return this.enabled;
     }
 }
-

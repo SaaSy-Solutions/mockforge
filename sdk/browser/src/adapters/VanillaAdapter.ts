@@ -1,6 +1,6 @@
 /**
  * Vanilla JavaScript Adapter
- * 
+ *
  * Simple adapter for vanilla JavaScript applications
  */
 
@@ -19,7 +19,7 @@ export interface VanillaAdapterConfig extends ForgeConnectConfig {
 
 /**
  * Vanilla JavaScript adapter for ForgeConnect
- * 
+ *
  * Provides a simple way to use ForgeConnect in vanilla JavaScript
  * without any framework dependencies.
  */
@@ -75,16 +75,16 @@ export class VanillaAdapter {
 
 /**
  * Global initialization function for vanilla JavaScript
- * 
+ *
  * @example
  * ```html
  * <script type="module">
  *   import { initForgeConnect } from '@mockforge/forgeconnect/adapters/vanilla';
- *   
+ *
  *   const adapter = initForgeConnect({
  *     mockMode: 'auto',
  *   });
- *   
+ *
  *   await adapter.initialize();
  * </script>
  * ```
@@ -95,12 +95,12 @@ export function initForgeConnect(config?: VanillaAdapterConfig): VanillaAdapter 
 
 /**
  * Auto-initialize ForgeConnect when script loads
- * 
+ *
  * @example
  * ```html
  * <script type="module">
  *   import { autoInitForgeConnect } from '@mockforge/forgeconnect/adapters/vanilla';
- *   
+ *
  *   autoInitForgeConnect({
  *     mockMode: 'auto',
  *   });
@@ -113,4 +113,3 @@ export function autoInitForgeConnect(config?: VanillaAdapterConfig): VanillaAdap
         autoInit: true,
     });
 }
-

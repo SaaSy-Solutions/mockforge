@@ -43,7 +43,7 @@
 
 **Usage:**
 The CORS middleware is automatically applied when using:
-- `build_router_with_multi_tenant()` 
+- `build_router_with_multi_tenant()`
 - `build_router_with_chains_and_multi_tenant()`
 
 **Configuration:**
@@ -150,4 +150,3 @@ http:
 **ForgeConnect is now functional and ready for use!**
 
 The browser SDK can connect to MockForge, intercept requests, and create mocks automatically. CORS is properly configured to allow browser access.
-

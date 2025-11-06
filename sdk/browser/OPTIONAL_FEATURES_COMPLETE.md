@@ -183,4 +183,3 @@ npm install && npm start
 - ✅ WebSocket support
 - ✅ Vue.js adapter
 - ✅ Angular adapter
-

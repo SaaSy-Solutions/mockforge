@@ -19,6 +19,7 @@ use tokio::net::TcpListener;
 mod amqp_commands;
 mod backend_generator;
 mod client_generator;
+mod deploy_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
 mod import_commands;
@@ -29,6 +30,7 @@ mod mockai_commands;
 mod mqtt_commands;
 mod plugin_commands;
 mod progress;
+mod scenario_commands;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
 mod time_commands;
@@ -674,6 +676,19 @@ enum Commands {
         plugin_command: plugin_commands::PluginCommands,
     },
 
+    /// Scenario marketplace management
+    ///
+    /// Examples:
+    ///   mockforge scenario install ./scenarios/ecommerce-store
+    ///   mockforge scenario list
+    ///   mockforge scenario search ecommerce
+    ///   mockforge scenario use ecommerce-store
+    #[command(verbatim_doc_comment)]
+    Scenario {
+        #[command(subcommand)]
+        scenario_command: scenario_commands::ScenarioCommands,
+    },
+
     /// Client code generation for frontend frameworks
     ///
     /// Examples:
@@ -723,6 +738,20 @@ enum Commands {
     Tunnel {
         #[command(subcommand)]
         tunnel_command: tunnel_commands::TunnelSubcommand,
+    },
+
+    /// Deploy mock APIs with production-like configuration (deceptive deploy)
+    ///
+    /// Examples:
+    ///   mockforge deploy --config config.yaml --spec api.yaml
+    ///   mockforge deploy --config config.yaml --auto-tunnel
+    ///   mockforge deploy --production-preset
+    ///   mockforge deploy status
+    ///   mockforge deploy stop
+    #[command(verbatim_doc_comment)]
+    Deploy {
+        #[command(subcommand)]
+        deploy_command: deploy_commands::DeploySubcommand,
     },
 
     /// Virtual Backend Reality (VBR) engine management
@@ -1782,6 +1811,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Plugin { plugin_command } => {
             plugin_commands::handle_plugin_command(plugin_command).await?;
         }
+        Commands::Scenario { scenario_command } => {
+            scenario_commands::handle_scenario_command(scenario_command).await?;
+        }
         Commands::Client { client_command } => {
             client_generator::execute_client_command(client_command).await?;
         }
@@ -1796,6 +1828,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             tunnel_commands::handle_tunnel_command(tunnel_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("Tunnel command failed: {}", e))?;
+        }
+
+        Commands::Deploy { deploy_command } => {
+            deploy_commands::handle_deploy_command(deploy_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Deploy command failed: {}", e))?;
         }
 
         Commands::Vbr { vbr_command } => {
@@ -2928,10 +2966,11 @@ async fn handle_serve(
         None, // ai_generator
         smtp_registry.as_ref().cloned(),
         mqtt_broker_for_http,
-        None,                            // traffic_shaper
-        false,                           // traffic_shaping_enabled
-        Some(health_manager_for_router), // health_manager
-        mockai,                          // mockai
+        None,                                  // traffic_shaper
+        false,                                 // traffic_shaping_enabled
+        Some(health_manager_for_router),       // health_manager
+        mockai,                                // mockai
+        Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
     )
     .await;
 
@@ -3125,6 +3164,80 @@ async fn handle_serve(
     };
     #[cfg(not(feature = "mqtt"))]
     let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+
+    // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
+    let tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
+        use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
+        use std::sync::Arc;
+        use tokio::time::{sleep, Duration};
+
+        let local_url = format!("http://localhost:{}", http_port);
+        let deploy_config = config.deceptive_deploy.clone();
+        let tunnel_shutdown = shutdown_token.clone();
+
+        Some(tokio::spawn(async move {
+            // Wait a bit for the server to be ready
+            sleep(Duration::from_secs(2)).await;
+
+            let provider = TunnelProvider::SelfHosted; // Default to self-hosted
+            let mut tunnel_config = TunnelConfig::new(&local_url).with_provider(provider);
+
+            // Use custom domain if specified
+            if let Some(domain) = deploy_config.custom_domain {
+                tunnel_config.custom_domain = Some(domain);
+            }
+
+            // Get tunnel server URL from environment or use default
+            if let Ok(server_url) = std::env::var("MOCKFORGE_TUNNEL_SERVER_URL") {
+                tunnel_config.server_url = Some(server_url);
+            }
+
+            // Get auth token from environment if available
+            if let Ok(auth_token) = std::env::var("MOCKFORGE_TUNNEL_AUTH_TOKEN") {
+                tunnel_config.auth_token = Some(auth_token);
+            }
+
+            match TunnelManager::new(&tunnel_config) {
+                Ok(manager) => {
+                    println!("🌐 Starting tunnel for deceptive deploy...");
+                    match manager.create_tunnel(&tunnel_config).await {
+                        Ok(status) => {
+                            println!("✅ Tunnel created successfully!");
+                            println!("   Public URL: {}", status.public_url);
+                            println!("   Tunnel ID: {}", status.tunnel_id);
+                            println!(
+                                "💡 Your mock API is now accessible at: {}",
+                                status.public_url
+                            );
+
+                            // Wait for shutdown signal
+                            tokio::select! {
+                                _ = tunnel_shutdown.cancelled() => {
+                                    println!("🛑 Stopping tunnel...");
+                                    if let Err(e) = manager.stop_tunnel().await {
+                                        eprintln!("⚠️  Warning: Failed to stop tunnel: {}", e);
+                                    }
+                                    Ok::<(), anyhow::Error>(())
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("⚠️  Warning: Failed to create tunnel: {}", e);
+                            eprintln!("💡 You can start a tunnel manually with: mockforge tunnel start --local-url {}", local_url);
+                            Ok(())
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("⚠️  Warning: Failed to initialize tunnel manager: {}", e);
+                    eprintln!("💡 You can start a tunnel manually with: mockforge tunnel start --local-url {}", local_url);
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
 
     // Start Kafka broker (if enabled)
     #[cfg(feature = "kafka")]

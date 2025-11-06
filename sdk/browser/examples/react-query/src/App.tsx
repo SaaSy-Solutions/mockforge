@@ -68,8 +68,8 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <div style={{ padding: '20px', fontFamily: 'system-ui' }}>
         <h1>ForgeConnect - React Query Example</h1>
-        <div style={{ 
-          padding: '10px', 
+        <div style={{
+          padding: '10px',
           marginBottom: '20px',
           backgroundColor: connected ? '#d4edda' : '#f8d7da',
           color: connected ? '#155724' : '#721c24',
@@ -84,4 +84,3 @@ function App() {
 }
 
 export default App;
-

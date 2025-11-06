@@ -400,4 +400,3 @@ See the `examples/` directory for complete working examples:
 ## License
 
 MIT License - see [LICENSE](../../LICENSE-MIT) for details.
-

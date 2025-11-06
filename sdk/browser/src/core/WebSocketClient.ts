@@ -1,6 +1,6 @@
 /**
  * WebSocket Client for Real-Time Updates
- * 
+ *
  * Provides WebSocket connection to MockForge for real-time
  * mock updates, connection status, and live request monitoring
  */
@@ -249,4 +249,3 @@ export class WebSocketClient {
         }, this.reconnectDelay);
     }
 }
-

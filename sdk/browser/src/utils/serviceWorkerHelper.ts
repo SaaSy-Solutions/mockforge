@@ -1,6 +1,6 @@
 /**
  * Service Worker Helper Utilities
- * 
+ *
  * Utilities for registering and managing the ForgeConnect service worker
  */
 
@@ -8,10 +8,10 @@ import { generateServiceWorkerScript } from '../core/ServiceWorkerInterceptor';
 
 /**
  * Register the ForgeConnect service worker script
- * 
+ *
  * This function creates a blob URL for the service worker script
  * and registers it. The script is generated dynamically.
- * 
+ *
  * @param scope - Service worker scope (default: '/')
  * @returns Promise that resolves to the service worker registration
  */
@@ -46,13 +46,12 @@ export async function registerForgeConnectServiceWorker(
 
 /**
  * Create a service worker script file for static serving
- * 
+ *
  * This generates the service worker script that can be saved to a file
  * and served statically from your server.
- * 
+ *
  * @returns Service worker script as string
  */
 export function createServiceWorkerFile(): string {
     return generateServiceWorkerScript();
 }
-

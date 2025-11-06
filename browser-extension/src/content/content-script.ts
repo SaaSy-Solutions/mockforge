@@ -1,6 +1,6 @@
 /**
  * Content Script
- * 
+ *
  * Injects SDK into page context and forwards requests to background
  */
 
@@ -44,4 +44,3 @@ chrome.runtime.onMessage.addListener((message) => {
         }, '*');
     }
 });
-

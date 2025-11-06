@@ -1,0 +1,46 @@
+manifest_version: "1.0"
+name: ecommerce-store
+version: "1.0.0"
+title: E-commerce Store with Shopping Carts
+description: |
+  Complete e-commerce API with shopping carts, products, orders, and user management.
+  Includes realistic product catalog, cart operations, checkout flow, and order tracking.
+author: community
+author_email: null
+category: ecommerce
+tags:
+  - ecommerce
+  - shopping
+  - cart
+  - orders
+  - products
+  - checkout
+compatibility:
+  min_version: "0.2.0"
+  max_version: null
+  required_features: []
+  protocols:
+    - http
+    - websocket
+files:
+  - scenario.yaml
+  - config.yaml
+  - openapi.json
+  - README.md
+  - fixtures/
+  - examples/
+readme: README.md
+example_usage: |
+  # Install the scenario
+  mockforge scenario install ./examples/scenarios/ecommerce-store
+
+  # Apply to workspace
+  mockforge scenario use ecommerce-store
+
+  # Start the server
+  mockforge serve --config config.yaml
+required_features: []
+plugin_dependencies: []
+metadata: {}
+created_at: "2025-01-27T00:00:00Z"
+updated_at: "2025-01-27T00:00:00Z"

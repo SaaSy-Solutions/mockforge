@@ -42,7 +42,7 @@ To create custom icons with different designs:
    ```bash
    # Create a simple colored square
    magick -size 128x128 xc:'#007bff' icon128.png
-   
+
    # Add text (requires font)
    magick -size 128x128 xc:'#007bff' -pointsize 72 -fill white -gravity center -annotate +0+0 'FC' icon128.png
    ```
@@ -60,4 +60,3 @@ Icons are verified to be:
 - ✅ PNG format
 - ✅ Located in `browser-extension/icons/`
 - ✅ Referenced in `manifest.json`
-

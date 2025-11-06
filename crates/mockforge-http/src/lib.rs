@@ -271,6 +271,8 @@ pub struct HttpServerState {
     pub routes: Vec<RouteInfo>,
     /// Optional global rate limiter for request throttling
     pub rate_limiter: Option<std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>>,
+    /// Production headers to add to all responses (for deceptive deploy)
+    pub production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>>,
 }
 
 impl Default for HttpServerState {
@@ -285,6 +287,7 @@ impl HttpServerState {
         Self {
             routes: Vec::new(),
             rate_limiter: None,
+            production_headers: None,
         }
     }
 
@@ -293,6 +296,7 @@ impl HttpServerState {
         Self {
             routes,
             rate_limiter: None,
+            production_headers: None,
         }
     }
 
@@ -302,6 +306,15 @@ impl HttpServerState {
         rate_limiter: std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>,
     ) -> Self {
         self.rate_limiter = Some(rate_limiter);
+        self
+    }
+
+    /// Add production headers to the HTTP server state
+    pub fn with_production_headers(
+        mut self,
+        headers: std::sync::Arc<std::collections::HashMap<String, String>>,
+    ) -> Self {
+        self.production_headers = Some(headers);
         self
     }
 }
@@ -339,6 +352,7 @@ pub async fn build_router(
         spec_path,
         options,
         failure_config,
+        None,
         None,
         None,
         None,
@@ -463,6 +477,7 @@ pub async fn build_router_with_multi_tenant(
     mockai: Option<
         std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
     >,
+    deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
 ) -> Router {
     use std::time::Instant;
 
@@ -473,7 +488,7 @@ pub async fn build_router_with_multi_tenant(
 
     // Initialize rate limiter with default configuration
     // Can be customized via environment variables or config
-    let rate_limit_config = crate::middleware::RateLimitConfig {
+    let mut rate_limit_config = crate::middleware::RateLimitConfig {
         requests_per_minute: std::env::var("MOCKFORGE_RATE_LIMIT_RPM")
             .ok()
             .and_then(|v| v.parse().ok())
@@ -485,10 +500,60 @@ pub async fn build_router_with_multi_tenant(
         per_ip: true,
         per_endpoint: false,
     };
+
+    // Apply deceptive deploy configuration if enabled
+    let mut final_cors_config = cors_config;
+    let mut production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>> =
+        None;
+
+    if let Some(deploy_config) = &deceptive_deploy_config {
+        if deploy_config.enabled {
+            info!("Deceptive deploy mode enabled - applying production-like configuration");
+
+            // Override CORS config if provided
+            if let Some(prod_cors) = &deploy_config.cors {
+                final_cors_config = Some(mockforge_core::config::HttpCorsConfig {
+                    enabled: true,
+                    allowed_origins: prod_cors.allowed_origins.clone(),
+                    allowed_methods: prod_cors.allowed_methods.clone(),
+                    allowed_headers: prod_cors.allowed_headers.clone(),
+                });
+                info!("Applied production-like CORS configuration");
+            }
+
+            // Override rate limit config if provided
+            if let Some(prod_rate_limit) = &deploy_config.rate_limit {
+                rate_limit_config = crate::middleware::RateLimitConfig {
+                    requests_per_minute: prod_rate_limit.requests_per_minute,
+                    burst: prod_rate_limit.burst,
+                    per_ip: prod_rate_limit.per_ip,
+                    per_endpoint: false,
+                };
+                info!(
+                    "Applied production-like rate limiting: {} req/min, burst: {}",
+                    prod_rate_limit.requests_per_minute, prod_rate_limit.burst
+                );
+            }
+
+            // Set production headers
+            if !deploy_config.headers.is_empty() {
+                let headers_map: std::collections::HashMap<String, String> =
+                    deploy_config.headers.clone();
+                production_headers = Some(std::sync::Arc::new(headers_map));
+                info!("Configured {} production headers", deploy_config.headers.len());
+            }
+        }
+    }
+
     let rate_limiter =
         std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
 
     let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
+
+    // Add production headers to state if configured
+    if let Some(headers) = production_headers.clone() {
+        state = state.with_production_headers(headers);
+    }
 
     // Clone spec_path for later use
     let spec_path_for_mgmt = spec_path.clone();
@@ -696,10 +761,18 @@ pub async fn build_router_with_multi_tenant(
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
 
     // Add rate limiting middleware (before logging to rate limit early)
-    app = app.layer(from_fn_with_state(state, crate::middleware::rate_limit_middleware));
+    app = app.layer(from_fn_with_state(state.clone(), crate::middleware::rate_limit_middleware));
 
-    // Add CORS middleware
-    app = apply_cors_middleware(app, cors_config);
+    // Add production headers middleware if configured
+    if state.production_headers.is_some() {
+        app = app.layer(from_fn_with_state(
+            state.clone(),
+            crate::middleware::production_headers_middleware,
+        ));
+    }
+
+    // Add CORS middleware (use final_cors_config which may be overridden by deceptive deploy)
+    app = apply_cors_middleware(app, final_cors_config);
 
     // Add workspace routing middleware if multi-tenant is enabled
     if let Some(mt_config) = multi_tenant_config {
@@ -1067,6 +1140,7 @@ pub async fn build_router_with_chains(
         false,
         None, // health_manager
         None, // mockai
+        None, // deceptive_deploy_config
     )
     .await
 }
@@ -1091,6 +1165,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     _mockai: Option<
         std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
     >,
+    deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
@@ -1263,8 +1338,86 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
     }
 
-    // Add CORS middleware
-    app = apply_cors_middleware(app, cors_config);
+    // Apply deceptive deploy configuration if enabled
+    let mut final_cors_config = cors_config;
+    let mut production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>> =
+        None;
+    let mut rate_limit_config = crate::middleware::RateLimitConfig {
+        requests_per_minute: std::env::var("MOCKFORGE_RATE_LIMIT_RPM")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1000),
+        burst: std::env::var("MOCKFORGE_RATE_LIMIT_BURST")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2000),
+        per_ip: true,
+        per_endpoint: false,
+    };
+
+    if let Some(deploy_config) = &deceptive_deploy_config {
+        if deploy_config.enabled {
+            info!("Deceptive deploy mode enabled - applying production-like configuration");
+
+            // Override CORS config if provided
+            if let Some(prod_cors) = &deploy_config.cors {
+                final_cors_config = Some(mockforge_core::config::HttpCorsConfig {
+                    enabled: true,
+                    allowed_origins: prod_cors.allowed_origins.clone(),
+                    allowed_methods: prod_cors.allowed_methods.clone(),
+                    allowed_headers: prod_cors.allowed_headers.clone(),
+                });
+                info!("Applied production-like CORS configuration");
+            }
+
+            // Override rate limit config if provided
+            if let Some(prod_rate_limit) = &deploy_config.rate_limit {
+                rate_limit_config = crate::middleware::RateLimitConfig {
+                    requests_per_minute: prod_rate_limit.requests_per_minute,
+                    burst: prod_rate_limit.burst,
+                    per_ip: prod_rate_limit.per_ip,
+                    per_endpoint: false,
+                };
+                info!(
+                    "Applied production-like rate limiting: {} req/min, burst: {}",
+                    prod_rate_limit.requests_per_minute, prod_rate_limit.burst
+                );
+            }
+
+            // Set production headers
+            if !deploy_config.headers.is_empty() {
+                let headers_map: std::collections::HashMap<String, String> =
+                    deploy_config.headers.clone();
+                production_headers = Some(std::sync::Arc::new(headers_map));
+                info!("Configured {} production headers", deploy_config.headers.len());
+            }
+        }
+    }
+
+    // Initialize rate limiter and state
+    let rate_limiter =
+        std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
+
+    let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
+
+    // Add production headers to state if configured
+    if let Some(headers) = production_headers.clone() {
+        state = state.with_production_headers(headers);
+    }
+
+    // Add rate limiting middleware
+    app = app.layer(from_fn_with_state(state.clone(), crate::middleware::rate_limit_middleware));
+
+    // Add production headers middleware if configured
+    if state.production_headers.is_some() {
+        app = app.layer(from_fn_with_state(
+            state.clone(),
+            crate::middleware::production_headers_middleware,
+        ));
+    }
+
+    // Add CORS middleware (use final_cors_config which may be overridden by deceptive deploy)
+    app = apply_cors_middleware(app, final_cors_config);
 
     app
 }

@@ -1,6 +1,6 @@
 /**
  * Injected Script
- * 
+ *
  * Runs in page context to intercept requests
  */
 
@@ -143,4 +143,3 @@
         return originalXHRSend.apply(this, [body]);
     };
 })();
-

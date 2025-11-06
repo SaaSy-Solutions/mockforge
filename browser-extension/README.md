@@ -105,4 +105,3 @@ npm run package
 ## License
 
 MIT License - see [LICENSE](../../LICENSE-MIT) for details.
-

@@ -1,6 +1,6 @@
 /**
  * Vue.js Adapter
- * 
+ *
  * Integration adapter for Vue.js applications
  */
 
@@ -15,7 +15,7 @@ export interface VueAdapterConfig extends ForgeConnectConfig {
      * Only enable in development mode (default: true)
      */
     devOnly?: boolean;
-    
+
     /**
      * Vue instance (optional, will try to auto-detect)
      */
@@ -24,7 +24,7 @@ export interface VueAdapterConfig extends ForgeConnectConfig {
 
 /**
  * Vue.js adapter for ForgeConnect
- * 
+ *
  * Provides integration with Vue.js by:
  * - Only running in development mode
  * - Providing Vue composable for easy setup
@@ -50,12 +50,12 @@ export class VueAdapter {
     async initialize(): Promise<boolean> {
         // Check if we should run
         if (this.config.devOnly) {
-            const isDev = typeof window !== 'undefined' && 
-                         (window.location.hostname === 'localhost' || 
+            const isDev = typeof window !== 'undefined' &&
+                         (window.location.hostname === 'localhost' ||
                           window.location.hostname === '127.0.0.1' ||
                           import.meta.env?.MODE === 'development' ||
                           process.env.NODE_ENV === 'development');
-            
+
             if (!isDev) {
                 return false;
             }
@@ -87,12 +87,12 @@ export class VueAdapter {
 
 /**
  * Vue composable for ForgeConnect
- * 
+ *
  * @example
  * ```vue
  * <script setup>
  * import { useForgeConnect } from '@mockforge/forgeconnect/adapters/vue';
- * 
+ *
  * const { forgeConnect, connected } = useForgeConnect({
  *   mockMode: 'auto',
  * });
@@ -108,7 +108,7 @@ export function useForgeConnect(config?: VueAdapterConfig) {
         // Vue not available, use basic implementation
         const adapter = new VueAdapter(config);
         const connected = Vue?.ref ? Vue.ref(false) : { value: false };
-        
+
         adapter.initialize().then((isConnected) => {
             if (connected.value !== undefined) {
                 connected.value = isConnected;
@@ -157,4 +157,3 @@ export function useForgeConnect(config?: VueAdapterConfig) {
         connected: { value: false },
     };
 }
-

@@ -44,4 +44,3 @@ export interface ConnectionStatus {
     error?: string;
     lastConnected?: number;
 }
-

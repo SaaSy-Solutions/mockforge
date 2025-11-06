@@ -1,6 +1,6 @@
 /**
  * Next.js Adapter
- * 
+ *
  * Integration adapter for Next.js applications
  */
 
@@ -15,7 +15,7 @@ export interface NextJSAdapterConfig extends ForgeConnectConfig {
      * Only enable in development mode (default: true)
      */
     devOnly?: boolean;
-    
+
     /**
      * Environment variable name for MockForge URL (default: 'NEXT_PUBLIC_MOCKFORGE_URL')
      */
@@ -24,7 +24,7 @@ export interface NextJSAdapterConfig extends ForgeConnectConfig {
 
 /**
  * Next.js adapter for ForgeConnect
- * 
+ *
  * Provides integration with Next.js by:
  * - Only running in development mode
  * - Reading configuration from environment variables
@@ -60,11 +60,11 @@ export class NextJSAdapter {
     async initialize(): Promise<boolean> {
         // Check if we should run
         if (this.config.devOnly) {
-            const isDev = typeof window !== 'undefined' && 
-                         (window.location.hostname === 'localhost' || 
+            const isDev = typeof window !== 'undefined' &&
+                         (window.location.hostname === 'localhost' ||
                           window.location.hostname === '127.0.0.1' ||
                           process.env.NODE_ENV === 'development');
-            
+
             if (!isDev) {
                 return false;
             }
@@ -96,17 +96,17 @@ export class NextJSAdapter {
 
 /**
  * React hook for Next.js integration
- * 
+ *
  * @example
  * ```tsx
  * // app/layout.tsx or pages/_app.tsx
  * import { useNextJSForgeConnect } from '@mockforge/forgeconnect/adapters/nextjs';
- * 
+ *
  * export default function RootLayout({ children }) {
  *   useNextJSForgeConnect({
  *     mockMode: 'auto',
  *   });
- *   
+ *
  *   return <html>{children}</html>;
  * }
  * ```
@@ -132,4 +132,3 @@ declare const React: any;
 if (typeof React === 'undefined') {
     console.warn('[NextJSAdapter] React is not available. useNextJSForgeConnect hook will not work.');
 }
-

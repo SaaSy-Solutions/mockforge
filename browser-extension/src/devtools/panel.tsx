@@ -1,6 +1,6 @@
 /**
  * DevTools Panel
- * 
+ *
  * React component for the DevTools panel
  */
 
@@ -254,4 +254,3 @@ function initializePanel() {
         root.render(React.createElement(ForgeConnectPanel));
     }
 }
-

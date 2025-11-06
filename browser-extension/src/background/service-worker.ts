@@ -1,6 +1,6 @@
 /**
  * Background Service Worker
- * 
+ *
  * Handles communication between content scripts, DevTools, and MockForge
  */
 
@@ -145,4 +145,3 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Initialize immediately
 initializeConnection();
-

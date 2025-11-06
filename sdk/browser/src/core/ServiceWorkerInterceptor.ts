@@ -1,6 +1,6 @@
 /**
  * Service Worker Interceptor
- * 
+ *
  * Registers a service worker to intercept all network requests
  * for comprehensive request capture
  */
@@ -181,7 +181,7 @@ async function analyzeRequestAsync(request, response, error) {
     const method = request.method;
     const url = request.url;
     const headers = {};
-    
+
     // Extract headers
     request.headers.forEach((value, key) => {
         headers[key] = value;
@@ -256,4 +256,3 @@ async function analyzeRequestAsync(request, response, error) {
 }
 `.trim();
 }
-

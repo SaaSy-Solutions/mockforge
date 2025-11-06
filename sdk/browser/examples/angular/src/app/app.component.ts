@@ -38,7 +38,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.connected = this.forgeConnect.connected;
-    
+
     // Listen for connection changes
     this.forgeConnect.getForgeConnect().getConnectionStatus();
   }
@@ -64,4 +64,3 @@ export class AppComponent implements OnInit, OnDestroy {
     this.forgeConnect.stop();
   }
 }
-

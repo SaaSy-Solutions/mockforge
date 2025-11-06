@@ -1,6 +1,6 @@
 /**
  * Angular Adapter
- * 
+ *
  * Integration adapter for Angular applications
  */
 
@@ -19,7 +19,7 @@ export interface AngularAdapterConfig extends ForgeConnectConfig {
 
 /**
  * Angular service for ForgeConnect
- * 
+ *
  * Provides integration with Angular by:
  * - Only running in development mode
  * - Injectable service for dependency injection
@@ -46,11 +46,11 @@ export class AngularForgeConnectService {
     async initialize(): Promise<boolean> {
         // Check if we should run
         if (this.config.devOnly) {
-            const isDev = typeof window !== 'undefined' && 
-                         (window.location.hostname === 'localhost' || 
+            const isDev = typeof window !== 'undefined' &&
+                         (window.location.hostname === 'localhost' ||
                           window.location.hostname === '127.0.0.1' ||
                           (window as any).__NG_DEV_MODE__ === true);
-            
+
             if (!isDev) {
                 return false;
             }
@@ -92,12 +92,12 @@ export class AngularForgeConnectService {
 
 /**
  * Angular decorator/service setup
- * 
+ *
  * @example
  * ```typescript
  * // In your Angular module or standalone component
  * import { provideForgeConnect } from '@mockforge/forgeconnect/adapters/angular';
- * 
+ *
  * @NgModule({
  *   providers: [
  *     provideForgeConnect({ mockMode: 'auto' })
@@ -124,12 +124,12 @@ export function provideForgeConnect(config?: AngularAdapterConfig) {
 
 /**
  * Injectable service class for Angular
- * 
+ *
  * @example
  * ```typescript
  * import { Injectable } from '@angular/core';
  * import { AngularForgeConnectService } from '@mockforge/forgeconnect/adapters/angular';
- * 
+ *
  * @Injectable({
  *   providedIn: 'root'
  * })
@@ -149,4 +149,3 @@ export class ForgeConnectService extends AngularForgeConnectService {
         });
     }
 }
-

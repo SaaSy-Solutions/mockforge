@@ -1,6 +1,6 @@
 /**
  * ForgeConnect - Main SDK Class
- * 
+ *
  * Provides browser-based mock creation and management for MockForge
  */
 
@@ -48,7 +48,7 @@ export class ForgeConnect {
 
         // Enable Service Worker if supported and requested
         this.useServiceWorker = config.enableServiceWorker !== false && 'serviceWorker' in navigator;
-        
+
         // Enable WebSocket if requested
         this.useWebSocket = config.enableWebSocket === true;
     }
@@ -71,7 +71,7 @@ export class ForgeConnect {
         // Create client and check connection
         this.client = new MockForgeClient(this.config.serverUrl);
         const connected = await this.client.healthCheck();
-        
+
         this.updateConnectionStatus(connected, this.config.serverUrl);
 
         if (connected) {
@@ -88,7 +88,7 @@ export class ForgeConnect {
             if (this.useWebSocket && this.config.serverUrl) {
                 this.websocketClient = new WebSocketClient(this.config.serverUrl);
                 const wsConnected = await this.websocketClient.connect();
-                
+
                 if (wsConnected) {
                     // Set up WebSocket event listeners
                     this.websocketClient.on('mock_created', (event) => {
@@ -130,14 +130,14 @@ export class ForgeConnect {
      */
     private async discoverMockForge(): Promise<string | null> {
         const baseUrl = 'http://localhost';
-        
+
         for (const port of this.discoveryPorts) {
             const url = `${baseUrl}:${port}`;
             this.log(`Trying to connect to ${url}...`);
-            
+
             const client = new MockForgeClient(url);
             const connected = await client.healthCheck();
-            
+
             if (connected) {
                 this.log(`Connected to MockForge at ${url}`);
                 return url;
@@ -168,7 +168,7 @@ export class ForgeConnect {
             case 'auto':
                 shouldCreate = shouldAutoMock;
                 break;
-            
+
             case 'prompt':
                 if (this.config.promptMockCreation) {
                     shouldCreate = await this.config.promptMockCreation(request);
@@ -177,7 +177,7 @@ export class ForgeConnect {
                     shouldCreate = shouldAutoMock;
                 }
                 break;
-            
+
             case 'hybrid':
                 // Auto-create for failed requests, prompt for others
                 if (shouldAutoMock) {
@@ -216,7 +216,7 @@ export class ForgeConnect {
             };
 
             const created = await this.client.createMock(mock);
-            
+
             this.log(`Created mock: ${created.id} - ${mockName}`);
 
             if (this.config.onMockCreated) {
@@ -325,7 +325,7 @@ export class ForgeConnect {
      */
     async stop(): Promise<void> {
         this.interceptor.stop();
-        
+
         if (this.serviceWorkerInterceptor) {
             await this.serviceWorkerInterceptor.stop();
         }
@@ -360,4 +360,3 @@ export class ForgeConnect {
         return this.client;
     }
 }
-

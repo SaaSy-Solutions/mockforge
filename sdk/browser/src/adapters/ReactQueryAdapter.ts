@@ -1,6 +1,6 @@
 /**
  * React Query Adapter
- * 
+ *
  * Integration adapter for @tanstack/react-query
  */
 
@@ -15,7 +15,7 @@ export interface ReactQueryAdapterConfig extends ForgeConnectConfig {
      * Auto-mock failed queries (default: true)
      */
     autoMockFailedQueries?: boolean;
-    
+
     /**
      * Auto-mock queries that return errors (default: true)
      */
@@ -24,7 +24,7 @@ export interface ReactQueryAdapterConfig extends ForgeConnectConfig {
 
 /**
  * React Query adapter for ForgeConnect
- * 
+ *
  * Provides seamless integration with React Query by automatically
  * creating mocks for failed queries.
  */
@@ -117,14 +117,14 @@ export class ReactQueryAdapter {
 
 /**
  * Hook for using ForgeConnect with React Query
- * 
+ *
  * @example
  * ```tsx
  * function App() {
  *   const forgeConnect = useForgeConnect({
  *     mockMode: 'auto',
  *   });
- *   
+ *
  *   return <div>Your app</div>;
  * }
  * ```
@@ -150,4 +150,3 @@ declare const React: any;
 if (typeof React === 'undefined') {
     console.warn('[ReactQueryAdapter] React is not available. useForgeConnect hook will not work.');
 }
-

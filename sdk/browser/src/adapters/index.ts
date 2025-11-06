@@ -1,6 +1,6 @@
 /**
  * Framework Adapters
- * 
+ *
  * Export all framework adapters
  */
 
@@ -16,10 +16,9 @@ export type { VanillaAdapterConfig } from './VanillaAdapter';
 export { VueAdapter, useForgeConnect as useVueForgeConnect } from './VueAdapter';
 export type { VueAdapterConfig } from './VueAdapter';
 
-export { 
-    AngularForgeConnectService, 
+export {
+    AngularForgeConnectService,
     ForgeConnectService,
-    provideForgeConnect 
+    provideForgeConnect
 } from './AngularAdapter';
 export type { AngularAdapterConfig } from './AngularAdapter';
-

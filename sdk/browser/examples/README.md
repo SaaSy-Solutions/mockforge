@@ -20,7 +20,7 @@ A simple HTML page demonstrating ForgeConnect with vanilla JavaScript.
    ```bash
    # Using Python
    python -m http.server 8080
-   
+
    # Or using Node.js
    npx serve -p 8080
    ```
@@ -98,4 +98,3 @@ All examples require:
 - The examples use auto-mock mode, which automatically creates mocks for failed requests
 - Make requests to endpoints that don't exist to see auto-mock creation in action
 - Check the browser console for ForgeConnect logs
-

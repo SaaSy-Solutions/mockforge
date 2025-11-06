@@ -1,0 +1,14 @@
+# Weather + Geolocation MockForge Configuration
+
+http:
+  port: 3000
+  host: "0.0.0.0"
+  openapi_spec: "openapi.json"
+  cors_enabled: true
+
+admin:
+  enabled: true
+  port: 3002
+
+logging:
+  level: "info"

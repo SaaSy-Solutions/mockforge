@@ -58,4 +58,3 @@ const fetchUsers = async () => {
   }
 };
 </script>
-

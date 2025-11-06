@@ -1,6 +1,6 @@
 /**
  * Integration tests for ForgeConnect
- * 
+ *
  * These tests require a running MockForge server on localhost:3000
  * Run with: MOCKFORGE_SERVER_URL=http://localhost:3000 npm test -- --testPathPattern=integration
  */
@@ -75,7 +75,7 @@ describe('ForgeConnect Integration', () => {
 
         const mocks = await forgeConnect.listMocks();
         expect(Array.isArray(mocks)).toBe(true);
-        
+
         // Should contain our mock
         const ourMock = mocks.find(m => m.path === '/api/list-test');
         expect(ourMock).toBeDefined();
@@ -103,4 +103,3 @@ describe('ForgeConnect Integration', () => {
         expect(deletedMock).toBeUndefined();
     });
 });
-

@@ -13,4 +13,3 @@ global.AbortSignal = {
     return controller.signal;
   }),
 } as any;
-

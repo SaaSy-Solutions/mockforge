@@ -1,6 +1,6 @@
 /**
  * ForgeConnect - Browser SDK for MockForge
- * 
+ *
  * @packageDocumentation
  */
 
@@ -21,4 +21,3 @@ export type {
 
 // Default export
 export { ForgeConnect as default } from './core/ForgeConnect';
-

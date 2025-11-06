@@ -204,4 +204,3 @@ npm publish --access public
 ## Status: **COMPLETE AND READY FOR USE** 🎉
 
 All core features are implemented, tested, and documented. The ForgeConnect browser SDK and extension are ready for production use!
-

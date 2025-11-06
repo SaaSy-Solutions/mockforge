@@ -129,6 +129,121 @@ pub struct RouteValidationConfig {
     pub schema: serde_json::Value,
 }
 
+/// Deceptive deploy configuration for production-like mock APIs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeceptiveDeployConfig {
+    /// Enable deceptive deploy mode
+    pub enabled: bool,
+    /// Production-like CORS configuration
+    pub cors: Option<ProductionCorsConfig>,
+    /// Production-like rate limiting
+    pub rate_limit: Option<ProductionRateLimitConfig>,
+    /// Production-like headers to add to all responses
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    /// OAuth configuration for production-like auth flows
+    pub oauth: Option<ProductionOAuthConfig>,
+    /// Custom domain for deployment
+    pub custom_domain: Option<String>,
+    /// Auto-start tunnel when deploying
+    pub auto_tunnel: bool,
+}
+
+impl Default for DeceptiveDeployConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cors: None,
+            rate_limit: None,
+            headers: HashMap::new(),
+            oauth: None,
+            custom_domain: None,
+            auto_tunnel: false,
+        }
+    }
+}
+
+impl DeceptiveDeployConfig {
+    /// Generate production-like configuration preset
+    pub fn production_preset() -> Self {
+        let mut headers = HashMap::new();
+        headers.insert("X-API-Version".to_string(), "1.0".to_string());
+        headers.insert("X-Request-ID".to_string(), "{{uuid}}".to_string());
+        headers.insert("X-Powered-By".to_string(), "MockForge".to_string());
+
+        Self {
+            enabled: true,
+            cors: Some(ProductionCorsConfig {
+                allowed_origins: vec!["*".to_string()],
+                allowed_methods: vec![
+                    "GET".to_string(),
+                    "POST".to_string(),
+                    "PUT".to_string(),
+                    "DELETE".to_string(),
+                    "PATCH".to_string(),
+                    "OPTIONS".to_string(),
+                ],
+                allowed_headers: vec!["*".to_string()],
+                allow_credentials: true,
+            }),
+            rate_limit: Some(ProductionRateLimitConfig {
+                requests_per_minute: 1000,
+                burst: 2000,
+                per_ip: true,
+            }),
+            headers,
+            oauth: None, // Configured separately
+            custom_domain: None,
+            auto_tunnel: true,
+        }
+    }
+}
+
+/// Production-like CORS configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductionCorsConfig {
+    /// Allowed origins (use "*" for all origins)
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+    /// Allowed HTTP methods
+    #[serde(default)]
+    pub allowed_methods: Vec<String>,
+    /// Allowed headers (use "*" for all headers)
+    #[serde(default)]
+    pub allowed_headers: Vec<String>,
+    /// Allow credentials (cookies, authorization headers)
+    pub allow_credentials: bool,
+}
+
+/// Production-like rate limiting configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductionRateLimitConfig {
+    /// Requests per minute allowed
+    pub requests_per_minute: u32,
+    /// Burst capacity (maximum requests in a short burst)
+    pub burst: u32,
+    /// Enable per-IP rate limiting
+    pub per_ip: bool,
+}
+
+/// Production-like OAuth configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductionOAuthConfig {
+    /// OAuth2 client ID
+    pub client_id: String,
+    /// OAuth2 client secret
+    pub client_secret: String,
+    /// Token introspection URL
+    pub introspection_url: String,
+    /// Authorization server URL
+    pub auth_url: Option<String>,
+    /// Token URL
+    pub token_url: Option<String>,
+    /// Expected token type hint
+    pub token_type_hint: Option<String>,
+}
+
 /// Protocol enable/disable configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtocolConfig {
@@ -231,6 +346,9 @@ pub struct ServerConfig {
     /// Named configuration profiles (dev, ci, demo, etc.)
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub profiles: HashMap<String, ProfileConfig>,
+    /// Deceptive deploy configuration for production-like mock APIs
+    #[serde(default)]
+    pub deceptive_deploy: DeceptiveDeployConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings
@@ -297,6 +415,9 @@ pub struct ProfileConfig {
     /// Protocol enable/disable configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocols: Option<ProtocolsConfig>,
+    /// Deceptive deploy configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deceptive_deploy: Option<DeceptiveDeployConfig>,
 }
 
 // Default is derived for ServerConfig

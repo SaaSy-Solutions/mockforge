@@ -13,6 +13,7 @@ members = [
     "crates/mockforge-plugin-sdk",
     "crates/mockforge-plugin-cli",
     "crates/mockforge-plugin-registry",
+    "crates/mockforge-scenarios",
     "crates/mockforge-ui",
     "crates/mockforge-observability",
     "crates/mockforge-tracing",

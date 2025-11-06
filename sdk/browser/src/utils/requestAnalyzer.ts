@@ -1,6 +1,6 @@
 /**
  * Request Analyzer
- * 
+ *
  * Analyzes captured requests to extract information for mock creation
  */
 
@@ -44,7 +44,7 @@ export function extractQueryParams(url: string): Record<string, string> {
  */
 export function parseHeaders(headers: Headers | Record<string, string> | string[][]): Record<string, string> {
     const result: Record<string, string> = {};
-    
+
     if (headers instanceof Headers) {
         headers.forEach((value, key) => {
             result[key] = value;
@@ -56,7 +56,7 @@ export function parseHeaders(headers: Headers | Record<string, string> | string[
     } else {
         Object.assign(result, headers);
     }
-    
+
     return result;
 }
 
@@ -76,7 +76,7 @@ export async function parseBody(body: any, contentType?: string): Promise<any> {
     // If it's a string, try to parse based on content type
     if (typeof body === 'string') {
         const ct = contentType?.toLowerCase() || '';
-        
+
         if (ct.includes('application/json')) {
             try {
                 return JSON.parse(body);
@@ -84,7 +84,7 @@ export async function parseBody(body: any, contentType?: string): Promise<any> {
                 return body;
             }
         }
-        
+
         if (ct.includes('application/x-www-form-urlencoded')) {
             const params: Record<string, string> = {};
             body.split('&').forEach(param => {
@@ -95,7 +95,7 @@ export async function parseBody(body: any, contentType?: string): Promise<any> {
             });
             return params;
         }
-        
+
         return body;
     }
 
@@ -116,18 +116,18 @@ export async function analyzeRequest(
     const parsedHeaders = parseHeaders(headers);
     const contentType = parsedHeaders['content-type'] || parsedHeaders['Content-Type'];
     const parsedBody = await parseBody(body, contentType);
-    
+
     const path = extractPath(url);
     const queryParams = extractQueryParams(url);
-    
+
     let responseBody: any;
     let responseHeaders: Record<string, string> = {};
     let statusCode: number | undefined;
-    
+
     if (response) {
         statusCode = response.status;
         responseHeaders = parseHeaders(response.headers);
-        
+
         // Try to parse response body
         const responseContentType = responseHeaders['content-type'] || responseHeaders['Content-Type'] || '';
         if (responseContentType.includes('application/json')) {
@@ -139,7 +139,7 @@ export async function analyzeRequest(
             }
         }
     }
-    
+
     return {
         method: method.toUpperCase(),
         url,
@@ -166,12 +166,11 @@ export function shouldCreateMock(
     if (request.error && autoMockNetworkErrors) {
         return true;
     }
-    
+
     // Check for HTTP error status codes
     if (request.statusCode && autoMockStatusCodes.includes(request.statusCode)) {
         return true;
     }
-    
+
     return false;
 }
-

@@ -1,0 +1,118 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Weather + Geolocation API",
+    "version": "1.0.0",
+    "description": "Weather API with geolocation-based queries"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/weather/current": {
+      "get": {
+        "operationId": "getCurrentWeather",
+        "summary": "Get current weather",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "number" },
+            "description": "Latitude"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "number" },
+            "description": "Longitude"
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "City name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current weather data",
+            "content": {
+              "application/json": {
+                "example": {
+                  "temperature": "{{random.int(-10,35)}}",
+                  "condition": "{{random.choice(['sunny', 'cloudy', 'rainy', 'snowy'])}}",
+                  "humidity": "{{random.int(30,90)}}",
+                  "windSpeed": "{{random.int(0,30)}}",
+                  "location": {
+                    "city": "{{faker.address.city}}",
+                    "country": "{{faker.address.country}}",
+                    "coordinates": {
+                      "lat": "{{faker.address.latitude}}",
+                      "lon": "{{faker.address.longitude}}"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weather/forecast": {
+      "get": {
+        "operationId": "getForecast",
+        "summary": "Get weather forecast",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "number" }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "number" }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 5 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Weather forecast",
+            "content": {
+              "application/json": {
+                "example": {
+                  "forecast": [
+                    {
+                      "date": "{{now}}",
+                      "temperature": "{{random.int(-10,35)}}",
+                      "condition": "{{random.choice(['sunny', 'cloudy', 'rainy'])}}"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

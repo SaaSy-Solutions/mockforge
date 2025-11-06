@@ -40,4 +40,3 @@ document.getElementById('refresh')?.addEventListener('click', async () => {
 
 // Check connection on load
 document.getElementById('refresh')?.click();
-

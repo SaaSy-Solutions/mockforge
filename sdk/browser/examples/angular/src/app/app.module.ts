@@ -21,4 +21,3 @@ import { ForgeConnectService } from '@mockforge/forgeconnect/adapters/angular';
   bootstrap: [AppComponent],
 })
 export class AppModule {}
-

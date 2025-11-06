@@ -458,4 +458,3 @@ The ForgeConnect browser SDK is complete with:
 - ✅ Backend integration (CORS, WebSocket)
 
 **Status: READY FOR PRODUCTION USE** 🎉
-

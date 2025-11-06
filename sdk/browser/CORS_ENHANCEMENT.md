@@ -23,7 +23,7 @@ use tower_http::cors::{CorsLayer, Any};
 if let Some(cors_config) = cors_config {
     if cors_config.enabled {
         let mut cors_layer = CorsLayer::new();
-        
+
         // Configure allowed origins
         if cors_config.allowed_origins.contains(&"*".to_string()) {
             cors_layer = cors_layer.allow_origin(Any);
@@ -32,7 +32,7 @@ if let Some(cors_config) = cors_config {
                 cors_layer = cors_layer.allow_origin(origin.parse().unwrap_or_else(|_| Any));
             }
         }
-        
+
         // Configure allowed methods
         if !cors_config.allowed_methods.is_empty() {
             let methods: Vec<_> = cors_config.allowed_methods
@@ -43,7 +43,7 @@ if let Some(cors_config) = cors_config {
                 cors_layer = cors_layer.allow_methods(methods);
             }
         }
-        
+
         // Configure allowed headers
         if !cors_config.allowed_headers.is_empty() {
             let headers: Vec<_> = cors_config.allowed_headers
@@ -54,7 +54,7 @@ if let Some(cors_config) = cors_config {
                 cors_layer = cors_layer.allow_headers(headers);
             }
         }
-        
+
         app = app.layer(cors_layer);
     }
 } else {
@@ -92,4 +92,3 @@ fetch('http://localhost:3000/mocks', {
 ## Priority
 
 **High** - Required for ForgeConnect browser SDK to function properly.
-

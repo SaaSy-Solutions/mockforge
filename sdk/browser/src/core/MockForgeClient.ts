@@ -1,6 +1,6 @@
 /**
  * MockForge API Client
- * 
+ *
  * Handles communication with MockForge server management API
  */
 
@@ -25,7 +25,7 @@ export class MockForgeClient {
         try {
             // Try multiple health check endpoints
             const healthEndpoints = ['/health', '/api/health', '/api/v1/health'];
-            
+
             for (const endpoint of healthEndpoints) {
                 try {
                     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -35,7 +35,7 @@ export class MockForgeClient {
                         },
                         signal: AbortSignal.timeout(2000), // 2 second timeout
                     });
-                    
+
                     if (response.ok) {
                         this.connected = true;
                         this.lastError = undefined;
@@ -46,7 +46,7 @@ export class MockForgeClient {
                     continue;
                 }
             }
-            
+
             // If no health endpoint works, try the mocks endpoint
             const response = await fetch(`${this.baseUrl}/mocks`, {
                 method: 'GET',
@@ -55,14 +55,14 @@ export class MockForgeClient {
                 },
                 signal: AbortSignal.timeout(2000),
             });
-            
+
             if (response.ok || response.status === 401) {
                 // 401 means server is there but auth required - still counts as connected
                 this.connected = true;
                 this.lastError = undefined;
                 return true;
             }
-            
+
             this.connected = false;
             this.lastError = `Health check failed with status ${response.status}`;
             return false;
@@ -203,7 +203,7 @@ export class MockForgeClient {
      */
     private async request(path: string, options: RequestInit = {}): Promise<Response> {
         const url = `${this.baseUrl}${path}`;
-        
+
         const response = await fetch(url, {
             ...options,
             headers: {
@@ -239,4 +239,3 @@ export class MockForgeClient {
         this.connected = false; // Reset connection status
     }
 }
-

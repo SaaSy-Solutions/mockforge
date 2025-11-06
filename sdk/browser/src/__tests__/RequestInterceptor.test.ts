@@ -11,7 +11,7 @@ describe('RequestInterceptor', () => {
     beforeEach(() => {
         interceptor = new RequestInterceptor();
         captureCallback = jest.fn();
-        
+
         // Reset fetch
         (global.fetch as jest.Mock).mockClear();
     });
@@ -92,4 +92,3 @@ describe('RequestInterceptor', () => {
         });
     });
 });
-
