@@ -235,6 +235,7 @@ use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi_routes::ValidationOptions;
+use tower_http::cors::{Any, CorsLayer};
 
 use mockforge_core::LatencyProfile;
 #[cfg(feature = "data-faker")]
@@ -348,6 +349,104 @@ pub async fn build_router(
     .await
 }
 
+/// Apply CORS middleware to the router based on configuration
+fn apply_cors_middleware(
+    app: Router,
+    cors_config: Option<mockforge_core::config::HttpCorsConfig>,
+) -> Router {
+    use http::Method;
+    use tower_http::cors::AllowOrigin;
+
+    if let Some(config) = cors_config {
+        if !config.enabled {
+            return app;
+        }
+
+        let mut cors_layer = CorsLayer::new();
+
+        // Configure allowed origins
+        if config.allowed_origins.contains(&"*".to_string()) {
+            cors_layer = cors_layer.allow_origin(Any);
+        } else if !config.allowed_origins.is_empty() {
+            // Try to parse each origin, fallback to permissive if parsing fails
+            let origins: Vec<_> = config
+                .allowed_origins
+                .iter()
+                .filter_map(|origin| {
+                    origin.parse::<http::HeaderValue>().ok().map(|hv| AllowOrigin::exact(hv))
+                })
+                .collect();
+
+            if origins.is_empty() {
+                // If no valid origins, use permissive for development
+                warn!("No valid CORS origins configured, using permissive CORS");
+                cors_layer = cors_layer.allow_origin(Any);
+            } else {
+                // Use the first origin as exact match (tower-http limitation)
+                // For multiple origins, we'd need a custom implementation
+                if origins.len() == 1 {
+                    cors_layer = cors_layer.allow_origin(origins[0].clone());
+                } else {
+                    // Multiple origins - use permissive for now
+                    warn!(
+                        "Multiple CORS origins configured, using permissive CORS. \
+                        Consider using '*' for all origins."
+                    );
+                    cors_layer = cors_layer.allow_origin(Any);
+                }
+            }
+        } else {
+            // No origins specified, use permissive for development
+            cors_layer = cors_layer.allow_origin(Any);
+        }
+
+        // Configure allowed methods
+        if !config.allowed_methods.is_empty() {
+            let methods: Vec<Method> =
+                config.allowed_methods.iter().filter_map(|m| m.parse().ok()).collect();
+            if !methods.is_empty() {
+                cors_layer = cors_layer.allow_methods(methods);
+            }
+        } else {
+            // Default to common HTTP methods
+            cors_layer = cors_layer.allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::PATCH,
+                Method::OPTIONS,
+            ]);
+        }
+
+        // Configure allowed headers
+        if !config.allowed_headers.is_empty() {
+            let headers: Vec<_> = config
+                .allowed_headers
+                .iter()
+                .filter_map(|h| h.parse::<http::HeaderName>().ok())
+                .collect();
+            if !headers.is_empty() {
+                cors_layer = cors_layer.allow_headers(headers);
+            }
+        } else {
+            // Default headers
+            cors_layer =
+                cors_layer.allow_headers([http::header::CONTENT_TYPE, http::header::AUTHORIZATION]);
+        }
+
+        // Allow credentials and expose common headers
+        cors_layer = cors_layer.allow_credentials(true);
+
+        info!("CORS middleware enabled with configured settings");
+        app.layer(cors_layer)
+    } else {
+        // No CORS config provided - use permissive CORS for development
+        debug!("No CORS config provided, using permissive CORS for development");
+        app.layer(CorsLayer::permissive())
+    }
+}
+
 /// Build the base HTTP router with multi-tenant workspace support
 #[allow(clippy::too_many_arguments)]
 pub async fn build_router_with_multi_tenant(
@@ -356,7 +455,7 @@ pub async fn build_router_with_multi_tenant(
     failure_config: Option<FailureConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
     _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
-    _cors_config: Option<mockforge_core::config::HttpCorsConfig>,
+    cors_config: Option<mockforge_core::config::HttpCorsConfig>,
     ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
@@ -598,6 +697,9 @@ pub async fn build_router_with_multi_tenant(
 
     // Add rate limiting middleware (before logging to rate limit early)
     app = app.layer(from_fn_with_state(state, crate::middleware::rate_limit_middleware));
+
+    // Add CORS middleware
+    app = apply_cors_middleware(app, cors_config);
 
     // Add workspace routing middleware if multi-tenant is enabled
     if let Some(mt_config) = multi_tenant_config {
@@ -977,7 +1079,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     _circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
     _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
-    _cors_config: Option<mockforge_core::config::HttpCorsConfig>,
+    cors_config: Option<mockforge_core::config::HttpCorsConfig>,
     _ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
@@ -1160,6 +1262,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
             info!("Workspace routing middleware initialized for HTTP server");
         }
     }
+
+    // Add CORS middleware
+    app = apply_cors_middleware(app, cors_config);
 
     app
 }
