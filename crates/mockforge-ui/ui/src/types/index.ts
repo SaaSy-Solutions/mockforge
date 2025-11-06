@@ -1227,3 +1227,11 @@ export interface SaveFileRequest {
   content: string;
   encoding?: string;
 }
+
+// Re-export graph types
+export type {
+  GraphData,
+  GraphNode,
+  GraphEdge,
+  GraphCluster,
+} from './graph';

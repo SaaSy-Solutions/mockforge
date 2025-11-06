@@ -36,6 +36,7 @@ import {
   Layers,
   Store,
   Package,
+  GitBranch as GraphIcon,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -49,42 +50,43 @@ const navItems = [
   // Core
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'workspaces', label: 'Workspaces', icon: FolderOpen },
-  
+
   // Services & Data
   { id: 'services', label: 'Services', icon: Server },
   { id: 'fixtures', label: 'Fixtures', icon: Database },
-  
+
   // Orchestration
   { id: 'chains', label: 'Chains', icon: Link2 },
+  { id: 'graph', label: 'Graph', icon: GraphIcon },
   { id: 'orchestration-builder', label: 'Orchestration Builder', icon: GitBranch },
   { id: 'orchestration-execution', label: 'Orchestration Execution', icon: PlayCircle },
-  
+
   // Observability & Monitoring
   { id: 'observability', label: 'Observability', icon: Eye },
   { id: 'logs', label: 'Logs', icon: FileText },
   { id: 'traces', label: 'Traces', icon: Network },
   { id: 'metrics', label: 'Metrics', icon: Activity },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  
+
   // Testing
   { id: 'testing', label: 'Testing', icon: TestTube },
   { id: 'test-generator', label: 'Test Generator', icon: Code2 },
   { id: 'test-execution', label: 'Test Execution', icon: PlayCircle },
   { id: 'integration-test-builder', label: 'Integration Tests', icon: Layers },
-  
+
   // Chaos & Resilience
   { id: 'chaos', label: 'Chaos Engineering', icon: Zap },
   { id: 'resilience', label: 'Resilience', icon: Shield },
   { id: 'recorder', label: 'Recorder', icon: Radio },
-  
+
   // Import & Templates
   { id: 'import', label: 'Import', icon: Import },
   { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
-  
+
   // Plugins
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'plugin-registry', label: 'Plugin Registry', icon: Package },
-  
+
   // Configuration
   { id: 'config', label: 'Config', icon: Settings },
 ];

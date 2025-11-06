@@ -48,6 +48,7 @@ import type {
   FileContentRequest,
   FileContentResponse,
   SaveFileRequest,
+  GraphData,
   EncryptionStatus,
   AutoEncryptionConfig,
   SecurityCheckResult,
@@ -115,6 +116,16 @@ class ApiService {
 
   async getChain(chainId: string): Promise<ChainDefinition> {
     return this.fetchJson(`${API_BASE}/${chainId}`) as Promise<ChainDefinition>;
+  }
+
+  async getGraph(): Promise<GraphData> {
+    const response = await this.fetchJson('/__mockforge/graph') as { data: GraphData; success: boolean };
+    // Handle ApiResponse wrapper
+    if (response.success && response.data) {
+      return response.data;
+    }
+    // Fallback: assume response is GraphData directly
+    return response as unknown as GraphData;
   }
 
   async createChain(definition: string): Promise<ChainCreationResponse> {

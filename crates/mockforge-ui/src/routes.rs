@@ -114,6 +114,9 @@ pub fn create_admin_router(
         .route("/__mockforge/chains/{id}/execute", post(proxy_chain_execute))
         .route("/__mockforge/chains/{id}/validate", post(proxy_chain_validate))
         .route("/__mockforge/chains/{id}/history", get(proxy_chain_history))
+        // Graph visualization routes
+        .route("/__mockforge/graph", get(get_graph))
+        .route("/__mockforge/graph/sse", get(graph_sse))
         // Validation configuration routes
         .route("/__mockforge/validation", get(get_validation))
         .route("/__mockforge/validation", post(update_validation))

@@ -49,12 +49,14 @@ pub mod analytics_stream;
 pub mod analytics_v2;
 pub mod assets;
 pub mod chains;
+pub mod graph;
 pub mod health;
 pub mod plugin;
 
 // Re-export commonly used types
 pub use assets::*;
 pub use chains::*;
+pub use graph::*;
 pub use plugin::*;
 
 // Import workspace persistence

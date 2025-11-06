@@ -19,6 +19,7 @@ const ImportPage = lazy(() => import('./pages/ImportPage').then(m => ({ default:
 const WorkspacesPage = lazy(() => import('./pages/WorkspacesPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
+const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 // Observability & Monitoring
@@ -66,16 +67,18 @@ function App() {
         return <DashboardPage />;
       case 'workspaces':
         return <WorkspacesPage />;
-      
+
       // Services & Data
       case 'services':
         return <ServicesPage />;
       case 'fixtures':
         return <FixturesPage />;
-      
+
       // Orchestration
       case 'chains':
         return <ChainsPage />;
+      case 'graph':
+        return <GraphPage />;
       case 'orchestration-builder':
         return <OrchestrationBuilder />;
       case 'orchestration-execution':
@@ -83,7 +86,7 @@ function App() {
         // For navigation, we'll show it with an empty ID (it will handle loading state)
         // In a real app, this would typically be accessed via a link from Orchestration Builder
         return <OrchestrationExecutionView orchestrationId="default" />;
-      
+
       // Observability & Monitoring
       case 'observability':
         return <ObservabilityPage />;
@@ -95,7 +98,7 @@ function App() {
         return <MetricsPage />;
       case 'analytics':
         return <AnalyticsPage />;
-      
+
       // Testing
       case 'testing':
         return <TestingPage />;
@@ -105,7 +108,7 @@ function App() {
         return <TestExecutionDashboard />;
       case 'integration-test-builder':
         return <IntegrationTestBuilder />;
-      
+
       // Chaos & Resilience
       case 'chaos':
         return <ChaosPage />;
@@ -113,23 +116,23 @@ function App() {
         return <ResiliencePage />;
       case 'recorder':
         return <RecorderPage />;
-      
+
       // Import & Templates
       case 'import':
         return <ImportPage />;
       case 'template-marketplace':
         return <TemplateMarketplacePage />;
-      
+
       // Plugins
       case 'plugins':
         return <PluginsPage />;
       case 'plugin-registry':
         return <PluginRegistryPage />;
-      
+
       // Configuration
       case 'config':
         return <ConfigPage />;
-      
+
       default:
         return (
           <div className="space-y-8">

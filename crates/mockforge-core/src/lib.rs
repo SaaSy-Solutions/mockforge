@@ -218,6 +218,7 @@ pub mod encryption;
 pub mod error;
 pub mod failure_injection;
 pub mod generate_config;
+pub mod graph;
 pub mod import;
 pub mod intelligent_behavior;
 pub mod latency;
@@ -266,6 +267,10 @@ pub use generate_config::{
     discover_config_file, load_generate_config, load_generate_config_with_fallback,
     save_generate_config, BarrelType, GenerateConfig, GenerateOptions, InputConfig, OutputConfig,
     PluginConfig,
+};
+pub use graph::{
+    builder::GraphBuilder, relationships, ClusterType, EdgeType, GraphCluster, GraphData,
+    GraphEdge, GraphNode, NodeType, Protocol as GraphProtocol,
 };
 pub use latency::LatencyProfile;
 pub use multi_tenant::{
