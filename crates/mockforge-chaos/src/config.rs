@@ -2,6 +2,20 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Payload corruption type
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CorruptionType {
+    /// No corruption
+    None,
+    /// Replace random bytes with random values
+    RandomBytes,
+    /// Truncate payload at random position
+    Truncate,
+    /// Flip random bits in the payload
+    BitFlip,
+}
+
 /// Main chaos engineering configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChaosConfig {
@@ -71,6 +85,12 @@ pub struct FaultInjectionConfig {
     pub partial_responses: bool,
     /// Probability of partial responses (0.0-1.0)
     pub partial_response_probability: f64,
+    /// Enable payload corruption
+    pub payload_corruption: bool,
+    /// Probability of payload corruption (0.0-1.0)
+    pub payload_corruption_probability: f64,
+    /// Type of corruption to apply
+    pub corruption_type: CorruptionType,
 }
 
 impl Default for FaultInjectionConfig {
@@ -86,6 +106,9 @@ impl Default for FaultInjectionConfig {
             timeout_probability: 0.05,
             partial_responses: false,
             partial_response_probability: 0.05,
+            payload_corruption: false,
+            payload_corruption_probability: 0.05,
+            corruption_type: CorruptionType::None,
         }
     }
 }

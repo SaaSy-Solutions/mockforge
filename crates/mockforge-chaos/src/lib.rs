@@ -79,8 +79,8 @@ pub use collaboration::{
     CollaborationSession, CollaborationUser, CursorPosition,
 };
 pub use config::{
-    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, FaultInjectionConfig, LatencyConfig,
-    RateLimitConfig, TrafficShapingConfig,
+    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, CorruptionType, FaultInjectionConfig,
+    LatencyConfig, RateLimitConfig, TrafficShapingConfig,
 };
 pub use dashboard::{DashboardManager, DashboardQuery, DashboardStats, DashboardUpdate};
 pub use distributed_coordinator::{

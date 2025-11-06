@@ -1,6 +1,7 @@
 //! Chaos engineering middleware for HTTP
 
 use crate::{
+    config::CorruptionType,
     fault::FaultInjector,
     latency::LatencyInjector,
     rate_limit::RateLimiter,
@@ -16,6 +17,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http_body_util::BodyExt;
+use rand::Rng;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{debug, warn};
 
@@ -201,18 +203,72 @@ pub async fn chaos_middleware(
     let response_size = response_body_bytes.len();
 
     // Check if should truncate response (partial response simulation)
-    let final_body = if chaos.fault_injector.should_truncate_response() {
+    let mut final_body_bytes = if chaos.fault_injector.should_truncate_response() {
         warn!("Injecting partial response");
         let truncate_at = response_size / 2;
-        Body::from(response_body_bytes.slice(0..truncate_at))
+        response_body_bytes.slice(0..truncate_at).to_vec()
     } else {
-        Body::from(response_body_bytes)
+        response_body_bytes.to_vec()
     };
+
+    // Apply payload corruption if enabled
+    if chaos.fault_injector.should_corrupt_payload() {
+        let corruption_type = chaos.fault_injector.corruption_type();
+        warn!("Injecting payload corruption: {:?}", corruption_type);
+        final_body_bytes = corrupt_payload(&final_body_bytes, corruption_type);
+    }
+
+    let final_body = Body::from(final_body_bytes);
 
     // Throttle response bandwidth
     chaos.traffic_shaper.throttle_bandwidth(response_size).await;
 
     Response::from_parts(parts, final_body)
+}
+
+/// Corrupt a payload based on the corruption type
+fn corrupt_payload(data: &[u8], corruption_type: CorruptionType) -> Vec<u8> {
+    if data.is_empty() {
+        return data.to_vec();
+    }
+
+    let mut rng = rand::rng();
+    let mut corrupted = data.to_vec();
+
+    match corruption_type {
+        CorruptionType::None => corrupted,
+        CorruptionType::RandomBytes => {
+            // Replace 10% of bytes with random values
+            let num_bytes_to_corrupt = (data.len() as f64 * 0.1).max(1.0) as usize;
+            for _ in 0..num_bytes_to_corrupt {
+                let index = rng.random_range(0..data.len());
+                corrupted[index] = rng.random::<u8>();
+            }
+            corrupted
+        }
+        CorruptionType::Truncate => {
+            // Truncate at random position (between 50% and 90% of original length)
+            let min_truncate = data.len() / 2;
+            let max_truncate = (data.len() as f64 * 0.9) as usize;
+            let truncate_at = if max_truncate > min_truncate {
+                rng.random_range(min_truncate..=max_truncate)
+            } else {
+                min_truncate
+            };
+            corrupted.truncate(truncate_at);
+            corrupted
+        }
+        CorruptionType::BitFlip => {
+            // Flip random bits in 10% of bytes
+            let num_bytes_to_flip = (data.len() as f64 * 0.1).max(1.0) as usize;
+            for _ in 0..num_bytes_to_flip {
+                let index = rng.random_range(0..data.len());
+                let bit_to_flip = rng.random_range(0..8);
+                corrupted[index] ^= 1 << bit_to_flip;
+            }
+            corrupted
+        }
+    }
 }
 
 #[cfg(test)]

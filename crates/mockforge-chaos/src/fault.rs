@@ -16,6 +16,8 @@ pub enum FaultType {
     Timeout,
     /// Partial response (incomplete data)
     PartialResponse,
+    /// Payload corruption
+    PayloadCorruption,
 }
 
 /// Fault injector for simulating errors
@@ -75,6 +77,14 @@ impl FaultInjector {
             return Some(FaultType::PartialResponse);
         }
 
+        // Check for payload corruption
+        if self.config.payload_corruption
+            && rng.random::<f64>() < self.config.payload_corruption_probability
+        {
+            debug!("Injecting payload corruption");
+            return Some(FaultType::PayloadCorruption);
+        }
+
         None
     }
 
@@ -91,6 +101,9 @@ impl FaultInjector {
                 FaultType::Timeout => Err(ChaosError::Timeout(self.config.timeout_ms)),
                 FaultType::PartialResponse => {
                     Err(ChaosError::InjectedFault("Partial response".to_string()))
+                }
+                FaultType::PayloadCorruption => {
+                    Err(ChaosError::InjectedFault("Payload corruption".to_string()))
                 }
             }
         } else {
@@ -110,6 +123,21 @@ impl FaultInjector {
     /// Check if should truncate response (for partial response simulation)
     pub fn should_truncate_response(&self) -> bool {
         matches!(self.should_inject_fault(), Some(FaultType::PartialResponse))
+    }
+
+    /// Check if should corrupt payload
+    pub fn should_corrupt_payload(&self) -> bool {
+        if !self.config.enabled || !self.config.payload_corruption {
+            return false;
+        }
+
+        let mut rng = rand::rng();
+        rng.random::<f64>() < self.config.payload_corruption_probability
+    }
+
+    /// Get corruption type from config
+    pub fn corruption_type(&self) -> crate::config::CorruptionType {
+        self.config.corruption_type
     }
 
     /// Get configuration

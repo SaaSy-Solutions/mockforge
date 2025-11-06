@@ -19,6 +19,7 @@ import {
   fixturesApi,
   smokeTestsApi,
   importApi,
+  chaosApi,
 } from '../services/api';
 import type {
   CreateEnvironmentRequest,
@@ -43,6 +44,8 @@ export const queryKeys = {
   smokeTests: ['smokeTests'] as const,
   import: ['import'] as const,
   importHistory: ['importHistory'] as const,
+  chaosConfig: ['chaosConfig'] as const,
+  chaosStatus: ['chaosStatus'] as const,
 };
 
 /**
@@ -584,6 +587,124 @@ export function useUpdateEnvironmentsOrder(workspaceId: string) {
     onSuccess: () => {
       // Invalidate environment queries for this workspace
       queryClient.invalidateQueries({ queryKey: ['environments', workspaceId] });
+    },
+  });
+}
+
+/**
+ * Chaos engineering hooks
+ */
+
+/**
+ * Get current chaos configuration
+ */
+export function useChaosConfig() {
+  return useQuery({
+    queryKey: queryKeys.chaosConfig,
+    queryFn: () => chaosApi.getChaosConfig(),
+    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+}
+
+/**
+ * Get current chaos status
+ */
+export function useChaosStatus() {
+  return useQuery({
+    queryKey: queryKeys.chaosStatus,
+    queryFn: () => chaosApi.getChaosStatus(),
+    staleTime: 5000, // Consider data stale after 5 seconds
+    refetchInterval: 10000, // Refetch every 10 seconds
+  });
+}
+
+/**
+ * Update chaos latency configuration
+ */
+export function useUpdateChaosLatency() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (config: any) => chaosApi.updateChaosLatency(config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
+    },
+  });
+}
+
+/**
+ * Update chaos fault injection configuration
+ */
+export function useUpdateChaosFaults() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (config: any) => chaosApi.updateChaosFaults(config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
+    },
+  });
+}
+
+/**
+ * Update chaos traffic shaping configuration
+ */
+export function useUpdateChaosTraffic() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (config: any) => chaosApi.updateChaosTraffic(config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
+    },
+  });
+}
+
+/**
+ * Enable chaos engineering
+ */
+export function useEnableChaos() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => chaosApi.enableChaos(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
+    },
+  });
+}
+
+/**
+ * Disable chaos engineering
+ */
+export function useDisableChaos() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => chaosApi.disableChaos(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
+    },
+  });
+}
+
+/**
+ * Reset chaos configuration to defaults
+ */
+export function useResetChaos() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => chaosApi.resetChaos(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
     },
   });
 }

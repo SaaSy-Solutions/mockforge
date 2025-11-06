@@ -139,6 +139,89 @@ export interface ProxyConfig {
   requests_proxied: number;
 }
 
+// ==================== CHAOS ENGINEERING TYPES ====================
+
+/**
+ * Payload corruption type
+ */
+export type CorruptionType = 'none' | 'random_bytes' | 'truncate' | 'bit_flip';
+
+/**
+ * Latency injection configuration for chaos engineering
+ */
+export interface ChaosLatencyConfig {
+  enabled: boolean;
+  fixed_delay_ms?: number | null;
+  random_delay_range_ms?: [number, number] | null;
+  jitter_percent: number;
+  probability: number;
+}
+
+/**
+ * Fault injection configuration for chaos engineering
+ */
+export interface ChaosFaultInjectionConfig {
+  enabled: boolean;
+  http_errors: number[];
+  http_error_probability: number;
+  connection_errors: boolean;
+  connection_error_probability: number;
+  timeout_errors: boolean;
+  timeout_ms: number;
+  timeout_probability: number;
+  partial_responses: boolean;
+  partial_response_probability: number;
+  payload_corruption: boolean;
+  payload_corruption_probability: number;
+  corruption_type: CorruptionType;
+}
+
+/**
+ * Traffic shaping configuration for chaos engineering
+ */
+export interface ChaosTrafficShapingConfig {
+  enabled: boolean;
+  bandwidth_limit_bps: number;
+  packet_loss_percent: number;
+  max_connections: number;
+  connection_timeout_ms: number;
+}
+
+/**
+ * Rate limiting configuration for chaos engineering
+ */
+export interface ChaosRateLimitConfig {
+  enabled: boolean;
+  requests_per_second: number;
+  burst_size: number;
+  per_ip: boolean;
+  per_endpoint: boolean;
+}
+
+/**
+ * Main chaos engineering configuration
+ */
+export interface ChaosConfig {
+  enabled: boolean;
+  latency?: ChaosLatencyConfig | null;
+  fault_injection?: ChaosFaultInjectionConfig | null;
+  rate_limit?: ChaosRateLimitConfig | null;
+  traffic_shaping?: ChaosTrafficShapingConfig | null;
+}
+
+/**
+ * Chaos engineering status response
+ */
+export interface ChaosStatus {
+  enabled: boolean;
+  active_scenarios?: string[];
+  latency_enabled?: boolean;
+  fault_injection_enabled?: boolean;
+  rate_limit_enabled?: boolean;
+  traffic_shaping_enabled?: boolean;
+  current_config?: ChaosConfig;
+}
+
 export interface ServerInfo {
   version: string;
   build_time: string;

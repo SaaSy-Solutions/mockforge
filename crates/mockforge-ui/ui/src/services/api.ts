@@ -888,6 +888,91 @@ class SmokeTestsApiService {
   }
 }
 
+class ChaosApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * Get current chaos configuration
+   */
+  async getChaosConfig(): Promise<any> {
+    return this.fetchJson('/api/chaos/config') as Promise<any>;
+  }
+
+  /**
+   * Get current chaos status
+   */
+  async getChaosStatus(): Promise<any> {
+    return this.fetchJson('/api/chaos/status') as Promise<any>;
+  }
+
+  /**
+   * Update latency configuration
+   */
+  async updateChaosLatency(config: any): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/config/latency', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Update fault injection configuration
+   */
+  async updateChaosFaults(config: any): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/config/faults', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Update traffic shaping configuration
+   */
+  async updateChaosTraffic(config: any): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/config/traffic', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Enable chaos engineering
+   */
+  async enableChaos(): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/enable', {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Disable chaos engineering
+   */
+  async disableChaos(): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/disable', {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Reset chaos configuration to defaults
+   */
+  async resetChaos(): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/reset', {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+}
+
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
@@ -964,6 +1049,7 @@ export const envApi = new EnvApiService();
 export const filesApi = new FilesApiService();
 export const smokeTestsApi = new SmokeTestsApiService();
 export const pluginsApi = new PluginsApiService();
+export const chaosApi = new ChaosApiService();
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {
@@ -982,6 +1068,7 @@ logger.info('API Services initialized', {
   filesApi: !!filesApi,
   smokeTestsApi: !!smokeTestsApi,
   pluginsApi: !!pluginsApi,
+  chaosApi: !!chaosApi,
 });
 
 // Type exports for backwards compatibility
