@@ -361,28 +361,107 @@ pub async fn clear_scheduled_responses() -> impl IntoResponse {
     }
 }
 
-/// Parse a duration string like "2h", "30m", "10s", "1d"
+/// Request to save a scenario
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaveScenarioRequest {
+    /// Scenario name
+    pub name: String,
+    /// Optional description
+    pub description: Option<String>,
+}
+
+/// Request to load a scenario
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoadScenarioRequest {
+    /// Scenario name
+    pub name: String,
+}
+
+/// Save current time travel state as a scenario
+pub async fn save_scenario(Json(req): Json<SaveScenarioRequest>) -> impl IntoResponse {
+    match get_time_travel_manager() {
+        Some(manager) => {
+            let mut scenario = manager.save_scenario(req.name.clone());
+            scenario.description = req.description;
+
+            Json(scenario).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Time travel not initialized"
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Load a scenario
+pub async fn load_scenario(Json(req): Json<LoadScenarioRequest>) -> impl IntoResponse {
+    match get_time_travel_manager() {
+        Some(_manager) => {
+            // For now, scenarios are passed in the request body
+            // In a full implementation, scenarios would be stored and loaded from disk
+            (
+                StatusCode::NOT_IMPLEMENTED,
+                Json(serde_json::json!({
+                    "error": "Scenario loading from storage not yet implemented. Use save_scenario to get scenario JSON, then POST it back."
+                })),
+            )
+                .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Time travel not initialized"
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Parse a duration string like "2h", "30m", "10s", "1d", "1month", "1year"
 fn parse_duration(s: &str) -> Result<Duration, String> {
     let s = s.trim();
     if s.is_empty() {
         return Err("Empty duration string".to_string());
     }
 
-    // Extract number and unit
-    let (num_str, unit) = if let Some(pos) = s.chars().position(|c| !c.is_numeric()) {
+    // Handle months and years (approximate)
+    if s.ends_with("month") || s.ends_with("months") {
+        let num_str = s.trim_end_matches("month").trim_end_matches("months").trim();
+        let amount: i64 =
+            num_str.parse().map_err(|e| format!("Invalid number for months: {}", e))?;
+        // Approximate: 1 month = 30 days
+        return Ok(Duration::days(amount * 30));
+    }
+    if s.ends_with('y') || s.ends_with("year") || s.ends_with("years") {
+        let num_str = s
+            .trim_end_matches('y')
+            .trim_end_matches("year")
+            .trim_end_matches("years")
+            .trim();
+        let amount: i64 =
+            num_str.parse().map_err(|e| format!("Invalid number for years: {}", e))?;
+        // Approximate: 1 year = 365 days
+        return Ok(Duration::days(amount * 365));
+    }
+
+    // Extract number and unit for standard durations
+    let (num_str, unit) = if let Some(pos) = s.chars().position(|c| !c.is_numeric() && c != '-') {
         (&s[..pos], &s[pos..])
     } else {
-        return Err("No unit specified (use s, m, h, or d)".to_string());
+        return Err("No unit specified (use s, m, h, d, month, or year)".to_string());
     };
 
     let amount: i64 = num_str.parse().map_err(|e| format!("Invalid number: {}", e))?;
 
     match unit {
-        "s" => Ok(Duration::seconds(amount)),
-        "m" => Ok(Duration::minutes(amount)),
-        "h" => Ok(Duration::hours(amount)),
-        "d" => Ok(Duration::days(amount)),
-        _ => Err(format!("Unknown unit: {}", unit)),
+        "s" | "sec" | "secs" | "second" | "seconds" => Ok(Duration::seconds(amount)),
+        "m" | "min" | "mins" | "minute" | "minutes" => Ok(Duration::minutes(amount)),
+        "h" | "hr" | "hrs" | "hour" | "hours" => Ok(Duration::hours(amount)),
+        "d" | "day" | "days" => Ok(Duration::days(amount)),
+        _ => Err(format!("Unknown unit: {}. Use s, m, h, d, month, or year", unit)),
     }
 }
 

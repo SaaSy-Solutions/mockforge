@@ -31,6 +31,7 @@ mod plugin_commands;
 mod progress;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
+mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
 mod workspace_commands;
@@ -753,6 +754,31 @@ enum Commands {
     Mockai {
         #[command(subcommand)]
         mockai_command: mockai_commands::MockAICommands,
+    },
+
+    /// Time travel / temporal simulation control
+    ///
+    /// Control virtual clock for testing time-dependent behavior. Requires
+    /// MockForge server to be running with admin UI enabled.
+    ///
+    /// Examples:
+    ///   mockforge time status
+    ///   mockforge time enable --time "2025-01-01T00:00:00Z"
+    ///   mockforge time advance 1month
+    ///   mockforge time advance 2h
+    ///   mockforge time set "2025-06-01T12:00:00Z"
+    ///   mockforge time scale 2.0
+    ///   mockforge time reset
+    ///   mockforge time save "1-month-later" --description "Scenario after 1 month"
+    ///   mockforge time load "1-month-later"
+    ///   mockforge time list
+    #[command(verbatim_doc_comment)]
+    Time {
+        #[command(subcommand)]
+        time_command: time_commands::TimeCommands,
+        /// Admin UI URL (default: http://localhost:9080)
+        #[arg(long)]
+        admin_url: Option<String>,
     },
 
     /// Chaos experiment orchestration
@@ -1782,6 +1808,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             mockai_commands::handle_mockai_command(mockai_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("MockAI command failed: {}", e))?;
+        }
+
+        Commands::Time {
+            time_command,
+            admin_url,
+        } => {
+            time_commands::execute_time_command(time_command, admin_url)
+                .await
+                .map_err(|e| anyhow::anyhow!("Time command failed: {}", e))?;
         }
 
         Commands::Orchestrate {
@@ -2820,6 +2855,28 @@ async fn handle_serve(
 
     let health_manager = Arc::new(HealthManager::with_init_timeout(Duration::from_secs(60)));
     let health_manager_for_router = health_manager.clone();
+
+    // Initialize TimeTravelManager if configured
+    use mockforge_core::TimeTravelManager;
+    use mockforge_ui::time_travel_handlers;
+
+    let time_travel_manager = {
+        let time_travel_config = config.core.time_travel.clone();
+        let manager = Arc::new(TimeTravelManager::new(time_travel_config));
+
+        // Initialize the global time travel manager for UI handlers
+        time_travel_handlers::init_time_travel_manager(manager.clone());
+
+        if manager.clock().is_enabled() {
+            println!("⏰ Time travel enabled");
+            if let Some(virtual_time) = manager.clock().status().current_time {
+                println!("   Virtual time: {}", virtual_time);
+            }
+            println!("   Scale factor: {}x", manager.clock().get_scale());
+        }
+
+        manager
+    };
 
     // Initialize MockAI if enabled
     let mockai = if config.mockai.enabled {

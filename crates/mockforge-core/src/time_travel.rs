@@ -407,6 +407,65 @@ impl ResponseScheduler {
     }
 }
 
+/// Time travel scenario snapshot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeScenario {
+    /// Scenario name
+    pub name: String,
+    /// Whether time travel is enabled
+    pub enabled: bool,
+    /// Current virtual time (if enabled)
+    pub current_time: Option<DateTime<Utc>>,
+    /// Time scale factor
+    pub scale_factor: f64,
+    /// Scheduled responses (if any)
+    #[serde(default)]
+    pub scheduled_responses: Vec<ScheduledResponse>,
+    /// Created timestamp
+    pub created_at: DateTime<Utc>,
+    /// Description (optional)
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+impl TimeScenario {
+    /// Create a new scenario from current time travel state
+    pub fn from_manager(manager: &TimeTravelManager, name: String) -> Self {
+        let status = manager.clock().status();
+        let scheduled = manager.scheduler().list_scheduled();
+
+        Self {
+            name,
+            enabled: status.enabled,
+            current_time: status.current_time,
+            scale_factor: status.scale_factor,
+            scheduled_responses: scheduled,
+            created_at: Utc::now(),
+            description: None,
+        }
+    }
+
+    /// Apply this scenario to a time travel manager
+    pub fn apply_to_manager(&self, manager: &TimeTravelManager) {
+        if self.enabled {
+            if let Some(time) = self.current_time {
+                manager.clock().enable_and_set(time);
+            } else {
+                manager.clock().enable_and_set(Utc::now());
+            }
+            manager.clock().set_scale(self.scale_factor);
+        } else {
+            manager.clock().disable();
+        }
+
+        // Clear existing scheduled responses and add scenario ones
+        manager.scheduler().clear_all();
+        for response in &self.scheduled_responses {
+            let _ = manager.scheduler().schedule(response.clone());
+        }
+    }
+}
+
 /// Global time travel manager
 pub struct TimeTravelManager {
     /// Virtual clock
@@ -447,6 +506,16 @@ impl TimeTravelManager {
     /// Get the current time (respects virtual clock if enabled)
     pub fn now(&self) -> DateTime<Utc> {
         self.clock.now()
+    }
+
+    /// Save current state as a scenario
+    pub fn save_scenario(&self, name: String) -> TimeScenario {
+        TimeScenario::from_manager(self, name)
+    }
+
+    /// Load and apply a scenario
+    pub fn load_scenario(&self, scenario: &TimeScenario) {
+        scenario.apply_to_manager(self);
     }
 }
 
@@ -564,5 +633,80 @@ mod tests {
 
         let manager = TimeTravelManager::new(config);
         assert!(manager.clock().is_enabled());
+    }
+
+    #[test]
+    fn test_one_month_later_scenario() {
+        let clock = Arc::new(VirtualClock::new());
+        let initial_time = Utc::now();
+        clock.enable_and_set(initial_time);
+
+        // Advance by 1 month (30 days)
+        clock.advance(Duration::days(30));
+
+        let final_time = clock.now();
+        let elapsed = final_time - initial_time;
+
+        // Should be approximately 30 days
+        assert!(elapsed.num_days() >= 29 && elapsed.num_days() <= 31);
+    }
+
+    #[test]
+    fn test_scenario_save_and_load() {
+        let config = TimeTravelConfig {
+            enabled: true,
+            initial_time: Some(Utc::now()),
+            scale_factor: 2.0,
+            enable_scheduling: true,
+        };
+
+        let manager = TimeTravelManager::new(config);
+
+        // Advance time
+        manager.clock().advance(Duration::hours(24));
+
+        // Save scenario
+        let scenario = manager.save_scenario("test-scenario".to_string());
+        assert_eq!(scenario.name, "test-scenario");
+        assert!(scenario.enabled);
+        assert_eq!(scenario.scale_factor, 2.0);
+        assert!(scenario.current_time.is_some());
+
+        // Create new manager and load scenario
+        let new_config = TimeTravelConfig::default();
+        let new_manager = TimeTravelManager::new(new_config);
+
+        // Load scenario
+        new_manager.load_scenario(&scenario);
+
+        // Verify state was restored
+        assert!(new_manager.clock().is_enabled());
+        assert_eq!(new_manager.clock().get_scale(), 2.0);
+        if let Some(saved_time) = scenario.current_time {
+            let loaded_time = new_manager.clock().now();
+            // Times should be very close (within 1 second)
+            assert!((loaded_time - saved_time).num_seconds().abs() < 1);
+        }
+    }
+
+    #[test]
+    fn test_duration_parsing_month_year() {
+        // Test that month and year durations work
+        let clock = Arc::new(VirtualClock::new());
+        let initial_time = Utc::now();
+        clock.enable_and_set(initial_time);
+
+        // Advance by 1 month (should be ~30 days)
+        clock.advance(Duration::days(30));
+        let after_month = clock.now();
+        let month_elapsed = after_month - initial_time;
+        assert!(month_elapsed.num_days() >= 29 && month_elapsed.num_days() <= 31);
+
+        // Reset and advance by 1 year (should be ~365 days)
+        clock.set_time(initial_time);
+        clock.advance(Duration::days(365));
+        let after_year = clock.now();
+        let year_elapsed = after_year - initial_time;
+        assert!(year_elapsed.num_days() >= 364 && year_elapsed.num_days() <= 366);
     }
 }

@@ -316,8 +316,8 @@ pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};
 pub use time_travel::{
-    RepeatConfig, ResponseScheduler, ScheduledResponse, TimeTravelConfig, TimeTravelManager,
-    TimeTravelStatus, VirtualClock,
+    RepeatConfig, ResponseScheduler, ScheduledResponse, TimeScenario, TimeTravelConfig,
+    TimeTravelManager, TimeTravelStatus, VirtualClock,
 };
 pub use time_travel_handler::{
     time_travel_middleware, ScheduledResponseWrapper, TimeTravelHandler,

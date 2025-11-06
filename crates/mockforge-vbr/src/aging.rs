@@ -4,6 +4,8 @@
 //! and time-based field updates.
 
 use crate::Result;
+use mockforge_core::VirtualClock;
+use std::sync::Arc;
 
 /// Data aging rule
 #[derive(Debug, Clone)]
@@ -33,12 +35,39 @@ pub enum AgingAction {
 pub struct AgingManager {
     /// Aging rules
     rules: Vec<AgingRule>,
+    /// Virtual clock for time travel (optional)
+    virtual_clock: Option<Arc<VirtualClock>>,
 }
 
 impl AgingManager {
     /// Create a new aging manager
     pub fn new() -> Self {
-        Self { rules: Vec::new() }
+        Self {
+            rules: Vec::new(),
+            virtual_clock: None,
+        }
+    }
+
+    /// Create a new aging manager with virtual clock
+    pub fn with_virtual_clock(clock: Arc<VirtualClock>) -> Self {
+        Self {
+            rules: Vec::new(),
+            virtual_clock: Some(clock),
+        }
+    }
+
+    /// Set the virtual clock
+    pub fn set_virtual_clock(&mut self, clock: Option<Arc<VirtualClock>>) {
+        self.virtual_clock = clock;
+    }
+
+    /// Get the current time (virtual or real)
+    fn now(&self) -> chrono::DateTime<chrono::Utc> {
+        if let Some(ref clock) = self.virtual_clock {
+            clock.now()
+        } else {
+            chrono::Utc::now()
+        }
     }
 
     /// Add an aging rule
@@ -64,7 +93,7 @@ impl AgingManager {
             };
 
             let table_name = entity.table_name();
-            let now = chrono::Utc::now();
+            let now = self.now();
 
             // Query all records for this entity
             let query = format!("SELECT * FROM {}", table_name);
@@ -86,7 +115,7 @@ impl AgingManager {
                             // Unix timestamp
                             if let Some(ts) = n.as_i64() {
                                 chrono::DateTime::from_timestamp(ts, 0)
-                                    .unwrap_or_else(|| chrono::Utc::now())
+                                    .unwrap_or_else(|| self.now())
                             } else {
                                 continue; // Invalid timestamp
                             }
@@ -183,7 +212,7 @@ impl AgingManager {
         primary_key_value: &serde_json::Value,
     ) -> Result<()> {
         // Update updated_at field if it exists
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = self.now().to_rfc3339();
         let update_query =
             format!("UPDATE {} SET updated_at = ? WHERE {} = ?", table, primary_key_field);
 
@@ -199,5 +228,80 @@ impl AgingManager {
 impl Default for AgingManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockforge_core::VirtualClock;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_aging_with_virtual_clock() {
+        // Create aging manager with virtual clock
+        let clock = Arc::new(VirtualClock::new());
+        let initial_time = chrono::Utc::now();
+        clock.enable_and_set(initial_time);
+
+        let aging_manager = AgingManager::with_virtual_clock(clock.clone());
+
+        // Verify that aging manager uses virtual clock
+        let now = aging_manager.now();
+        assert!((now - initial_time).num_seconds().abs() < 1);
+
+        // Advance virtual clock by 2 hours
+        clock.advance(chrono::Duration::hours(2));
+
+        // Verify aging manager now sees the advanced time
+        let advanced_now = aging_manager.now();
+        let elapsed = advanced_now - initial_time;
+        assert!(elapsed.num_hours() >= 1 && elapsed.num_hours() <= 3);
+    }
+
+    #[test]
+    fn test_aging_timestamps_with_virtual_clock() {
+        let clock = Arc::new(VirtualClock::new());
+        let initial_time = chrono::Utc::now();
+        clock.enable_and_set(initial_time);
+
+        let aging_manager = AgingManager::with_virtual_clock(clock.clone());
+
+        // Advance time by 1 month
+        clock.advance(chrono::Duration::days(30));
+
+        // Update timestamps should use virtual clock
+        // This is tested indirectly through the now() method
+        let now = aging_manager.now();
+        let elapsed = now - initial_time;
+        assert!(elapsed.num_days() >= 29 && elapsed.num_days() <= 31);
+    }
+
+    #[test]
+    fn test_one_month_aging_scenario() {
+        // Simulate "1 month later" scenario with data aging
+        let clock = Arc::new(VirtualClock::new());
+        let initial_time = chrono::Utc::now();
+        clock.enable_and_set(initial_time);
+
+        let aging_manager = AgingManager::with_virtual_clock(clock.clone());
+
+        // Initial time check
+        let start_time = aging_manager.now();
+        assert!((start_time - initial_time).num_seconds().abs() < 1);
+
+        // Advance by 1 month (30 days)
+        clock.advance(chrono::Duration::days(30));
+
+        // Verify aging manager sees the advanced time
+        let month_later = aging_manager.now();
+        let elapsed = month_later - start_time;
+
+        // Should be approximately 30 days
+        assert!(
+            elapsed.num_days() >= 29 && elapsed.num_days() <= 31,
+            "Expected ~30 days, got {} days",
+            elapsed.num_days()
+        );
     }
 }

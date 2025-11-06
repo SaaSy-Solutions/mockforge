@@ -69,7 +69,41 @@ Create an endpoint that returns current time:
 }
 ```
 
-### 4. Control Time via Admin API
+### 4. Control Time via CLI (Recommended)
+
+```bash
+# Get time travel status
+mockforge time status
+
+# Enable time travel at a specific time
+mockforge time enable --time "2025-01-01T00:00:00Z"
+
+# Advance time by 1 month (instantly!)
+mockforge time advance 1month
+
+# Advance time by 2 hours
+mockforge time advance 2h
+
+# Set time to a specific point
+mockforge time set "2025-06-01T12:00:00Z"
+
+# Set time scale (2x speed)
+mockforge time scale 2.0
+
+# Save current state as a scenario
+mockforge time save "1-month-later" --description "Scenario after 1 month"
+
+# Load a saved scenario
+mockforge time load "1-month-later"
+
+# List all saved scenarios
+mockforge time list
+
+# Reset to real time
+mockforge time reset
+```
+
+### 5. Control Time via Admin API
 
 ```bash
 # Get time travel status
@@ -79,6 +113,11 @@ curl http://localhost:9080/__mockforge/time-travel/status
 curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
   -H "Content-Type: application/json" \
   -d '{"duration": "2h"}'
+
+# Advance time by 1 month
+curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
+  -H "Content-Type: application/json" \
+  -d '{"duration": "1month"}'
 
 # Schedule a response for 30 minutes from now
 curl -X POST http://localhost:9080/__mockforge/time-travel/schedule \
@@ -286,6 +325,81 @@ paths:
                 expires_at: "{{now+1h}}"
 ```
 
+## CLI Commands
+
+The `mockforge time` command provides a convenient CLI interface for controlling time travel:
+
+### Basic Commands
+
+```bash
+# Show current status
+mockforge time status
+
+# Enable time travel
+mockforge time enable [--time TIME] [--scale FACTOR]
+
+# Disable time travel
+mockforge time disable
+
+# Advance time
+mockforge time advance <duration>
+
+# Set time to specific point
+mockforge time set <time>
+
+# Set time scale
+mockforge time scale <factor>
+
+# Reset to real time
+mockforge time reset
+```
+
+### Duration Formats
+
+Supported duration formats for `advance`:
+- `10s`, `30m`, `2h`, `1d` - Standard units
+- `1month`, `2months` - Months (approximate: 30 days)
+- `1year`, `2years` - Years (approximate: 365 days)
+
+Examples:
+```bash
+mockforge time advance 1month    # Advance by 1 month
+mockforge time advance 2h        # Advance by 2 hours
+mockforge time advance 30m       # Advance by 30 minutes
+```
+
+### Scenario Management
+
+Save and load time travel states for repeatable testing:
+
+```bash
+# Save current state
+mockforge time save <name> [--description TEXT] [--output PATH]
+
+# Load a saved scenario
+mockforge time load <name>
+
+# List all saved scenarios
+mockforge time list [--dir PATH]
+```
+
+Example workflow:
+```bash
+# 1. Enable time travel and set initial time
+mockforge time enable --time "2025-01-01T00:00:00Z"
+
+# 2. Advance to 1 month later
+mockforge time advance 1month
+
+# 3. Save this state
+mockforge time save "1-month-later" --description "State after 1 month"
+
+# 4. Later, load it again
+mockforge time load "1-month-later"
+```
+
+Scenarios are saved as JSON files in `./scenarios/` by default.
+
 ## Admin API
 
 ### Endpoints
@@ -302,6 +416,8 @@ paths:
 | `/__mockforge/time-travel/scheduled` | GET | List scheduled responses |
 | `/__mockforge/time-travel/scheduled/{id}` | DELETE | Cancel scheduled response |
 | `/__mockforge/time-travel/scheduled/clear` | POST | Clear all scheduled responses |
+| `/__mockforge/time-travel/scenario/save` | POST | Save current state as scenario |
+| `/__mockforge/time-travel/scenario/load` | POST | Load a scenario |
 
 ### Request/Response Schemas
 
@@ -407,7 +523,10 @@ curl http://localhost:3000/orders/123
 # 1. Start MockForge with time travel
 mockforge serve --config time-travel-demo.yaml --admin
 
-# 2. Enable time travel at a known time
+# 2. Enable time travel at a known time (using CLI)
+mockforge time enable --time "2025-01-01T00:00:00Z"
+
+# Or using API
 curl -X POST http://localhost:9080/__mockforge/time-travel/enable \
   -d '{"time": "2025-01-01T00:00:00Z"}'
 
@@ -428,7 +547,10 @@ curl -X POST http://localhost:9080/__mockforge/time-travel/schedule \
     "name": "token_refresh"
   }'
 
-# 4. Advance time to trigger first event
+# 4. Advance time to trigger first event (using CLI)
+mockforge time advance 35m
+
+# Or using API
 curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
   -d '{"duration": "35m"}'
 
@@ -437,11 +559,13 @@ curl http://localhost:3000/api/events
 # Response: {"event": "token_refresh_needed"}
 
 # 6. Continue advancing
-curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
-  -d '{"duration": "30m"}'
+mockforge time advance 30m
 
 curl http://localhost:3000/api/events
 # Response: {"event": "hourly_sync"}
+
+# 7. Save scenario for future use
+mockforge time save "test-scenario" --description "Complete test scenario"
 ```
 
 ### Integration Test Example

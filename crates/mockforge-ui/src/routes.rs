@@ -137,6 +137,8 @@ pub fn create_admin_router(
         .route("/__mockforge/time-travel/scheduled", get(time_travel_handlers::list_scheduled_responses))
         .route("/__mockforge/time-travel/scheduled/{id}", delete(time_travel_handlers::cancel_scheduled_response))
         .route("/__mockforge/time-travel/scheduled/clear", post(time_travel_handlers::clear_scheduled_responses))
+        .route("/__mockforge/time-travel/scenario/save", post(time_travel_handlers::save_scenario))
+        .route("/__mockforge/time-travel/scenario/load", post(time_travel_handlers::load_scenario))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))
