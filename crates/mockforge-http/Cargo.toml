@@ -52,7 +52,7 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = "0.2.7"
+mockforge-core = { version = "0.2.7", path = "../mockforge-core" }
 mockforge-data = "0.2.7"
 mockforge-observability = { version = "0.2.0", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }

@@ -52,16 +52,32 @@ pub mod context;
 pub mod embedding_client;
 pub mod llm_client;
 pub mod memory;
+pub mod mockai;
+pub mod mutation_analyzer;
+pub mod pagination_intelligence;
+pub mod rule_generator;
 pub mod rules;
 pub mod session;
 pub mod spec_suggestion;
 pub mod types;
+pub mod validation_generator;
 
 // Re-export main types
 pub use behavior::BehaviorModel;
 pub use config::IntelligentBehaviorConfig;
 pub use context::StatefulAiContext;
 pub use memory::VectorMemoryStore;
+pub use mockai::{MockAI, Request, Response};
+pub use mutation_analyzer::{
+    ChangeType, FieldChange, MutationAnalysis, MutationAnalyzer, MutationType, ResponseType,
+    ValidationIssue, ValidationIssueType, ValidationSeverity,
+};
+pub use pagination_intelligence::{
+    PaginationFormat, PaginationIntelligence, PaginationMetadata, PaginationRequest, PaginationRule,
+};
+pub use rule_generator::{
+    CrudExample, ErrorExample, ExamplePair, PaginatedResponse, RuleGenerator, ValidationRule,
+};
 pub use rules::{ConsistencyRule, RuleAction, StateMachine, StateTransition};
 pub use session::{SessionManager, SessionTracking};
 pub use spec_suggestion::{
@@ -69,3 +85,7 @@ pub use spec_suggestion::{
     SuggestionInput, SuggestionMetadata, SuggestionResult,
 };
 pub use types::{BehaviorRules, InteractionRecord};
+pub use validation_generator::{
+    ErrorFormat, FieldError, RequestContext, ValidationErrorExample, ValidationErrorResponse,
+    ValidationGenerator,
+};

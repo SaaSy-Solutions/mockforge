@@ -94,11 +94,12 @@ impl ApiGenerator {
             let relationship_name = fk.field.trim_end_matches("_id");
             endpoints.push(ApiEndpoint {
                 method: "GET".to_string(),
-                path: format!(
-                    "{}/{}/{{id}}/{}",
-                    self.prefix, entity_name, relationship_name
+                path: format!("{}/{}/{{id}}/{}", self.prefix, entity_name, relationship_name),
+                handler_name: format!(
+                    "get_{}_by_{}",
+                    fk.target_entity.to_lowercase(),
+                    relationship_name
                 ),
-                handler_name: format!("get_{}_by_{}", fk.target_entity.to_lowercase(), relationship_name),
                 entity_name: entity.name().to_string(),
             });
         }

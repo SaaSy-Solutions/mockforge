@@ -9,6 +9,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
     Router,
 };
+use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
     config::VbrConfig,
     entities::Entity,
@@ -17,7 +18,6 @@ use mockforge_vbr::{
     schema::{ForeignKeyDefinition, VbrSchemaDefinition},
     VbrEngine,
 };
-use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tokio::net::TcpListener;
@@ -176,10 +176,7 @@ async fn setup_test_server(
     }
 
     // Create handler context
-    let context = HandlerContext {
-        database,
-        registry,
-    };
+    let context = HandlerContext { database, registry };
 
     // Create router with VBR routes
     let router = Router::new()

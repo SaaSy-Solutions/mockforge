@@ -7,9 +7,9 @@
 use crate::{Error, Result};
 use async_trait::async_trait;
 use serde_json::Value;
+use sqlx::{Column, Row};
 use std::collections::HashMap;
 use std::sync::Arc;
-use sqlx::{Column, Row};
 use tokio::sync::RwLock;
 
 /// Virtual database abstraction trait
@@ -306,9 +306,9 @@ impl JsonDatabase {
 
         // Load existing data if file exists
         let data = if path.exists() {
-            let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
-                Error::generic(format!("Failed to read JSON database: {}", e))
-            })?;
+            let content = tokio::fs::read_to_string(&path)
+                .await
+                .map_err(|e| Error::generic(format!("Failed to read JSON database: {}", e)))?;
             serde_json::from_str(&content).unwrap_or_default()
         } else {
             HashMap::new()
@@ -335,9 +335,9 @@ impl JsonDatabase {
         let content = serde_json::to_string_pretty(&*data)
             .map_err(|e| Error::generic(format!("Failed to serialize JSON database: {}", e)))?;
 
-        tokio::fs::write(&self.path, content).await.map_err(|e| {
-            Error::generic(format!("Failed to write JSON database: {}", e))
-        })?;
+        tokio::fs::write(&self.path, content)
+            .await
+            .map_err(|e| Error::generic(format!("Failed to write JSON database: {}", e)))?;
 
         Ok(())
     }
@@ -403,7 +403,8 @@ impl VirtualDatabase for JsonDatabase {
             self.save().await?;
             Ok(1)
         } else if query_upper.starts_with("UPDATE") {
-            let (table_name, updates, where_clause, where_params) = parse_update_query(query, params)?;
+            let (table_name, updates, where_clause, where_params) =
+                parse_update_query(query, params)?;
             if let Some(records) = data.get_mut(&table_name) {
                 let mut updated = 0;
                 for record in records.iter_mut() {
@@ -448,10 +449,7 @@ impl VirtualDatabase for JsonDatabase {
                 record.insert("id".to_string(), Value::String(Uuid::new_v4().to_string()));
             }
 
-            let id = record.get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let id = record.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
             let records = data.entry(table_name).or_insert_with(Vec::new);
             records.push(record);
@@ -548,7 +546,8 @@ impl VirtualDatabase for InMemoryDatabase {
             records.push(record);
             Ok(1)
         } else if query_upper.starts_with("UPDATE") {
-            let (table_name, updates, where_clause, where_params) = parse_update_query(query, params)?;
+            let (table_name, updates, where_clause, where_params) =
+                parse_update_query(query, params)?;
             if let Some(records) = data.get_mut(&table_name) {
                 let mut updated = 0;
                 for record in records.iter_mut() {
@@ -589,10 +588,7 @@ impl VirtualDatabase for InMemoryDatabase {
                 record.insert("id".to_string(), Value::String(Uuid::new_v4().to_string()));
             }
 
-            let id = record.get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let id = record.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
             let records = data.entry(table_name).or_insert_with(Vec::new);
             records.push(record);
@@ -808,12 +804,13 @@ fn parse_update_query(
         }
 
         // Extract WHERE clause
-        let (where_clause_str, where_params) = if let Some(where_idx) = set_clause.to_uppercase().find("WHERE") {
-            let where_part = &set_clause[where_idx + 5..];
-            (where_part.to_string(), params[param_idx..].to_vec())
-        } else {
-            (String::new(), Vec::new())
-        };
+        let (where_clause_str, where_params) =
+            if let Some(where_idx) = set_clause.to_uppercase().find("WHERE") {
+                let where_part = &set_clause[where_idx + 5..];
+                (where_part.to_string(), params[param_idx..].to_vec())
+            } else {
+                (String::new(), Vec::new())
+            };
 
         return Ok((table_name, updates, where_clause_str, where_params));
     }

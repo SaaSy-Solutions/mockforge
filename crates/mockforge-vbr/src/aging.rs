@@ -101,7 +101,10 @@ impl AgingManager {
                         match rule.action {
                             AgingAction::Delete => {
                                 // Get primary key value
-                                let pk_field = entity.schema.primary_key.first()
+                                let pk_field = entity
+                                    .schema
+                                    .primary_key
+                                    .first()
                                     .map(|s| s.as_str())
                                     .unwrap_or("id");
                                 if let Some(pk_value) = record.get(pk_field) {
@@ -109,15 +112,16 @@ impl AgingManager {
                                         "DELETE FROM {} WHERE {} = ?",
                                         table_name, pk_field
                                     );
-                                    database
-                                        .execute(&delete_query, &[pk_value.clone()])
-                                        .await?;
+                                    database.execute(&delete_query, &[pk_value.clone()]).await?;
                                     total_cleaned += 1;
                                 }
                             }
                             AgingAction::MarkExpired => {
                                 // Update status field
-                                let pk_field = entity.schema.primary_key.first()
+                                let pk_field = entity
+                                    .schema
+                                    .primary_key
+                                    .first()
                                     .map(|s| s.as_str())
                                     .unwrap_or("id");
                                 if let Some(pk_value) = record.get(pk_field) {
@@ -139,7 +143,10 @@ impl AgingManager {
                             }
                             AgingAction::Archive => {
                                 // For now, just mark as archived (full archive would require archive table)
-                                let pk_field = entity.schema.primary_key.first()
+                                let pk_field = entity
+                                    .schema
+                                    .primary_key
+                                    .first()
                                     .map(|s| s.as_str())
                                     .unwrap_or("id");
                                 if let Some(pk_value) = record.get(pk_field) {
@@ -150,10 +157,7 @@ impl AgingManager {
                                     database
                                         .execute(
                                             &update_query,
-                                            &[
-                                                serde_json::Value::Bool(true),
-                                                pk_value.clone(),
-                                            ],
+                                            &[serde_json::Value::Bool(true), pk_value.clone()],
                                         )
                                         .await?;
                                     total_cleaned += 1;
@@ -180,20 +184,12 @@ impl AgingManager {
     ) -> Result<()> {
         // Update updated_at field if it exists
         let now = chrono::Utc::now().to_rfc3339();
-        let update_query = format!(
-            "UPDATE {} SET updated_at = ? WHERE {} = ?",
-            table, primary_key_field
-        );
+        let update_query =
+            format!("UPDATE {} SET updated_at = ? WHERE {} = ?", table, primary_key_field);
 
         // Try to update, but ignore if column doesn't exist
         let _ = database
-            .execute(
-                &update_query,
-                &[
-                    serde_json::Value::String(now),
-                    primary_key_value.clone(),
-                ],
-            )
+            .execute(&update_query, &[serde_json::Value::String(now), primary_key_value.clone()])
             .await;
 
         Ok(())

@@ -42,16 +42,16 @@ pub mod entities;
 pub mod schema;
 
 // Database and migration modules
-pub mod migration;
 pub mod constraints;
+pub mod migration;
 
 // API generation modules
 pub mod api_generator;
 pub mod handlers;
 
 // Session and auth modules
-pub mod session;
 pub mod auth;
+pub mod session;
 
 // Time-based features
 pub mod aging;

@@ -24,6 +24,7 @@ mod ftp_commands;
 mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
+mod mockai_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
 mod plugin_commands;
@@ -736,6 +737,22 @@ enum Commands {
     Vbr {
         #[command(subcommand)]
         vbr_command: vbr_commands::VbrCommands,
+    },
+
+    /// MockAI (Behavioral Mock Intelligence) management
+    ///
+    /// AI-powered mock generation and response realism. Auto-generate rules
+    /// from examples or OpenAPI specs, enable intelligent behavior for endpoints.
+    ///
+    /// Examples:
+    ///   mockforge mockai learn --from-examples examples.json
+    ///   mockforge mockai generate --from-openapi api.yaml
+    ///   mockforge mockai enable --endpoint "/api/users"
+    ///   mockforge mockai status
+    #[command(verbatim_doc_comment)]
+    Mockai {
+        #[command(subcommand)]
+        mockai_command: mockai_commands::MockAICommands,
     },
 
     /// Chaos experiment orchestration
@@ -1759,6 +1776,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             vbr_commands::execute_vbr_command(vbr_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("VBR command failed: {}", e))?;
+        }
+
+        Commands::Mockai { mockai_command } => {
+            mockai_commands::handle_mockai_command(mockai_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("MockAI command failed: {}", e))?;
         }
 
         Commands::Orchestrate {
@@ -2798,6 +2821,45 @@ async fn handle_serve(
     let health_manager = Arc::new(HealthManager::with_init_timeout(Duration::from_secs(60)));
     let health_manager_for_router = health_manager.clone();
 
+    // Initialize MockAI if enabled
+    let mockai = if config.mockai.enabled {
+        use mockforge_core::intelligent_behavior::{IntelligentBehaviorConfig, MockAI};
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        use tracing::{info, warn};
+
+        // Create MockAI from OpenAPI spec if available
+        if let Some(ref spec_path) = config.http.openapi_spec {
+            match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+                Ok(openapi_spec) => {
+                    let behavior_config = config.mockai.intelligent_behavior.clone();
+                    match MockAI::from_openapi(&openapi_spec, behavior_config).await {
+                        Ok(mockai_instance) => {
+                            info!("✅ MockAI initialized from OpenAPI spec");
+                            Some(Arc::new(RwLock::new(mockai_instance)))
+                        }
+                        Err(e) => {
+                            warn!("Failed to initialize MockAI from OpenAPI spec: {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to load OpenAPI spec for MockAI: {}", e);
+                    None
+                }
+            }
+        } else {
+            // Create MockAI with default config if no spec
+            let behavior_config = config.mockai.intelligent_behavior.clone();
+            let mockai_instance = MockAI::new(behavior_config);
+            info!("✅ MockAI initialized with default configuration");
+            Some(Arc::new(RwLock::new(mockai_instance)))
+        }
+    } else {
+        None
+    };
+
     // Use standard router (traffic shaping temporarily disabled)
     let http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
@@ -2812,6 +2874,7 @@ async fn handle_serve(
         None,                            // traffic_shaper
         false,                           // traffic_shaping_enabled
         Some(health_manager_for_router), // health_manager
+        mockai,                          // mockai
     )
     .await;
 

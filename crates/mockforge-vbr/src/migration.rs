@@ -175,7 +175,7 @@ fn rust_type_to_sql_type(rust_type: &str) -> Result<&str> {
         "float" | "double" | "f32" | "f64" | "number" => Ok("REAL"),
         "boolean" | "bool" => Ok("INTEGER"), // SQLite uses INTEGER for booleans
         "date" | "datetime" | "timestamp" => Ok("TEXT"), // SQLite stores dates as TEXT
-        _ => Ok("TEXT"), // Default to TEXT for unknown types
+        _ => Ok("TEXT"),                     // Default to TEXT for unknown types
     }
 }
 

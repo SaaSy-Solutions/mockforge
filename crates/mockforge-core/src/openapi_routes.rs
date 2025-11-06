@@ -32,7 +32,7 @@ use chrono::Utc;
 use once_cell::sync::Lazy;
 use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tracing;
 
@@ -1146,6 +1146,129 @@ impl OpenApiRouteRegistry {
                     router = router.route(&route.path, patch(handler));
                 }
                 _ => tracing::warn!("Unsupported HTTP method for AI: {}", route.method),
+            }
+        }
+
+        router
+    }
+
+    /// Build router with MockAI (Behavioral Mock Intelligence) support
+    ///
+    /// This method integrates MockAI for intelligent, context-aware response generation,
+    /// mutation detection, validation error generation, and pagination intelligence.
+    ///
+    /// # Arguments
+    /// * `mockai` - Optional MockAI instance for intelligent behavior
+    ///
+    /// # Returns
+    /// Axum router with MockAI-powered response generation
+    pub fn build_router_with_mockai(
+        &self,
+        mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+    ) -> Router {
+        use crate::intelligent_behavior::{Request as MockAIRequest, Response as MockAIResponse};
+        use axum::extract::Query;
+        use axum::routing::{delete, get, patch, post, put};
+
+        let mut router = Router::new();
+        tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
+
+        for route in &self.routes {
+            tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
+
+            let route_clone = route.clone();
+            let mockai_clone = mockai.clone();
+
+            // Create async handler that processes requests through MockAI
+            // Query params are extracted via Query extractor with HashMap
+            // Note: Using Query<HashMap<String, String>> wrapped in Option to handle missing query params
+            let handler = move |query: axum::extract::Query<HashMap<String, String>>,
+                                headers: HeaderMap,
+                                body: Option<Json<Value>>| {
+                let route = route_clone.clone();
+                let mockai = mockai_clone.clone();
+
+                async move {
+                    tracing::debug!(
+                        "Handling MockAI request for route: {} {}",
+                        route.method,
+                        route.path
+                    );
+
+                    // Query parameters are already parsed by Query extractor
+                    let mockai_query = query.0;
+
+                    // If MockAI is enabled, use it to process the request
+                    if let Some(mockai_arc) = mockai {
+                        let mockai_guard = mockai_arc.read().await;
+
+                        // Build MockAI request
+                        let mut mockai_headers = HashMap::new();
+                        for (k, v) in headers.iter() {
+                            mockai_headers
+                                .insert(k.to_string(), v.to_str().unwrap_or("").to_string());
+                        }
+
+                        let mockai_request = MockAIRequest {
+                            method: route.method.clone(),
+                            path: route.path.clone(),
+                            body: body.as_ref().map(|Json(b)| b.clone()),
+                            query_params: mockai_query,
+                            headers: mockai_headers,
+                        };
+
+                        // Process request through MockAI
+                        match mockai_guard.process_request(&mockai_request).await {
+                            Ok(mockai_response) => {
+                                tracing::debug!(
+                                    "MockAI generated response with status: {}",
+                                    mockai_response.status_code
+                                );
+                                return (
+                                    axum::http::StatusCode::from_u16(mockai_response.status_code)
+                                        .unwrap_or(axum::http::StatusCode::OK),
+                                    axum::response::Json(mockai_response.body),
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "MockAI processing failed for {} {}: {}, falling back to standard response",
+                                    route.method,
+                                    route.path,
+                                    e
+                                );
+                                // Fall through to standard response generation
+                            }
+                        }
+                    }
+
+                    // Fallback to standard response generation
+                    let (status, response) = route.mock_response_with_status();
+                    (
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
+                        axum::response::Json(response),
+                    )
+                }
+            };
+
+            match route.method.as_str() {
+                "GET" => {
+                    router = router.route(&route.path, get(handler));
+                }
+                "POST" => {
+                    router = router.route(&route.path, post(handler));
+                }
+                "PUT" => {
+                    router = router.route(&route.path, put(handler));
+                }
+                "DELETE" => {
+                    router = router.route(&route.path, delete(handler));
+                }
+                "PATCH" => {
+                    router = router.route(&route.path, patch(handler));
+                }
+                _ => tracing::warn!("Unsupported HTTP method for MockAI: {}", route.method),
             }
         }
 

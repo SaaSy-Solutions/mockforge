@@ -33,16 +33,14 @@ fn get_entity_info<'a>(
     registry: &'a crate::entities::EntityRegistry,
     entity_name: &str,
 ) -> std::result::Result<(&'a crate::entities::Entity, &'a str), (StatusCode, Json<Value>)> {
-    let entity = registry
-        .get(entity_name)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "error": format!("Entity '{}' not found", entity_name)
-                })),
-            )
-        })?;
+    let entity = registry.get(entity_name).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": format!("Entity '{}' not found", entity_name)
+            })),
+        )
+    })?;
 
     Ok((entity, entity.table_name()))
 }
@@ -82,7 +80,10 @@ fn apply_auto_generation(
 }
 
 /// Helper function to build WHERE clause from query parameters
-fn build_where_clause(params: &HashMap<String, String>, entity: &crate::entities::Entity) -> (String, Vec<Value>) {
+fn build_where_clause(
+    params: &HashMap<String, String>,
+    entity: &crate::entities::Entity,
+) -> (String, Vec<Value>) {
     let mut conditions = Vec::new();
     let mut bind_values = Vec::new();
 
@@ -113,7 +114,10 @@ fn build_order_by(params: &HashMap<String, String>, entity: &crate::entities::En
     if let Some(sort_field) = params.get("sort") {
         // Validate sort field exists
         if entity.schema.base.fields.iter().any(|f| f.name == *sort_field) {
-            let order = params.get("order").map(|o| o.to_uppercase()).unwrap_or_else(|| "ASC".to_string());
+            let order = params
+                .get("order")
+                .map(|o| o.to_uppercase())
+                .unwrap_or_else(|| "ASC".to_string());
             if order == "ASC" || order == "DESC" {
                 return format!("ORDER BY {} {}", sort_field, order);
             }
@@ -259,10 +263,7 @@ pub async fn create_handler(
                     )
                     .await
                     .map_err(|e| {
-                        (
-                            StatusCode::BAD_REQUEST,
-                            Json(json!({"error": e.to_string()})),
-                        )
+                        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()})))
                     })?;
             }
         }
@@ -272,7 +273,8 @@ pub async fn create_handler(
     if let Value::Object(obj) = &body {
         let fields: Vec<String> = obj.keys().cloned().collect();
         let placeholders: Vec<String> = (0..fields.len()).map(|_| "?".to_string()).collect();
-        let values: Vec<Value> = fields.iter().map(|f| obj.get(f).cloned().unwrap_or(Value::Null)).collect();
+        let values: Vec<Value> =
+            fields.iter().map(|f| obj.get(f).cloned().unwrap_or(Value::Null)).collect();
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({})",
@@ -282,16 +284,12 @@ pub async fn create_handler(
         );
 
         // Execute insert
-        let inserted_id = context
-            .database
-            .execute_with_id(&query, &values)
-            .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("Insert failed: {}", e)})),
-                )
-            })?;
+        let inserted_id = context.database.execute_with_id(&query, &values).await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Insert failed: {}", e)})),
+            )
+        })?;
 
         // Fetch the created record
         let primary_key = "id";
@@ -338,7 +336,8 @@ pub async fn update_handler(
     let primary_key = "id";
 
     // Check if record exists
-    let check_query = format!("SELECT COUNT(*) as count FROM {} WHERE {} = ?", table_name, primary_key);
+    let check_query =
+        format!("SELECT COUNT(*) as count FROM {} WHERE {} = ?", table_name, primary_key);
     let check_results = context
         .database
         .query(&check_query, &[Value::String(id.clone())])
@@ -382,10 +381,7 @@ pub async fn update_handler(
                     )
                     .await
                     .map_err(|e| {
-                        (
-                            StatusCode::BAD_REQUEST,
-                            Json(json!({"error": e.to_string()})),
-                        )
+                        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()})))
                     })?;
             }
         }
@@ -405,10 +401,7 @@ pub async fn update_handler(
         }
 
         if set_clauses.is_empty() {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "No fields to update"})),
-            ));
+            return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "No fields to update"}))));
         }
 
         values.push(Value::String(id.clone()));
@@ -430,11 +423,8 @@ pub async fn update_handler(
 
         // Fetch updated record
         let select_query = format!("SELECT * FROM {} WHERE {} = ?", table_name, primary_key);
-        let select_results = context
-            .database
-            .query(&select_query, &[Value::String(id)])
-            .await
-            .map_err(|e| {
+        let select_results =
+            context.database.query(&select_query, &[Value::String(id)]).await.map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({"error": format!("Failed to fetch updated record: {}", e)})),
@@ -471,12 +461,7 @@ pub async fn patch_handler(
     // PATCH is similar to PUT but only updates provided fields
     // For now, we'll use the same logic as PUT
     // In a full implementation, we'd fetch the existing record first and merge
-    update_handler(
-        Path((entity_name.clone(), id.clone())),
-        Extension(context),
-        Json(body),
-    )
-    .await
+    update_handler(Path((entity_name.clone(), id.clone())), Extension(context), Json(body)).await
 }
 
 /// Delete entity (DELETE /api/{entity}/{id})
@@ -488,7 +473,8 @@ pub async fn delete_handler(
     let primary_key = "id";
 
     // Check if record exists
-    let check_query = format!("SELECT COUNT(*) as count FROM {} WHERE {} = ?", table_name, primary_key);
+    let check_query =
+        format!("SELECT COUNT(*) as count FROM {} WHERE {} = ?", table_name, primary_key);
     let check_results = context
         .database
         .query(&check_query, &[Value::String(id.clone())])
@@ -559,7 +545,8 @@ pub async fn get_relationship_handler(
     let primary_key = "id";
 
     // First, verify the parent entity exists
-    let check_query = format!("SELECT COUNT(*) as count FROM {} WHERE {} = ?", table_name, primary_key);
+    let check_query =
+        format!("SELECT COUNT(*) as count FROM {} WHERE {} = ?", table_name, primary_key);
     let check_results = context
         .database
         .query(&check_query, &[Value::String(id.clone())])
@@ -635,13 +622,15 @@ pub async fn get_relationship_handler(
             })?;
 
             // Get total count
-            let count_query = format!("SELECT COUNT(*) as total FROM {} {}", target_table, fk_condition);
-            let count_results = context.database.query(&count_query, &bind_values).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("Count query failed: {}", e)})),
-                )
-            })?;
+            let count_query =
+                format!("SELECT COUNT(*) as total FROM {} {}", target_table, fk_condition);
+            let count_results =
+                context.database.query(&count_query, &bind_values).await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": format!("Count query failed: {}", e)})),
+                    )
+                })?;
 
             let total = count_results
                 .first()
@@ -664,17 +653,12 @@ pub async fn get_relationship_handler(
     // - The current entity (orders) has a FK field pointing to "user" entity
     // Try reverse relationship: Find if current entity has a FK pointing to the relationship
     // Example: GET /api/orders/456/user -> orders table has user_id field pointing to users
-    if let Some(fk) = entity
-        .schema
-        .foreign_keys
-        .iter()
-        .find(|fk| {
-            // Relationship name might match the target entity or the FK field
-            fk.target_entity.to_lowercase() == relationship_name.to_lowercase()
-                || fk.field == relationship_name
-                || fk.field == format!("{}_id", relationship_name)
-        })
-    {
+    if let Some(fk) = entity.schema.foreign_keys.iter().find(|fk| {
+        // Relationship name might match the target entity or the FK field
+        fk.target_entity.to_lowercase() == relationship_name.to_lowercase()
+            || fk.field == relationship_name
+            || fk.field == format!("{}_id", relationship_name)
+    }) {
         // Reverse relationship: Get the parent entity
         // Get the current entity record to find the FK value
         let current_query = format!("SELECT * FROM {} WHERE {} = ?", table_name, primary_key);
@@ -714,15 +698,10 @@ pub async fn get_relationship_handler(
             let target_primary_key = "id";
 
             // Query the target entity
-            let target_query = format!(
-                "SELECT * FROM {} WHERE {} = ?",
-                target_table, target_primary_key
-            );
-            let target_results = context
-                .database
-                .query(&target_query, &[fk_value.clone()])
-                .await
-                .map_err(|e| {
+            let target_query =
+                format!("SELECT * FROM {} WHERE {} = ?", target_table, target_primary_key);
+            let target_results =
+                context.database.query(&target_query, &[fk_value.clone()]).await.map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({"error": format!("Database query failed: {}", e)})),

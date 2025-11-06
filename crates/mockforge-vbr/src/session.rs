@@ -3,8 +3,8 @@
 //! This module integrates with existing SessionManager from mockforge-core/intelligent_behavior
 //! for session-scoped data and session expiration handling.
 
-use crate::database::{create_database, VirtualDatabase};
 use crate::config::StorageBackend;
+use crate::database::{create_database, VirtualDatabase};
 use crate::Result;
 use mockforge_core::intelligent_behavior::session::SessionManager;
 use std::collections::HashMap;
@@ -26,10 +26,7 @@ pub struct SessionDataManager {
 
 impl SessionDataManager {
     /// Create a new session data manager
-    pub fn new(
-        session_manager: Arc<SessionManager>,
-        storage_backend: StorageBackend,
-    ) -> Self {
+    pub fn new(session_manager: Arc<SessionManager>, storage_backend: StorageBackend) -> Self {
         Self {
             session_manager,
             storage_backend,
@@ -48,10 +45,7 @@ impl SessionDataManager {
         // Check if session exists in SessionManager
         let session_state = self.session_manager.get_session(session_id).await;
         if session_state.is_none() {
-            return Err(crate::Error::generic(format!(
-                "Session '{}' not found",
-                session_id
-            )));
+            return Err(crate::Error::generic(format!("Session '{}' not found", session_id)));
         }
 
         // Check if we already have a database for this session
@@ -89,8 +83,7 @@ impl SessionDataManager {
 
         // Get list of active sessions
         let active_sessions = self.session_manager.list_sessions().await;
-        let active_set: std::collections::HashSet<String> =
-            active_sessions.into_iter().collect();
+        let active_set: std::collections::HashSet<String> = active_sessions.into_iter().collect();
 
         // Remove databases for sessions that are no longer active
         let mut databases = self.session_databases.write().await;
@@ -115,7 +108,10 @@ impl SessionDataManager {
     }
 
     /// Get session state (returns session if it exists)
-    pub async fn get_session_state(&self, session_id: &str) -> Option<mockforge_core::intelligent_behavior::types::SessionState> {
+    pub async fn get_session_state(
+        &self,
+        session_id: &str,
+    ) -> Option<mockforge_core::intelligent_behavior::types::SessionState> {
         self.session_manager.get_session(session_id).await
     }
 

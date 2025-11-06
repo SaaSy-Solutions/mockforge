@@ -22,10 +22,7 @@ impl ConstraintValidator {
         target_field: &str,
     ) -> Result<()> {
         // Check if the referenced record exists
-        let query = format!(
-            "SELECT COUNT(*) FROM {} WHERE {} = ?",
-            target_table, target_field
-        );
+        let query = format!("SELECT COUNT(*) FROM {} WHERE {} = ?", target_table, target_field);
 
         let params = vec![value.clone()];
         let results = database.query(&query, &params).await?;
@@ -63,11 +60,8 @@ impl ConstraintValidator {
             return Ok(()); // No fields to check
         }
 
-        let mut query = format!(
-            "SELECT COUNT(*) FROM {} WHERE {}",
-            table_name,
-            conditions.join(" AND ")
-        );
+        let mut query =
+            format!("SELECT COUNT(*) FROM {} WHERE {}", table_name, conditions.join(" AND "));
 
         if let Some(id) = exclude_id {
             query.push_str(&format!(" AND id != ?"));

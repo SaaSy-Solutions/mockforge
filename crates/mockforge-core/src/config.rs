@@ -215,6 +215,9 @@ pub struct ServerConfig {
     pub logging: LoggingConfig,
     /// Data generation configuration
     pub data: DataConfig,
+    /// MockAI (Behavioral Mock Intelligence) configuration
+    #[serde(default)]
+    pub mockai: MockAIConfig,
     /// Observability configuration (metrics, tracing)
     pub observability: ObservabilityConfig,
     /// Multi-tenant workspace configuration
@@ -279,6 +282,9 @@ pub struct ProfileConfig {
     /// Data generation configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<DataConfig>,
+    /// MockAI configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mockai: Option<MockAIConfig>,
     /// Observability configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub observability: Option<ObservabilityConfig>,
@@ -1004,6 +1010,41 @@ impl Default for RagConfig {
     }
 }
 
+/// MockAI (Behavioral Mock Intelligence) configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MockAIConfig {
+    /// Enable MockAI features
+    pub enabled: bool,
+    /// Intelligent behavior configuration
+    pub intelligent_behavior: crate::intelligent_behavior::IntelligentBehaviorConfig,
+    /// Auto-learn from examples
+    pub auto_learn: bool,
+    /// Enable mutation detection
+    pub mutation_detection: bool,
+    /// Enable AI-driven validation errors
+    pub ai_validation_errors: bool,
+    /// Enable context-aware pagination
+    pub intelligent_pagination: bool,
+    /// Endpoints to enable MockAI for (empty = all endpoints)
+    #[serde(default)]
+    pub enabled_endpoints: Vec<String>,
+}
+
+impl Default for MockAIConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            intelligent_behavior: crate::intelligent_behavior::IntelligentBehaviorConfig::default(),
+            auto_learn: true,
+            mutation_detection: true,
+            ai_validation_errors: true,
+            intelligent_pagination: true,
+            enabled_endpoints: Vec::new(),
+        }
+    }
+}
+
 /// Observability configuration for metrics and distributed tracing
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -1545,6 +1586,7 @@ pub fn apply_profile(mut base: ServerConfig, profile: ProfileConfig) -> ServerCo
     merge_field!(core);
     merge_field!(logging);
     merge_field!(data);
+    merge_field!(mockai);
     merge_field!(observability);
     merge_field!(multi_tenant);
     merge_field!(routes);

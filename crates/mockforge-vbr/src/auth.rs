@@ -74,7 +74,12 @@ impl VbrAuthService {
     }
 
     /// Create a default user (for demo/testing)
-    pub async fn create_default_user(&self, username: String, password: String, email: String) -> Result<VirtualUser> {
+    pub async fn create_default_user(
+        &self,
+        username: String,
+        password: String,
+        email: String,
+    ) -> Result<VirtualUser> {
         // Hash password (simple implementation - in production use bcrypt)
         let password_hash = self.hash_password(&password)?;
 

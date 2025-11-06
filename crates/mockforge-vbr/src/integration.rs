@@ -90,22 +90,14 @@ pub fn create_vbr_router_with_context(
     context: crate::handlers::HandlerContext,
 ) -> Result<Router> {
     let router = create_vbr_router(api_prefix)?;
-    Ok(router.layer(
-        ServiceBuilder::new()
-            .layer(Extension(context))
-            .into_inner(),
-    ))
+    Ok(router.layer(ServiceBuilder::new().layer(Extension(context)).into_inner()))
 }
 
 /// Register VBR routes dynamically for each entity
 ///
 /// Adds entity-specific routes to an existing router. This allows you to
 /// register routes for individual entities as they are added to the registry.
-pub fn register_entity_routes(
-    router: Router,
-    entity_name: &str,
-    api_prefix: &str,
-) -> Router {
+pub fn register_entity_routes(router: Router, entity_name: &str, api_prefix: &str) -> Router {
     router
         // List all entities
         .route(

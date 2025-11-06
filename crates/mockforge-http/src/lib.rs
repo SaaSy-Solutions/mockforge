@@ -334,8 +334,18 @@ pub async fn build_router(
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
 ) -> Router {
-    build_router_with_multi_tenant(spec_path, options, failure_config, None, None, None, None, None)
-        .await
+    build_router_with_multi_tenant(
+        spec_path,
+        options,
+        failure_config,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
 }
 
 /// Build the base HTTP router with multi-tenant workspace support
@@ -351,6 +361,9 @@ pub async fn build_router_with_multi_tenant(
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
     >,
     smtp_registry: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
 ) -> Router {
     use std::time::Instant;
 
@@ -456,7 +469,10 @@ pub async fn build_router_with_multi_tenant(
                 // Measure router building
                 let router_build_start = Instant::now();
                 let overrides_enabled = overrides.is_some();
-                let openapi_router = if let Some(ai_generator) = &ai_generator {
+                let openapi_router = if let Some(mockai_instance) = &mockai {
+                    tracing::debug!("Building router with MockAI support");
+                    registry.build_router_with_mockai(Some(mockai_instance.clone()))
+                } else if let Some(ai_generator) = &ai_generator {
                     tracing::debug!("Building router with AI generator support");
                     registry.build_router_with_ai(Some(ai_generator.clone()))
                 } else if let Some(failure_config) = &failure_config {
@@ -948,6 +964,7 @@ pub async fn build_router_with_chains(
         None,
         false,
         None, // health_manager
+        None, // mockai
     )
     .await
 }
@@ -969,6 +986,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,
     traffic_shaping_enabled: bool,
     health_manager: Option<std::sync::Arc<health::HealthManager>>,
+    _mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
@@ -1004,7 +1024,13 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 {
                     include_default_health = false;
                 }
-                let spec_router = registry.build_router();
+                // Use MockAI if available, otherwise use standard router
+                let spec_router = if let Some(ref mockai_instance) = _mockai {
+                    tracing::debug!("Building router with MockAI support");
+                    registry.build_router_with_mockai(Some(mockai_instance.clone()))
+                } else {
+                    registry.build_router()
+                };
                 app = app.merge(spec_router);
             }
             Err(e) => {

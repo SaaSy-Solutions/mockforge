@@ -5,6 +5,7 @@
 
 use clap::Subcommand;
 use colored::Colorize;
+use mockforge_data::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
     config::{StorageBackend, VbrConfig},
     entities::{Entity, EntityRegistry},
@@ -12,7 +13,6 @@ use mockforge_vbr::{
     schema::VbrSchemaDefinition,
     VbrEngine,
 };
-use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -125,21 +125,15 @@ pub enum EntitiesCommands {
 /// Execute VBR command
 pub async fn execute_vbr_command(command: VbrCommands) -> Result<(), Box<dyn std::error::Error>> {
     match command {
-        VbrCommands::Create { create_command } => {
-            execute_create_command(create_command).await
-        }
+        VbrCommands::Create { create_command } => execute_create_command(create_command).await,
         VbrCommands::Serve {
             port,
             storage,
             db_path,
             api_prefix,
             session_scoped,
-        } => {
-            execute_serve_command(port, storage, db_path, api_prefix, session_scoped).await
-        }
-        VbrCommands::Manage { manage_command } => {
-            execute_manage_command(manage_command).await
-        }
+        } => execute_serve_command(port, storage, db_path, api_prefix, session_scoped).await,
+        VbrCommands::Manage { manage_command } => execute_manage_command(manage_command).await,
     }
 }
 
@@ -254,13 +248,11 @@ async fn execute_serve_command(
     // Create storage backend
     let storage_backend = match storage.as_str() {
         "sqlite" => {
-            let path = db_path
-                .unwrap_or_else(|| PathBuf::from("./data/vbr.db"));
+            let path = db_path.unwrap_or_else(|| PathBuf::from("./data/vbr.db"));
             StorageBackend::Sqlite { path }
         }
         "json" => {
-            let path = db_path
-                .unwrap_or_else(|| PathBuf::from("./data/vbr.json"));
+            let path = db_path.unwrap_or_else(|| PathBuf::from("./data/vbr.json"));
             StorageBackend::Json { path }
         }
         "memory" => StorageBackend::Memory,
@@ -287,22 +279,14 @@ async fn execute_serve_command(
     };
 
     // Create router
-    let router = mockforge_vbr::integration::create_vbr_router_with_context(
-        &api_prefix,
-        context,
-    )?;
+    let router = mockforge_vbr::integration::create_vbr_router_with_context(&api_prefix, context)?;
 
     // Start server
     use std::net::SocketAddr;
     let addr: SocketAddr = format!("0.0.0.0:{}", port).parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
-    println!(
-        "{} VBR server running at http://localhost:{}{}",
-        "✓".green(),
-        port,
-        api_prefix
-    );
+    println!("{} VBR server running at http://localhost:{}{}", "✓".green(), port, api_prefix);
     println!("{} Press Ctrl+C to stop", "ℹ".bright_blue());
 
     axum::serve(listener, router).await?;
@@ -310,9 +294,7 @@ async fn execute_serve_command(
     Ok(())
 }
 
-async fn execute_manage_command(
-    command: ManageCommands,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn execute_manage_command(command: ManageCommands) -> Result<(), Box<dyn std::error::Error>> {
     match command {
         ManageCommands::Entities { entities_command } => {
             match entities_command {

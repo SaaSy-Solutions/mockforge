@@ -169,7 +169,8 @@ pub fn create_admin_router(
 
         // Load server config for UI Builder
         // For now, create a default config. In production, this should be loaded from the actual config.
-        let server_config = mockforge_core::config::ServerConfig::default();
+        // Use the re-exported ServerConfig from mockforge_core root to match UIBuilderState's import
+        let server_config = mockforge_core::ServerConfig::default();
         let ui_builder_state = UIBuilderState::new(server_config);
         let ui_builder_router = create_ui_builder_router(ui_builder_state);
 
