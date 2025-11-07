@@ -76,6 +76,7 @@ fn create_user_schema() -> VbrSchemaDefinition {
         unique_constraints: Vec::new(),
         indexes: Vec::new(),
         auto_generation: HashMap::new(),
+        many_to_many: Vec::new(),
     }
 }
 
@@ -139,6 +140,7 @@ fn create_order_schema() -> VbrSchemaDefinition {
         unique_constraints: Vec::new(),
         indexes: Vec::new(),
         auto_generation: HashMap::new(),
+        many_to_many: Vec::new(),
     }
 }
 

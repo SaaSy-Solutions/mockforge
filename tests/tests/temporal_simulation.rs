@@ -28,12 +28,12 @@ async fn test_virtual_clock_basic() {
 
     assert!(clock.is_enabled());
     let now = clock.now();
-    assert!((now - test_time).num_seconds().abs() < 1);
+    assert!((now - test_time).num_seconds().abs() < 1i64);
 
     // Advance time
     clock.advance(Duration::hours(2));
     let advanced = clock.now();
-    assert!((advanced - test_time - Duration::hours(2)).num_seconds().abs() < 1);
+    assert!((advanced - test_time - Duration::hours(2)).num_seconds().abs() < 1i64);
 }
 
 #[tokio::test]
@@ -52,7 +52,7 @@ async fn test_time_travel_manager() {
     manager.advance(Duration::hours(1));
     let advanced_time = manager.now();
 
-    assert!((advanced_time - initial_time - Duration::hours(1)).num_seconds().abs() < 1);
+    assert!((advanced_time - initial_time - Duration::hours(1)).num_seconds().abs() < 1i64);
 }
 
 #[tokio::test]
@@ -209,15 +209,24 @@ async fn test_vbr_snapshot_with_time_travel() {
 async fn test_token_expiration_with_virtual_clock() {
     use mockforge_vbr::auth::VbrAuthService;
 
-    // Create auth service
-    let auth_service = VbrAuthService::new("test-secret".to_string());
+    // Create auth service with 1 hour token expiration
+    let auth_service = VbrAuthService::new("test-secret".to_string(), 3600);
 
-    // Create a token that expires in 1 hour
-    let user_id = "user1".to_string();
-    let token = auth_service.generate_token(&user_id, Some(3600)).await.unwrap();
+    // Create a user first
+    let user = auth_service
+        .create_default_user(
+            "user1".to_string(),
+            "password123".to_string(),
+            "user1@example.com".to_string(),
+        )
+        .await
+        .unwrap();
+
+    // Create a token
+    let token = auth_service.generate_token(&user).unwrap();
 
     // Initially, token should be valid
-    assert!(auth_service.validate_token(&token).await.is_ok());
+    assert!(auth_service.validate_token(&token).is_ok());
 
     // Enable virtual clock and advance time by 2 hours
     let clock = Arc::new(VirtualClock::new());
@@ -331,5 +340,5 @@ async fn test_scenario_save_and_load() {
     new_manager.load_scenario(&scenario);
 
     assert!(new_manager.clock().is_enabled());
-    assert_eq!(new_manager.clock().scale_factor(), 2.0);
+    assert_eq!(new_manager.clock().get_scale(), 2.0);
 }

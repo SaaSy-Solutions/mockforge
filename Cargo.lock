@@ -5213,6 +5213,7 @@ name = "mockforge-integration-tests"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.6",
+ "chrono",
  "futures-util",
  "mockforge-core 0.2.7",
  "mockforge-data 0.2.7",

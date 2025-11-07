@@ -3,6 +3,8 @@
 //! This benchmark ensures that token resolution and data generation
 //! meet the <200ms response time requirement.
 
+#![allow(missing_docs)]
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use mockforge_data::{resolve_tokens, Domain, DomainGenerator, TokenResolver};
 use serde_json::json;
@@ -213,6 +215,7 @@ fn bench_real_world_scenario(c: &mut Criterion) {
     group.finish();
 }
 
+// Benchmark group for token resolver functionality
 criterion_group!(
     benches,
     bench_token_resolution,

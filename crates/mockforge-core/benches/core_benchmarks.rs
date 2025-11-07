@@ -8,6 +8,8 @@
 //! - Large OpenAPI spec parsing
 //! - Bulk data generation
 //! - Deep template rendering
+
+#![allow(missing_docs)]
 //!
 //! These benchmarks use smaller sample sizes to reduce overhead while still
 //! providing meaningful memory usage insights.
@@ -433,6 +435,7 @@ fn bench_memory_usage(c: &mut Criterion) {
     group.finish();
 }
 
+// Benchmark group for core functionality
 criterion_group!(
     benches,
     bench_template_rendering,
