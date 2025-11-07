@@ -8,6 +8,7 @@
 //! - routing: Route matching and rule evaluation
 
 // Re-export sub-modules for backward compatibility
+pub mod body_transform;
 pub mod client;
 pub mod conditional;
 pub mod config;
@@ -16,7 +17,8 @@ pub mod middleware;
 pub mod routing;
 
 // Re-export commonly used types
-pub use config::MigrationMode;
+pub use body_transform::BodyTransformationMiddleware;
+pub use config::{BodyTransform, BodyTransformRule, MigrationMode, TransformOperation};
 pub use middleware::*;
 pub use routing::*;
 

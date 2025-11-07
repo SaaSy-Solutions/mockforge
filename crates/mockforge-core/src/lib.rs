@@ -212,12 +212,15 @@ pub mod conditions;
 pub mod config;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
+/// Data source abstraction for loading test data from multiple sources
+pub mod data_source;
 /// Docker Compose integration for containerized mock deployments
 pub mod docker_compose;
 pub mod encryption;
 pub mod error;
 pub mod failure_injection;
 pub mod generate_config;
+pub mod git_watch;
 pub mod graph;
 pub mod import;
 pub mod intelligent_behavior;
@@ -246,6 +249,8 @@ pub mod spec_parser;
 pub mod stateful_handler;
 pub mod sync_watcher;
 pub mod templating;
+/// Template library system for shared templates, versioning, and marketplace
+pub mod template_library;
 pub mod time_travel;
 pub mod time_travel_handler;
 pub mod traffic_shaping;
@@ -271,6 +276,11 @@ pub use generate_config::{
     discover_config_file, load_generate_config, load_generate_config_with_fallback,
     save_generate_config, BarrelType, GenerateConfig, GenerateOptions, InputConfig, OutputConfig,
     PluginConfig,
+};
+pub use git_watch::{GitWatchConfig, GitWatchService};
+pub use data_source::{
+    DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
+    DataSourceType, HttpDataSource, LocalDataSource, GitDataSource,
 };
 pub use graph::{
     builder::GraphBuilder, relationships, ClusterType, EdgeType, GraphCluster, GraphData,
@@ -333,6 +343,10 @@ pub use stateful_handler::{
 };
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};
+pub use template_library::{
+    TemplateLibrary, TemplateLibraryEntry, TemplateLibraryManager, TemplateMarketplace,
+    TemplateMetadata, TemplateVersion,
+};
 pub use time_travel::{
     cron::{CronJob, CronJobAction, CronScheduler},
     get_global_clock, is_time_travel_enabled, now as time_travel_now, register_global_clock,

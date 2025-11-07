@@ -1363,9 +1363,114 @@ class VerificationApiService {
   }
 }
 
+// Proxy replacement rules API types
+export interface ProxyRule {
+  id: number;
+  pattern: string;
+  type: 'request' | 'response';
+  status_codes: number[];
+  body_transforms: Array<{
+    path: string;
+    replace: string;
+    operation: 'replace' | 'add' | 'remove';
+  }>;
+  enabled: boolean;
+}
+
+export interface ProxyRuleRequest {
+  pattern: string;
+  type: 'request' | 'response';
+  status_codes?: number[];
+  body_transforms: Array<{
+    path: string;
+    replace: string;
+    operation?: 'replace' | 'add' | 'remove';
+  }>;
+  enabled?: boolean;
+}
+
+export interface ProxyRulesResponse {
+  rules: ProxyRule[];
+}
+
+export interface ProxyInspectResponse {
+  requests: Array<{
+    id: string;
+    timestamp: string;
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    body?: string;
+  }>;
+  responses: Array<{
+    id: string;
+    timestamp: string;
+    status_code: number;
+    headers: Record<string, string>;
+    body?: string;
+  }>;
+  limit: number;
+  message?: string;
+}
+
+class ProxyApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorMessage;
+      } catch {
+        // Not JSON, use default message
+      }
+      throw new Error(errorMessage);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async getProxyRules(): Promise<ProxyRulesResponse> {
+    return this.fetchJson('/__mockforge/api/proxy/rules') as Promise<ProxyRulesResponse>;
+  }
+
+  async getProxyRule(id: number): Promise<ProxyRule> {
+    return this.fetchJson(`/__mockforge/api/proxy/rules/${id}`) as Promise<ProxyRule>;
+  }
+
+  async createProxyRule(rule: ProxyRuleRequest): Promise<{ id: number; message: string }> {
+    return this.fetchJson('/__mockforge/api/proxy/rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }) as Promise<{ id: number; message: string }>;
+  }
+
+  async updateProxyRule(id: number, rule: ProxyRuleRequest): Promise<{ id: number; message: string }> {
+    return this.fetchJson(`/__mockforge/api/proxy/rules/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }) as Promise<{ id: number; message: string }>;
+  }
+
+  async deleteProxyRule(id: number): Promise<{ id: number; message: string }> {
+    return this.fetchJson(`/__mockforge/api/proxy/rules/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ id: number; message: string }>;
+  }
+
+  async getProxyInspect(limit?: number): Promise<ProxyInspectResponse> {
+    const url = limit ? `/__mockforge/api/proxy/inspect?limit=${limit}` : '/__mockforge/api/proxy/inspect';
+    return this.fetchJson(url) as Promise<ProxyInspectResponse>;
+  }
+}
+
 export const apiService = new ApiService();
 export const importApi = new ImportApiService();
 export const fixturesApi = new FixturesApiService();
+export const proxyApi = new ProxyApiService();
 
 // Admin API services
 export const dashboardApi = new DashboardApiService();
@@ -1382,6 +1487,7 @@ export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
 export const verificationApi = new VerificationApiService();
+export { proxyApi, type ProxyRule, type ProxyRuleRequest, type ProxyRulesResponse, type ProxyInspectResponse };
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {

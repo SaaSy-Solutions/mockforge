@@ -322,7 +322,7 @@ This will log:
 - Timing information
 - Client IP addresses
 
-### Admin UI
+### Admin UI and Proxy Inspector
 
 Access the proxy management interface:
 
@@ -335,6 +335,66 @@ Visit `http://127.0.0.1:9080` to:
 - Monitor request/response logs
 - Configure proxy rules
 - Manage certificates
+- **Use the Proxy Inspector** for body transformation management
+
+#### Proxy Inspector Features
+
+The Proxy Inspector UI provides:
+
+1. **Replacement Rules Management**
+   - Create, edit, and delete body transformation rules
+   - Filter rules by type (request/response) and pattern
+   - Enable/disable rules without deleting
+   - Visual status indicators
+
+2. **Intercepted Traffic Viewing**
+   - Real-time view of intercepted requests and responses
+   - Request/response body inspection
+   - Auto-refresh every 2 seconds
+   - Search and filter capabilities
+
+3. **JSONPath Transformation Editor**
+   - Visual editor for JSONPath expressions
+   - Template expansion support (UUIDs, faker data, etc.)
+   - Operation selection (Replace, Add, Remove)
+   - Status code filtering for response rules
+
+Access the Proxy Inspector:
+- Navigate to the "Proxy Inspector" tab in the admin UI
+- Or access directly via the `proxy-inspector` route
+
+### Body Transformation
+
+MockForge supports JSONPath-based body transformation for both requests and responses. This allows you to:
+
+- **Modify request bodies** before they reach the upstream server
+- **Modify response bodies** before they reach the client
+- **Use JSONPath expressions** to target specific fields
+- **Apply template expansion** for dynamic values
+
+See [Proxy Body Transformation Guide](./PROXY_BODY_TRANSFORMATION.md) for detailed documentation.
+
+Quick example:
+
+```bash
+# Create a transformation rule via API
+curl -X POST http://127.0.0.1:9080/__mockforge/api/proxy/rules \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pattern": "/api/users/*",
+    "type": "request",
+    "body_transforms": [
+      {
+        "path": "$.userId",
+        "replace": "{{uuid}}",
+        "operation": "replace"
+      }
+    ],
+    "enabled": true
+  }'
+```
+
+This rule replaces the `userId` field in request bodies with a generated UUID.
 
 ### Custom Proxy Rules
 
@@ -437,6 +497,10 @@ Expected response:
 4. **Test with real clients** to ensure compatibility
 5. **Monitor proxy performance** using the admin UI
 6. **Clean up certificates** when done testing
+7. **Use body transformations** for testing edge cases and data masking
+8. **Leverage the Proxy Inspector UI** for visual rule management and traffic inspection
+9. **Document transformation rules** to maintain clarity on what each rule does
+10. **Test transformations** before enabling them in production-like scenarios
 
 ## Integration with CI/CD
 

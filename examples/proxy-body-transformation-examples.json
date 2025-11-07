@@ -1,0 +1,213 @@
+{
+  "examples": [
+    {
+      "name": "Replace User ID with UUID",
+      "description": "Replace the userId field in request bodies with a generated UUID",
+      "rule": {
+        "pattern": "/api/users/*",
+        "type": "request",
+        "body_transforms": [
+          {
+            "path": "$.userId",
+            "replace": "{{uuid}}",
+            "operation": "replace"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Add Session Tracking",
+      "description": "Add sessionId and loginTime to successful login responses",
+      "rule": {
+        "pattern": "/api/auth/login",
+        "type": "response",
+        "status_codes": [200],
+        "body_transforms": [
+          {
+            "path": "$.sessionId",
+            "replace": "{{uuid}}",
+            "operation": "add"
+          },
+          {
+            "path": "$.loginTime",
+            "replace": "{{timestamp.iso}}",
+            "operation": "add"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Mask Sensitive Data",
+      "description": "Replace email and phone with faker data, remove SSN",
+      "rule": {
+        "pattern": "/api/users/*",
+        "type": "response",
+        "status_codes": [200, 201],
+        "body_transforms": [
+          {
+            "path": "$.email",
+            "replace": "{{faker.email}}",
+            "operation": "replace"
+          },
+          {
+            "path": "$.phone",
+            "replace": "{{faker.phone}}",
+            "operation": "replace"
+          },
+          {
+            "path": "$.ssn",
+            "replace": "",
+            "operation": "remove"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Inject Test User ID",
+      "description": "Replace userId in auth requests with a test user ID",
+      "rule": {
+        "pattern": "/api/auth/*",
+        "type": "request",
+        "body_transforms": [
+          {
+            "path": "$.userId",
+            "replace": "test-user-{{uuid.short}}",
+            "operation": "replace"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Add Timestamp to Events",
+      "description": "Add timestamp field to event responses",
+      "rule": {
+        "pattern": "/api/events",
+        "type": "response",
+        "body_transforms": [
+          {
+            "path": "$.timestamp",
+            "replace": "{{timestamp.iso}}",
+            "operation": "add"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Simulate Payment Failure",
+      "description": "Modify payment responses to simulate failures",
+      "rule": {
+        "pattern": "/api/payment",
+        "type": "response",
+        "status_codes": [200],
+        "body_transforms": [
+          {
+            "path": "$.status",
+            "replace": "failed",
+            "operation": "replace"
+          },
+          {
+            "path": "$.error",
+            "replace": "Insufficient funds",
+            "operation": "add"
+          }
+        ],
+        "enabled": false
+      }
+    },
+    {
+      "name": "Nested Field Transformation",
+      "description": "Modify nested user profile data",
+      "rule": {
+        "pattern": "/api/users/*/profile",
+        "type": "response",
+        "body_transforms": [
+          {
+            "path": "$.user.profile.email",
+            "replace": "{{faker.email}}",
+            "operation": "replace"
+          },
+          {
+            "path": "$.user.profile.phone",
+            "replace": "{{faker.phone}}",
+            "operation": "replace"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Array Element Modification",
+      "description": "Replace first element in tags array",
+      "rule": {
+        "pattern": "/api/users/*",
+        "type": "response",
+        "body_transforms": [
+          {
+            "path": "$.tags[0]",
+            "replace": "test-tag",
+            "operation": "replace"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Multiple Field Replacements",
+      "description": "Replace multiple fields in a single rule",
+      "rule": {
+        "pattern": "/api/users",
+        "type": "response",
+        "body_transforms": [
+          {
+            "path": "$.id",
+            "replace": "{{random.int}}",
+            "operation": "replace"
+          },
+          {
+            "path": "$.email",
+            "replace": "{{faker.email}}",
+            "operation": "replace"
+          },
+          {
+            "path": "$.name",
+            "replace": "{{faker.name}}",
+            "operation": "replace"
+          }
+        ],
+        "enabled": true
+      }
+    },
+    {
+      "name": "Error Response Modification",
+      "description": "Modify error responses for testing",
+      "rule": {
+        "pattern": "/api/*",
+        "type": "response",
+        "status_codes": [404, 500],
+        "body_transforms": [
+          {
+            "path": "$.error",
+            "replace": "Test error message",
+            "operation": "replace"
+          },
+          {
+            "path": "$.errorCode",
+            "replace": "TEST_ERROR",
+            "operation": "add"
+          }
+        ],
+        "enabled": false
+      }
+    }
+  ],
+  "usage": {
+    "description": "These examples can be imported via the REST API or used as reference when creating rules in the Proxy Inspector UI",
+    "api_endpoint": "POST /__mockforge/api/proxy/rules",
+    "ui_location": "Proxy Inspector > Create Rule"
+  }
+}

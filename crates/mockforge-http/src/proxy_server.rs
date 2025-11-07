@@ -11,7 +11,9 @@ use axum::{
     routing::{any, get},
     Router,
 };
-use mockforge_core::proxy::{config::ProxyConfig, handler::ProxyHandler};
+use mockforge_core::proxy::{
+    body_transform::BodyTransformationMiddleware, config::ProxyConfig, handler::ProxyHandler,
+};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -177,8 +179,29 @@ async fn proxy_handler(
         header_map.insert(key.clone(), value.clone());
     }
 
+    // Apply request body transformations if configured
+    let mut transformed_request_body = body_bytes.clone();
+    if !config.request_replacements.is_empty() {
+        let transform_middleware = BodyTransformationMiddleware::new(
+            config.request_replacements.clone(),
+            Vec::new(), // No response rules needed here
+        );
+        if let Err(e) = transform_middleware.transform_request_body(
+            uri.path(),
+            &mut transformed_request_body,
+        ) {
+            warn!("Failed to transform request body: {}", e);
+            // Continue with original body if transformation fails
+        }
+    }
+
     match proxy_client
-        .send_request(reqwest_method, &full_upstream_url, &header_map, body_bytes.as_deref())
+        .send_request(
+            reqwest_method,
+            &full_upstream_url,
+            &header_map,
+            transformed_request_body.as_deref(),
+        )
         .await
     {
         Ok(response) => {
@@ -207,12 +230,35 @@ async fn proxy_handler(
             }
 
             // Read response body
-            let body_bytes = response.bytes().await.map_err(|e| {
+            let response_body_bytes = response.bytes().await.map_err(|e| {
                 error!("Failed to read proxy response body: {}", e);
                 StatusCode::BAD_GATEWAY
             })?;
 
-            let body_string = String::from_utf8_lossy(&body_bytes).to_string();
+            // Apply response body transformations if configured
+            let mut final_body_bytes = response_body_bytes.to_vec();
+            {
+                let config_for_response = state.config.read().await;
+                if !config_for_response.response_replacements.is_empty() {
+                    let transform_middleware = BodyTransformationMiddleware::new(
+                        Vec::new(), // No request rules needed here
+                        config_for_response.response_replacements.clone(),
+                    );
+                    let mut body_option = Some(final_body_bytes.clone());
+                    if let Err(e) = transform_middleware.transform_response_body(
+                        uri.path(),
+                        status.as_u16(),
+                        &mut body_option,
+                    ) {
+                        warn!("Failed to transform response body: {}", e);
+                        // Continue with original body if transformation fails
+                    } else if let Some(transformed_body) = body_option {
+                        final_body_bytes = transformed_body;
+                    }
+                }
+            }
+
+            let body_string = String::from_utf8_lossy(&final_body_bytes).to_string();
 
             // Build Axum response
             let mut response_builder = Response::builder().status(status);

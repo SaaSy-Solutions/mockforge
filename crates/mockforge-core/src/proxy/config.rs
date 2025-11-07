@@ -49,6 +49,12 @@ pub struct ProxyConfig {
     /// Maps group name to migration mode
     #[serde(default)]
     pub migration_groups: HashMap<String, MigrationMode>,
+    /// Request body replacement rules for browser proxy mode
+    #[serde(default)]
+    pub request_replacements: Vec<BodyTransformRule>,
+    /// Response body replacement rules for browser proxy mode
+    #[serde(default)]
+    pub response_replacements: Vec<BodyTransformRule>,
 }
 
 /// Proxy routing rule
@@ -110,6 +116,8 @@ impl ProxyConfig {
             rules: Vec::new(),
             migration_enabled: false,
             migration_groups: HashMap::new(),
+            request_replacements: Vec::new(),
+            response_replacements: Vec::new(),
         }
     }
 
@@ -423,6 +431,81 @@ pub struct MigrationGroupInfo {
     pub route_count: usize,
 }
 
+/// Body transformation rule for request/response replacement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BodyTransformRule {
+    /// URL pattern to match (supports wildcards like "/api/users/*")
+    pub pattern: String,
+    /// Optional status code filter for response rules (only applies to responses)
+    #[serde(default)]
+    pub status_codes: Vec<u16>,
+    /// Body transformations to apply
+    pub body_transforms: Vec<BodyTransform>,
+    /// Whether this rule is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl BodyTransformRule {
+    /// Check if this rule matches a URL
+    pub fn matches_url(&self, url: &str) -> bool {
+        if !self.enabled {
+            return false;
+        }
+
+        // Simple pattern matching - supports wildcards
+        if self.pattern.ends_with("/*") {
+            let prefix = &self.pattern[..self.pattern.len() - 2];
+            url.starts_with(prefix)
+        } else {
+            url == self.pattern || url.starts_with(&self.pattern)
+        }
+    }
+
+    /// Check if this rule matches a status code (for response rules)
+    pub fn matches_status_code(&self, status_code: u16) -> bool {
+        if self.status_codes.is_empty() {
+            true // No filter means match all
+        } else {
+            self.status_codes.contains(&status_code)
+        }
+    }
+}
+
+/// Individual body transformation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BodyTransform {
+    /// JSONPath expression to target (e.g., "$.userId", "$.email")
+    pub path: String,
+    /// Replacement value (supports template expansion like "{{uuid}}", "{{faker.email}}")
+    pub replace: String,
+    /// Operation to perform
+    #[serde(default)]
+    pub operation: TransformOperation,
+}
+
+/// Transform operation type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TransformOperation {
+    /// Replace the value at the path
+    Replace,
+    /// Add a new field at the path
+    Add,
+    /// Remove the field at the path
+    Remove,
+}
+
+impl Default for TransformOperation {
+    fn default() -> Self {
+        Self::Replace
+    }
+}
+
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
@@ -436,6 +519,8 @@ impl Default for ProxyConfig {
             rules: Vec::new(),
             migration_enabled: false,
             migration_groups: HashMap::new(),
+            request_replacements: Vec::new(),
+            response_replacements: Vec::new(),
         }
     }
 }

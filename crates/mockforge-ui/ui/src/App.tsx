@@ -41,6 +41,9 @@ const RecorderPage = lazy(() => import('./pages/RecorderPage').then(m => ({ defa
 // Time Travel
 const TimeTravelPage = lazy(() => import('./pages/TimeTravelPage').then(m => ({ default: m.TimeTravelPage })));
 
+// Proxy Inspector
+const ProxyInspectorPage = lazy(() => import('./pages/ProxyInspectorPage').then(m => ({ default: m.ProxyInspectorPage })));
+
 // Orchestration
 const OrchestrationBuilder = lazy(() => import('./pages/OrchestrationBuilder'));
 const OrchestrationExecutionView = lazy(() => import('./pages/OrchestrationExecutionView'));
@@ -48,6 +51,9 @@ const OrchestrationExecutionView = lazy(() => import('./pages/OrchestrationExecu
 // Plugins & Templates
 const PluginRegistryPage = lazy(() => import('./pages/PluginRegistryPage'));
 const TemplateMarketplacePage = lazy(() => import('./pages/TemplateMarketplacePage'));
+
+// User Management
+const UserManagementPage = lazy(() => import('./pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -138,6 +144,10 @@ function App() {
       case 'plugin-registry':
         return <PluginRegistryPage />;
 
+      // User Management
+      case 'user-management':
+        return <UserManagementPage />;
+
       // Configuration
       case 'config':
         return <ConfigPage />;
@@ -145,6 +155,10 @@ function App() {
       // Time Travel
       case 'time-travel':
         return <TimeTravelPage />;
+
+      // Proxy Inspector
+      case 'proxy-inspector':
+        return <ProxyInspectorPage />;
 
       default:
         return (

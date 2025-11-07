@@ -38,6 +38,9 @@ mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
 mod workspace_commands;
+mod git_watch_commands;
+mod contract_sync_commands;
+mod template_commands;
 
 #[cfg(test)]
 mod tests;
@@ -652,6 +655,97 @@ enum Commands {
         config_command: ConfigCommands,
     },
 
+    /// Watch a Git repository for OpenAPI spec changes and auto-sync
+    ///
+    /// Monitors a Git repository for changes to OpenAPI specification files
+    /// and automatically reloads mocks when changes are detected.
+    ///
+    /// Examples:
+    ///   mockforge git-watch https://github.com/user/api-specs --spec-paths "specs/*.yaml"
+    ///   mockforge git-watch https://github.com/user/api-specs --branch develop --poll-interval 30
+    ///   mockforge git-watch https://github.com/user/api-specs --reload-command "mockforge serve --spec"
+    #[command(verbatim_doc_comment)]
+    GitWatch {
+        /// Git repository URL (HTTPS or SSH)
+        #[arg(value_name = "REPOSITORY_URL")]
+        repository_url: String,
+
+        /// Branch to watch (default: "main")
+        #[arg(short, long, default_value = "main")]
+        branch: Option<String>,
+
+        /// Path(s) to OpenAPI spec files in the repository (supports glob patterns)
+        /// Default: ["**/*.yaml", "**/*.json", "**/openapi*.yaml", "**/openapi*.json"]
+        #[arg(short, long, value_name = "PATH")]
+        spec_paths: Vec<String>,
+
+        /// Polling interval in seconds (default: 60)
+        #[arg(long, default_value = "60")]
+        poll_interval: Option<u64>,
+
+        /// Authentication token for private repositories
+        #[arg(long, value_name = "TOKEN")]
+        auth_token: Option<String>,
+
+        /// Local cache directory for cloned repository (default: "./.mockforge-git-cache")
+        #[arg(long, value_name = "DIR")]
+        cache_dir: Option<PathBuf>,
+
+        /// Command to execute when spec files change
+        /// Spec file paths will be appended as arguments
+        #[arg(long, value_name = "COMMAND")]
+        reload_command: Option<String>,
+    },
+
+    /// Sync and validate mocks against Git-hosted OpenAPI specs
+    ///
+    /// Fetches OpenAPI specifications from a Git repository and validates
+    /// that mocks conform to the contract. Can optionally update mocks to match specs.
+    ///
+    /// Examples:
+    ///   mockforge contract-sync https://github.com/user/api-specs --mock-config mocks.yaml
+    ///   mockforge contract-sync https://github.com/user/api-specs --branch develop --strict
+    ///   mockforge contract-sync https://github.com/user/api-specs --update --output report.md
+    #[command(verbatim_doc_comment)]
+    ContractSync {
+        /// Git repository URL (HTTPS or SSH)
+        #[arg(value_name = "REPOSITORY_URL")]
+        repository_url: String,
+
+        /// Branch to sync from (default: "main")
+        #[arg(short, long, default_value = "main")]
+        branch: Option<String>,
+
+        /// Path(s) to OpenAPI spec files in the repository (supports glob patterns)
+        /// Default: ["**/*.yaml", "**/*.json", "**/openapi*.yaml", "**/openapi*.json"]
+        #[arg(short, long, value_name = "PATH")]
+        spec_paths: Vec<String>,
+
+        /// Path to mock configuration file to validate/update
+        #[arg(long, value_name = "FILE")]
+        mock_config: Option<PathBuf>,
+
+        /// Authentication token for private repositories
+        #[arg(long, value_name = "TOKEN")]
+        auth_token: Option<String>,
+
+        /// Local cache directory for cloned repository (default: "./.mockforge-git-cache")
+        #[arg(long, value_name = "DIR")]
+        cache_dir: Option<PathBuf>,
+
+        /// Use strict validation mode (fails on warnings)
+        #[arg(long)]
+        strict: bool,
+
+        /// Output file path for validation report (optional)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// Update mock configuration to match Git specs
+        #[arg(long)]
+        update: bool,
+    },
+
     /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
     ///
     /// Examples:
@@ -700,6 +794,22 @@ enum Commands {
     Scenario {
         #[command(subcommand)]
         scenario_command: scenario_commands::ScenarioCommands,
+    },
+
+    /// Template library management
+    ///
+    /// Manage shared templates with versioning and marketplace support.
+    ///
+    /// Examples:
+    ///   mockforge template register --id user-profile --name "User Profile" --content "{{faker.name}}"
+    ///   mockforge template list
+    ///   mockforge template search user
+    ///   mockforge template install user-profile --registry https://registry.mockforge.dev
+    ///   mockforge template marketplace search payment --registry https://registry.mockforge.dev
+    #[command(verbatim_doc_comment)]
+    Template {
+        #[command(subcommand)]
+        template_command: template_commands::TemplateCommands,
     },
 
     /// Client code generation for frontend frameworks
@@ -1814,6 +1924,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
         }
+        Commands::GitWatch {
+            repository_url,
+            branch,
+            spec_paths,
+            poll_interval,
+            auth_token,
+            cache_dir,
+            reload_command,
+        } => {
+            git_watch_commands::handle_git_watch(
+                repository_url,
+                branch,
+                spec_paths,
+                poll_interval,
+                auth_token,
+                cache_dir,
+                reload_command,
+            )
+            .await?;
+        }
+        Commands::ContractSync {
+            repository_url,
+            branch,
+            spec_paths,
+            mock_config,
+            auth_token,
+            cache_dir,
+            strict,
+            output,
+            update,
+        } => {
+            contract_sync_commands::handle_contract_sync(
+                repository_url,
+                branch,
+                spec_paths,
+                mock_config,
+                auth_token,
+                cache_dir,
+                strict,
+                output,
+                update,
+            )
+            .await?;
+        }
         Commands::Import { import_command } => {
             import_commands::handle_import_command(import_command).await?;
         }
@@ -1829,6 +1983,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;
+        }
+        Commands::Template { template_command } => {
+            template_commands::handle_template_command(template_command).await?;
         }
         Commands::Client { client_command } => {
             client_generator::execute_client_command(client_command).await?;
