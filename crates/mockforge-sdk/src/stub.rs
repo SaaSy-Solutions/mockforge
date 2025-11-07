@@ -1,5 +1,6 @@
 //! Response stub configuration
 
+use mockforge_core::stateful_handler::ResourceIdExtract as CoreResourceIdExtract;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -26,6 +27,139 @@ pub struct RequestContext {
     pub body: Option<Value>,
 }
 
+/// State machine configuration for stateful stub responses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateMachineConfig {
+    /// Resource type identifier (e.g., "order", "user", "payment")
+    pub resource_type: String,
+    /// Resource ID extraction configuration
+    #[serde(flatten)]
+    pub resource_id_extract: ResourceIdExtractConfig,
+    /// Initial state name
+    pub initial_state: String,
+    /// State-based response mappings (state name -> response override)
+    /// If provided, responses will vary based on current state
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_responses: Option<HashMap<String, StateResponseOverride>>,
+}
+
+/// Resource ID extraction configuration for state machines
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "extract_type", rename_all = "snake_case")]
+pub enum ResourceIdExtractConfig {
+    /// Extract from path parameter (e.g., "/orders/{order_id}" -> extract "order_id")
+    PathParam {
+        /// Path parameter name to extract
+        param: String,
+    },
+    /// Extract from JSONPath in request body
+    JsonPath {
+        /// JSONPath expression to extract the resource ID
+        path: String,
+    },
+    /// Extract from header value
+    Header {
+        /// Header name to extract the resource ID from
+        name: String,
+    },
+    /// Extract from query parameter
+    QueryParam {
+        /// Query parameter name to extract
+        param: String,
+    },
+}
+
+/// State-based response override
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateResponseOverride {
+    /// Optional status code override (if None, uses stub's default status)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<u16>,
+    /// Optional body override (if None, uses stub's default body)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<Value>,
+    /// Optional headers override (merged with stub's default headers)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<HashMap<String, String>>,
+}
+
+/// Fault injection configuration for per-stub error and latency simulation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StubFaultInjectionConfig {
+    /// Enable fault injection for this stub
+    #[serde(default)]
+    pub enabled: bool,
+    /// HTTP error codes to inject (randomly selected if multiple)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_errors: Option<Vec<u16>>,
+    /// Probability of injecting HTTP error (0.0-1.0, default: 1.0 if http_errors set)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_error_probability: Option<f64>,
+    /// Inject timeout error (returns 504 Gateway Timeout)
+    #[serde(default)]
+    pub timeout_error: bool,
+    /// Timeout duration in milliseconds (only used if timeout_error is true)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    /// Probability of timeout error (0.0-1.0, default: 1.0 if timeout_error is true)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_probability: Option<f64>,
+    /// Inject connection error (returns 503 Service Unavailable)
+    #[serde(default)]
+    pub connection_error: bool,
+    /// Probability of connection error (0.0-1.0, default: 1.0 if connection_error is true)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection_error_probability: Option<f64>,
+}
+
+impl Default for StubFaultInjectionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            http_errors: None,
+            http_error_probability: None,
+            timeout_error: false,
+            timeout_ms: None,
+            timeout_probability: None,
+            connection_error: false,
+            connection_error_probability: None,
+        }
+    }
+}
+
+impl StubFaultInjectionConfig {
+    /// Create a simple HTTP error injection config
+    pub fn http_error(codes: Vec<u16>) -> Self {
+        Self {
+            enabled: true,
+            http_errors: Some(codes),
+            http_error_probability: Some(1.0),
+            ..Default::default()
+        }
+    }
+
+    /// Create a timeout error injection config
+    pub fn timeout(ms: u64) -> Self {
+        Self {
+            enabled: true,
+            timeout_error: true,
+            timeout_ms: Some(ms),
+            timeout_probability: Some(1.0),
+            ..Default::default()
+        }
+    }
+
+    /// Create a connection error injection config
+    pub fn connection_error() -> Self {
+        Self {
+            enabled: true,
+            connection_error: true,
+            connection_error_probability: Some(1.0),
+            ..Default::default()
+        }
+    }
+}
+
 /// A response stub for mocking API endpoints
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseStub {
@@ -41,6 +175,14 @@ pub struct ResponseStub {
     pub body: Value,
     /// Optional latency in milliseconds
     pub latency_ms: Option<u64>,
+    /// Optional state machine configuration for stateful behavior
+    /// When set, responses will vary based on resource state
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_machine: Option<StateMachineConfig>,
+    /// Optional fault injection configuration for error simulation
+    /// When set, can inject errors, timeouts, or connection failures
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fault_injection: Option<StubFaultInjectionConfig>,
 }
 
 impl ResponseStub {
@@ -53,6 +195,8 @@ impl ResponseStub {
             headers: HashMap::new(),
             body,
             latency_ms: None,
+            state_machine: None,
+            fault_injection: None,
         }
     }
 
@@ -72,6 +216,97 @@ impl ResponseStub {
     pub fn latency(mut self, ms: u64) -> Self {
         self.latency_ms = Some(ms);
         self
+    }
+
+    /// Set state machine configuration for stateful behavior
+    pub fn with_state_machine(mut self, config: StateMachineConfig) -> Self {
+        self.state_machine = Some(config);
+        self
+    }
+
+    /// Check if this stub has state machine configuration
+    pub fn has_state_machine(&self) -> bool {
+        self.state_machine.is_some()
+    }
+
+    /// Get state machine configuration
+    pub fn state_machine(&self) -> Option<&StateMachineConfig> {
+        self.state_machine.as_ref()
+    }
+
+    /// Apply state-based response override if state machine is configured
+    ///
+    /// This method checks if the stub has state machine configuration and applies
+    /// state-based response overrides based on the current state.
+    ///
+    /// Returns a modified stub with state-specific overrides applied, or the original
+    /// stub if no state machine config or no override for current state.
+    pub fn apply_state_override(&self, current_state: &str) -> ResponseStub {
+        let mut stub = self.clone();
+
+        if let Some(ref state_machine) = self.state_machine {
+            if let Some(ref state_responses) = state_machine.state_responses {
+                if let Some(ref override_config) = state_responses.get(current_state) {
+                    // Apply status override
+                    if let Some(status) = override_config.status {
+                        stub.status = status;
+                    }
+
+                    // Apply body override
+                    if let Some(ref body) = override_config.body {
+                        stub.body = body.clone();
+                    }
+
+                    // Merge headers
+                    if let Some(ref headers) = override_config.headers {
+                        for (key, value) in headers {
+                            stub.headers.insert(key.clone(), value.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        stub
+    }
+
+    /// Set fault injection configuration
+    pub fn with_fault_injection(mut self, config: StubFaultInjectionConfig) -> Self {
+        self.fault_injection = Some(config);
+        self
+    }
+
+    /// Check if this stub has fault injection configured
+    pub fn has_fault_injection(&self) -> bool {
+        self.fault_injection
+            .as_ref()
+            .map(|f| f.enabled)
+            .unwrap_or(false)
+    }
+
+    /// Get fault injection configuration
+    pub fn fault_injection(&self) -> Option<&StubFaultInjectionConfig> {
+        self.fault_injection.as_ref()
+    }
+}
+
+impl ResourceIdExtractConfig {
+    /// Convert to core's ResourceIdExtract enum
+    pub fn to_core(&self) -> CoreResourceIdExtract {
+        match self {
+            ResourceIdExtractConfig::PathParam { param } => {
+                CoreResourceIdExtract::PathParam { param: param.clone() }
+            }
+            ResourceIdExtractConfig::JsonPath { path } => {
+                CoreResourceIdExtract::JsonPath { path: path.clone() }
+            }
+            ResourceIdExtractConfig::Header { name } => {
+                CoreResourceIdExtract::Header { name: name.clone() }
+            }
+            ResourceIdExtractConfig::QueryParam { param } => {
+                CoreResourceIdExtract::QueryParam { param: param.clone() }
+            }
+        }
     }
 }
 
@@ -182,6 +417,8 @@ pub struct StubBuilder {
     headers: HashMap<String, String>,
     body: Value,
     latency_ms: Option<u64>,
+    state_machine: Option<StateMachineConfig>,
+    fault_injection: Option<StubFaultInjectionConfig>,
 }
 
 impl StubBuilder {
@@ -194,6 +431,8 @@ impl StubBuilder {
             headers: HashMap::new(),
             body: Value::Null,
             latency_ms: None,
+            state_machine: None,
+            fault_injection: None,
         }
     }
 
@@ -221,6 +460,18 @@ impl StubBuilder {
         self
     }
 
+    /// Set state machine configuration
+    pub fn state_machine(mut self, config: StateMachineConfig) -> Self {
+        self.state_machine = Some(config);
+        self
+    }
+
+    /// Set fault injection configuration
+    pub fn fault_injection(mut self, config: StubFaultInjectionConfig) -> Self {
+        self.fault_injection = Some(config);
+        self
+    }
+
     /// Build the response stub
     pub fn build(self) -> ResponseStub {
         ResponseStub {
@@ -230,6 +481,8 @@ impl StubBuilder {
             headers: self.headers,
             body: self.body,
             latency_ms: self.latency_ms,
+            state_machine: self.state_machine,
+            fault_injection: self.fault_injection,
         }
     }
 }

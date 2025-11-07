@@ -128,6 +128,13 @@ impl StubMappingConverter {
         if let Some(ref trace_id) = request.trace_id {
             metadata.insert("trace_id".to_string(), trace_id.clone());
         }
+        // Check if this was a proxied request (check tags for proxy indicator)
+        if let Some(ref tags) = request.tags {
+            let tags_lower = tags.to_lowercase();
+            if tags_lower.contains("proxy") || tags_lower.contains("\"proxy\"") {
+                metadata.insert("proxy_source".to_string(), "true".to_string());
+            }
+        }
 
         Ok(StubMapping {
             identifier,

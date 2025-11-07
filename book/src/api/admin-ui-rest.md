@@ -16,7 +16,121 @@ The MockForge Admin UI provides a web-based interface for managing and monitorin
 
 ## Base URL
 
-All API endpoints are prefixed with `/__mockforge` to avoid conflicts with user-defined routes.
+All API endpoints are prefixed with `/__mockforge/api` to avoid conflicts with user-defined routes.
+
+### Standalone Mode vs Embedded Mode
+
+The REST API works identically in both standalone and embedded modes:
+
+**Standalone Mode (Default):**
+- Admin UI runs on a separate port (default: 9080)
+- REST API endpoints available at: `http://localhost:9080/__mockforge/api/*`
+- Main HTTP server runs on port 3000 (or configured port)
+- Example: `curl http://localhost:9080/__mockforge/api/mocks`
+
+**Embedded Mode:**
+- Admin UI mounted under HTTP server (e.g., `/admin`)
+- REST API endpoints available at: `http://localhost:3000/__mockforge/api/*`
+- Same endpoints, different base URL
+- Example: `curl http://localhost:3000/__mockforge/api/mocks`
+
+**Configuration via REST API (JSON over HTTP):**
+
+The REST API supports full configuration management via JSON over HTTP, making it suitable for:
+- CI/CD pipelines
+- Automated testing
+- Remote configuration
+- Integration with external tools
+
+All endpoints accept and return JSON, following standard REST conventions.
+
+### Standalone Mode Examples
+
+**Starting MockForge in Standalone Mode:**
+```bash
+# Start MockForge with standalone admin UI
+mockforge serve --admin --admin-standalone --admin-port 9080
+
+# Or via config file
+# admin:
+#   enabled: true
+#   port: 9080
+#   api_enabled: true
+```
+
+**Creating a Mock via REST API (Standalone Mode):**
+```bash
+# Create a mock using JSON over HTTP
+curl -X POST http://localhost:9080/__mockforge/api/mocks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "user-get",
+    "name": "Get User",
+    "method": "GET",
+    "path": "/api/users/{id}",
+    "response": {
+      "body": {
+        "id": "{{request.path.id}}",
+        "name": "Alice",
+        "email": "alice@example.com"
+      },
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    "enabled": true,
+    "status_code": 200
+  }'
+```
+
+**Updating Configuration via REST API:**
+```bash
+# Update latency configuration
+curl -X POST http://localhost:9080/__mockforge/api/config/latency \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_ms": 100,
+    "jitter_ms": 50
+  }'
+```
+
+**Listing All Mocks:**
+```bash
+# Get all configured mocks
+curl http://localhost:9080/__mockforge/api/mocks
+```
+
+**Using the SDK with Standalone Mode:**
+```rust
+use mockforge_sdk::AdminClient;
+use mockforge_sdk::MockConfigBuilder;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to standalone admin API
+    let client = AdminClient::new("http://localhost:9080");
+    
+    // Create a mock using the fluent builder API
+    let mock = MockConfigBuilder::new("POST", "/api/users")
+        .name("Create User")
+        .with_header("Authorization", "Bearer.*")
+        .with_query_param("role", "admin")
+        .status(201)
+        .body(json!({
+            "id": "{{uuid}}",
+            "name": "{{faker.name}}",
+            "created": true
+        }))
+        .priority(10)
+        .build();
+    
+    // Create the mock via REST API
+    client.create_mock(mock).await?;
+    
+    Ok(())
+}
+```
 
 ## Authentication
 

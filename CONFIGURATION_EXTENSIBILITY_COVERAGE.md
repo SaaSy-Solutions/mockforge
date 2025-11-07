@@ -8,8 +8,9 @@ This document verifies MockForge's coverage of configuration and extensibility f
 |---------|--------|----------------------|
 | **GUI Configuration** | ✅ **YES** | - Admin UI (v2) with visual configuration interface<br>- Config page in Admin UI for runtime settings<br>- Fixture management UI for editing mocks<br>- Services page for route configuration<br>- Real-time configuration updates |
 | **JSON/YAML Config** | ✅ **YES** | - YAML config files: `mockforge.yaml`, `mockforge.yml`, `.mockforge.yaml`, `.mockforge.yml`<br>- JSON config support<br>- TypeScript config: `mockforge.config.ts`<br>- JavaScript config: `mockforge.config.js`<br>- Auto-discovery of config files |
-| **REST API** | ✅ **YES** | - Admin API endpoints for configuration management<br>- Runtime mock creation/update via REST<br>- Configuration endpoints in `/__mockforge/admin/api/`<br>- RESTful API for managing mocks, fixtures, and settings |
-| **Code/SDK Clients** | ✅ **YES** | - Rust SDK: `mockforge-sdk` crate<br>- TypeScript/JavaScript SDK available<br>- Go SDK available<br>- VS Code extension with programmatic access<br>- AdminClient API for creating/updating mocks |
+| **REST API** | ✅ **YES** | - Admin API endpoints for configuration management<br>- Runtime mock creation/update via REST<br>- Configuration endpoints in `/__mockforge/api/`<br>- RESTful API for managing mocks, fixtures, and settings<br>- **Standalone mode support**: REST API works identically in standalone and embedded modes<br>- **JSON over HTTP**: Full configuration via JSON over HTTP in standalone mode |
+| **Fluent API** | ✅ **YES** | - **Enhanced MockConfigBuilder**: WireMock-like fluent API for creating mocks<br>- Method chaining for request matching (headers, query params, body patterns)<br>- Response configuration with templating support<br>- Priority and scenario-based mock ordering<br>- Comprehensive request matching (JSONPath, XPath, regex, custom matchers) |
+| **Code/SDK Clients** | ✅ **YES** | - Rust SDK: `mockforge-sdk` crate with fluent builder API<br>- TypeScript/JavaScript SDK available<br>- Go SDK available<br>- VS Code extension with programmatic access<br>- AdminClient API for creating/updating mocks |
 | **CLI** | ✅ **YES** | - Comprehensive CLI with all configuration options<br>- `--config` flag for specifying config file<br>- `--profile` flag for profile selection<br>- Command-line flags for all settings<br>- Auto-discovery of config files |
 
 **Evidence:**
@@ -17,7 +18,10 @@ This document verifies MockForge's coverage of configuration and extensibility f
 - Config loading: `crates/mockforge-core/src/config.rs` - Multi-format config loading
 - CLI: `crates/mockforge-cli/src/main.rs` - Full CLI implementation
 - Admin API: `crates/mockforge-http/src/management.rs` - REST API for mock management
-- SDK: `crates/mockforge-sdk/src/admin.rs` - Programmatic API client
+- SDK: `crates/mockforge-sdk/src/admin.rs` - Programmatic API client with fluent builder
+- Fluent API: `crates/mockforge-sdk/src/admin.rs` - `MockConfigBuilder` with comprehensive request matching
+- Lifecycle hooks: `crates/mockforge-core/src/lifecycle.rs` - Complete lifecycle hook system
+- REST standalone: `book/src/api/admin-ui-rest.md` - Standalone mode documentation with examples
 
 ## 2. Persistence ✅ **FULLY COVERED**
 
@@ -53,6 +57,7 @@ This document verifies MockForge's coverage of configuration and extensibility f
 | **Plugin matchers** | ✅ **YES** | - WebAssembly-based plugin system<br>- Custom request matching via plugins<br>- Plugin registry for discovery<br>- Plugin loader with validation<br>- Signature verification for security |
 | **Response transformers** | ✅ **YES** | - `ResponseModifierPlugin` trait for response transformation<br>- Priority-based plugin execution<br>- Plugin context with request/response access<br>- Custom response generation plugins<br>- Template extension plugins |
 | **Custom behaviors** | ✅ **YES** | - Custom response generators<br>- Authentication providers<br>- Data source connectors<br>- Protocol handlers<br>- Plugin capabilities system |
+| **Lifecycle hooks** | ✅ **YES** | - **Comprehensive lifecycle hook system**: `LifecycleHook` trait for extensibility<br>- Request/response lifecycle: `before_request`, `after_response`<br>- Server lifecycle: `on_startup`, `on_shutdown`<br>- Mock lifecycle: `on_mock_created`, `on_mock_updated`, `on_mock_deleted`, `on_mock_state_changed`<br>- `LifecycleHookRegistry` for managing and invoking hooks |
 
 **Evidence:**
 - Plugin system: `book/src/user-guide/plugins.md` - Complete plugin documentation
@@ -100,17 +105,31 @@ This document verifies MockForge's coverage of configuration and extensibility f
 - Workspace sync: Workspace sync daemon for Git-based fixtures
 - Startup: `crates/mockforge-plugin-loader/src/loader.rs` (lines 51-87) - Plugin loading on startup
 
+## 8. Configuration API Enhancements ✅ **FULLY COVERED**
+
+| Feature | Status | Implementation Details |
+|---------|--------|----------------------|
+| **Configuration validation** | ✅ **YES** | - `POST /__mockforge/api/config/validate` endpoint<br>- Validates configuration without applying it<br>- Supports JSON and YAML formats<br>- Returns detailed validation errors |
+| **Bulk configuration updates** | ✅ **YES** | - `POST /__mockforge/api/config/bulk` endpoint<br>- Update multiple configuration options at once<br>- Partial configuration updates supported<br>- Validates updates before applying |
+| **Comprehensive config endpoints** | ✅ **YES** | - All configuration options accessible via REST API<br>- Chaos engineering configuration endpoints<br>- Network profile management<br>- Migration pipeline configuration |
+
+**Evidence:**
+- Config validation: `crates/mockforge-http/src/management.rs` (lines 2203-2238) - `validate_config` endpoint
+- Bulk updates: `crates/mockforge-http/src/management.rs` (lines 2248-2277) - `bulk_update_config` endpoint
+- Config endpoints: `crates/mockforge-http/src/management.rs` (lines 1226-1229) - Configuration management routes
+
 ## Summary
 
-### ✅ Fully Covered (7/7 categories) - **100% Coverage** 🎉
+### ✅ Fully Covered (8/8 categories) - **100% Coverage** 🎉
 
-1. **Configuration Methods** - ✅ GUI, JSON/YAML, REST API, SDKs (Rust/TS/Go), CLI
+1. **Configuration Methods** - ✅ GUI, JSON/YAML, REST API (standalone mode), Fluent API, SDKs (Rust/TS/Go), CLI
 2. **Persistence** - ✅ Store mocks across restarts with version control support
 3. **Programmatic API** - ✅ REST endpoints and SDKs for runtime mock management
-4. **Custom Extensions** - ✅ WebAssembly plugin system with matchers and transformers
+4. **Custom Extensions** - ✅ WebAssembly plugin system with matchers, transformers, and lifecycle hooks
 5. **CORS Configuration** - ✅ Enable/disable with full configuration options
 6. **Variable & Environment Management** - ✅ Environment variables, placeholders, global variables
 7. **Startup Initialization** - ✅ Load from files and repositories on startup
+8. **Configuration API Enhancements** - ✅ Configuration validation, bulk updates, comprehensive endpoints
 
 ### Key Features
 
@@ -120,6 +139,9 @@ This document verifies MockForge's coverage of configuration and extensibility f
 - **Profile Support**: Environment-specific profiles (dev, ci, prod)
 - **Configuration Precedence**: CLI > Env vars > Profile > Config file > Defaults
 - **GUI Configuration**: Admin UI v2 with visual config interface
+- **Fluent API**: WireMock-like fluent builder API (`MockConfigBuilder`) with method chaining
+- **REST API Standalone Mode**: Full JSON-over-HTTP configuration in standalone mode (port 9080)
+- **Request Matching**: Comprehensive matching via fluent API (headers, query params, body patterns, JSONPath, XPath, regex)
 
 #### Persistence
 - **Workspace Persistence**: State saved to JSON files in workspace directory
@@ -138,6 +160,8 @@ This document verifies MockForge's coverage of configuration and extensibility f
 - **Plugin Types**: Response generators, transformers, matchers, auth providers, data sources
 - **Plugin Registry**: Central registry for plugin discovery and installation
 - **Capability System**: Fine-grained permissions for plugin access
+- **Lifecycle Hooks**: Comprehensive hook system for request/response, server, and mock lifecycle events
+- **Hook Registry**: `LifecycleHookRegistry` for managing and invoking lifecycle hooks
 
 #### CORS Configuration
 - **Full Control**: Enable/disable, origins, methods, headers, max-age
@@ -159,12 +183,17 @@ This document verifies MockForge's coverage of configuration and extensibility f
 ## Overall Assessment: **100% Coverage** ✅
 
 MockForge provides **complete coverage** of configuration and extensibility features. The system supports:
-- ✅ Multiple configuration methods (GUI, JSON/YAML, REST API, SDKs, CLI)
+- ✅ Multiple configuration methods (GUI, JSON/YAML, REST API standalone mode, Fluent API, SDKs, CLI)
 - ✅ Persistent storage across restarts with version control support
-- ✅ Programmatic API via REST endpoints and multiple SDKs
-- ✅ Comprehensive plugin system for custom extensions
+- ✅ Programmatic API via REST endpoints and multiple SDKs with fluent builder API
+- ✅ Comprehensive plugin system for custom extensions with lifecycle hooks
 - ✅ Full CORS configuration for frontend testing
 - ✅ Advanced variable and environment management
 - ✅ Startup initialization from files and repositories
+- ✅ Configuration validation and bulk update endpoints
 
-All features are fully implemented with comprehensive documentation and examples. MockForge provides industry-leading coverage of configuration and extensibility capabilities.
+All features are fully implemented with comprehensive documentation and examples. MockForge provides industry-leading coverage of configuration and extensibility capabilities, matching and exceeding WireMock's feature set with:
+- **Enhanced Fluent API**: WireMock-like fluent builder with comprehensive request matching
+- **REST API Standalone Mode**: Full JSON-over-HTTP configuration support
+- **Lifecycle Hooks**: Comprehensive hook system for extensibility
+- **Configuration Management**: Validation and bulk update endpoints

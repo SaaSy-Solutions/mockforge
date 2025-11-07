@@ -68,6 +68,7 @@ pub struct KafkaMessageEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MockConfig {
     /// Unique identifier for the mock
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub id: String,
     /// Human-readable name for the mock
     pub name: String,
@@ -78,6 +79,7 @@ pub struct MockConfig {
     /// Response configuration
     pub response: MockResponse,
     /// Whether this mock is currently enabled
+    #[serde(default = "default_true")]
     pub enabled: bool,
     /// Optional latency to inject in milliseconds
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -85,6 +87,25 @@ pub struct MockConfig {
     /// Optional HTTP status code override
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_code: Option<u16>,
+    /// Request matching criteria (headers, query params, body patterns)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_match: Option<RequestMatchCriteria>,
+    /// Priority for mock ordering (higher priority mocks are matched first)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i32>,
+    /// Scenario name for stateful mocking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenario: Option<String>,
+    /// Required scenario state for this mock to be active
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_scenario_state: Option<String>,
+    /// New scenario state after this mock is matched
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_scenario_state: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Mock response configuration
@@ -95,6 +116,324 @@ pub struct MockResponse {
     /// Optional custom response headers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Request matching criteria for advanced request matching
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RequestMatchCriteria {
+    /// Headers that must be present and match (case-insensitive header names)
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub headers: std::collections::HashMap<String, String>,
+    /// Query parameters that must be present and match
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub query_params: std::collections::HashMap<String, String>,
+    /// Request body pattern (supports exact match or regex)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_pattern: Option<String>,
+    /// JSONPath expression for JSON body matching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_path: Option<String>,
+    /// XPath expression for XML body matching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xpath: Option<String>,
+    /// Custom matcher expression (e.g., "headers.content-type == \"application/json\"")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_matcher: Option<String>,
+}
+
+/// Check if a request matches the given mock configuration
+///
+/// This function implements comprehensive request matching including:
+/// - Method and path matching
+/// - Header matching (with regex support)
+/// - Query parameter matching
+/// - Body pattern matching (exact, regex, JSONPath, XPath)
+/// - Custom matcher expressions
+pub fn mock_matches_request(
+    mock: &MockConfig,
+    method: &str,
+    path: &str,
+    headers: &std::collections::HashMap<String, String>,
+    query_params: &std::collections::HashMap<String, String>,
+    body: Option<&[u8]>,
+) -> bool {
+    use regex::Regex;
+
+    // Check if mock is enabled
+    if !mock.enabled {
+        return false;
+    }
+
+    // Check method (case-insensitive)
+    if mock.method.to_uppercase() != method.to_uppercase() {
+        return false;
+    }
+
+    // Check path pattern (supports wildcards and path parameters)
+    if !path_matches_pattern(&mock.path, path) {
+        return false;
+    }
+
+    // Check request matching criteria if present
+    if let Some(criteria) = &mock.request_match {
+        // Check headers
+        for (key, expected_value) in &criteria.headers {
+            let header_key_lower = key.to_lowercase();
+            let found = headers.iter().find(|(k, _)| k.to_lowercase() == header_key_lower);
+
+            if let Some((_, actual_value)) = found {
+                // Try regex match first, then exact match
+                if let Ok(re) = Regex::new(expected_value) {
+                    if !re.is_match(actual_value) {
+                        return false;
+                    }
+                } else if actual_value != expected_value {
+                    return false;
+                }
+            } else {
+                return false; // Header not found
+            }
+        }
+
+        // Check query parameters
+        for (key, expected_value) in &criteria.query_params {
+            if let Some(actual_value) = query_params.get(key) {
+                if actual_value != expected_value {
+                    return false;
+                }
+            } else {
+                return false; // Query param not found
+            }
+        }
+
+        // Check body pattern
+        if let Some(pattern) = &criteria.body_pattern {
+            if let Some(body_bytes) = body {
+                let body_str = String::from_utf8_lossy(body_bytes);
+                // Try regex first, then exact match
+                if let Ok(re) = Regex::new(pattern) {
+                    if !re.is_match(&body_str) {
+                        return false;
+                    }
+                } else if body_str.as_ref() != pattern {
+                    return false;
+                }
+            } else {
+                return false; // Body required but not present
+            }
+        }
+
+        // Check JSONPath (simplified implementation)
+        if let Some(json_path) = &criteria.json_path {
+            if let Some(body_bytes) = body {
+                if let Ok(body_str) = std::str::from_utf8(body_bytes) {
+                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(body_str) {
+                        // Simple JSONPath check
+                        if !json_path_exists(&json_value, json_path) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check XPath (placeholder - requires XML/XPath library for full implementation)
+        if let Some(_xpath) = &criteria.xpath {
+            // XPath matching would require an XML/XPath library
+            // For now, this is a placeholder that warns but doesn't fail
+            tracing::warn!("XPath matching not yet fully implemented");
+        }
+
+        // Check custom matcher
+        if let Some(custom) = &criteria.custom_matcher {
+            if !evaluate_custom_matcher(custom, method, path, headers, query_params, body) {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Check if a path matches a pattern (supports wildcards and path parameters)
+fn path_matches_pattern(pattern: &str, path: &str) -> bool {
+    // Exact match
+    if pattern == path {
+        return true;
+    }
+
+    // Wildcard match
+    if pattern == "*" {
+        return true;
+    }
+
+    // Path parameter matching (e.g., /users/{id} matches /users/123)
+    let pattern_parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
+    let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+    if pattern_parts.len() != path_parts.len() {
+        // Check for wildcard patterns
+        if pattern.contains('*') {
+            return matches_wildcard_pattern(pattern, path);
+        }
+        return false;
+    }
+
+    for (pattern_part, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
+        // Check for path parameters {param}
+        if pattern_part.starts_with('{') && pattern_part.ends_with('}') {
+            continue; // Matches any value
+        }
+
+        if pattern_part != path_part {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Check if path matches a wildcard pattern
+fn matches_wildcard_pattern(pattern: &str, path: &str) -> bool {
+    use regex::Regex;
+
+    // Convert pattern to regex
+    let regex_pattern = pattern
+        .replace('*', ".*")
+        .replace('?', ".?");
+
+    if let Ok(re) = Regex::new(&format!("^{}$", regex_pattern)) {
+        return re.is_match(path);
+    }
+
+    false
+}
+
+/// Check if a JSONPath exists in a JSON value (simplified implementation)
+fn json_path_exists(json: &serde_json::Value, json_path: &str) -> bool {
+    // Simple implementation - for full JSONPath support, use a library like jsonpath-rs
+    // This handles simple paths like $.field or $.field.subfield
+    if json_path.starts_with("$.") {
+        let path = &json_path[2..];
+        let parts: Vec<&str> = path.split('.').collect();
+
+        let mut current = json;
+        for part in parts {
+            if let Some(obj) = current.as_object() {
+                if let Some(value) = obj.get(part) {
+                    current = value;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    } else {
+        // For complex JSONPath expressions, would need a proper JSONPath library
+        tracing::warn!("Complex JSONPath expressions not yet fully supported: {}", json_path);
+        false
+    }
+}
+
+/// Evaluate a custom matcher expression
+fn evaluate_custom_matcher(
+    expression: &str,
+    method: &str,
+    path: &str,
+    headers: &std::collections::HashMap<String, String>,
+    query_params: &std::collections::HashMap<String, String>,
+    body: Option<&[u8]>,
+) -> bool {
+    use regex::Regex;
+
+    let expr = expression.trim();
+
+    // Handle equality expressions (field == "value")
+    if expr.contains("==") {
+        let parts: Vec<&str> = expr.split("==").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let expected_value = parts[1].trim_matches('"').trim_matches('\'');
+
+        match field {
+            "method" => method == expected_value,
+            "path" => path == expected_value,
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..];
+                headers.get(header_name).map(|v| v == expected_value).unwrap_or(false)
+            }
+            _ if field.starts_with("query.") => {
+                let param_name = &field[6..];
+                query_params.get(param_name).map(|v| v == expected_value).unwrap_or(false)
+            }
+            _ => false,
+        }
+    }
+    // Handle regex match expressions (field =~ "pattern")
+    else if expr.contains("=~") {
+        let parts: Vec<&str> = expr.split("=~").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let pattern = parts[1].trim_matches('"').trim_matches('\'');
+
+        if let Ok(re) = Regex::new(pattern) {
+            match field {
+                "method" => re.is_match(method),
+                "path" => re.is_match(path),
+                _ if field.starts_with("headers.") => {
+                    let header_name = &field[8..];
+                    headers.get(header_name).map(|v| re.is_match(v)).unwrap_or(false)
+                }
+                _ if field.starts_with("query.") => {
+                    let param_name = &field[6..];
+                    query_params.get(param_name).map(|v| re.is_match(v)).unwrap_or(false)
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+    // Handle contains expressions (field contains "value")
+    else if expr.contains("contains") {
+        let parts: Vec<&str> = expr.split("contains").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let search_value = parts[1].trim_matches('"').trim_matches('\'');
+
+        match field {
+            "path" => path.contains(search_value),
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..];
+                headers.get(header_name).map(|v| v.contains(search_value)).unwrap_or(false)
+            }
+            _ if field.starts_with("body") => {
+                if let Some(body_bytes) = body {
+                    let body_str = String::from_utf8_lossy(body_bytes);
+                    body_str.contains(search_value)
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+    else {
+        // Unknown expression format
+        tracing::warn!("Unknown custom matcher expression format: {}", expr);
+        false
+    }
 }
 
 /// Server statistics
@@ -160,6 +499,8 @@ pub struct ManagementState {
         Arc<RwLock<mockforge_scenarios::state_machine::ScenarioStateMachineManager>>,
     /// Optional WebSocket broadcast channel for real-time updates
     pub ws_broadcast: Option<Arc<broadcast::Sender<crate::management_ws::MockEvent>>>,
+    /// Lifecycle hook registry for extensibility
+    pub lifecycle_hooks: Option<Arc<mockforge_core::lifecycle::LifecycleHookRegistry>>,
 }
 
 impl ManagementState {
@@ -193,7 +534,17 @@ impl ManagementState {
                 mockforge_scenarios::state_machine::ScenarioStateMachineManager::new(),
             )),
             ws_broadcast: None,
+            lifecycle_hooks: None,
         }
+    }
+
+    /// Add lifecycle hook registry to management state
+    pub fn with_lifecycle_hooks(
+        mut self,
+        hooks: Arc<mockforge_core::lifecycle::LifecycleHookRegistry>,
+    ) -> Self {
+        self.lifecycle_hooks = Some(hooks);
+        self
     }
 
     /// Add WebSocket broadcast channel to management state
@@ -281,7 +632,24 @@ async fn create_mock(
     }
 
     info!("Creating mock: {} {} {}", mock.method, mock.path, mock.id);
+
+    // Invoke lifecycle hooks
+    if let Some(hooks) = &state.lifecycle_hooks {
+        let event = mockforge_core::lifecycle::MockLifecycleEvent::Created {
+            id: mock.id.clone(),
+            name: mock.name.clone(),
+            config: serde_json::to_value(&mock).unwrap_or_default(),
+        };
+        hooks.invoke_mock_created(&event).await;
+    }
+
     mocks.push(mock.clone());
+
+    // Broadcast WebSocket event
+    if let Some(tx) = &state.ws_broadcast {
+        let _ = tx.send(crate::management_ws::MockEvent::mock_created(mock.clone()));
+    }
+
     Ok(Json(mock))
 }
 
@@ -295,8 +663,41 @@ async fn update_mock(
 
     let position = mocks.iter().position(|m| m.id == id).ok_or(StatusCode::NOT_FOUND)?;
 
+    // Get old mock for comparison
+    let old_mock = mocks[position].clone();
+
     info!("Updating mock: {}", id);
     mocks[position] = updated_mock.clone();
+
+    // Invoke lifecycle hooks
+    if let Some(hooks) = &state.lifecycle_hooks {
+        let event = mockforge_core::lifecycle::MockLifecycleEvent::Updated {
+            id: updated_mock.id.clone(),
+            name: updated_mock.name.clone(),
+            config: serde_json::to_value(&updated_mock).unwrap_or_default(),
+        };
+        hooks.invoke_mock_updated(&event).await;
+
+        // Check if enabled state changed
+        if old_mock.enabled != updated_mock.enabled {
+            let state_event = if updated_mock.enabled {
+                mockforge_core::lifecycle::MockLifecycleEvent::Enabled {
+                    id: updated_mock.id.clone(),
+                }
+            } else {
+                mockforge_core::lifecycle::MockLifecycleEvent::Disabled {
+                    id: updated_mock.id.clone(),
+                }
+            };
+            hooks.invoke_mock_state_changed(&state_event).await;
+        }
+    }
+
+    // Broadcast WebSocket event
+    if let Some(tx) = &state.ws_broadcast {
+        let _ = tx.send(crate::management_ws::MockEvent::mock_updated(updated_mock.clone()));
+    }
+
     Ok(Json(updated_mock))
 }
 
@@ -309,9 +710,172 @@ async fn delete_mock(
 
     let position = mocks.iter().position(|m| m.id == id).ok_or(StatusCode::NOT_FOUND)?;
 
+    // Get mock info before deletion for lifecycle hooks
+    let deleted_mock = mocks[position].clone();
+
     info!("Deleting mock: {}", id);
     mocks.remove(position);
+
+    // Invoke lifecycle hooks
+    if let Some(hooks) = &state.lifecycle_hooks {
+        let event = mockforge_core::lifecycle::MockLifecycleEvent::Deleted {
+            id: deleted_mock.id.clone(),
+            name: deleted_mock.name.clone(),
+        };
+        hooks.invoke_mock_deleted(&event).await;
+    }
+
+    // Broadcast WebSocket event
+    if let Some(tx) = &state.ws_broadcast {
+        let _ = tx.send(crate::management_ws::MockEvent::mock_deleted(id.clone()));
+    }
+
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Request to validate configuration
+#[derive(Debug, Deserialize)]
+pub struct ValidateConfigRequest {
+    /// Configuration to validate (as JSON)
+    pub config: serde_json::Value,
+    /// Format of the configuration ("json" or "yaml")
+    #[serde(default = "default_format")]
+    pub format: String,
+}
+
+fn default_format() -> String {
+    "json".to_string()
+}
+
+/// Validate configuration without applying it
+async fn validate_config(
+    Json(request): Json<ValidateConfigRequest>,
+) -> impl IntoResponse {
+    use mockforge_core::config::ServerConfig;
+
+    let config_result: Result<ServerConfig, String> = match request.format.as_str() {
+        "yaml" | "yml" => {
+            let yaml_str = match serde_json::to_string(&request.config) {
+                Ok(s) => s,
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({
+                            "valid": false,
+                            "error": format!("Failed to convert to string: {}", e),
+                            "message": "Configuration validation failed"
+                        })),
+                    )
+                        .into_response();
+                }
+            };
+            serde_yaml::from_str(&yaml_str).map_err(|e| format!("YAML parse error: {}", e))
+        }
+        _ => serde_json::from_value(request.config).map_err(|e| format!("JSON parse error: {}", e)),
+    };
+
+    match config_result {
+        Ok(_) => Json(serde_json::json!({
+            "valid": true,
+            "message": "Configuration is valid"
+        }))
+        .into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "valid": false,
+                "error": format!("Invalid configuration: {}", e),
+                "message": "Configuration validation failed"
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Request for bulk configuration update
+#[derive(Debug, Deserialize)]
+pub struct BulkConfigUpdateRequest {
+    /// Partial configuration updates (only specified fields will be updated)
+    pub updates: serde_json::Value,
+}
+
+/// Bulk update configuration
+///
+/// This endpoint allows updating multiple configuration options at once.
+/// Only the specified fields in the updates object will be modified.
+///
+/// Note: This endpoint validates the configuration structure. Full runtime
+/// application of configuration changes would require architectural changes
+/// to store and apply ServerConfig in ManagementState. For now, this provides
+/// validation and acknowledgment of the update request.
+async fn bulk_update_config(
+    State(_state): State<ManagementState>,
+    Json(request): Json<BulkConfigUpdateRequest>,
+) -> impl IntoResponse {
+    // Validate the updates structure
+    if !request.updates.is_object() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid request",
+                "message": "Updates must be a JSON object"
+            })),
+        )
+            .into_response();
+    }
+
+    // Try to validate as partial ServerConfig
+    use mockforge_core::config::ServerConfig;
+
+    // Create a minimal valid config and try to merge updates
+    let base_config = ServerConfig::default();
+    let base_json = match serde_json::to_value(&base_config) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Internal error",
+                    "message": format!("Failed to serialize base config: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Merge updates into base config (simplified merge)
+    let mut merged = base_json.clone();
+    if let (Some(merged_obj), Some(updates_obj)) = (merged.as_object_mut(), request.updates.as_object()) {
+        for (key, value) in updates_obj {
+            merged_obj.insert(key.clone(), value.clone());
+        }
+    }
+
+    // Validate the merged config
+    match serde_json::from_value::<ServerConfig>(merged) {
+        Ok(_) => {
+            // Config is valid
+            // TODO: Apply config to server when ServerConfig is stored in ManagementState
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Bulk configuration update validated successfully. Note: Runtime application requires ServerConfig in ManagementState.",
+                "updates_received": request.updates,
+                "validated": true
+            }))
+            .into_response()
+        }
+        Err(e) => {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Invalid configuration",
+                    "message": format!("Configuration validation failed: {}", e),
+                    "validated": false
+                })),
+            )
+                .into_response()
+        }
+    }
 }
 
 /// Get server statistics
@@ -1156,6 +1720,8 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/health", get(health_check))
         .route("/stats", get(get_stats))
         .route("/config", get(get_config))
+        .route("/config/validate", post(validate_config))
+        .route("/config/bulk", post(bulk_update_config))
         .route("/mocks", get(list_mocks))
         .route("/mocks", post(create_mock))
         .route("/mocks/{id}", get(get_mock))

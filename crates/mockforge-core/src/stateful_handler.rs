@@ -94,15 +94,30 @@ pub struct StatefulConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ResourceIdExtract {
     /// Extract from path parameter (e.g., "/orders/{order_id}" -> extract "order_id")
-    PathParam { param: String },
+    PathParam {
+        /// Path parameter name to extract
+        param: String,
+    },
     /// Extract from JSONPath in request body
-    JsonPath { path: String },
+    JsonPath {
+        /// JSONPath expression to extract the resource ID
+        path: String,
+    },
     /// Extract from header value
-    Header { name: String },
+    Header {
+        /// Header name to extract the resource ID from
+        name: String,
+    },
     /// Extract from query parameter
-    QueryParam { param: String },
+    QueryParam {
+        /// Query parameter name to extract
+        param: String,
+    },
     /// Use a combination of values
-    Composite { extractors: Vec<ResourceIdExtract> },
+    Composite {
+        /// List of extractors to try in order
+        extractors: Vec<ResourceIdExtract>,
+    },
 }
 
 /// State-based response configuration
@@ -178,7 +193,7 @@ impl StatefulResponseHandler {
     }
 
     /// Check if this handler can process the request
-    pub async fn can_handle(&self, method: &Method, path: &str) -> bool {
+    pub async fn can_handle(&self, _method: &Method, path: &str) -> bool {
         let configs = self.configs.read().await;
         for (pattern, _) in configs.iter() {
             if self.path_matches(pattern, path) {
@@ -232,8 +247,8 @@ impl StatefulResponseHandler {
             .await?;
 
         // Get current state (after potential transition)
-        let current_state = if let Some(state) = new_state {
-            state
+        let current_state = if let Some(ref state) = new_state {
+            state.clone()
         } else {
             state_instance.current_state.clone()
         };
@@ -244,7 +259,7 @@ impl StatefulResponseHandler {
         })?;
 
         // Update state instance if transition occurred
-        if let Some(new_state) = new_state {
+        if let Some(ref new_state) = new_state {
             let mut updated_instance = state_instance.clone();
             updated_instance.transition_to(new_state.clone());
             self.state_manager
@@ -410,7 +425,7 @@ impl StatefulResponseHandler {
     fn evaluate_condition(
         &self,
         condition: &str,
-        headers: &HeaderMap,
+        _headers: &HeaderMap,
         body: Option<&[u8]>,
     ) -> Result<bool> {
         // Simple condition evaluation (can be enhanced with Rhai later)
@@ -457,6 +472,88 @@ impl StatefulResponseHandler {
         Ok(result)
     }
 
+    /// Process a stub with state machine configuration
+    ///
+    /// This method extracts resource ID, manages state, and returns state information
+    /// that can be used to select or modify stub responses based on current state.
+    ///
+    /// Returns:
+    /// - `Ok(Some(StateInfo))` if state machine config exists and state was processed
+    /// - `Ok(None)` if no state machine config or state processing not applicable
+    /// - `Err` if there was an error processing state
+    pub async fn process_stub_state(
+        &self,
+        method: &Method,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: Option<&[u8]>,
+        resource_type: &str,
+        resource_id_extract: &ResourceIdExtract,
+        initial_state: &str,
+    ) -> Result<Option<StateInfo>> {
+        // Extract resource ID
+        let resource_id = self.extract_resource_id(resource_id_extract, uri, headers, body)?;
+
+        // Get or create state instance
+        let state_instance = self
+            .state_manager
+            .get_or_create_instance(
+                resource_id.clone(),
+                resource_type.to_string(),
+                initial_state.to_string(),
+            )
+            .await?;
+
+        // Check for transition triggers (we need a config for this, but for stub processing
+        // we'll skip transitions for now - they can be handled by the stub's own transition logic)
+        // TODO: Support transitions in stub state processing
+
+        Ok(Some(StateInfo {
+            resource_id: resource_id.clone(),
+            current_state: state_instance.current_state.clone(),
+            state_data: state_instance.state_data.clone(),
+        }))
+    }
+
+    /// Update state for a resource (for use with stub transitions)
+    pub async fn update_resource_state(
+        &self,
+        resource_id: &str,
+        resource_type: &str,
+        new_state: &str,
+    ) -> Result<()> {
+        let mut instances = self.state_manager.instances.write().await;
+        if let Some(instance) = instances.get_mut(resource_id) {
+            if instance.resource_type == resource_type {
+                instance.transition_to(new_state.to_string());
+                return Ok(());
+            }
+        }
+        Err(Error::generic(format!(
+            "Resource '{}' of type '{}' not found",
+            resource_id, resource_type
+        )))
+    }
+
+    /// Get current state for a resource
+    pub async fn get_resource_state(
+        &self,
+        resource_id: &str,
+        resource_type: &str,
+    ) -> Result<Option<StateInfo>> {
+        let instances = self.state_manager.instances.read().await;
+        if let Some(instance) = instances.get(resource_id) {
+            if instance.resource_type == resource_type {
+                return Ok(Some(StateInfo {
+                    resource_id: resource_id.to_string(),
+                    current_state: instance.current_state.clone(),
+                    state_data: instance.state_data.clone(),
+                }));
+            }
+        }
+        Ok(None)
+    }
+
     /// Check if path matches pattern (simple wildcard matching)
     fn path_matches(&self, pattern: &str, path: &str) -> bool {
         // Simple pattern matching: support {param} and * wildcards
@@ -467,6 +564,17 @@ impl StatefulResponseHandler {
             Err(_) => pattern == path, // Fallback to exact match
         }
     }
+}
+
+/// State information for stub response selection
+#[derive(Debug, Clone)]
+pub struct StateInfo {
+    /// Resource ID
+    pub resource_id: String,
+    /// Current state name
+    pub current_state: String,
+    /// State data (key-value pairs)
+    pub state_data: HashMap<String, Value>,
 }
 
 /// Stateful response

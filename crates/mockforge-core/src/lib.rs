@@ -222,6 +222,7 @@ pub mod graph;
 pub mod import;
 pub mod intelligent_behavior;
 pub mod latency;
+pub mod lifecycle;
 pub mod multi_tenant;
 pub mod network_profiles;
 pub mod openapi;
@@ -276,6 +277,10 @@ pub use graph::{
     GraphEdge, GraphNode, NodeType, Protocol as GraphProtocol,
 };
 pub use latency::LatencyProfile;
+pub use lifecycle::{
+    LifecycleHook, LifecycleHookRegistry, MockLifecycleEvent, RequestContext, ResponseContext,
+    ServerLifecycleEvent,
+};
 pub use multi_tenant::{
     MultiTenantConfig, MultiTenantWorkspaceRegistry, RoutingStrategy, TenantWorkspace,
     WorkspaceContext, WorkspaceRouter, WorkspaceStats,
@@ -323,8 +328,8 @@ pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
 pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use stateful_handler::{
-    ResourceIdExtract, StateResponse, StatefulConfig, StatefulResponse, StatefulResponseHandler,
-    TransitionTrigger,
+    ResourceIdExtract, StateInfo, StateResponse, StatefulConfig, StatefulResponse,
+    StatefulResponseHandler, TransitionTrigger,
 };
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};

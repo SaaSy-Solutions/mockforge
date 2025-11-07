@@ -31,6 +31,7 @@ The record & playback feature allows you to:
 core:
   recorder:
     enabled: true
+    record_proxy: true  # Record proxied requests (default: true)
     auto_convert: true  # Automatically convert recordings to stub mappings
     output_dir: "./fixtures/recorded"
     format: "yaml"  # or "json"
@@ -41,6 +42,8 @@ core:
         - "/health"
         - "/metrics"
 ```
+
+When `record_proxy` is enabled, proxied requests will be recorded with metadata indicating they came from a proxy source. This metadata is included in the generated stub mappings.
 
 ### CLI Usage
 
@@ -244,6 +247,41 @@ Response templates support dynamic values:
 - `{{state_data.key}}` - Access state machine data
 - `{{uuid}}`, `{{timestamp}}`, etc. - Standard template variables
 
+### State Machine Configuration in Stubs
+
+You can also configure state machines directly in response stubs using the SDK:
+
+```rust
+use mockforge_sdk::{ResponseStub, StateMachineConfig, ResourceIdExtractConfig, StateResponseOverride};
+use serde_json::json;
+use std::collections::HashMap;
+
+let stub = ResponseStub::new("GET", "/orders/{id}", json!({"status": "pending"}))
+    .with_state_machine(StateMachineConfig {
+        resource_type: "order".to_string(),
+        resource_id_extract: ResourceIdExtractConfig::PathParam {
+            param: "id".to_string(),
+        },
+        initial_state: "pending".to_string(),
+        state_responses: Some({
+            let mut responses = HashMap::new();
+            responses.insert("pending".to_string(), StateResponseOverride {
+                status: Some(200),
+                body: Some(json!({"status": "pending", "message": "Order is being processed"})),
+                headers: None,
+            });
+            responses.insert("shipped".to_string(), StateResponseOverride {
+                status: Some(200),
+                body: Some(json!({"status": "shipped", "tracking": "{{uuid}}"})),
+                headers: None,
+            });
+            responses
+        }),
+    });
+```
+
+The stateful handler will automatically process stubs with state machine configuration and apply state-based response overrides.
+
 ---
 
 ## Per-Route Fault Injection
@@ -316,6 +354,40 @@ core:
 ```yaml
 - type: "payload_corruption"
   corruption_type: "random_bytes"  # or "truncate", "bit_flip"
+```
+
+### Fault Injection in Stubs
+
+You can also configure fault injection directly in response stubs using the SDK:
+
+```rust
+use mockforge_sdk::{ResponseStub, StubFaultInjectionConfig};
+use serde_json::json;
+
+// HTTP error injection
+let stub = ResponseStub::new("POST", "/api/payments", json!({"status": "success"}))
+    .with_fault_injection(StubFaultInjectionConfig::http_error(vec![500, 503]));
+
+// Timeout error injection
+let stub = ResponseStub::new("GET", "/api/slow", json!({}))
+    .with_fault_injection(StubFaultInjectionConfig::timeout(5000));
+
+// Connection error injection
+let stub = ResponseStub::new("GET", "/api/unavailable", json!({}))
+    .with_fault_injection(StubFaultInjectionConfig::connection_error());
+
+// Custom fault injection with probabilities
+let stub = ResponseStub::new("POST", "/api/unreliable", json!({}))
+    .with_fault_injection(StubFaultInjectionConfig {
+        enabled: true,
+        http_errors: Some(vec![500, 502, 503]),
+        http_error_probability: Some(0.1),  // 10% chance
+        timeout_error: true,
+        timeout_ms: Some(3000),
+        timeout_probability: Some(0.05),  // 5% chance
+        connection_error: false,
+        connection_error_probability: None,
+    });
 ```
 
 ---

@@ -152,20 +152,33 @@ pub struct RouteFaultInjectionConfig {
 pub enum RouteFaultType {
     /// HTTP error with status code
     HttpError {
+        /// HTTP status code to return
         status_code: u16,
+        /// Optional error message
         message: Option<String>,
     },
     /// Connection error
-    ConnectionError { message: Option<String> },
+    ConnectionError {
+        /// Optional error message
+        message: Option<String>,
+    },
     /// Timeout error
     Timeout {
+        /// Timeout duration in milliseconds
         duration_ms: u64,
+        /// Optional error message
         message: Option<String>,
     },
     /// Partial response (truncate at percentage)
-    PartialResponse { truncate_percent: f64 },
+    PartialResponse {
+        /// Percentage of response to truncate (0.0-100.0)
+        truncate_percent: f64,
+    },
     /// Payload corruption
-    PayloadCorruption { corruption_type: String },
+    PayloadCorruption {
+        /// Type of corruption to apply
+        corruption_type: String,
+    },
 }
 
 /// Per-route latency configuration
@@ -187,15 +200,23 @@ pub struct RouteLatencyConfig {
 }
 
 /// Latency distribution type
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum LatencyDistribution {
     /// Fixed delay
     Fixed,
     /// Normal distribution (requires mean and std_dev)
-    Normal { mean_ms: f64, std_dev_ms: f64 },
+    Normal {
+        /// Mean delay in milliseconds
+        mean_ms: f64,
+        /// Standard deviation in milliseconds
+        std_dev_ms: f64,
+    },
     /// Exponential distribution (requires lambda)
-    Exponential { lambda: f64 },
+    Exponential {
+        /// Lambda parameter for exponential distribution
+        lambda: f64,
+    },
     /// Uniform distribution (uses random_delay_range_ms)
     Uniform,
 }
@@ -1404,6 +1425,10 @@ pub struct RecorderConfig {
     pub record_websocket: bool,
     /// Record GraphQL requests
     pub record_graphql: bool,
+    /// Record proxied requests (requests that are forwarded to real backends)
+    /// When enabled, proxied requests/responses will be recorded with metadata indicating proxy source
+    #[serde(default = "default_true")]
+    pub record_proxy: bool,
 }
 
 impl Default for RecorderConfig {
@@ -1419,6 +1444,7 @@ impl Default for RecorderConfig {
             record_grpc: true,
             record_websocket: true,
             record_graphql: true,
+            record_proxy: true,
         }
     }
 }

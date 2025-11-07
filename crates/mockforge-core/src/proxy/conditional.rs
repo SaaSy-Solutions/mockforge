@@ -81,14 +81,14 @@ pub fn evaluate_proxy_condition(
 }
 
 /// Find matching proxy rule with condition evaluation
-pub fn find_matching_rule(
-    rules: &[ProxyRule],
+pub fn find_matching_rule<'a>(
+    rules: &'a [ProxyRule],
     method: &Method,
     uri: &Uri,
     headers: &HeaderMap,
     body: Option<&[u8]>,
     path_matches: impl Fn(&str, &str) -> bool,
-) -> Option<&ProxyRule> {
+) -> Option<&'a ProxyRule> {
     for rule in rules {
         if !rule.enabled {
             continue;

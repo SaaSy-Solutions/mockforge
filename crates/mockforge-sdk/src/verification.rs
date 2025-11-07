@@ -5,11 +5,8 @@
 
 use crate::Error;
 use mockforge_core::{
-    request_logger::get_global_logger,
-    verification::{
-        verify_at_least, verify_never, verify_requests, verify_sequence, VerificationCount,
-        VerificationRequest, VerificationResult,
-    },
+    request_logger::get_global_logger, verify_at_least, verify_never, verify_requests,
+    verify_sequence, VerificationCount, VerificationRequest, VerificationResult,
 };
 
 /// Extension trait for verification methods on MockServer

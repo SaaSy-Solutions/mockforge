@@ -73,6 +73,7 @@ mod tests {
             upstream_url: "http://users.example.com".to_string(),
             migration_mode: MigrationMode::Auto,
             migration_group: None,
+            condition: None,
         });
         config.rules.push(ProxyRule {
             path_pattern: "/api/orders/*".to_string(),
@@ -82,6 +83,7 @@ mod tests {
             upstream_url: "http://orders.example.com".to_string(),
             migration_mode: MigrationMode::Auto,
             migration_group: None,
+            condition: None,
         });
 
         assert!(config.should_proxy(&Method::GET, "/api/users/123"));

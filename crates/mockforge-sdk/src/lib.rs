@@ -60,12 +60,16 @@ pub mod verification;
 
 pub use admin::{
     AdminClient, MockConfig as AdminMockConfig, MockConfigBuilder, MockList,
-    MockResponse as AdminMockResponse, ServerConfig as AdminServerConfig, ServerStats,
+    MockResponse as AdminMockResponse, RequestMatchCriteria, ServerConfig as AdminServerConfig,
+    ServerStats,
 };
 pub use builder::MockServerBuilder;
 pub use error::{Error, Result};
 pub use server::MockServer;
-pub use stub::{DynamicResponseFn, DynamicStub, RequestContext, ResponseStub, StubBuilder};
+pub use stub::{
+    DynamicResponseFn, DynamicStub, RequestContext, ResourceIdExtractConfig, ResponseStub,
+    StubBuilder, StubFaultInjectionConfig, StateMachineConfig, StateResponseOverride,
+};
 pub use verification::Verification;
 
 // Re-export commonly used types from mockforge-core
