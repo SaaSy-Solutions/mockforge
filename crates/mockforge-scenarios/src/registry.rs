@@ -191,10 +191,9 @@ impl ScenarioRegistry {
             )));
         }
 
-        let results: ScenarioSearchResults = response
-            .json()
-            .await
-            .map_err(|e| ScenarioError::Network(format!("Failed to parse search results: {}", e)))?;
+        let results: ScenarioSearchResults = response.json().await.map_err(|e| {
+            ScenarioError::Network(format!("Failed to parse search results: {}", e))
+        })?;
 
         Ok(results)
     }
@@ -224,20 +223,15 @@ impl ScenarioRegistry {
             )));
         }
 
-        let entry: ScenarioRegistryEntry = response
-            .json()
-            .await
-            .map_err(|e| ScenarioError::Network(format!("Failed to parse scenario entry: {}", e)))?;
+        let entry: ScenarioRegistryEntry = response.json().await.map_err(|e| {
+            ScenarioError::Network(format!("Failed to parse scenario entry: {}", e))
+        })?;
 
         Ok(entry)
     }
 
     /// Get scenario version
-    pub async fn get_version(
-        &self,
-        name: &str,
-        version: &str,
-    ) -> Result<ScenarioVersionEntry> {
+    pub async fn get_version(&self, name: &str, version: &str) -> Result<ScenarioVersionEntry> {
         let url = format!("{}/api/v1/scenarios/{}/versions/{}", self.base_url, name, version);
 
         let mut request = self.client.get(&url);
@@ -266,8 +260,13 @@ impl ScenarioRegistry {
     }
 
     /// Download scenario package
-    pub async fn download(&self, download_url: &str, expected_checksum: Option<&str>) -> Result<Vec<u8>> {
-        let response = self.client
+    pub async fn download(
+        &self,
+        download_url: &str,
+        expected_checksum: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let response = self
+            .client
             .get(download_url)
             .send()
             .await
@@ -307,13 +306,16 @@ impl ScenarioRegistry {
     }
 
     /// Publish a scenario to the registry
-    pub async fn publish(&self, publish_request: ScenarioPublishRequest) -> Result<ScenarioPublishResponse> {
-        let token = self.token.as_ref()
-            .ok_or_else(|| ScenarioError::AuthRequired)?;
+    pub async fn publish(
+        &self,
+        publish_request: ScenarioPublishRequest,
+    ) -> Result<ScenarioPublishResponse> {
+        let token = self.token.as_ref().ok_or_else(|| ScenarioError::AuthRequired)?;
 
         let url = format!("{}/api/v1/scenarios/publish", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .bearer_auth(token)
             .json(&publish_request)
@@ -336,10 +338,9 @@ impl ScenarioRegistry {
             )));
         }
 
-        let result: ScenarioPublishResponse = response
-            .json()
-            .await
-            .map_err(|e| ScenarioError::Network(format!("Failed to parse publish response: {}", e)))?;
+        let result: ScenarioPublishResponse = response.json().await.map_err(|e| {
+            ScenarioError::Network(format!("Failed to parse publish response: {}", e))
+        })?;
 
         Ok(result)
     }

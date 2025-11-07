@@ -65,24 +65,20 @@ impl ScenarioPackage {
     }
 
     /// Recursively collect files from directory
-    fn collect_files(
-        root: &Path,
-        current: &Path,
-        files: &mut Vec<PathBuf>,
-    ) -> Result<()> {
+    fn collect_files(root: &Path, current: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
         if !current.is_dir() {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(current)
-            .map_err(|e| ScenarioError::Io(e))?;
+        let entries = std::fs::read_dir(current).map_err(|e| ScenarioError::Io(e))?;
 
         for entry in entries {
             let entry = entry.map_err(|e| ScenarioError::Io(e))?;
             let path = entry.path();
 
             // Skip hidden files and directories
-            if path.file_name()
+            if path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .map(|s| s.starts_with('.'))
                 .unwrap_or(false)
@@ -91,9 +87,7 @@ impl ScenarioPackage {
             }
 
             // Skip common ignore patterns
-            let name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if matches!(name, "target" | "node_modules" | ".git" | ".DS_Store") {
                 continue;
             }
@@ -102,11 +96,12 @@ impl ScenarioPackage {
                 Self::collect_files(root, &path, files)?;
             } else {
                 // Store relative path
-                let relative = path.strip_prefix(root)
-                    .map_err(|e| ScenarioError::Io(std::io::Error::new(
+                let relative = path.strip_prefix(root).map_err(|e| {
+                    ScenarioError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         format!("Failed to compute relative path: {}", e),
-                    )))?;
+                    ))
+                })?;
                 files.push(relative.to_path_buf());
             }
         }
@@ -245,7 +240,9 @@ mod tests {
         let root = temp_dir.path();
 
         // Create minimal valid package
-        std::fs::write(root.join("scenario.yaml"), r#"
+        std::fs::write(
+            root.join("scenario.yaml"),
+            r#"
 manifest_version: "1.0"
 name: test-scenario
 version: "1.0.0"
@@ -256,7 +253,9 @@ category: other
 compatibility:
   min_version: "0.2.0"
 files: []
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let package = ScenarioPackage::from_directory(root).unwrap();
         let validation = package.validate().unwrap();

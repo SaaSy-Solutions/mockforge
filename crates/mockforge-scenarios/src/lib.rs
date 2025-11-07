@@ -44,18 +44,21 @@
 //! - `README.md` - Documentation
 
 pub mod error;
+pub mod installer;
 pub mod manifest;
 pub mod package;
-pub mod installer;
 pub mod registry;
 pub mod source;
 pub mod storage;
 
 // Re-export commonly used types
-pub use error::{ScenarioError, Result};
-pub use manifest::{ScenarioManifest, ScenarioCategory, CompatibilityInfo, PluginDependency};
-pub use package::{ScenarioPackage, PackageValidation};
-pub use installer::{ScenarioInstaller, InstallOptions};
-pub use registry::{ScenarioRegistry, RegistryClient, ScenarioRegistryEntry, ScenarioSearchQuery, ScenarioSearchResults, ScenarioSortOrder, ScenarioPublishRequest, ScenarioPublishResponse};
+pub use error::{Result, ScenarioError};
+pub use installer::{InstallOptions, ScenarioInstaller};
+pub use manifest::{CompatibilityInfo, PluginDependency, ScenarioCategory, ScenarioManifest};
+pub use package::{PackageValidation, ScenarioPackage};
+pub use registry::{
+    RegistryClient, ScenarioPublishRequest, ScenarioPublishResponse, ScenarioRegistry,
+    ScenarioRegistryEntry, ScenarioSearchQuery, ScenarioSearchResults, ScenarioSortOrder,
+};
 pub use source::{ScenarioSource, SourceType};
-pub use storage::{ScenarioStorage, InstalledScenario};
+pub use storage::{InstalledScenario, ScenarioStorage};

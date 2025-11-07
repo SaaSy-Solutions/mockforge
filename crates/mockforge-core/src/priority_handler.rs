@@ -138,9 +138,22 @@ impl PriorityHttpHandler {
             }
         }
 
-        // 3. PROXY: Check if request should be proxied
+        // 3. PROXY: Check if request should be proxied (respecting migration mode)
         if let Some(ref proxy_handler) = self.proxy_handler {
-            if proxy_handler.config.should_proxy(method, uri.path()) {
+            // Check migration mode first
+            let migration_mode = if proxy_handler.config.migration_enabled {
+                proxy_handler.config.get_effective_migration_mode(uri.path())
+            } else {
+                None
+            };
+
+            // If migration mode is Mock, skip proxy and continue to mock generator
+            if let Some(crate::proxy::config::MigrationMode::Mock) = migration_mode {
+                // Force mock mode - skip proxy
+            } else if proxy_handler.config.should_proxy(method, uri.path()) {
+                // Check if this is shadow mode (proxy + generate mock for comparison)
+                let is_shadow = proxy_handler.config.should_shadow(uri.path());
+
                 match proxy_handler.proxy_request(method, uri, headers, body).await {
                     Ok(proxy_response) => {
                         let mut response_headers = HashMap::new();
@@ -156,15 +169,56 @@ impl PriorityHttpHandler {
                             .unwrap_or(&"application/json".to_string())
                             .clone();
 
+                        // If shadow mode, also generate mock response for comparison
+                        if is_shadow {
+                            if let Some(ref mock_generator) = self.mock_generator {
+                                if let Ok(Some(mock_response)) = mock_generator
+                                    .generate_mock_response(&fingerprint, headers, body)
+                                {
+                                    // Log comparison between real and mock
+                                    tracing::info!(
+                                        path = %uri.path(),
+                                        real_status = proxy_response.status_code,
+                                        mock_status = mock_response.status_code,
+                                        "Shadow mode: comparing real and mock responses"
+                                    );
+
+                                    // Compare response bodies (basic comparison)
+                                    let real_body = String::from_utf8_lossy(
+                                        &proxy_response.body.clone().unwrap_or_default(),
+                                    );
+                                    let mock_body = &mock_response.body;
+
+                                    if real_body != *mock_body {
+                                        tracing::warn!(
+                                            path = %uri.path(),
+                                            "Shadow mode: real and mock responses differ"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        let mut source = ResponseSource::new(
+                            ResponsePriority::Proxy,
+                            if is_shadow {
+                                "shadow".to_string()
+                            } else {
+                                "proxy".to_string()
+                            },
+                        )
+                        .with_metadata(
+                            "upstream_url".to_string(),
+                            proxy_handler.config.get_upstream_url(uri.path()),
+                        );
+
+                        if let Some(mode) = migration_mode {
+                            source = source
+                                .with_metadata("migration_mode".to_string(), format!("{:?}", mode));
+                        }
+
                         return Ok(PriorityResponse {
-                            source: ResponseSource::new(
-                                ResponsePriority::Proxy,
-                                "proxy".to_string(),
-                            )
-                            .with_metadata(
-                                "upstream_url".to_string(),
-                                proxy_handler.config.get_upstream_url(uri.path()),
-                            ),
+                            source,
                             status_code: proxy_response.status_code,
                             headers: response_headers,
                             body: proxy_response.body.unwrap_or_default(),
@@ -173,7 +227,14 @@ impl PriorityHttpHandler {
                     }
                     Err(e) => {
                         tracing::warn!("Proxy request failed: {}", e);
-                        // Continue to next handler
+                        // If migration mode is Real, fail hard (don't fall back to mock)
+                        if let Some(crate::proxy::config::MigrationMode::Real) = migration_mode {
+                            return Err(Error::generic(format!(
+                                "Proxy request failed in real mode: {}",
+                                e
+                            )));
+                        }
+                        // Continue to next handler for other modes
                     }
                 }
             }
@@ -181,12 +242,30 @@ impl PriorityHttpHandler {
 
         // 4. MOCK: Generate mock response from OpenAPI spec
         if let Some(ref mock_generator) = self.mock_generator {
+            // Check if we're in mock mode (forced by migration)
+            let migration_mode = if let Some(ref proxy_handler) = self.proxy_handler {
+                if proxy_handler.config.migration_enabled {
+                    proxy_handler.config.get_effective_migration_mode(uri.path())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             if let Some(mock_response) =
                 mock_generator.generate_mock_response(&fingerprint, headers, body)?
             {
+                let mut source = ResponseSource::new(ResponsePriority::Mock, "mock".to_string())
+                    .with_metadata("generated_from".to_string(), "openapi_spec".to_string());
+
+                if let Some(mode) = migration_mode {
+                    source =
+                        source.with_metadata("migration_mode".to_string(), format!("{:?}", mode));
+                }
+
                 return Ok(PriorityResponse {
-                    source: ResponseSource::new(ResponsePriority::Mock, "mock".to_string())
-                        .with_metadata("generated_from".to_string(), "openapi_spec".to_string()),
+                    source,
                     status_code: mock_response.status_code,
                     headers: mock_response.headers,
                     body: mock_response.body.into_bytes(),

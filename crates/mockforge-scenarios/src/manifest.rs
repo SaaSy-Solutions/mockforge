@@ -110,15 +110,13 @@ impl ScenarioManifest {
 
     /// Load manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| ScenarioError::Io(e))?;
         Self::from_str(&content)
     }
 
     /// Load manifest from string
     pub fn from_str(content: &str) -> Result<Self> {
-        let manifest: Self = serde_yaml::from_str(content)
-            .map_err(|e| ScenarioError::Yaml(e))?;
+        let manifest: Self = serde_yaml::from_str(content).map_err(|e| ScenarioError::Yaml(e))?;
         manifest.validate()?;
         Ok(manifest)
     }
@@ -280,15 +278,14 @@ impl PluginDependency {
     /// Validate plugin dependency
     pub fn validate(&self) -> Result<()> {
         if self.plugin_id.trim().is_empty() {
-            return Err(ScenarioError::InvalidManifest(
-                "Plugin ID cannot be empty".to_string(),
-            ));
+            return Err(ScenarioError::InvalidManifest("Plugin ID cannot be empty".to_string()));
         }
 
         if self.version.trim().is_empty() {
-            return Err(ScenarioError::InvalidManifest(
-                format!("Plugin dependency {} version cannot be empty", self.plugin_id),
-            ));
+            return Err(ScenarioError::InvalidManifest(format!(
+                "Plugin dependency {} version cannot be empty",
+                self.plugin_id
+            )));
         }
 
         Ok(())

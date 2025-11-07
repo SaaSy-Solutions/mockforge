@@ -55,8 +55,9 @@ impl ScenarioInstaller {
             .unwrap_or_else(|| PathBuf::from(".cache"))
             .join("mockforge")
             .join("scenarios");
-        std::fs::create_dir_all(&cache_dir)
-            .map_err(|e| ScenarioError::Storage(format!("Failed to create cache directory: {}", e)))?;
+        std::fs::create_dir_all(&cache_dir).map_err(|e| {
+            ScenarioError::Storage(format!("Failed to create cache directory: {}", e))
+        })?;
 
         // Create HTTP client
         let client = Client::builder()
@@ -114,9 +115,7 @@ impl ScenarioInstaller {
                 url,
                 reference,
                 subdirectory,
-            } => {
-                self.clone_from_git(&url, reference.as_deref(), subdirectory.as_deref()).await?
-            }
+            } => self.clone_from_git(&url, reference.as_deref(), subdirectory.as_deref()).await?,
             ScenarioSource::Registry { name, version } => {
                 self.download_from_registry(&name, version.as_deref()).await?
             }
@@ -159,14 +158,13 @@ impl ScenarioInstaller {
         }
 
         // Copy package to storage location
-        let install_path = self
-            .storage
-            .scenario_path(&manifest.name, &manifest.version);
+        let install_path = self.storage.scenario_path(&manifest.name, &manifest.version);
 
         // Create parent directory
         if let Some(parent) = install_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ScenarioError::Storage(format!("Failed to create install directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ScenarioError::Storage(format!("Failed to create install directory: {}", e))
+            })?;
         }
 
         // Copy all files from package to install location
@@ -189,7 +187,11 @@ impl ScenarioInstaller {
     }
 
     /// Download scenario from URL
-    async fn download_from_url(&self, url: &str, expected_checksum: Option<&str>) -> Result<PathBuf> {
+    async fn download_from_url(
+        &self,
+        url: &str,
+        expected_checksum: Option<&str>,
+    ) -> Result<PathBuf> {
         info!("Downloading scenario from URL: {}", url);
 
         // Parse URL to determine file type
@@ -199,7 +201,9 @@ impl ScenarioInstaller {
         let file_name = url_parsed
             .path_segments()
             .and_then(|mut segments| segments.next_back())
-            .ok_or_else(|| ScenarioError::InvalidSource("Could not determine file name from URL".to_string()))?;
+            .ok_or_else(|| {
+                ScenarioError::InvalidSource("Could not determine file name from URL".to_string())
+            })?;
 
         // Check cache first
         let cache_key = self.generate_cache_key(url);
@@ -250,7 +254,8 @@ impl ScenarioInstaller {
         info!("Cloning scenario from Git: {}", url);
 
         // Generate cache key
-        let cache_key = self.generate_cache_key(&format!("{}{:?}{:?}", url, reference, subdirectory));
+        let cache_key =
+            self.generate_cache_key(&format!("{}{:?}{:?}", url, reference, subdirectory));
         let repo_path = self.cache_dir.join(&cache_key);
 
         // Check if repository is already cloned
@@ -268,29 +273,35 @@ impl ScenarioInstaller {
                 repo_builder.branch(branch);
             }
 
-            let repo = repo_builder
-                .clone(url, &repo_path)
-                .map_err(|e| ScenarioError::Network(format!("Failed to clone repository: {}", e)))?;
+            let repo = repo_builder.clone(url, &repo_path).map_err(|e| {
+                ScenarioError::Network(format!("Failed to clone repository: {}", e))
+            })?;
 
             // Checkout specific ref if needed
             if let Some(ref_str) = reference {
                 if ref_str.len() == 40 && ref_str.chars().all(|c| c.is_ascii_hexdigit()) {
                     // Commit SHA
-                    let obj = repo.revparse_single(ref_str)
-                        .map_err(|e| ScenarioError::Network(format!("Failed to find commit: {}", e)))?;
-                    repo.checkout_tree(&obj, None)
-                        .map_err(|e| ScenarioError::Network(format!("Failed to checkout: {}", e)))?;
-                    repo.set_head_detached(obj.id())
-                        .map_err(|e| ScenarioError::Network(format!("Failed to set HEAD: {}", e)))?;
+                    let obj = repo.revparse_single(ref_str).map_err(|e| {
+                        ScenarioError::Network(format!("Failed to find commit: {}", e))
+                    })?;
+                    repo.checkout_tree(&obj, None).map_err(|e| {
+                        ScenarioError::Network(format!("Failed to checkout: {}", e))
+                    })?;
+                    repo.set_head_detached(obj.id()).map_err(|e| {
+                        ScenarioError::Network(format!("Failed to set HEAD: {}", e))
+                    })?;
                 } else if ref_str.starts_with('v') {
                     // Tag
                     let refname = format!("refs/tags/{}", ref_str);
-                    let obj = repo.revparse_single(&refname)
-                        .map_err(|e| ScenarioError::Network(format!("Failed to find tag: {}", e)))?;
-                    repo.checkout_tree(&obj, None)
-                        .map_err(|e| ScenarioError::Network(format!("Failed to checkout: {}", e)))?;
-                    repo.set_head_detached(obj.id())
-                        .map_err(|e| ScenarioError::Network(format!("Failed to set HEAD: {}", e)))?;
+                    let obj = repo.revparse_single(&refname).map_err(|e| {
+                        ScenarioError::Network(format!("Failed to find tag: {}", e))
+                    })?;
+                    repo.checkout_tree(&obj, None).map_err(|e| {
+                        ScenarioError::Network(format!("Failed to checkout: {}", e))
+                    })?;
+                    repo.set_head_detached(obj.id()).map_err(|e| {
+                        ScenarioError::Network(format!("Failed to set HEAD: {}", e))
+                    })?;
                 }
             }
         }
@@ -327,9 +338,14 @@ impl ScenarioInstaller {
 
     /// Download file with progress bar
     /// Returns (temp_file_path, temp_dir) to keep temp_dir alive
-    async fn download_with_progress(&self, url: &str, file_name: &str) -> Result<(PathBuf, tempfile::TempDir)> {
-        let mut response = self.client.get(url).send().await
-            .map_err(|e| ScenarioError::Network(format!("Failed to download from '{}': {}", url, e)))?;
+    async fn download_with_progress(
+        &self,
+        url: &str,
+        file_name: &str,
+    ) -> Result<(PathBuf, tempfile::TempDir)> {
+        let mut response = self.client.get(url).send().await.map_err(|e| {
+            ScenarioError::Network(format!("Failed to download from '{}': {}", url, e))
+        })?;
 
         if !response.status().is_success() {
             return Err(ScenarioError::Network(format!(
@@ -355,15 +371,18 @@ impl ScenarioInstaller {
         });
 
         // Create temporary file
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| ScenarioError::Storage(format!("Failed to create temp directory: {}", e)))?;
+        let temp_dir = tempfile::tempdir().map_err(|e| {
+            ScenarioError::Storage(format!("Failed to create temp directory: {}", e))
+        })?;
         let temp_file = temp_dir.path().join(file_name);
         let mut file = std::fs::File::create(&temp_file)
             .map_err(|e| ScenarioError::Storage(format!("Failed to create temp file: {}", e)))?;
 
         // Download chunks and write to file
         let mut downloaded: u64 = 0;
-        while let Some(chunk) = response.chunk().await
+        while let Some(chunk) = response
+            .chunk()
+            .await
             .map_err(|e| ScenarioError::Network(format!("Failed to download chunk: {}", e)))?
         {
             file.write_all(&chunk)
@@ -402,7 +421,8 @@ impl ScenarioInstaller {
             .map_err(|e| ScenarioError::Storage(format!("Failed to create directory: {}", e)))?;
 
         for i in 0..archive.len() {
-            let mut file = archive.by_index(i)
+            let mut file = archive
+                .by_index(i)
                 .map_err(|e| ScenarioError::Storage(format!("Failed to read ZIP entry: {}", e)))?;
 
             let outpath = match file.enclosed_name() {
@@ -411,17 +431,20 @@ impl ScenarioInstaller {
             };
 
             if file.name().ends_with('/') {
-                fs::create_dir_all(&outpath)
-                    .map_err(|e| ScenarioError::Storage(format!("Failed to create directory: {}", e)))?;
+                fs::create_dir_all(&outpath).map_err(|e| {
+                    ScenarioError::Storage(format!("Failed to create directory: {}", e))
+                })?;
             } else {
                 if let Some(p) = outpath.parent() {
-                    fs::create_dir_all(p)
-                        .map_err(|e| ScenarioError::Storage(format!("Failed to create parent directory: {}", e)))?;
+                    fs::create_dir_all(p).map_err(|e| {
+                        ScenarioError::Storage(format!("Failed to create parent directory: {}", e))
+                    })?;
                 }
                 let mut outfile = fs::File::create(&outpath)
                     .map_err(|e| ScenarioError::Storage(format!("Failed to create file: {}", e)))?;
-                std::io::copy(&mut file, &mut outfile)
-                    .map_err(|e| ScenarioError::Storage(format!("Failed to extract file: {}", e)))?;
+                std::io::copy(&mut file, &mut outfile).map_err(|e| {
+                    ScenarioError::Storage(format!("Failed to extract file: {}", e))
+                })?;
             }
         }
 
@@ -441,8 +464,9 @@ impl ScenarioInstaller {
         fs::create_dir_all(dest)
             .map_err(|e| ScenarioError::Storage(format!("Failed to create directory: {}", e)))?;
 
-        archive.unpack(dest)
-            .map_err(|e| ScenarioError::Storage(format!("Failed to extract tar.gz archive: {}", e)))?;
+        archive.unpack(dest).map_err(|e| {
+            ScenarioError::Storage(format!("Failed to extract tar.gz archive: {}", e))
+        })?;
 
         Ok(dest.clone())
     }
@@ -506,35 +530,44 @@ impl ScenarioInstaller {
         let target_version = version.unwrap_or(&entry.version);
 
         // Find version entry
-        let version_entry = entry.versions
+        let version_entry = entry
+            .versions
             .iter()
             .find(|v| v.version == target_version && !v.yanked)
-            .ok_or_else(|| ScenarioError::InvalidVersion(format!(
-                "Version {} not found or yanked for scenario {}",
-                target_version, name
-            )))?;
+            .ok_or_else(|| {
+                ScenarioError::InvalidVersion(format!(
+                    "Version {} not found or yanked for scenario {}",
+                    target_version, name
+                ))
+            })?;
 
         info!("Downloading version {} ({} bytes)", target_version, version_entry.size);
 
         // Download package
-        let package_data = registry.download(&version_entry.download_url, Some(&version_entry.checksum)).await?;
+        let package_data = registry
+            .download(&version_entry.download_url, Some(&version_entry.checksum))
+            .await?;
 
         // Save to temporary file
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| ScenarioError::Storage(format!("Failed to create temp directory: {}", e)))?;
+        let temp_dir = tempfile::tempdir().map_err(|e| {
+            ScenarioError::Storage(format!("Failed to create temp directory: {}", e))
+        })?;
 
         // Determine file extension from download URL
         let file_name = if version_entry.download_url.ends_with(".zip") {
             format!("{}.zip", name)
-        } else if version_entry.download_url.ends_with(".tar.gz") || version_entry.download_url.ends_with(".tgz") {
+        } else if version_entry.download_url.ends_with(".tar.gz")
+            || version_entry.download_url.ends_with(".tgz")
+        {
             format!("{}.tar.gz", name)
         } else {
             format!("{}.zip", name) // Default to zip
         };
 
         let temp_file = temp_dir.path().join(&file_name);
-        std::fs::write(&temp_file, &package_data)
-            .map_err(|e| ScenarioError::Storage(format!("Failed to write downloaded package: {}", e)))?;
+        std::fs::write(&temp_file, &package_data).map_err(|e| {
+            ScenarioError::Storage(format!("Failed to write downloaded package: {}", e))
+        })?;
 
         // Extract to cache
         let cache_key = self.generate_cache_key(&format!("registry:{}@{}", name, target_version));
@@ -575,13 +608,16 @@ impl ScenarioInstaller {
         let scenario = self
             .storage
             .get(name, version)
-            .ok_or_else(|| ScenarioError::NotFound(format!("Scenario {}@{} not found", name, version)))?
+            .ok_or_else(|| {
+                ScenarioError::NotFound(format!("Scenario {}@{} not found", name, version))
+            })?
             .clone();
 
         // Remove scenario directory
         if scenario.path.exists() {
-            std::fs::remove_dir_all(&scenario.path)
-                .map_err(|e| ScenarioError::Storage(format!("Failed to remove scenario directory: {}", e)))?;
+            std::fs::remove_dir_all(&scenario.path).map_err(|e| {
+                ScenarioError::Storage(format!("Failed to remove scenario directory: {}", e))
+            })?;
         }
 
         // Remove metadata
@@ -611,7 +647,8 @@ impl ScenarioInstaller {
         info!("Updating all installed scenarios...");
 
         // Collect scenario info first to avoid borrow conflicts
-        let scenarios_info: Vec<(String, String, String)> = self.list_installed()
+        let scenarios_info: Vec<(String, String, String)> = self
+            .list_installed()
             .iter()
             .map(|s| (s.name.clone(), s.version.clone(), s.source.clone()))
             .collect();
@@ -630,7 +667,10 @@ impl ScenarioInstaller {
                     match self.update_from_registry(&name, &current_version).await {
                         Ok(new_version) => {
                             if new_version != current_version {
-                                updated.push(format!("{}@{} -> {}", name, current_version, new_version));
+                                updated.push(format!(
+                                    "{}@{} -> {}",
+                                    name, current_version, new_version
+                                ));
                             }
                         }
                         Err(e) => {
@@ -664,7 +704,11 @@ impl ScenarioInstaller {
     }
 
     /// Update a single scenario from registry
-    pub async fn update_from_registry(&mut self, name: &str, current_version: &str) -> Result<String> {
+    pub async fn update_from_registry(
+        &mut self,
+        name: &str,
+        current_version: &str,
+    ) -> Result<String> {
         use crate::registry::ScenarioRegistry;
 
         let registry = ScenarioRegistry::new("https://registry.mockforge.dev".to_string());
@@ -702,21 +746,22 @@ impl ScenarioInstaller {
             self.get_latest(name)
         };
 
-        let scenario = scenario.ok_or_else(|| {
-            ScenarioError::NotFound(format!("Scenario '{}' not found", name))
-        })?;
+        let scenario = scenario
+            .ok_or_else(|| ScenarioError::NotFound(format!("Scenario '{}' not found", name)))?;
 
         info!("Applying scenario {}@{} to workspace", scenario.name, scenario.version);
 
-        let current_dir = std::env::current_dir()
-            .map_err(|e| ScenarioError::Storage(format!("Failed to get current directory: {}", e)))?;
+        let current_dir = std::env::current_dir().map_err(|e| {
+            ScenarioError::Storage(format!("Failed to get current directory: {}", e))
+        })?;
 
         // Copy config.yaml if it exists
         let config_source = scenario.path.join("config.yaml");
         if config_source.exists() {
             let config_dest = current_dir.join("config.yaml");
-            std::fs::copy(&config_source, &config_dest)
-                .map_err(|e| ScenarioError::Storage(format!("Failed to copy config.yaml: {}", e)))?;
+            std::fs::copy(&config_source, &config_dest).map_err(|e| {
+                ScenarioError::Storage(format!("Failed to copy config.yaml: {}", e))
+            })?;
             info!("Copied config.yaml to workspace");
         }
 
@@ -724,8 +769,9 @@ impl ScenarioInstaller {
         let openapi_source = scenario.path.join("openapi.json");
         if openapi_source.exists() {
             let openapi_dest = current_dir.join("openapi.json");
-            std::fs::copy(&openapi_source, &openapi_dest)
-                .map_err(|e| ScenarioError::Storage(format!("Failed to copy openapi.json: {}", e)))?;
+            std::fs::copy(&openapi_source, &openapi_dest).map_err(|e| {
+                ScenarioError::Storage(format!("Failed to copy openapi.json: {}", e))
+            })?;
             info!("Copied openapi.json to workspace");
         }
 
@@ -737,8 +783,9 @@ impl ScenarioInstaller {
                 // Merge fixtures
                 info!("Merging fixtures into existing fixtures directory");
             } else {
-                std::fs::create_dir_all(&fixtures_dest)
-                    .map_err(|e| ScenarioError::Storage(format!("Failed to create fixtures directory: {}", e)))?;
+                std::fs::create_dir_all(&fixtures_dest).map_err(|e| {
+                    ScenarioError::Storage(format!("Failed to create fixtures directory: {}", e))
+                })?;
             }
             copy_dir::copy_dir(&fixtures_source, &fixtures_dest)
                 .map_err(|e| ScenarioError::Storage(format!("Failed to copy fixtures: {}", e)))?;
@@ -750,8 +797,9 @@ impl ScenarioInstaller {
         if examples_source.exists() {
             let examples_dest = current_dir.join("examples");
             if !examples_dest.exists() {
-                std::fs::create_dir_all(&examples_dest)
-                    .map_err(|e| ScenarioError::Storage(format!("Failed to create examples directory: {}", e)))?;
+                std::fs::create_dir_all(&examples_dest).map_err(|e| {
+                    ScenarioError::Storage(format!("Failed to create examples directory: {}", e))
+                })?;
             }
             copy_dir::copy_dir(&examples_source, &examples_dest)
                 .map_err(|e| ScenarioError::Storage(format!("Failed to copy examples: {}", e)))?;

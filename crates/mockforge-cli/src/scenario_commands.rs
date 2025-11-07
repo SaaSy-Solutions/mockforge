@@ -1,8 +1,8 @@
 //! Scenario management CLI commands
 
+use base64::{engine::general_purpose, Engine as _};
 use clap::Subcommand;
 use mockforge_scenarios::{InstallOptions, ScenarioInstaller, ScenarioRegistry};
-use base64::{Engine as _, engine::general_purpose};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -238,7 +238,9 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                     match installer.apply_to_workspace(&name, version_clone.as_deref()).await {
                         Ok(_) => {
                             println!("✅ Scenario applied successfully to workspace");
-                            println!("   Files copied: config.yaml, openapi.json, fixtures/, examples/");
+                            println!(
+                                "   Files copied: config.yaml, openapi.json, fixtures/, examples/"
+                            );
                         }
                         Err(e) => {
                             eprintln!("❌ Failed to apply scenario: {}", e);
@@ -253,7 +255,11 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
             }
         }
 
-        ScenarioCommands::Search { query, category, limit } => {
+        ScenarioCommands::Search {
+            query,
+            category,
+            limit,
+        } => {
             println!("🔍 Searching for scenarios: {}", query);
 
             let registry = ScenarioRegistry::new("https://registry.mockforge.dev".to_string());
@@ -294,7 +300,8 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                 .map_err(|e| anyhow::anyhow!("Failed to load scenario package: {}", e))?;
 
             // Validate package
-            let validation = package.validate()
+            let validation = package
+                .validate()
                 .map_err(|e| anyhow::anyhow!("Package validation failed: {}", e))?;
 
             if !validation.is_valid {
@@ -339,12 +346,14 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
             };
 
             // Get registry URL and token
-            let registry_url = registry.unwrap_or_else(|| "https://registry.mockforge.dev".to_string());
+            let registry_url =
+                registry.unwrap_or_else(|| "https://registry.mockforge.dev".to_string());
             let token = std::env::var("MOCKFORGE_REGISTRY_TOKEN")
                 .map_err(|_| anyhow::anyhow!("MOCKFORGE_REGISTRY_TOKEN environment variable not set. Required for publishing."))?;
 
             // Create registry client and publish
-            let registry_client = mockforge_scenarios::ScenarioRegistry::with_token(registry_url, token);
+            let registry_client =
+                mockforge_scenarios::ScenarioRegistry::with_token(registry_url, token);
 
             println!("   Publishing to registry...");
             match registry_client.publish(publish_request).await {
@@ -391,7 +400,8 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                 println!("🔄 Updating scenario: {}", n);
 
                 // Get current scenario info
-                let scenario = installer.get_latest(&n)
+                let scenario = installer
+                    .get_latest(&n)
                     .ok_or_else(|| anyhow::anyhow!("Scenario '{}' not found", n))?;
 
                 let current_version = scenario.version.clone();
@@ -407,9 +417,15 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                         match installer_mut.update_from_registry(&n, &current_version).await {
                             Ok(new_version) => {
                                 if new_version == current_version {
-                                    println!("✅ Scenario is already up to date: {}@{}", n, current_version);
+                                    println!(
+                                        "✅ Scenario is already up to date: {}@{}",
+                                        n, current_version
+                                    );
                                 } else {
-                                    println!("✅ Scenario updated: {}@{} -> {}", n, current_version, new_version);
+                                    println!(
+                                        "✅ Scenario updated: {}@{} -> {}",
+                                        n, current_version, new_version
+                                    );
                                 }
                             }
                             Err(e) => {
@@ -449,7 +465,9 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
 }
 
 /// Create a scenario package archive (ZIP format)
-fn create_scenario_archive(package: &mockforge_scenarios::ScenarioPackage) -> anyhow::Result<(std::path::PathBuf, String, u64)> {
+fn create_scenario_archive(
+    package: &mockforge_scenarios::ScenarioPackage,
+) -> anyhow::Result<(std::path::PathBuf, String, u64)> {
     use zip::write::FileOptions;
     use zip::ZipWriter;
 
@@ -524,7 +542,8 @@ fn add_directory_to_zip(
             add_directory_to_zip(zip, base, &path, options)?;
         } else {
             // Add file
-            let relative_path = path.strip_prefix(base)
+            let relative_path = path
+                .strip_prefix(base)
                 .map_err(|e| anyhow::anyhow!("Failed to compute relative path: {}", e))?;
             let archive_name = relative_path.to_string_lossy().replace('\\', "/");
 

@@ -120,6 +120,14 @@ pub fn create_admin_router(
         // Validation configuration routes
         .route("/__mockforge/validation", get(get_validation))
         .route("/__mockforge/validation", post(update_validation))
+        // Migration pipeline routes
+        .route("/__mockforge/migration/routes", get(migration::get_migration_routes))
+        .route("/__mockforge/migration/routes/{pattern}/toggle", post(migration::toggle_route_migration))
+        .route("/__mockforge/migration/routes/{pattern}", axum::routing::put(migration::set_route_migration_mode))
+        .route("/__mockforge/migration/groups/{group}/toggle", post(migration::toggle_group_migration))
+        .route("/__mockforge/migration/groups/{group}", axum::routing::put(migration::set_group_migration_mode))
+        .route("/__mockforge/migration/groups", get(migration::get_migration_groups))
+        .route("/__mockforge/migration/status", get(migration::get_migration_status))
         // Environment variables routes
         .route("/__mockforge/env", get(get_env_vars))
         .route("/__mockforge/env", post(update_env_var))

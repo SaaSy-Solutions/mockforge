@@ -87,7 +87,34 @@ core:
     headers: {}
     prefix: "/proxy"
     passthrough_by_default: false
-    rules: []
+    # Enable migration pipeline features
+    migration_enabled: true
+    # Group-level migration mode overrides
+    # Groups allow you to toggle multiple routes together
+    migration_groups:
+      "api-v1": "mock"      # All v1 routes start with mock
+      "api-v2": "shadow"    # All v2 routes in shadow mode (compare real vs mock)
+      "legacy": "real"      # Legacy routes already migrated to real
+    rules:
+      # Example: Route with migration mode
+      - pattern: "/api/users/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "mock"  # Start with mock
+        migration_group: "api-v1"  # Belongs to api-v1 group
+      # Example: Route in shadow mode (proxy + generate mock for comparison)
+      - pattern: "/api/orders/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "shadow"  # Compare real vs mock responses
+        migration_group: "api-v2"
+      # Example: Route already migrated to real backend
+      - pattern: "/api/legacy/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "real"  # Always use real backend
+        migration_group: "legacy"
+      # Example: Route without migration (uses auto/default behavior)
+      - pattern: "/api/public/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "auto"  # Use existing priority chain
   default_latency:
     base_ms: 50
     jitter_ms: 20
