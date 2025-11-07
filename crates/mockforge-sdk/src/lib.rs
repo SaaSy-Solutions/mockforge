@@ -56,6 +56,7 @@ pub mod error;
 pub mod ffi;
 pub mod server;
 pub mod stub;
+pub mod verification;
 
 pub use admin::{
     AdminClient, MockConfig as AdminMockConfig, MockConfigBuilder, MockList,
@@ -65,6 +66,7 @@ pub use builder::MockServerBuilder;
 pub use error::{Error, Result};
 pub use server::MockServer;
 pub use stub::{DynamicResponseFn, DynamicStub, RequestContext, ResponseStub, StubBuilder};
+pub use verification::Verification;
 
 // Re-export commonly used types from mockforge-core
 pub use mockforge_core::{

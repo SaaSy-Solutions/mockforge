@@ -4,7 +4,8 @@ import subprocess
 import time
 import requests
 from typing import Optional, Dict, Any, List
-from .types import MockServerConfig, ResponseStub
+from .types import MockServerConfig, ResponseStub, VerificationRequest, VerificationResult
+from .verification import VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
 
 
 class MockServer:
@@ -159,3 +160,86 @@ class MockServer:
     def __del__(self) -> None:
         """Destructor - ensure server is stopped"""
         self.stop()
+
+    def verify(
+        self,
+        pattern: VerificationRequest,
+        expected: Dict[str, Any],
+    ) -> VerificationResult:
+        """
+        Verify requests against a pattern and count assertion
+
+        Args:
+            pattern: Pattern to match requests
+            expected: Expected count assertion (from VerificationCount)
+
+        Returns:
+            VerificationResult with verification outcome
+
+        Example:
+            >>> from mockforge_sdk import MockServer
+            >>> from mockforge_sdk.types import VerificationRequest
+            >>> from mockforge_sdk.verification import VerificationCount
+            >>>
+            >>> server = MockServer(port=3000).start()
+            >>> pattern = VerificationRequest(method="GET", path="/api/users")
+            >>> result = server.verify(pattern, VerificationCount.exactly(3))
+            >>> assert result.matched
+        """
+        return verify(self.url(), pattern, expected)
+
+    def verify_never(self, pattern: VerificationRequest) -> VerificationResult:
+        """
+        Verify that a request was never made
+
+        Args:
+            pattern: Pattern to match requests
+
+        Returns:
+            VerificationResult with verification outcome
+        """
+        return verify_never(self.url(), pattern)
+
+    def verify_at_least(
+        self,
+        pattern: VerificationRequest,
+        min_count: int,
+    ) -> VerificationResult:
+        """
+        Verify that a request was made at least N times
+
+        Args:
+            pattern: Pattern to match requests
+            min_count: Minimum count
+
+        Returns:
+            VerificationResult with verification outcome
+        """
+        return verify_at_least(self.url(), pattern, min_count)
+
+    def verify_sequence(
+        self,
+        patterns: List[VerificationRequest],
+    ) -> VerificationResult:
+        """
+        Verify that requests occurred in a specific sequence
+
+        Args:
+            patterns: List of patterns to match in sequence
+
+        Returns:
+            VerificationResult with verification outcome
+        """
+        return verify_sequence(self.url(), patterns)
+
+    def count_requests(self, pattern: VerificationRequest) -> int:
+        """
+        Get count of matching requests
+
+        Args:
+            pattern: Pattern to match requests
+
+        Returns:
+            Count of matching requests
+        """
+        return count(self.url(), pattern)

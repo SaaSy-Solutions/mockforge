@@ -53,7 +53,10 @@ import type {
   AutoEncryptionConfig,
   SecurityCheckResult,
   FixtureInfo,
-  PluginListResponse
+  PluginListResponse,
+  VerificationRequest,
+  VerificationCount,
+  VerificationResult
 } from '../types';
 
 import {
@@ -1308,6 +1311,58 @@ class PluginsApiService {
   }
 }
 
+class VerificationApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async verify(pattern: VerificationRequest, expected: VerificationCount): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern, expected }),
+    }) as Promise<VerificationResult>;
+  }
+
+  async count(pattern: VerificationRequest): Promise<{ count: number }> {
+    return this.fetchJson('/__mockforge/verification/count', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern }),
+    }) as Promise<{ count: number }>;
+  }
+
+  async verifySequence(patterns: VerificationRequest[]): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/sequence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patterns }),
+    }) as Promise<VerificationResult>;
+  }
+
+  async verifyNever(pattern: VerificationRequest): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/never', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pattern),
+    }) as Promise<VerificationResult>;
+  }
+
+  async verifyAtLeast(pattern: VerificationRequest, min: number): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/at-least', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern, min }),
+    }) as Promise<VerificationResult>;
+  }
+}
+
 export const apiService = new ApiService();
 export const importApi = new ImportApiService();
 export const fixturesApi = new FixturesApiService();
@@ -1326,6 +1381,7 @@ export const smokeTestsApi = new SmokeTestsApiService();
 export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
+export const verificationApi = new VerificationApiService();
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {

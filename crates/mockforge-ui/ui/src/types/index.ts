@@ -1228,6 +1228,31 @@ export interface SaveFileRequest {
   encoding?: string;
 }
 
+// ==================== VERIFICATION TYPES ====================
+
+export interface VerificationRequest {
+  method?: string;
+  path?: string;
+  query_params?: Record<string, string>;
+  headers?: Record<string, string>;
+  body_pattern?: string;
+}
+
+export type VerificationCount =
+  | { type: 'exactly'; value: number }
+  | { type: 'at_least'; value: number }
+  | { type: 'at_most'; value: number }
+  | { type: 'never' }
+  | { type: 'at_least_once' };
+
+export interface VerificationResult {
+  matched: boolean;
+  count: number;
+  expected: VerificationCount;
+  matches: RequestLog[];
+  error_message?: string;
+}
+
 // Re-export graph types
 export type {
   GraphData,

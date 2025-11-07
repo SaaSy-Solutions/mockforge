@@ -1,18 +1,24 @@
 //! Priority-based HTTP request handler implementing the full priority chain:
-//! Replay → Fail → Proxy → Mock → Record
+//! Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
 
+use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
     Error, FailureInjector, ProxyHandler, RecordReplayHandler, RequestFingerprint,
-    ResponsePriority, ResponseSource, Result,
+    ResponsePriority, ResponseSource, Result, RouteChaosInjector,
 };
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Priority-based HTTP request handler
 pub struct PriorityHttpHandler {
     /// Record/replay handler
     record_replay: RecordReplayHandler,
-    /// Failure injector
+    /// Stateful response handler
+    stateful_handler: Option<Arc<StatefulResponseHandler>>,
+    /// Per-route chaos injector (fault injection and latency)
+    route_chaos_injector: Option<Arc<RouteChaosInjector>>,
+    /// Failure injector (global/tag-based)
     failure_injector: Option<FailureInjector>,
     /// Proxy handler
     proxy_handler: Option<ProxyHandler>,
@@ -56,6 +62,8 @@ impl PriorityHttpHandler {
     ) -> Self {
         Self {
             record_replay,
+            stateful_handler: None,
+            route_chaos_injector: None,
             failure_injector,
             proxy_handler,
             mock_generator,
@@ -73,11 +81,25 @@ impl PriorityHttpHandler {
     ) -> Self {
         Self {
             record_replay,
+            stateful_handler: None,
+            route_chaos_injector: None,
             failure_injector,
             proxy_handler,
             mock_generator,
             openapi_spec,
         }
+    }
+
+    /// Set stateful response handler
+    pub fn with_stateful_handler(mut self, handler: Arc<StatefulResponseHandler>) -> Self {
+        self.stateful_handler = Some(handler);
+        self
+    }
+
+    /// Set per-route chaos injector
+    pub fn with_route_chaos_injector(mut self, injector: Arc<RouteChaosInjector>) -> Self {
+        self.route_chaos_injector = Some(injector);
+        self
     }
 
     /// Process a request through the priority chain
@@ -110,7 +132,55 @@ impl PriorityHttpHandler {
             });
         }
 
-        // 2. FAIL: Check for failure injection
+        // 2. STATEFUL: Check for stateful response handling
+        if let Some(ref stateful_handler) = self.stateful_handler {
+            if let Some(stateful_response) =
+                stateful_handler.process_request(method, uri, headers, body).await?
+            {
+                return Ok(PriorityResponse {
+                    source: ResponseSource::new(ResponsePriority::Stateful, "stateful".to_string())
+                        .with_metadata("state".to_string(), stateful_response.state)
+                        .with_metadata("resource_id".to_string(), stateful_response.resource_id),
+                    status_code: stateful_response.status_code,
+                    headers: stateful_response.headers,
+                    body: stateful_response.body.into_bytes(),
+                    content_type: stateful_response.content_type,
+                });
+            }
+        }
+
+        // 2.5. ROUTE CHAOS: Check for per-route fault injection and latency
+        if let Some(ref route_chaos) = self.route_chaos_injector {
+            // Inject latency first (before fault injection)
+            if let Err(e) = route_chaos.inject_latency(method, uri).await {
+                tracing::warn!("Failed to inject per-route latency: {}", e);
+            }
+
+            // Check for per-route fault injection
+            if let Some(fault_response) = route_chaos.get_fault_response(method, uri) {
+                let error_response = serde_json::json!({
+                    "error": fault_response.error_message,
+                    "injected_failure": true,
+                    "fault_type": fault_response.fault_type,
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                });
+
+                return Ok(PriorityResponse {
+                    source: ResponseSource::new(
+                        ResponsePriority::Fail,
+                        "route_fault_injection".to_string(),
+                    )
+                    .with_metadata("fault_type".to_string(), fault_response.fault_type)
+                    .with_metadata("error_message".to_string(), fault_response.error_message),
+                    status_code: fault_response.status_code,
+                    headers: HashMap::new(),
+                    body: serde_json::to_string(&error_response)?.into_bytes(),
+                    content_type: "application/json".to_string(),
+                });
+            }
+        }
+
+        // 3. FAIL: Check for global/tag-based failure injection
         if let Some(ref failure_injector) = self.failure_injector {
             let tags = if let Some(ref spec) = self.openapi_spec {
                 fingerprint.openapi_tags(spec).unwrap_or_else(|| fingerprint.tags())
@@ -138,7 +208,7 @@ impl PriorityHttpHandler {
             }
         }
 
-        // 3. PROXY: Check if request should be proxied (respecting migration mode)
+        // 4. PROXY: Check if request should be proxied (respecting migration mode)
         if let Some(ref proxy_handler) = self.proxy_handler {
             // Check migration mode first
             let migration_mode = if proxy_handler.config.migration_enabled {
@@ -150,7 +220,7 @@ impl PriorityHttpHandler {
             // If migration mode is Mock, skip proxy and continue to mock generator
             if let Some(crate::proxy::config::MigrationMode::Mock) = migration_mode {
                 // Force mock mode - skip proxy
-            } else if proxy_handler.config.should_proxy(method, uri.path()) {
+            } else if proxy_handler.config.should_proxy_with_condition(method, uri, headers, body) {
                 // Check if this is shadow mode (proxy + generate mock for comparison)
                 let is_shadow = proxy_handler.config.should_shadow(uri.path());
 

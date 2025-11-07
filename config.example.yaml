@@ -115,6 +115,84 @@ core:
       - pattern: "/api/public/*"
         upstream_url: "https://api.example.com"
         migration_mode: "auto"  # Use existing priority chain
+      # Example: Conditional proxying - only proxy admin requests
+      - pattern: "/api/admin/*"
+        upstream_url: "https://admin-api.example.com"
+        condition: "$.user.role == 'admin'"  # JSONPath condition
+      # Example: Conditional proxying - only proxy authenticated requests
+      - pattern: "/api/protected/*"
+        upstream_url: "https://protected-api.example.com"
+        condition: "header[authorization] != ''"  # Header condition
+      # Example: Conditional proxying - complex condition
+      - pattern: "/api/orders/*"
+        upstream_url: "https://orders-api.example.com"
+        condition: "AND(header[authorization] != '', $.order.amount > 1000)"  # Multiple conditions
+
+  # ============================================================================
+  # Per-Route Configuration: Fault Injection & Latency
+  # ============================================================================
+  # Configure fault injection and latency on a per-route basis
+  routes:
+    # Example: High-latency payment endpoint with occasional failures
+    - path: "/api/payments/process"
+      method: "POST"
+      response:
+        status: 200
+        body:
+          message: "Payment processed"
+      latency:
+        enabled: true
+        probability: 1.0
+        fixed_delay_ms: 500
+        jitter_percent: 20.0
+        distribution: "normal"  # fixed, normal, exponential, uniform
+        mean_ms: 500.0
+        std_dev_ms: 100.0
+      fault_injection:
+        enabled: true
+        probability: 0.05  # 5% chance of failure
+        fault_types:
+          - type: "http_error"
+            status_code: 503
+            message: "Payment service temporarily unavailable"
+          - type: "timeout"
+            duration_ms: 5000
+            message: "Payment processing timeout"
+
+    # Example: Unreliable user service
+    - path: "/api/users/{user_id}"
+      method: "GET"
+      response:
+        status: 200
+        body:
+          id: "{{user_id}}"
+          name: "John Doe"
+      fault_injection:
+        enabled: true
+        probability: 0.1  # 10% chance of failure
+        fault_types:
+          - type: "http_error"
+            status_code: 500
+            message: "Internal server error"
+          - type: "connection_error"
+            message: "Connection refused"
+          - type: "partial_response"
+            truncate_percent: 50.0
+
+    # Example: Slow search endpoint with exponential latency
+    - path: "/api/search"
+      method: "GET"
+      response:
+        status: 200
+        body:
+          results: []
+      latency:
+        enabled: true
+        probability: 0.8  # 80% of requests get latency
+        distribution: "exponential"
+        lambda: 0.001  # Mean delay of 1000ms
+        jitter_percent: 15.0
+
   default_latency:
     base_ms: 50
     jitter_ms: 20

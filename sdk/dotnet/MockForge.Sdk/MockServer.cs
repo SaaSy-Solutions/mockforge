@@ -316,6 +316,200 @@ public class MockServer : IDisposable
     }
 
     /// <summary>
+    /// Verify requests against a pattern and count assertion
+    /// </summary>
+    /// <param name="pattern">Pattern to match requests</param>
+    /// <param name="expected">Expected count assertion (e.g., VerificationCount.Exactly(3))</param>
+    /// <returns>VerificationResult with verification outcome</returns>
+    public async Task<VerificationResult> VerifyAsync(
+        VerificationRequest pattern,
+        Dictionary<string, object> expected
+    )
+    {
+        var requestBody = new
+        {
+            pattern = new
+            {
+                method = pattern.Method,
+                path = pattern.Path,
+                query_params = pattern.QueryParams,
+                headers = pattern.Headers,
+                body_pattern = pattern.BodyPattern
+            },
+            expected
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{GetUrl()}/api/verification/verify",
+            requestBody
+        );
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
+        {
+            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
+        return result ?? new VerificationResult
+        {
+            Matched = false,
+            ErrorMessage = "Failed to deserialize verification result"
+        };
+    }
+
+    /// <summary>
+    /// Verify that a request was never made
+    /// </summary>
+    /// <param name="pattern">Pattern to match requests</param>
+    /// <returns>VerificationResult with verification outcome</returns>
+    public async Task<VerificationResult> VerifyNeverAsync(VerificationRequest pattern)
+    {
+        var requestBody = new
+        {
+            method = pattern.Method,
+            path = pattern.Path,
+            query_params = pattern.QueryParams,
+            headers = pattern.Headers,
+            body_pattern = pattern.BodyPattern
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{GetUrl()}/api/verification/never",
+            requestBody
+        );
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
+        {
+            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
+        return result ?? new VerificationResult
+        {
+            Matched = false,
+            ErrorMessage = "Failed to deserialize verification result"
+        };
+    }
+
+    /// <summary>
+    /// Verify that a request was made at least N times
+    /// </summary>
+    /// <param name="pattern">Pattern to match requests</param>
+    /// <param name="min">Minimum count</param>
+    /// <returns>VerificationResult with verification outcome</returns>
+    public async Task<VerificationResult> VerifyAtLeastAsync(VerificationRequest pattern, int min)
+    {
+        var requestBody = new
+        {
+            pattern = new
+            {
+                method = pattern.Method,
+                path = pattern.Path,
+                query_params = pattern.QueryParams,
+                headers = pattern.Headers,
+                body_pattern = pattern.BodyPattern
+            },
+            min
+        };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{GetUrl()}/api/verification/at-least",
+            requestBody
+        );
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
+        {
+            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
+        return result ?? new VerificationResult
+        {
+            Matched = false,
+            ErrorMessage = "Failed to deserialize verification result"
+        };
+    }
+
+    /// <summary>
+    /// Verify that requests occurred in a specific sequence
+    /// </summary>
+    /// <param name="patterns">List of patterns to match in sequence</param>
+    /// <returns>VerificationResult with verification outcome</returns>
+    public async Task<VerificationResult> VerifySequenceAsync(List<VerificationRequest> patterns)
+    {
+        var patternsList = patterns.Select(p => new
+        {
+            method = p.Method,
+            path = p.Path,
+            query_params = p.QueryParams,
+            headers = p.Headers,
+            body_pattern = p.BodyPattern
+        }).ToList();
+
+        var requestBody = new { patterns = patternsList };
+
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{GetUrl()}/api/verification/sequence",
+            requestBody
+        );
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
+        {
+            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
+        return result ?? new VerificationResult
+        {
+            Matched = false,
+            ErrorMessage = "Failed to deserialize verification result"
+        };
+    }
+
+    /// <summary>
+    /// Get count of matching requests
+    /// </summary>
+    /// <param name="pattern">Pattern to match requests</param>
+    /// <returns>Count of matching requests</returns>
+    public async Task<int> CountRequestsAsync(VerificationRequest pattern)
+    {
+        var requestBody = new
+        {
+            pattern = new
+            {
+                method = pattern.Method,
+                path = pattern.Path,
+                query_params = pattern.QueryParams,
+                headers = pattern.Headers,
+                body_pattern = pattern.BodyPattern
+            }
+        };
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"{GetUrl()}/api/verification/count",
+                requestBody
+            );
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Dictionary<string, JsonElement>>();
+                if (result != null && result.TryGetValue("count", out var countElement))
+                {
+                    return countElement.GetInt32();
+                }
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Silently fail, return 0
+        }
+
+        return 0;
+    }
+
+    /// <summary>
     /// Dispose resources
     /// </summary>
     public void Dispose()

@@ -203,6 +203,8 @@ pub mod tls;
 pub mod token_response;
 /// UI Builder API for low-code mock endpoint creation
 pub mod ui_builder;
+/// Verification API for request verification
+pub mod verification;
 
 // Re-export AI handler utilities
 pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
@@ -220,6 +222,9 @@ pub use ui_builder::{create_ui_builder_router, EndpointConfig, UIBuilderState};
 
 // Re-export management WebSocket utilities
 pub use management_ws::{ws_management_router, MockEvent, WsManagementState};
+
+// Re-export verification API utilities
+pub use verification::verification_router;
 
 // Re-export metrics middleware
 pub use metrics_middleware::collect_http_metrics;
@@ -764,6 +769,9 @@ pub async fn build_router_with_multi_tenant(
     #[cfg(not(feature = "smtp"))]
     let _ = smtp_registry;
     app = app.nest("/__mockforge/api", management_router(management_state));
+
+    // Add verification API endpoint
+    app = app.merge(verification_router());
 
     // Add management WebSocket endpoint
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
@@ -1328,6 +1336,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         management_state
     };
     app = app.nest("/__mockforge/api", management_router(management_state));
+
+    // Add verification API endpoint
+    app = app.merge(verification_router());
 
     // Add management WebSocket endpoint
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));

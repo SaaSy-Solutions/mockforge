@@ -1,7 +1,14 @@
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
-import { MockServerConfig, ResponseStub, StubOptions } from './types';
+import {
+  MockServerConfig,
+  ResponseStub,
+  StubOptions,
+  VerificationRequest,
+  VerificationCount,
+  VerificationResult,
+} from './types';
 
 const sleep = promisify(setTimeout);
 
@@ -170,6 +177,153 @@ export class MockServer {
       });
 
       this.process = null;
+    }
+  }
+
+  /**
+   * Verify requests against a pattern and count assertion
+   */
+  async verify(
+    pattern: VerificationRequest,
+    expected: VerificationCount
+  ): Promise<VerificationResult> {
+    try {
+      const response = await axios.post(
+        `${this.url()}/api/verification/verify`,
+        {
+          pattern: {
+            method: pattern.method,
+            path: pattern.path,
+            query_params: pattern.queryParams || {},
+            headers: pattern.headers || {},
+            body_pattern: pattern.bodyPattern,
+          },
+          expected,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        matched: false,
+        count: 0,
+        expected,
+        matches: [],
+        errorMessage: `Verification API request failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Verify that a request was never made
+   */
+  async verifyNever(pattern: VerificationRequest): Promise<VerificationResult> {
+    try {
+      const response = await axios.post(
+        `${this.url()}/api/verification/never`,
+        {
+          method: pattern.method,
+          path: pattern.path,
+          query_params: pattern.queryParams || {},
+          headers: pattern.headers || {},
+          body_pattern: pattern.bodyPattern,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        matched: false,
+        count: 0,
+        expected: { type: 'never' },
+        matches: [],
+        errorMessage: `Verification API request failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Verify that a request was made at least N times
+   */
+  async verifyAtLeast(
+    pattern: VerificationRequest,
+    min: number
+  ): Promise<VerificationResult> {
+    try {
+      const response = await axios.post(
+        `${this.url()}/api/verification/at-least`,
+        {
+          pattern: {
+            method: pattern.method,
+            path: pattern.path,
+            query_params: pattern.queryParams || {},
+            headers: pattern.headers || {},
+            body_pattern: pattern.bodyPattern,
+          },
+          min,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        matched: false,
+        count: 0,
+        expected: { type: 'at_least', value: min },
+        matches: [],
+        errorMessage: `Verification API request failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Verify that requests occurred in a specific sequence
+   */
+  async verifySequence(
+    patterns: VerificationRequest[]
+  ): Promise<VerificationResult> {
+    try {
+      const response = await axios.post(
+        `${this.url()}/api/verification/sequence`,
+        {
+          patterns: patterns.map((p) => ({
+            method: p.method,
+            path: p.path,
+            query_params: p.queryParams || {},
+            headers: p.headers || {},
+            body_pattern: p.bodyPattern,
+          })),
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      return {
+        matched: false,
+        count: 0,
+        expected: { type: 'exactly', value: patterns.length },
+        matches: [],
+        errorMessage: `Verification API request failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Get count of matching requests
+   */
+  async countRequests(pattern: VerificationRequest): Promise<number> {
+    try {
+      const response = await axios.post(
+        `${this.url()}/api/verification/count`,
+        {
+          pattern: {
+            method: pattern.method,
+            path: pattern.path,
+            query_params: pattern.queryParams || {},
+            headers: pattern.headers || {},
+            body_pattern: pattern.bodyPattern,
+          },
+        }
+      );
+      return response.data.count || 0;
+    } catch (error) {
+      return 0;
     }
   }
 }

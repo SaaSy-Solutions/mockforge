@@ -30,6 +30,7 @@ mod mockai_commands;
 mod mqtt_commands;
 mod plugin_commands;
 mod progress;
+mod recorder_commands;
 mod scenario_commands;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
@@ -674,6 +675,18 @@ enum Commands {
     Plugin {
         #[command(subcommand)]
         plugin_command: plugin_commands::PluginCommands,
+    },
+
+    /// Recorder management (stub mapping conversion)
+    ///
+    /// Convert recorded API interactions into replayable stub mappings (fixtures).
+    ///
+    /// Examples:
+    ///   mockforge recorder convert --recording-id abc123 --output fixtures/user-api.yaml
+    ///   mockforge recorder convert --input recordings.db --output fixtures/ --format yaml
+    Recorder {
+        #[command(subcommand)]
+        recorder_command: recorder_commands::RecorderCommands,
     },
 
     /// Scenario marketplace management
@@ -1810,6 +1823,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         Commands::Plugin { plugin_command } => {
             plugin_commands::handle_plugin_command(plugin_command).await?;
+        }
+        Commands::Recorder { recorder_command } => {
+            recorder_commands::handle_recorder_command(recorder_command).await?;
         }
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;

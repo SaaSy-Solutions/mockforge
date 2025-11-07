@@ -237,16 +237,19 @@ pub mod request_chaining;
 pub mod request_fingerprint;
 pub mod request_logger;
 pub mod request_scripting;
+pub mod route_chaos;
 pub mod routing;
 pub mod schema_diff;
 pub mod server_utils;
 pub mod spec_parser;
+pub mod stateful_handler;
 pub mod sync_watcher;
 pub mod templating;
 pub mod time_travel;
 pub mod time_travel_handler;
 pub mod traffic_shaping;
 pub mod validation;
+pub mod verification;
 pub mod workspace;
 pub mod workspace_import;
 pub mod workspace_persistence;
@@ -313,11 +316,16 @@ pub use request_logger::{
     create_grpc_log_entry, create_http_log_entry, create_websocket_log_entry, get_global_logger,
     init_global_logger, log_request_global, CentralizedRequestLogger, RequestLogEntry,
 };
+pub use route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
 pub use routing::{HttpMethod, Route, RouteRegistry};
 pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
 pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
+pub use stateful_handler::{
+    ResourceIdExtract, StateResponse, StatefulConfig, StatefulResponse, StatefulResponseHandler,
+    TransitionTrigger,
+};
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};
 pub use time_travel::{
@@ -332,6 +340,10 @@ pub use time_travel_handler::{
 pub use traffic_shaping::{BandwidthConfig, BurstLossConfig, TrafficShaper, TrafficShapingConfig};
 pub use uuid::Uuid;
 pub use validation::{validate_openapi_operation_security, validate_openapi_security, Validator};
+pub use verification::{
+    matches_verification_pattern, verify_at_least, verify_never, verify_requests, verify_sequence,
+    VerificationCount, VerificationRequest, VerificationResult,
+};
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 pub use workspace_import::{
     create_workspace_from_curl, create_workspace_from_har, create_workspace_from_insomnia,

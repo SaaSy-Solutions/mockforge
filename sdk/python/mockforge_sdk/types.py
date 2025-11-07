@@ -42,3 +42,43 @@ class ResponseStub:
 
     latency_ms: Optional[int] = None
     """Latency in milliseconds"""
+
+
+@dataclass
+class VerificationRequest:
+    """Pattern for matching requests during verification"""
+
+    method: Optional[str] = None
+    """HTTP method to match (e.g., 'GET', 'POST'). Case-insensitive. If None, matches any method."""
+
+    path: Optional[str] = None
+    """URL path to match. Supports exact match, wildcards (*, **), and regex. If None, matches any path."""
+
+    query_params: Dict[str, str] = field(default_factory=dict)
+    """Query parameters to match (all must be present and match). If empty, query parameters are not checked."""
+
+    headers: Dict[str, str] = field(default_factory=dict)
+    """Headers to match (all must be present and match). Case-insensitive header names. If empty, headers are not checked."""
+
+    body_pattern: Optional[str] = None
+    """Request body pattern to match. Supports exact match or regex. If None, body is not checked."""
+
+
+@dataclass
+class VerificationResult:
+    """Result of a verification operation"""
+
+    matched: bool
+    """Whether the verification passed"""
+
+    count: int
+    """Actual count of matching requests"""
+
+    expected: Dict[str, Any]
+    """Expected count assertion"""
+
+    matches: List[Dict[str, Any]] = field(default_factory=list)
+    """All matching request log entries (for inspection)"""
+
+    error_message: Optional[str] = None
+    """Error message if verification failed"""

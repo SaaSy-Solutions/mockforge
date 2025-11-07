@@ -162,6 +162,12 @@ pub fn create_admin_router(
         .route("/__mockforge/time-travel/mutations/{id}", get(time_travel_handlers::get_mutation_rule))
         .route("/__mockforge/time-travel/mutations/{id}", delete(time_travel_handlers::delete_mutation_rule))
         .route("/__mockforge/time-travel/mutations/{id}/enable", post(time_travel_handlers::set_mutation_rule_enabled))
+        // Verification routes
+        .route("/__mockforge/verification/verify", post(verification::verify))
+        .route("/__mockforge/verification/count", post(verification::count))
+        .route("/__mockforge/verification/sequence", post(verification::verify_sequence_handler))
+        .route("/__mockforge/verification/never", post(verification::verify_never_handler))
+        .route("/__mockforge/verification/at-least", post(verification::verify_at_least_handler))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))

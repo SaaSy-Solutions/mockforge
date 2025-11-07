@@ -12,6 +12,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ de
 const ServicesPage = lazy(() => import('./pages/ServicesPage').then(m => ({ default: m.ServicesPage })));
 const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
 const MetricsPage = lazy(() => import('./pages/MetricsPage').then(m => ({ default: m.MetricsPage })));
+const VerificationPage = lazy(() => import('./pages/VerificationPage').then(m => ({ default: m.VerificationPage })));
 const FixturesPage = lazy(() => import('./pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
 const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const TestingPage = lazy(() => import('./pages/TestingPage').then(m => ({ default: m.TestingPage })));
@@ -104,6 +105,8 @@ function App() {
         return <MetricsPage />;
       case 'analytics':
         return <AnalyticsPage />;
+      case 'verification':
+        return <VerificationPage />;
 
       // Testing
       case 'testing':

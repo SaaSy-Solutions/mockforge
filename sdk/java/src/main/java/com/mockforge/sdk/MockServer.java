@@ -297,6 +297,198 @@ public class MockServer {
     }
 
     /**
+     * Verify requests against a pattern and count assertion
+     *
+     * @param pattern Pattern to match requests
+     * @param expected Expected count assertion (e.g., VerificationCount.exactly(3))
+     * @return VerificationResult with verification outcome
+     * @throws MockServerException if the verification request fails
+     */
+    public VerificationResult verify(VerificationRequest pattern, Map<String, Object> expected) throws MockServerException {
+        try {
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("pattern", toMap(pattern));
+            requestBody.put("expected", expected);
+
+            String json = GSON.toJson(requestBody);
+            RequestBody body = RequestBody.create(
+                json,
+                MediaType.get("application/json; charset=utf-8")
+            );
+
+            Request request = new Request.Builder()
+                .url(String.format("%s/api/verification/verify", getUrl()))
+                .post(body)
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new MockServerException("Verification request failed: " + response.code());
+                }
+                return GSON.fromJson(response.body().string(), VerificationResult.class);
+            }
+        } catch (IOException e) {
+            throw new MockServerException("Failed to verify requests", e);
+        }
+    }
+
+    /**
+     * Verify that a request was never made
+     *
+     * @param pattern Pattern to match requests
+     * @return VerificationResult with verification outcome
+     * @throws MockServerException if the verification request fails
+     */
+    public VerificationResult verifyNever(VerificationRequest pattern) throws MockServerException {
+        try {
+            String json = GSON.toJson(toMap(pattern));
+            RequestBody body = RequestBody.create(
+                json,
+                MediaType.get("application/json; charset=utf-8")
+            );
+
+            Request request = new Request.Builder()
+                .url(String.format("%s/api/verification/never", getUrl()))
+                .post(body)
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new MockServerException("Verification request failed: " + response.code());
+                }
+                return GSON.fromJson(response.body().string(), VerificationResult.class);
+            }
+        } catch (IOException e) {
+            throw new MockServerException("Failed to verify requests", e);
+        }
+    }
+
+    /**
+     * Verify that a request was made at least N times
+     *
+     * @param pattern Pattern to match requests
+     * @param min Minimum count
+     * @return VerificationResult with verification outcome
+     * @throws MockServerException if the verification request fails
+     */
+    public VerificationResult verifyAtLeast(VerificationRequest pattern, int min) throws MockServerException {
+        try {
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("pattern", toMap(pattern));
+            requestBody.put("min", min);
+
+            String json = GSON.toJson(requestBody);
+            RequestBody body = RequestBody.create(
+                json,
+                MediaType.get("application/json; charset=utf-8")
+            );
+
+            Request request = new Request.Builder()
+                .url(String.format("%s/api/verification/at-least", getUrl()))
+                .post(body)
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new MockServerException("Verification request failed: " + response.code());
+                }
+                return GSON.fromJson(response.body().string(), VerificationResult.class);
+            }
+        } catch (IOException e) {
+            throw new MockServerException("Failed to verify requests", e);
+        }
+    }
+
+    /**
+     * Verify that requests occurred in a specific sequence
+     *
+     * @param patterns List of patterns to match in sequence
+     * @return VerificationResult with verification outcome
+     * @throws MockServerException if the verification request fails
+     */
+    public VerificationResult verifySequence(List<VerificationRequest> patterns) throws MockServerException {
+        try {
+            List<Map<String, Object>> patternsList = new ArrayList<>();
+            for (VerificationRequest pattern : patterns) {
+                patternsList.add(toMap(pattern));
+            }
+
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("patterns", patternsList);
+
+            String json = GSON.toJson(requestBody);
+            RequestBody body = RequestBody.create(
+                json,
+                MediaType.get("application/json; charset=utf-8")
+            );
+
+            Request request = new Request.Builder()
+                .url(String.format("%s/api/verification/sequence", getUrl()))
+                .post(body)
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new MockServerException("Verification request failed: " + response.code());
+                }
+                return GSON.fromJson(response.body().string(), VerificationResult.class);
+            }
+        } catch (IOException e) {
+            throw new MockServerException("Failed to verify requests", e);
+        }
+    }
+
+    /**
+     * Get count of matching requests
+     *
+     * @param pattern Pattern to match requests
+     * @return Count of matching requests
+     */
+    public int countRequests(VerificationRequest pattern) {
+        try {
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("pattern", toMap(pattern));
+
+            String json = GSON.toJson(requestBody);
+            RequestBody body = RequestBody.create(
+                json,
+                MediaType.get("application/json; charset=utf-8")
+            );
+
+            Request request = new Request.Builder()
+                .url(String.format("%s/api/verification/count", getUrl()))
+                .post(body)
+                .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful()) {
+                    Map<String, Object> result = GSON.fromJson(response.body().string(), Map.class);
+                    Object count = result.get("count");
+                    if (count instanceof Number) {
+                        return ((Number) count).intValue();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // Silently fail, return 0
+        }
+        return 0;
+    }
+
+    /**
+     * Helper method to convert VerificationRequest to Map for JSON serialization
+     */
+    private Map<String, Object> toMap(VerificationRequest pattern) {
+        Map<String, Object> map = new java.util.HashMap<>();
+        map.put("method", pattern.getMethod());
+        map.put("path", pattern.getPath());
+        map.put("query_params", pattern.getQueryParams());
+        map.put("headers", pattern.getHeaders());
+        map.put("body_pattern", pattern.getBodyPattern());
+        return map;
+    }
+
+    /**
      * Auto-stop when garbage collected (safety net)
      */
     @Override

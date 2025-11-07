@@ -86,6 +86,15 @@ async fn proxy_handler(
     let uri = request.uri().clone();
     let headers = request.headers().clone();
 
+    // Read request body early for conditional evaluation (consume the body)
+    let body_bytes = match axum::body::to_bytes(request.into_body(), usize::MAX).await {
+        Ok(bytes) => Some(bytes.to_vec()),
+        Err(e) => {
+            error!("Failed to read request body: {}", e);
+            None
+        }
+    };
+
     let config = state.config.read().await;
 
     // Check if proxy is enabled
@@ -93,8 +102,8 @@ async fn proxy_handler(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    // Determine if this request should be proxied
-    if !config.should_proxy(&method, uri.path()) {
+    // Determine if this request should be proxied (with conditional evaluation)
+    if !config.should_proxy_with_condition(&method, &uri, &headers, body_bytes.as_deref()) {
         return Err(StatusCode::NOT_FOUND);
     }
 
@@ -144,26 +153,9 @@ async fn proxy_handler(
         }
     }
 
-    // Read request body (consume the request)
-    let body_bytes = match axum::body::to_bytes(request.into_body(), usize::MAX).await {
-        Ok(bytes) => Some(bytes.to_vec()),
-        Err(e) => {
-            error!("Failed to read request body: {}", e);
-            None
-        }
-    };
-
     // Use ProxyClient directly with the full upstream URL to bypass ProxyHandler's URL construction
     use mockforge_core::proxy::client::ProxyClient;
     let proxy_client = ProxyClient::new();
-
-    // Convert headers to HashMap
-    let mut header_map = std::collections::HashMap::new();
-    for (key, value) in &headers {
-        if let Ok(value_str) = value.to_str() {
-            header_map.insert(key.to_string(), value_str.to_string());
-        }
-    }
 
     // Convert method to reqwest method
     let reqwest_method = match method.as_str() {

@@ -53,6 +53,7 @@ pub mod graph;
 pub mod health;
 pub mod migration;
 pub mod plugin;
+pub mod verification;
 
 // Re-export commonly used types
 pub use assets::*;

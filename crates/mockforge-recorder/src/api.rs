@@ -8,6 +8,7 @@ use crate::{
     query::{execute_query, QueryFilter, QueryResult},
     recorder::Recorder,
     replay::ReplayEngine,
+    stub_mapping::{StubFormat, StubMappingConverter},
     sync::{SyncConfig, SyncService, SyncStatus},
     test_generation::{LlmConfig, TestFormat, TestGenerationConfig, TestGenerator},
 };
@@ -76,6 +77,10 @@ pub fn create_api_router(
         .route("/api/recorder/sync/config", post(update_sync_config))
         .route("/api/recorder/sync/now", post(sync_now))
         .route("/api/recorder/sync/changes", get(get_sync_changes))
+
+        // Stub mapping conversion endpoints
+        .route("/api/recorder/convert/:id", post(convert_to_stub))
+        .route("/api/recorder/convert/batch", post(convert_batch))
 
         .with_state(state)
 }
@@ -640,5 +645,119 @@ async fn get_sync_changes(
         "last_error": status.last_error,
         "total_syncs": status.total_syncs,
         "is_running": status.is_running,
+    })))
+}
+
+/// Convert a single recording to stub mapping
+#[derive(Debug, Deserialize)]
+struct ConvertRequest {
+    format: Option<String>, // "yaml" or "json"
+    detect_dynamic_values: Option<bool>,
+}
+
+async fn convert_to_stub(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<ConvertRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let exchange = state
+        .recorder
+        .database()
+        .get_exchange(&id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Request {} not found", id)))?;
+
+    let detect_dynamic = req.detect_dynamic_values.unwrap_or(true);
+    let converter = StubMappingConverter::new(detect_dynamic);
+    let stub = converter.convert(&exchange)?;
+
+    let format = match req.format.as_deref() {
+        Some("json") => StubFormat::Json,
+        Some("yaml") | None => StubFormat::Yaml,
+        _ => StubFormat::Yaml,
+    };
+
+    let content = converter.to_string(&stub, format)?;
+
+    Ok(Json(serde_json::json!({
+        "request_id": id,
+        "format": match format {
+            StubFormat::Yaml => "yaml",
+            StubFormat::Json => "json",
+        },
+        "stub": stub,
+        "content": content,
+    })))
+}
+
+/// Convert multiple recordings to stub mappings
+#[derive(Debug, Deserialize)]
+struct BatchConvertRequest {
+    request_ids: Vec<String>,
+    format: Option<String>,
+    detect_dynamic_values: Option<bool>,
+    deduplicate: Option<bool>,
+}
+
+async fn convert_batch(
+    State(state): State<ApiState>,
+    Json(req): Json<BatchConvertRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let detect_dynamic = req.detect_dynamic_values.unwrap_or(true);
+    let converter = StubMappingConverter::new(detect_dynamic);
+
+    let format = match req.format.as_deref() {
+        Some("json") => StubFormat::Json,
+        Some("yaml") | None => StubFormat::Yaml,
+        _ => StubFormat::Yaml,
+    };
+
+    let mut stubs = Vec::new();
+    let mut errors = Vec::new();
+
+    for request_id in &req.request_ids {
+        match state.recorder.database().get_exchange(request_id).await {
+            Ok(Some(exchange)) => match converter.convert(&exchange) {
+                Ok(stub) => {
+                    let content = converter.to_string(&stub, format)?;
+                    stubs.push(serde_json::json!({
+                        "request_id": request_id,
+                        "stub": stub,
+                        "content": content,
+                    }));
+                }
+                Err(e) => {
+                    errors.push(format!("Failed to convert {}: {}", request_id, e));
+                }
+            },
+            Ok(None) => {
+                errors.push(format!("Request {} not found", request_id));
+            }
+            Err(e) => {
+                errors.push(format!("Database error for {}: {}", request_id, e));
+            }
+        }
+    }
+
+    // Deduplicate if requested
+    if req.deduplicate.unwrap_or(false) {
+        // Simple deduplication based on identifier
+        let mut seen = std::collections::HashSet::new();
+        stubs.retain(|stub| {
+            if let Some(id) = stub.get("stub").and_then(|s| s.get("identifier")) {
+                if let Some(id_str) = id.as_str() {
+                    return seen.insert(id_str.to_string());
+                }
+            }
+            true
+        });
+    }
+
+    Ok(Json(serde_json::json!({
+        "total": req.request_ids.len(),
+        "converted": stubs.len(),
+        "errors": errors.len(),
+        "stubs": stubs,
+        "errors_list": errors,
     })))
 }

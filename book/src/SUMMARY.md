@@ -43,6 +43,7 @@
   - [OpenAPI Integration](user-guide/http-mocking/openapi.md)
   - [Custom Responses](user-guide/http-mocking/custom-responses.md)
   - [Dynamic Data](user-guide/http-mocking/dynamic-data.md)
+- [Advanced Behavior and Simulation](user-guide/advanced-behavior.md)
 - [gRPC Mocking](user-guide/grpc-mocking.md)
   - [Protocol Buffers](user-guide/grpc-mocking/protobuf.md)
   - [Streaming](user-guide/grpc-mocking/streaming.md)

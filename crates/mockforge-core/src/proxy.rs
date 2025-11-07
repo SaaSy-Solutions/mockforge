@@ -9,6 +9,7 @@
 
 // Re-export sub-modules for backward compatibility
 pub mod client;
+pub mod conditional;
 pub mod config;
 pub mod handler;
 pub mod middleware;
@@ -22,6 +23,7 @@ pub use routing::*;
 // Legacy imports for compatibility
 
 pub use client::{ProxyClient, ProxyResponse};
+pub use conditional::{evaluate_proxy_condition, find_matching_rule};
 /// Legacy types and structures - moved to sub-modules
 /// These are kept for backward compatibility
 // Re-export the main types from sub-modules

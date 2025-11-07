@@ -112,6 +112,72 @@ impl CentralizedRequestLogger {
         let mut logs = self.logs.write().await;
         logs.clear();
     }
+
+    /// Find all request log entries that match the verification pattern
+    ///
+    /// This method is used by the verification API to find matching requests.
+    /// It returns all log entries that match the given pattern, ordered by
+    /// timestamp (most recent first).
+    pub async fn find_matching_requests(
+        &self,
+        pattern: &crate::verification::VerificationRequest,
+    ) -> Vec<RequestLogEntry> {
+        let logs = self.logs.read().await;
+        logs.iter()
+            .filter(|entry| crate::verification::matches_verification_pattern(entry, pattern))
+            .cloned()
+            .collect()
+    }
+
+    /// Count request log entries that match the verification pattern
+    ///
+    /// This is a convenience method that returns just the count of matching requests
+    /// without collecting all the matching entries, which is more efficient when
+    /// you only need the count.
+    pub async fn count_matching_requests(
+        &self,
+        pattern: &crate::verification::VerificationRequest,
+    ) -> usize {
+        let logs = self.logs.read().await;
+        logs.iter()
+            .filter(|entry| crate::verification::matches_verification_pattern(entry, pattern))
+            .count()
+    }
+
+    /// Get request sequence matching the given patterns in order
+    ///
+    /// This method finds requests that match the patterns in the specified order,
+    /// which is useful for verifying request sequences. It returns the matching
+    /// entries in the order they were found (chronological order).
+    pub async fn get_request_sequence(
+        &self,
+        patterns: &[crate::verification::VerificationRequest],
+    ) -> Vec<RequestLogEntry> {
+        let logs = self.logs.read().await;
+        let mut log_idx = 0;
+        let mut all_matches = Vec::new();
+
+        for pattern in patterns {
+            // Find the next matching request after the last match
+            let mut found = false;
+            while log_idx < logs.len() {
+                if crate::verification::matches_verification_pattern(&logs[log_idx], pattern) {
+                    all_matches.push(logs[log_idx].clone());
+                    log_idx += 1;
+                    found = true;
+                    break;
+                }
+                log_idx += 1;
+            }
+
+            if !found {
+                // If we can't find a match for this pattern, return what we have so far
+                break;
+            }
+        }
+
+        all_matches
+    }
 }
 
 /// Global singleton instance of the centralized logger

@@ -37,6 +37,7 @@ import {
   Store,
   Package,
   GitBranch as GraphIcon,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -68,6 +69,7 @@ const navItems = [
   { id: 'traces', label: 'Traces', icon: Network },
   { id: 'metrics', label: 'Metrics', icon: Activity },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'verification', label: 'Verification', icon: CheckCircle2 },
 
   // Testing
   { id: 'testing', label: 'Testing', icon: TestTube },

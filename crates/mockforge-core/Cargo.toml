@@ -58,6 +58,7 @@ axum = { workspace = true }
 json-patch = "4.0.0"
 jsonptr = "0.7.1"
 jsonpath = "0.1"
+mockforge-scenarios = { version = "0.2.0", path = "../mockforge-scenarios" }
 roxmltree = "0.21"
 globwalk = "0.9.1"
 tempfile = "3.10"

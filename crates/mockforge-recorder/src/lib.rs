@@ -15,6 +15,7 @@ pub mod query;
 pub mod recorder;
 pub mod replay;
 pub mod scrubbing;
+pub mod stub_mapping;
 pub mod sync;
 pub mod test_generation;
 
@@ -33,6 +34,9 @@ pub use recorder::Recorder;
 pub use replay::ReplayEngine;
 pub use scrubbing::{
     CaptureFilter, CaptureFilterConfig, ScrubConfig, ScrubRule, ScrubTarget, Scrubber,
+};
+pub use stub_mapping::{
+    RequestMatcher, ResponseTemplate, StubFormat, StubMapping, StubMappingConverter,
 };
 pub use sync::{SyncConfig, SyncService, SyncStatus};
 pub use test_generation::{

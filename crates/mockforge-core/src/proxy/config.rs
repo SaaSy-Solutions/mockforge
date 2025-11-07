@@ -70,6 +70,15 @@ pub struct ProxyRule {
     /// Migration group this route belongs to (optional)
     #[serde(default)]
     pub migration_group: Option<String>,
+    /// Conditional expression for proxying (JSONPath, JavaScript-like, or Rhai script)
+    /// If provided, the request will only be proxied if the condition evaluates to true
+    /// Examples:
+    ///   - JSONPath: "$.user.role == 'admin'"
+    ///   - Header check: "header[authorization] != ''"
+    ///   - Query param: "query[env] == 'production'"
+    ///   - Complex: "AND($.user.role == 'admin', header[x-forwarded-for] != '')"
+    #[serde(default)]
+    pub condition: Option<String>,
 }
 
 impl Default for ProxyRule {
@@ -82,6 +91,7 @@ impl Default for ProxyRule {
             upstream_url: "http://localhost:9080".to_string(),
             migration_mode: MigrationMode::Auto,
             migration_group: None,
+            condition: None,
         }
     }
 }
@@ -129,6 +139,7 @@ impl ProxyConfig {
 
     /// Check if a request should be proxied
     /// Respects migration mode: mock forces mock, real forces proxy, shadow forces proxy, auto uses existing logic
+    /// This is a legacy method that doesn't evaluate conditions - use should_proxy_with_condition for conditional proxying
     pub fn should_proxy(&self, _method: &axum::http::Method, path: &str) -> bool {
         if !self.enabled {
             return false;
@@ -148,10 +159,14 @@ impl ProxyConfig {
             }
         }
 
-        // If there are rules, check if any rule matches
+        // If there are rules, check if any rule matches (without condition evaluation)
         for rule in &self.rules {
             if rule.enabled && self.path_matches_pattern(&rule.path_pattern, path) {
-                return true;
+                // If rule has a condition, we can't evaluate it here (no request context)
+                // So we skip conditional rules in this legacy method
+                if rule.condition.is_none() {
+                    return true;
+                }
             }
         }
 
@@ -159,6 +174,60 @@ impl ProxyConfig {
         match &self.prefix {
             None => true, // No prefix means proxy everything
             Some(prefix) => path.starts_with(prefix),
+        }
+    }
+
+    /// Check if a request should be proxied with conditional evaluation
+    /// This method evaluates conditions in proxy rules using request context
+    pub fn should_proxy_with_condition(
+        &self,
+        method: &axum::http::Method,
+        uri: &axum::http::Uri,
+        headers: &axum::http::HeaderMap,
+        body: Option<&[u8]>,
+    ) -> bool {
+        use crate::proxy::conditional::find_matching_rule;
+
+        if !self.enabled {
+            return false;
+        }
+
+        let path = uri.path();
+
+        // Check migration mode if enabled
+        if self.migration_enabled {
+            if let Some(mode) = self.get_effective_migration_mode(path) {
+                match mode {
+                    MigrationMode::Mock => return false,  // Force mock
+                    MigrationMode::Shadow => return true, // Force proxy (for shadow mode)
+                    MigrationMode::Real => return true,   // Force proxy
+                    MigrationMode::Auto => {
+                        // Fall through to conditional evaluation
+                    }
+                }
+            }
+        }
+
+        // If there are rules, check if any rule matches with condition evaluation
+        if !self.rules.is_empty() {
+            if find_matching_rule(&self.rules, method, uri, headers, body, |pattern, path| {
+                self.path_matches_pattern(pattern, path)
+            })
+            .is_some()
+            {
+                return true;
+            }
+        }
+
+        // If no rules match, check prefix logic (only if no rules have conditions)
+        let has_conditional_rules = self.rules.iter().any(|r| r.enabled && r.condition.is_some());
+        if !has_conditional_rules {
+            match &self.prefix {
+                None => true, // No prefix means proxy everything
+                Some(prefix) => path.starts_with(prefix),
+            }
+        } else {
+            false // If we have conditional rules but none matched, don't proxy
         }
     }
 

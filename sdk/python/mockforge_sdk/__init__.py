@@ -21,7 +21,16 @@ Example:
 
 from .mock_server import MockServer
 from .stub_builder import StubBuilder
-from .types import ResponseStub, MockServerConfig
+from .types import ResponseStub, MockServerConfig, VerificationRequest, VerificationResult
+from .verification import VerificationCount
 
 __version__ = "0.1.0"
-__all__ = ["MockServer", "StubBuilder", "ResponseStub", "MockServerConfig"]
+__all__ = [
+    "MockServer",
+    "StubBuilder",
+    "ResponseStub",
+    "MockServerConfig",
+    "VerificationRequest",
+    "VerificationResult",
+    "VerificationCount",
+]
