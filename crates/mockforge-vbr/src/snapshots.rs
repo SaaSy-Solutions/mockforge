@@ -27,6 +27,26 @@ pub struct SnapshotMetadata {
     pub database_size: Option<u64>,
     /// Storage backend type
     pub storage_backend: String,
+    /// Time travel state (if included in snapshot)
+    #[serde(default)]
+    pub time_travel_state: Option<TimeTravelSnapshotState>,
+}
+
+/// Time travel state included in snapshots
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeTravelSnapshotState {
+    /// Time travel enabled status
+    pub enabled: bool,
+    /// Current virtual time (if enabled)
+    pub current_time: Option<chrono::DateTime<chrono::Utc>>,
+    /// Time scale factor
+    pub scale_factor: f64,
+    /// Cron jobs (serialized)
+    #[serde(default)]
+    pub cron_jobs: Vec<serde_json::Value>,
+    /// Mutation rules (serialized)
+    #[serde(default)]
+    pub mutation_rules: Vec<serde_json::Value>,
 }
 
 /// Snapshot manager
@@ -63,12 +83,36 @@ impl SnapshotManager {
     /// * `description` - Optional description
     /// * `database` - The virtual database instance
     /// * `registry` - The entity registry
+    /// * `include_time_travel` - Whether to include time travel state (cron jobs, mutation rules)
+    /// * `time_travel_state` - Optional time travel state to include
     pub async fn create_snapshot(
         &self,
         name: &str,
         description: Option<String>,
         database: &dyn crate::database::VirtualDatabase,
         registry: &EntityRegistry,
+    ) -> Result<SnapshotMetadata> {
+        self.create_snapshot_with_time_travel(name, description, database, registry, false, None)
+            .await
+    }
+
+    /// Create a snapshot with optional time travel state
+    ///
+    /// # Arguments
+    /// * `name` - Name for the snapshot
+    /// * `description` - Optional description
+    /// * `database` - The virtual database instance
+    /// * `registry` - The entity registry
+    /// * `include_time_travel` - Whether to include time travel state
+    /// * `time_travel_state` - Optional time travel state to include
+    pub async fn create_snapshot_with_time_travel(
+        &self,
+        name: &str,
+        description: Option<String>,
+        database: &dyn crate::database::VirtualDatabase,
+        registry: &EntityRegistry,
+        include_time_travel: bool,
+        time_travel_state: Option<TimeTravelSnapshotState>,
     ) -> Result<SnapshotMetadata> {
         // Create snapshot directory
         let snapshot_dir = self.snapshot_path(name);
@@ -102,6 +146,11 @@ impl SnapshotManager {
             name: name.to_string(),
             created_at: chrono::Utc::now(),
             description,
+            time_travel_state: if include_time_travel {
+                time_travel_state
+            } else {
+                None
+            },
             entity_counts,
             database_size,
             storage_backend,
@@ -130,8 +179,7 @@ impl SnapshotManager {
         if storage_backend.contains("sqlite") {
             // For SQLite, we'll export all data to JSON
             // In a production system, you might use SQLite backup API
-            self.export_sqlite_to_json(&snapshot_dir, database, registry)
-                .await?;
+            self.export_sqlite_to_json(&snapshot_dir, database, registry).await?;
             Ok(None) // Size calculation would require file system access
         } else if storage_backend.contains("json") {
             // For JSON backend, copy the JSON file
@@ -139,8 +187,7 @@ impl SnapshotManager {
             Ok(None)
         } else {
             // For in-memory, export to JSON
-            self.export_memory_to_json(&snapshot_dir, database, registry)
-                .await?;
+            self.export_memory_to_json(&snapshot_dir, database, registry).await?;
             Ok(None)
         }
     }
@@ -183,8 +230,7 @@ impl SnapshotManager {
         database: &dyn crate::database::VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
-        self.export_sqlite_to_json(snapshot_dir, database, registry)
-            .await
+        self.export_sqlite_to_json(snapshot_dir, database, registry).await
     }
 
     /// Restore a snapshot
@@ -199,6 +245,35 @@ impl SnapshotManager {
         database: &dyn crate::database::VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
+        self.restore_snapshot_with_time_travel(
+            name,
+            database,
+            registry,
+            false,
+            None::<fn(TimeTravelSnapshotState) -> Result<()>>,
+        )
+        .await
+    }
+
+    /// Restore a snapshot with optional time travel state restoration
+    ///
+    /// # Arguments
+    /// * `name` - Name of the snapshot to restore
+    /// * `database` - The virtual database instance (will be reset)
+    /// * `registry` - The entity registry
+    /// * `restore_time_travel` - Whether to restore time travel state
+    /// * `time_travel_restore_callback` - Optional callback to restore time travel state
+    pub async fn restore_snapshot_with_time_travel<F>(
+        &self,
+        name: &str,
+        database: &dyn crate::database::VirtualDatabase,
+        registry: &EntityRegistry,
+        restore_time_travel: bool,
+        time_travel_restore_callback: Option<F>,
+    ) -> Result<()>
+    where
+        F: FnOnce(TimeTravelSnapshotState) -> Result<()>,
+    {
         // Load metadata to verify snapshot exists
         let metadata = self.get_snapshot_metadata(name).await?;
 
@@ -207,15 +282,25 @@ impl SnapshotManager {
 
         // Restore data based on storage backend
         let snapshot_dir = self.snapshot_path(name);
-        if metadata.storage_backend.contains("sqlite") || metadata.storage_backend.contains("memory") {
-            self.import_json_to_database(&snapshot_dir, database, registry)
-                .await?;
+        if metadata.storage_backend.contains("sqlite")
+            || metadata.storage_backend.contains("memory")
+        {
+            self.import_json_to_database(&snapshot_dir, database, registry).await?;
         } else if metadata.storage_backend.contains("json") {
             // For JSON backend, would need to copy the JSON file
             // This requires access to the JSON database implementation
             return Err(Error::generic(
                 "JSON backend snapshot restore not yet implemented".to_string(),
             ));
+        }
+
+        // Restore time travel state if requested and available
+        if restore_time_travel {
+            if let Some(ref time_travel_state) = metadata.time_travel_state {
+                if let Some(callback) = time_travel_restore_callback {
+                    callback(time_travel_state.clone())?;
+                }
+            }
         }
 
         Ok(())
@@ -350,12 +435,7 @@ impl SnapshotManager {
         let metadata_path = self.metadata_path(name);
         let content = fs::read_to_string(&metadata_path)
             .await
-            .map_err(|e| {
-                Error::generic(format!(
-                    "Failed to read snapshot metadata: {}",
-                    e
-                ))
-            })?;
+            .map_err(|e| Error::generic(format!("Failed to read snapshot metadata: {}", e)))?;
 
         let metadata: SnapshotMetadata = serde_json::from_str(&content)
             .map_err(|e| Error::generic(format!("Failed to parse snapshot metadata: {}", e)))?;

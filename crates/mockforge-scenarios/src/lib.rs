@@ -49,6 +49,7 @@ pub mod manifest;
 pub mod package;
 pub mod registry;
 pub mod source;
+pub mod state_machine;
 pub mod storage;
 
 // Re-export commonly used types
@@ -61,4 +62,5 @@ pub use registry::{
     ScenarioRegistryEntry, ScenarioSearchQuery, ScenarioSearchResults, ScenarioSortOrder,
 };
 pub use source::{ScenarioSource, SourceType};
+pub use state_machine::{ScenarioStateMachineManager, StateHistoryEntry, StateInstance};
 pub use storage::{InstalledScenario, ScenarioStorage};

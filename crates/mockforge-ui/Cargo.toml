@@ -41,6 +41,7 @@ mockforge-core = { version = "0.2.7", path = "../mockforge-core" }
 mockforge-http = { version = "0.2.7", path = "../mockforge-http", features = ["smtp", "mqtt"] }
 mockforge-ws = { version = "0.2.7", path = "../mockforge-ws" }
 mockforge-grpc = { version = "0.2.7", path = "../mockforge-grpc" }
+mockforge-vbr = { version = "0.2.7", path = "../mockforge-vbr" }
 mockforge-plugin-core = "0.2.7"
 mockforge-plugin-loader = { version = "0.2.7", path = "../mockforge-plugin-loader" }
 mockforge-analytics = { version = "0.2.7", path = "../mockforge-analytics" }

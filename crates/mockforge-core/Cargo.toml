@@ -67,6 +67,8 @@ prost-types = "0.14"
 notify = "8.2"
 # JavaScript runtime for scripting
 rquickjs = { version = "0.9", features = ["macro", "classes"] }
+# Cron expression parsing for scheduled events
+cron = "0.15"
 
 [dev-dependencies]
 tempfile = "3.10"

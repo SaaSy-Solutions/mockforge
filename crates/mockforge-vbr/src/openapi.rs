@@ -102,11 +102,8 @@ fn convert_schema_to_vbr(
         for (field_name, field_schema_ref) in &obj_type.properties {
             match field_schema_ref {
                 ReferenceOr::Item(field_schema) => {
-                    let field_def = convert_field_to_definition(
-                        field_name,
-                        field_schema,
-                        &obj_type.required,
-                    )?;
+                    let field_def =
+                        convert_field_to_definition(field_name, field_schema, &obj_type.required)?;
                     fields.push(field_def.clone());
 
                     // Auto-detect primary key
@@ -126,11 +123,8 @@ fn convert_schema_to_vbr(
                 ReferenceOr::Reference { reference } => {
                     // Handle schema references - for now, treat as string
                     // TODO: Resolve references properly
-                    let field_def = FieldDefinition::new(
-                        field_name.clone(),
-                        "string".to_string(),
-                    )
-                    .optional();
+                    let field_def =
+                        FieldDefinition::new(field_name.clone(), "string".to_string()).optional();
                     fields.push(field_def);
                 }
             }
@@ -164,18 +158,13 @@ fn convert_schema_to_vbr(
     let base_schema = SchemaDefinition {
         name: schema_name.to_string(),
         fields,
-        description: schema
-            .schema_data
-            .description
-            .as_ref()
-            .map(|s| s.clone()),
+        description: schema.schema_data.description.as_ref().map(|s| s.clone()),
         metadata: HashMap::new(),
         relationships: HashMap::new(),
     };
 
     // Create VBR schema definition
-    let vbr_schema = VbrSchemaDefinition::new(base_schema)
-        .with_primary_key(primary_key);
+    let vbr_schema = VbrSchemaDefinition::new(base_schema).with_primary_key(primary_key);
 
     // Apply auto-generation rules
     let mut final_schema = vbr_schema;
@@ -295,16 +284,18 @@ fn detect_auto_generation(field_name: &str, schema: &Schema) -> Option<AutoGener
     }
 
     // Timestamp fields
-    if name_lower.contains("timestamp") || name_lower.contains("created_at") || name_lower.contains("updated_at") {
+    if name_lower.contains("timestamp")
+        || name_lower.contains("created_at")
+        || name_lower.contains("updated_at")
+    {
         return Some(AutoGenerationRule::Timestamp);
     }
 
     // Date fields
     if name_lower.contains("date") && !name_lower.contains("timestamp") {
         if let SchemaKind::Type(Type::String(string_type)) = &schema.schema_kind {
-            if let openapiv3::VariantOrUnknownOrEmpty::Item(
-                openapiv3::StringFormat::Date,
-            ) = &string_type.format
+            if let openapiv3::VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Date) =
+                &string_type.format
             {
                 return Some(AutoGenerationRule::Date);
             }
@@ -321,17 +312,12 @@ fn detect_foreign_keys(
     entity_names: &[String],
     warnings: &mut Vec<String>,
 ) {
-
     for field in &vbr_schema.base.fields {
         // Check if field name suggests a foreign key
         if is_foreign_key_field(&field.name, &entity_names) {
             if let Some(target_entity) = extract_target_entity(&field.name, &entity_names) {
                 // Check if foreign key already exists
-                if !vbr_schema
-                    .foreign_keys
-                    .iter()
-                    .any(|fk| fk.field == field.name)
-                {
+                if !vbr_schema.foreign_keys.iter().any(|fk| fk.field == field.name) {
                     let fk = ForeignKeyDefinition {
                         field: field.name.clone(),
                         target_entity: target_entity.clone(),
@@ -375,10 +361,7 @@ fn extract_target_entity(field_name: &str, entity_names: &[String]) -> Option<St
     let name_lower = field_name.to_lowercase();
 
     // Remove common suffixes
-    let base_name = name_lower
-        .trim_end_matches("_id")
-        .trim_end_matches("id")
-        .to_string();
+    let base_name = name_lower.trim_end_matches("_id").trim_end_matches("id").to_string();
 
     // Find matching entity
     for entity_name in entity_names {

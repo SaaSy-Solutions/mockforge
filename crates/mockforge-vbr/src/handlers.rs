@@ -94,7 +94,8 @@ async fn apply_auto_generation(
                         Value::String(id)
                     }
                     crate::schema::AutoGenerationRule::Realistic { .. } => {
-                        let id = crate::id_generation::generate_id(rule, entity_name, field_name, None)?;
+                        let id =
+                            crate::id_generation::generate_id(rule, entity_name, field_name, None)?;
                         Value::String(id)
                     }
                     crate::schema::AutoGenerationRule::Custom(_) => {
@@ -855,12 +856,13 @@ pub async fn get_relationship_handler(
                 "SELECT COUNT(*) as total FROM {} t INNER JOIN {} j ON t.id = j.{} WHERE j.{} = ?",
                 target_table, junction_table, target_fk_field, fk_field
             );
-            let count_results = context.database.query(&count_query, &bind_values).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("Count query failed: {}", e)})),
-                )
-            })?;
+            let count_results =
+                context.database.query(&count_query, &bind_values).await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": format!("Count query failed: {}", e)})),
+                    )
+                })?;
 
             let total = count_results
                 .first()
@@ -908,12 +910,7 @@ pub async fn create_snapshot_handler(
 
     let manager = crate::snapshots::SnapshotManager::new(snapshots_dir);
     let metadata = manager
-        .create_snapshot(
-            &body.name,
-            body.description,
-            context.database.as_ref(),
-            &context.registry,
-        )
+        .create_snapshot(&body.name, body.description, context.database.as_ref(), &context.registry)
         .await
         .map_err(|e| {
             (

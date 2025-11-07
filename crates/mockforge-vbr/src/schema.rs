@@ -134,7 +134,11 @@ impl ManyToManyDefinition {
     }
 
     /// Set cascade actions
-    pub fn with_cascade_actions(mut self, on_delete_a: CascadeAction, on_delete_b: CascadeAction) -> Self {
+    pub fn with_cascade_actions(
+        mut self,
+        on_delete_a: CascadeAction,
+        on_delete_b: CascadeAction,
+    ) -> Self {
         self.on_delete_a = on_delete_a;
         self.on_delete_b = on_delete_b;
         self

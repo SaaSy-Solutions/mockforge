@@ -5,6 +5,7 @@
 
 use crate::{Error, Result};
 use chrono::{Duration, Utc};
+use mockforge_core::time_travel_now;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -46,8 +47,11 @@ struct JwtClaims {
 
 impl JwtClaims {
     /// Check if token is expired
+    ///
+    /// Automatically uses virtual clock if time travel is enabled,
+    /// otherwise uses real time.
     fn is_expired(&self) -> bool {
-        let now = Utc::now().timestamp() as usize;
+        let now = time_travel_now().timestamp() as usize;
         now >= self.exp
     }
 }
@@ -133,8 +137,11 @@ impl VbrAuthService {
     }
 
     /// Generate JWT token for a user
+    ///
+    /// Automatically uses virtual clock if time travel is enabled,
+    /// otherwise uses real time.
     pub fn generate_token(&self, user: &VirtualUser) -> Result<String> {
-        let now = Utc::now();
+        let now = time_travel_now();
         let exp = now
             .checked_add_signed(Duration::seconds(self.token_expiration as i64))
             .ok_or_else(|| Error::generic("Invalid expiration time".to_string()))?

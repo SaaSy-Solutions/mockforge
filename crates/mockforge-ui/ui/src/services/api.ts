@@ -128,6 +128,81 @@ class ApiService {
     return response as unknown as GraphData;
   }
 
+  // State Machine API methods
+  async getStateMachines(): Promise<{ state_machines: Array<{ resource_type: string; state_count: number; transition_count: number; sub_scenario_count: number; has_visual_layout: boolean }>; total: number }> {
+    return this.fetchJson('/__mockforge/api/state-machines') as Promise<{ state_machines: Array<{ resource_type: string; state_count: number; transition_count: number; sub_scenario_count: number; has_visual_layout: boolean }>; total: number }>;
+  }
+
+  async getStateMachine(resourceType: string): Promise<{ state_machine: unknown; visual_layout?: unknown }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/${encodeURIComponent(resourceType)}`) as Promise<{ state_machine: unknown; visual_layout?: unknown }>;
+  }
+
+  async createStateMachine(stateMachine: unknown, visualLayout?: unknown): Promise<{ state_machine: unknown; visual_layout?: unknown }> {
+    return this.fetchJson('/__mockforge/api/state-machines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state_machine: stateMachine, visual_layout: visualLayout }),
+    }) as Promise<{ state_machine: unknown; visual_layout?: unknown }>;
+  }
+
+  async updateStateMachine(resourceType: string, stateMachine: unknown, visualLayout?: unknown): Promise<{ state_machine: unknown; visual_layout?: unknown }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/${encodeURIComponent(resourceType)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state_machine: stateMachine, visual_layout: visualLayout }),
+    }) as Promise<{ state_machine: unknown; visual_layout?: unknown }>;
+  }
+
+  async deleteStateMachine(resourceType: string): Promise<void> {
+    await this.fetchJson(`/__mockforge/api/state-machines/${encodeURIComponent(resourceType)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getStateInstances(): Promise<{ instances: Array<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>; total: number }> {
+    return this.fetchJson('/__mockforge/api/state-machines/instances') as Promise<{ instances: Array<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>; total: number }>;
+  }
+
+  async getStateInstance(resourceId: string): Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}`) as Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>;
+  }
+
+  async createStateInstance(resourceId: string, resourceType: string): Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }> {
+    return this.fetchJson('/__mockforge/api/state-machines/instances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_id: resourceId, resource_type: resourceType }),
+    }) as Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>;
+  }
+
+  async executeTransition(resourceId: string, toState: string, context?: Record<string, unknown>): Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_id: resourceId, to_state: toState, context }),
+    }) as Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>;
+  }
+
+  async getNextStates(resourceId: string): Promise<{ next_states: string[] }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}/next-states`) as Promise<{ next_states: string[] }>;
+  }
+
+  async getCurrentState(resourceId: string): Promise<{ resource_id: string; current_state: string }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}/state`) as Promise<{ resource_id: string; current_state: string }>;
+  }
+
+  async exportStateMachines(): Promise<{ state_machines: unknown[]; visual_layouts: Record<string, unknown> }> {
+    return this.fetchJson('/__mockforge/api/state-machines/export') as Promise<{ state_machines: unknown[]; visual_layouts: Record<string, unknown> }>;
+  }
+
+  async importStateMachines(data: { state_machines: unknown[]; visual_layouts: Record<string, unknown> }): Promise<void> {
+    await this.fetchJson('/__mockforge/api/state-machines/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  }
+
   async createChain(definition: string): Promise<ChainCreationResponse> {
     return this.fetchJson(API_BASE, {
       method: 'POST',
@@ -984,6 +1059,195 @@ class ChaosApiService {
   }
 }
 
+/**
+ * Time Travel API Service
+ * Handles all time travel and temporal simulation operations
+ */
+class TimeTravelApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  // Time Travel Status
+  async getStatus(): Promise<{
+    enabled: boolean;
+    current_time?: string;
+    scale_factor: number;
+    real_time: string;
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/status') as Promise<{
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+      real_time: string;
+    }>;
+  }
+
+  async enable(time?: string, scale?: number): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time, scale }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
+  async disable(): Promise<{ success: boolean }> {
+    return this.fetchJson('/__mockforge/time-travel/disable', {
+      method: 'POST',
+    }) as Promise<{ success: boolean }>;
+  }
+
+  async advance(duration: string): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
+  async setScale(scale: number): Promise<{ success: boolean }> {
+    return this.fetchJson('/__mockforge/time-travel/scale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scale }),
+    }) as Promise<{ success: boolean }>;
+  }
+
+  async reset(): Promise<{ success: boolean }> {
+    return this.fetchJson('/__mockforge/time-travel/reset', {
+      method: 'POST',
+    }) as Promise<{ success: boolean }>;
+  }
+
+  // Cron Jobs
+  async listCronJobs(): Promise<{ success: boolean; jobs: unknown[] }> {
+    return this.fetchJson('/__mockforge/time-travel/cron') as Promise<{
+      success: boolean;
+      jobs: unknown[];
+    }>;
+  }
+
+  async getCronJob(id: string): Promise<{ success: boolean; job: unknown }> {
+    return this.fetchJson(`/__mockforge/time-travel/cron/${id}`) as Promise<{
+      success: boolean;
+      job: unknown;
+    }>;
+  }
+
+  async createCronJob(job: {
+    id: string;
+    name: string;
+    schedule: string;
+    description?: string;
+    action_type: string;
+    action_metadata: unknown;
+  }): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson('/__mockforge/time-travel/cron', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(job),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async deleteCronJob(id: string): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson(`/__mockforge/time-travel/cron/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async setCronJobEnabled(id: string, enabled: boolean): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.fetchJson(`/__mockforge/time-travel/cron/${id}/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  // Mutation Rules
+  async listMutationRules(): Promise<{ success: boolean; rules: unknown[] }> {
+    return this.fetchJson('/__mockforge/time-travel/mutations') as Promise<{
+      success: boolean;
+      rules: unknown[];
+    }>;
+  }
+
+  async getMutationRule(id: string): Promise<{ success: boolean; rule: unknown }> {
+    return this.fetchJson(`/__mockforge/time-travel/mutations/${id}`) as Promise<{
+      success: boolean;
+      rule: unknown;
+    }>;
+  }
+
+  async createMutationRule(rule: {
+    id: string;
+    entity_name: string;
+    trigger: unknown;
+    operation: unknown;
+    description?: string;
+    condition?: string;
+  }): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson('/__mockforge/time-travel/mutations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async deleteMutationRule(id: string): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson(`/__mockforge/time-travel/mutations/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async setMutationRuleEnabled(id: string, enabled: boolean): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.fetchJson(`/__mockforge/time-travel/mutations/${id}/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+}
+
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
@@ -1061,6 +1325,7 @@ export const filesApi = new FilesApiService();
 export const smokeTestsApi = new SmokeTestsApiService();
 export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
+export const timeTravelApi = new TimeTravelApiService();
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {
@@ -1080,6 +1345,7 @@ logger.info('API Services initialized', {
   smokeTestsApi: !!smokeTestsApi,
   pluginsApi: !!pluginsApi,
   chaosApi: !!chaosApi,
+  timeTravelApi: !!timeTravelApi,
 });
 
 // Type exports for backwards compatibility

@@ -73,6 +73,9 @@ mockforge-plugin-registry = "0.2.7"
 # Reuse plugin loader patterns
 mockforge-plugin-loader = "0.2.7"
 
+# Core types for state machines
+mockforge-core = { path = "../mockforge-core", version = "0.2.7" }
+
 [features]
 default = ["git-support"]
 git-support = ["git2"]

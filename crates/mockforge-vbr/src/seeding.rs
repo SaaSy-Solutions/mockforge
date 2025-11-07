@@ -51,7 +51,8 @@ pub async fn seed_entity(
         );
 
         // Prepare values in the same order as fields
-        let mut values: Vec<Value> = fields.iter().map(|f| record.get(f).cloned().unwrap_or(Value::Null)).collect();
+        let mut values: Vec<Value> =
+            fields.iter().map(|f| record.get(f).cloned().unwrap_or(Value::Null)).collect();
 
         database.execute(&query, &values).await?;
         inserted_count += 1;
@@ -117,11 +118,7 @@ pub async fn load_seed_file_yaml<P: AsRef<Path>>(path: P) -> Result<SeedData> {
 /// Load seed data from a file (auto-detect format)
 pub async fn load_seed_file<P: AsRef<Path>>(path: P) -> Result<SeedData> {
     let path_ref = path.as_ref();
-    let ext = path_ref
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+    let ext = path_ref.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
 
     match ext.as_str() {
         "json" => load_seed_file_json(path_ref).await,
@@ -148,10 +145,7 @@ fn parse_seed_data(value: Value) -> Result<SeedData> {
         let records = records_value
             .as_array()
             .ok_or_else(|| {
-                Error::generic(format!(
-                    "Entity '{}' seed data must be an array",
-                    entity_name
-                ))
+                Error::generic(format!("Entity '{}' seed data must be an array", entity_name))
             })?
             .iter()
             .map(|v| {
@@ -196,19 +190,17 @@ fn validate_foreign_keys(
 
             // For now, we'll validate during insertion (database will enforce)
             // This is a placeholder for more sophisticated validation
-            if fk_value.is_null() && !entity
-                .schema
-                .base
-                .fields
-                .iter()
-                .find(|f| f.name == fk.field)
-                .map(|f| !f.required)
-                .unwrap_or(false)
+            if fk_value.is_null()
+                && !entity
+                    .schema
+                    .base
+                    .fields
+                    .iter()
+                    .find(|f| f.name == fk.field)
+                    .map(|f| !f.required)
+                    .unwrap_or(false)
             {
-                return Err(Error::generic(format!(
-                    "Foreign key '{}' cannot be null",
-                    fk.field
-                )));
+                return Err(Error::generic(format!("Foreign key '{}' cannot be null", fk.field)));
             }
         }
     }
@@ -219,10 +211,7 @@ fn validate_foreign_keys(
 /// Perform topological sort of entities based on foreign key dependencies
 ///
 /// Returns entities in an order where parent entities come before child entities.
-fn topological_sort(
-    registry: &EntityRegistry,
-    seed_data: &SeedData,
-) -> Result<Vec<String>> {
+fn topological_sort(registry: &EntityRegistry, seed_data: &SeedData) -> Result<Vec<String>> {
     // Build dependency graph
     let mut graph: HashMap<String, Vec<String>> = HashMap::new();
     let mut in_degree: HashMap<String, usize> = HashMap::new();

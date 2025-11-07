@@ -195,6 +195,8 @@ pub mod request_logging;
 pub mod spec_import;
 /// Server-Sent Events for streaming logs and metrics
 pub mod sse;
+/// State machine API for scenario state machines
+pub mod state_machine_api;
 /// TLS/HTTPS support
 pub mod tls;
 /// Token response utilities
@@ -731,6 +733,12 @@ pub async fn build_router_with_multi_tenant(
     // Add management API endpoints
     let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
 
+    // Create WebSocket state and connect it to management state
+    use std::sync::Arc;
+    let ws_state = WsManagementState::new();
+    let ws_broadcast = Arc::new(ws_state.tx.clone());
+    let management_state = management_state.with_ws_broadcast(ws_broadcast);
+
     // Note: ProxyConfig not available in this build function path
     // Migration endpoints will work once ProxyConfig is passed to build_router_with_chains_and_multi_tenant
 
@@ -758,7 +766,6 @@ pub async fn build_router_with_multi_tenant(
     app = app.nest("/__mockforge/api", management_router(management_state));
 
     // Add management WebSocket endpoint
-    let ws_state = WsManagementState::new();
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
 
     // Add request logging middleware to capture all requests
@@ -1259,11 +1266,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
     app = app.merge(file_server::file_serving_router());
 
     // Add management API endpoints
-    let management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
+    let mut management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
+
+    // Create WebSocket state and connect it to management state
+    use std::sync::Arc;
+    let ws_state = WsManagementState::new();
+    let ws_broadcast = Arc::new(ws_state.tx.clone());
+    let management_state = management_state.with_ws_broadcast(ws_broadcast);
 
     // Add proxy config to management state if available
     let management_state = if let Some(proxy_cfg) = proxy_config {
-        use std::sync::Arc;
         use tokio::sync::RwLock;
         let proxy_config_arc = Arc::new(RwLock::new(proxy_cfg));
         management_state.with_proxy_config(proxy_config_arc)
@@ -1316,6 +1328,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         management_state
     };
     app = app.nest("/__mockforge/api", management_router(management_state));
+
+    // Add management WebSocket endpoint
+    app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
 
     // Add workspace routing middleware if multi-tenant is enabled
     if let Some(mt_config) = multi_tenant_config {

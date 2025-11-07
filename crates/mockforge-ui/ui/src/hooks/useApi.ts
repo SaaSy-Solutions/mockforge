@@ -20,6 +20,7 @@ import {
   smokeTestsApi,
   importApi,
   chaosApi,
+  timeTravelApi,
 } from '../services/api';
 import type {
   CreateEnvironmentRequest,
@@ -46,6 +47,9 @@ export const queryKeys = {
   importHistory: ['importHistory'] as const,
   chaosConfig: ['chaosConfig'] as const,
   chaosStatus: ['chaosStatus'] as const,
+  timeTravelStatus: ['timeTravelStatus'] as const,
+  cronJobs: ['cronJobs'] as const,
+  mutationRules: ['mutationRules'] as const,
 };
 
 /**
@@ -706,5 +710,91 @@ export function useResetChaos() {
       queryClient.invalidateQueries({ queryKey: queryKeys.chaosConfig });
       queryClient.invalidateQueries({ queryKey: queryKeys.chaosStatus });
     },
+  });
+}
+
+/**
+ * Time Travel hooks
+ */
+export function useTimeTravelStatus() {
+  return useQuery({
+    queryKey: queryKeys.timeTravelStatus,
+    queryFn: () => timeTravelApi.getStatus(),
+    refetchInterval: 2000, // Refetch every 2 seconds for real-time updates
+    staleTime: 1000,
+  });
+}
+
+export function useEnableTimeTravel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ time, scale }: { time?: string; scale?: number }) =>
+      timeTravelApi.enable(time, scale),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useDisableTimeTravel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => timeTravelApi.disable(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useAdvanceTime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (duration: string) => timeTravelApi.advance(duration),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useSetTimeScale() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (scale: number) => timeTravelApi.setScale(scale),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useResetTimeTravel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => timeTravelApi.reset(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useCronJobs() {
+  return useQuery({
+    queryKey: queryKeys.cronJobs,
+    queryFn: () => timeTravelApi.listCronJobs(),
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000,
+  });
+}
+
+export function useMutationRules() {
+  return useQuery({
+    queryKey: queryKeys.mutationRules,
+    queryFn: () => timeTravelApi.listMutationRules(),
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000,
   });
 }

@@ -5,6 +5,7 @@
 
 use crate::error::{Result, ScenarioError};
 use chrono::{DateTime, Utc};
+use mockforge_core::intelligent_behavior::{rules::StateMachine, VisualLayout};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -77,6 +78,20 @@ pub struct ScenarioManifest {
     /// Updated timestamp
     #[serde(default = "default_timestamp")]
     pub updated_at: DateTime<Utc>,
+
+    /// State machines defined in this scenario
+    ///
+    /// These state machines can be used to model resource lifecycles,
+    /// workflow states, and complex state transitions.
+    #[serde(default)]
+    pub state_machines: Vec<StateMachine>,
+
+    /// Visual layout graphs for state machines
+    ///
+    /// Maps state machine resource_type to its visual layout representation.
+    /// This allows the editor to restore node positions and visual structure.
+    #[serde(default)]
+    pub state_machine_graphs: HashMap<String, VisualLayout>,
 }
 
 fn default_timestamp() -> DateTime<Utc> {
@@ -105,6 +120,8 @@ impl ScenarioManifest {
             metadata: HashMap::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            state_machines: Vec::new(),
+            state_machine_graphs: HashMap::new(),
         }
     }
 
@@ -172,6 +189,58 @@ impl ScenarioManifest {
         // Validate plugin dependencies
         for dep in &self.plugin_dependencies {
             dep.validate()?;
+        }
+
+        // Validate state machines
+        for state_machine in &self.state_machines {
+            // Ensure initial state exists in states list
+            if !state_machine.states.contains(&state_machine.initial_state) {
+                return Err(ScenarioError::InvalidManifest(format!(
+                    "State machine '{}' has initial state '{}' that is not in states list",
+                    state_machine.resource_type, state_machine.initial_state
+                )));
+            }
+
+            // Validate transitions reference valid states
+            for transition in &state_machine.transitions {
+                if !state_machine.states.contains(&transition.from_state) {
+                    return Err(ScenarioError::InvalidManifest(format!(
+                        "State machine '{}' has transition from invalid state '{}'",
+                        state_machine.resource_type, transition.from_state
+                    )));
+                }
+                if !state_machine.states.contains(&transition.to_state) {
+                    return Err(ScenarioError::InvalidManifest(format!(
+                        "State machine '{}' has transition to invalid state '{}'",
+                        state_machine.resource_type, transition.to_state
+                    )));
+                }
+
+                // Validate sub-scenario references
+                if let Some(ref sub_scenario_id) = transition.sub_scenario_ref {
+                    if state_machine.get_sub_scenario(sub_scenario_id).is_none() {
+                        return Err(ScenarioError::InvalidManifest(format!(
+                            "State machine '{}' references non-existent sub-scenario '{}'",
+                            state_machine.resource_type, sub_scenario_id
+                        )));
+                    }
+                }
+            }
+
+            // Validate sub-scenarios recursively
+            for sub_scenario in &state_machine.sub_scenarios {
+                // Validate sub-scenario has valid state machine
+                if !sub_scenario
+                    .state_machine
+                    .states
+                    .contains(&sub_scenario.state_machine.initial_state)
+                {
+                    return Err(ScenarioError::InvalidManifest(format!(
+                        "Sub-scenario '{}' in state machine '{}' has invalid initial state",
+                        sub_scenario.id, state_machine.resource_type
+                    )));
+                }
+            }
         }
 
         Ok(())

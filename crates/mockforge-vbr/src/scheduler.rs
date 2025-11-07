@@ -44,6 +44,39 @@ impl Scheduler {
         }
     }
 
+    /// Start background tasks including aging and mutation rules
+    ///
+    /// Runs periodic cleanup and mutation tasks in the background.
+    pub async fn start_all_tasks(
+        &self,
+        aging_manager: std::sync::Arc<crate::aging::AgingManager>,
+        mutation_manager: Option<std::sync::Arc<crate::mutation_rules::MutationRuleManager>>,
+        database: std::sync::Arc<dyn crate::database::VirtualDatabase + Send + Sync>,
+        registry: std::sync::Arc<tokio::sync::RwLock<crate::entities::EntityRegistry>>,
+    ) -> Result<()> {
+        let mut interval = interval(self.cleanup_interval);
+
+        loop {
+            interval.tick().await;
+
+            // Run cleanup tasks
+            let registry_read = registry.read().await;
+            if let Err(e) = aging_manager.cleanup_expired(database.as_ref(), &registry_read).await {
+                tracing::warn!("Error during data aging cleanup: {}", e);
+            }
+
+            // Run mutation rules if manager is provided
+            if let Some(ref mutation_mgr) = mutation_manager {
+                if let Err(e) =
+                    mutation_mgr.check_and_execute(database.as_ref(), &registry_read).await
+                {
+                    tracing::warn!("Error during mutation rule execution: {}", e);
+                }
+            }
+            drop(registry_read);
+        }
+    }
+
     /// Spawn cleanup tasks as a background task
     ///
     /// Returns a handle that can be used to abort the task.

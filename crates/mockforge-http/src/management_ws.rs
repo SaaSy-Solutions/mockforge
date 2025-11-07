@@ -52,6 +52,57 @@ pub enum MockEvent {
         /// ISO 8601 timestamp of the event
         timestamp: String,
     },
+    /// State machine was created or updated
+    StateMachineUpdated {
+        /// Resource type of the state machine
+        resource_type: String,
+        /// The state machine definition
+        state_machine: mockforge_core::intelligent_behavior::rules::StateMachine,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
+    /// State machine was deleted
+    StateMachineDeleted {
+        /// Resource type of the deleted state machine
+        resource_type: String,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
+    /// State instance was created
+    StateInstanceCreated {
+        /// Resource ID
+        resource_id: String,
+        /// Resource type
+        resource_type: String,
+        /// Initial state
+        initial_state: String,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
+    /// State transition occurred
+    StateTransitioned {
+        /// Resource ID
+        resource_id: String,
+        /// Resource type
+        resource_type: String,
+        /// Previous state
+        from_state: String,
+        /// New state
+        to_state: String,
+        /// Current state data
+        state_data: std::collections::HashMap<String, serde_json::Value>,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
+    /// State instance was deleted
+    StateInstanceDeleted {
+        /// Resource ID
+        resource_id: String,
+        /// Resource type
+        resource_type: String,
+        /// ISO 8601 timestamp of the event
+        timestamp: String,
+    },
 }
 
 impl MockEvent {
@@ -91,6 +142,67 @@ impl MockEvent {
     pub fn connected(message: String) -> Self {
         Self::Connected {
             message,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Create a state machine updated event
+    pub fn state_machine_updated(
+        resource_type: String,
+        state_machine: mockforge_core::intelligent_behavior::rules::StateMachine,
+    ) -> Self {
+        Self::StateMachineUpdated {
+            resource_type,
+            state_machine,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Create a state machine deleted event
+    pub fn state_machine_deleted(resource_type: String) -> Self {
+        Self::StateMachineDeleted {
+            resource_type,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Create a state instance created event
+    pub fn state_instance_created(
+        resource_id: String,
+        resource_type: String,
+        initial_state: String,
+    ) -> Self {
+        Self::StateInstanceCreated {
+            resource_id,
+            resource_type,
+            initial_state,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Create a state transitioned event
+    pub fn state_transitioned(
+        resource_id: String,
+        resource_type: String,
+        from_state: String,
+        to_state: String,
+        state_data: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Self {
+        Self::StateTransitioned {
+            resource_id,
+            resource_type,
+            from_state,
+            to_state,
+            state_data,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Create a state instance deleted event
+    pub fn state_instance_deleted(resource_id: String, resource_type: String) -> Self {
+        Self::StateInstanceDeleted {
+            resource_id,
+            resource_type,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }

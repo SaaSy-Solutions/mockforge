@@ -2913,8 +2913,25 @@ async fn handle_serve(
             println!("   Scale factor: {}x", manager.clock().get_scale());
         }
 
+        // Start cron scheduler background task
+        let cron_scheduler = manager.cron_scheduler();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                if let Err(e) = cron_scheduler.check_and_execute().await {
+                    tracing::warn!("Error checking cron jobs: {}", e);
+                }
+            }
+        });
+
         manager
     };
+
+    // Initialize MutationRuleManager for time-based data mutations
+    use mockforge_vbr::MutationRuleManager;
+    let mutation_rule_manager = Arc::new(MutationRuleManager::new());
+    time_travel_handlers::init_mutation_rule_manager(mutation_rule_manager.clone());
 
     // Initialize MockAI if enabled
     let mockai = if config.mockai.enabled {
@@ -2971,7 +2988,7 @@ async fn handle_serve(
         Some(health_manager_for_router),       // health_manager
         mockai,                                // mockai
         Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
-        None,                                   // proxy_config (ProxyConfig not in ServerConfig)
+        None,                                  // proxy_config (ProxyConfig not in ServerConfig)
     )
     .await;
 

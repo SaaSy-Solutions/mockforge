@@ -324,12 +324,8 @@ impl RuleGenerator {
             let initial_state = states.first().cloned().unwrap_or_else(|| "created".to_string());
             let transitions = self.infer_transitions_from_crud(&resource_examples, &states)?;
 
-            let machine = StateMachine {
-                resource_type: resource_type.clone(),
-                states,
-                initial_state,
-                transitions,
-            };
+            let machine = StateMachine::new(resource_type.clone(), states, initial_state)
+                .add_transitions(transitions);
 
             machines.insert(resource_type, machine);
         }

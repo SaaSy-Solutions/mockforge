@@ -155,6 +155,11 @@ pub struct ManagementState {
     /// Broadcast channel for message events (MQTT & Kafka)
     #[cfg(any(feature = "mqtt", feature = "kafka"))]
     pub message_events: Arc<broadcast::Sender<MessageEvent>>,
+    /// State machine manager for scenario state machines
+    pub state_machine_manager:
+        Arc<RwLock<mockforge_scenarios::state_machine::ScenarioStateMachineManager>>,
+    /// Optional WebSocket broadcast channel for real-time updates
+    pub ws_broadcast: Option<Arc<broadcast::Sender<crate::management_ws::MockEvent>>>,
 }
 
 impl ManagementState {
@@ -184,7 +189,20 @@ impl ManagementState {
                 let (tx, _) = broadcast::channel(1000);
                 Arc::new(tx)
             },
+            state_machine_manager: Arc::new(RwLock::new(
+                mockforge_scenarios::state_machine::ScenarioStateMachineManager::new(),
+            )),
+            ws_broadcast: None,
         }
+    }
+
+    /// Add WebSocket broadcast channel to management state
+    pub fn with_ws_broadcast(
+        mut self,
+        ws_broadcast: Arc<broadcast::Sender<crate::management_ws::MockEvent>>,
+    ) -> Self {
+        self.ws_broadcast = Some(ws_broadcast);
+        self
     }
 
     /// Add proxy configuration to management state
@@ -1204,6 +1222,10 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/chaos/config", post(update_chaos_config))
         .route("/network/profiles", get(list_network_profiles))
         .route("/network/profile/apply", post(apply_network_profile));
+
+    // State machine API routes
+    let router =
+        router.nest("/state-machines", crate::state_machine_api::create_state_machine_routes());
 
     router.with_state(state)
 }

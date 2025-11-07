@@ -47,9 +47,11 @@
 
 pub mod behavior;
 pub mod cache;
+pub mod condition_evaluator;
 pub mod config;
 pub mod context;
 pub mod embedding_client;
+pub mod history;
 pub mod llm_client;
 pub mod memory;
 pub mod mockai;
@@ -59,13 +61,17 @@ pub mod rule_generator;
 pub mod rules;
 pub mod session;
 pub mod spec_suggestion;
+pub mod sub_scenario;
 pub mod types;
 pub mod validation_generator;
+pub mod visual_layout;
 
 // Re-export main types
 pub use behavior::BehaviorModel;
+pub use condition_evaluator::{ConditionError, ConditionEvaluator, ConditionResult};
 pub use config::IntelligentBehaviorConfig;
 pub use context::StatefulAiContext;
+pub use history::HistoryManager;
 pub use memory::VectorMemoryStore;
 pub use mockai::{MockAI, Request, Response};
 pub use mutation_analyzer::{
@@ -84,8 +90,10 @@ pub use spec_suggestion::{
     EndpointSuggestion, OutputFormat, ParameterInfo, SpecSuggestionEngine, SuggestionConfig,
     SuggestionInput, SuggestionMetadata, SuggestionResult,
 };
+pub use sub_scenario::SubScenario;
 pub use types::{BehaviorRules, InteractionRecord};
 pub use validation_generator::{
     ErrorFormat, FieldError, RequestContext, ValidationErrorExample, ValidationErrorResponse,
     ValidationGenerator,
 };
+pub use visual_layout::{Viewport, VisualEdge, VisualLayout, VisualNode};

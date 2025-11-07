@@ -15,9 +15,9 @@ pub mod middleware;
 pub mod routing;
 
 // Re-export commonly used types
+pub use config::MigrationMode;
 pub use middleware::*;
 pub use routing::*;
-pub use config::MigrationMode;
 
 // Legacy imports for compatibility
 

@@ -1,5 +1,6 @@
 //! Consistency rules and state machines for intelligent behavior
 
+use crate::intelligent_behavior::{sub_scenario::SubScenario, visual_layout::VisualLayout};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -122,6 +123,18 @@ pub struct StateMachine {
 
     /// Allowed transitions between states
     pub transitions: Vec<StateTransition>,
+
+    /// Nested sub-scenarios that can be referenced from this state machine
+    #[serde(default)]
+    pub sub_scenarios: Vec<SubScenario>,
+
+    /// Visual layout information for the editor (node positions, edges, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visual_layout: Option<VisualLayout>,
+
+    /// Additional metadata for editor-specific data
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 impl StateMachine {
@@ -136,12 +149,21 @@ impl StateMachine {
             states,
             initial_state: initial_state.into(),
             transitions: Vec::new(),
+            sub_scenarios: Vec::new(),
+            visual_layout: None,
+            metadata: HashMap::new(),
         }
     }
 
     /// Add a transition
     pub fn add_transition(mut self, transition: StateTransition) -> Self {
         self.transitions.push(transition);
+        self
+    }
+
+    /// Add multiple transitions
+    pub fn add_transitions(mut self, transitions: Vec<StateTransition>) -> Self {
+        self.transitions.extend(transitions);
         self
     }
 
@@ -183,6 +205,34 @@ impl StateMachine {
         // Fallback to first transition
         Some(candidates[0].to_state.clone())
     }
+
+    /// Add a sub-scenario
+    pub fn add_sub_scenario(mut self, sub_scenario: SubScenario) -> Self {
+        self.sub_scenarios.push(sub_scenario);
+        self
+    }
+
+    /// Set visual layout
+    pub fn with_visual_layout(mut self, layout: VisualLayout) -> Self {
+        self.visual_layout = Some(layout);
+        self
+    }
+
+    /// Set metadata value
+    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.metadata.insert(key.into(), value);
+        self
+    }
+
+    /// Get a sub-scenario by ID
+    pub fn get_sub_scenario(&self, id: &str) -> Option<&SubScenario> {
+        self.sub_scenarios.iter().find(|s| s.id == id)
+    }
+
+    /// Get a sub-scenario by ID mutably
+    pub fn get_sub_scenario_mut(&mut self, id: &str) -> Option<&mut SubScenario> {
+        self.sub_scenarios.iter_mut().find(|s| s.id == id)
+    }
 }
 
 /// State transition definition
@@ -200,11 +250,30 @@ pub struct StateTransition {
     #[serde(default = "default_probability")]
     pub probability: f64,
 
-    /// Optional condition for this transition
+    /// Optional condition for this transition (legacy string format)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub condition: Option<String>,
 
     /// Optional side effects of this transition
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub side_effects: Option<Vec<String>>,
+
+    /// JavaScript/TypeScript expression for conditional transition
+    ///
+    /// This is the new preferred way to specify conditions. Supports full
+    /// JavaScript expressions with variable access, comparison, and logical operators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition_expression: Option<String>,
+
+    /// Parsed condition AST for validation (not serialized, computed on demand)
+    #[serde(skip)]
+    pub condition_ast: Option<serde_json::Value>,
+
+    /// Reference to a sub-scenario to execute during this transition
+    ///
+    /// If set, the sub-scenario will be executed when this transition is taken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_scenario_ref: Option<String>,
 }
 
 impl StateTransition {
@@ -216,6 +285,9 @@ impl StateTransition {
             probability: default_probability(),
             condition: None,
             side_effects: None,
+            condition_expression: None,
+            condition_ast: None,
+            sub_scenario_ref: None,
         }
     }
 
@@ -236,6 +308,18 @@ impl StateTransition {
         let mut effects = self.side_effects.unwrap_or_default();
         effects.push(effect.into());
         self.side_effects = Some(effects);
+        self
+    }
+
+    /// Set condition expression (JavaScript/TypeScript)
+    pub fn with_condition_expression(mut self, expression: impl Into<String>) -> Self {
+        self.condition_expression = Some(expression.into());
+        self
+    }
+
+    /// Set sub-scenario reference
+    pub fn with_sub_scenario_ref(mut self, sub_scenario_id: impl Into<String>) -> Self {
+        self.sub_scenario_ref = Some(sub_scenario_id.into());
         self
     }
 }

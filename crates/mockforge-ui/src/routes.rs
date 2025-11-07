@@ -150,6 +150,18 @@ pub fn create_admin_router(
         .route("/__mockforge/time-travel/scheduled/clear", post(time_travel_handlers::clear_scheduled_responses))
         .route("/__mockforge/time-travel/scenario/save", post(time_travel_handlers::save_scenario))
         .route("/__mockforge/time-travel/scenario/load", post(time_travel_handlers::load_scenario))
+        // Cron job management routes
+        .route("/__mockforge/time-travel/cron", get(time_travel_handlers::list_cron_jobs))
+        .route("/__mockforge/time-travel/cron", post(time_travel_handlers::create_cron_job))
+        .route("/__mockforge/time-travel/cron/{id}", get(time_travel_handlers::get_cron_job))
+        .route("/__mockforge/time-travel/cron/{id}", delete(time_travel_handlers::delete_cron_job))
+        .route("/__mockforge/time-travel/cron/{id}/enable", post(time_travel_handlers::set_cron_job_enabled))
+        // Mutation rule management routes
+        .route("/__mockforge/time-travel/mutations", get(time_travel_handlers::list_mutation_rules))
+        .route("/__mockforge/time-travel/mutations", post(time_travel_handlers::create_mutation_rule))
+        .route("/__mockforge/time-travel/mutations/{id}", get(time_travel_handlers::get_mutation_rule))
+        .route("/__mockforge/time-travel/mutations/{id}", delete(time_travel_handlers::delete_mutation_rule))
+        .route("/__mockforge/time-travel/mutations/{id}/enable", post(time_travel_handlers::set_mutation_rule_enabled))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))

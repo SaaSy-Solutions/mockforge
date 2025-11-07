@@ -56,6 +56,7 @@ pub mod session;
 
 // Time-based features
 pub mod aging;
+pub mod mutation_rules;
 pub mod scheduler;
 
 // Integration module
@@ -77,7 +78,11 @@ pub mod snapshots;
 pub use config::{StorageBackend, VbrConfig};
 pub use database::VirtualDatabase;
 pub use entities::{Entity, EntityRegistry};
+pub use mutation_rules::{
+    ComparisonOperator, MutationOperation, MutationRule, MutationRuleManager, MutationTrigger,
+};
 pub use schema::{ManyToManyDefinition, VbrSchemaDefinition};
+pub use snapshots::{SnapshotMetadata, TimeTravelSnapshotState};
 
 /// Main VBR engine
 pub struct VbrEngine {
@@ -178,11 +183,7 @@ impl VbrEngine {
             engine.registry_mut().register(entity.clone())?;
 
             // Create database table for this entity
-            migration::create_table_for_entity(
-                engine.database.as_ref(),
-                &entity,
-            )
-            .await?;
+            migration::create_table_for_entity(engine.database.as_ref(), &entity).await?;
         }
 
         Ok((engine, conversion_result))
@@ -202,12 +203,7 @@ impl VbrEngine {
     ) -> Result<(Self, openapi::OpenApiConversionResult)> {
         let content = tokio::fs::read_to_string(file_path.as_ref())
             .await
-            .map_err(|e| {
-                Error::generic(format!(
-                    "Failed to read OpenAPI file: {}",
-                    e
-                ))
-            })?;
+            .map_err(|e| Error::generic(format!("Failed to read OpenAPI file: {}", e)))?;
 
         Self::from_openapi(config, &content).await
     }
@@ -222,23 +218,14 @@ impl VbrEngine {
         entity_name: &str,
         records: &[HashMap<String, serde_json::Value>],
     ) -> Result<usize> {
-        seeding::seed_entity(
-            self.database.as_ref(),
-            &self.registry,
-            entity_name,
-            records,
-        )
-        .await
+        seeding::seed_entity(self.database.as_ref(), &self.registry, entity_name, records).await
     }
 
     /// Seed all entities with data (respects dependencies)
     ///
     /// # Arguments
     /// * `seed_data` - Seed data organized by entity name
-    pub async fn seed_all(
-        &self,
-        seed_data: &seeding::SeedData,
-    ) -> Result<HashMap<String, usize>> {
+    pub async fn seed_all(&self, seed_data: &seeding::SeedData) -> Result<HashMap<String, usize>> {
         seeding::seed_all(self.database.as_ref(), &self.registry, seed_data).await
     }
 
@@ -285,6 +272,35 @@ impl VbrEngine {
             .await
     }
 
+    /// Create a snapshot with time travel state
+    ///
+    /// # Arguments
+    /// * `name` - Name for the snapshot
+    /// * `description` - Optional description
+    /// * `snapshots_dir` - Directory to store snapshots
+    /// * `include_time_travel` - Whether to include time travel state
+    /// * `time_travel_state` - Optional time travel state to include
+    pub async fn create_snapshot_with_time_travel<P: AsRef<std::path::Path>>(
+        &self,
+        name: &str,
+        description: Option<String>,
+        snapshots_dir: P,
+        include_time_travel: bool,
+        time_travel_state: Option<snapshots::TimeTravelSnapshotState>,
+    ) -> Result<snapshots::SnapshotMetadata> {
+        let manager = snapshots::SnapshotManager::new(snapshots_dir);
+        manager
+            .create_snapshot_with_time_travel(
+                name,
+                description,
+                self.database.as_ref(),
+                &self.registry,
+                include_time_travel,
+                time_travel_state,
+            )
+            .await
+    }
+
     /// Restore a snapshot
     ///
     /// # Arguments
@@ -296,8 +312,36 @@ impl VbrEngine {
         snapshots_dir: P,
     ) -> Result<()> {
         let manager = snapshots::SnapshotManager::new(snapshots_dir);
+        manager.restore_snapshot(name, self.database.as_ref(), &self.registry).await
+    }
+
+    /// Restore a snapshot with time travel state
+    ///
+    /// # Arguments
+    /// * `name` - Name of the snapshot to restore
+    /// * `snapshots_dir` - Directory where snapshots are stored
+    /// * `restore_time_travel` - Whether to restore time travel state
+    /// * `time_travel_restore_callback` - Optional callback to restore time travel state
+    pub async fn restore_snapshot_with_time_travel<P, F>(
+        &self,
+        name: &str,
+        snapshots_dir: P,
+        restore_time_travel: bool,
+        time_travel_restore_callback: Option<F>,
+    ) -> Result<()>
+    where
+        P: AsRef<std::path::Path>,
+        F: FnOnce(snapshots::TimeTravelSnapshotState) -> Result<()>,
+    {
+        let manager = snapshots::SnapshotManager::new(snapshots_dir);
         manager
-            .restore_snapshot(name, self.database.as_ref(), &self.registry)
+            .restore_snapshot_with_time_travel(
+                name,
+                self.database.as_ref(),
+                &self.registry,
+                restore_time_travel,
+                time_travel_restore_callback,
+            )
             .await
     }
 
@@ -338,8 +382,7 @@ mod tests {
     #[tokio::test]
     async fn test_vbr_engine_creation() {
         // Use Memory backend for tests to avoid file system issues
-        let config = VbrConfig::default()
-            .with_storage_backend(StorageBackend::Memory);
+        let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
         let engine = VbrEngine::new(config).await;
         assert!(engine.is_ok());
     }

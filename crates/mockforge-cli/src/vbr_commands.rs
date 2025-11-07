@@ -601,9 +601,7 @@ async fn execute_snapshot_command(
             let mut engine = VbrEngine::new(config).await?;
 
             // Create snapshot
-            let metadata = engine
-                .create_snapshot(&name, description, &snapshots_dir)
-                .await?;
+            let metadata = engine.create_snapshot(&name, description, &snapshots_dir).await?;
 
             println!("{} Snapshot created:", "✓".green());
             println!("  Name: {}", metadata.name.bright_cyan());
@@ -657,7 +655,10 @@ async fn execute_snapshot_command(
 
             Ok(())
         }
-        SnapshotCommands::Delete { name, snapshots_dir } => {
+        SnapshotCommands::Delete {
+            name,
+            snapshots_dir,
+        } => {
             println!("{} Deleting snapshot '{}'...", "🗑️".bright_cyan(), name);
 
             VbrEngine::delete_snapshot(&name, &snapshots_dir).await?;

@@ -9,7 +9,9 @@
 
 use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
-    config::{StorageBackend, VbrConfig}, entities::Entity, schema::{
+    config::{StorageBackend, VbrConfig},
+    entities::Entity,
+    schema::{
         AutoGenerationRule, CascadeAction, ForeignKeyDefinition, ManyToManyDefinition,
         VbrSchemaDefinition,
     },
@@ -81,8 +83,7 @@ async fn test_openapi_integration() {
 }
 "#;
 
-    let config = VbrConfig::default()
-        .with_storage_backend(StorageBackend::Memory);
+    let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
     let (engine, result) = VbrEngine::from_openapi(config, openapi_spec)
         .await
         .expect("Failed to create engine from OpenAPI");
@@ -105,8 +106,7 @@ async fn test_openapi_integration() {
 /// Test many-to-many relationships
 #[tokio::test]
 async fn test_many_to_many_relationships() {
-    let config = VbrConfig::default()
-        .with_storage_backend(StorageBackend::Memory);
+    let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
     let mut engine = VbrEngine::new(config).await.expect("Failed to create engine");
 
     // Create User entity
@@ -121,8 +121,7 @@ async fn test_many_to_many_relationships() {
         relationships: HashMap::new(),
     };
 
-    let user_schema = VbrSchemaDefinition::new(user_base)
-        .with_primary_key(vec!["id".to_string()]);
+    let user_schema = VbrSchemaDefinition::new(user_base).with_primary_key(vec!["id".to_string()]);
 
     let user_entity = Entity::new("User".to_string(), user_schema);
     engine.registry_mut().register(user_entity).unwrap();
@@ -141,10 +140,7 @@ async fn test_many_to_many_relationships() {
 
     let role_schema = VbrSchemaDefinition::new(role_base)
         .with_primary_key(vec!["id".to_string()])
-        .with_many_to_many(ManyToManyDefinition::new(
-            "User".to_string(),
-            "Role".to_string(),
-        ));
+        .with_many_to_many(ManyToManyDefinition::new("User".to_string(), "Role".to_string()));
 
     let role_entity = Entity::new("Role".to_string(), role_schema);
     engine.registry_mut().register(role_entity).unwrap();
@@ -152,36 +148,25 @@ async fn test_many_to_many_relationships() {
     // Create tables
     for entity_name in engine.registry().list() {
         let entity = engine.registry().get(&entity_name).unwrap();
-        mockforge_vbr::migration::create_table_for_entity(
-            engine.database(),
-            entity,
-        )
-        .await
-        .unwrap();
+        mockforge_vbr::migration::create_table_for_entity(engine.database(), entity)
+            .await
+            .unwrap();
     }
 
     // Create junction table
-    mockforge_vbr::migration::create_junction_tables(
-        engine.database(),
-        engine.registry(),
-    )
-    .await
-    .unwrap();
-
-    // Verify junction table exists (auto-generated name is alphabetically sorted: role_user)
-    let junction_exists = engine
-        .database()
-        .table_exists("role_user")
+    mockforge_vbr::migration::create_junction_tables(engine.database(), engine.registry())
         .await
         .unwrap();
+
+    // Verify junction table exists (auto-generated name is alphabetically sorted: role_user)
+    let junction_exists = engine.database().table_exists("role_user").await.unwrap();
     assert!(junction_exists);
 }
 
 /// Test data seeding
 #[tokio::test]
 async fn test_data_seeding() {
-    let config = VbrConfig::default()
-        .with_storage_backend(StorageBackend::Memory);
+    let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
     let mut engine = VbrEngine::new(config).await.expect("Failed to create engine");
 
     // Create User entity
@@ -197,8 +182,7 @@ async fn test_data_seeding() {
         relationships: HashMap::new(),
     };
 
-    let user_schema = VbrSchemaDefinition::new(user_base)
-        .with_primary_key(vec!["id".to_string()]);
+    let user_schema = VbrSchemaDefinition::new(user_base).with_primary_key(vec!["id".to_string()]);
 
     let user_entity = Entity::new("User".to_string(), user_schema);
     engine.registry_mut().register(user_entity).unwrap();
@@ -237,11 +221,7 @@ async fn test_data_seeding() {
 
     // Verify data was inserted
     let query = "SELECT * FROM users";
-    let records = engine
-        .database()
-        .query(query, &[])
-        .await
-        .expect("Failed to query");
+    let records = engine.database().query(query, &[]).await.expect("Failed to query");
     assert_eq!(records.len(), 2);
 }
 
@@ -291,8 +271,7 @@ async fn test_state_snapshots() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let snapshots_dir = temp_dir.path().join("snapshots");
 
-    let config = VbrConfig::default()
-        .with_storage_backend(StorageBackend::Memory);
+    let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
     let mut engine = VbrEngine::new(config).await.expect("Failed to create engine");
 
     // Create User entity
@@ -307,8 +286,7 @@ async fn test_state_snapshots() {
         relationships: HashMap::new(),
     };
 
-    let user_schema = VbrSchemaDefinition::new(user_base)
-        .with_primary_key(vec!["id".to_string()]);
+    let user_schema = VbrSchemaDefinition::new(user_base).with_primary_key(vec!["id".to_string()]);
 
     let user_entity = Entity::new("User".to_string(), user_schema);
     engine.registry_mut().register(user_entity).unwrap();
@@ -336,10 +314,7 @@ async fn test_state_snapshots() {
     // Verify data was seeded before creating snapshot
     let query = "SELECT COUNT(*) as count FROM users";
     let results = engine.database().query(query, &[]).await.expect("Failed to query");
-    let count_before_snapshot = results[0]
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let count_before_snapshot = results[0].get("count").and_then(|v| v.as_u64()).unwrap_or(0);
     assert_eq!(count_before_snapshot, 1, "Data should be seeded before snapshot");
 
     // Create snapshot
@@ -357,10 +332,7 @@ async fn test_state_snapshots() {
     // Verify data is gone
     let query = "SELECT COUNT(*) as count FROM users";
     let results = engine.database().query(query, &[]).await.expect("Failed to query");
-    let count = results[0]
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let count = results[0].get("count").and_then(|v| v.as_u64()).unwrap_or(0);
     assert_eq!(count, 0);
 
     // Restore snapshot
@@ -371,10 +343,7 @@ async fn test_state_snapshots() {
 
     // Verify data is restored
     let results = engine.database().query(query, &[]).await.expect("Failed to query");
-    let count = results[0]
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let count = results[0].get("count").and_then(|v| v.as_u64()).unwrap_or(0);
     assert_eq!(count, 1);
 
     // List snapshots
@@ -399,8 +368,7 @@ async fn test_state_snapshots() {
 /// Test database reset
 #[tokio::test]
 async fn test_database_reset() {
-    let config = VbrConfig::default()
-        .with_storage_backend(StorageBackend::Memory);
+    let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
     let mut engine = VbrEngine::new(config).await.expect("Failed to create engine");
 
     // Create User entity
@@ -415,8 +383,7 @@ async fn test_database_reset() {
         relationships: HashMap::new(),
     };
 
-    let user_schema = VbrSchemaDefinition::new(user_base)
-        .with_primary_key(vec!["id".to_string()]);
+    let user_schema = VbrSchemaDefinition::new(user_base).with_primary_key(vec!["id".to_string()]);
 
     let user_entity = Entity::new("User".to_string(), user_schema);
     engine.registry_mut().register(user_entity).unwrap();
@@ -452,10 +419,7 @@ async fn test_database_reset() {
     // Verify data exists
     let query = "SELECT COUNT(*) as count FROM users";
     let results = engine.database().query(query, &[]).await.expect("Failed to query");
-    let count = results[0]
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let count = results[0].get("count").and_then(|v| v.as_u64()).unwrap_or(0);
     assert_eq!(count, 2);
 
     // Reset database
@@ -463,9 +427,6 @@ async fn test_database_reset() {
 
     // Verify data is gone
     let results = engine.database().query(query, &[]).await.expect("Failed to query");
-    let count = results[0]
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let count = results[0].get("count").and_then(|v| v.as_u64()).unwrap_or(0);
     assert_eq!(count, 0);
 }

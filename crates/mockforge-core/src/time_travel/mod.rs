@@ -8,6 +8,7 @@
 //! - Control time flow for deterministic testing
 
 use chrono::{DateTime, Duration, Utc};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
@@ -449,13 +450,13 @@ impl TimeScenario {
     pub fn apply_to_manager(&self, manager: &TimeTravelManager) {
         if self.enabled {
             if let Some(time) = self.current_time {
-                manager.clock().enable_and_set(time);
+                manager.enable_and_set(time);
             } else {
-                manager.clock().enable_and_set(Utc::now());
+                manager.enable_and_set(Utc::now());
             }
-            manager.clock().set_scale(self.scale_factor);
+            manager.set_scale(self.scale_factor);
         } else {
-            manager.clock().disable();
+            manager.disable();
         }
 
         // Clear existing scheduled responses and add scenario ones
@@ -466,16 +467,82 @@ impl TimeScenario {
     }
 }
 
+/// Global virtual clock registry for automatic time travel detection
+///
+/// This registry allows modules throughout MockForge to automatically detect
+/// if time travel is enabled and use the virtual clock when available.
+/// Modules can call `get_global_clock()` or `now()` to get the current time,
+/// which will automatically use virtual time if enabled, or real time otherwise.
+static GLOBAL_CLOCK_REGISTRY: Lazy<Arc<RwLock<Option<Arc<VirtualClock>>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(None)));
+
+/// Register a virtual clock with the global registry
+///
+/// This should be called when a `TimeTravelManager` is created to make
+/// the virtual clock available throughout the application.
+pub fn register_global_clock(clock: Arc<VirtualClock>) {
+    let mut registry = GLOBAL_CLOCK_REGISTRY.write().unwrap();
+    *registry = Some(clock);
+    info!("Virtual clock registered globally");
+}
+
+/// Unregister the global virtual clock
+///
+/// This should be called when time travel is disabled or the manager is dropped.
+pub fn unregister_global_clock() {
+    let mut registry = GLOBAL_CLOCK_REGISTRY.write().unwrap();
+    *registry = None;
+    info!("Virtual clock unregistered globally");
+}
+
+/// Get the global virtual clock if one is registered
+///
+/// Returns `None` if time travel is not enabled or no clock is registered.
+pub fn get_global_clock() -> Option<Arc<VirtualClock>> {
+    let registry = GLOBAL_CLOCK_REGISTRY.read().unwrap();
+    registry.clone()
+}
+
+/// Get the current time, automatically using virtual clock if available
+///
+/// This is a convenience function that checks the global registry and returns
+/// virtual time if time travel is enabled, or real time otherwise.
+/// This allows modules to automatically respect time travel without needing
+/// to explicitly pass a clock reference.
+pub fn now() -> DateTime<Utc> {
+    if let Some(clock) = get_global_clock() {
+        clock.now()
+    } else {
+        Utc::now()
+    }
+}
+
+/// Check if time travel is currently enabled globally
+///
+/// Returns `true` if a virtual clock is registered and enabled.
+pub fn is_time_travel_enabled() -> bool {
+    if let Some(clock) = get_global_clock() {
+        clock.is_enabled()
+    } else {
+        false
+    }
+}
+
 /// Global time travel manager
 pub struct TimeTravelManager {
     /// Virtual clock
     clock: Arc<VirtualClock>,
     /// Response scheduler
     scheduler: Arc<ResponseScheduler>,
+    /// Cron scheduler for recurring events
+    cron_scheduler: Arc<cron::CronScheduler>,
 }
 
 impl TimeTravelManager {
     /// Create a new time travel manager
+    ///
+    /// The virtual clock is automatically registered with the global registry
+    /// so it can be detected by other modules (e.g., auth, session expiration).
     pub fn new(config: TimeTravelConfig) -> Self {
         let clock = Arc::new(VirtualClock::new());
 
@@ -486,11 +553,18 @@ impl TimeTravelManager {
                 clock.enable_and_set(Utc::now());
             }
             clock.set_scale(config.scale_factor);
+            // Register with global registry for automatic detection
+            register_global_clock(clock.clone());
         }
 
         let scheduler = Arc::new(ResponseScheduler::new(clock.clone()));
+        let cron_scheduler = Arc::new(cron::CronScheduler::new(clock.clone()));
 
-        Self { clock, scheduler }
+        Self {
+            clock,
+            scheduler,
+            cron_scheduler,
+        }
     }
 
     /// Get the virtual clock
@@ -501,6 +575,11 @@ impl TimeTravelManager {
     /// Get the response scheduler
     pub fn scheduler(&self) -> Arc<ResponseScheduler> {
         self.scheduler.clone()
+    }
+
+    /// Get the cron scheduler
+    pub fn cron_scheduler(&self) -> Arc<cron::CronScheduler> {
+        self.cron_scheduler.clone()
     }
 
     /// Get the current time (respects virtual clock if enabled)
@@ -516,6 +595,53 @@ impl TimeTravelManager {
     /// Load and apply a scenario
     pub fn load_scenario(&self, scenario: &TimeScenario) {
         scenario.apply_to_manager(self);
+    }
+
+    /// Enable time travel and set the current virtual time
+    ///
+    /// This method wraps the clock's enable_and_set and updates the global registry.
+    pub fn enable_and_set(&self, time: DateTime<Utc>) {
+        self.clock.enable_and_set(time);
+        register_global_clock(self.clock.clone());
+    }
+
+    /// Disable time travel and return to using real time
+    ///
+    /// This method wraps the clock's disable and updates the global registry.
+    pub fn disable(&self) {
+        self.clock.disable();
+        unregister_global_clock();
+    }
+
+    /// Advance time by a duration
+    ///
+    /// This method wraps the clock's advance for convenience.
+    pub fn advance(&self, duration: Duration) {
+        self.clock.advance(duration);
+    }
+
+    /// Set the virtual time to a specific point
+    ///
+    /// This method wraps the clock's set_time for convenience.
+    pub fn set_time(&self, time: DateTime<Utc>) {
+        self.clock.set_time(time);
+        if self.clock.is_enabled() {
+            register_global_clock(self.clock.clone());
+        }
+    }
+
+    /// Set the time scale factor
+    ///
+    /// This method wraps the clock's set_scale for convenience.
+    pub fn set_scale(&self, factor: f64) {
+        self.clock.set_scale(factor);
+    }
+}
+
+impl Drop for TimeTravelManager {
+    fn drop(&mut self) {
+        // Unregister when manager is dropped
+        unregister_global_clock();
     }
 }
 
@@ -710,3 +836,9 @@ mod tests {
         assert!(year_elapsed.num_days() >= 364 && year_elapsed.num_days() <= 366);
     }
 }
+
+// Cron scheduler module
+pub mod cron;
+
+// Re-export cron types
+pub use cron::{CronJob, CronJobAction, CronScheduler};

@@ -321,8 +321,10 @@ pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use templating::{expand_str, expand_tokens};
 pub use time_travel::{
-    RepeatConfig, ResponseScheduler, ScheduledResponse, TimeScenario, TimeTravelConfig,
-    TimeTravelManager, TimeTravelStatus, VirtualClock,
+    cron::{CronJob, CronJobAction, CronScheduler},
+    get_global_clock, is_time_travel_enabled, now as time_travel_now, register_global_clock,
+    unregister_global_clock, RepeatConfig, ResponseScheduler, ScheduledResponse, TimeScenario,
+    TimeTravelConfig, TimeTravelManager, TimeTravelStatus, VirtualClock,
 };
 pub use time_travel_handler::{
     time_travel_middleware, ScheduledResponseWrapper, TimeTravelHandler,

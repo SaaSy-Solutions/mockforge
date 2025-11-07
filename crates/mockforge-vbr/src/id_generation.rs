@@ -31,14 +31,10 @@ pub fn generate_id(
         AutoGenerationRule::Pattern(pattern) => {
             generate_pattern_id(pattern, entity_name, field_name, counter)
         }
-        AutoGenerationRule::Realistic { prefix, length } => {
-            generate_realistic_id(prefix, *length)
-        }
+        AutoGenerationRule::Realistic { prefix, length } => generate_realistic_id(prefix, *length),
         AutoGenerationRule::AutoIncrement => {
             // Auto-increment should be handled by database
-            Err(Error::generic(
-                "AutoIncrement should be handled by database".to_string(),
-            ))
+            Err(Error::generic("AutoIncrement should be handled by database".to_string()))
         }
         AutoGenerationRule::Custom(_) => {
             // Custom rules would need an evaluation engine
@@ -90,10 +86,7 @@ fn generate_pattern_id(
     if random_re.is_match(&result) {
         result = random_re
             .replace_all(&result, |caps: &regex::Captures| {
-                let length: usize = caps
-                    .get(1)
-                    .and_then(|m| m.as_str().parse().ok())
-                    .unwrap_or(8);
+                let length: usize = caps.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(8);
                 generate_random_string(length)
             })
             .to_string();
@@ -159,9 +152,7 @@ pub async fn get_and_increment_counter(
     let results = database.query(&query, &[Value::String(key.clone())]).await?;
 
     let current_value = if let Some(row) = results.first() {
-        row.get("value")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
+        row.get("value").and_then(|v| v.as_u64()).unwrap_or(0)
     } else {
         0
     };

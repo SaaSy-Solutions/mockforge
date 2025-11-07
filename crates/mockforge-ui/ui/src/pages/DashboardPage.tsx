@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
+import { TimeTravelWidget } from '../components/time-travel/TimeTravelWidget';
 import type { LatencyMetrics, LogEntry } from '../types';
 import { useDashboard, useLogs } from '../hooks/useApi';
 import {
@@ -161,6 +162,19 @@ export function DashboardPage() {
         subtitle="Real-time system overview and performance metrics"
         className="space-section"
       />
+
+      {/* Time Travel Widget */}
+      <Section
+        title="Temporal Simulation"
+        subtitle="Control virtual time for testing time-dependent features"
+        className="space-section section-breathing"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 grid-gap-lg">
+          <TimeTravelWidget />
+        </div>
+      </Section>
+
+      <div className="divider-accent my-12"></div>
 
       <Section
         title="System Metrics"

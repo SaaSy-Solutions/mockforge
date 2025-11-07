@@ -58,6 +58,7 @@ const navItems = [
   // Orchestration
   { id: 'chains', label: 'Chains', icon: Link2 },
   { id: 'graph', label: 'Graph', icon: GraphIcon },
+  { id: 'state-machine-editor', label: 'State Machines', icon: GitBranch },
   { id: 'orchestration-builder', label: 'Orchestration Builder', icon: GitBranch },
   { id: 'orchestration-execution', label: 'Orchestration Execution', icon: PlayCircle },
 

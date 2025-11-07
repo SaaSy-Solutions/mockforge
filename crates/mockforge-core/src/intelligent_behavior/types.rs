@@ -186,8 +186,11 @@ pub struct SessionState {
 
 impl SessionState {
     /// Create a new session state
+    ///
+    /// Automatically uses virtual clock if time travel is enabled,
+    /// otherwise uses real time.
     pub fn new(session_id: impl Into<String>) -> Self {
-        let now = Utc::now();
+        let now = crate::time_travel_now();
         Self {
             session_id: session_id.into(),
             state: HashMap::new(),
@@ -199,8 +202,11 @@ impl SessionState {
     }
 
     /// Update last activity timestamp
+    ///
+    /// Automatically uses virtual clock if time travel is enabled,
+    /// otherwise uses real time.
     pub fn touch(&mut self) {
-        self.last_activity = Utc::now();
+        self.last_activity = crate::time_travel_now();
     }
 
     /// Add an interaction to history
@@ -228,8 +234,11 @@ impl SessionState {
     }
 
     /// Check if session has been inactive for a duration
+    ///
+    /// Automatically uses virtual clock if time travel is enabled,
+    /// otherwise uses real time.
     pub fn is_inactive(&self, duration: chrono::Duration) -> bool {
-        Utc::now().signed_duration_since(self.last_activity) > duration
+        crate::time_travel_now().signed_duration_since(self.last_activity) > duration
     }
 }
 

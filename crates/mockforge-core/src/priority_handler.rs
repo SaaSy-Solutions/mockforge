@@ -184,7 +184,8 @@ impl PriorityHttpHandler {
                                     );
 
                                     // Compare response bodies (basic comparison)
-                                    let real_body_bytes = proxy_response.body.clone().unwrap_or_default();
+                                    let real_body_bytes =
+                                        proxy_response.body.clone().unwrap_or_default();
                                     let real_body = String::from_utf8_lossy(&real_body_bytes);
                                     let mock_body = &mock_response.body;
 
