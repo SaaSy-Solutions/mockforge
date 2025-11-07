@@ -17,6 +17,7 @@ pub mod routing;
 // Re-export commonly used types
 pub use middleware::*;
 pub use routing::*;
+pub use config::MigrationMode;
 
 // Legacy imports for compatibility
 
@@ -68,6 +69,8 @@ mod tests {
             enabled: true,
             pattern: "/api/users/*".to_string(),
             upstream_url: "http://users.example.com".to_string(),
+            migration_mode: MigrationMode::Auto,
+            migration_group: None,
         });
         config.rules.push(ProxyRule {
             path_pattern: "/api/orders/*".to_string(),
@@ -75,6 +78,8 @@ mod tests {
             enabled: true,
             pattern: "/api/orders/*".to_string(),
             upstream_url: "http://orders.example.com".to_string(),
+            migration_mode: MigrationMode::Auto,
+            migration_group: None,
         });
 
         assert!(config.should_proxy(&Method::GET, "/api/users/123"));

@@ -16,6 +16,9 @@ mockforge-core = { path = "../mockforge-core" }
 mockforge-data = { path = "../mockforge-data" }
 mockforge-http = { path = "../mockforge-http" }
 
+# OpenAPI support
+openapiv3 = { workspace = true }
+
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
 async-trait = { workspace = true }
@@ -42,6 +45,8 @@ url = { workspace = true }
 sha2 = "0.10"
 base64 = "0.21"
 jsonwebtoken = { version = "9", optional = true }
+rand = "0.9"
+regex = "1.10"
 
 # HTTP framework
 axum = { workspace = true }

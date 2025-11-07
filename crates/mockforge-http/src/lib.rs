@@ -729,7 +729,11 @@ pub async fn build_router_with_multi_tenant(
     }
 
     // Add management API endpoints
-    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+
+    // Note: ProxyConfig not available in this build function path
+    // Migration endpoints will work once ProxyConfig is passed to build_router_with_chains_and_multi_tenant
+
     #[cfg(feature = "smtp")]
     let management_state = {
         if let Some(smtp_reg) = smtp_registry {
@@ -1141,6 +1145,7 @@ pub async fn build_router_with_chains(
         None, // health_manager
         None, // mockai
         None, // deceptive_deploy_config
+        None, // proxy_config
     )
     .await
 }
@@ -1166,6 +1171,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
     >,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
+    proxy_config: Option<mockforge_core::proxy::config::ProxyConfig>,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
@@ -1254,6 +1260,17 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add management API endpoints
     let management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
+
+    // Add proxy config to management state if available
+    let management_state = if let Some(proxy_cfg) = proxy_config {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+        let proxy_config_arc = Arc::new(RwLock::new(proxy_cfg));
+        management_state.with_proxy_config(proxy_config_arc)
+    } else {
+        management_state
+    };
+
     #[cfg(feature = "smtp")]
     let management_state = {
         if let Some(smtp_reg) = smtp_registry {

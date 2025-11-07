@@ -76,6 +76,32 @@ pub fn create_vbr_router(api_prefix: &str) -> Result<Router> {
             &format!("{}/:entity/:id/:relationship", api_prefix),
             get(crate::handlers::get_relationship_handler),
         )
+        // Snapshot endpoints
+        // POST /vbr-api/snapshots - Create snapshot
+        .route(
+            &format!("{}/snapshots", api_prefix),
+            post(crate::handlers::create_snapshot_handler),
+        )
+        // GET /vbr-api/snapshots - List snapshots
+        .route(
+            &format!("{}/snapshots", api_prefix),
+            get(crate::handlers::list_snapshots_handler),
+        )
+        // POST /vbr-api/snapshots/{name}/restore - Restore snapshot
+        .route(
+            &format!("{}/snapshots/:name/restore", api_prefix),
+            post(crate::handlers::restore_snapshot_handler),
+        )
+        // DELETE /vbr-api/snapshots/{name} - Delete snapshot
+        .route(
+            &format!("{}/snapshots/:name", api_prefix),
+            delete(crate::handlers::delete_snapshot_handler),
+        )
+        // POST /vbr-api/reset - Reset database
+        .route(
+            &format!("{}/reset", api_prefix),
+            post(crate::handlers::reset_handler),
+        )
         .layer(CorsLayer::permissive());
 
     Ok(router)

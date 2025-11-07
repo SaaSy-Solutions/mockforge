@@ -6,8 +6,11 @@ The VBR engine creates stateful mock servers with persistent virtual databases, 
 
 VBR acts like a mini real backend with:
 - **Persistent virtual database** (SQLite, JSON, in-memory options)
-- **CRUD APIs auto-generated** from entity schemas
-- **Relationship modeling** and constraint enforcement
+- **CRUD APIs auto-generated** from OpenAPI specifications or entity schemas
+- **Relationship modeling** (1:N, N:N) with constraint enforcement
+- **Configurable data seeding** from JSON/YAML files or programmatic API
+- **Enhanced ID generation** (pattern-based, realistic Stripe-style IDs)
+- **State snapshots and resets** for environment management
 - **User session & auth emulation**
 - **Time-based data evolution** (data aging, expiring sessions)
 
@@ -374,14 +377,116 @@ let config = VbrConfig::default()
     .with_cleanup_interval(3600); // 1 hour
 ```
 
+## New Features
+
+### OpenAPI Integration
+
+Automatically generate VBR entities from OpenAPI 3.x specifications:
+
+```rust
+use mockforge_vbr::{VbrEngine, VbrConfig};
+
+let config = VbrConfig::default();
+let (engine, result) = VbrEngine::from_openapi_file(config, "./api-spec.yaml").await?;
+
+println!("Created {} entities", result.entities.len());
+```
+
+The engine automatically:
+- Extracts schemas from `components/schemas`
+- Detects primary keys (fields named "id", "uuid")
+- Detects foreign keys (fields ending in "_id")
+- Generates CRUD endpoints for each entity
+
+### Many-to-Many Relationships
+
+Define many-to-many relationships with junction tables:
+
+```rust
+use mockforge_vbr::schema::ManyToManyDefinition;
+
+let user_role_m2m = ManyToManyDefinition::new(
+    "User".to_string(),
+    "Role".to_string(),
+)
+.with_junction_table("user_roles".to_string());
+
+let role_schema = VbrSchemaDefinition::new(role_base)
+    .with_many_to_many(user_role_m2m);
+```
+
+Access via: `GET /api/users/{id}/roles` or `GET /api/roles/{id}/users`
+
+### Data Seeding
+
+Seed your database from JSON/YAML files:
+
+```rust
+// From file
+engine.seed_from_file("./seed_data.json").await?;
+
+// Programmatically
+let mut seed_data = HashMap::new();
+seed_data.insert("User".to_string(), vec![
+    // ... records
+]);
+engine.seed_all(&seed_data).await?;
+```
+
+Seed file format:
+```json
+{
+  "users": [
+    {"id": "user1", "name": "Alice", "email": "alice@example.com"},
+    {"id": "user2", "name": "Bob", "email": "bob@example.com"}
+  ]
+}
+```
+
+### Enhanced ID Generation
+
+Generate realistic IDs with patterns:
+
+```rust
+// Pattern-based: "USR-000001", "ORD-{timestamp}", "TXN-{random:12}"
+.with_auto_generation("id", AutoGenerationRule::Pattern("USR-{increment:06}".to_string()))
+
+// Realistic Stripe-style: "cus_abc123def456"
+.with_auto_generation("id", AutoGenerationRule::Realistic {
+    prefix: "cus".to_string(),
+    length: 14,
+})
+```
+
+### State Snapshots
+
+Create and restore database snapshots:
+
+```rust
+// Create snapshot
+let metadata = engine.create_snapshot(
+    "initial_state",
+    Some("Initial seeded data".to_string()),
+    "./snapshots"
+).await?;
+
+// Restore snapshot
+engine.restore_snapshot("initial_state", "./snapshots").await?;
+
+// List snapshots
+let snapshots = VbrEngine::list_snapshots("./snapshots").await?;
+
+// Reset database
+engine.reset().await?;
+```
+
 ## Examples
 
-See the `tests/tests/vbr_integration.rs` file for comprehensive examples of:
-- Creating entities
-- CRUD operations
-- Relationship traversal
-- Pagination and filtering
-- Error handling
+See the following files for comprehensive examples:
+- `tests/tests/vbr_integration.rs` - Basic CRUD operations, relationships, pagination
+- `tests/tests/vbr_new_features.rs` - OpenAPI, seeding, snapshots, ID generation
+- `examples/vbr_openapi_example.rs` - Creating engine from OpenAPI spec
+- `examples/vbr_seeding_example.rs` - Data seeding from files
 
 ## Architecture
 

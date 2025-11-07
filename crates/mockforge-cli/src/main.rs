@@ -2971,6 +2971,7 @@ async fn handle_serve(
         Some(health_manager_for_router),       // health_manager
         mockai,                                // mockai
         Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
+        None,                                   // proxy_config (ProxyConfig not in ServerConfig)
     )
     .await;
 

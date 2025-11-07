@@ -176,7 +176,12 @@ async fn setup_test_server(
     }
 
     // Create handler context
-    let context = HandlerContext { database, registry };
+    let context = HandlerContext {
+        database,
+        registry,
+        session_manager: None,
+        snapshots_dir: None,
+    };
 
     // Create router with VBR routes
     let router = Router::new()

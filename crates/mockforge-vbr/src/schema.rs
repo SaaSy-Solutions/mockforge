@@ -30,6 +30,9 @@ pub struct VbrSchemaDefinition {
 
     /// Auto-generation rules for fields
     pub auto_generation: HashMap<String, AutoGenerationRule>,
+
+    /// Many-to-many relationships
+    pub many_to_many: Vec<ManyToManyDefinition>,
 }
 
 /// Foreign key relationship definition
@@ -51,6 +54,91 @@ pub struct ForeignKeyDefinition {
     /// Cascade action on update
     #[serde(default)]
     pub on_update: CascadeAction,
+}
+
+/// Many-to-many relationship definition
+///
+/// Represents a many-to-many relationship between two entities using a junction table.
+/// For example, Users and Roles with a user_roles junction table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManyToManyDefinition {
+    /// First entity name
+    pub entity_a: String,
+
+    /// Second entity name
+    pub entity_b: String,
+
+    /// Junction table name (auto-generated if not provided)
+    /// Format: "{entity_a}_{entity_b}" or "{entity_b}_{entity_a}" (alphabetically sorted)
+    pub junction_table: Option<String>,
+
+    /// Foreign key field name in junction table pointing to entity_a
+    pub entity_a_field: String,
+
+    /// Foreign key field name in junction table pointing to entity_b
+    pub entity_b_field: String,
+
+    /// Cascade action on delete for entity_a
+    #[serde(default)]
+    pub on_delete_a: CascadeAction,
+
+    /// Cascade action on delete for entity_b
+    #[serde(default)]
+    pub on_delete_b: CascadeAction,
+}
+
+impl ManyToManyDefinition {
+    /// Create a new many-to-many relationship definition
+    pub fn new(entity_a: String, entity_b: String) -> Self {
+        // Auto-generate junction table name (alphabetically sorted)
+        let (field_a, field_b) = if entity_a.to_lowercase() < entity_b.to_lowercase() {
+            (
+                format!("{}_id", entity_a.to_lowercase()),
+                format!("{}_id", entity_b.to_lowercase()),
+            )
+        } else {
+            (
+                format!("{}_id", entity_b.to_lowercase()),
+                format!("{}_id", entity_a.to_lowercase()),
+            )
+        };
+
+        let junction_table = if entity_a.to_lowercase() < entity_b.to_lowercase() {
+            Some(format!("{}_{}", entity_a.to_lowercase(), entity_b.to_lowercase()))
+        } else {
+            Some(format!("{}_{}", entity_b.to_lowercase(), entity_a.to_lowercase()))
+        };
+
+        Self {
+            entity_a: entity_a.clone(),
+            entity_b: entity_b.clone(),
+            junction_table,
+            entity_a_field: format!("{}_id", entity_a.to_lowercase()),
+            entity_b_field: format!("{}_id", entity_b.to_lowercase()),
+            on_delete_a: CascadeAction::Cascade,
+            on_delete_b: CascadeAction::Cascade,
+        }
+    }
+
+    /// Set the junction table name
+    pub fn with_junction_table(mut self, table_name: String) -> Self {
+        self.junction_table = Some(table_name);
+        self
+    }
+
+    /// Set the foreign key field names
+    pub fn with_fields(mut self, entity_a_field: String, entity_b_field: String) -> Self {
+        self.entity_a_field = entity_a_field;
+        self.entity_b_field = entity_b_field;
+        self
+    }
+
+    /// Set cascade actions
+    pub fn with_cascade_actions(mut self, on_delete_a: CascadeAction, on_delete_b: CascadeAction) -> Self {
+        self.on_delete_a = on_delete_a;
+        self.on_delete_b = on_delete_b;
+        self
+    }
 }
 
 /// Cascade action for foreign keys
@@ -108,6 +196,31 @@ pub enum AutoGenerationRule {
     Date,
     /// Custom function/expression
     Custom(String),
+    /// Pattern-based ID generation
+    ///
+    /// Supports template variables:
+    /// - `{increment}` or `{increment:06}` - Auto-incrementing number with padding
+    /// - `{timestamp}` - Unix timestamp
+    /// - `{random}` - Random alphanumeric string
+    /// - `{uuid}` - UUID v4
+    ///
+    /// Examples:
+    /// - "USR-{increment:06}" -> "USR-000001"
+    /// - "ORD-{timestamp}" -> "ORD-1704067200"
+    Pattern(String),
+    /// Realistic-looking ID generation (Stripe-style)
+    ///
+    /// Generates IDs in the format: `{prefix}_{random_alphanumeric}`
+    ///
+    /// # Arguments
+    /// * `prefix` - Prefix for the ID (e.g., "cus", "ord")
+    /// * `length` - Total length of the random part (excluding prefix and underscore)
+    Realistic {
+        /// Prefix for the ID
+        prefix: String,
+        /// Length of the random alphanumeric part
+        length: usize,
+    },
 }
 
 impl VbrSchemaDefinition {
@@ -120,6 +233,7 @@ impl VbrSchemaDefinition {
             indexes: Vec::new(),
             unique_constraints: Vec::new(),
             auto_generation: HashMap::new(),
+            many_to_many: Vec::new(),
         }
     }
 
@@ -150,6 +264,12 @@ impl VbrSchemaDefinition {
     /// Set auto-generation rule for a field
     pub fn with_auto_generation(mut self, field: String, rule: AutoGenerationRule) -> Self {
         self.auto_generation.insert(field, rule);
+        self
+    }
+
+    /// Add a many-to-many relationship
+    pub fn with_many_to_many(mut self, m2m: ManyToManyDefinition) -> Self {
+        self.many_to_many.push(m2m);
         self
     }
 }

@@ -25,3 +25,5 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "tim
 # WebSocket client dependencies
 tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 futures-util = "0.3"
+# Test utilities
+tempfile = "3.8"

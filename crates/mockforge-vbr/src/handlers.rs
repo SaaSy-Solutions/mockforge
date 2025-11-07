@@ -26,6 +26,8 @@ pub struct HandlerContext {
     pub registry: crate::entities::EntityRegistry,
     /// Session data manager (optional, for session-scoped data)
     pub session_manager: Option<std::sync::Arc<crate::session::SessionDataManager>>,
+    /// Snapshots directory (optional, for snapshot operations)
+    pub snapshots_dir: Option<std::path::PathBuf>,
 }
 
 /// Helper function to get entity and table name
@@ -46,16 +48,18 @@ fn get_entity_info<'a>(
 }
 
 /// Helper function to apply auto-generation rules
-fn apply_auto_generation(
+async fn apply_auto_generation(
     data: &mut Value,
     schema: &crate::schema::VbrSchemaDefinition,
+    entity_name: &str,
+    database: &dyn crate::database::VirtualDatabase,
 ) -> Result<()> {
     if let Value::Object(obj) = data {
         for (field_name, rule) in &schema.auto_generation {
             if !obj.contains_key(field_name) {
                 let generated_value = match rule {
                     crate::schema::AutoGenerationRule::Uuid => {
-                        Value::String(Uuid::new_v4().to_string())
+                        Value::String(uuid::Uuid::new_v4().to_string())
                     }
                     crate::schema::AutoGenerationRule::Timestamp => {
                         Value::String(chrono::Utc::now().to_rfc3339())
@@ -66,6 +70,32 @@ fn apply_auto_generation(
                     crate::schema::AutoGenerationRule::AutoIncrement => {
                         // Auto-increment is handled by database
                         continue;
+                    }
+                    crate::schema::AutoGenerationRule::Pattern(pattern) => {
+                        // Get counter for pattern-based IDs that use increment
+                        let counter = if pattern.contains("increment") {
+                            Some(
+                                crate::id_generation::get_and_increment_counter(
+                                    database,
+                                    entity_name,
+                                    field_name,
+                                )
+                                .await?,
+                            )
+                        } else {
+                            None
+                        };
+                        let id = crate::id_generation::generate_id(
+                            rule,
+                            entity_name,
+                            field_name,
+                            counter,
+                        )?;
+                        Value::String(id)
+                    }
+                    crate::schema::AutoGenerationRule::Realistic { .. } => {
+                        let id = crate::id_generation::generate_id(rule, entity_name, field_name, None)?;
+                        Value::String(id)
                     }
                     crate::schema::AutoGenerationRule::Custom(_) => {
                         // Custom rules would need evaluation engine
@@ -240,12 +270,14 @@ pub async fn create_handler(
     let (entity, table_name) = get_entity_info(&context.registry, &entity_name)?;
 
     // Apply auto-generation rules
-    apply_auto_generation(&mut body, &entity.schema).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Auto-generation failed: {}", e)})),
-        )
-    })?;
+    apply_auto_generation(&mut body, &entity.schema, &entity_name, context.database.as_ref())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Auto-generation failed: {}", e)})),
+            )
+        })?;
 
     // Validate foreign key constraints
     let validator = ConstraintValidator;
@@ -733,6 +765,120 @@ pub async fn get_relationship_handler(
         }
     }
 
+    // Strategy 3: Many-to-many relationship
+    // Example: GET /api/users/123/roles -> Get all roles for user 123 via user_roles junction table
+    // Check if there's a many-to-many relationship between current entity and relationship name
+    for m2m in &entity.schema.many_to_many {
+        // Check if relationship_name matches entity_a or entity_b
+        let is_entity_a = m2m.entity_a.to_lowercase() == relationship_name.to_lowercase();
+        let is_entity_b = m2m.entity_b.to_lowercase() == relationship_name.to_lowercase();
+
+        if is_entity_a || is_entity_b {
+            // Get the target entity
+            let target_entity_name = if is_entity_a {
+                &m2m.entity_a
+            } else {
+                &m2m.entity_b
+            };
+
+            let target_entity = context.registry.get(target_entity_name).ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({
+                        "error": format!("Target entity '{}' not found", target_entity_name)
+                    })),
+                )
+            })?;
+
+            let junction_table = m2m.junction_table.as_ref().ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": "Junction table name not specified for many-to-many relationship"
+                    })),
+                )
+            })?;
+
+            // Determine which field to use based on which entity we're querying from
+            let fk_field = if entity_name.to_lowercase() == m2m.entity_a.to_lowercase() {
+                &m2m.entity_a_field
+            } else {
+                &m2m.entity_b_field
+            };
+
+            let target_fk_field = if is_entity_a {
+                &m2m.entity_b_field
+            } else {
+                &m2m.entity_a_field
+            };
+
+            let target_table = target_entity.table_name();
+
+            // Build query with JOIN through junction table
+            let (where_clause, mut bind_values) = build_where_clause(&params, target_entity);
+            let order_by = build_order_by(&params, target_entity);
+            let (limit, offset) = get_pagination(&params);
+
+            // Build JOIN query
+            let mut query = format!(
+                "SELECT t.* FROM {} t INNER JOIN {} j ON t.id = j.{} WHERE j.{} = ?",
+                target_table, junction_table, target_fk_field, fk_field
+            );
+
+            bind_values.push(Value::String(id.clone()));
+
+            if !where_clause.is_empty() {
+                query.push_str(&format!(" AND {}", where_clause));
+            }
+
+            if !order_by.is_empty() {
+                query.push_str(&format!(" {}", order_by));
+            }
+
+            if let Some(limit_val) = limit {
+                query.push_str(&format!(" LIMIT {}", limit_val));
+            }
+
+            if let Some(offset_val) = offset {
+                query.push_str(&format!(" OFFSET {}", offset_val));
+            }
+
+            let results = context.database.query(&query, &bind_values).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Database query failed: {}", e)})),
+                )
+            })?;
+
+            // Get total count
+            let count_query = format!(
+                "SELECT COUNT(*) as total FROM {} t INNER JOIN {} j ON t.id = j.{} WHERE j.{} = ?",
+                target_table, junction_table, target_fk_field, fk_field
+            );
+            let count_results = context.database.query(&count_query, &bind_values).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Count query failed: {}", e)})),
+                )
+            })?;
+
+            let total = count_results
+                .first()
+                .and_then(|r| r.get("total"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+
+            return Ok(Json(json!({
+                "data": results,
+                "total": total,
+                "relationship": relationship_name,
+                "parent_entity": entity_name,
+                "parent_id": id,
+                "relationship_type": "many_to_many"
+            })));
+        }
+    }
+
     // No relationship found - return error
     Err((
         StatusCode::NOT_FOUND,
@@ -740,4 +886,128 @@ pub async fn get_relationship_handler(
             "error": format!("Relationship '{}' not found for entity '{}'", relationship_name, entity_name)
         })),
     ))
+}
+
+/// Create snapshot (POST /vbr-api/snapshots)
+#[derive(serde::Deserialize)]
+pub struct CreateSnapshotRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+pub async fn create_snapshot_handler(
+    Extension(context): Extension<HandlerContext>,
+    Json(body): Json<CreateSnapshotRequest>,
+) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let snapshots_dir = context.snapshots_dir.as_ref().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Snapshots directory not configured"})),
+        )
+    })?;
+
+    let manager = crate::snapshots::SnapshotManager::new(snapshots_dir);
+    let metadata = manager
+        .create_snapshot(
+            &body.name,
+            body.description,
+            context.database.as_ref(),
+            &context.registry,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to create snapshot: {}", e)})),
+            )
+        })?;
+
+    Ok(Json(serde_json::to_value(&metadata).unwrap()))
+}
+
+/// List snapshots (GET /vbr-api/snapshots)
+pub async fn list_snapshots_handler(
+    Extension(context): Extension<HandlerContext>,
+) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let snapshots_dir = context.snapshots_dir.as_ref().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Snapshots directory not configured"})),
+        )
+    })?;
+
+    let manager = crate::snapshots::SnapshotManager::new(snapshots_dir);
+    let snapshots = manager.list_snapshots().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to list snapshots: {}", e)})),
+        )
+    })?;
+
+    Ok(Json(serde_json::to_value(&snapshots).unwrap()))
+}
+
+/// Restore snapshot (POST /vbr-api/snapshots/{name}/restore)
+pub async fn restore_snapshot_handler(
+    Path(name): Path<String>,
+    Extension(context): Extension<HandlerContext>,
+) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let snapshots_dir = context.snapshots_dir.as_ref().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Snapshots directory not configured"})),
+        )
+    })?;
+
+    let manager = crate::snapshots::SnapshotManager::new(snapshots_dir);
+    manager
+        .restore_snapshot(&name, context.database.as_ref(), &context.registry)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to restore snapshot: {}", e)})),
+            )
+        })?;
+
+    Ok(Json(json!({"message": format!("Snapshot '{}' restored successfully", name)})))
+}
+
+/// Delete snapshot (DELETE /vbr-api/snapshots/{name})
+pub async fn delete_snapshot_handler(
+    Path(name): Path<String>,
+    Extension(context): Extension<HandlerContext>,
+) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let snapshots_dir = context.snapshots_dir.as_ref().ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Snapshots directory not configured"})),
+        )
+    })?;
+
+    let manager = crate::snapshots::SnapshotManager::new(snapshots_dir);
+    manager.delete_snapshot(&name).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to delete snapshot: {}", e)})),
+        )
+    })?;
+
+    Ok(Json(json!({"message": format!("Snapshot '{}' deleted successfully", name)})))
+}
+
+/// Reset database (POST /vbr-api/reset)
+pub async fn reset_handler(
+    Extension(context): Extension<HandlerContext>,
+) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::snapshots::reset_database(context.database.as_ref(), &context.registry)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to reset database: {}", e)})),
+            )
+        })?;
+
+    Ok(Json(json!({"message": "Database reset successfully"})))
 }

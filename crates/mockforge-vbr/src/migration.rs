@@ -3,8 +3,8 @@
 //! This module handles generating SQLite schema from entity definitions,
 //! creating tables, indexes, foreign keys, and managing schema migrations.
 
-use crate::entities::Entity;
-use crate::schema::{CascadeAction, VbrSchemaDefinition};
+use crate::entities::{Entity, EntityRegistry};
+use crate::schema::{CascadeAction, ManyToManyDefinition, VbrSchemaDefinition};
 use crate::{Error, Result};
 use std::collections::HashMap;
 
@@ -84,6 +84,84 @@ impl MigrationManager {
         index_statements
     }
 
+    /// Generate junction table creation statement for a many-to-many relationship
+    pub fn generate_junction_table(&self, m2m: &ManyToManyDefinition) -> Result<String> {
+        let junction_table = m2m
+            .junction_table
+            .as_ref()
+            .ok_or_else(|| Error::generic("Junction table name is required".to_string()))?;
+
+        // Get table names for entities (assuming pluralization)
+        let table_a = m2m.entity_a.to_lowercase() + "s";
+        let table_b = m2m.entity_b.to_lowercase() + "s";
+
+        let on_delete_a = cascade_action_to_sql(m2m.on_delete_a);
+        let on_delete_b = cascade_action_to_sql(m2m.on_delete_b);
+
+        // Create junction table with composite primary key
+        let sql = format!(
+            "CREATE TABLE IF NOT EXISTS {} (
+    {} TEXT NOT NULL,
+    {} TEXT NOT NULL,
+    PRIMARY KEY ({}, {}),
+    FOREIGN KEY ({}) REFERENCES {}(id) ON DELETE {},
+    FOREIGN KEY ({}) REFERENCES {}(id) ON DELETE {}
+)",
+            junction_table,
+            m2m.entity_a_field,
+            m2m.entity_b_field,
+            m2m.entity_a_field,
+            m2m.entity_b_field,
+            m2m.entity_a_field,
+            table_a,
+            on_delete_a,
+            m2m.entity_b_field,
+            table_b,
+            on_delete_b
+        );
+
+        Ok(sql)
+    }
+
+    /// Generate all junction tables for many-to-many relationships in the registry
+    pub fn generate_all_junction_tables(
+        &self,
+        registry: &EntityRegistry,
+    ) -> Result<Vec<(String, String)>> {
+        let mut junction_tables = Vec::new();
+        let mut processed = std::collections::HashSet::new();
+
+        // Collect all many-to-many relationships
+        for entity in registry.list() {
+            if let Some(entity_def) = registry.get(&entity) {
+                for m2m in &entity_def.schema.many_to_many {
+                    // Create a canonical key to avoid duplicates
+                    let (a, b) = if m2m.entity_a < m2m.entity_b {
+                        (m2m.entity_a.clone(), m2m.entity_b.clone())
+                    } else {
+                        (m2m.entity_b.clone(), m2m.entity_a.clone())
+                    };
+                    let key = format!("{}:{}", a, b);
+
+                    if !processed.contains(&key) {
+                        processed.insert(key);
+                        let table_name = m2m
+                            .junction_table
+                            .as_ref()
+                            .ok_or_else(|| {
+                                Error::generic("Junction table name is required".to_string())
+                            })?
+                            .clone();
+                        let create_sql = self.generate_junction_table(m2m)?;
+                        junction_tables.push((table_name, create_sql));
+                    }
+                }
+            }
+        }
+
+        Ok(junction_tables)
+    }
+
     /// Convert a field definition to SQL column definition
     fn field_to_column_definition(
         &self,
@@ -122,6 +200,12 @@ impl MigrationManager {
                 }
                 crate::schema::AutoGenerationRule::Custom(expr) => {
                     parts.push(format!("DEFAULT ({})", expr));
+                }
+                crate::schema::AutoGenerationRule::Pattern(_) => {
+                    // Pattern-based IDs are generated in application code
+                }
+                crate::schema::AutoGenerationRule::Realistic { .. } => {
+                    // Realistic IDs are generated in application code
                 }
             }
         }
@@ -165,6 +249,58 @@ impl Default for MigrationManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Create a database table for an entity
+///
+/// This is a convenience function that creates a table, indexes, and foreign keys
+/// for a single entity.
+///
+/// # Arguments
+/// * `database` - The virtual database instance
+/// * `entity` - The entity to create a table for
+pub async fn create_table_for_entity(
+    database: &dyn crate::database::VirtualDatabase,
+    entity: &Entity,
+) -> Result<()> {
+    let manager = MigrationManager::new();
+
+    // Create the table
+    let create_table = manager.generate_create_table(entity)?;
+    database.create_table(&create_table).await?;
+
+    // Create indexes
+    for index_sql in manager.generate_indexes(entity) {
+        database.execute(&index_sql, &[]).await?;
+    }
+
+    // Create foreign keys (if target tables exist)
+    for fk_sql in manager.generate_foreign_keys(entity) {
+        // Foreign keys might fail if target tables don't exist yet
+        // This is okay - they'll be created when the target entity is processed
+        let _ = database.execute(&fk_sql, &[]).await;
+    }
+
+    Ok(())
+}
+
+/// Create all junction tables for many-to-many relationships
+///
+/// # Arguments
+/// * `database` - The virtual database instance
+/// * `registry` - The entity registry containing all entities
+pub async fn create_junction_tables(
+    database: &dyn crate::database::VirtualDatabase,
+    registry: &EntityRegistry,
+) -> Result<()> {
+    let manager = MigrationManager::new();
+    let junction_tables = manager.generate_all_junction_tables(registry)?;
+
+    for (_table_name, create_sql) in junction_tables {
+        database.create_table(&create_sql).await?;
+    }
+
+    Ok(())
 }
 
 /// Convert Rust type to SQL type

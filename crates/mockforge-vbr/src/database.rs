@@ -354,9 +354,23 @@ impl VirtualDatabase for JsonDatabase {
         // Simple SQL-like query parser for JSON backend
         // This is a basic implementation - for full SQL support, consider using sqlparser crate
         let data = self.data.read().await;
+        let query_upper = query.trim().to_uppercase();
 
-        // Parse SELECT query
-        if query.trim().to_uppercase().starts_with("SELECT") {
+        // Handle SELECT COUNT(*) queries
+        if query_upper.contains("COUNT(*)") || query_upper.contains("COUNT( * )") {
+            let table_name = extract_table_name_from_select(query)?;
+            if let Some(records) = data.get(table_name) {
+                let count = if query.contains("WHERE") {
+                    apply_json_where_clause(records, query, params)?.len()
+                } else {
+                    records.len()
+                };
+                let mut result = HashMap::new();
+                // Always use "count" as the field name for COUNT(*) queries
+                result.insert("count".to_string(), Value::Number(count.into()));
+                return Ok(vec![result]);
+            }
+        } else if query_upper.starts_with("SELECT") {
             // Extract table name from query
             let table_name = extract_table_name_from_select(query)?;
 
@@ -372,7 +386,7 @@ impl VirtualDatabase for JsonDatabase {
                 let result = apply_json_pagination(&filtered, query)?;
                 return Ok(result);
             }
-        } else if query.trim().to_uppercase().starts_with("COUNT") {
+        } else if query_upper.starts_with("COUNT") {
             // Handle COUNT queries
             let table_name = extract_table_name_from_count(query)?;
             if let Some(records) = data.get(table_name) {
@@ -504,8 +518,25 @@ impl VirtualDatabase for InMemoryDatabase {
     async fn query(&self, query: &str, params: &[Value]) -> Result<Vec<HashMap<String, Value>>> {
         // Reuse JSON backend query logic (same structure)
         let data = self.data.read().await;
+        let query_upper = query.trim().to_uppercase();
 
-        if query.trim().to_uppercase().starts_with("SELECT") {
+        // Handle SELECT COUNT(*) queries
+        if query_upper.contains("COUNT(*)") || query_upper.contains("COUNT( * )") {
+            let table_name = extract_table_name_from_select(query)?;
+            let count = if let Some(records) = data.get(table_name) {
+                if query.contains("WHERE") {
+                    apply_json_where_clause(records, query, params)?.len()
+                } else {
+                    records.len()
+                }
+            } else {
+                // Table doesn't exist yet, return 0
+                0
+            };
+            let mut result = HashMap::new();
+            result.insert("count".to_string(), Value::Number(count.into()));
+            return Ok(vec![result]);
+        } else if query_upper.starts_with("SELECT") {
             let table_name = extract_table_name_from_select(query)?;
 
             if let Some(records) = data.get(table_name) {
@@ -518,7 +549,7 @@ impl VirtualDatabase for InMemoryDatabase {
                 let result = apply_json_pagination(&filtered, query)?;
                 return Ok(result);
             }
-        } else if query.trim().to_uppercase().starts_with("COUNT") {
+        } else if query_upper.starts_with("COUNT") {
             let table_name = extract_table_name_from_count(query)?;
             if let Some(records) = data.get(table_name) {
                 let count = if query.contains("WHERE") {
@@ -562,16 +593,14 @@ impl VirtualDatabase for InMemoryDatabase {
             }
         } else if query_upper.starts_with("DELETE") {
             let (table_name, where_clause, where_params) = parse_delete_query(query, params)?;
-            if let Some(records) = data.get_mut(&table_name) {
-                let initial_len = records.len();
-                records.retain(|record| {
-                    !matches_json_where(record, &where_clause, &where_params).unwrap_or(false)
-                });
-                let deleted = initial_len - records.len();
-                Ok(deleted as u64)
-            } else {
-                Ok(0)
-            }
+            // Ensure table exists (for DELETE FROM table_name without WHERE, we need the table)
+            let records = data.entry(table_name.clone()).or_insert_with(Vec::new);
+            let initial_len = records.len();
+            records.retain(|record| {
+                !matches_json_where(record, &where_clause, &where_params).unwrap_or(false)
+            });
+            let deleted = initial_len - records.len();
+            Ok(deleted as u64)
         } else {
             Ok(0)
         }
@@ -604,8 +633,42 @@ impl VirtualDatabase for InMemoryDatabase {
         Ok(data.contains_key(table_name))
     }
 
-    async fn create_table(&self, _create_statement: &str) -> Result<()> {
-        // In-memory backend doesn't need explicit table creation
+    async fn create_table(&self, create_statement: &str) -> Result<()> {
+        // In-memory backend doesn't need explicit table creation, but we should
+        // extract table name and ensure it exists in the data HashMap
+        // Extract table name from CREATE TABLE statement
+        // Format: "CREATE TABLE IF NOT EXISTS table_name (" or "CREATE TABLE table_name ("
+        let query_upper = create_statement.to_uppercase();
+        if query_upper.contains("CREATE TABLE") {
+            let mut rest = create_statement;
+
+            // Skip "CREATE TABLE"
+            if let Some(idx) = query_upper.find("CREATE TABLE") {
+                rest = &create_statement[idx + 12..];
+            }
+
+            // Skip "IF NOT EXISTS" if present
+            let rest_upper = rest.to_uppercase();
+            if rest_upper.trim_start().starts_with("IF NOT EXISTS") {
+                if let Some(idx) = rest_upper.find("IF NOT EXISTS") {
+                    rest = &rest[idx + 13..];
+                }
+            }
+
+            // Find the table name (ends at '(' or whitespace)
+            let table_name = rest
+                .trim_start()
+                .split(|c: char| c == '(' || c.is_whitespace())
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+
+            if !table_name.is_empty() {
+                let mut data = self.data.write().await;
+                data.entry(table_name).or_insert_with(Vec::new);
+            }
+        }
         Ok(())
     }
 

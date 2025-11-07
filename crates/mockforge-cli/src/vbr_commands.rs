@@ -71,6 +71,73 @@ pub enum VbrCommands {
         #[command(subcommand)]
         manage_command: ManageCommands,
     },
+
+    /// Import entities from OpenAPI specification
+    ///
+    /// Examples:
+    ///   mockforge vbr import openapi ./api-spec.yaml
+    ///   mockforge vbr import openapi ./api-spec.json --output ./entities
+    #[command(verbatim_doc_comment)]
+    Import {
+        #[command(subcommand)]
+        import_command: ImportCommands,
+    },
+
+    /// Seed data into VBR database
+    ///
+    /// Examples:
+    ///   mockforge vbr seed ./seed_data.json
+    ///   mockforge vbr seed ./seed_data.yaml --entity User
+    #[command(verbatim_doc_comment)]
+    Seed {
+        /// Seed file path (JSON or YAML)
+        file: PathBuf,
+
+        /// Specific entity to seed (optional, seeds all if not specified)
+        #[arg(short, long)]
+        entity: Option<String>,
+
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
+    },
+
+    /// Manage database snapshots
+    ///
+    /// Examples:
+    ///   mockforge vbr snapshot create initial_state --description "Initial data"
+    ///   mockforge vbr snapshot list
+    ///   mockforge vbr snapshot restore initial_state
+    ///   mockforge vbr snapshot delete old_snapshot
+    #[command(verbatim_doc_comment)]
+    Snapshot {
+        #[command(subcommand)]
+        snapshot_command: SnapshotCommands,
+    },
+
+    /// Reset database to empty state
+    ///
+    /// Examples:
+    ///   mockforge vbr reset
+    ///   mockforge vbr reset --entity User
+    #[command(verbatim_doc_comment)]
+    Reset {
+        /// Specific entity to reset (optional, resets all if not specified)
+        #[arg(short, long)]
+        entity: Option<String>,
+
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -122,6 +189,87 @@ pub enum EntitiesCommands {
     },
 }
 
+#[derive(Subcommand)]
+pub enum ImportCommands {
+    /// Import from OpenAPI specification
+    Openapi {
+        /// OpenAPI spec file path (JSON or YAML)
+        file: PathBuf,
+
+        /// Output directory for entity definitions
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SnapshotCommands {
+    /// Create a new snapshot
+    Create {
+        /// Snapshot name
+        name: String,
+
+        /// Snapshot description
+        #[arg(short, long)]
+        description: Option<String>,
+
+        /// Snapshots directory
+        #[arg(long, default_value = "./snapshots")]
+        snapshots_dir: PathBuf,
+
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
+    },
+
+    /// List all snapshots
+    List {
+        /// Snapshots directory
+        #[arg(long, default_value = "./snapshots")]
+        snapshots_dir: PathBuf,
+    },
+
+    /// Restore a snapshot
+    Restore {
+        /// Snapshot name
+        name: String,
+
+        /// Snapshots directory
+        #[arg(long, default_value = "./snapshots")]
+        snapshots_dir: PathBuf,
+
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
+    },
+
+    /// Delete a snapshot
+    Delete {
+        /// Snapshot name
+        name: String,
+
+        /// Snapshots directory
+        #[arg(long, default_value = "./snapshots")]
+        snapshots_dir: PathBuf,
+    },
+}
+
 /// Execute VBR command
 pub async fn execute_vbr_command(command: VbrCommands) -> Result<(), Box<dyn std::error::Error>> {
     match command {
@@ -134,6 +282,21 @@ pub async fn execute_vbr_command(command: VbrCommands) -> Result<(), Box<dyn std
             session_scoped,
         } => execute_serve_command(port, storage, db_path, api_prefix, session_scoped).await,
         VbrCommands::Manage { manage_command } => execute_manage_command(manage_command).await,
+        VbrCommands::Import { import_command } => execute_import_command(import_command).await,
+        VbrCommands::Seed {
+            file,
+            entity,
+            db_path,
+            storage,
+        } => execute_seed_command(file, entity, db_path, storage).await,
+        VbrCommands::Snapshot { snapshot_command } => {
+            execute_snapshot_command(snapshot_command).await
+        }
+        VbrCommands::Reset {
+            entity,
+            db_path,
+            storage,
+        } => execute_reset_command(entity, db_path, storage).await,
     }
 }
 
@@ -233,6 +396,7 @@ fn create_schema_from_fields(
         unique_constraints: Vec::new(),
         indexes: Vec::new(),
         auto_generation: HashMap::new(),
+        many_to_many: Vec::new(),
     })
 }
 
@@ -276,6 +440,7 @@ async fn execute_serve_command(
         database,
         registry,
         session_manager: None, // TODO: Initialize session manager if needed
+        snapshots_dir: None,
     };
 
     // Create router
@@ -322,4 +487,233 @@ async fn execute_manage_command(command: ManageCommands) -> Result<(), Box<dyn s
             Ok(())
         }
     }
+}
+
+async fn execute_import_command(command: ImportCommands) -> Result<(), Box<dyn std::error::Error>> {
+    match command {
+        ImportCommands::Openapi {
+            file,
+            output,
+            db_path,
+            storage,
+        } => {
+            println!("{} Importing entities from OpenAPI specification...", "📥".bright_cyan());
+
+            // Read OpenAPI spec
+            let content = std::fs::read_to_string(&file)?;
+            let is_yaml = file
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s == "yaml" || s == "yml")
+                .unwrap_or(false);
+
+            // Create VBR engine from OpenAPI
+            let config = create_config_from_storage(&storage, db_path)?;
+            let (engine, result) = if is_yaml {
+                VbrEngine::from_openapi_file(config, &file).await?
+            } else {
+                VbrEngine::from_openapi(config, &content).await?
+            };
+
+            println!("{} Created {} entities:", "✓".green(), result.entities.len());
+            for (name, _) in &result.entities {
+                println!("  - {}", name.bright_cyan());
+            }
+
+            if !result.warnings.is_empty() {
+                println!("{} Warnings:", "⚠".yellow());
+                for warning in &result.warnings {
+                    println!("  - {}", warning);
+                }
+            }
+
+            // Save entity definitions if output directory specified
+            if let Some(output_dir) = output {
+                std::fs::create_dir_all(&output_dir)?;
+                for (name, _schema) in &result.entities {
+                    if let Some(entity) = engine.registry().get(name) {
+                        let schema_json = serde_json::to_string_pretty(&entity.schema)?;
+                        let output_file = output_dir.join(format!("{}.json", name));
+                        std::fs::write(&output_file, schema_json)?;
+                        println!("  {} Saved to {}", "✓".green(), output_file.display());
+                    }
+                }
+            }
+
+            Ok(())
+        }
+    }
+}
+
+async fn execute_seed_command(
+    file: PathBuf,
+    entity: Option<String>,
+    db_path: Option<PathBuf>,
+    storage: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{} Seeding data from {}...", "🌱".bright_cyan(), file.display());
+
+    // Create VBR engine
+    let config = create_config_from_storage(&storage, db_path)?;
+    let mut engine = VbrEngine::new(config).await?;
+
+    // Seed data
+    let results = if let Some(entity_name) = entity {
+        // Load seed file and extract specific entity
+        let seed_data = mockforge_vbr::seeding::load_seed_file(&file).await?;
+        if let Some(records) = seed_data.get(&entity_name) {
+            let count = engine.seed_entity(&entity_name, records).await?;
+            let mut results = HashMap::new();
+            results.insert(entity_name, count);
+            results
+        } else {
+            return Err(format!("Entity '{}' not found in seed file", entity_name).into());
+        }
+    } else {
+        // Seed all entities
+        let seed_data = mockforge_vbr::seeding::load_seed_file(&file).await?;
+        engine.seed_all(&seed_data).await?
+    };
+
+    println!("{} Seeded data:", "✓".green());
+    for (entity_name, count) in results {
+        println!("  - {}: {} records", entity_name.bright_cyan(), count);
+    }
+
+    Ok(())
+}
+
+async fn execute_snapshot_command(
+    command: SnapshotCommands,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match command {
+        SnapshotCommands::Create {
+            name,
+            description,
+            snapshots_dir,
+            db_path,
+            storage,
+        } => {
+            println!("{} Creating snapshot '{}'...", "📸".bright_cyan(), name);
+
+            // Create VBR engine
+            let config = create_config_from_storage(&storage, db_path)?;
+            let mut engine = VbrEngine::new(config).await?;
+
+            // Create snapshot
+            let metadata = engine
+                .create_snapshot(&name, description, &snapshots_dir)
+                .await?;
+
+            println!("{} Snapshot created:", "✓".green());
+            println!("  Name: {}", metadata.name.bright_cyan());
+            println!("  Created: {}", metadata.created_at);
+            println!("  Entity counts:");
+            for (entity, count) in &metadata.entity_counts {
+                println!("    - {}: {}", entity, count);
+            }
+
+            Ok(())
+        }
+        SnapshotCommands::List { snapshots_dir } => {
+            println!("{} Listing snapshots...", "📋".bright_cyan());
+
+            let snapshots = VbrEngine::list_snapshots(&snapshots_dir).await?;
+
+            if snapshots.is_empty() {
+                println!("  No snapshots found");
+            } else {
+                println!("{} Found {} snapshots:", "✓".green(), snapshots.len());
+                for snapshot in snapshots {
+                    println!("  - {} ({})", snapshot.name.bright_cyan(), snapshot.created_at);
+                    if let Some(desc) = &snapshot.description {
+                        println!("    Description: {}", desc);
+                    }
+                    println!("    Entity counts:");
+                    for (entity, count) in &snapshot.entity_counts {
+                        println!("      - {}: {}", entity, count);
+                    }
+                }
+            }
+
+            Ok(())
+        }
+        SnapshotCommands::Restore {
+            name,
+            snapshots_dir,
+            db_path,
+            storage,
+        } => {
+            println!("{} Restoring snapshot '{}'...", "🔄".bright_cyan(), name);
+
+            // Create VBR engine
+            let config = create_config_from_storage(&storage, db_path)?;
+            let mut engine = VbrEngine::new(config).await?;
+
+            // Restore snapshot
+            engine.restore_snapshot(&name, &snapshots_dir).await?;
+
+            println!("{} Snapshot '{}' restored successfully", "✓".green(), name);
+
+            Ok(())
+        }
+        SnapshotCommands::Delete { name, snapshots_dir } => {
+            println!("{} Deleting snapshot '{}'...", "🗑️".bright_cyan(), name);
+
+            VbrEngine::delete_snapshot(&name, &snapshots_dir).await?;
+
+            println!("{} Snapshot '{}' deleted successfully", "✓".green(), name);
+
+            Ok(())
+        }
+    }
+}
+
+async fn execute_reset_command(
+    entity: Option<String>,
+    db_path: Option<PathBuf>,
+    storage: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{} Resetting database...", "🔄".bright_cyan());
+
+    // Create VBR engine
+    let config = create_config_from_storage(&storage, db_path)?;
+    let mut engine = VbrEngine::new(config).await?;
+
+    if let Some(entity_name) = entity {
+        println!("  Resetting entity: {}", entity_name.bright_cyan());
+        engine.clear_entity(&entity_name).await?;
+        println!("{} Entity '{}' reset successfully", "✓".green(), entity_name);
+    } else {
+        println!("  Resetting all entities...");
+        engine.reset().await?;
+        println!("{} Database reset successfully", "✓".green());
+    }
+
+    Ok(())
+}
+
+/// Helper function to create VbrConfig from storage type
+fn create_config_from_storage(
+    storage: &str,
+    db_path: Option<PathBuf>,
+) -> Result<VbrConfig, Box<dyn std::error::Error>> {
+    let storage_backend = match storage {
+        "sqlite" => {
+            let path = db_path.unwrap_or_else(|| PathBuf::from("./data/vbr.db"));
+            StorageBackend::Sqlite { path }
+        }
+        "json" => {
+            let path = db_path.unwrap_or_else(|| PathBuf::from("./data/vbr.json"));
+            StorageBackend::Json { path }
+        }
+        "memory" => StorageBackend::Memory,
+        _ => {
+            return Err(format!("Invalid storage backend: {}", storage).into());
+        }
+    };
+
+    let mut config = VbrConfig::default();
+    config.storage = storage_backend;
+    Ok(config)
 }
