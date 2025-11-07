@@ -16,6 +16,7 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | Feature | MockForge | WireMock | MockServer | Mockoon |
 |---------|-----------|----------|------------|---------|
 | **Language** | Rust | Java | Java/JavaScript | JavaScript |
+| **Multi-Language SDKs** | ✅ Rust, Node.js, Python, Go, Java, .NET | ⚠️ Java native, clients for others | ⚠️ Java/JS native, clients for others | ⚠️ JS native, clients for others |
 | **Performance** | ⚡ High (native Rust) | Medium | Medium | Medium |
 | **HTTP/REST** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
 | **gRPC Native** | ✅ Full + HTTP Bridge | ❌ No | ❌ No | ⚠️ Limited |
@@ -42,6 +43,65 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **Fault Injection** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
 | **CLI Tool** | ✅ Full-featured | ✅ Yes | ✅ Yes | ✅ Yes |
 | **License** | MIT/Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
+
+## 🌐 Multi-Language Ecosystem
+
+MockForge provides native SDKs for multiple programming languages, enabling developers to embed mock servers directly in their test suites regardless of their technology stack.
+
+### Supported Languages
+
+- **Rust** - Native SDK with zero-overhead embedding
+- **Node.js/TypeScript** - Full TypeScript support with type definitions
+- **Python** - Context manager support with type hints
+- **Go** - Idiomatic Go API with module support
+- **Java** - Maven/Gradle integration
+- **.NET/C#** - NuGet package with async/await support
+
+### Quick Example
+
+**Rust**:
+```rust
+let mut server = MockServer::new().port(3000).start().await?;
+server.stub_response("GET", "/api/users/{id}", json!({"id": 123})).await?;
+```
+
+**Node.js**:
+```typescript
+const server = await MockServer.start({ port: 3000 });
+await server.stubResponse('GET', '/api/users/123', { id: 123 });
+```
+
+**Python**:
+```python
+with MockServer(port=3000) as server:
+    server.stub_response('GET', '/api/users/123', {'id': 123})
+```
+
+See [SDK Documentation](sdk/README.md) for complete examples and [Ecosystem & Use Cases Guide](docs/ECOSYSTEM_AND_USE_CASES.md) for detailed comparisons with WireMock.
+
+## 🎯 Use Cases
+
+MockForge supports a wide range of use cases, from unit testing to service virtualization:
+
+### 1. Unit Tests
+Embed mock servers directly in test suites across all supported languages. No separate server process required for most SDKs.
+
+### 2. Integration Tests
+Test complex multi-service interactions with stateful mocking and multi-protocol support (HTTP, gRPC, WebSocket).
+
+### 3. Service Virtualization
+Replace external dependencies with mocks using proxy mode and record/replay workflows. Capture real API behavior and replay it later.
+
+### 4. Development/Stub Environments
+Create local development environments without backend dependencies. Share mock configurations across teams with workspace synchronization.
+
+### 5. Isolating from Flaky Dependencies
+Simulate network failures, timeouts, and slow responses with built-in latency and fault injection. Test application resilience under various failure conditions.
+
+### 6. Simulating APIs That Don't Exist Yet
+Generate realistic mocks from API specifications (OpenAPI, GraphQL, gRPC) before implementation. Enable parallel development with schema-driven mock generation.
+
+For detailed use case examples and code samples, see [Ecosystem & Use Cases Guide](docs/ECOSYSTEM_AND_USE_CASES.md).
 
 ### v1.0 Feature Status
 

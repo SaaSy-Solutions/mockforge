@@ -29,6 +29,9 @@ See our [detailed comparison table](https://github.com/SaaSy-Solutions/mockforge
 - **gRPC HTTP Bridge** for REST access to gRPC services
 - **Built-in encryption** for sensitive data
 - **Rust performance** with native compilation
+- **Multi-language SDKs** - Native support for 6 languages vs WireMock's Java-first approach
+
+For detailed ecosystem comparison, see [Ecosystem Comparison Guide](../../docs/ECOSYSTEM_COMPARISON.md).
 
 ### Can I use MockForge in production?
 
@@ -78,6 +81,48 @@ Follow our **[5-Minute Tutorial](../getting-started/five-minute-api.md)**:
 - Building from source
 - Developing custom plugins
 - Embedding MockForge as a library
+
+### What programming languages are supported?
+
+MockForge provides native SDKs for 6 languages:
+- **Rust** - Native SDK with zero-overhead embedding
+- **Node.js/TypeScript** - Full TypeScript support
+- **Python** - Context manager support with type hints
+- **Go** - Idiomatic Go API
+- **Java** - Maven/Gradle integration
+- **.NET/C#** - NuGet package
+
+All SDKs support embedded mock servers in your test suites. See [SDK Documentation](../../sdk/README.md) for examples.
+
+### Can I use MockForge from Python/Node.js/Go/etc.?
+
+Yes! MockForge provides native SDKs for multiple languages. You can embed mock servers directly in your test code:
+
+**Python**:
+```python
+from mockforge_sdk import MockServer
+
+with MockServer(port=3000) as server:
+    server.stub_response('GET', '/api/users/123', {'id': 123})
+    # Your test code here
+```
+
+**Node.js**:
+```typescript
+import { MockServer } from '@mockforge/sdk';
+
+const server = await MockServer.start({ port: 3000 });
+await server.stubResponse('GET', '/api/users/123', { id: 123 });
+```
+
+**Go**:
+```go
+server := mockforge.NewMockServer(mockforge.MockServerConfig{Port: 3000})
+server.Start()
+defer server.Stop()
+```
+
+See [Ecosystem & Use Cases Guide](../../docs/ECOSYSTEM_AND_USE_CASES.md) for complete examples in all languages.
 
 ### How do I create my first mock API?
 
@@ -645,11 +690,100 @@ Yes. You can offer:
 
 ---
 
+## Use Cases
+
+### What use cases does MockForge support?
+
+MockForge supports a wide range of use cases:
+
+1. **Unit Tests** - Embed mock servers directly in test suites across all supported languages
+2. **Integration Tests** - Test complex multi-service interactions with stateful mocking
+3. **Service Virtualization** - Replace external dependencies with mocks using proxy mode
+4. **Development Environments** - Create local development environments without backend dependencies
+5. **Isolating from Flaky Dependencies** - Simulate network failures and slow responses
+6. **Simulating APIs That Don't Exist Yet** - Generate mocks from API specifications before implementation
+
+See [Ecosystem & Use Cases Guide](../../docs/ECOSYSTEM_AND_USE_CASES.md) for detailed examples and code samples.
+
+### Can I use MockForge for unit testing?
+
+Yes! MockForge SDKs allow you to embed mock servers directly in your unit tests:
+
+**Rust**:
+```rust
+let mut server = MockServer::new().port(0).start().await?;
+server.stub_response("GET", "/api/users/123", json!({"id": 123})).await?;
+```
+
+**Python**:
+```python
+with MockServer(port=0) as server:
+    server.stub_response('GET', '/api/users/123', {'id': 123})
+```
+
+No separate server process required. See [SDK Documentation](../../sdk/README.md) for examples.
+
+### How do I replace external APIs in my tests?
+
+Use MockForge's proxy mode with record/replay:
+
+```bash
+# Record real API interactions
+mockforge serve --proxy-enabled \
+  --proxy-target https://api.external-service.com \
+  --record-responses ./recordings/
+
+# Replay from recordings
+mockforge serve --replay-from ./recordings/
+```
+
+Or use the SDK to programmatically stub responses. See [Service Virtualization](../../docs/ECOSYSTEM_AND_USE_CASES.md#use-case-3-service-virtualization) for details.
+
+### Can I simulate network failures and slow responses?
+
+Yes! MockForge provides built-in latency and fault injection:
+
+```bash
+# Add latency
+mockforge serve --latency-mode normal --latency-mean-ms 500
+
+# Inject failures
+mockforge serve --failure-rate 0.1 --failure-codes 500,503
+```
+
+Or configure in your SDK:
+```typescript
+const server = await MockServer.start({
+  latency: { mode: 'normal', meanMs: 500 },
+  failures: { enabled: true, failureRate: 0.1 }
+});
+```
+
+See [Isolating from Flaky Dependencies](../../docs/ECOSYSTEM_AND_USE_CASES.md#use-case-5-isolating-from-flaky-dependencies) for examples.
+
+### How do I mock an API that doesn't exist yet?
+
+Generate mocks from API specifications:
+
+```bash
+# From OpenAPI spec
+mockforge serve --spec api-spec.yaml
+
+# From GraphQL schema
+mockforge serve --graphql-schema schema.graphql
+
+# From gRPC proto files
+mockforge serve --grpc-port 50051 --proto-dir ./proto
+```
+
+All endpoints are automatically available with schema-validated responses. See [Simulating APIs That Don't Exist Yet](../../docs/ECOSYSTEM_AND_USE_CASES.md#use-case-6-simulating-apis-that-dont-exist-yet) for details.
+
 ## What's Next?
 
 **Ready to start?** Try our **[5-Minute Tutorial](../getting-started/five-minute-api.md)**!
 
 **Need more help?**
 - [Full Documentation](https://docs.mockforge.dev/)
+- [Ecosystem & Use Cases Guide](../../docs/ECOSYSTEM_AND_USE_CASES.md)
 - [GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues)
 - [Community Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)
