@@ -19,6 +19,7 @@ pub mod fault;
 pub mod gitops;
 pub mod integrations;
 pub mod latency;
+pub mod latency_metrics;
 pub mod metrics;
 pub mod middleware;
 pub mod ml_anomaly_detector;
@@ -79,8 +80,8 @@ pub use collaboration::{
     CollaborationSession, CollaborationUser, CursorPosition,
 };
 pub use config::{
-    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, CorruptionType, FaultInjectionConfig,
-    LatencyConfig, RateLimitConfig, TrafficShapingConfig,
+    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, CorruptionType, ErrorPattern,
+    FaultInjectionConfig, LatencyConfig, NetworkProfile, RateLimitConfig, TrafficShapingConfig,
 };
 pub use dashboard::{DashboardManager, DashboardQuery, DashboardStats, DashboardUpdate};
 pub use distributed_coordinator::{
@@ -95,6 +96,7 @@ pub use integrations::{
     PagerDutyIntegration, SlackConfig, SlackNotifier, TeamsConfig, TeamsNotifier,
 };
 pub use latency::LatencyInjector;
+pub use latency_metrics::{LatencyMetricsTracker, LatencySample, LatencyStats};
 pub use metrics::{registry as metrics_registry, ChaosMetrics, CHAOS_METRICS};
 pub use middleware::{chaos_middleware, ChaosMiddleware};
 pub use ml_anomaly_detector::{

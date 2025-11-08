@@ -45,7 +45,7 @@ mockforge-vbr = { version = "0.2.7", path = "../mockforge-vbr" }
 mockforge-plugin-core = "0.2.7"
 mockforge-plugin-loader = { version = "0.2.0", path = "../mockforge-plugin-loader" }
 mockforge-scenarios = { version = "0.2.7", path = "../mockforge-scenarios" }
-# mockforge-chaos = { path = "../mockforge-chaos" }  # Temporarily disabled due to compilation errors
+mockforge-chaos = { version = "0.2.0", path = "../mockforge-chaos" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

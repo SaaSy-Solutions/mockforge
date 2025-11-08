@@ -22,6 +22,11 @@ import {
 } from '../hooks/useApi';
 import type { ChaosLatencyConfig, ChaosFaultInjectionConfig, ChaosTrafficShapingConfig, CorruptionType } from '../types';
 import { toast } from 'sonner';
+// Chaos Lab components
+import { LatencyGraph } from '../components/chaos/LatencyGraph';
+import { ErrorPatternEditor } from '../components/chaos/ErrorPatternEditor';
+import { NetworkProfileSelector } from '../components/chaos/NetworkProfileSelector';
+import { ProfileExporter } from '../components/chaos/ProfileExporter';
 
 interface ChaosScenario {
   name: string;
@@ -294,6 +299,7 @@ export function ChaosPage() {
         subtitle="Test system resilience with controlled failure injection"
         actions={
           <div className="flex gap-2">
+            <ProfileExporter compact />
             <button
               onClick={fetchStatus}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
@@ -337,6 +343,14 @@ export function ChaosPage() {
         />
       )}
 
+      {/* Network Profiles - New Chaos Lab Feature */}
+      <NetworkProfileSelector
+        onProfileApplied={(profileName) => {
+          toast.success(`Applied profile: ${profileName}`);
+          fetchStatus();
+        }}
+      />
+
       {/* Predefined Scenarios */}
       <Section
         title="Predefined Scenarios"
@@ -372,6 +386,14 @@ export function ChaosPage() {
             </ModernCard>
           ))}
         </div>
+      </Section>
+
+      {/* Real-time Latency Graph - New Chaos Lab Feature */}
+      <Section
+        title="Real-time Latency Metrics"
+        subtitle="Visualize request latency over time"
+      >
+        <LatencyGraph height={400} showStats />
       </Section>
 
       {/* Current Configuration */}
@@ -681,6 +703,31 @@ export function ChaosPage() {
             )}
           </ModernCard>
 
+          {/* Error Pattern Editor - New Chaos Lab Feature */}
+          {faultConfig.enabled && (
+            <ErrorPatternEditor
+              currentPattern={
+                chaosConfig?.fault_injection?.error_pattern
+                  ? {
+                      type: chaosConfig.fault_injection.error_pattern.type as 'burst' | 'random' | 'sequential',
+                      count: chaosConfig.fault_injection.error_pattern.count,
+                      interval_ms: chaosConfig.fault_injection.error_pattern.interval_ms,
+                      probability: chaosConfig.fault_injection.error_pattern.probability,
+                      sequence: chaosConfig.fault_injection.error_pattern.sequence,
+                    }
+                  : null
+              }
+              onPatternChange={(pattern) => {
+                if (pattern) {
+                  const newConfig = { ...faultConfig, error_pattern: pattern };
+                  setFaultConfig(newConfig);
+                  debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                }
+              }}
+              disabled={updatingFaults || configLoading}
+            />
+          )}
+
           {/* Traffic Shaping Controls */}
           <ModernCard className={trafficConfig.enabled ? 'ring-2 ring-green-500/50 dark:ring-green-400/50' : ''}>
             <div className="flex items-center gap-3 mb-6">
@@ -759,6 +806,14 @@ export function ChaosPage() {
             )}
           </ModernCard>
         </div>
+      </Section>
+
+      {/* Profile Export/Import - New Chaos Lab Feature */}
+      <Section
+        title="Profile Management"
+        subtitle="Export and import chaos configuration profiles"
+      >
+        <ProfileExporter />
       </Section>
     </div>
   );

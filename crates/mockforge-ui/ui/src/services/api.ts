@@ -1219,6 +1219,151 @@ class ChaosApiService {
       method: 'POST',
     }) as Promise<{ message: string }>;
   }
+
+  /**
+   * Get latency metrics (time-series data)
+   */
+  async getLatencyMetrics(): Promise<{ samples: Array<{ timestamp: number; latency_ms: number }> }> {
+    return this.fetchJson('/api/chaos/metrics/latency') as Promise<{ samples: Array<{ timestamp: number; latency_ms: number }> }>;
+  }
+
+  /**
+   * Get latency statistics
+   */
+  async getLatencyStats(): Promise<{
+    count: number;
+    min_ms: number;
+    max_ms: number;
+    avg_ms: number;
+    p50_ms: number;
+    p95_ms: number;
+    p99_ms: number;
+  }> {
+    return this.fetchJson('/api/chaos/metrics/latency/stats') as Promise<{
+      count: number;
+      min_ms: number;
+      max_ms: number;
+      avg_ms: number;
+      p50_ms: number;
+      p95_ms: number;
+      p99_ms: number;
+    }>;
+  }
+
+  /**
+   * List all network profiles (built-in + custom)
+   */
+  async getNetworkProfiles(): Promise<Array<{
+    name: string;
+    description: string;
+    chaos_config: any;
+    tags: string[];
+    builtin: boolean;
+  }>> {
+    return this.fetchJson('/api/chaos/profiles') as Promise<Array<{
+      name: string;
+      description: string;
+      chaos_config: any;
+      tags: string[];
+      builtin: boolean;
+    }>>;
+  }
+
+  /**
+   * Get a specific network profile by name
+   */
+  async getNetworkProfile(name: string): Promise<{
+    name: string;
+    description: string;
+    chaos_config: any;
+    tags: string[];
+    builtin: boolean;
+  }> {
+    return this.fetchJson(`/api/chaos/profiles/${encodeURIComponent(name)}`) as Promise<{
+      name: string;
+      description: string;
+      chaos_config: any;
+      tags: string[];
+      builtin: boolean;
+    }>;
+  }
+
+  /**
+   * Apply a network profile
+   */
+  async applyNetworkProfile(name: string): Promise<{ message: string }> {
+    return this.fetchJson(`/api/chaos/profiles/${encodeURIComponent(name)}/apply`, {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Create a custom network profile
+   */
+  async createNetworkProfile(profile: {
+    name: string;
+    description: string;
+    chaos_config: any;
+    tags?: string[];
+  }): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Delete a custom network profile
+   */
+  async deleteNetworkProfile(name: string): Promise<{ message: string }> {
+    return this.fetchJson(`/api/chaos/profiles/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Export a network profile (JSON or YAML)
+   */
+  async exportNetworkProfile(name: string, format: 'json' | 'yaml' = 'json'): Promise<any> {
+    const response = await fetch(`/api/chaos/profiles/${encodeURIComponent(name)}/export?format=${format}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    if (format === 'yaml') {
+      return response.text();
+    }
+    return response.json();
+  }
+
+  /**
+   * Import a network profile from JSON or YAML
+   */
+  async importNetworkProfile(content: string, format: 'json' | 'yaml'): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/profiles/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, format }),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Update error pattern configuration
+   */
+  async updateErrorPattern(pattern: {
+    type: 'burst' | 'random' | 'sequential';
+    count?: number;
+    interval_ms?: number;
+    probability?: number;
+    sequence?: number[];
+  }): Promise<{ message: string }> {
+    // Get current fault config, update pattern, then save
+    const currentConfig = await this.getChaosConfig();
+    const faultConfig = currentConfig.fault_injection || {};
+    faultConfig.error_pattern = pattern;
+    
+    return this.updateChaosFaults(faultConfig);
+  }
 }
 
 /**

@@ -8,6 +8,8 @@ use mockforge_core::{
 };
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
+use mockforge_chaos::api::create_chaos_api_router;
+use mockforge_chaos::config::ChaosConfig;
 use serde_json::json;
 use std::any::Any;
 use std::net::SocketAddr;
@@ -386,6 +388,10 @@ enum Commands {
             help_heading = "Chaos Engineering - Random"
         )]
         chaos_random_max_delay: u64,
+
+        /// Apply a chaos network profile by name (e.g., slow_3g, flaky_wifi)
+        #[arg(long, help_heading = "Chaos Engineering - Profiles")]
+        chaos_profile: Option<String>,
 
         /// Enable AI-powered features
         #[arg(long, help_heading = "AI Features")]
@@ -949,6 +955,18 @@ enum Commands {
         /// Admin UI URL (default: http://localhost:9080)
         #[arg(long)]
         admin_url: Option<String>,
+    },
+
+    /// Chaos engineering profile management
+    ///
+    /// Examples:
+    ///   mockforge chaos profile apply slow_3g
+    ///   mockforge chaos profile export slow_3g --format json
+    ///   mockforge chaos profile import --file profile.json
+    #[command(verbatim_doc_comment)]
+    Chaos {
+        #[command(subcommand)]
+        chaos_command: ChaosCommands,
     },
 
     /// Chaos experiment orchestration
@@ -1817,6 +1835,56 @@ enum DataCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum ChaosCommands {
+    /// Profile management operations
+    Profile {
+        #[command(subcommand)]
+        profile_command: ProfileCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProfileCommands {
+    /// Apply a network profile by name
+    Apply {
+        /// Profile name (e.g., slow_3g, flaky_wifi)
+        name: String,
+        /// Base URL of the MockForge server (default: http://localhost:3000)
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+    /// Export a profile to JSON or YAML
+    Export {
+        /// Profile name to export
+        name: String,
+        /// Output format (json or yaml)
+        #[arg(long, default_value = "json")]
+        format: String,
+        /// Output file path (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Base URL of the MockForge server (default: http://localhost:3000)
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+    /// Import a profile from JSON or YAML file
+    Import {
+        /// Input file path
+        #[arg(short, long)]
+        file: PathBuf,
+        /// Base URL of the MockForge server (default: http://localhost:3000)
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+    /// List all available profiles
+    List {
+        /// Base URL of the MockForge server (default: http://localhost:3000)
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
@@ -1909,6 +1977,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             chaos_random_delay_rate,
             chaos_random_min_delay,
             chaos_random_max_delay,
+            chaos_profile,
             ai_enabled,
             rag_provider,
             rag_model,
@@ -1975,6 +2044,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 chaos_random_delay_rate,
                 chaos_random_min_delay,
                 chaos_random_max_delay,
+                chaos_profile,
                 ai_enabled,
                 rag_provider,
                 rag_model,
@@ -2161,6 +2231,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map_err(|e| anyhow::anyhow!("MockAI command failed: {}", e))?;
         }
 
+        Commands::Chaos { chaos_command } => {
+            handle_chaos_command(chaos_command).await?;
+        }
         Commands::Time {
             time_command,
             admin_url,
@@ -2840,6 +2913,7 @@ async fn handle_serve(
     chaos_random_delay_rate: f64,
     chaos_random_min_delay: u64,
     chaos_random_max_delay: u64,
+    chaos_profile: Option<String>,
     ai_enabled: bool,
     rag_provider: Option<String>,
     rag_model: Option<String>,
@@ -3292,7 +3366,7 @@ async fn handle_serve(
     };
 
     // Use standard router (traffic shaping temporarily disabled)
-    let http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
+    let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
         None,
         None, // circling_config
@@ -3305,11 +3379,78 @@ async fn handle_serve(
         None,                                  // traffic_shaper
         false,                                 // traffic_shaping_enabled
         Some(health_manager_for_router),       // health_manager
-        mockai,                                // mockai
+        mockai.clone(),                        // mockai
         Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
         None,                                  // proxy_config (ProxyConfig not in ServerConfig)
     )
     .await;
+
+    // Integrate chaos engineering API router
+    // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
+    let chaos_config = if let Some(ref chaos_eng_config) = config.observability.chaos {
+        // Convert ChaosEngConfig to ChaosConfig
+        let mut chaos_cfg = ChaosConfig {
+            enabled: chaos_eng_config.enabled,
+            latency: chaos_eng_config.latency.as_ref().map(|l| {
+                mockforge_chaos::config::LatencyConfig {
+                    enabled: l.enabled,
+                    fixed_delay_ms: l.fixed_delay_ms,
+                    random_delay_range_ms: l.random_delay_range_ms,
+                    jitter_percent: l.jitter_percent,
+                    probability: l.probability,
+                }
+            }),
+            fault_injection: chaos_eng_config.fault_injection.as_ref().map(|f| {
+                mockforge_chaos::config::FaultInjectionConfig {
+                    enabled: f.enabled,
+                    http_errors: f.http_errors.clone(),
+                    http_error_probability: f.http_error_probability,
+                    connection_errors: f.connection_errors,
+                    connection_error_probability: f.connection_error_probability,
+                    timeout_errors: f.timeout_errors,
+                    timeout_ms: f.timeout_ms,
+                    timeout_probability: f.timeout_probability,
+                    partial_responses: false,
+                    partial_response_probability: 0.0,
+                    payload_corruption: false,
+                    payload_corruption_probability: 0.0,
+                    corruption_type: mockforge_chaos::config::CorruptionType::None,
+                    error_pattern: None,
+                    mockai_enabled: false,
+                }
+            }),
+            rate_limit: chaos_eng_config.rate_limit.as_ref().map(|r| {
+                mockforge_chaos::config::RateLimitConfig {
+                    enabled: r.enabled,
+                    requests_per_second: r.requests_per_second,
+                    burst_size: r.burst_size,
+                    per_ip: r.per_ip,
+                    per_endpoint: r.per_endpoint,
+                }
+            }),
+            traffic_shaping: chaos_eng_config.traffic_shaping.as_ref().map(|t| {
+                mockforge_chaos::config::TrafficShapingConfig {
+                    enabled: t.enabled,
+                    bandwidth_limit_bps: t.bandwidth_limit_bps,
+                    packet_loss_percent: t.packet_loss_percent,
+                    max_connections: 0,
+                    connection_timeout_ms: 30000,
+                }
+            }),
+            circuit_breaker: None,
+            bulkhead: None,
+        };
+        chaos_cfg
+    } else {
+        // Default chaos config if not configured
+        ChaosConfig::default()
+    };
+
+    // Create and merge chaos API router
+    // Pass MockAI instance if available for dynamic error message generation
+    let (chaos_router, _chaos_config_arc) = create_chaos_api_router(chaos_config, mockai.clone());
+    http_app = http_app.merge(chaos_router);
+    println!("✅ Chaos Engineering API available at /api/chaos/*");
 
     println!(
         "✅ HTTP server configured with health checks at http://localhost:{}/health (live, ready, startup)",
@@ -4787,6 +4928,107 @@ async fn start_mock_server_from_spec(
 }
 
 /// Handle shell completions generation
+/// Handle chaos engineering commands
+async fn handle_chaos_command(chaos_command: ChaosCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match chaos_command {
+        ChaosCommands::Profile { profile_command } => {
+            match profile_command {
+                ProfileCommands::Apply { name, base_url } => {
+                    println!("🔧 Applying chaos profile: {}", name);
+                    let client = reqwest::Client::new();
+                    let url = format!("{}/api/chaos/profiles/{}/apply", base_url, name);
+                    let response = client.post(&url).send().await?;
+                    if response.status().is_success() {
+                        println!("✅ Profile '{}' applied successfully", name);
+                    } else {
+                        let error_text = response.text().await.unwrap_or_default();
+                        eprintln!("❌ Failed to apply profile: {}", error_text);
+                        std::process::exit(1);
+                    }
+                }
+                ProfileCommands::Export { name, format, output, base_url } => {
+                    println!("📤 Exporting profile: {}", name);
+                    let client = reqwest::Client::new();
+                    let url = format!("{}/api/chaos/profiles/{}/export?format={}", base_url, name, format);
+                    let response = client.get(&url).send().await?;
+                    if response.status().is_success() {
+                        let content = response.text().await?;
+                        if let Some(output_path) = output {
+                            tokio::fs::write(&output_path, content).await?;
+                            println!("✅ Profile exported to: {}", output_path.display());
+                        } else {
+                            println!("{}", content);
+                        }
+                    } else {
+                        let error_text = response.text().await.unwrap_or_default();
+                        eprintln!("❌ Failed to export profile: {}", error_text);
+                        std::process::exit(1);
+                    }
+                }
+                ProfileCommands::Import { file, base_url } => {
+                    println!("📥 Importing profile from: {}", file.display());
+                    let content = tokio::fs::read_to_string(&file).await?;
+                    let format = if file.extension().and_then(|s| s.to_str()) == Some("yaml") ||
+                                   file.extension().and_then(|s| s.to_str()) == Some("yml") {
+                        "yaml"
+                    } else {
+                        "json"
+                    };
+                    let client = reqwest::Client::new();
+                    let url = format!("{}/api/chaos/profiles/import", base_url);
+                    let response = client
+                        .post(&url)
+                        .json(&serde_json::json!({
+                            "content": content,
+                            "format": format
+                        }))
+                        .send()
+                        .await?;
+                    if response.status().is_success() {
+                        println!("✅ Profile imported successfully");
+                    } else {
+                        let error_text = response.text().await.unwrap_or_default();
+                        eprintln!("❌ Failed to import profile: {}", error_text);
+                        std::process::exit(1);
+                    }
+                }
+                ProfileCommands::List { base_url } => {
+                    println!("📋 Listing available chaos profiles...");
+                    let client = reqwest::Client::new();
+                    let url = format!("{}/api/chaos/profiles", base_url);
+                    let response = client.get(&url).send().await?;
+                    if response.status().is_success() {
+                        let profiles: Vec<serde_json::Value> = response.json().await?;
+                        println!("\nAvailable Profiles:");
+                        println!("{:-<80}", "");
+                        for profile in profiles {
+                            let name = profile["name"].as_str().unwrap_or("unknown");
+                            let description = profile["description"].as_str().unwrap_or("");
+                            let builtin = profile["builtin"].as_bool().unwrap_or(false);
+                            let tags = profile["tags"].as_array()
+                                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
+                                .unwrap_or_default();
+                            println!("  • {} {}", name, if builtin { "(built-in)" } else { "(custom)" });
+                            if !description.is_empty() {
+                                println!("    {}", description);
+                            }
+                            if !tags.is_empty() {
+                                println!("    Tags: {}", tags);
+                            }
+                            println!();
+                        }
+                    } else {
+                        let error_text = response.text().await.unwrap_or_default();
+                        eprintln!("❌ Failed to list profiles: {}", error_text);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn handle_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
