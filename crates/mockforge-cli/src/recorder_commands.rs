@@ -1,7 +1,7 @@
 //! Recorder commands for stub mapping conversion
 
 use clap::Subcommand;
-use mockforge_recorder::{RecorderDatabase, StubFormat, StubMappingConverter};
+use mockforge_recorder::{models::Protocol, RecorderDatabase, StubFormat, StubMappingConverter};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -142,7 +142,20 @@ async fn handle_convert(
         };
 
         if let Some(ref proto) = protocol {
-            filter.protocol = Some(proto.clone());
+            // Parse protocol string to Protocol enum
+            let protocol_enum = match proto.to_lowercase().as_str() {
+                "http" => Protocol::Http,
+                "grpc" => Protocol::Grpc,
+                "websocket" => Protocol::WebSocket,
+                "graphql" => Protocol::GraphQL,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Invalid protocol: {}. Must be one of: http, grpc, websocket, graphql",
+                        proto
+                    ));
+                }
+            };
+            filter.protocol = Some(protocol_enum);
         }
         if let Some(ref m) = method {
             filter.method = Some(m.clone());
@@ -163,11 +176,8 @@ async fn handle_convert(
         let mut errors = 0;
         let mut seen_identifiers = std::collections::HashSet::new();
 
-        for request in query_result.requests {
-            let exchange = db
-                .get_exchange(&request.id)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Exchange {} not found", request.id))?;
+        for exchange in query_result.exchanges {
+            let exchange_id = exchange.request.id.clone();
 
             match converter.convert(&exchange) {
                 Ok(stub) => {
@@ -199,7 +209,7 @@ async fn handle_convert(
                     }
                 }
                 Err(e) => {
-                    eprintln!("⚠️  Failed to convert {}: {}", request.id, e);
+                    eprintln!("⚠️  Failed to convert {}: {}", exchange_id, e);
                     errors += 1;
                 }
             }

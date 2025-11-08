@@ -127,12 +127,11 @@ impl TemplateLibrary {
             return Ok(());
         }
 
-        for entry in std::fs::read_dir(&templates_dir).map_err(|e| {
-            Error::generic(format!("Failed to read templates directory: {}", e))
-        })? {
-            let entry = entry.map_err(|e| {
-                Error::generic(format!("Failed to read directory entry: {}", e))
-            })?;
+        for entry in std::fs::read_dir(&templates_dir)
+            .map_err(|e| Error::generic(format!("Failed to read templates directory: {}", e)))?
+        {
+            let entry = entry
+                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
 
             let path = entry.path();
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
@@ -230,18 +229,15 @@ impl TemplateLibrary {
     /// Save a template to disk
     fn save_template(&self, template: &TemplateLibraryEntry) -> Result<()> {
         let templates_dir = self.storage_dir.join("templates");
-        std::fs::create_dir_all(&templates_dir).map_err(|e| {
-            Error::generic(format!("Failed to create templates directory: {}", e))
-        })?;
+        std::fs::create_dir_all(&templates_dir)
+            .map_err(|e| Error::generic(format!("Failed to create templates directory: {}", e)))?;
 
         let file_path = templates_dir.join(format!("{}.json", template.id));
-        let json = serde_json::to_string_pretty(template).map_err(|e| {
-            Error::generic(format!("Failed to serialize template: {}", e))
-        })?;
+        let json = serde_json::to_string_pretty(template)
+            .map_err(|e| Error::generic(format!("Failed to serialize template: {}", e)))?;
 
-        std::fs::write(&file_path, json).map_err(|e| {
-            Error::generic(format!("Failed to write template file: {}", e))
-        })?;
+        std::fs::write(&file_path, json)
+            .map_err(|e| Error::generic(format!("Failed to write template file: {}", e)))?;
 
         debug!("Saved template {} to {}", template.id, file_path.display());
         Ok(())
@@ -256,25 +252,18 @@ impl TemplateLibrary {
     pub fn get_template_version(&self, id: &str, version: &str) -> Option<String> {
         self.templates
             .get(id)
-            .and_then(|entry| {
-                entry.versions.iter().find(|v| v.version == version)
-            })
+            .and_then(|entry| entry.versions.iter().find(|v| v.version == version))
             .map(|v| v.content.clone())
     }
 
     /// Get the latest version of a template
     pub fn get_latest_template(&self, id: &str) -> Option<String> {
-        self.templates
-            .get(id)
-            .map(|entry| {
-                entry.versions.first()
-                    .map(|v| v.content.clone())
-                    .unwrap_or_else(|| {
-                        // Fallback to latest_version field
-                        self.get_template_version(id, &entry.latest_version)
-                            .unwrap_or_default()
-                    })
+        self.templates.get(id).map(|entry| {
+            entry.versions.first().map(|v| v.content.clone()).unwrap_or_else(|| {
+                // Fallback to latest_version field
+                self.get_template_version(id, &entry.latest_version).unwrap_or_default()
             })
+        })
     }
 
     /// List all templates
@@ -290,11 +279,15 @@ impl TemplateLibrary {
             .values()
             .filter(|template| {
                 template.name.to_lowercase().contains(&query_lower)
-                    || template.description.as_ref()
+                    || template
+                        .description
+                        .as_ref()
                         .map(|d| d.to_lowercase().contains(&query_lower))
                         .unwrap_or(false)
                     || template.tags.iter().any(|tag| tag.to_lowercase().contains(&query_lower))
-                    || template.category.as_ref()
+                    || template
+                        .category
+                        .as_ref()
                         .map(|c| c.to_lowercase().contains(&query_lower))
                         .unwrap_or(false)
             })
@@ -306,7 +299,9 @@ impl TemplateLibrary {
         self.templates
             .values()
             .filter(|template| {
-                template.category.as_ref()
+                template
+                    .category
+                    .as_ref()
                     .map(|c| c.eq_ignore_ascii_case(category))
                     .unwrap_or(false)
             })
@@ -338,13 +333,16 @@ impl TemplateLibrary {
             } else {
                 // Update latest version
                 template.versions.sort_by(|a, b| b.version.cmp(&a.version));
-                template.latest_version = template.versions.first()
-                    .map(|v| v.version.clone())
-                    .unwrap_or_default();
+                template.latest_version =
+                    template.versions.first().map(|v| v.version.clone()).unwrap_or_default();
                 template.updated_at = Some(chrono::Utc::now().to_rfc3339());
 
+                // Clone template to avoid borrow checker issues
+                let template_clone = template.clone();
+                drop(template); // Explicitly drop mutable borrow
+
                 // Save updated template
-                self.save_template(template)?;
+                self.save_template(&template_clone)?;
             }
         }
         Ok(())
@@ -383,9 +381,10 @@ impl TemplateMarketplace {
             request = request.bearer_auth(token);
         }
 
-        let response = request.send().await.map_err(|e| {
-            Error::generic(format!("Failed to search marketplace: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to search marketplace: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(Error::generic(format!(
@@ -394,15 +393,20 @@ impl TemplateMarketplace {
             )));
         }
 
-        let templates: Vec<TemplateLibraryEntry> = response.json().await.map_err(|e| {
-            Error::generic(format!("Failed to parse marketplace response: {}", e))
-        })?;
+        let templates: Vec<TemplateLibraryEntry> = response
+            .json()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to parse marketplace response: {}", e)))?;
 
         Ok(templates)
     }
 
     /// Get a template from the marketplace
-    pub async fn get_template(&self, id: &str, version: Option<&str>) -> Result<TemplateLibraryEntry> {
+    pub async fn get_template(
+        &self,
+        id: &str,
+        version: Option<&str>,
+    ) -> Result<TemplateLibraryEntry> {
         let url = if let Some(version) = version {
             format!("{}/api/templates/{}/{}", self.registry_url, id, version)
         } else {
@@ -419,15 +423,13 @@ impl TemplateMarketplace {
         })?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to fetch template: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to fetch template: {}", response.status())));
         }
 
-        let template: TemplateLibraryEntry = response.json().await.map_err(|e| {
-            Error::generic(format!("Failed to parse template: {}", e))
-        })?;
+        let template: TemplateLibraryEntry = response
+            .json()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to parse template: {}", e)))?;
 
         Ok(template)
     }
@@ -441,9 +443,10 @@ impl TemplateMarketplace {
             request = request.bearer_auth(token);
         }
 
-        let response = request.send().await.map_err(|e| {
-            Error::generic(format!("Failed to fetch featured templates: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to fetch featured templates: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(Error::generic(format!(
@@ -452,9 +455,10 @@ impl TemplateMarketplace {
             )));
         }
 
-        let templates: Vec<TemplateLibraryEntry> = response.json().await.map_err(|e| {
-            Error::generic(format!("Failed to parse featured templates: {}", e))
-        })?;
+        let templates: Vec<TemplateLibraryEntry> = response
+            .json()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to parse featured templates: {}", e)))?;
 
         Ok(templates)
     }
@@ -469,9 +473,10 @@ impl TemplateMarketplace {
             request = request.bearer_auth(token);
         }
 
-        let response = request.send().await.map_err(|e| {
-            Error::generic(format!("Failed to fetch templates by category: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to fetch templates by category: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(Error::generic(format!(
@@ -480,9 +485,10 @@ impl TemplateMarketplace {
             )));
         }
 
-        let templates: Vec<TemplateLibraryEntry> = response.json().await.map_err(|e| {
-            Error::generic(format!("Failed to parse templates: {}", e))
-        })?;
+        let templates: Vec<TemplateLibraryEntry> = response
+            .json()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to parse templates: {}", e)))?;
 
         Ok(templates)
     }
@@ -513,15 +519,22 @@ impl TemplateLibraryManager {
     }
 
     /// Install a template from marketplace to local library
-    pub async fn install_from_marketplace(&mut self, id: &str, version: Option<&str>) -> Result<()> {
-        let marketplace = self.marketplace.as_ref().ok_or_else(|| {
-            Error::generic("Marketplace not configured".to_string())
-        })?;
+    pub async fn install_from_marketplace(
+        &mut self,
+        id: &str,
+        version: Option<&str>,
+    ) -> Result<()> {
+        let marketplace = self
+            .marketplace
+            .as_ref()
+            .ok_or_else(|| Error::generic("Marketplace not configured".to_string()))?;
 
         let template = marketplace.get_template(id, version).await?;
 
         // Convert to metadata and register
-        let latest_version = template.versions.first()
+        let latest_version = template
+            .versions
+            .first()
             .ok_or_else(|| Error::generic("Template has no versions".to_string()))?;
 
         let metadata = TemplateMetadata {

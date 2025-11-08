@@ -68,7 +68,7 @@ pub use error::{Error, Result};
 pub use server::MockServer;
 pub use stub::{
     DynamicResponseFn, DynamicStub, RequestContext, ResourceIdExtractConfig, ResponseStub,
-    StubBuilder, StubFaultInjectionConfig, StateMachineConfig, StateResponseOverride,
+    StateMachineConfig, StateResponseOverride, StubBuilder, StubFaultInjectionConfig,
 };
 pub use verification::Verification;
 

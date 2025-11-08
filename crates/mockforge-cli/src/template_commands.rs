@@ -8,7 +8,9 @@
 
 use clap::Subcommand;
 use mockforge_core::{
-    template_library::{TemplateLibrary, TemplateLibraryManager, TemplateMarketplace, TemplateMetadata},
+    template_library::{
+        TemplateLibrary, TemplateLibraryManager, TemplateMarketplace, TemplateMetadata,
+    },
     Error, Result,
 };
 use std::path::PathBuf;
@@ -149,9 +151,7 @@ pub enum MarketplaceCommands {
 }
 
 /// Handle template library commands
-pub async fn handle_template_command(
-    command: TemplateCommands,
-) -> Result<()> {
+pub async fn handle_template_command(command: TemplateCommands) -> Result<()> {
     // Extract storage_dir from any command variant
     let storage_dir = match &command {
         TemplateCommands::Register { storage_dir, .. } => storage_dir.clone(),
@@ -160,7 +160,7 @@ pub async fn handle_template_command(
         TemplateCommands::Remove { storage_dir, .. } => storage_dir.clone(),
         TemplateCommands::Search { storage_dir, .. } => storage_dir.clone(),
         TemplateCommands::Install { storage_dir, .. } => storage_dir.clone(),
-        TemplateCommands::Marketplace { storage_dir, .. } => storage_dir.clone(),
+        TemplateCommands::Marketplace { .. } => None,
     };
 
     let storage = storage_dir.unwrap_or_else(|| PathBuf::from("./.mockforge-templates"));
@@ -195,35 +195,29 @@ pub async fn handle_template_command(
             )
             .await
         }
-        TemplateCommands::List { category, search, .. } => {
-            handle_list_templates(&manager, category, search).await
-        }
+        TemplateCommands::List {
+            category, search, ..
+        } => handle_list_templates(&manager, category, search).await,
         TemplateCommands::Get { id, version, .. } => {
             handle_get_template(&manager, id, version).await
         }
         TemplateCommands::Remove { id, version, .. } => {
             handle_remove_template(&mut manager, id, version).await
         }
-        TemplateCommands::Search { query, .. } => {
-            handle_search_templates(&manager, query).await
-        }
+        TemplateCommands::Search { query, .. } => handle_search_templates(&manager, query).await,
         TemplateCommands::Install {
             id,
             version,
             registry_url,
             auth_token,
             ..
-        } => {
-            handle_install_template(&mut manager, id, version, registry_url, auth_token).await
-        }
+        } => handle_install_template(&mut manager, id, version, registry_url, auth_token).await,
         TemplateCommands::Marketplace {
             registry_url,
             auth_token,
             command: marketplace_cmd,
             ..
-        } => {
-            handle_marketplace_command(registry_url, auth_token, marketplace_cmd).await
-        }
+        } => handle_marketplace_command(registry_url, auth_token, marketplace_cmd).await,
     }
 }
 
@@ -307,8 +301,9 @@ async fn handle_get_template(
     id: String,
     version: Option<String>,
 ) -> Result<()> {
-    let content = if let Some(version) = version {
-        manager.library().get_template_version(&id, &version)
+    let version_clone = version.clone();
+    let content = if let Some(ref version) = version {
+        manager.library().get_template_version(&id, version)
     } else {
         manager.library().get_latest_template(&id)
     };
@@ -316,15 +311,13 @@ async fn handle_get_template(
     match content {
         Some(content) => {
             println!("Template: {}", id);
-            if let Some(version) = version {
+            if let Some(ref version) = version_clone {
                 println!("Version: {}", version);
             }
             println!("\nContent:\n{}", content);
             Ok(())
         }
-        None => {
-            Err(Error::generic(format!("Template '{}' not found", id)))
-        }
+        None => Err(Error::generic(format!("Template '{}' not found", id))),
     }
 }
 
@@ -343,10 +336,7 @@ async fn handle_remove_template(
     Ok(())
 }
 
-async fn handle_search_templates(
-    manager: &TemplateLibraryManager,
-    query: String,
-) -> Result<()> {
+async fn handle_search_templates(manager: &TemplateLibraryManager, query: String) -> Result<()> {
     let templates = manager.library().search_templates(&query);
 
     if templates.is_empty() {
@@ -372,8 +362,12 @@ async fn handle_install_template(
     registry_url: String,
     auth_token: Option<String>,
 ) -> Result<()> {
-    manager = manager.with_marketplace(registry_url, auth_token);
-    manager.install_from_marketplace(&id, version.as_deref()).await?;
+    // Take ownership, configure marketplace, then put it back
+    let mut temp_manager =
+        std::mem::replace(manager, TemplateLibraryManager::new(manager.library().storage_dir())?);
+    temp_manager = temp_manager.with_marketplace(registry_url, auth_token);
+    temp_manager.install_from_marketplace(&id, version.as_deref()).await?;
+    *manager = temp_manager;
     info!("Template '{}' installed successfully", id);
     Ok(())
 }
@@ -424,7 +418,10 @@ async fn handle_marketplace_command(
             if let Some(ref author) = template.author {
                 println!("Author: {}", author);
             }
-            println!("\nContent:\n{}", template.versions.first().map(|v| &v.content).unwrap_or(&String::new()));
+            println!(
+                "\nContent:\n{}",
+                template.versions.first().map(|v| &v.content).unwrap_or(&String::new())
+            );
         }
     }
 

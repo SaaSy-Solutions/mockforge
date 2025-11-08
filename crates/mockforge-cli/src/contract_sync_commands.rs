@@ -52,9 +52,7 @@ pub async fn handle_contract_sync(
     // Get OpenAPI spec files from Git
     let spec_files = git_service.get_spec_files()?;
     if spec_files.is_empty() {
-        return Err(Error::generic(
-            "No OpenAPI spec files found in repository".to_string(),
-        ));
+        return Err(Error::generic("No OpenAPI spec files found in repository".to_string()));
     }
 
     info!("Found {} OpenAPI spec file(s) in Git repository", spec_files.len());
@@ -122,9 +120,9 @@ pub async fn handle_contract_sync(
 
 /// Load an OpenAPI spec from a file
 async fn load_openapi_spec(path: &Path) -> Result<OpenApiSpec> {
-    OpenApiSpec::from_file(path)
-        .await
-        .map_err(|e| Error::generic(format!("Failed to load OpenAPI spec from {}: {}", path.display(), e)))
+    OpenApiSpec::from_file(path).await.map_err(|e| {
+        Error::generic(format!("Failed to load OpenAPI spec from {}: {}", path.display(), e))
+    })
 }
 
 /// Merge validation results into an overall result
@@ -157,11 +155,7 @@ async fn update_mocks_from_git_specs(
     if let Some(mock_path) = mock_config_path {
         // Copy the Git spec to the mock config location
         tokio::fs::copy(primary_spec, mock_path).await.map_err(|e| {
-            Error::generic(format!(
-                "Failed to copy spec to {}: {}",
-                mock_path.display(),
-                e
-            ))
+            Error::generic(format!("Failed to copy spec to {}: {}", mock_path.display(), e))
         })?;
         info!("Mock configuration updated: {}", mock_path.display());
     } else {

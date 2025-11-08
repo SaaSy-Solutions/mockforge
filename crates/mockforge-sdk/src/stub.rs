@@ -1,6 +1,6 @@
 //! Response stub configuration
 
-use mockforge_core::stateful_handler::ResourceIdExtract as CoreResourceIdExtract;
+use mockforge_core::ResourceIdExtract as CoreResourceIdExtract;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -278,10 +278,7 @@ impl ResponseStub {
 
     /// Check if this stub has fault injection configured
     pub fn has_fault_injection(&self) -> bool {
-        self.fault_injection
-            .as_ref()
-            .map(|f| f.enabled)
-            .unwrap_or(false)
+        self.fault_injection.as_ref().map(|f| f.enabled).unwrap_or(false)
     }
 
     /// Get fault injection configuration
@@ -294,18 +291,18 @@ impl ResourceIdExtractConfig {
     /// Convert to core's ResourceIdExtract enum
     pub fn to_core(&self) -> CoreResourceIdExtract {
         match self {
-            ResourceIdExtractConfig::PathParam { param } => {
-                CoreResourceIdExtract::PathParam { param: param.clone() }
-            }
+            ResourceIdExtractConfig::PathParam { param } => CoreResourceIdExtract::PathParam {
+                param: param.clone(),
+            },
             ResourceIdExtractConfig::JsonPath { path } => {
                 CoreResourceIdExtract::JsonPath { path: path.clone() }
             }
             ResourceIdExtractConfig::Header { name } => {
                 CoreResourceIdExtract::Header { name: name.clone() }
             }
-            ResourceIdExtractConfig::QueryParam { param } => {
-                CoreResourceIdExtract::QueryParam { param: param.clone() }
-            }
+            ResourceIdExtractConfig::QueryParam { param } => CoreResourceIdExtract::QueryParam {
+                param: param.clone(),
+            },
         }
     }
 }

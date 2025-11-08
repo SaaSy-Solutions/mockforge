@@ -19,9 +19,12 @@ use tokio::net::TcpListener;
 mod amqp_commands;
 mod backend_generator;
 mod client_generator;
+mod contract_diff_commands;
+mod contract_sync_commands;
 mod deploy_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
+mod git_watch_commands;
 mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
@@ -34,13 +37,11 @@ mod recorder_commands;
 mod scenario_commands;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
+mod template_commands;
 mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
 mod workspace_commands;
-mod git_watch_commands;
-mod contract_sync_commands;
-mod template_commands;
 
 #[cfg(test)]
 mod tests;
@@ -746,6 +747,23 @@ enum Commands {
         update: bool,
     },
 
+    /// AI-powered contract diff analysis
+    ///
+    /// Analyze front-end requests against backend contract specifications,
+    /// detect mismatches, and generate correction proposals.
+    ///
+    /// Examples:
+    ///   mockforge contract-diff analyze --spec api.yaml --request-path request.json
+    ///   mockforge contract-diff analyze --spec api.yaml --capture-id abc123 --output results.json
+    ///   mockforge contract-diff compare --old-spec old.yaml --new-spec new.yaml
+    ///   mockforge contract-diff generate-patch --spec api.yaml --request-path request.json --output patch.json
+    ///   mockforge contract-diff apply-patch --spec api.yaml --patch patch.json
+    #[command(verbatim_doc_comment)]
+    ContractDiff {
+        #[command(subcommand)]
+        diff_command: ContractDiffCommands,
+    },
+
     /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
     ///
     /// Examples:
@@ -1295,6 +1313,125 @@ enum ConfigCommands {
         /// Configuration file path
         #[arg(short, long)]
         config: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ContractDiffCommands {
+    /// Analyze a request against a contract specification
+    ///
+    /// Examples:
+    ///   mockforge contract-diff analyze --spec api.yaml --request-path request.json
+    ///   mockforge contract-diff analyze --spec api.yaml --capture-id abc123 --output results.json
+    #[command(verbatim_doc_comment)]
+    Analyze {
+        /// Path to contract specification file (OpenAPI YAML/JSON)
+        #[arg(short, long)]
+        spec: PathBuf,
+
+        /// Path to request JSON file
+        #[arg(long, conflicts_with = "capture_id")]
+        request_path: Option<PathBuf>,
+
+        /// Capture ID from request capture system
+        #[arg(long, conflicts_with = "request_path")]
+        capture_id: Option<String>,
+
+        /// Output file path for results (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// LLM provider (openai, anthropic, ollama, openai-compatible)
+        #[arg(long)]
+        llm_provider: Option<String>,
+
+        /// LLM model name
+        #[arg(long)]
+        llm_model: Option<String>,
+
+        /// LLM API key
+        #[arg(long)]
+        llm_api_key: Option<String>,
+
+        /// Confidence threshold (0.0-1.0)
+        #[arg(long)]
+        confidence_threshold: Option<f64>,
+    },
+
+    /// Compare two contract specifications
+    ///
+    /// Examples:
+    ///   mockforge contract-diff compare --old-spec old.yaml --new-spec new.yaml
+    ///   mockforge contract-diff compare --old-spec old.yaml --new-spec new.yaml --output diff.md
+    #[command(verbatim_doc_comment)]
+    Compare {
+        /// Path to old contract specification
+        #[arg(long)]
+        old_spec: PathBuf,
+
+        /// Path to new contract specification
+        #[arg(long)]
+        new_spec: PathBuf,
+
+        /// Output file path for comparison report (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Generate correction patch file
+    ///
+    /// Examples:
+    ///   mockforge contract-diff generate-patch --spec api.yaml --request-path request.json --output patch.json
+    ///   mockforge contract-diff generate-patch --spec api.yaml --capture-id abc123 --output patch.json
+    #[command(verbatim_doc_comment)]
+    GeneratePatch {
+        /// Path to contract specification file
+        #[arg(short, long)]
+        spec: PathBuf,
+
+        /// Path to request JSON file
+        #[arg(long, conflicts_with = "capture_id")]
+        request_path: Option<PathBuf>,
+
+        /// Capture ID from request capture system
+        #[arg(long, conflicts_with = "request_path")]
+        capture_id: Option<String>,
+
+        /// Output file path for patch file
+        #[arg(short, long)]
+        output: PathBuf,
+
+        /// LLM provider (openai, anthropic, ollama, openai-compatible)
+        #[arg(long)]
+        llm_provider: Option<String>,
+
+        /// LLM model name
+        #[arg(long)]
+        llm_model: Option<String>,
+
+        /// LLM API key
+        #[arg(long)]
+        llm_api_key: Option<String>,
+    },
+
+    /// Apply correction patch to contract specification
+    ///
+    /// Examples:
+    ///   mockforge contract-diff apply-patch --spec api.yaml --patch patch.json
+    ///   mockforge contract-diff apply-patch --spec api.yaml --patch patch.json --output updated-api.yaml
+    #[command(verbatim_doc_comment)]
+    ApplyPatch {
+        /// Path to contract specification file
+        #[arg(short, long)]
+        spec: PathBuf,
+
+        /// Path to patch file (JSON Patch format)
+        #[arg(short, long)]
+        patch: PathBuf,
+
+        /// Output file path (default: overwrites input spec)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 
@@ -1968,6 +2105,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )
             .await?;
         }
+        Commands::ContractDiff { diff_command } => {
+            handle_contract_diff(diff_command).await?;
+        }
         Commands::Import { import_command } => {
             import_commands::handle_import_command(import_command).await?;
         }
@@ -2420,6 +2560,7 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
             record_grpc: true,
             record_websocket: true,
             record_graphql: true,
+            record_proxy: true,
         });
     }
 
@@ -2964,6 +3105,11 @@ async fn handle_serve(
 
     // Initialize key store at startup
     init_key_store();
+
+    // Initialize request capture manager for contract diff analysis
+    use mockforge_core::request_capture::init_global_capture_manager;
+    init_global_capture_manager(1000); // Keep last 1000 requests
+    tracing::info!("Request capture manager initialized for contract diff analysis");
 
     // Build HTTP router with OpenAPI spec, chain support, multi-tenant, and traffic shaping if enabled
     let multi_tenant_config = if config.multi_tenant.enabled {
@@ -3809,6 +3955,101 @@ async fn handle_serve(
     } else {
         Ok(())
     }
+}
+
+/// Handle contract-diff commands
+async fn handle_contract_diff(
+    diff_command: ContractDiffCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use contract_diff_commands::{
+        handle_contract_diff_analyze, handle_contract_diff_apply_patch,
+        handle_contract_diff_compare, handle_contract_diff_generate_patch,
+    };
+    use mockforge_core::ai_contract_diff::ContractDiffConfig;
+
+    match diff_command {
+        ContractDiffCommands::Analyze {
+            spec,
+            request_path,
+            capture_id,
+            output,
+            llm_provider,
+            llm_model,
+            llm_api_key,
+            confidence_threshold,
+        } => {
+            // Build config from CLI args
+            let config = if llm_provider.is_some()
+                || llm_model.is_some()
+                || llm_api_key.is_some()
+                || confidence_threshold.is_some()
+            {
+                let mut cfg = ContractDiffConfig::default();
+                if let Some(provider) = llm_provider {
+                    cfg.llm_provider = provider;
+                }
+                if let Some(model) = llm_model {
+                    cfg.llm_model = model;
+                }
+                if let Some(api_key) = llm_api_key {
+                    cfg.api_key = Some(api_key);
+                }
+                if let Some(threshold) = confidence_threshold {
+                    cfg.confidence_threshold = threshold;
+                }
+                Some(cfg)
+            } else {
+                None
+            };
+
+            handle_contract_diff_analyze(spec, request_path, capture_id, output, config).await?;
+        }
+        ContractDiffCommands::Compare {
+            old_spec,
+            new_spec,
+            output,
+        } => {
+            handle_contract_diff_compare(old_spec, new_spec, output).await?;
+        }
+        ContractDiffCommands::GeneratePatch {
+            spec,
+            request_path,
+            capture_id,
+            output,
+            llm_provider,
+            llm_model,
+            llm_api_key,
+        } => {
+            // Build config from CLI args
+            let config = if llm_provider.is_some() || llm_model.is_some() || llm_api_key.is_some() {
+                let mut cfg = ContractDiffConfig::default();
+                if let Some(provider) = llm_provider {
+                    cfg.llm_provider = provider;
+                }
+                if let Some(model) = llm_model {
+                    cfg.llm_model = model;
+                }
+                if let Some(api_key) = llm_api_key {
+                    cfg.api_key = Some(api_key);
+                }
+                Some(cfg)
+            } else {
+                None
+            };
+
+            handle_contract_diff_generate_patch(spec, request_path, capture_id, output, config)
+                .await?;
+        }
+        ContractDiffCommands::ApplyPatch {
+            spec,
+            patch,
+            output,
+        } => {
+            handle_contract_diff_apply_patch(spec, patch, output).await?;
+        }
+    }
+
+    Ok(())
 }
 
 async fn handle_data(

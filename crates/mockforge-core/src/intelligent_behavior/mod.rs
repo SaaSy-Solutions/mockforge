@@ -56,6 +56,7 @@ pub mod llm_client;
 pub mod memory;
 pub mod mockai;
 pub mod mutation_analyzer;
+pub mod openapi_generator;
 pub mod pagination_intelligence;
 pub mod rule_generator;
 pub mod rules;
@@ -78,11 +79,16 @@ pub use mutation_analyzer::{
     ChangeType, FieldChange, MutationAnalysis, MutationAnalyzer, MutationType, ResponseType,
     ValidationIssue, ValidationIssueType, ValidationSeverity,
 };
+pub use openapi_generator::{
+    ConfidenceScore, HttpExchange, OpenApiGenerationConfig, OpenApiGenerationMetadata,
+    OpenApiGenerationResult, OpenApiSpecGenerator,
+};
 pub use pagination_intelligence::{
     PaginationFormat, PaginationIntelligence, PaginationMetadata, PaginationRequest, PaginationRule,
 };
 pub use rule_generator::{
-    CrudExample, ErrorExample, ExamplePair, PaginatedResponse, RuleGenerator, ValidationRule,
+    CrudExample, ErrorExample, ExamplePair, PaginatedResponse, PatternMatch, RuleExplanation,
+    RuleGenerator, RuleType, ValidationRule,
 };
 pub use rules::{ConsistencyRule, RuleAction, StateMachine, StateTransition};
 pub use session::{SessionManager, SessionTracking};

@@ -168,6 +168,14 @@ pub fn create_admin_router(
         .route("/__mockforge/verification/sequence", post(verification::verify_sequence_handler))
         .route("/__mockforge/verification/never", post(verification::verify_never_handler))
         .route("/__mockforge/verification/at-least", post(verification::verify_at_least_handler))
+        // Contract diff routes
+        .route("/__mockforge/contract-diff/upload", post(contract_diff::upload_request))
+        .route("/__mockforge/contract-diff/submit", post(contract_diff::submit_request))
+        .route("/__mockforge/contract-diff/captures", get(contract_diff::get_captured_requests))
+        .route("/__mockforge/contract-diff/captures/{id}", get(contract_diff::get_captured_request))
+        .route("/__mockforge/contract-diff/captures/{id}/analyze", post(contract_diff::analyze_captured_request))
+        .route("/__mockforge/contract-diff/captures/{id}/patch", post(contract_diff::generate_patch_file))
+        .route("/__mockforge/contract-diff/statistics", get(contract_diff::get_capture_statistics))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))

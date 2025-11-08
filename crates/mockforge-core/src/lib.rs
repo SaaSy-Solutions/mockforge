@@ -201,6 +201,7 @@
 
 #![allow(deprecated)]
 
+pub mod ai_contract_diff;
 pub mod ai_response;
 pub mod cache;
 pub mod chain_execution;
@@ -212,6 +213,8 @@ pub mod conditions;
 pub mod config;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
+/// Contract webhooks for notifying external systems about contract changes
+pub mod contract_webhooks;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
 /// Docker Compose integration for containerized mock deployments
@@ -237,6 +240,7 @@ pub mod priority_handler;
 pub mod protocol_abstraction;
 pub mod proxy;
 pub mod record_replay;
+pub mod request_capture;
 pub mod request_chaining;
 pub mod request_fingerprint;
 pub mod request_logger;
@@ -248,9 +252,9 @@ pub mod server_utils;
 pub mod spec_parser;
 pub mod stateful_handler;
 pub mod sync_watcher;
-pub mod templating;
 /// Template library system for shared templates, versioning, and marketplace
 pub mod template_library;
+pub mod templating;
 pub mod time_travel;
 pub mod time_travel_handler;
 pub mod traffic_shaping;
@@ -268,6 +272,10 @@ pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ApiKeyConfig,
     AuthConfig, ServerConfig,
 };
+pub use data_source::{
+    DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
+    DataSourceType, GitDataSource, HttpDataSource, LocalDataSource,
+};
 pub use error::{Error, Result};
 pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
@@ -278,10 +286,6 @@ pub use generate_config::{
     PluginConfig,
 };
 pub use git_watch::{GitWatchConfig, GitWatchService};
-pub use data_source::{
-    DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
-    DataSourceType, HttpDataSource, LocalDataSource, GitDataSource,
-};
 pub use graph::{
     builder::GraphBuilder, relationships, ClusterType, EdgeType, GraphCluster, GraphData,
     GraphEdge, GraphNode, NodeType, Protocol as GraphProtocol,
@@ -342,11 +346,11 @@ pub use stateful_handler::{
     StatefulResponseHandler, TransitionTrigger,
 };
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
-pub use templating::{expand_str, expand_tokens};
 pub use template_library::{
     TemplateLibrary, TemplateLibraryEntry, TemplateLibraryManager, TemplateMarketplace,
     TemplateMetadata, TemplateVersion,
 };
+pub use templating::{expand_str, expand_tokens};
 pub use time_travel::{
     cron::{CronJob, CronJobAction, CronScheduler},
     get_global_clock, is_time_travel_enabled, now as time_travel_now, register_global_clock,

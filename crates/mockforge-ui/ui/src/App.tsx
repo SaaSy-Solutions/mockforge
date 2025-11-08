@@ -13,6 +13,7 @@ const ServicesPage = lazy(() => import('./pages/ServicesPage').then(m => ({ defa
 const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
 const MetricsPage = lazy(() => import('./pages/MetricsPage').then(m => ({ default: m.MetricsPage })));
 const VerificationPage = lazy(() => import('./pages/VerificationPage').then(m => ({ default: m.VerificationPage })));
+const ContractDiffPage = lazy(() => import('./pages/ContractDiffPage').then(m => ({ default: m.ContractDiffPage })));
 const FixturesPage = lazy(() => import('./pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
 const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const TestingPage = lazy(() => import('./pages/TestingPage').then(m => ({ default: m.TestingPage })));
@@ -54,6 +55,11 @@ const TemplateMarketplacePage = lazy(() => import('./pages/TemplateMarketplacePa
 
 // User Management
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
+
+// MockAI
+const MockAIPage = lazy(() => import('./pages/MockAIPage').then(m => ({ default: m.MockAIPage })));
+const MockAIOpenApiGeneratorPage = lazy(() => import('./pages/MockAIOpenApiGeneratorPage').then(m => ({ default: m.MockAIOpenApiGeneratorPage })));
+const MockAIRulesPage = lazy(() => import('./pages/MockAIRulesPage').then(m => ({ default: m.MockAIRulesPage })));
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -113,6 +119,8 @@ function App() {
         return <AnalyticsPage />;
       case 'verification':
         return <VerificationPage />;
+      case 'contract-diff':
+        return <ContractDiffPage />;
 
       // Testing
       case 'testing':
@@ -147,6 +155,14 @@ function App() {
       // User Management
       case 'user-management':
         return <UserManagementPage />;
+
+      // MockAI
+      case 'mockai':
+        return <MockAIPage />;
+      case 'mockai-openapi-generator':
+        return <MockAIOpenApiGeneratorPage />;
+      case 'mockai-rules':
+        return <MockAIRulesPage />;
 
       // Configuration
       case 'config':

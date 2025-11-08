@@ -165,6 +165,8 @@
 pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
+/// Contract diff middleware for automatic request capture
+pub mod contract_diff_middleware;
 pub mod coverage;
 /// File generation service for creating mock PDF, CSV, JSON files
 pub mod file_generator;
@@ -778,6 +780,10 @@ pub async fn build_router_with_multi_tenant(
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    // Add contract diff middleware for automatic request capture
+    // This captures requests for contract diff analysis (after logging)
+    app = app.layer(axum::middleware::from_fn(contract_diff_middleware::capture_for_contract_diff));
 
     // Add rate limiting middleware (before logging to rate limit early)
     app = app.layer(from_fn_with_state(state.clone(), crate::middleware::rate_limit_middleware));
@@ -1458,6 +1464,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
             crate::middleware::production_headers_middleware,
         ));
     }
+
+    // Add contract diff middleware for automatic request capture
+    // This captures requests for contract diff analysis
+    app = app.layer(axum::middleware::from_fn(contract_diff_middleware::capture_for_contract_diff));
 
     // Add CORS middleware (use final_cors_config which may be overridden by deceptive deploy)
     app = apply_cors_middleware(app, final_cors_config);

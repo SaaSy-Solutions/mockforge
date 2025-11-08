@@ -473,14 +473,16 @@ impl MockConfigBuilder {
     ///     .with_header("Content-Type", "application/json")
     /// ```
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.headers.insert(name.into(), value.into());
         self
     }
 
     /// Require multiple headers to be present and match
     pub fn with_headers(mut self, headers: HashMap<String, String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.headers.extend(headers);
         self
     }
@@ -494,14 +496,16 @@ impl MockConfigBuilder {
     ///     .with_query_param("limit", "10")
     /// ```
     pub fn with_query_param(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.query_params.insert(name.into(), value.into());
         self
     }
 
     /// Require multiple query parameters to be present and match
     pub fn with_query_params(mut self, params: HashMap<String, String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.query_params.extend(params);
         self
     }
@@ -515,7 +519,8 @@ impl MockConfigBuilder {
     ///     .with_body_pattern("exact string match")  // Exact match
     /// ```
     pub fn with_body_pattern(mut self, pattern: impl Into<String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.body_pattern = Some(pattern.into());
         self
     }
@@ -529,7 +534,8 @@ impl MockConfigBuilder {
     ///     .with_json_path("$.age > 18")  // Body must have age > 18
     /// ```
     pub fn with_json_path(mut self, json_path: impl Into<String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.json_path = Some(json_path.into());
         self
     }
@@ -542,7 +548,8 @@ impl MockConfigBuilder {
     ///     .with_xpath("/users/user[@id='123']")
     /// ```
     pub fn with_xpath(mut self, xpath: impl Into<String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.xpath = Some(xpath.into());
         self
     }
@@ -556,7 +563,8 @@ impl MockConfigBuilder {
     ///     .with_custom_matcher("path =~ \"/api/.*\"")
     /// ```
     pub fn with_custom_matcher(mut self, expression: impl Into<String>) -> Self {
-        let match_criteria = self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
+        let match_criteria =
+            self.config.request_match.get_or_insert_with(RequestMatchCriteria::default);
         match_criteria.custom_matcher = Some(expression.into());
         self
     }

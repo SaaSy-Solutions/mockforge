@@ -38,6 +38,8 @@ import {
   Package,
   GitBranch as GraphIcon,
   CheckCircle2,
+  Brain,
+  GitCompare,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -70,6 +72,7 @@ const navItems = [
   { id: 'metrics', label: 'Metrics', icon: Activity },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'verification', label: 'Verification', icon: CheckCircle2 },
+  { id: 'contract-diff', label: 'Contract Diff', icon: GitCompare },
 
   // Testing
   { id: 'testing', label: 'Testing', icon: TestTube },
@@ -85,6 +88,11 @@ const navItems = [
   // Import & Templates
   { id: 'import', label: 'Import', icon: Import },
   { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
+
+  // AI & Intelligence
+  { id: 'mockai', label: 'MockAI', icon: Brain },
+  { id: 'mockai-openapi-generator', label: 'MockAI OpenAPI Generator', icon: Code2 },
+  { id: 'mockai-rules', label: 'MockAI Rules', icon: BarChart3 },
 
   // Plugins
   { id: 'plugins', label: 'Plugins', icon: Puzzle },

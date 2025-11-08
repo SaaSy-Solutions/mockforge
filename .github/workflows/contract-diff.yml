@@ -1,0 +1,257 @@
+name: Contract Diff Verification
+
+on:
+  pull_request:
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.json'
+      - 'crates/mockforge-core/src/ai_contract_diff/**'
+      - 'crates/mockforge-cli/src/contract_diff_commands.rs'
+      - '.github/workflows/contract-diff.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.json'
+  workflow_dispatch:
+    inputs:
+      spec_path:
+        description: 'Path to OpenAPI spec file'
+        required: true
+        type: string
+      request_path:
+        description: 'Path to request JSON file (optional)'
+        required: false
+        type: string
+      llm_provider:
+        description: 'LLM provider (openai, anthropic, ollama)'
+        required: false
+        default: 'openai'
+        type: choice
+        options:
+          - openai
+          - anthropic
+          - ollama
+          - openai-compatible
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  contract-diff:
+    name: Contract Diff Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-contract-diff-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build MockForge CLI
+        run: cargo build --release --package mockforge-cli
+
+      - name: Detect OpenAPI spec files
+        id: detect-specs
+        run: |
+          echo "Detecting OpenAPI specification files..."
+          SPECS=$(find . -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) \
+            -not -path "*/target/*" \
+            -not -path "*/.git/*" \
+            -not -path "*/node_modules/*" \
+            -not -path "*/book/*" \
+            -exec grep -l "openapi\|swagger" {} \; 2>/dev/null | head -10)
+
+          if [ -z "$SPECS" ]; then
+            echo "No OpenAPI spec files found"
+            echo "specs=[]" >> $GITHUB_OUTPUT
+          else
+            echo "Found OpenAPI specs:"
+            echo "$SPECS"
+            echo "specs<<EOF" >> $GITHUB_OUTPUT
+            echo "$SPECS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run contract diff analysis
+        id: analyze
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LLM_PROVIDER: ${{ github.event.inputs.llm_provider || 'openai' }}
+        run: |
+          set +e
+          RESULTS_DIR="contract-diff-results"
+          mkdir -p "$RESULTS_DIR"
+
+          SPECS="${{ steps.detect-specs.outputs.specs }}"
+
+          if [ -z "$SPECS" ]; then
+            echo "No OpenAPI specs found, skipping analysis"
+            echo "status=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          FAILED=0
+          TOTAL=0
+
+          for SPEC in $SPECS; do
+            TOTAL=$((TOTAL + 1))
+            SPEC_NAME=$(basename "$SPEC" | sed 's/\.[^.]*$//')
+            OUTPUT_FILE="$RESULTS_DIR/${SPEC_NAME}-diff.json"
+
+            echo "Analyzing contract: $SPEC"
+
+            # For PRs, compare against base branch
+            if [ "${{ github.event_name }}" == "pull_request" ]; then
+              BASE_SPEC=$(git show "${{ github.event.pull_request.base.sha }}:$SPEC" 2>/dev/null || echo "")
+
+              if [ -n "$BASE_SPEC" ]; then
+                echo "$BASE_SPEC" > "/tmp/base-spec.yaml"
+                ./target/release/mockforge contract-diff compare \
+                  --old-spec "/tmp/base-spec.yaml" \
+                  --new-spec "$SPEC" \
+                  --output "$OUTPUT_FILE" || FAILED=$((FAILED + 1))
+              else
+                echo "Base spec not found, analyzing current spec only"
+                ./target/release/mockforge contract-diff analyze \
+                  --spec "$SPEC" \
+                  --output "$OUTPUT_FILE" \
+                  --llm-provider "$LLM_PROVIDER" || FAILED=$((FAILED + 1))
+              fi
+            else
+              # For manual dispatch or push, use provided inputs or analyze all
+              if [ -n "${{ github.event.inputs.spec_path }}" ]; then
+                REQUEST_ARG=""
+                if [ -n "${{ github.event.inputs.request_path }}" ]; then
+                  REQUEST_ARG="--request-path ${{ github.event.inputs.request_path }}"
+                fi
+
+                ./target/release/mockforge contract-diff analyze \
+                  --spec "${{ github.event.inputs.spec_path }}" \
+                  $REQUEST_ARG \
+                  --output "$OUTPUT_FILE" \
+                  --llm-provider "${{ github.event.inputs.llm_provider || 'openai' }}" || FAILED=$((FAILED + 1))
+              else
+                ./target/release/mockforge contract-diff analyze \
+                  --spec "$SPEC" \
+                  --output "$OUTPUT_FILE" \
+                  --llm-provider "$LLM_PROVIDER" || FAILED=$((FAILED + 1))
+              fi
+            fi
+          done
+
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+
+          if [ $FAILED -gt 0 ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload contract diff results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-diff-results
+          path: contract-diff-results/
+          retention-days: 7
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && steps.analyze.outcome != 'skipped'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const resultsDir = 'contract-diff-results';
+            let comment = '## 📋 Contract Diff Analysis Results\n\n';
+
+            if (steps.analyze.outputs.status === 'skipped') {
+              comment += '⚠️ No OpenAPI specification files found to analyze.\n';
+            } else if (steps.analyze.outputs.status === 'failed') {
+              comment += `❌ Contract diff analysis failed for ${steps.analyze.outputs.failed} of ${steps.analyze.outputs.total} specifications.\n\n`;
+              comment += 'Please review the artifacts for detailed error information.\n';
+            } else {
+              comment += `✅ Contract diff analysis completed successfully for ${steps.analyze.outputs.total} specification(s).\n\n`;
+
+              // Try to read and summarize results
+              try {
+                const files = fs.readdirSync(resultsDir);
+                const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+                if (jsonFiles.length > 0) {
+                  comment += '### Summary\n\n';
+
+                  for (const file of jsonFiles) {
+                    const content = JSON.parse(fs.readFileSync(path.join(resultsDir, file), 'utf8'));
+                    const specName = file.replace('-diff.json', '');
+
+                    comment += `#### ${specName}\n`;
+                    comment += `- **Status**: ${content.matches ? '✅ Matches' : '❌ Mismatches'}\n`;
+                    comment += `- **Confidence**: ${(content.confidence * 100).toFixed(1)}%\n`;
+                    comment += `- **Mismatches**: ${content.mismatches.length}\n`;
+                    comment += `- **Recommendations**: ${content.recommendations.length}\n`;
+                    comment += `- **Corrections**: ${content.corrections.length}\n\n`;
+
+                    if (content.mismatches.length > 0) {
+                      comment += '<details>\n<summary>View Mismatches</summary>\n\n';
+                      for (const mismatch of content.mismatches.slice(0, 10)) {
+                        comment += `- **${mismatch.path}**: ${mismatch.description} (${mismatch.severity})\n`;
+                      }
+                      if (content.mismatches.length > 10) {
+                        comment += `\n*... and ${content.mismatches.length - 10} more*\n`;
+                      }
+                      comment += '</details>\n\n';
+                    }
+                  }
+                }
+              } catch (e) {
+                comment += '⚠️ Could not parse results. Check artifacts for details.\n';
+              }
+            }
+
+            comment += '\n---\n';
+            comment += '📦 Artifacts are available in the workflow run.\n';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail if contract diff failed
+        if: steps.analyze.outputs.status == 'failed'
+        run: |
+          echo "Contract diff analysis failed. Please review the results."
+          exit 1

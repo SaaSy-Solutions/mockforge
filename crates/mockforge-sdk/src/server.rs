@@ -203,6 +203,8 @@ impl MockServer {
                 headers: stub.headers,
                 body: Some(stub.body),
             },
+            fault_injection: None,
+            latency: None,
         };
 
         self.routes.push(route_config);

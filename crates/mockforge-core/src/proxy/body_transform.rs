@@ -34,21 +34,14 @@ impl BodyTransformationMiddleware {
     }
 
     /// Transform a request body based on configured rules
-    pub fn transform_request_body(
-        &self,
-        url: &str,
-        body: &mut Option<Vec<u8>>,
-    ) -> Result<()> {
+    pub fn transform_request_body(&self, url: &str, body: &mut Option<Vec<u8>>) -> Result<()> {
         if body.is_none() || self.request_rules.is_empty() {
             return Ok(());
         }
 
         // Find matching rules for this URL
-        let matching_rules: Vec<&BodyTransformRule> = self
-            .request_rules
-            .iter()
-            .filter(|rule| rule.matches_url(url))
-            .collect();
+        let matching_rules: Vec<&BodyTransformRule> =
+            self.request_rules.iter().filter(|rule| rule.matches_url(url)).collect();
 
         if matching_rules.is_empty() {
             return Ok(());
@@ -143,24 +136,14 @@ impl BodyTransformationMiddleware {
     }
 
     /// Apply a single transformation rule to JSON
-    fn apply_transform_rule(
-        &self,
-        json: &mut Value,
-        rule: &BodyTransformRule,
-    ) -> Result<()> {
+    fn apply_transform_rule(&self, json: &mut Value, rule: &BodyTransformRule) -> Result<()> {
         for transform in &rule.body_transforms {
             match self.apply_single_transform(json, transform) {
                 Ok(_) => {
-                    debug!(
-                        "Applied transformation: {} -> {}",
-                        transform.path, transform.replace
-                    );
+                    debug!("Applied transformation: {} -> {}", transform.path, transform.replace);
                 }
                 Err(e) => {
-                    error!(
-                        "Failed to apply transformation {}: {}",
-                        transform.path, e
-                    );
+                    error!("Failed to apply transformation {}: {}", transform.path, e);
                     // Continue with other transforms even if one fails
                 }
             }
@@ -170,11 +153,7 @@ impl BodyTransformationMiddleware {
 
     /// Apply a single transform to JSON using JSONPath
     /// Uses a simplified path-based approach for common JSONPath expressions
-    fn apply_single_transform(
-        &self,
-        json: &mut Value,
-        transform: &BodyTransform,
-    ) -> Result<()> {
+    fn apply_single_transform(&self, json: &mut Value, transform: &BodyTransform) -> Result<()> {
         // For now, use the simplified path-based approach
         // Full JSONPath support can be added later if needed
         self.apply_single_transform_simple(json, transform)
@@ -214,64 +193,84 @@ impl BodyTransformationMiddleware {
 
             if is_last {
                 // Apply the transformation
+                // Check type first to avoid multiple mutable borrows
                 match transform.operation {
                     TransformOperation::Replace => {
-                        if let Some(obj) = current.as_object_mut() {
-                            obj.insert(part.to_string(), replacement_json.clone());
-                        } else if let Some(arr) = current.as_array_mut() {
-                            if let Ok(idx) = part.parse::<usize>() {
-                                if idx < arr.len() {
-                                    arr[idx] = replacement_json.clone();
+                        match current {
+                            Value::Object(ref mut obj) => {
+                                obj.insert(part.to_string(), replacement_json.clone());
+                            }
+                            Value::Array(ref mut arr) => {
+                                if let Ok(idx) = part.parse::<usize>() {
+                                    if idx < arr.len() {
+                                        arr[idx] = replacement_json.clone();
+                                    }
                                 }
                             }
+                            _ => {}
                         }
+                        // Break early since we're done
+                        break;
                     }
                     TransformOperation::Add => {
-                        if let Some(obj) = current.as_object_mut() {
+                        if let Value::Object(ref mut obj) = current {
                             obj.insert(part.to_string(), replacement_json.clone());
                         }
+                        // Break early since we're done
+                        break;
                     }
                     TransformOperation::Remove => {
-                        if let Some(obj) = current.as_object_mut() {
-                            obj.remove(part);
-                        } else if let Some(arr) = current.as_array_mut() {
-                            if let Ok(idx) = part.parse::<usize>() {
-                                if idx < arr.len() {
-                                    arr.remove(idx);
+                        match current {
+                            Value::Object(ref mut obj) => {
+                                // part is &str, which String can Borrow from
+                                obj.remove(*part);
+                            }
+                            Value::Array(ref mut arr) => {
+                                if let Ok(idx) = part.parse::<usize>() {
+                                    if idx < arr.len() {
+                                        arr.remove(idx);
+                                    }
                                 }
                             }
+                            _ => {}
                         }
+                        // Break early since we're done
+                        break;
                     }
                 }
             } else {
-                // Navigate deeper
-                if let Some(obj) = current.as_object_mut() {
-                    current = obj
-                        .entry(part.to_string())
-                        .or_insert_with(|| Value::Object(serde_json::Map::new()));
-                } else if let Some(arr) = current.as_array_mut() {
-                    if let Ok(idx) = part.parse::<usize>() {
-                        if idx < arr.len() {
-                            current = &mut arr[idx];
-                        } else {
-                            return Err(crate::Error::generic(format!(
-                                "Array index {} out of bounds",
-                                idx
-                            )));
-                        }
-                    } else {
-                        return Err(crate::Error::generic(format!(
-                            "Invalid array index: {}",
-                            part
-                        )));
-                    }
-                } else {
-                    // Create intermediate objects as needed
-                    *current = Value::Object(serde_json::Map::new());
-                    if let Some(obj) = current.as_object_mut() {
+                // Navigate deeper - use match to avoid borrow conflicts
+                match current {
+                    Value::Object(ref mut obj) => {
                         current = obj
                             .entry(part.to_string())
                             .or_insert_with(|| Value::Object(serde_json::Map::new()));
+                    }
+                    Value::Array(ref mut arr) => {
+                        if let Ok(idx) = part.parse::<usize>() {
+                            if idx < arr.len() {
+                                current = &mut arr[idx];
+                            } else {
+                                return Err(crate::Error::generic(format!(
+                                    "Array index {} out of bounds",
+                                    idx
+                                )));
+                            }
+                        } else {
+                            return Err(crate::Error::generic(format!(
+                                "Invalid array index: {}",
+                                part
+                            )));
+                        }
+                    }
+                    _ => {
+                        // Create intermediate objects as needed
+                        *current = Value::Object(serde_json::Map::new());
+                        if let Value::Object(ref mut obj) = current {
+                            current = obj
+                                .entry(part.to_string())
+                                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+                        }
                     }
                 }
             }

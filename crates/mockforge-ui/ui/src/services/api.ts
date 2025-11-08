@@ -198,6 +198,165 @@ class ApiService {
     return this.fetchJson('/__mockforge/api/state-machines/export') as Promise<{ state_machines: unknown[]; visual_layouts: Record<string, unknown> }>;
   }
 
+  // MockAI OpenAPI Generation API methods
+  async generateOpenApiFromTraffic(request: {
+    database_path?: string;
+    since?: string;
+    until?: string;
+    path_pattern?: string;
+    min_confidence?: number;
+  }): Promise<{
+    spec: unknown;
+    metadata: {
+      requests_analyzed: number;
+      paths_inferred: number;
+      path_confidence: Record<string, { value: number; reason: string }>;
+      generated_at: string;
+      duration_ms: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/api/mockai/generate-openapi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      spec: unknown;
+      metadata: {
+        requests_analyzed: number;
+        paths_inferred: number;
+        path_confidence: Record<string, { value: number; reason: string }>;
+        generated_at: string;
+        duration_ms: number;
+      };
+    }>;
+  }
+
+  // MockAI Rule Explanations API methods
+  async listRuleExplanations(filters?: {
+    rule_type?: string;
+    min_confidence?: number;
+  }): Promise<{
+    explanations: Array<{
+      rule_id: string;
+      rule_type: string;
+      confidence: number;
+      source_examples: string[];
+      reasoning: string;
+      pattern_matches: Array<{
+        pattern: string;
+        match_count: number;
+        example_ids: string[];
+      }>;
+      generated_at: string;
+    }>;
+    total: number;
+  }> {
+    const params = new URLSearchParams();
+    if (filters?.rule_type) {
+      params.append('rule_type', filters.rule_type);
+    }
+    if (filters?.min_confidence !== undefined) {
+      params.append('min_confidence', filters.min_confidence.toString());
+    }
+    const queryString = params.toString();
+    const url = `/__mockforge/api/mockai/rules/explanations${queryString ? `?${queryString}` : ''}`;
+    return this.fetchJson(url) as Promise<{
+      explanations: Array<{
+        rule_id: string;
+        rule_type: string;
+        confidence: number;
+        source_examples: string[];
+        reasoning: string;
+        pattern_matches: Array<{
+          pattern: string;
+          match_count: number;
+          example_ids: string[];
+        }>;
+        generated_at: string;
+      }>;
+      total: number;
+    }>;
+  }
+
+  async getRuleExplanation(ruleId: string): Promise<{
+    explanation: {
+      rule_id: string;
+      rule_type: string;
+      confidence: number;
+      source_examples: string[];
+      reasoning: string;
+      pattern_matches: Array<{
+        pattern: string;
+        match_count: number;
+        example_ids: string[];
+      }>;
+      generated_at: string;
+    };
+  }> {
+    return this.fetchJson(
+      `/__mockforge/api/mockai/rules/${encodeURIComponent(ruleId)}/explanation`
+    ) as Promise<{
+      explanation: {
+        rule_id: string;
+        rule_type: string;
+        confidence: number;
+        source_examples: string[];
+        reasoning: string;
+        pattern_matches: Array<{
+          pattern: string;
+          match_count: number;
+          example_ids: string[];
+        }>;
+        generated_at: string;
+      };
+    }>;
+  }
+
+  // MockAI Learn from Examples API method
+  async learnFromExamples(request: {
+    examples: Array<{
+      request: unknown;
+      response: unknown;
+    }>;
+    config?: unknown;
+  }): Promise<{
+    success: boolean;
+    rules_generated: {
+      consistency_rules: number;
+      schemas: number;
+      state_machines: number;
+      system_prompt: boolean;
+    };
+    explanations: Array<{
+      rule_id: string;
+      rule_type: string;
+      confidence: number;
+      reasoning: string;
+    }>;
+    total_explanations: number;
+  }> {
+    return this.fetchJson('/__mockforge/api/mockai/learn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      success: boolean;
+      rules_generated: {
+        consistency_rules: number;
+        schemas: number;
+        state_machines: number;
+        system_prompt: boolean;
+      };
+      explanations: Array<{
+        rule_id: string;
+        rule_type: string;
+        confidence: number;
+        reasoning: string;
+      }>;
+      total_explanations: number;
+    }>;
+  }
+
   async importStateMachines(data: { state_machines: unknown[]; visual_layouts: Record<string, unknown> }): Promise<void> {
     await this.fetchJson('/__mockforge/api/state-machines/import', {
       method: 'POST',
@@ -1363,6 +1522,151 @@ class VerificationApiService {
   }
 }
 
+// Contract Diff API types
+export interface CapturedRequest {
+  id?: string;
+  method: string;
+  path: string;
+  source: string;
+  captured_at?: string;
+  analyzed?: boolean;
+  query_params?: Record<string, string>;
+  headers?: Record<string, string>;
+  body?: unknown;
+  status_code?: number;
+  response_body?: unknown;
+}
+
+export interface ContractDiffResult {
+  matches: boolean;
+  confidence: number;
+  mismatches: Mismatch[];
+  recommendations: Recommendation[];
+  corrections: CorrectionProposal[];
+  metadata?: {
+    contract_format?: string;
+    analyzed_at?: string;
+  };
+}
+
+export interface Mismatch {
+  path: string;
+  description: string;
+  mismatch_type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  expected?: string;
+  actual?: string;
+}
+
+export interface Recommendation {
+  recommendation: string;
+  suggested_fix?: string;
+  confidence: number;
+}
+
+export interface CorrectionProposal {
+  description: string;
+  path: string;
+  operation: 'add' | 'remove' | 'replace';
+  value?: unknown;
+  confidence: number;
+}
+
+export interface CaptureStatistics {
+  total_captures: number;
+  analyzed_captures: number;
+  sources: Record<string, number>;
+  methods: Record<string, number>;
+}
+
+export interface AnalyzeRequestPayload {
+  spec_path?: string;
+  spec_content?: string;
+  contract_id?: string;
+  config?: {
+    llm_provider?: string;
+    llm_model?: string;
+    confidence_threshold?: number;
+  };
+}
+
+class ContractDiffApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorMessage;
+      } catch {
+        // Not JSON, use default message
+      }
+      throw new Error(errorMessage);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async uploadRequest(request: Omit<CapturedRequest, 'id' | 'captured_at' | 'analyzed'>): Promise<{ capture_id: string; message: string }> {
+    const response = await fetch('/__mockforge/contract-diff/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json.error || `HTTP error! status: ${response.status}`);
+    }
+    return json;
+  }
+
+  async getCapturedRequests(params?: {
+    source?: string;
+    method?: string;
+    path_pattern?: string;
+    analyzed?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ count: number; captures: CapturedRequest[] }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const url = `/__mockforge/contract-diff/captures${queryParams.toString() ? `?${queryParams}` : ''}`;
+    return this.fetchJson(url) as Promise<{ count: number; captures: CapturedRequest[] }>;
+  }
+
+  async getCapturedRequest(id: string): Promise<{ capture: CapturedRequest }> {
+    return this.fetchJson(`/__mockforge/contract-diff/captures/${id}`) as Promise<{ capture: CapturedRequest }>;
+  }
+
+  async analyzeCapturedRequest(id: string, payload: AnalyzeRequestPayload): Promise<{ analysis_result_id: string; result: ContractDiffResult }> {
+    return this.fetchJson(`/__mockforge/contract-diff/captures/${id}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }) as Promise<{ analysis_result_id: string; result: ContractDiffResult }>;
+  }
+
+  async getStatistics(): Promise<{ statistics: CaptureStatistics }> {
+    return this.fetchJson('/__mockforge/contract-diff/statistics') as Promise<{ statistics: CaptureStatistics }>;
+  }
+
+  async generatePatchFile(id: string, payload: AnalyzeRequestPayload): Promise<{ patch_file: unknown; corrections_count: number }> {
+    return this.fetchJson(`/__mockforge/contract-diff/captures/${id}/patch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }) as Promise<{ patch_file: unknown; corrections_count: number }>;
+  }
+}
+
 // Proxy replacement rules API types
 export interface ProxyRule {
   id: number;
@@ -1487,6 +1791,7 @@ export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
 export const verificationApi = new VerificationApiService();
+export const contractDiffApi = new ContractDiffApiService();
 export { proxyApi, type ProxyRule, type ProxyRuleRequest, type ProxyRulesResponse, type ProxyInspectResponse };
 
 // Debug: Log to verify services are created

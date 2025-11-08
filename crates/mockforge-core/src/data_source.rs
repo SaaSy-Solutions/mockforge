@@ -94,17 +94,11 @@ impl DataSource for LocalDataSource {
         debug!("Loading data from local file: {}", self.path.display());
 
         let content = tokio::fs::read(&self.path).await.map_err(|e| {
-            Error::generic(format!(
-                "Failed to read local file {}: {}",
-                self.path.display(),
-                e
-            ))
+            Error::generic(format!("Failed to read local file {}: {}", self.path.display(), e))
         })?;
 
-        let content_type = self.path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| match ext {
+        let content_type =
+            self.path.extension().and_then(|ext| ext.to_str()).map(|ext| match ext {
                 "json" => "application/json".to_string(),
                 "yaml" | "yml" => "application/x-yaml".to_string(),
                 "xml" => "application/xml".to_string(),
@@ -114,15 +108,9 @@ impl DataSource for LocalDataSource {
 
         let mut metadata = HashMap::new();
         if let Ok(metadata_info) = tokio::fs::metadata(&self.path).await {
-            metadata.insert(
-                "size".to_string(),
-                metadata_info.len().to_string(),
-            );
+            metadata.insert("size".to_string(), metadata_info.len().to_string());
             if let Ok(modified) = metadata_info.modified() {
-                metadata.insert(
-                    "modified".to_string(),
-                    format!("{:?}", modified),
-                );
+                metadata.insert("modified".to_string(), format!("{:?}", modified));
             }
         }
         metadata.insert("path".to_string(), self.path.display().to_string());
@@ -157,15 +145,13 @@ impl GitDataSource {
     pub fn new(config: DataSourceConfig) -> Result<Self> {
         // Extract repo name from URL
         let repo_name = Self::extract_repo_name(&config.location)?;
-        let cache_dir = config.cache_dir.clone().unwrap_or_else(|| {
-            PathBuf::from("./.mockforge-data-cache")
-        });
+        let cache_dir = config
+            .cache_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("./.mockforge-data-cache"));
         let repo_path = cache_dir.join(repo_name);
 
-        Ok(Self {
-            config,
-            repo_path,
-        })
+        Ok(Self { config, repo_path })
     }
 
     /// Extract repository name from URL
@@ -191,9 +177,9 @@ impl GitDataSource {
 
         // Create cache directory if needed
         if let Some(parent) = self.repo_path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                Error::generic(format!("Failed to create cache directory: {}", e))
-            })?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| Error::generic(format!("Failed to create cache directory: {}", e)))?;
         }
 
         if self.repo_path.exists() {
@@ -287,7 +273,8 @@ impl DataSource for GitDataSource {
             self.repo_path.join(path)
         } else {
             return Err(Error::generic(
-                "Git data source requires a 'path' to specify the file within the repository".to_string(),
+                "Git data source requires a 'path' to specify the file within the repository"
+                    .to_string(),
             ));
         };
 
@@ -300,16 +287,11 @@ impl DataSource for GitDataSource {
 
         // Load file content
         let content = tokio::fs::read(&file_path).await.map_err(|e| {
-            Error::generic(format!(
-                "Failed to read file from Git repository: {}",
-                e
-            ))
+            Error::generic(format!("Failed to read file from Git repository: {}", e))
         })?;
 
-        let content_type = file_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| match ext {
+        let content_type =
+            file_path.extension().and_then(|ext| ext.to_str()).map(|ext| match ext {
                 "json" => "application/json".to_string(),
                 "yaml" | "yml" => "application/x-yaml".to_string(),
                 _ => format!("text/{}", ext),
@@ -326,12 +308,7 @@ impl DataSource for GitDataSource {
         // Get commit hash
         use std::process::Command;
         if let Ok(output) = Command::new("git")
-            .args([
-                "-C",
-                self.repo_path.to_str().unwrap(),
-                "rev-parse",
-                "HEAD",
-            ])
+            .args(["-C", self.repo_path.to_str().unwrap(), "rev-parse", "HEAD"])
             .output()
         {
             if output.status.success() {
@@ -423,16 +400,13 @@ impl HttpDataSource {
             Error::generic(format!("Failed to fetch data from {}: {}", self.url, e))
         })?;
 
-        if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "HTTP request failed with status {}",
-                response.status()
-            )));
-        }
+        // Extract status and content type before consuming the response
+        let status = response.status();
+        let status_code = status.as_u16();
 
-        let content = response.bytes().await.map_err(|e| {
-            Error::generic(format!("Failed to read response body: {}", e))
-        })?.to_vec();
+        if !status.is_success() {
+            return Err(Error::generic(format!("HTTP request failed with status {}", status)));
+        }
 
         let content_type = response
             .headers()
@@ -440,10 +414,16 @@ impl HttpDataSource {
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
 
+        let content = response
+            .bytes()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?
+            .to_vec();
+
         let mut metadata = HashMap::new();
         metadata.insert("source".to_string(), "http".to_string());
         metadata.insert("url".to_string(), self.url.clone());
-        metadata.insert("status".to_string(), response.status().as_u16().to_string());
+        metadata.insert("status".to_string(), status_code.to_string());
         if let Some(content_type) = &content_type {
             metadata.insert("content_type".to_string(), content_type.clone());
         }
@@ -469,7 +449,7 @@ impl DataSource for HttpDataSource {
             {
                 if last_fetch.elapsed().as_secs() < refresh_interval {
                     debug!("Using cached HTTP data");
-                    return Ok(cached.clone());
+                    return Ok((*cached).clone());
                 }
             }
         }
@@ -511,16 +491,12 @@ impl DataSourceFactory {
     /// Create a data source from configuration
     pub fn create(config: DataSourceConfig) -> Result<Box<dyn DataSource + Send + Sync>> {
         match config.source_type {
-            DataSourceType::Local => {
-                Ok(Box::new(LocalDataSource::new(&config.location)))
-            }
+            DataSourceType::Local => Ok(Box::new(LocalDataSource::new(&config.location))),
             DataSourceType::Git => {
                 let git_source = GitDataSource::new(config)?;
                 Ok(Box::new(git_source))
             }
-            DataSourceType::Http => {
-                Ok(Box::new(HttpDataSource::new(config)))
-            }
+            DataSourceType::Http => Ok(Box::new(HttpDataSource::new(config))),
         }
     }
 }
@@ -545,9 +521,10 @@ impl DataSourceManager {
 
     /// Load data from a named source
     pub async fn load(&self, name: &str) -> Result<DataSourceContent> {
-        let source = self.sources.get(name).ok_or_else(|| {
-            Error::generic(format!("Data source '{}' not found", name))
-        })?;
+        let source = self
+            .sources
+            .get(name)
+            .ok_or_else(|| Error::generic(format!("Data source '{}' not found", name)))?;
 
         source.load().await
     }

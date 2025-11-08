@@ -49,6 +49,7 @@ pub mod analytics_stream;
 pub mod analytics_v2;
 pub mod assets;
 pub mod chains;
+pub mod contract_diff;
 pub mod graph;
 pub mod health;
 pub mod migration;

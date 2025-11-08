@@ -300,9 +300,7 @@ fn matches_wildcard_pattern(pattern: &str, path: &str) -> bool {
     use regex::Regex;
 
     // Convert pattern to regex
-    let regex_pattern = pattern
-        .replace('*', ".*")
-        .replace('?', ".?");
+    let regex_pattern = pattern.replace('*', ".*").replace('?', ".?");
 
     if let Ok(re) = Regex::new(&format!("^{}$", regex_pattern)) {
         return re.is_match(path);
@@ -430,8 +428,7 @@ fn evaluate_custom_matcher(
             }
             _ => false,
         }
-    }
-    else {
+    } else {
         // Unknown expression format
         tracing::warn!("Unknown custom matcher expression format: {}", expr);
         false
@@ -503,6 +500,15 @@ pub struct ManagementState {
     pub ws_broadcast: Option<Arc<broadcast::Sender<crate::management_ws::MockEvent>>>,
     /// Lifecycle hook registry for extensibility
     pub lifecycle_hooks: Option<Arc<mockforge_core::lifecycle::LifecycleHookRegistry>>,
+    /// Rule explanations storage (in-memory for now)
+    pub rule_explanations: Arc<
+        RwLock<
+            std::collections::HashMap<
+                String,
+                mockforge_core::intelligent_behavior::RuleExplanation,
+            >,
+        >,
+    >,
 }
 
 impl ManagementState {
@@ -537,6 +543,7 @@ impl ManagementState {
             )),
             ws_broadcast: None,
             lifecycle_hooks: None,
+            rule_explanations: Arc::new(RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -750,9 +757,7 @@ fn default_format() -> String {
 }
 
 /// Validate configuration without applying it
-async fn validate_config(
-    Json(request): Json<ValidateConfigRequest>,
-) -> impl IntoResponse {
+async fn validate_config(Json(request): Json<ValidateConfigRequest>) -> impl IntoResponse {
     use mockforge_core::config::ServerConfig;
 
     let config_result: Result<ServerConfig, String> = match request.format.as_str() {
@@ -847,7 +852,9 @@ async fn bulk_update_config(
 
     // Merge updates into base config (simplified merge)
     let mut merged = base_json.clone();
-    if let (Some(merged_obj), Some(updates_obj)) = (merged.as_object_mut(), request.updates.as_object()) {
+    if let (Some(merged_obj), Some(updates_obj)) =
+        (merged.as_object_mut(), request.updates.as_object())
+    {
         for (key, value) in updates_obj {
             merged_obj.insert(key.clone(), value.clone());
         }
@@ -866,17 +873,15 @@ async fn bulk_update_config(
             }))
             .into_response()
         }
-        Err(e) => {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": "Invalid configuration",
-                    "message": format!("Configuration validation failed: {}", e),
-                    "validated": false
-                })),
-            )
-                .into_response()
-        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Invalid configuration",
+                "message": format!("Configuration validation failed: {}", e),
+                "validated": false
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -2081,10 +2086,7 @@ async fn get_proxy_inspect(
     State(_state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let limit: usize = params
-        .get("limit")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(50);
+    let limit: usize = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
 
     // TODO: In a full implementation, this would return actual intercepted requests/responses
     // For now, return a placeholder response
@@ -2175,6 +2177,10 @@ pub fn management_router(state: ManagementState) -> Router {
     // AI-powered features
     let router = router
         .route("/ai/generate-spec", post(generate_ai_spec))
+        .route("/mockai/generate-openapi", post(generate_openapi_from_traffic))
+        .route("/mockai/learn", post(learn_from_examples))
+        .route("/mockai/rules/explanations", get(list_rule_explanations))
+        .route("/mockai/rules/{id}/explanation", get(get_rule_explanation))
         .route("/chaos/config", get(get_chaos_config))
         .route("/chaos/config", post(update_chaos_config))
         .route("/network/profiles", get(list_network_profiles))
@@ -2798,6 +2804,30 @@ pub struct GenerateSpecRequest {
     pub api_version: Option<String>,
 }
 
+/// Request for OpenAPI generation from recorded traffic
+#[derive(Debug, Deserialize)]
+pub struct GenerateOpenApiFromTrafficRequest {
+    /// Path to recorder database (optional, defaults to ./recordings.db)
+    #[serde(default)]
+    pub database_path: Option<String>,
+    /// Start time for filtering (ISO 8601 format, e.g., 2025-01-01T00:00:00Z)
+    #[serde(default)]
+    pub since: Option<String>,
+    /// End time for filtering (ISO 8601 format)
+    #[serde(default)]
+    pub until: Option<String>,
+    /// Path pattern filter (supports wildcards, e.g., /api/*)
+    #[serde(default)]
+    pub path_pattern: Option<String>,
+    /// Minimum confidence score for including paths (0.0 to 1.0)
+    #[serde(default = "default_min_confidence")]
+    pub min_confidence: f64,
+}
+
+fn default_min_confidence() -> f64 {
+    0.7
+}
+
 /// Generate API specification from natural language using AI
 #[cfg(feature = "data-faker")]
 async fn generate_ai_spec(
@@ -2982,6 +3012,422 @@ async fn generate_ai_spec(
         })),
     )
         .into_response()
+}
+
+/// Generate OpenAPI specification from recorded traffic
+async fn generate_openapi_from_traffic(
+    State(_state): State<ManagementState>,
+    Json(request): Json<GenerateOpenApiFromTrafficRequest>,
+) -> impl IntoResponse {
+    use chrono::{DateTime, Utc};
+    use mockforge_core::intelligent_behavior::{
+        openapi_generator::{OpenApiGenerationConfig, OpenApiSpecGenerator},
+        IntelligentBehaviorConfig,
+    };
+    use mockforge_recorder::{
+        database::RecorderDatabase,
+        openapi_export::{QueryFilters, RecordingsToOpenApi},
+    };
+    use std::path::PathBuf;
+
+    // Determine database path
+    let db_path = if let Some(ref path) = request.database_path {
+        PathBuf::from(path)
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("recordings.db")
+    };
+
+    // Open database
+    let db = match RecorderDatabase::new(&db_path).await {
+        Ok(db) => db,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Database error",
+                    "message": format!("Failed to open recorder database: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Parse time filters
+    let since_dt = if let Some(ref since_str) = request.since {
+        match DateTime::parse_from_rfc3339(since_str) {
+            Ok(dt) => Some(dt.with_timezone(&Utc)),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": "Invalid date format",
+                        "message": format!("Invalid --since format: {}. Use ISO 8601 format (e.g., 2025-01-01T00:00:00Z)", e)
+                    })),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        None
+    };
+
+    let until_dt = if let Some(ref until_str) = request.until {
+        match DateTime::parse_from_rfc3339(until_str) {
+            Ok(dt) => Some(dt.with_timezone(&Utc)),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": "Invalid date format",
+                        "message": format!("Invalid --until format: {}. Use ISO 8601 format (e.g., 2025-01-01T00:00:00Z)", e)
+                    })),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        None
+    };
+
+    // Build query filters
+    let query_filters = QueryFilters {
+        since: since_dt,
+        until: until_dt,
+        path_pattern: request.path_pattern.clone(),
+        min_status_code: None,
+        max_requests: Some(1000),
+    };
+
+    // Query HTTP exchanges
+    let exchanges = match RecordingsToOpenApi::query_http_exchanges(&db, Some(query_filters)).await
+    {
+        Ok(exchanges) => exchanges,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Query error",
+                    "message": format!("Failed to query HTTP exchanges: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    if exchanges.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "No exchanges found",
+                "message": "No HTTP exchanges found matching the specified filters"
+            })),
+        )
+            .into_response();
+    }
+
+    // Create OpenAPI generator config
+    let behavior_config = IntelligentBehaviorConfig::default();
+    let gen_config = OpenApiGenerationConfig {
+        min_confidence: request.min_confidence,
+        behavior_model: Some(behavior_config.behavior_model),
+    };
+
+    // Generate OpenAPI spec
+    let generator = OpenApiSpecGenerator::new(gen_config);
+    let result = match generator.generate_from_exchanges(exchanges).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Generation error",
+                    "message": format!("Failed to generate OpenAPI spec: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Prepare response
+    let spec_json = if let Some(ref raw) = result.spec.raw_document {
+        raw.clone()
+    } else {
+        match serde_json::to_value(&result.spec.spec) {
+            Ok(json) => json,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Serialization error",
+                        "message": format!("Failed to serialize OpenAPI spec: {}", e)
+                    })),
+                )
+                    .into_response();
+            }
+        }
+    };
+
+    // Build response with metadata
+    let response = serde_json::json!({
+        "spec": spec_json,
+        "metadata": {
+            "requests_analyzed": result.metadata.requests_analyzed,
+            "paths_inferred": result.metadata.paths_inferred,
+            "path_confidence": result.metadata.path_confidence,
+            "generated_at": result.metadata.generated_at.to_rfc3339(),
+            "duration_ms": result.metadata.duration_ms,
+        }
+    });
+
+    Json(response).into_response()
+}
+
+/// List all rule explanations
+async fn list_rule_explanations(
+    State(state): State<ManagementState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    use mockforge_core::intelligent_behavior::RuleType;
+
+    let explanations = state.rule_explanations.read().await;
+    let mut explanations_vec: Vec<_> = explanations.values().cloned().collect();
+
+    // Filter by rule type if provided
+    if let Some(rule_type_str) = params.get("rule_type") {
+        if let Ok(rule_type) = serde_json::from_str::<RuleType>(&format!("\"{}\"", rule_type_str)) {
+            explanations_vec.retain(|e| e.rule_type == rule_type);
+        }
+    }
+
+    // Filter by minimum confidence if provided
+    if let Some(min_confidence_str) = params.get("min_confidence") {
+        if let Ok(min_confidence) = min_confidence_str.parse::<f64>() {
+            explanations_vec.retain(|e| e.confidence >= min_confidence);
+        }
+    }
+
+    // Sort by confidence (descending) and then by generated_at (descending)
+    explanations_vec.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.generated_at.cmp(&a.generated_at))
+    });
+
+    Json(serde_json::json!({
+        "explanations": explanations_vec,
+        "total": explanations_vec.len(),
+    }))
+    .into_response()
+}
+
+/// Get a specific rule explanation by ID
+async fn get_rule_explanation(
+    State(state): State<ManagementState>,
+    Path(rule_id): Path<String>,
+) -> impl IntoResponse {
+    let explanations = state.rule_explanations.read().await;
+
+    match explanations.get(&rule_id) {
+        Some(explanation) => Json(serde_json::json!({
+            "explanation": explanation,
+        }))
+        .into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Rule explanation not found",
+                "message": format!("No explanation found for rule ID: {}", rule_id)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Request for learning from examples
+#[derive(Debug, Deserialize)]
+pub struct LearnFromExamplesRequest {
+    /// Example request/response pairs to learn from
+    pub examples: Vec<ExamplePairRequest>,
+    /// Optional configuration override
+    #[serde(default)]
+    pub config: Option<serde_json::Value>,
+}
+
+/// Example pair request format
+#[derive(Debug, Deserialize)]
+pub struct ExamplePairRequest {
+    /// Request data (method, path, body, etc.)
+    pub request: serde_json::Value,
+    /// Response data (status_code, body, etc.)
+    pub response: serde_json::Value,
+}
+
+/// Learn behavioral rules from example pairs
+///
+/// This endpoint accepts example request/response pairs, generates behavioral rules
+/// with explanations, and stores the explanations for later retrieval.
+async fn learn_from_examples(
+    State(state): State<ManagementState>,
+    Json(request): Json<LearnFromExamplesRequest>,
+) -> impl IntoResponse {
+    use mockforge_core::intelligent_behavior::{
+        config::{BehaviorModelConfig, IntelligentBehaviorConfig},
+        rule_generator::{ExamplePair, RuleGenerator},
+    };
+
+    if request.examples.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "No examples provided",
+                "message": "At least one example pair is required"
+            })),
+        )
+            .into_response();
+    }
+
+    // Convert request examples to ExamplePair format
+    let example_pairs: Result<Vec<ExamplePair>, String> = request
+        .examples
+        .into_iter()
+        .enumerate()
+        .map(|(idx, ex)| {
+            // Parse request JSON to extract method, path, body, etc.
+            let method = ex
+                .request
+                .get("method")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "GET".to_string());
+            let path = ex
+                .request
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "/".to_string());
+            let request_body = ex.request.get("body").cloned();
+            let query_params = ex
+                .request
+                .get("query_params")
+                .and_then(|v| v.as_object())
+                .map(|obj| {
+                    obj.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let headers = ex
+                .request
+                .get("headers")
+                .and_then(|v| v.as_object())
+                .map(|obj| {
+                    obj.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            // Parse response JSON to extract status, body, etc.
+            let status = ex
+                .response
+                .get("status_code")
+                .or_else(|| ex.response.get("status"))
+                .and_then(|v| v.as_u64())
+                .map(|n| n as u16)
+                .unwrap_or(200);
+            let response_body = ex.response.get("body").cloned();
+
+            Ok(ExamplePair {
+                method,
+                path,
+                request: request_body,
+                status,
+                response: response_body,
+                query_params,
+                headers,
+                metadata: {
+                    let mut meta = std::collections::HashMap::new();
+                    meta.insert("source".to_string(), "api".to_string());
+                    meta.insert("example_index".to_string(), idx.to_string());
+                    meta
+                },
+            })
+        })
+        .collect();
+
+    let example_pairs = match example_pairs {
+        Ok(pairs) => pairs,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Invalid examples",
+                    "message": e
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Create behavior config (use provided config or default)
+    let behavior_config = if let Some(config_json) = request.config {
+        // Try to deserialize custom config, fall back to default
+        serde_json::from_value(config_json)
+            .unwrap_or_else(|_| IntelligentBehaviorConfig::default())
+            .behavior_model
+    } else {
+        BehaviorModelConfig::default()
+    };
+
+    // Create rule generator
+    let generator = RuleGenerator::new(behavior_config);
+
+    // Generate rules with explanations
+    let (rules, explanations) =
+        match generator.generate_rules_with_explanations(example_pairs).await {
+            Ok(result) => result,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Rule generation failed",
+                        "message": format!("Failed to generate rules: {}", e)
+                    })),
+                )
+                    .into_response();
+            }
+        };
+
+    // Store explanations in ManagementState
+    {
+        let mut stored_explanations = state.rule_explanations.write().await;
+        for explanation in &explanations {
+            stored_explanations.insert(explanation.rule_id.clone(), explanation.clone());
+        }
+    }
+
+    // Prepare response
+    let response = serde_json::json!({
+        "success": true,
+        "rules_generated": {
+            "consistency_rules": rules.consistency_rules.len(),
+            "schemas": rules.schemas.len(),
+            "state_machines": rules.state_transitions.len(),
+            "system_prompt": !rules.system_prompt.is_empty(),
+        },
+        "explanations": explanations.iter().map(|e| serde_json::json!({
+            "rule_id": e.rule_id,
+            "rule_type": e.rule_type,
+            "confidence": e.confidence,
+            "reasoning": e.reasoning,
+        })).collect::<Vec<_>>(),
+        "total_explanations": explanations.len(),
+    });
+
+    Json(response).into_response()
 }
 
 fn extract_yaml_spec(text: &str) -> String {

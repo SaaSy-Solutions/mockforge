@@ -10,6 +10,7 @@ pub mod har_export;
 pub mod integration_testing;
 pub mod middleware;
 pub mod models;
+pub mod openapi_export;
 pub mod protocols;
 pub mod query;
 pub mod recorder;
@@ -29,6 +30,7 @@ pub use integration_testing::{
 };
 pub use middleware::recording_middleware;
 pub use models::{Protocol, RecordedRequest, RecordedResponse};
+pub use openapi_export::{QueryFilters, RecordingsToOpenApi};
 pub use query::{QueryFilter, QueryResult};
 pub use recorder::Recorder;
 pub use replay::ReplayEngine;

@@ -120,6 +120,84 @@ pub struct PaginationRule {
     pub format: String,
 }
 
+/// Rule type classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RuleType {
+    /// CRUD operation rule
+    Crud,
+    /// Validation rule
+    Validation,
+    /// Pagination rule
+    Pagination,
+    /// Consistency rule
+    Consistency,
+    /// State transition rule
+    StateTransition,
+    /// Unknown/other rule type
+    Other,
+}
+
+/// Pattern match information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternMatch {
+    /// Pattern that was matched
+    pub pattern: String,
+    /// Number of examples that matched this pattern
+    pub match_count: usize,
+    /// Example IDs that matched
+    pub example_ids: Vec<String>,
+}
+
+/// Rule explanation metadata
+///
+/// Provides information about why and how a rule was generated,
+/// including source examples, confidence scores, and reasoning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleExplanation {
+    /// Unique identifier for the rule
+    pub rule_id: String,
+    /// Type of rule
+    pub rule_type: RuleType,
+    /// Confidence score (0.0 to 1.0)
+    pub confidence: f64,
+    /// Source example IDs that triggered rule generation
+    pub source_examples: Vec<String>,
+    /// Human-readable reasoning explanation
+    pub reasoning: String,
+    /// Pattern matches that contributed to this rule
+    pub pattern_matches: Vec<PatternMatch>,
+    /// Timestamp when rule was generated
+    pub generated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl RuleExplanation {
+    /// Create a new rule explanation
+    pub fn new(rule_id: String, rule_type: RuleType, confidence: f64, reasoning: String) -> Self {
+        Self {
+            rule_id,
+            rule_type,
+            confidence,
+            source_examples: Vec::new(),
+            reasoning,
+            pattern_matches: Vec::new(),
+            generated_at: chrono::Utc::now(),
+        }
+    }
+
+    /// Add a source example
+    pub fn with_source_example(mut self, example_id: String) -> Self {
+        self.source_examples.push(example_id);
+        self
+    }
+
+    /// Add a pattern match
+    pub fn with_pattern_match(mut self, pattern_match: PatternMatch) -> Self {
+        self.pattern_matches.push(pattern_match);
+        self
+    }
+}
+
 /// Rule generator that learns from examples
 pub struct RuleGenerator {
     /// LLM client for intelligent rule generation
@@ -178,6 +256,73 @@ impl RuleGenerator {
             max_context_interactions: 10,
             enable_semantic_search: true,
         })
+    }
+
+    /// Generate behavioral rules with explanations from example pairs
+    ///
+    /// Similar to `generate_rules_from_examples`, but also returns
+    /// detailed explanations for each generated rule.
+    pub async fn generate_rules_with_explanations(
+        &self,
+        examples: Vec<ExamplePair>,
+    ) -> Result<(BehaviorRules, Vec<RuleExplanation>)> {
+        if examples.is_empty() {
+            return Ok((BehaviorRules::default(), Vec::new()));
+        }
+
+        // Generate rules first
+        let rules = self.generate_rules_from_examples(examples.clone()).await?;
+
+        // Generate explanations for each rule
+        let mut explanations = Vec::new();
+
+        // Explain consistency rules
+        for (idx, rule) in rules.consistency_rules.iter().enumerate() {
+            let rule_id = format!("consistency_rule_{}", idx);
+            let explanation = RuleExplanation::new(
+                rule_id,
+                RuleType::Consistency,
+                0.8, // Default confidence for consistency rules
+                format!(
+                    "Inferred from {} examples matching pattern: {}",
+                    examples.len(),
+                    rule.condition
+                ),
+            )
+            .with_source_example(format!("example_{}", idx));
+            explanations.push(explanation);
+        }
+
+        // Explain state machines
+        for (resource_type, state_machine) in &rules.state_transitions {
+            let rule_id = format!("state_machine_{}", resource_type);
+            let explanation = RuleExplanation::new(
+                rule_id,
+                RuleType::StateTransition,
+                0.85, // Higher confidence for state machines
+                format!(
+                    "State machine for {} with {} states and {} transitions inferred from CRUD patterns",
+                    resource_type,
+                    state_machine.states.len(),
+                    state_machine.transitions.len()
+                ),
+            );
+            explanations.push(explanation);
+        }
+
+        // Explain schemas
+        for (resource_name, _schema) in &rules.schemas {
+            let rule_id = format!("schema_{}", resource_name);
+            let explanation = RuleExplanation::new(
+                rule_id,
+                RuleType::Other,
+                0.75, // Moderate confidence for inferred schemas
+                format!("Schema for {} resource inferred from response examples", resource_name),
+            );
+            explanations.push(explanation);
+        }
+
+        Ok((rules, explanations))
     }
 
     /// Infer validation rules from error examples

@@ -186,10 +186,9 @@ async fn proxy_handler(
             config.request_replacements.clone(),
             Vec::new(), // No response rules needed here
         );
-        if let Err(e) = transform_middleware.transform_request_body(
-            uri.path(),
-            &mut transformed_request_body,
-        ) {
+        if let Err(e) =
+            transform_middleware.transform_request_body(uri.path(), &mut transformed_request_body)
+        {
             warn!("Failed to transform request body: {}", e);
             // Continue with original body if transformation fails
         }

@@ -2,7 +2,7 @@
 //!
 //! Commands for monitoring Git repositories for OpenAPI spec changes and auto-syncing mocks.
 
-use mockforge_core::{git_watch::GitWatchService, git_watch::GitWatchConfig, Error, Result};
+use mockforge_core::{git_watch::GitWatchConfig, git_watch::GitWatchService, Error, Result};
 use std::path::PathBuf;
 use tracing::{error, info, warn};
 
@@ -23,7 +23,12 @@ pub async fn handle_git_watch(
         repository_url,
         branch: branch.unwrap_or_else(|| "main".to_string()),
         spec_paths: if spec_paths.is_empty() {
-            vec!["**/*.yaml".to_string(), "**/*.json".to_string(), "**/openapi*.yaml".to_string(), "**/openapi*.json".to_string()]
+            vec![
+                "**/*.yaml".to_string(),
+                "**/*.json".to_string(),
+                "**/openapi*.yaml".to_string(),
+                "**/openapi*.json".to_string(),
+            ]
         } else {
             spec_paths
         },
@@ -112,10 +117,7 @@ async fn execute_reload_command(command: &str, spec_files: &[PathBuf]) -> Result
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(Error::generic(format!(
-            "Reload command failed: {}",
-            stderr
-        )));
+        return Err(Error::generic(format!("Reload command failed: {}", stderr)));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

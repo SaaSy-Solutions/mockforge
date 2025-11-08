@@ -203,12 +203,7 @@ impl GitWatchService {
         use std::process::Command;
 
         let output = Command::new("git")
-            .args([
-                "-C",
-                self.repo_path.to_str().unwrap(),
-                "rev-parse",
-                "HEAD",
-            ])
+            .args(["-C", self.repo_path.to_str().unwrap(), "rev-parse", "HEAD"])
             .output()
             .map_err(|e| Error::generic(format!("Failed to execute git rev-parse: {}", e)))?;
 
@@ -257,10 +252,7 @@ impl GitWatchService {
 
         info!(
             "Changes detected! Previous: {}, Current: {}",
-            self.last_commit
-                .as_ref()
-                .map(|c| &c[..8])
-                .unwrap_or("none"),
+            self.last_commit.as_ref().map(|c| &c[..8]).unwrap_or("none"),
             &current_commit[..8]
         );
 
