@@ -173,7 +173,7 @@ impl OpenApiSpecGenerator {
     }
 
     /// Group exchanges by path pattern
-    fn group_by_path_pattern<'a>(
+    pub fn group_by_path_pattern<'a>(
         &self,
         exchanges: &'a [HttpExchange],
     ) -> HashMap<String, Vec<&'a HttpExchange>> {
@@ -191,7 +191,7 @@ impl OpenApiSpecGenerator {
     ///
     /// Detects patterns like `/api/users/123` and `/api/users/456` and normalizes
     /// them to `/api/users/{id}`.
-    fn infer_path_parameters<'a>(
+    pub fn infer_path_parameters<'a>(
         &self,
         path_groups: &HashMap<String, Vec<&'a HttpExchange>>,
     ) -> HashMap<String, Vec<&'a HttpExchange>> {
@@ -270,7 +270,10 @@ impl OpenApiSpecGenerator {
     }
 
     /// Infer JSON schemas from request/response bodies
-    async fn infer_schemas(&self, exchanges: &[HttpExchange]) -> Result<HashMap<String, Value>> {
+    pub async fn infer_schemas(
+        &self,
+        exchanges: &[HttpExchange],
+    ) -> Result<HashMap<String, Value>> {
         let mut schemas: HashMap<String, Value> = HashMap::new();
 
         for exchange in exchanges {
@@ -299,7 +302,7 @@ impl OpenApiSpecGenerator {
     }
 
     /// Convert JSON value to JSON Schema
-    fn json_to_schema(&self, value: &Value) -> Value {
+    pub fn json_to_schema(&self, value: &Value) -> Value {
         match value {
             Value::Null => json!({"type": "null"}),
             Value::Bool(_) => json!({"type": "boolean"}),
@@ -647,7 +650,7 @@ impl OpenApiSpecGenerator {
     }
 
     /// Calculate confidence scores for inferred paths
-    fn calculate_confidence_scores(
+    pub fn calculate_confidence_scores(
         &self,
         normalized_paths: &HashMap<String, Vec<&HttpExchange>>,
         exchanges: &[HttpExchange],

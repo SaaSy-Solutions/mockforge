@@ -147,7 +147,7 @@ async fn test_confidence_scoring() {
     let path_groups = generator.group_by_path_pattern(&exchanges);
 
     // Calculate confidence scores
-    let confidence = generator.calculate_confidence_scores(&path_groups);
+    let confidence = generator.calculate_confidence_scores(&path_groups, &exchanges);
 
     // Should have confidence scores
     assert!(!confidence.is_empty());
