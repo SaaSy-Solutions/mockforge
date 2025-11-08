@@ -111,7 +111,7 @@ pub struct ChaosApiState {
 }
 
 /// Create the chaos management API router
-/// 
+///
 /// # Arguments
 /// * `config` - Initial chaos configuration
 /// * `mockai` - Optional MockAI instance for dynamic error message generation

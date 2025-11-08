@@ -255,7 +255,7 @@ impl FaultInjector {
     }
 
     /// Generate dynamic error message using MockAI if available
-    /// 
+    ///
     /// This generates context-aware error messages based on the request context
     pub async fn generate_error_message(
         &self,

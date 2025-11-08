@@ -441,4 +441,3 @@ mockforge chaos profile apply none --base-url http://localhost:3000
 - [Network Profiles](./NETWORK_PROFILES_AND_CHAOS.md) - Network profile details
 - [Resilience Patterns](./RESILIENCE_PATTERNS.md) - Resilience testing patterns
 - [API Documentation](./API_DOCUMENTATION_STATUS.md) - Complete API reference
-

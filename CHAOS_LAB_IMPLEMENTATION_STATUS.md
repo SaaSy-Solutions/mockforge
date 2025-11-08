@@ -135,4 +135,3 @@ Documentation:
 Note: Latency recording integration into middleware is recommended
 for next iteration to enable full latency graph functionality.
 ```
-

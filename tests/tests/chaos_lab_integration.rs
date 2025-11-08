@@ -364,4 +364,3 @@ async fn test_latency_statistics_calculation() {
         "Average should match expected value"
     );
 }
-

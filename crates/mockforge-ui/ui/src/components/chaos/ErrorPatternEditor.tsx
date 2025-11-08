@@ -1,6 +1,6 @@
 /**
  * Error Pattern Editor Component
- * 
+ *
  * Allows users to configure error injection patterns:
  * - Burst: Inject N errors within a time interval
  * - Random: Inject errors with a probability
@@ -313,4 +313,3 @@ export function ErrorPatternEditor({
     </ModernCard>
   );
 }
-

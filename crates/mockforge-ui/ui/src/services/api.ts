@@ -1361,7 +1361,7 @@ class ChaosApiService {
     const currentConfig = await this.getChaosConfig();
     const faultConfig = currentConfig.fault_injection || {};
     faultConfig.error_pattern = pattern;
-    
+
     return this.updateChaosFaults(faultConfig);
   }
 }

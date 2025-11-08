@@ -1,6 +1,6 @@
 /**
  * Profile Export/Import Component
- * 
+ *
  * Allows users to export current chaos configuration as a profile template
  * and import profiles from JSON/YAML files.
  */
@@ -348,4 +348,3 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
     </ModernCard>
   );
 }
-

@@ -167,4 +167,3 @@ pub struct LatencyStats {
     /// 99th percentile latency in ms
     pub p99_ms: u64,
 }
-

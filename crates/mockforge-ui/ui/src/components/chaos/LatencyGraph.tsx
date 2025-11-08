@@ -1,6 +1,6 @@
 /**
  * Real-time latency graph component
- * 
+ *
  * Displays request latency over time using a line chart.
  * Updates in real-time via polling (every 500ms).
  */
@@ -68,7 +68,7 @@ export function LatencyGraph({
       // Convert timestamp (ms) to relative time (seconds ago)
       const now = Date.now();
       const timeAgo = Math.max(0, (now - sample.timestamp) / 1000);
-      
+
       if (timeAgo < 60) {
         return `${timeAgo.toFixed(0)}s`;
       }
@@ -229,4 +229,3 @@ export function LatencyGraph({
     </ModernCard>
   );
 }
-

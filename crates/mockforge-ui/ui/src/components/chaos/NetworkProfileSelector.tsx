@@ -1,6 +1,6 @@
 /**
  * Network Profile Selector Component
- * 
+ *
  * Displays predefined and custom network profiles with one-click apply.
  * Shows profile preview and allows custom profile creation.
  */
@@ -282,4 +282,3 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
     </Section>
   );
 }
-
