@@ -397,6 +397,19 @@ enum Commands {
         #[arg(long, help_heading = "AI Features")]
         ai_enabled: bool,
 
+        /// Reality level (1-5) for unified realism control
+        ///
+        /// Controls chaos, latency, and MockAI behavior:
+        ///   1 = Static Stubs (no chaos, instant, no AI)
+        ///   2 = Light Simulation (minimal latency, basic AI)
+        ///   3 = Moderate Realism (some chaos, moderate latency, full AI)
+        ///   4 = High Realism (increased chaos, realistic latency, session state)
+        ///   5 = Production Chaos (maximum chaos, production-like latency, full features)
+        ///
+        /// Can also be set via MOCKFORGE_REALITY_LEVEL environment variable.
+        #[arg(long, help_heading = "Reality Slider")]
+        reality_level: Option<u8>,
+
         /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
         #[arg(long, help_heading = "AI Features")]
         rag_provider: Option<String>,
@@ -1979,6 +1992,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             chaos_random_max_delay,
             chaos_profile,
             ai_enabled,
+            reality_level,
             rag_provider,
             rag_model,
             rag_api_key,
@@ -2046,6 +2060,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 chaos_random_max_delay,
                 chaos_profile,
                 ai_enabled,
+                reality_level,
                 rag_provider,
                 rag_model,
                 rag_api_key,
@@ -2430,6 +2445,7 @@ struct ServeArgs {
     chaos_random_min_delay: u64,
     /// Random chaos: maximum delay in milliseconds
     chaos_random_max_delay: u64,
+    reality_level: Option<u8>,
     dry_run: bool,
     progress: bool,
     verbose: bool,
@@ -2738,6 +2754,29 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
         }
     }
 
+    // Reality level configuration
+    if let Some(level_value) = serve_args.reality_level {
+        if let Some(level) = mockforge_core::RealityLevel::from_value(level_value) {
+            config.reality.level = level;
+            config.reality.enabled = true;
+            println!("🎚️  Reality level set to {} ({})", level.value(), level.name());
+
+            // Apply reality configuration to subsystems
+            let reality_engine = mockforge_core::RealityEngine::with_level(level);
+            reality_engine.apply_to_config(&mut config).await;
+        } else {
+            eprintln!(
+                "⚠️  Invalid reality level: {}. Must be between 1 and 5. Using default.",
+                level_value
+            );
+        }
+    } else if config.reality.enabled {
+        // Apply reality configuration from config file if enabled
+        let level = config.reality.level;
+        let reality_engine = mockforge_core::RealityEngine::with_level(level);
+        reality_engine.apply_to_config(&mut config).await;
+    }
+
     config
 }
 
@@ -2915,6 +2954,7 @@ async fn handle_serve(
     chaos_random_max_delay: u64,
     chaos_profile: Option<String>,
     ai_enabled: bool,
+    reality_level: Option<u8>,
     rag_provider: Option<String>,
     rag_model: Option<String>,
     rag_api_key: Option<String>,
@@ -3000,6 +3040,12 @@ async fn handle_serve(
         chaos_random_delay_rate,
         chaos_random_min_delay,
         chaos_random_max_delay,
+        reality_level: reality_level.or_else(|| {
+            // Check environment variable as fallback
+            std::env::var("MOCKFORGE_REALITY_LEVEL")
+                .ok()
+                .and_then(|v| v.parse::<u8>().ok())
+        }),
         dry_run,
         progress,
         verbose,
@@ -3448,9 +3494,51 @@ async fn handle_serve(
 
     // Create and merge chaos API router
     // Pass MockAI instance if available for dynamic error message generation
-    let (chaos_router, _chaos_config_arc) = create_chaos_api_router(chaos_config, mockai.clone());
+    let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) = create_chaos_api_router(chaos_config.clone(), mockai.clone());
     http_app = http_app.merge(chaos_router);
     println!("✅ Chaos Engineering API available at /api/chaos/*");
+
+    // Store chaos_api_state for passing to admin server (Phase 3)
+    let chaos_api_state_for_admin = chaos_api_state.clone();
+
+    // Integrate chaos middleware if chaos is enabled
+    if chaos_config.enabled {
+        use mockforge_chaos::middleware::{chaos_middleware_with_state, ChaosMiddleware};
+        use axum::middleware::from_fn;
+        use std::sync::{Arc, OnceLock};
+
+        // Create chaos middleware with latency tracker
+        let chaos_middleware_instance = Arc::new(ChaosMiddleware::new(chaos_config, latency_tracker));
+
+        // Store the middleware in a static OnceLock to avoid Send issues with closures
+        // This middleware will record latencies for the latency graph
+        static CHAOS_MIDDLEWARE: OnceLock<Arc<ChaosMiddleware>> = OnceLock::new();
+        let _ = CHAOS_MIDDLEWARE.set(chaos_middleware_instance.clone());
+
+        // Use a closure that accesses the static - this is Send-safe because
+        // the static is accessed inside the async block, not captured in the closure.
+        // The RNG used by the middleware is thread-local and created fresh each time,
+        // so it's safe even though the compiler can't prove it statically.
+        // SAFETY: rand::rng() uses thread-local storage, so each thread gets its own RNG instance.
+        // The RNG is created fresh on each call and never sent across threads, so this is Send-safe.
+        // We use a wrapper to assert Send safety for the future.
+        struct SendSafeWrapper<F>(F);
+        unsafe impl<F> Send for SendSafeWrapper<F> {}
+        impl<F: std::future::Future<Output = axum::response::Response>> std::future::Future for SendSafeWrapper<F> {
+            type Output = axum::response::Response;
+            fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+                unsafe { std::pin::Pin::new_unchecked(&mut self.get_unchecked_mut().0).poll(cx) }
+            }
+        }
+
+        http_app = http_app.layer(from_fn(|req: axum::extract::Request, next: axum::middleware::Next| {
+            SendSafeWrapper(async move {
+                let state = CHAOS_MIDDLEWARE.get().expect("Chaos middleware should be initialized").clone();
+                chaos_middleware_with_state(state, req, next).await
+            })
+        }));
+        println!("✅ Chaos middleware integrated - latency recording enabled");
+    }
 
     println!(
         "✅ HTTP server configured with health checks at http://localhost:{}/health (live, ready, startup)",
@@ -3861,6 +3949,26 @@ async fn handle_serve(
     #[cfg(not(feature = "tcp"))]
     let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
+    // Create latency injector if latency is enabled (for hot-reload support)
+    use mockforge_core::latency::{LatencyInjector, LatencyProfile};
+    use mockforge_core::failure_injection::FaultConfig;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    let latency_injector_for_admin = if config.core.latency_enabled {
+        let latency_profile = config.core.default_latency.clone();
+        // Create a basic fault config (can be enhanced later)
+        let fault_config = FaultConfig::default();
+        Some(Arc::new(RwLock::new(LatencyInjector::new(latency_profile, fault_config))))
+    } else {
+        None
+    };
+
+    // Clone references for admin server
+    let chaos_api_state_for_admin_clone = chaos_api_state_for_admin.clone();
+    let latency_injector_for_admin_clone = latency_injector_for_admin.clone();
+    let mockai_for_admin = mockai.clone();
+
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {
         let admin_port = config.admin.port;
@@ -3874,6 +3982,10 @@ async fn handle_serve(
         let http_host = config.http.host.clone();
         let ws_host = config.websocket.host.clone();
         let grpc_host = config.grpc.host.clone();
+        // Clone subsystem references for admin server
+        let chaos_state = chaos_api_state_for_admin_clone.clone();
+        let latency_injector = latency_injector_for_admin_clone.clone();
+        let mockai_ref = mockai_for_admin.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://{}:{}", admin_host, admin_port);
 
@@ -3929,6 +4041,9 @@ async fn handle_serve(
                     None,
                     true,
                     prometheus_url,
+                    chaos_state,
+                    latency_injector,
+                    mockai_ref,
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))
                 }

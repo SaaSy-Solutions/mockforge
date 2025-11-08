@@ -115,10 +115,13 @@ pub struct ChaosApiState {
 /// # Arguments
 /// * `config` - Initial chaos configuration
 /// * `mockai` - Optional MockAI instance for dynamic error message generation
+///
+/// # Returns
+/// Tuple of (Router, Config, LatencyTracker, ChaosApiState) - The router, config, latency tracker, and API state for hot-reload support
 pub fn create_chaos_api_router(
     config: ChaosConfig,
     mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
-) -> (Router, Arc<RwLock<ChaosConfig>>) {
+) -> (Router, Arc<RwLock<ChaosConfig>>, Arc<LatencyMetricsTracker>, Arc<ChaosApiState>) {
     let config_arc = Arc::new(RwLock::new(config));
     let scenario_engine = Arc::new(ScenarioEngine::new());
     let orchestrator = Arc::new(tokio::sync::RwLock::new(ScenarioOrchestrator::new()));
@@ -132,6 +135,9 @@ pub fn create_chaos_api_router(
     let scheduler = Arc::new(tokio::sync::RwLock::new(ScenarioScheduler::new()));
     let latency_tracker = Arc::new(LatencyMetricsTracker::new());
     let profile_manager = Arc::new(ProfileManager::new());
+
+    // Clone latency_tracker for return value (state will own the original)
+    let latency_tracker_for_return = latency_tracker.clone();
 
     let state = ChaosApiState {
         config: config_arc.clone(),
@@ -262,9 +268,9 @@ pub fn create_chaos_api_router(
         .route("/api/chaos/ab-tests/:id", delete(delete_ab_test))
         .route("/api/chaos/ab-tests/stats", get(get_ab_test_stats))
 
-        .with_state(state);
+        .with_state(state.clone());
 
-    (router, config_arc)
+    (router, config_arc, latency_tracker_for_return, state)
 }
 
 /// Get current configuration

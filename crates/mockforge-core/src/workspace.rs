@@ -23,6 +23,7 @@ pub use sync::*;
 // Legacy imports for compatibility
 use crate::config::AuthConfig;
 use crate::encryption::AutoEncryptionConfig;
+use crate::reality::RealityLevel;
 use crate::routing::{HttpMethod, Route, RouteRegistry};
 use crate::{Error, Result};
 use chrono::{DateTime, Utc};
@@ -275,6 +276,10 @@ pub struct WorkspaceConfig {
     /// Automatic encryption configuration
     #[serde(default)]
     pub auto_encryption: AutoEncryptionConfig,
+    /// Reality level for this workspace (1-5)
+    /// Controls the realism of mock behavior (chaos, latency, MockAI)
+    #[serde(default)]
+    pub reality_level: Option<RealityLevel>,
 }
 
 /// Workspace registry for managing multiple workspaces
@@ -1040,6 +1045,7 @@ impl Default for WorkspaceConfig {
             active_environment_id: None,
             sync: SyncConfig::default(),
             auto_encryption: AutoEncryptionConfig::default(),
+            reality_level: None,
         }
     }
 }

@@ -258,6 +258,10 @@ pub struct WorkspaceConfig {
     /// Automatic encryption configuration
     #[serde(default)]
     pub auto_encryption: AutoEncryptionConfig,
+    /// Reality level for this workspace (1-5)
+    /// Controls the realism of mock behavior (chaos, latency, MockAI)
+    #[serde(default)]
+    pub reality_level: Option<crate::RealityLevel>,
 }
 
 /// Default timeout value (30 seconds)
@@ -285,6 +289,7 @@ impl Default for WorkspaceConfig {
             ssl_verify: default_true(),
             proxy: None,
             auto_encryption: AutoEncryptionConfig::default(),
+            reality_level: None,
         }
     }
 }

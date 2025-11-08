@@ -4,6 +4,7 @@ use crate::{
     config::CorruptionType,
     fault::FaultInjector,
     latency::LatencyInjector,
+    latency_metrics::LatencyMetricsTracker,
     rate_limit::RateLimiter,
     resilience::{Bulkhead, CircuitBreaker},
     traffic_shaping::TrafficShaper,
@@ -11,7 +12,7 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{ConnectInfo, Request},
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -30,11 +31,16 @@ pub struct ChaosMiddleware {
     traffic_shaper: Arc<TrafficShaper>,
     circuit_breaker: Arc<CircuitBreaker>,
     bulkhead: Arc<Bulkhead>,
+    latency_tracker: Arc<LatencyMetricsTracker>,
 }
 
 impl ChaosMiddleware {
     /// Create new chaos middleware from config
-    pub fn new(config: ChaosConfig) -> Self {
+    ///
+    /// # Arguments
+    /// * `config` - Chaos configuration
+    /// * `latency_tracker` - Latency metrics tracker for recording injected latencies
+    pub fn new(config: ChaosConfig, latency_tracker: Arc<LatencyMetricsTracker>) -> Self {
         let latency_injector =
             Arc::new(LatencyInjector::new(config.latency.clone().unwrap_or_default()));
 
@@ -59,6 +65,7 @@ impl ChaosMiddleware {
             traffic_shaper,
             circuit_breaker,
             bulkhead,
+            latency_tracker,
         }
     }
 
@@ -91,17 +98,60 @@ impl ChaosMiddleware {
     pub fn bulkhead(&self) -> &Arc<Bulkhead> {
         &self.bulkhead
     }
+
+    /// Get latency tracker
+    pub fn latency_tracker(&self) -> &Arc<LatencyMetricsTracker> {
+        &self.latency_tracker
+    }
 }
 
-/// Chaos middleware handler
-pub async fn chaos_middleware(
+/// Chaos middleware handler (takes state directly, for use with from_fn)
+pub async fn chaos_middleware_with_state(
     chaos: Arc<ChaosMiddleware>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    req: Request,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    // Call the main handler by creating a temporary State extractor
+    // We do this by putting the state in request extensions temporarily
+    let (mut parts, body) = req.into_parts();
+    parts.extensions.insert(chaos.clone());
+    let req = Request::from_parts(parts, body);
+
+    // Now we can use the State extractor pattern
+    // But actually, let's just call the core logic directly
+    chaos_middleware_core(chaos, req, next).await
+}
+
+/// Chaos middleware handler (uses State extractor, for use with from_fn_with_state)
+pub async fn chaos_middleware(
+    State(chaos): State<Arc<ChaosMiddleware>>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    chaos_middleware_core(chaos, req, next).await
+}
+
+/// Core chaos middleware logic
+async fn chaos_middleware_core(
+    chaos: Arc<ChaosMiddleware>,
+    req: Request<Body>,
     next: Next,
 ) -> Response {
     let path = req.uri().path().to_string();
-    let ip = addr.ip().to_string();
+
+    // Extract client IP from request extensions (set by ConnectInfo if available) or headers
+    let ip = req
+        .extensions()
+        .get::<SocketAddr>()
+        .map(|addr| addr.ip().to_string())
+        .or_else(|| {
+            req.headers()
+                .get("x-forwarded-for")
+                .or_else(|| req.headers().get("x-real-ip"))
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+        })
+        .unwrap_or_else(|| "127.0.0.1".to_string());
 
     debug!("Chaos middleware processing: {} {}", req.method(), path);
 
@@ -147,8 +197,11 @@ pub async fn chaos_middleware(
         return (StatusCode::REQUEST_TIMEOUT, "Connection dropped").into_response();
     }
 
-    // Inject latency
-    chaos.latency_injector.inject().await;
+    // Inject latency and record it for metrics
+    let delay_ms = chaos.latency_injector.inject().await;
+    if delay_ms > 0 {
+        chaos.latency_tracker.record_latency(delay_ms);
+    }
 
     // Check for fault injection
     if let Some(status_code) = chaos.fault_injector.get_http_error_status() {
@@ -275,6 +328,7 @@ fn corrupt_payload(data: &[u8], corruption_type: CorruptionType) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::config::{LatencyConfig, RateLimitConfig};
+    use crate::latency_metrics::LatencyMetricsTracker;
 
     #[tokio::test]
     async fn test_middleware_creation() {
@@ -288,7 +342,8 @@ mod tests {
             ..Default::default()
         };
 
-        let middleware = ChaosMiddleware::new(config);
+        let latency_tracker = Arc::new(LatencyMetricsTracker::new());
+        let middleware = ChaosMiddleware::new(config, latency_tracker);
         assert!(middleware.latency_injector.is_enabled());
     }
 
@@ -305,7 +360,8 @@ mod tests {
             ..Default::default()
         };
 
-        let middleware = Arc::new(ChaosMiddleware::new(config));
+        let latency_tracker = Arc::new(LatencyMetricsTracker::new());
+        let middleware = Arc::new(ChaosMiddleware::new(config, latency_tracker));
 
         // First two requests should succeed (rate + burst)
         assert!(middleware.rate_limiter.check(Some("127.0.0.1"), Some("/test")).is_ok());
@@ -313,5 +369,37 @@ mod tests {
 
         // Third should fail
         assert!(middleware.rate_limiter.check(Some("127.0.0.1"), Some("/test")).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_latency_recording() {
+        let config = ChaosConfig {
+            enabled: true,
+            latency: Some(LatencyConfig {
+                enabled: true,
+                fixed_delay_ms: Some(50),
+                probability: 1.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let latency_tracker = Arc::new(LatencyMetricsTracker::new());
+        let middleware = Arc::new(ChaosMiddleware::new(config, latency_tracker.clone()));
+
+        // Verify tracker is accessible via getter
+        let tracker_from_middleware = middleware.latency_tracker();
+        assert_eq!(Arc::as_ptr(tracker_from_middleware), Arc::as_ptr(&latency_tracker));
+
+        // Manually inject latency and record it (simulating what middleware does)
+        let delay_ms = middleware.latency_injector.inject().await;
+        if delay_ms > 0 {
+            latency_tracker.record_latency(delay_ms);
+        }
+
+        // Verify latency was recorded
+        let samples = latency_tracker.get_samples();
+        assert!(!samples.is_empty(), "Should have recorded at least one latency sample");
+        assert_eq!(samples[0].latency_ms, 50, "Recorded latency should match injected delay");
     }
 }
