@@ -366,7 +366,9 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
 
                     // Parse merge strategy
                     let alignment_config = if auto_align {
-                        use mockforge_scenarios::schema_alignment::{MergeStrategy, SchemaAlignmentConfig};
+                        use mockforge_scenarios::schema_alignment::{
+                            MergeStrategy, SchemaAlignmentConfig,
+                        };
                         let strategy = match merge_strategy.as_str() {
                             "prefer-existing" => MergeStrategy::PreferExisting,
                             "prefer-scenario" => MergeStrategy::PreferScenario,
@@ -387,28 +389,42 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                     };
 
                     match installer
-                        .apply_to_workspace_with_alignment(&name, version_clone.as_deref(), alignment_config)
+                        .apply_to_workspace_with_alignment(
+                            &name,
+                            version_clone.as_deref(),
+                            alignment_config,
+                        )
                         .await
                     {
                         Ok(_) => {
                             println!("✅ Scenario applied successfully to workspace");
                             if auto_align {
-                                println!("   Schema alignment enabled (strategy: {})", merge_strategy);
+                                println!(
+                                    "   Schema alignment enabled (strategy: {})",
+                                    merge_strategy
+                                );
                             }
                             println!(
                                 "   Files copied: config.yaml, openapi.json, fixtures/, examples/"
                             );
 
                             // Apply VBR entities if present
-                            if let Ok(Some(vbr_entities)) = installer.get_vbr_entities(&name, version_clone.as_deref()) {
+                            if let Ok(Some(vbr_entities)) =
+                                installer.get_vbr_entities(&name, version_clone.as_deref())
+                            {
                                 if !vbr_entities.is_empty() {
                                     println!("\n🔧 Applying VBR entities...");
-                                    match apply_vbr_entities_from_scenario(vbr_entities, &s.path).await {
+                                    match apply_vbr_entities_from_scenario(vbr_entities, &s.path)
+                                        .await
+                                    {
                                         Ok(count) => {
                                             println!("   ✅ Applied {} VBR entities", count);
                                         }
                                         Err(e) => {
-                                            println!("   ⚠️  Warning: Failed to apply VBR entities: {}", e);
+                                            println!(
+                                                "   ⚠️  Warning: Failed to apply VBR entities: {}",
+                                                e
+                                            );
                                             println!("   You can apply them manually using 'mockforge vbr' commands");
                                         }
                                     }
@@ -416,15 +432,24 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                             }
 
                             // Merge MockAI config if present
-                            if let Ok(Some(mockai_config)) = installer.get_mockai_config(&name, version_clone.as_deref()) {
+                            if let Ok(Some(mockai_config)) =
+                                installer.get_mockai_config(&name, version_clone.as_deref())
+                            {
                                 println!("\n🤖 Merging MockAI configuration...");
-                                match merge_mockai_config_from_scenario(mockai_config, &s.path).await {
+                                match merge_mockai_config_from_scenario(mockai_config, &s.path)
+                                    .await
+                                {
                                     Ok(_) => {
                                         println!("   ✅ MockAI config merged into config.yaml");
                                     }
                                     Err(e) => {
-                                        println!("   ⚠️  Warning: Failed to merge MockAI config: {}", e);
-                                        println!("   MockAI config is available in the scenario package");
+                                        println!(
+                                            "   ⚠️  Warning: Failed to merge MockAI config: {}",
+                                            e
+                                        );
+                                        println!(
+                                            "   MockAI config is available in the scenario package"
+                                        );
                                     }
                                 }
                             }
@@ -647,87 +672,107 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
             }
         }
 
-        ScenarioCommands::Pack { command } => {
-            match command {
-                PackCommands::List => {
-                    println!("📦 Installed domain packs:");
+        ScenarioCommands::Pack { command } => match command {
+            PackCommands::List => {
+                println!("📦 Installed domain packs:");
 
-                    let pack_installer = DomainPackInstaller::new()?;
-                    pack_installer.init()?;
+                let pack_installer = DomainPackInstaller::new()?;
+                pack_installer.init()?;
 
-                    let packs = pack_installer.list_installed()?;
+                let packs = pack_installer.list_installed()?;
 
-                    if packs.is_empty() {
-                        println!("  No packs installed");
-                    } else {
-                        for pack in packs {
-                            println!("  - {}@{} ({})", pack.manifest.name, pack.manifest.version, pack.manifest.domain);
-                            println!("    Title: {}", pack.manifest.title);
-                            println!("    Scenarios: {}", pack.manifest.scenarios.len());
-                        }
-                    }
-                }
-
-                PackCommands::Install { manifest } => {
-                    println!("📦 Installing domain pack from: {}", manifest);
-
-                    let pack_installer = DomainPackInstaller::new()?;
-                    pack_installer.init()?;
-
-                    let manifest_path = Path::new(&manifest);
-                    if !manifest_path.exists() {
-                        eprintln!("❌ Pack manifest not found: {}", manifest);
-                        std::process::exit(1);
-                    }
-
-                    match pack_installer.install_from_manifest(manifest_path) {
-                        Ok(pack_info) => {
-                            println!("✅ Pack installed successfully: {}@{}", pack_info.manifest.name, pack_info.manifest.version);
-                            println!("   Domain: {}", pack_info.manifest.domain);
-                            println!("   Scenarios: {}", pack_info.manifest.scenarios.len());
-                            println!("\n   To install scenarios from this pack, use:");
-                            for scenario in &pack_info.manifest.scenarios {
-                                println!("     mockforge scenario install {}", scenario.source);
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("❌ Failed to install pack: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                }
-
-                PackCommands::Info { name } => {
-                    let pack_installer = DomainPackInstaller::new()?;
-                    pack_installer.init()?;
-
-                    match pack_installer.get_pack(&name)? {
-                        Some(pack_info) => {
-                            println!("ℹ️  Pack information: {}@{}", pack_info.manifest.name, pack_info.manifest.version);
-                            println!("   Title: {}", pack_info.manifest.title);
-                            println!("   Description: {}", pack_info.manifest.description);
-                            println!("   Domain: {}", pack_info.manifest.domain);
-                            println!("   Author: {}", pack_info.manifest.author);
-                            println!("   Scenarios ({}):", pack_info.manifest.scenarios.len());
-                            for scenario in &pack_info.manifest.scenarios {
-                                println!("     - {} ({})", scenario.name, scenario.source);
-                                if let Some(ref desc) = scenario.description {
-                                    println!("       {}", desc);
-                                }
-                            }
-                        }
-                        None => {
-                            eprintln!("❌ Pack '{}' not found", name);
-                            std::process::exit(1);
-                        }
+                if packs.is_empty() {
+                    println!("  No packs installed");
+                } else {
+                    for pack in packs {
+                        println!(
+                            "  - {}@{} ({})",
+                            pack.manifest.name, pack.manifest.version, pack.manifest.domain
+                        );
+                        println!("    Title: {}", pack.manifest.title);
+                        println!("    Scenarios: {}", pack.manifest.scenarios.len());
                     }
                 }
             }
-        }
 
-        ScenarioCommands::Review { command } => {
-            match command {
-                ReviewCommands::Submit {
+            PackCommands::Install { manifest } => {
+                println!("📦 Installing domain pack from: {}", manifest);
+
+                let pack_installer = DomainPackInstaller::new()?;
+                pack_installer.init()?;
+
+                let manifest_path = Path::new(&manifest);
+                if !manifest_path.exists() {
+                    eprintln!("❌ Pack manifest not found: {}", manifest);
+                    std::process::exit(1);
+                }
+
+                match pack_installer.install_from_manifest(manifest_path) {
+                    Ok(pack_info) => {
+                        println!(
+                            "✅ Pack installed successfully: {}@{}",
+                            pack_info.manifest.name, pack_info.manifest.version
+                        );
+                        println!("   Domain: {}", pack_info.manifest.domain);
+                        println!("   Scenarios: {}", pack_info.manifest.scenarios.len());
+                        println!("\n   To install scenarios from this pack, use:");
+                        for scenario in &pack_info.manifest.scenarios {
+                            println!("     mockforge scenario install {}", scenario.source);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to install pack: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            PackCommands::Info { name } => {
+                let pack_installer = DomainPackInstaller::new()?;
+                pack_installer.init()?;
+
+                match pack_installer.get_pack(&name)? {
+                    Some(pack_info) => {
+                        println!(
+                            "ℹ️  Pack information: {}@{}",
+                            pack_info.manifest.name, pack_info.manifest.version
+                        );
+                        println!("   Title: {}", pack_info.manifest.title);
+                        println!("   Description: {}", pack_info.manifest.description);
+                        println!("   Domain: {}", pack_info.manifest.domain);
+                        println!("   Author: {}", pack_info.manifest.author);
+                        println!("   Scenarios ({}):", pack_info.manifest.scenarios.len());
+                        for scenario in &pack_info.manifest.scenarios {
+                            println!("     - {} ({})", scenario.name, scenario.source);
+                            if let Some(ref desc) = scenario.description {
+                                println!("       {}", desc);
+                            }
+                        }
+                    }
+                    None => {
+                        eprintln!("❌ Pack '{}' not found", name);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        },
+
+        ScenarioCommands::Review { command } => match command {
+            ReviewCommands::Submit {
+                scenario_name,
+                scenario_version,
+                rating,
+                title,
+                comment,
+                reviewer,
+                reviewer_email,
+                verified,
+            } => {
+                println!("⭐ Submitting review for scenario: {}", scenario_name);
+
+                let registry = ScenarioRegistry::new("https://registry.mockforge.dev".to_string());
+
+                let review = ScenarioReviewSubmission {
                     scenario_name,
                     scenario_version,
                     rating,
@@ -735,75 +780,64 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                     comment,
                     reviewer,
                     reviewer_email,
-                    verified,
-                } => {
-                    println!("⭐ Submitting review for scenario: {}", scenario_name);
+                    verified_purchase: verified,
+                };
 
-                    let registry = ScenarioRegistry::new("https://registry.mockforge.dev".to_string());
-
-                    let review = ScenarioReviewSubmission {
-                        scenario_name,
-                        scenario_version,
-                        rating,
-                        title,
-                        comment,
-                        reviewer,
-                        reviewer_email,
-                        verified_purchase: verified,
-                    };
-
-                    match registry.submit_review(review).await {
-                        Ok(submitted_review) => {
-                            println!("✅ Review submitted successfully!");
-                            println!("   Review ID: {}", submitted_review.id);
-                            println!("   Rating: {}/5", submitted_review.rating);
-                            if let Some(ref review_title) = submitted_review.title {
-                                println!("   Title: {}", review_title);
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("❌ Failed to submit review: {}", e);
-                            std::process::exit(1);
+                match registry.submit_review(review).await {
+                    Ok(submitted_review) => {
+                        println!("✅ Review submitted successfully!");
+                        println!("   Review ID: {}", submitted_review.id);
+                        println!("   Rating: {}/5", submitted_review.rating);
+                        if let Some(ref review_title) = submitted_review.title {
+                            println!("   Title: {}", review_title);
                         }
                     }
-                }
-
-                ReviewCommands::List { scenario_name, page, per_page } => {
-                    println!("📝 Reviews for scenario: {}", scenario_name);
-
-                    let registry = ScenarioRegistry::new("https://registry.mockforge.dev".to_string());
-
-                    match registry.get_reviews(&scenario_name, page, per_page).await {
-                        Ok(reviews) => {
-                            if reviews.is_empty() {
-                                println!("  No reviews found");
-                            } else {
-                                println!("  Found {} reviews:", reviews.len());
-                                for review in reviews {
-                                    println!("  - {} ({}/5)", review.reviewer, review.rating);
-                                    if let Some(ref title) = review.title {
-                                        println!("    Title: {}", title);
-                                    }
-                                    println!("    Comment: {}", review.comment);
-                                    println!("    Date: {}", review.created_at);
-                                    if review.verified_purchase {
-                                        println!("    ✓ Verified purchase");
-                                    }
-                                    if review.helpful_count > 0 {
-                                        println!("    👍 {} helpful", review.helpful_count);
-                                    }
-                                    println!();
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("❌ Failed to get reviews: {}", e);
-                            std::process::exit(1);
-                        }
+                    Err(e) => {
+                        eprintln!("❌ Failed to submit review: {}", e);
+                        std::process::exit(1);
                     }
                 }
             }
-        }
+
+            ReviewCommands::List {
+                scenario_name,
+                page,
+                per_page,
+            } => {
+                println!("📝 Reviews for scenario: {}", scenario_name);
+
+                let registry = ScenarioRegistry::new("https://registry.mockforge.dev".to_string());
+
+                match registry.get_reviews(&scenario_name, page, per_page).await {
+                    Ok(reviews) => {
+                        if reviews.is_empty() {
+                            println!("  No reviews found");
+                        } else {
+                            println!("  Found {} reviews:", reviews.len());
+                            for review in reviews {
+                                println!("  - {} ({}/5)", review.reviewer, review.rating);
+                                if let Some(ref title) = review.title {
+                                    println!("    Title: {}", title);
+                                }
+                                println!("    Comment: {}", review.comment);
+                                println!("    Date: {}", review.created_at);
+                                if review.verified_purchase {
+                                    println!("    ✓ Verified purchase");
+                                }
+                                if review.helpful_count > 0 {
+                                    println!("    👍 {} helpful", review.helpful_count);
+                                }
+                                println!();
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to get reviews: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        },
     }
 
     Ok(())
@@ -970,15 +1004,22 @@ async fn apply_vbr_entities_from_scenario(
             Err(e) => {
                 // If direct deserialization fails, try to convert from JSON Schema format
                 // This is a simplified conversion - in production, you'd want a more robust converter
-                println!("   ⚠️  Warning: Could not parse entity schema for '{}': {}", entity_def.name, e);
+                println!(
+                    "   ⚠️  Warning: Could not parse entity schema for '{}': {}",
+                    entity_def.name, e
+                );
                 println!("     Entity definition will need manual conversion");
             }
         }
     }
 
     if applied_count > 0 {
-        println!("\n   💡 Note: VBR entities are prepared but need to be registered with a VBR engine.");
-        println!("   Use 'mockforge vbr create entity <name>' or start MockForge with VBR enabled.");
+        println!(
+            "\n   💡 Note: VBR entities are prepared but need to be registered with a VBR engine."
+        );
+        println!(
+            "   Use 'mockforge vbr create entity <name>' or start MockForge with VBR enabled."
+        );
     }
 
     Ok(applied_count)
@@ -1008,7 +1049,9 @@ async fn merge_mockai_config_from_scenario(
     let mockai_config_json = &mockai_config_def.config;
 
     // Try to deserialize as MockAIConfig
-    if let Ok(scenario_mockai) = serde_json::from_value::<mockforge_core::config::MockAIConfig>(mockai_config_json.clone()) {
+    if let Ok(scenario_mockai) =
+        serde_json::from_value::<mockforge_core::config::MockAIConfig>(mockai_config_json.clone())
+    {
         // Merge: prefer scenario config over existing
         config.mockai = scenario_mockai;
     } else {
@@ -1020,7 +1063,10 @@ async fn merge_mockai_config_from_scenario(
 
         // Try to merge intelligent_behavior if present
         if let Some(behavior_json) = mockai_config_json.get("intelligent_behavior") {
-            if let Ok(behavior_config) = serde_json::from_value::<mockforge_core::intelligent_behavior::IntelligentBehaviorConfig>(behavior_json.clone()) {
+            if let Ok(behavior_config) = serde_json::from_value::<
+                mockforge_core::intelligent_behavior::IntelligentBehaviorConfig,
+            >(behavior_json.clone())
+            {
                 config.mockai.intelligent_behavior = behavior_config;
             }
         }
@@ -1029,13 +1075,19 @@ async fn merge_mockai_config_from_scenario(
         if let Some(auto_learn) = mockai_config_json.get("auto_learn").and_then(|v| v.as_bool()) {
             config.mockai.auto_learn = auto_learn;
         }
-        if let Some(mutation_detection) = mockai_config_json.get("mutation_detection").and_then(|v| v.as_bool()) {
+        if let Some(mutation_detection) =
+            mockai_config_json.get("mutation_detection").and_then(|v| v.as_bool())
+        {
             config.mockai.mutation_detection = mutation_detection;
         }
-        if let Some(ai_validation_errors) = mockai_config_json.get("ai_validation_errors").and_then(|v| v.as_bool()) {
+        if let Some(ai_validation_errors) =
+            mockai_config_json.get("ai_validation_errors").and_then(|v| v.as_bool())
+        {
             config.mockai.ai_validation_errors = ai_validation_errors;
         }
-        if let Some(intelligent_pagination) = mockai_config_json.get("intelligent_pagination").and_then(|v| v.as_bool()) {
+        if let Some(intelligent_pagination) =
+            mockai_config_json.get("intelligent_pagination").and_then(|v| v.as_bool())
+        {
             config.mockai.intelligent_pagination = intelligent_pagination;
         }
     }

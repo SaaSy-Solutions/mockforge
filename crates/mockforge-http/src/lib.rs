@@ -514,6 +514,8 @@ pub async fn build_router_with_multi_tenant(
     let mut final_cors_config = cors_config;
     let mut production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>> =
         None;
+    // Auth config from deceptive deploy OAuth (if configured)
+    let mut deceptive_deploy_auth_config: Option<mockforge_core::config::AuthConfig> = None;
 
     if let Some(deploy_config) = &deceptive_deploy_config {
         if deploy_config.enabled {
@@ -550,6 +552,16 @@ pub async fn build_router_with_multi_tenant(
                     deploy_config.headers.clone();
                 production_headers = Some(std::sync::Arc::new(headers_map));
                 info!("Configured {} production headers", deploy_config.headers.len());
+            }
+
+            // Integrate OAuth config from deceptive deploy
+            if let Some(prod_oauth) = &deploy_config.oauth {
+                let oauth2_config: mockforge_core::config::OAuth2Config = prod_oauth.clone().into();
+                deceptive_deploy_auth_config = Some(mockforge_core::config::AuthConfig {
+                    oauth2: Some(oauth2_config),
+                    ..Default::default()
+                });
+                info!("Applied production-like OAuth configuration for deceptive deploy");
             }
         }
     }
@@ -794,6 +806,39 @@ pub async fn build_router_with_multi_tenant(
             state.clone(),
             crate::middleware::production_headers_middleware,
         ));
+    }
+
+    // Add authentication middleware if OAuth is configured via deceptive deploy
+    if let Some(auth_config) = deceptive_deploy_auth_config {
+        use crate::auth::{auth_middleware, create_oauth2_client, AuthState};
+        use std::collections::HashMap;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Create OAuth2 client if configured
+        let oauth2_client = if let Some(oauth2_config) = &auth_config.oauth2 {
+            match create_oauth2_client(oauth2_config) {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    warn!("Failed to create OAuth2 client from deceptive deploy config: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create auth state
+        let auth_state = AuthState {
+            config: auth_config,
+            spec: None, // OpenAPI spec not available in this context
+            oauth2_client,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        // Apply auth middleware
+        app = app.layer(axum::middleware::from_fn_with_state(auth_state, auth_middleware));
+        info!("Applied OAuth authentication middleware from deceptive deploy configuration");
     }
 
     // Add CORS middleware (use final_cors_config which may be overridden by deceptive deploy)
@@ -1391,6 +1436,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     let mut final_cors_config = cors_config;
     let mut production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>> =
         None;
+    // Auth config from deceptive deploy OAuth (if configured)
+    let mut deceptive_deploy_auth_config: Option<mockforge_core::config::AuthConfig> = None;
     let mut rate_limit_config = crate::middleware::RateLimitConfig {
         requests_per_minute: std::env::var("MOCKFORGE_RATE_LIMIT_RPM")
             .ok()
@@ -1440,6 +1487,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 production_headers = Some(std::sync::Arc::new(headers_map));
                 info!("Configured {} production headers", deploy_config.headers.len());
             }
+
+            // Integrate OAuth config from deceptive deploy
+            if let Some(prod_oauth) = &deploy_config.oauth {
+                let oauth2_config: mockforge_core::config::OAuth2Config = prod_oauth.clone().into();
+                deceptive_deploy_auth_config = Some(mockforge_core::config::AuthConfig {
+                    oauth2: Some(oauth2_config),
+                    ..Default::default()
+                });
+                info!("Applied production-like OAuth configuration for deceptive deploy");
+            }
         }
     }
 
@@ -1463,6 +1520,39 @@ pub async fn build_router_with_chains_and_multi_tenant(
             state.clone(),
             crate::middleware::production_headers_middleware,
         ));
+    }
+
+    // Add authentication middleware if OAuth is configured via deceptive deploy
+    if let Some(auth_config) = deceptive_deploy_auth_config {
+        use crate::auth::{auth_middleware, create_oauth2_client, AuthState};
+        use std::collections::HashMap;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Create OAuth2 client if configured
+        let oauth2_client = if let Some(oauth2_config) = &auth_config.oauth2 {
+            match create_oauth2_client(oauth2_config) {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    warn!("Failed to create OAuth2 client from deceptive deploy config: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create auth state
+        let auth_state = AuthState {
+            config: auth_config,
+            spec: None, // OpenAPI spec not available in this context
+            oauth2_client,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        // Apply auth middleware
+        app = app.layer(axum::middleware::from_fn_with_state(auth_state, auth_middleware));
+        info!("Applied OAuth authentication middleware from deceptive deploy configuration");
     }
 
     // Add contract diff middleware for automatic request capture

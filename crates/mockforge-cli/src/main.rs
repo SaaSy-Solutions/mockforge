@@ -2905,7 +2905,10 @@ fn initialize_opentelemetry_tracing(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn handle_serve(
+/// Start the MockForge server with the given configuration
+///
+/// This function is public so it can be called from other commands like deploy
+pub async fn handle_serve(
     config_path: Option<PathBuf>,
     profile: Option<String>,
     http_port: Option<u16>,
@@ -3791,6 +3794,31 @@ async fn handle_serve(
                                 "💡 Your mock API is now accessible at: {}",
                                 status.public_url
                             );
+
+                            // Update deployment metadata with tunnel URL
+                            let metadata_path = std::path::Path::new(".mockforge/deployment.json");
+                            if metadata_path.exists() {
+                                if let Ok(metadata_content) = std::fs::read_to_string(metadata_path)
+                                {
+                                    if let Ok(mut metadata) =
+                                        serde_json::from_str::<serde_json::Value>(&metadata_content)
+                                    {
+                                        metadata["tunnel_url"] =
+                                            serde_json::Value::String(status.public_url.clone());
+                                        if let Ok(updated_json) =
+                                            serde_json::to_string_pretty(&metadata)
+                                        {
+                                            if let Err(e) =
+                                                std::fs::write(metadata_path, updated_json)
+                                            {
+                                                tracing::warn!("Failed to update deployment metadata with tunnel URL: {}", e);
+                                            } else {
+                                                tracing::info!("Updated deployment metadata with tunnel URL: {}", status.public_url);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             // Wait for shutdown signal
                             tokio::select! {

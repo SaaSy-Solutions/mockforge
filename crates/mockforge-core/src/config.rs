@@ -365,6 +365,20 @@ pub struct ProductionOAuthConfig {
     pub token_type_hint: Option<String>,
 }
 
+impl From<ProductionOAuthConfig> for OAuth2Config {
+    /// Convert ProductionOAuthConfig to OAuth2Config for use in auth middleware
+    fn from(prod: ProductionOAuthConfig) -> Self {
+        OAuth2Config {
+            client_id: prod.client_id,
+            client_secret: prod.client_secret,
+            introspection_url: prod.introspection_url,
+            auth_url: prod.auth_url,
+            token_url: prod.token_url,
+            token_type_hint: prod.token_type_hint,
+        }
+    }
+}
+
 /// Protocol enable/disable configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtocolConfig {
