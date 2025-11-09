@@ -83,11 +83,7 @@ impl LatencyMetricsTracker {
         let cutoff = now.saturating_sub(self.max_age_seconds * 1000);
 
         // Remove samples older than cutoff
-        while samples
-            .front()
-            .map(|s| s.timestamp < cutoff)
-            .unwrap_or(false)
-        {
+        while samples.front().map(|s| s.timestamp < cutoff).unwrap_or(false) {
             samples.pop_front();
         }
 

@@ -1,6 +1,6 @@
 //! Configuration management for MockForge
 
-use crate::{Config as CoreConfig, Error, Result, RealityLevel};
+use crate::{Config as CoreConfig, Error, RealityLevel, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

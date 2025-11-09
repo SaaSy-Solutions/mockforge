@@ -1,7 +1,11 @@
 //! Workspace management and collaboration
 
+use crate::core_bridge::CoreBridge;
 use crate::error::{CollabError, Result};
-use crate::models::{TeamWorkspace, UserRole, WorkspaceMember};
+use crate::models::{
+    MergeConflict, MergeStatus, TeamWorkspace, UserRole, WorkspaceFork, WorkspaceMember,
+    WorkspaceMerge,
+};
 use crate::permissions::{Permission, PermissionChecker};
 use chrono::Utc;
 use parking_lot::RwLock;
@@ -14,6 +18,7 @@ use uuid::Uuid;
 pub struct WorkspaceService {
     db: Pool<Sqlite>,
     cache: Arc<RwLock<HashMap<Uuid, TeamWorkspace>>>,
+    core_bridge: Option<Arc<CoreBridge>>,
 }
 
 impl WorkspaceService {
@@ -22,6 +27,16 @@ impl WorkspaceService {
         Self {
             db,
             cache: Arc::new(RwLock::new(HashMap::new())),
+            core_bridge: None,
+        }
+    }
+
+    /// Create a new workspace service with CoreBridge integration
+    pub fn with_core_bridge(db: Pool<Sqlite>, core_bridge: Arc<CoreBridge>) -> Self {
+        Self {
+            db,
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            core_bridge: Some(core_bridge),
         }
     }
 
@@ -32,8 +47,22 @@ impl WorkspaceService {
         description: Option<String>,
         owner_id: Uuid,
     ) -> Result<TeamWorkspace> {
-        let mut workspace = TeamWorkspace::new(name, owner_id);
-        workspace.description = description;
+        let mut workspace = TeamWorkspace::new(name.clone(), owner_id);
+        workspace.description = description.clone();
+
+        // If we have CoreBridge, create a proper core workspace and embed it
+        if let Some(core_bridge) = &self.core_bridge {
+            let core_workspace = core_bridge.create_empty_workspace(name, owner_id)?;
+            workspace.config = core_workspace.config;
+        } else {
+            // Fallback: create minimal config
+            workspace.config = serde_json::json!({
+                "name": workspace.name,
+                "description": workspace.description,
+                "folders": [],
+                "requests": []
+            });
+        }
 
         // Insert into database
         sqlx::query!(
@@ -362,6 +391,205 @@ impl WorkspaceService {
         .await?;
 
         Ok(workspaces)
+    }
+
+    /// Fork a workspace (create an independent copy)
+    ///
+    /// Creates a new workspace that is a copy of the source workspace.
+    /// The forked workspace has its own ID and can be modified independently.
+    pub async fn fork_workspace(
+        &self,
+        source_workspace_id: Uuid,
+        new_name: Option<String>,
+        new_owner_id: Uuid,
+        fork_point_commit_id: Option<Uuid>,
+    ) -> Result<TeamWorkspace> {
+        // Verify user has access to source workspace
+        self.get_member(source_workspace_id, new_owner_id).await?;
+
+        // Get source workspace
+        let source_workspace = self.get_workspace(source_workspace_id).await?;
+
+        // Create new workspace with copied data
+        let mut forked_workspace = TeamWorkspace::new(
+            new_name.unwrap_or_else(|| format!("{} (Fork)", source_workspace.name)),
+            new_owner_id,
+        );
+        forked_workspace.description = source_workspace.description.clone();
+
+        // Deep copy the config (workspace data) to ensure independence
+        // If we have CoreBridge, we can properly clone the core workspace
+        if let Some(core_bridge) = &self.core_bridge {
+            // Get the core workspace from source
+            if let Ok(mut core_workspace) = core_bridge.team_to_core(&source_workspace) {
+                // Generate new IDs for all entities in the forked workspace
+                core_workspace.id = forked_workspace.id.to_string();
+                core_workspace.name = forked_workspace.name.clone();
+                core_workspace.description = forked_workspace.description.clone();
+                core_workspace.created_at = forked_workspace.created_at;
+                core_workspace.updated_at = forked_workspace.updated_at;
+
+                // Regenerate IDs for folders and requests to ensure independence
+                Self::regenerate_entity_ids(&mut core_workspace);
+
+                // Convert back to TeamWorkspace
+                if let Ok(team_ws) = core_bridge.core_to_team(&core_workspace, new_owner_id) {
+                    forked_workspace.config = team_ws.config;
+                } else {
+                    // Fallback to shallow copy
+                    forked_workspace.config = source_workspace.config.clone();
+                }
+            } else {
+                // Fallback to shallow copy
+                forked_workspace.config = source_workspace.config.clone();
+            }
+        } else {
+            // Fallback to shallow copy
+            forked_workspace.config = source_workspace.config.clone();
+        }
+
+        // Insert forked workspace into database
+        sqlx::query!(
+            r#"
+            INSERT INTO workspaces (id, name, description, owner_id, config, version, created_at, updated_at, is_archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+            forked_workspace.id,
+            forked_workspace.name,
+            forked_workspace.description,
+            forked_workspace.owner_id,
+            forked_workspace.config,
+            forked_workspace.version,
+            forked_workspace.created_at,
+            forked_workspace.updated_at,
+            forked_workspace.is_archived
+        )
+        .execute(&self.db)
+        .await?;
+
+        // Add owner as admin member
+        let member = WorkspaceMember::new(forked_workspace.id, new_owner_id, UserRole::Admin);
+        sqlx::query!(
+            r#"
+            INSERT INTO workspace_members (id, workspace_id, user_id, role, joined_at, last_activity)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+            member.id,
+            member.workspace_id,
+            member.user_id,
+            member.role,
+            member.joined_at,
+            member.last_activity
+        )
+        .execute(&self.db)
+        .await?;
+
+        // Create fork relationship record
+        let fork = WorkspaceFork::new(
+            source_workspace_id,
+            forked_workspace.id,
+            new_owner_id,
+            fork_point_commit_id,
+        );
+        sqlx::query!(
+            r#"
+            INSERT INTO workspace_forks (id, source_workspace_id, forked_workspace_id, forked_at, forked_by, fork_point_commit_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+            fork.id,
+            fork.source_workspace_id,
+            fork.forked_workspace_id,
+            fork.forked_at,
+            fork.forked_by,
+            fork.fork_point_commit_id
+        )
+        .execute(&self.db)
+        .await?;
+
+        // Update cache
+        self.cache.write().insert(forked_workspace.id, forked_workspace.clone());
+
+        Ok(forked_workspace)
+    }
+
+    /// List all forks of a workspace
+    pub async fn list_forks(&self, workspace_id: Uuid) -> Result<Vec<WorkspaceFork>> {
+        let forks = sqlx::query_as!(
+            WorkspaceFork,
+            r#"
+            SELECT
+                id as "id: Uuid",
+                source_workspace_id as "source_workspace_id: Uuid",
+                forked_workspace_id as "forked_workspace_id: Uuid",
+                forked_at as "forked_at: chrono::DateTime<chrono::Utc>",
+                forked_by as "forked_by: Uuid",
+                fork_point_commit_id as "fork_point_commit_id: Uuid"
+            FROM workspace_forks
+            WHERE source_workspace_id = ?
+            ORDER BY forked_at DESC
+            "#,
+            workspace_id
+        )
+        .fetch_all(&self.db)
+        .await?;
+
+        Ok(forks)
+    }
+
+    /// Get the source workspace for a fork
+    pub async fn get_fork_source(
+        &self,
+        forked_workspace_id: Uuid,
+    ) -> Result<Option<WorkspaceFork>> {
+        let fork = sqlx::query_as!(
+            WorkspaceFork,
+            r#"
+            SELECT
+                id as "id: Uuid",
+                source_workspace_id as "source_workspace_id: Uuid",
+                forked_workspace_id as "forked_workspace_id: Uuid",
+                forked_at as "forked_at: chrono::DateTime<chrono::Utc>",
+                forked_by as "forked_by: Uuid",
+                fork_point_commit_id as "fork_point_commit_id: Uuid"
+            FROM workspace_forks
+            WHERE forked_workspace_id = ?
+            "#,
+            forked_workspace_id
+        )
+        .fetch_optional(&self.db)
+        .await?;
+
+        Ok(fork)
+    }
+
+    /// Regenerate entity IDs in a core workspace to ensure fork independence
+    fn regenerate_entity_ids(core_workspace: &mut mockforge_core::workspace::Workspace) {
+        use mockforge_core::workspace::{Folder, MockRequest};
+        use uuid::Uuid;
+
+        // Regenerate workspace ID
+        core_workspace.id = Uuid::new_v4().to_string();
+
+        // Helper to regenerate folder IDs recursively
+        fn regenerate_folder_ids(folder: &mut Folder) {
+            folder.id = Uuid::new_v4().to_string();
+            for subfolder in &mut folder.folders {
+                regenerate_folder_ids(subfolder);
+            }
+            for request in &mut folder.requests {
+                request.id = Uuid::new_v4().to_string();
+            }
+        }
+
+        // Regenerate IDs for root folders
+        for folder in &mut core_workspace.folders {
+            regenerate_folder_ids(folder);
+        }
+
+        // Regenerate IDs for root requests
+        for request in &mut core_workspace.requests {
+            request.id = Uuid::new_v4().to_string();
+        }
     }
 }
 

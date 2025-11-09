@@ -24,6 +24,10 @@ pub struct CollabConfig {
     pub websocket_ping_interval: Duration,
     /// Maximum message size (bytes)
     pub max_message_size: usize,
+    /// Directory for workspace storage (for CoreBridge)
+    pub workspace_dir: Option<String>,
+    /// Directory for backup storage
+    pub backup_dir: Option<String>,
 }
 
 impl Default for CollabConfig {
@@ -38,6 +42,8 @@ impl Default for CollabConfig {
             session_timeout: Duration::from_secs(24 * 3600), // 24 hours
             websocket_ping_interval: Duration::from_secs(30),
             max_message_size: 1024 * 1024, // 1 MB
+            workspace_dir: Some("./workspaces".to_string()),
+            backup_dir: Some("./backups".to_string()),
         }
     }
 }

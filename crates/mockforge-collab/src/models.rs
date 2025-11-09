@@ -200,6 +200,141 @@ pub struct CursorPosition {
     pub column: Option<u32>,
 }
 
+/// Workspace fork relationship
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct WorkspaceFork {
+    /// Unique fork ID
+    pub id: Uuid,
+    /// Source workspace ID (the original)
+    pub source_workspace_id: Uuid,
+    /// Forked workspace ID (the copy)
+    pub forked_workspace_id: Uuid,
+    /// When the fork was created
+    pub forked_at: DateTime<Utc>,
+    /// User who created the fork
+    pub forked_by: Uuid,
+    /// Commit ID at which fork was created (fork point)
+    pub fork_point_commit_id: Option<Uuid>,
+}
+
+impl WorkspaceFork {
+    /// Create a new fork record
+    pub fn new(
+        source_workspace_id: Uuid,
+        forked_workspace_id: Uuid,
+        forked_by: Uuid,
+        fork_point_commit_id: Option<Uuid>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            source_workspace_id,
+            forked_workspace_id,
+            forked_by,
+            fork_point_commit_id,
+            forked_at: Utc::now(),
+        }
+    }
+}
+
+/// Merge status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "merge_status", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum MergeStatus {
+    /// Merge is pending
+    Pending,
+    /// Merge is in progress
+    InProgress,
+    /// Merge completed successfully
+    Completed,
+    /// Merge has conflicts that need resolution
+    Conflict,
+    /// Merge was cancelled
+    Cancelled,
+}
+
+/// Workspace merge operation
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct WorkspaceMerge {
+    /// Unique merge ID
+    pub id: Uuid,
+    /// Source workspace ID (being merged FROM)
+    pub source_workspace_id: Uuid,
+    /// Target workspace ID (being merged INTO)
+    pub target_workspace_id: Uuid,
+    /// Common ancestor commit ID
+    pub base_commit_id: Uuid,
+    /// Latest commit from source workspace
+    pub source_commit_id: Uuid,
+    /// Latest commit from target workspace
+    pub target_commit_id: Uuid,
+    /// Resulting merge commit ID (None if not completed)
+    pub merge_commit_id: Option<Uuid>,
+    /// Merge status
+    pub status: MergeStatus,
+    /// Conflict data (JSON array of conflicts)
+    pub conflict_data: Option<serde_json::Value>,
+    /// User who performed the merge
+    pub merged_by: Option<Uuid>,
+    /// When the merge was completed
+    pub merged_at: Option<DateTime<Utc>>,
+    /// When the merge was created
+    pub created_at: DateTime<Utc>,
+}
+
+impl WorkspaceMerge {
+    /// Create a new merge operation
+    pub fn new(
+        source_workspace_id: Uuid,
+        target_workspace_id: Uuid,
+        base_commit_id: Uuid,
+        source_commit_id: Uuid,
+        target_commit_id: Uuid,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            source_workspace_id,
+            target_workspace_id,
+            base_commit_id,
+            source_commit_id,
+            target_commit_id,
+            merge_commit_id: None,
+            status: MergeStatus::Pending,
+            conflict_data: None,
+            merged_by: None,
+            merged_at: None,
+            created_at: Utc::now(),
+        }
+    }
+}
+
+/// Conflict in a merge
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeConflict {
+    /// Path to the conflicting field
+    pub path: String,
+    /// Base value (common ancestor)
+    pub base_value: Option<serde_json::Value>,
+    /// Source value (from workspace being merged)
+    pub source_value: Option<serde_json::Value>,
+    /// Target value (from current workspace)
+    pub target_value: Option<serde_json::Value>,
+    /// Conflict type
+    pub conflict_type: ConflictType,
+}
+
+/// Type of conflict
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictType {
+    /// Both sides modified the same field
+    Modified,
+    /// Field was deleted in one side, modified in the other
+    DeletedModified,
+    /// Field was added in both sides with different values
+    BothAdded,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

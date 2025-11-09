@@ -34,8 +34,12 @@ pub fn create_admin_router(
     admin_port: u16,
     prometheus_url: String,
     chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
-    latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
-    mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    latency_injector: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>,
+    >,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
 ) -> Router {
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));

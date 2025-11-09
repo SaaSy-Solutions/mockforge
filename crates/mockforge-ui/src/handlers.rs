@@ -277,10 +277,12 @@ pub struct AdminState {
     pub chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
     /// Latency injector for HTTP middleware (optional)
     /// Allows updating latency profile at runtime
-    pub latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
+    pub latency_injector:
+        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
     /// MockAI instance (optional)
     /// Allows updating MockAI configuration at runtime
-    pub mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    pub mockai:
+        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 impl AdminState {
@@ -353,8 +355,12 @@ impl AdminState {
         api_enabled: bool,
         admin_port: u16,
         chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
-        latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
-        mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+        latency_injector: Option<
+            std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>,
+        >,
+        mockai: Option<
+            std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+        >,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -3657,9 +3663,10 @@ pub async fn set_reality_level(
     let level = match mockforge_core::RealityLevel::from_value(request.level) {
         Some(l) => l,
         None => {
-            return Json(ApiResponse::error(
-                format!("Invalid reality level: {}. Must be between 1 and 5.", request.level),
-            ));
+            return Json(ApiResponse::error(format!(
+                "Invalid reality level: {}. Must be between 1 and 5.",
+                request.level
+            )));
         }
     };
 
@@ -3685,7 +3692,10 @@ pub async fn set_reality_level(
             Some(LatencyConfig {
                 enabled: true,
                 fixed_delay_ms: Some(config.latency.base_ms),
-                random_delay_range_ms: config.latency.max_ms.map(|max| (config.latency.min_ms, max)),
+                random_delay_range_ms: config
+                    .latency
+                    .max_ms
+                    .map(|max| (config.latency.min_ms, max)),
                 jitter_percent: if config.latency.jitter_ms > 0 {
                     (config.latency.jitter_ms as f64 / config.latency.base_ms as f64).min(1.0)
                 } else {
@@ -3706,7 +3716,11 @@ pub async fn set_reality_level(
                 connection_error_probability: 0.0,
                 timeout_errors: config.chaos.inject_timeouts,
                 timeout_ms: config.chaos.timeout_ms,
-                timeout_probability: if config.chaos.inject_timeouts { config.chaos.error_rate } else { 0.0 },
+                timeout_probability: if config.chaos.inject_timeouts {
+                    config.chaos.error_rate
+                } else {
+                    0.0
+                },
                 partial_responses: false,
                 partial_response_probability: 0.0,
                 payload_corruption: false,
@@ -3737,7 +3751,12 @@ pub async fn set_reality_level(
 
     // Update latency injector if available
     if let Some(ref latency_injector) = state.latency_injector {
-        match mockforge_core::latency::LatencyInjector::update_profile_async(latency_injector, config.latency.clone()).await {
+        match mockforge_core::latency::LatencyInjector::update_profile_async(
+            latency_injector,
+            config.latency.clone(),
+        )
+        .await
+        {
             Ok(_) => {
                 tracing::info!("✅ Updated latency injector for reality level {}", level.value());
             }
@@ -3751,7 +3770,12 @@ pub async fn set_reality_level(
 
     // Update MockAI if available
     if let Some(ref mockai) = state.mockai {
-        match mockforge_core::intelligent_behavior::MockAI::update_config_async(mockai, config.mockai.clone()).await {
+        match mockforge_core::intelligent_behavior::MockAI::update_config_async(
+            mockai,
+            config.mockai.clone(),
+        )
+        .await
+        {
             Ok(_) => {
                 tracing::info!("✅ Updated MockAI config for reality level {}", level.value());
             }
@@ -3791,7 +3815,10 @@ pub async fn set_reality_level(
             update_errors
         );
     } else {
-        tracing::info!("✅ Reality level successfully updated to {} (hot-reload applied)", level.value());
+        tracing::info!(
+            "✅ Reality level successfully updated to {} (hot-reload applied)",
+            level.value()
+        );
     }
 
     Json(ApiResponse::success(response))
@@ -3862,9 +3889,7 @@ pub async fn export_reality_preset(
     Json(request): Json<ExportPresetRequest>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     let engine = state.reality_engine.read().await;
-    let preset = engine
-        .create_preset(request.name.clone(), request.description.clone())
-        .await;
+    let preset = engine.create_preset(request.name.clone(), request.description.clone()).await;
 
     let persistence = &state.workspace_persistence;
     let presets_dir = persistence.presets_dir();
@@ -4239,7 +4264,8 @@ mod tests {
     #[test]
     fn test_admin_state_new() {
         let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
-        let state = AdminState::new(Some(http_addr), None, None, None, true, 8080, None, None, None);
+        let state =
+            AdminState::new(Some(http_addr), None, None, None, true, 8080, None, None, None);
 
         assert_eq!(state.http_server_addr, Some(http_addr));
         assert!(state.api_enabled);

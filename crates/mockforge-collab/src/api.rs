@@ -1,10 +1,13 @@
 //! REST API endpoints for collaboration
 
 use crate::auth::{AuthService, Credentials};
+use crate::backup::{BackupService, StorageBackend};
 use crate::error::{CollabError, Result};
 use crate::history::VersionControl;
+use crate::merge::MergeService;
 use crate::middleware::{auth_middleware, AuthUser};
 use crate::models::UserRole;
+use crate::sync::SyncEngine;
 use crate::user::UserService;
 use crate::workspace::WorkspaceService;
 use axum::{
@@ -26,6 +29,9 @@ pub struct ApiState {
     pub user: Arc<UserService>,
     pub workspace: Arc<WorkspaceService>,
     pub history: Arc<VersionControl>,
+    pub merge: Arc<MergeService>,
+    pub backup: Arc<BackupService>,
+    pub sync: Arc<SyncEngine>,
 }
 
 /// Create API router
@@ -59,6 +65,20 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/workspaces/:id/snapshots", post(create_snapshot))
         .route("/workspaces/:id/snapshots", get(list_snapshots))
         .route("/workspaces/:id/snapshots/:name", get(get_snapshot))
+        // Fork and Merge
+        .route("/workspaces/:id/fork", post(fork_workspace))
+        .route("/workspaces/:id/forks", get(list_forks))
+        .route("/workspaces/:id/merge", post(merge_workspaces))
+        .route("/workspaces/:id/merges", get(list_merges))
+        // Backup and Restore
+        .route("/workspaces/:id/backup", post(create_backup))
+        .route("/workspaces/:id/backups", get(list_backups))
+        .route("/workspaces/:id/backups/:backup_id", delete(delete_backup))
+        .route("/workspaces/:id/restore", post(restore_workspace))
+        // State Management
+        .route("/workspaces/:id/state", get(get_workspace_state))
+        .route("/workspaces/:id/state", post(update_workspace_state))
+        .route("/workspaces/:id/state/history", get(get_state_history))
         .route_layer(middleware::from_fn_with_state(
             state.auth.clone(),
             auth_middleware,
@@ -669,6 +689,332 @@ async fn get_snapshot(
     let snapshot = state.history.get_snapshot(workspace_id, &name).await?;
 
     Ok(Json(serde_json::to_value(snapshot)?))
+}
+
+// ===== Fork and Merge Handlers =====
+
+#[derive(Debug, Deserialize)]
+pub struct ForkWorkspaceRequest {
+    pub name: Option<String>,
+    pub fork_point_commit_id: Option<Uuid>,
+}
+
+/// Fork a workspace
+async fn fork_workspace(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(payload): Json<ForkWorkspaceRequest>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user has access to source workspace
+    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+
+    // Fork workspace
+    let forked = state
+        .workspace
+        .fork_workspace(workspace_id, payload.name, auth_user.user_id, payload.fork_point_commit_id)
+        .await?;
+
+    Ok(Json(serde_json::to_value(forked)?))
+}
+
+/// List all forks of a workspace
+async fn list_forks(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user is a member
+    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+
+    // List forks
+    let forks = state.workspace.list_forks(workspace_id).await?;
+
+    Ok(Json(serde_json::to_value(forks)?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MergeWorkspacesRequest {
+    pub source_workspace_id: Uuid,
+}
+
+/// Merge changes from another workspace
+async fn merge_workspaces(
+    State(state): State<ApiState>,
+    Path(target_workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(payload): Json<MergeWorkspacesRequest>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user has permission to merge into target
+    let member = state.workspace.get_member(target_workspace_id, auth_user.user_id).await?;
+    if !matches!(member.role, UserRole::Admin | UserRole::Editor) {
+        return Err(CollabError::AuthorizationFailed(
+            "Only Admins and Editors can merge workspaces".to_string(),
+        ));
+    }
+
+    // Perform merge
+    let (merged_state, conflicts) = state
+        .merge
+        .merge_workspaces(payload.source_workspace_id, target_workspace_id, auth_user.user_id)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "merged_state": merged_state,
+        "conflicts": conflicts,
+        "has_conflicts": !conflicts.is_empty()
+    })))
+}
+
+/// List merge operations for a workspace
+async fn list_merges(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user is a member
+    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+
+    // List merges
+    let merges = state.merge.list_merges(workspace_id).await?;
+
+    Ok(Json(serde_json::to_value(merges)?))
+}
+
+// ===== Backup and Restore Handlers =====
+
+#[derive(Debug, Deserialize)]
+pub struct CreateBackupRequest {
+    pub storage_backend: Option<String>,
+    pub format: Option<String>,
+    pub commit_id: Option<Uuid>,
+}
+
+/// Create a backup of a workspace
+async fn create_backup(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(payload): Json<CreateBackupRequest>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user has permission
+    let member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+    if !matches!(member.role, UserRole::Admin | UserRole::Editor) {
+        return Err(CollabError::AuthorizationFailed(
+            "Only Admins and Editors can create backups".to_string(),
+        ));
+    }
+
+    // Determine storage backend
+    let storage_backend = match payload.storage_backend.as_deref() {
+        Some("s3") => StorageBackend::S3,
+        Some("azure") => StorageBackend::Azure,
+        Some("gcs") => StorageBackend::Gcs,
+        Some("custom") => StorageBackend::Custom,
+        _ => StorageBackend::Local,
+    };
+
+    // Create backup
+    let backup = state
+        .backup
+        .backup_workspace(
+            workspace_id,
+            auth_user.user_id,
+            storage_backend,
+            payload.format,
+            payload.commit_id,
+        )
+        .await?;
+
+    Ok(Json(serde_json::to_value(backup)?))
+}
+
+/// List backups for a workspace
+async fn list_backups(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user is a member
+    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+
+    // List backups
+    let backups = state.backup.list_backups(workspace_id, Some(pagination.limit)).await?;
+
+    Ok(Json(serde_json::to_value(backups)?))
+}
+
+/// Delete a backup
+async fn delete_backup(
+    State(state): State<ApiState>,
+    Path((workspace_id, backup_id)): Path<(Uuid, Uuid)>,
+    Extension(auth_user): Extension<AuthUser>,
+) -> Result<StatusCode> {
+    // Verify user has permission
+    let member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+    if !matches!(member.role, UserRole::Admin) {
+        return Err(CollabError::AuthorizationFailed("Only Admins can delete backups".to_string()));
+    }
+
+    // Delete backup
+    state.backup.delete_backup(backup_id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RestoreWorkspaceRequest {
+    pub backup_id: Uuid,
+    pub target_workspace_id: Option<Uuid>,
+}
+
+/// Restore a workspace from a backup
+async fn restore_workspace(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(payload): Json<RestoreWorkspaceRequest>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user has permission
+    let member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+    if !matches!(member.role, UserRole::Admin) {
+        return Err(CollabError::AuthorizationFailed(
+            "Only Admins can restore workspaces".to_string(),
+        ));
+    }
+
+    // Restore workspace
+    let restored_id = state
+        .backup
+        .restore_workspace(payload.backup_id, payload.target_workspace_id, auth_user.user_id)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "workspace_id": restored_id,
+        "restored_from_backup": payload.backup_id
+    })))
+}
+
+// ===== State Management Handlers =====
+
+/// Get current workspace state
+async fn get_workspace_state(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user is a member
+    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+
+    // Get version if specified
+    let version = params.get("version").and_then(|v| v.parse::<i64>().ok());
+
+    // Get state from sync engine - try full workspace state first
+    let sync_state = if let Some(version) = version {
+        state.sync.load_state_snapshot(workspace_id, Some(version)).await?
+    } else {
+        // Try to get full workspace state using CoreBridge
+        if let Ok(Some(full_state)) = state.sync.get_full_workspace_state(workspace_id).await {
+            // Get workspace for version info
+            let workspace = state.workspace.get_workspace(workspace_id).await?;
+            return Ok(Json(serde_json::json!({
+                "workspace_id": workspace_id,
+                "version": workspace.version,
+                "state": full_state,
+                "last_updated": workspace.updated_at
+            })));
+        }
+
+        // Fallback to in-memory state
+        state.sync.get_state(workspace_id)
+    };
+
+    if let Some(state_val) = sync_state {
+        Ok(Json(serde_json::json!({
+            "workspace_id": workspace_id,
+            "version": state_val.version,
+            "state": state_val.state,
+            "last_updated": state_val.last_updated
+        })))
+    } else {
+        // Return workspace metadata if no state available
+        let workspace = state.workspace.get_workspace(workspace_id).await?;
+        Ok(Json(serde_json::json!({
+            "workspace_id": workspace_id,
+            "version": workspace.version,
+            "state": workspace.config,
+            "last_updated": workspace.updated_at
+        })))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateWorkspaceStateRequest {
+    pub state: serde_json::Value,
+}
+
+/// Update workspace state
+async fn update_workspace_state(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Json(payload): Json<UpdateWorkspaceStateRequest>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user has permission
+    let member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+    if !matches!(member.role, UserRole::Admin | UserRole::Editor) {
+        return Err(CollabError::AuthorizationFailed(
+            "Only Admins and Editors can update workspace state".to_string(),
+        ));
+    }
+
+    // Update state in sync engine
+    state.sync.update_state(workspace_id, payload.state.clone())?;
+
+    // Record state change
+    let workspace = state.workspace.get_workspace(workspace_id).await?;
+    state
+        .sync
+        .record_state_change(
+            workspace_id,
+            "full_sync",
+            payload.state.clone(),
+            workspace.version + 1,
+            auth_user.user_id,
+        )
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "workspace_id": workspace_id,
+        "version": workspace.version + 1,
+        "state": payload.state
+    })))
+}
+
+/// Get state change history
+async fn get_state_history(
+    State(state): State<ApiState>,
+    Path(workspace_id): Path<Uuid>,
+    Extension(auth_user): Extension<AuthUser>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>> {
+    // Verify user is a member
+    let _member = state.workspace.get_member(workspace_id, auth_user.user_id).await?;
+
+    // Get since_version if specified
+    let since_version =
+        params.get("since_version").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
+
+    // Get state changes
+    let changes = state.sync.get_state_changes_since(workspace_id, since_version).await?;
+
+    Ok(Json(serde_json::json!({
+        "workspace_id": workspace_id,
+        "since_version": since_version,
+        "changes": changes
+    })))
 }
 
 #[cfg(test)]

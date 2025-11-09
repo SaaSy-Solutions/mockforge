@@ -57,32 +57,20 @@ impl ChaosMiddleware {
         latency_tracker: Arc<LatencyMetricsTracker>,
     ) -> Self {
         // Initialize injectors with defaults (will be updated via init_from_config)
-        let latency_injector = Arc::new(RwLock::new(
-            LatencyInjector::new(Default::default())
-        ));
+        let latency_injector = Arc::new(RwLock::new(LatencyInjector::new(Default::default())));
 
         // FaultInjector doesn't support hot-reload, but we'll read from config directly
         // Keep a reference for compatibility but won't use it for fault injection
         // Note: We wrap it in RwLock for consistency, even though we read from config directly
-        let fault_injector = Arc::new(RwLock::new(
-            FaultInjector::new(Default::default())
-        ));
+        let fault_injector = Arc::new(RwLock::new(FaultInjector::new(Default::default())));
 
-        let rate_limiter = Arc::new(RwLock::new(
-            RateLimiter::new(Default::default())
-        ));
+        let rate_limiter = Arc::new(RwLock::new(RateLimiter::new(Default::default())));
 
-        let traffic_shaper = Arc::new(RwLock::new(
-            TrafficShaper::new(Default::default())
-        ));
+        let traffic_shaper = Arc::new(RwLock::new(TrafficShaper::new(Default::default())));
 
-        let circuit_breaker = Arc::new(RwLock::new(
-            CircuitBreaker::new(Default::default())
-        ));
+        let circuit_breaker = Arc::new(RwLock::new(CircuitBreaker::new(Default::default())));
 
-        let bulkhead = Arc::new(RwLock::new(
-            Bulkhead::new(Default::default())
-        ));
+        let bulkhead = Arc::new(RwLock::new(Bulkhead::new(Default::default())));
 
         Self {
             config,
@@ -294,8 +282,7 @@ async fn chaos_middleware_core(
     }
 
     // Always release connection on scope exit
-    let _connection_guard =
-        crate::traffic_shaping::ConnectionGuard::new(traffic_shaper.clone());
+    let _connection_guard = crate::traffic_shaping::ConnectionGuard::new(traffic_shaper.clone());
 
     // Check for packet loss (simulate dropped connection)
     if traffic_shaper.should_drop_packet() {
@@ -392,13 +379,15 @@ async fn chaos_middleware_core(
     // Check if should truncate response (partial response simulation)
     // Read from config for hot-reload support
     let config = chaos.config.read().await;
-    let should_truncate = config.fault_injection.as_ref()
+    let should_truncate = config
+        .fault_injection
+        .as_ref()
         .map(|f| f.enabled && f.timeout_errors)
         .unwrap_or(false);
-    let should_corrupt = config.fault_injection.as_ref()
-        .map(|f| f.enabled)
-        .unwrap_or(false);
-    let corruption_type = config.fault_injection.as_ref()
+    let should_corrupt = config.fault_injection.as_ref().map(|f| f.enabled).unwrap_or(false);
+    let corruption_type = config
+        .fault_injection
+        .as_ref()
         .map(|f| f.corruption_type)
         .unwrap_or(CorruptionType::None);
     drop(config);

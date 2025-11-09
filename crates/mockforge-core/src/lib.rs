@@ -268,9 +268,6 @@ pub mod ws_proxy;
 
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
-pub use reality::{
-    RealityConfig, RealityEngine, RealityLevel, RealityPreset, PresetMetadata,
-};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ApiKeyConfig,
@@ -324,6 +321,7 @@ pub use protocol_abstraction::{
     ValidationError as ProtocolValidationError, ValidationResult as ProtocolValidationResult,
 };
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};
+pub use reality::{PresetMetadata, RealityConfig, RealityEngine, RealityLevel, RealityPreset};
 pub use record_replay::{
     clean_old_fixtures, list_fixtures, list_ready_fixtures, list_smoke_endpoints, RecordHandler,
     RecordReplayHandler, RecordedRequest, ReplayHandler,

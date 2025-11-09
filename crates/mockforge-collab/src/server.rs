@@ -2,10 +2,13 @@
 
 use crate::api::{create_router as create_api_router, ApiState};
 use crate::auth::AuthService;
+use crate::backup::BackupService;
 use crate::config::CollabConfig;
+use crate::core_bridge::CoreBridge;
 use crate::error::Result;
 use crate::events::EventBus;
 use crate::history::{History, VersionControl};
+use crate::merge::MergeService;
 use crate::sync::SyncEngine;
 use crate::user::UserService;
 use crate::websocket::{ws_handler, WsState};
@@ -33,6 +36,10 @@ pub struct CollabServer {
     sync: Arc<SyncEngine>,
     /// History tracker
     history: Arc<History>,
+    /// Merge service
+    merge: Arc<MergeService>,
+    /// Backup service
+    backup: Arc<BackupService>,
 }
 
 impl CollabServer {
@@ -44,15 +51,37 @@ impl CollabServer {
         // Run migrations
         sqlx::migrate!("./migrations").run(&db).await?;
 
+        // Create CoreBridge for workspace integration
+        let workspace_dir =
+            config.workspace_dir.as_ref().map(|s| s.as_str()).unwrap_or("./workspaces");
+        let core_bridge = Arc::new(CoreBridge::new(workspace_dir));
+
         // Create services
         let auth = Arc::new(AuthService::new(config.jwt_secret.clone()));
         let user = Arc::new(UserService::new(db.clone(), auth.clone()));
-        let workspace = Arc::new(WorkspaceService::new(db.clone()));
+        let workspace =
+            Arc::new(WorkspaceService::with_core_bridge(db.clone(), core_bridge.clone()));
         let event_bus = Arc::new(EventBus::new(config.event_bus_capacity));
-        let sync = Arc::new(SyncEngine::new(event_bus.clone()));
+        let sync = Arc::new(SyncEngine::with_integration(
+            event_bus.clone(),
+            db.clone(),
+            core_bridge.clone(),
+            workspace.clone(),
+        ));
         let mut history = History::new(db.clone());
         history.set_auto_commit(config.auto_commit);
         let history = Arc::new(history);
+
+        // Create merge service
+        let merge = Arc::new(MergeService::new(db.clone()));
+
+        // Create backup service
+        let backup = Arc::new(BackupService::new(
+            db.clone(),
+            config.backup_dir.clone(),
+            core_bridge.clone(),
+            workspace.clone(),
+        ));
 
         Ok(Self {
             config,
@@ -63,6 +92,8 @@ impl CollabServer {
             event_bus,
             sync,
             history,
+            merge,
+            backup,
         })
     }
 
@@ -72,11 +103,20 @@ impl CollabServer {
 
         // Create API router
         let version_control = Arc::new(VersionControl::new(self.db.clone()));
+
+        // Get merge and backup services from config or create them
+        // For now, we'll need to store them in the server struct
+        // Let me check what we have available...
+
+        // Actually, we need to restructure this - let me add merge and backup to the server struct
         let api_state = ApiState {
             auth: self.auth.clone(),
             user: self.user.clone(),
             workspace: self.workspace.clone(),
             history: version_control,
+            merge: self.merge.clone(),
+            backup: self.backup.clone(),
+            sync: self.sync.clone(),
         };
         let api_router = create_api_router(api_state);
 

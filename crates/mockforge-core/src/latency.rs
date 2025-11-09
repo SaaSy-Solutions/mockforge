@@ -371,10 +371,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_profile() {
-        let mut injector = LatencyInjector::new(
-            LatencyProfile::new(50, 20),
-            FaultConfig::default(),
-        );
+        let mut injector =
+            LatencyInjector::new(LatencyProfile::new(50, 20), FaultConfig::default());
 
         // Update to a new profile
         let new_profile = LatencyProfile::new(100, 30);

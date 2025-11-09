@@ -3,9 +3,9 @@
 //! These tests verify that LatencyInjector and MockAI can be updated
 //! at runtime without requiring recreation.
 
-use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
 use mockforge_core::intelligent_behavior::config::IntelligentBehaviorConfig;
 use mockforge_core::intelligent_behavior::MockAI;
+use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

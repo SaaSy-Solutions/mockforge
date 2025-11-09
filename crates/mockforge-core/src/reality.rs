@@ -54,7 +54,9 @@ impl RealityLevel {
             RealityLevel::LightSimulation => "Minimal latency, basic intelligence",
             RealityLevel::ModerateRealism => "Some chaos, moderate latency, full intelligence",
             RealityLevel::HighRealism => "Increased chaos, realistic latency, session state",
-            RealityLevel::ProductionChaos => "Maximum chaos, production-like latency, full features",
+            RealityLevel::ProductionChaos => {
+                "Maximum chaos, production-like latency, full features"
+            }
         }
     }
 
@@ -421,7 +423,6 @@ impl RealityEngine {
         *config = preset.config;
     }
 
-
     /// Apply reality configuration to a ServerConfig
     ///
     /// This method updates the provided ServerConfig with chaos, latency, and MockAI
@@ -445,7 +446,9 @@ impl RealityEngine {
                     latency.enabled = reality_config.latency.base_ms > 0;
                     latency.fixed_delay_ms = Some(reality_config.latency.base_ms);
                     latency.jitter_percent = if reality_config.latency.jitter_ms > 0 {
-                        (reality_config.latency.jitter_ms as f64 / reality_config.latency.base_ms as f64).min(1.0)
+                        (reality_config.latency.jitter_ms as f64
+                            / reality_config.latency.base_ms as f64)
+                            .min(1.0)
                     } else {
                         0.0
                     };
@@ -488,14 +491,8 @@ mod tests {
 
     #[test]
     fn test_reality_level_from_value() {
-        assert_eq!(
-            RealityLevel::from_value(1),
-            Some(RealityLevel::StaticStubs)
-        );
-        assert_eq!(
-            RealityLevel::from_value(3),
-            Some(RealityLevel::ModerateRealism)
-        );
+        assert_eq!(RealityLevel::from_value(1), Some(RealityLevel::StaticStubs));
+        assert_eq!(RealityLevel::from_value(3), Some(RealityLevel::ModerateRealism));
         assert_eq!(RealityLevel::from_value(5), Some(RealityLevel::ProductionChaos));
         assert_eq!(RealityLevel::from_value(0), None);
         assert_eq!(RealityLevel::from_value(6), None);

@@ -51,10 +51,7 @@ async fn test_network_profile_management() {
 
     // Verify built-in profiles exist
     let profile_names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
-    assert!(
-        profile_names.contains(&"slow_3g".to_string()),
-        "Should have slow_3g profile"
-    );
+    assert!(profile_names.contains(&"slow_3g".to_string()), "Should have slow_3g profile");
     assert!(
         profile_names.contains(&"flaky_wifi".to_string()),
         "Should have flaky_wifi profile"
@@ -103,10 +100,7 @@ async fn test_error_pattern_configuration() {
     let injector = FaultInjector::new(fault_config.clone());
 
     // Test that pattern is configured
-    assert!(
-        injector.config.error_pattern.is_some(),
-        "Error pattern should be configured"
-    );
+    assert!(injector.config.error_pattern.is_some(), "Error pattern should be configured");
 
     // Test random pattern
     fault_config.error_pattern = Some(ErrorPattern::Random { probability: 0.5 });
@@ -130,23 +124,18 @@ async fn test_error_pattern_configuration() {
 /// Test profile export/import
 #[tokio::test]
 async fn test_profile_export_import() {
-    use mockforge_chaos::profiles::ProfileManager;
     use mockforge_chaos::config::ChaosConfig;
+    use mockforge_chaos::profiles::ProfileManager;
     use serde_json;
 
     let profile_manager = ProfileManager::new();
 
     // Get a profile to export
-    let profile = profile_manager
-        .get_profile("slow_3g")
-        .expect("Should have slow_3g profile");
+    let profile = profile_manager.get_profile("slow_3g").expect("Should have slow_3g profile");
 
     // Export as JSON
     let json_export = serde_json::to_string(&profile).expect("Should serialize to JSON");
-    assert!(
-        json_export.contains("slow_3g"),
-        "Exported JSON should contain profile name"
-    );
+    assert!(json_export.contains("slow_3g"), "Exported JSON should contain profile name");
     assert!(
         json_export.contains("chaos_config"),
         "Exported JSON should contain chaos_config"
@@ -174,26 +163,14 @@ async fn test_latency_metrics_api_format() {
     // Test samples serialization
     let samples = tracker.get_samples();
     let json = serde_json::to_string(&samples).expect("Should serialize samples");
-    assert!(
-        json.contains("timestamp"),
-        "Samples JSON should contain timestamp"
-    );
-    assert!(
-        json.contains("latency_ms"),
-        "Samples JSON should contain latency_ms"
-    );
+    assert!(json.contains("timestamp"), "Samples JSON should contain timestamp");
+    assert!(json.contains("latency_ms"), "Samples JSON should contain latency_ms");
 
     // Test stats serialization
     let stats = tracker.get_stats();
     let json = serde_json::to_string(&stats).expect("Should serialize stats");
-    assert!(
-        json.contains("avg_latency_ms"),
-        "Stats JSON should contain avg_latency_ms"
-    );
-    assert!(
-        json.contains("total_requests"),
-        "Stats JSON should contain total_requests"
-    );
+    assert!(json.contains("avg_latency_ms"), "Stats JSON should contain avg_latency_ms");
+    assert!(json.contains("total_requests"), "Stats JSON should contain total_requests");
 }
 
 /// Test error pattern serialization
@@ -221,8 +198,7 @@ async fn test_error_pattern_serialization() {
     let sequential = ErrorPattern::Sequential {
         sequence: vec![500, 502, 503],
     };
-    let json =
-        serde_json::to_string(&sequential).expect("Should serialize sequential pattern");
+    let json = serde_json::to_string(&sequential).expect("Should serialize sequential pattern");
     assert!(json.contains("sequential"), "Should contain 'sequential' type");
     assert!(json.contains("500"), "Should contain status codes");
 }
@@ -230,8 +206,8 @@ async fn test_error_pattern_serialization() {
 /// Test profile creation and deletion
 #[tokio::test]
 async fn test_profile_crud_operations() {
-    use mockforge_chaos::profiles::ProfileManager;
     use mockforge_chaos::config::ChaosConfig;
+    use mockforge_chaos::profiles::ProfileManager;
 
     let profile_manager = ProfileManager::new();
 
@@ -265,18 +241,12 @@ async fn test_latency_metrics_sample_limit() {
 
     // Should only keep the last 100 samples
     let samples = tracker.get_samples();
-    assert!(
-        samples.len() <= 100,
-        "Should not exceed MAX_SAMPLES limit"
-    );
+    assert!(samples.len() <= 100, "Should not exceed MAX_SAMPLES limit");
     assert_eq!(samples.len(), 100, "Should have exactly 100 samples");
 
     // Verify oldest samples were removed
     let first_sample = samples.first().unwrap();
-    assert!(
-        first_sample.latency_ms >= 50,
-        "First sample should be from later recordings"
-    );
+    assert!(first_sample.latency_ms >= 50, "First sample should be from later recordings");
 }
 
 /// Test error pattern state management
@@ -328,15 +298,17 @@ async fn test_profile_configuration_structure() {
     use mockforge_chaos::profiles::ProfileManager;
 
     let profile_manager = ProfileManager::new();
-    let profile = profile_manager
-        .get_profile("slow_3g")
-        .expect("Should have slow_3g profile");
+    let profile = profile_manager.get_profile("slow_3g").expect("Should have slow_3g profile");
 
     // Verify profile has required fields
     assert!(!profile.name.is_empty());
     assert!(!profile.description.is_empty());
-    assert!(profile.chaos_config.latency.is_some() || profile.chaos_config.fault_injection.is_some() || profile.chaos_config.traffic_shaping.is_some(),
-        "Profile should have at least one chaos configuration");
+    assert!(
+        profile.chaos_config.latency.is_some()
+            || profile.chaos_config.fault_injection.is_some()
+            || profile.chaos_config.traffic_shaping.is_some(),
+        "Profile should have at least one chaos configuration"
+    );
 }
 
 /// Test latency statistics calculation

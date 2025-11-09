@@ -192,10 +192,8 @@ impl FaultInjector {
     /// Check error pattern and return fault if pattern matches
     fn check_pattern(&self, pattern: &ErrorPattern) -> Option<FaultType> {
         let mut state = self.pattern_state.write();
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now_ms =
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
 
         match pattern {
             ErrorPattern::Burst { count, interval_ms } => {
@@ -209,7 +207,12 @@ impl FaultInjector {
                         // Inject error and increment counter
                         state.burst_state = Some((errors_in_burst + 1, burst_start));
                         let error_code = self.get_next_error_code();
-                        debug!("Burst pattern: injecting error {} ({}/{})", error_code, errors_in_burst + 1, count);
+                        debug!(
+                            "Burst pattern: injecting error {} ({}/{})",
+                            error_code,
+                            errors_in_burst + 1,
+                            count
+                        );
                         return Some(FaultType::HttpError(error_code));
                     } else {
                         // Burst quota reached, don't inject
@@ -227,7 +230,10 @@ impl FaultInjector {
                 let mut rng = rand::rng();
                 if rng.random::<f64>() < *probability {
                     let error_code = self.get_next_error_code();
-                    debug!("Random pattern: injecting error {} (probability: {})", error_code, probability);
+                    debug!(
+                        "Random pattern: injecting error {} (probability: {})",
+                        error_code, probability
+                    );
                     return Some(FaultType::HttpError(error_code));
                 }
                 return None;
@@ -238,7 +244,10 @@ impl FaultInjector {
                 }
                 let error_code = sequence[state.sequential_index % sequence.len()];
                 state.sequential_index = (state.sequential_index + 1) % sequence.len();
-                debug!("Sequential pattern: injecting error {} (index: {})", error_code, state.sequential_index);
+                debug!(
+                    "Sequential pattern: injecting error {} (index: {})",
+                    error_code, state.sequential_index
+                );
                 return Some(FaultType::HttpError(error_code));
             }
         }
@@ -260,7 +269,9 @@ impl FaultInjector {
     pub async fn generate_error_message(
         &self,
         status_code: u16,
-        mockai: Option<&std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+        mockai: Option<
+            &std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+        >,
         request_context: Option<&str>,
     ) -> String {
         // If MockAI is enabled and available, use it to generate context-aware error messages
@@ -286,8 +297,12 @@ impl FaultInjector {
                     429 => "Too Many Requests: Rate limit exceeded".to_string(),
                     500 => "Internal Server Error: An unexpected error occurred".to_string(),
                     502 => "Bad Gateway: Upstream server error".to_string(),
-                    503 => "Service Unavailable: The service is temporarily unavailable".to_string(),
-                    504 => "Gateway Timeout: The upstream server did not respond in time".to_string(),
+                    503 => {
+                        "Service Unavailable: The service is temporarily unavailable".to_string()
+                    }
+                    504 => {
+                        "Gateway Timeout: The upstream server did not respond in time".to_string()
+                    }
                     _ => format!("HTTP {} Error", status_code),
                 }
             } else {

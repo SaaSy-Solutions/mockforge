@@ -288,7 +288,9 @@ impl NetworkProfile {
             // Slow 3G: High latency, packet loss, low bandwidth
             Self {
                 name: "slow_3g".to_string(),
-                description: "Simulates slow 3G network: 400ms latency, 1% packet loss, 400KB/s bandwidth".to_string(),
+                description:
+                    "Simulates slow 3G network: 400ms latency, 1% packet loss, 400KB/s bandwidth"
+                        .to_string(),
                 chaos_config: ChaosConfig {
                     enabled: true,
                     latency: Some(LatencyConfig {
@@ -316,7 +318,9 @@ impl NetworkProfile {
             // Fast 3G: Moderate latency, low packet loss, higher bandwidth
             Self {
                 name: "fast_3g".to_string(),
-                description: "Simulates fast 3G network: 150ms latency, 0.5% packet loss, 1.5MB/s bandwidth".to_string(),
+                description:
+                    "Simulates fast 3G network: 150ms latency, 0.5% packet loss, 1.5MB/s bandwidth"
+                        .to_string(),
                 chaos_config: ChaosConfig {
                     enabled: true,
                     latency: Some(LatencyConfig {
@@ -344,7 +348,9 @@ impl NetworkProfile {
             // Flaky Wi-Fi: Low latency but high packet loss and random disconnects
             Self {
                 name: "flaky_wifi".to_string(),
-                description: "Simulates flaky Wi-Fi: 50ms latency, 5% packet loss, random connection errors".to_string(),
+                description:
+                    "Simulates flaky Wi-Fi: 50ms latency, 5% packet loss, random connection errors"
+                        .to_string(),
                 chaos_config: ChaosConfig {
                     enabled: true,
                     latency: Some(LatencyConfig {
@@ -382,13 +388,19 @@ impl NetworkProfile {
                     circuit_breaker: None,
                     bulkhead: None,
                 },
-                tags: vec!["wifi".to_string(), "unstable".to_string(), "wireless".to_string()],
+                tags: vec![
+                    "wifi".to_string(),
+                    "unstable".to_string(),
+                    "wireless".to_string(),
+                ],
                 builtin: true,
             },
             // Cable: Low latency, no packet loss, high bandwidth
             Self {
                 name: "cable".to_string(),
-                description: "Simulates cable internet: 20ms latency, no packet loss, 10MB/s bandwidth".to_string(),
+                description:
+                    "Simulates cable internet: 20ms latency, no packet loss, 10MB/s bandwidth"
+                        .to_string(),
                 chaos_config: ChaosConfig {
                     enabled: true,
                     latency: Some(LatencyConfig {
@@ -410,13 +422,19 @@ impl NetworkProfile {
                     circuit_breaker: None,
                     bulkhead: None,
                 },
-                tags: vec!["broadband".to_string(), "fast".to_string(), "stable".to_string()],
+                tags: vec![
+                    "broadband".to_string(),
+                    "fast".to_string(),
+                    "stable".to_string(),
+                ],
                 builtin: true,
             },
             // Dial-up: Very high latency, packet loss, very low bandwidth
             Self {
                 name: "dialup".to_string(),
-                description: "Simulates dial-up connection: 2000ms latency, 2% packet loss, 50KB/s bandwidth".to_string(),
+                description:
+                    "Simulates dial-up connection: 2000ms latency, 2% packet loss, 50KB/s bandwidth"
+                        .to_string(),
                 chaos_config: ChaosConfig {
                     enabled: true,
                     latency: Some(LatencyConfig {
@@ -438,7 +456,11 @@ impl NetworkProfile {
                     circuit_breaker: None,
                     bulkhead: None,
                 },
-                tags: vec!["dialup".to_string(), "slow".to_string(), "legacy".to_string()],
+                tags: vec![
+                    "dialup".to_string(),
+                    "slow".to_string(),
+                    "legacy".to_string(),
+                ],
                 builtin: true,
             },
         ]

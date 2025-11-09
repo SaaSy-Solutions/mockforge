@@ -4,9 +4,14 @@ use axum::Router;
 use mockforge_collab::{
     api::{create_router, ApiState},
     auth::AuthService,
+    backup::BackupService,
     config::CollabConfig,
+    core_bridge::CoreBridge,
+    events::EventBus,
     history::VersionControl,
+    merge::MergeService,
     models::{User, UserRole},
+    sync::SyncEngine,
     user::UserService,
     workspace::WorkspaceService,
 };
@@ -42,11 +47,41 @@ impl TestContext {
         // Run migrations
         sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
 
+        // Create temporary directories for workspace and backup storage
+        let workspace_dir = temp_dir.path().join("workspaces");
+        let backup_dir = temp_dir.path().join("backups");
+        std::fs::create_dir_all(&workspace_dir).expect("Failed to create workspace dir");
+        std::fs::create_dir_all(&backup_dir).expect("Failed to create backup dir");
+
+        // Create CoreBridge
+        let core_bridge = Arc::new(CoreBridge::new(&workspace_dir));
+
         // Create services
         let auth = Arc::new(AuthService::new("test-secret-key".to_string()));
         let user = Arc::new(UserService::new(db.clone(), auth.clone()));
-        let workspace = Arc::new(WorkspaceService::new(db.clone()));
+        let workspace =
+            Arc::new(WorkspaceService::with_core_bridge(db.clone(), core_bridge.clone()));
         let history = Arc::new(VersionControl::new(db.clone()));
+
+        // Create event bus and sync engine
+        let event_bus = Arc::new(EventBus::new(1000));
+        let sync = Arc::new(SyncEngine::with_integration(
+            event_bus.clone(),
+            db.clone(),
+            core_bridge.clone(),
+            workspace.clone(),
+        ));
+
+        // Create merge service
+        let merge = Arc::new(MergeService::new(db.clone()));
+
+        // Create backup service
+        let backup = Arc::new(BackupService::new(
+            db.clone(),
+            Some(backup_dir.to_string_lossy().to_string()),
+            core_bridge.clone(),
+            workspace.clone(),
+        ));
 
         // Create API router
         let api_state = ApiState {
@@ -54,6 +89,9 @@ impl TestContext {
             user: user.clone(),
             workspace: workspace.clone(),
             history: history.clone(),
+            merge: merge.clone(),
+            backup: backup.clone(),
+            sync: sync.clone(),
         };
         let router = create_router(api_state);
 

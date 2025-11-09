@@ -25,10 +25,10 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
+use parking_lot::RwLock as ParkingRwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use parking_lot::RwLock as ParkingRwLock;
 use tracing::info;
 
 /// Profile manager for storing custom profiles
@@ -107,7 +107,8 @@ pub struct ChaosApiState {
     pub scheduler: Arc<tokio::sync::RwLock<ScenarioScheduler>>,
     pub latency_tracker: Arc<LatencyMetricsTracker>,
     pub profile_manager: Arc<ProfileManager>,
-    pub mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    pub mockai:
+        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 /// Create the chaos management API router
@@ -120,7 +121,9 @@ pub struct ChaosApiState {
 /// Tuple of (Router, Config, LatencyTracker, ChaosApiState) - The router, config, latency tracker, and API state for hot-reload support
 pub fn create_chaos_api_router(
     config: ChaosConfig,
-    mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
 ) -> (Router, Arc<RwLock<ChaosConfig>>, Arc<LatencyMetricsTracker>, Arc<ChaosApiState>) {
     let config_arc = Arc::new(RwLock::new(config));
     let scenario_engine = Arc::new(ScenarioEngine::new());
@@ -1674,7 +1677,9 @@ async fn get_latency_metrics(State(state): State<ChaosApiState>) -> Json<Latency
 }
 
 /// Get latency statistics
-async fn get_latency_stats(State(state): State<ChaosApiState>) -> Json<crate::latency_metrics::LatencyStats> {
+async fn get_latency_stats(
+    State(state): State<ChaosApiState>,
+) -> Json<crate::latency_metrics::LatencyStats> {
     let stats = state.latency_tracker.get_stats();
     Json(stats)
 }
@@ -1799,9 +1804,8 @@ async fn export_profile(
             .into_response())
     } else {
         // Default to JSON
-        let json = serde_json::to_value(&profile).map_err(|e| {
-            ChaosApiError::NotFound(format!("Failed to serialize profile: {}", e))
-        })?;
+        let json = serde_json::to_value(&profile)
+            .map_err(|e| ChaosApiError::NotFound(format!("Failed to serialize profile: {}", e)))?;
         Ok(Json(json).into_response())
     }
 }
@@ -1812,13 +1816,11 @@ async fn import_profile(
     Json(req): Json<ImportProfileRequest>,
 ) -> Result<Json<StatusResponse>, ChaosApiError> {
     let profile: NetworkProfile = if req.format == "yaml" {
-        serde_yaml::from_str(&req.content).map_err(|e| {
-            ChaosApiError::NotFound(format!("Failed to parse YAML: {}", e))
-        })?
+        serde_yaml::from_str(&req.content)
+            .map_err(|e| ChaosApiError::NotFound(format!("Failed to parse YAML: {}", e)))?
     } else {
-        serde_json::from_str(&req.content).map_err(|e| {
-            ChaosApiError::NotFound(format!("Failed to parse JSON: {}", e))
-        })?
+        serde_json::from_str(&req.content)
+            .map_err(|e| ChaosApiError::NotFound(format!("Failed to parse JSON: {}", e)))?
     };
 
     // Check if it's a built-in profile name

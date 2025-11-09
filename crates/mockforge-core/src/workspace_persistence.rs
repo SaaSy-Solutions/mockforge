@@ -1811,9 +1811,9 @@ impl WorkspacePersistence {
 
         // Ensure parent directory exists
         if let Some(parent) = output_path.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| {
-                Error::generic(format!("Failed to create preset directory: {}", e))
-            })?;
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| Error::generic(format!("Failed to create preset directory: {}", e)))?;
         }
 
         fs::write(output_path, content)

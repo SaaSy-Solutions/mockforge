@@ -57,12 +57,15 @@
 
 pub mod api;
 pub mod auth;
+pub mod backup;
 pub mod client;
 pub mod config;
 pub mod conflict;
+pub mod core_bridge;
 pub mod error;
 pub mod events;
 pub mod history;
+pub mod merge;
 pub mod middleware;
 pub mod models;
 pub mod permissions;
@@ -73,12 +76,15 @@ pub mod websocket;
 pub mod workspace;
 
 pub use auth::{AuthService, Credentials, Session, Token};
+pub use backup::{BackupService, StorageBackend, WorkspaceBackup};
 pub use client::{ClientConfig, CollabClient, ConnectionState};
 pub use config::CollabConfig;
 pub use conflict::{ConflictResolution, ConflictResolver, MergeStrategy};
+pub use core_bridge::CoreBridge;
 pub use error::{CollabError, Result};
 pub use events::{ChangeEvent, ChangeType, EventBus, EventListener};
 pub use history::{Commit, History, Snapshot, VersionControl};
+pub use merge::MergeService;
 pub use models::{TeamWorkspace, User, UserRole, WorkspaceMember};
 pub use permissions::{Permission, PermissionChecker, RolePermissions};
 pub use server::CollabServer;

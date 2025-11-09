@@ -36,8 +36,12 @@ pub async fn start_admin_server(
     api_enabled: bool,
     prometheus_url: String,
     chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
-    latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
-    mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    latency_injector: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>,
+    >,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = create_admin_router(
         http_server_addr,

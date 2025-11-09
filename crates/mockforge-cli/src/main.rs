@@ -1,6 +1,8 @@
 use axum::serve;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+use mockforge_chaos::api::create_chaos_api_router;
+use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
 use mockforge_core::{
     apply_env_overrides, build_file_naming_context, process_generated_file, BarrelGenerator,
@@ -8,8 +10,6 @@ use mockforge_core::{
 };
 use mockforge_data::rag::{EmbeddingProvider, LlmProvider, RagConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
-use mockforge_chaos::api::create_chaos_api_router;
-use mockforge_chaos::config::ChaosConfig;
 use serde_json::json;
 use std::any::Any;
 use std::net::SocketAddr;
@@ -3042,9 +3042,7 @@ async fn handle_serve(
         chaos_random_max_delay,
         reality_level: reality_level.or_else(|| {
             // Check environment variable as fallback
-            std::env::var("MOCKFORGE_REALITY_LEVEL")
-                .ok()
-                .and_then(|v| v.parse::<u8>().ok())
+            std::env::var("MOCKFORGE_REALITY_LEVEL").ok().and_then(|v| v.parse::<u8>().ok())
         }),
         dry_run,
         progress,
@@ -3494,7 +3492,8 @@ async fn handle_serve(
 
     // Create and merge chaos API router
     // Pass MockAI instance if available for dynamic error message generation
-    let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) = create_chaos_api_router(chaos_config.clone(), mockai.clone());
+    let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
+        create_chaos_api_router(chaos_config.clone(), mockai.clone());
     http_app = http_app.merge(chaos_router);
     println!("✅ Chaos Engineering API available at /api/chaos/*");
 
@@ -3503,13 +3502,14 @@ async fn handle_serve(
 
     // Integrate chaos middleware if chaos is enabled
     if chaos_config.enabled {
-        use mockforge_chaos::middleware::{chaos_middleware_with_state, ChaosMiddleware};
         use axum::middleware::from_fn;
+        use mockforge_chaos::middleware::{chaos_middleware_with_state, ChaosMiddleware};
         use std::sync::{Arc, OnceLock};
 
         // Create chaos middleware with shared config for hot-reload support
         // Pass the shared config Arc from chaos_api_state
-        let chaos_middleware_instance = Arc::new(ChaosMiddleware::new(chaos_config_arc.clone(), latency_tracker));
+        let chaos_middleware_instance =
+            Arc::new(ChaosMiddleware::new(chaos_config_arc.clone(), latency_tracker));
 
         // Initialize middleware injectors from actual config (async, but we spawn it)
         let middleware_init = chaos_middleware_instance.clone();
@@ -3531,19 +3531,28 @@ async fn handle_serve(
         // We use a wrapper to assert Send safety for the future.
         struct SendSafeWrapper<F>(F);
         unsafe impl<F> Send for SendSafeWrapper<F> {}
-        impl<F: std::future::Future<Output = axum::response::Response>> std::future::Future for SendSafeWrapper<F> {
+        impl<F: std::future::Future<Output = axum::response::Response>> std::future::Future
+            for SendSafeWrapper<F>
+        {
             type Output = axum::response::Response;
-            fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+            fn poll(
+                self: std::pin::Pin<&mut Self>,
+                cx: &mut std::task::Context<'_>,
+            ) -> std::task::Poll<Self::Output> {
                 unsafe { std::pin::Pin::new_unchecked(&mut self.get_unchecked_mut().0).poll(cx) }
             }
         }
 
-        http_app = http_app.layer(from_fn(|req: axum::extract::Request, next: axum::middleware::Next| {
-            SendSafeWrapper(async move {
-                let state = CHAOS_MIDDLEWARE.get().expect("Chaos middleware should be initialized").clone();
-                chaos_middleware_with_state(state, req, next).await
-            })
-        }));
+        http_app =
+            http_app.layer(from_fn(|req: axum::extract::Request, next: axum::middleware::Next| {
+                SendSafeWrapper(async move {
+                    let state = CHAOS_MIDDLEWARE
+                        .get()
+                        .expect("Chaos middleware should be initialized")
+                        .clone();
+                    chaos_middleware_with_state(state, req, next).await
+                })
+            }));
         println!("✅ Chaos middleware integrated - latency recording enabled");
     }
 
@@ -5052,102 +5061,116 @@ async fn start_mock_server_from_spec(
 
 /// Handle shell completions generation
 /// Handle chaos engineering commands
-async fn handle_chaos_command(chaos_command: ChaosCommands) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_chaos_command(
+    chaos_command: ChaosCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match chaos_command {
-        ChaosCommands::Profile { profile_command } => {
-            match profile_command {
-                ProfileCommands::Apply { name, base_url } => {
-                    println!("🔧 Applying chaos profile: {}", name);
-                    let client = reqwest::Client::new();
-                    let url = format!("{}/api/chaos/profiles/{}/apply", base_url, name);
-                    let response = client.post(&url).send().await?;
-                    if response.status().is_success() {
-                        println!("✅ Profile '{}' applied successfully", name);
-                    } else {
-                        let error_text = response.text().await.unwrap_or_default();
-                        eprintln!("❌ Failed to apply profile: {}", error_text);
-                        std::process::exit(1);
-                    }
-                }
-                ProfileCommands::Export { name, format, output, base_url } => {
-                    println!("📤 Exporting profile: {}", name);
-                    let client = reqwest::Client::new();
-                    let url = format!("{}/api/chaos/profiles/{}/export?format={}", base_url, name, format);
-                    let response = client.get(&url).send().await?;
-                    if response.status().is_success() {
-                        let content = response.text().await?;
-                        if let Some(output_path) = output {
-                            tokio::fs::write(&output_path, content).await?;
-                            println!("✅ Profile exported to: {}", output_path.display());
-                        } else {
-                            println!("{}", content);
-                        }
-                    } else {
-                        let error_text = response.text().await.unwrap_or_default();
-                        eprintln!("❌ Failed to export profile: {}", error_text);
-                        std::process::exit(1);
-                    }
-                }
-                ProfileCommands::Import { file, base_url } => {
-                    println!("📥 Importing profile from: {}", file.display());
-                    let content = tokio::fs::read_to_string(&file).await?;
-                    let format = if file.extension().and_then(|s| s.to_str()) == Some("yaml") ||
-                                   file.extension().and_then(|s| s.to_str()) == Some("yml") {
-                        "yaml"
-                    } else {
-                        "json"
-                    };
-                    let client = reqwest::Client::new();
-                    let url = format!("{}/api/chaos/profiles/import", base_url);
-                    let response = client
-                        .post(&url)
-                        .json(&serde_json::json!({
-                            "content": content,
-                            "format": format
-                        }))
-                        .send()
-                        .await?;
-                    if response.status().is_success() {
-                        println!("✅ Profile imported successfully");
-                    } else {
-                        let error_text = response.text().await.unwrap_or_default();
-                        eprintln!("❌ Failed to import profile: {}", error_text);
-                        std::process::exit(1);
-                    }
-                }
-                ProfileCommands::List { base_url } => {
-                    println!("📋 Listing available chaos profiles...");
-                    let client = reqwest::Client::new();
-                    let url = format!("{}/api/chaos/profiles", base_url);
-                    let response = client.get(&url).send().await?;
-                    if response.status().is_success() {
-                        let profiles: Vec<serde_json::Value> = response.json().await?;
-                        println!("\nAvailable Profiles:");
-                        println!("{:-<80}", "");
-                        for profile in profiles {
-                            let name = profile["name"].as_str().unwrap_or("unknown");
-                            let description = profile["description"].as_str().unwrap_or("");
-                            let builtin = profile["builtin"].as_bool().unwrap_or(false);
-                            let tags = profile["tags"].as_array()
-                                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
-                                .unwrap_or_default();
-                            println!("  • {} {}", name, if builtin { "(built-in)" } else { "(custom)" });
-                            if !description.is_empty() {
-                                println!("    {}", description);
-                            }
-                            if !tags.is_empty() {
-                                println!("    Tags: {}", tags);
-                            }
-                            println!();
-                        }
-                    } else {
-                        let error_text = response.text().await.unwrap_or_default();
-                        eprintln!("❌ Failed to list profiles: {}", error_text);
-                        std::process::exit(1);
-                    }
+        ChaosCommands::Profile { profile_command } => match profile_command {
+            ProfileCommands::Apply { name, base_url } => {
+                println!("🔧 Applying chaos profile: {}", name);
+                let client = reqwest::Client::new();
+                let url = format!("{}/api/chaos/profiles/{}/apply", base_url, name);
+                let response = client.post(&url).send().await?;
+                if response.status().is_success() {
+                    println!("✅ Profile '{}' applied successfully", name);
+                } else {
+                    let error_text = response.text().await.unwrap_or_default();
+                    eprintln!("❌ Failed to apply profile: {}", error_text);
+                    std::process::exit(1);
                 }
             }
-        }
+            ProfileCommands::Export {
+                name,
+                format,
+                output,
+                base_url,
+            } => {
+                println!("📤 Exporting profile: {}", name);
+                let client = reqwest::Client::new();
+                let url =
+                    format!("{}/api/chaos/profiles/{}/export?format={}", base_url, name, format);
+                let response = client.get(&url).send().await?;
+                if response.status().is_success() {
+                    let content = response.text().await?;
+                    if let Some(output_path) = output {
+                        tokio::fs::write(&output_path, content).await?;
+                        println!("✅ Profile exported to: {}", output_path.display());
+                    } else {
+                        println!("{}", content);
+                    }
+                } else {
+                    let error_text = response.text().await.unwrap_or_default();
+                    eprintln!("❌ Failed to export profile: {}", error_text);
+                    std::process::exit(1);
+                }
+            }
+            ProfileCommands::Import { file, base_url } => {
+                println!("📥 Importing profile from: {}", file.display());
+                let content = tokio::fs::read_to_string(&file).await?;
+                let format = if file.extension().and_then(|s| s.to_str()) == Some("yaml")
+                    || file.extension().and_then(|s| s.to_str()) == Some("yml")
+                {
+                    "yaml"
+                } else {
+                    "json"
+                };
+                let client = reqwest::Client::new();
+                let url = format!("{}/api/chaos/profiles/import", base_url);
+                let response = client
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "content": content,
+                        "format": format
+                    }))
+                    .send()
+                    .await?;
+                if response.status().is_success() {
+                    println!("✅ Profile imported successfully");
+                } else {
+                    let error_text = response.text().await.unwrap_or_default();
+                    eprintln!("❌ Failed to import profile: {}", error_text);
+                    std::process::exit(1);
+                }
+            }
+            ProfileCommands::List { base_url } => {
+                println!("📋 Listing available chaos profiles...");
+                let client = reqwest::Client::new();
+                let url = format!("{}/api/chaos/profiles", base_url);
+                let response = client.get(&url).send().await?;
+                if response.status().is_success() {
+                    let profiles: Vec<serde_json::Value> = response.json().await?;
+                    println!("\nAvailable Profiles:");
+                    println!("{:-<80}", "");
+                    for profile in profiles {
+                        let name = profile["name"].as_str().unwrap_or("unknown");
+                        let description = profile["description"].as_str().unwrap_or("");
+                        let builtin = profile["builtin"].as_bool().unwrap_or(false);
+                        let tags = profile["tags"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")
+                            })
+                            .unwrap_or_default();
+                        println!(
+                            "  • {} {}",
+                            name,
+                            if builtin { "(built-in)" } else { "(custom)" }
+                        );
+                        if !description.is_empty() {
+                            println!("    {}", description);
+                        }
+                        if !tags.is_empty() {
+                            println!("    Tags: {}", tags);
+                        }
+                        println!();
+                    }
+                } else {
+                    let error_text = response.text().await.unwrap_or_default();
+                    eprintln!("❌ Failed to list profiles: {}", error_text);
+                    std::process::exit(1);
+                }
+            }
+        },
     }
     Ok(())
 }
