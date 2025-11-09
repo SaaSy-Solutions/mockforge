@@ -3,7 +3,7 @@
  */
 
 export interface ExtensionMessage {
-    type: 'REQUEST_CAPTURED' | 'MOCK_CREATED' | 'CONNECTION_CHANGE' | 'GET_MOCKS' | 'CREATE_MOCK' | 'DELETE_MOCK';
+    type: 'REQUEST_CAPTURED' | 'MOCK_CREATED' | 'MOCK_UPDATED' | 'MOCK_DELETED' | 'CONNECTION_CHANGE' | 'GET_MOCKS' | 'CREATE_MOCK' | 'DELETE_MOCK' | 'GET_CAPTURED_REQUESTS' | 'GET_ENVIRONMENTS' | 'SET_ACTIVE_ENVIRONMENT' | 'GET_ENVIRONMENT_VARIABLES';
     payload?: any;
 }
 
@@ -22,6 +22,14 @@ export interface CapturedRequest {
         message: string;
     };
     timestamp: number;
+    /**
+     * Request timing information (if available)
+     */
+    timing?: {
+        startTime: number;
+        endTime?: number;
+        duration?: number;
+    };
 }
 
 export interface MockConfig {
@@ -43,4 +51,14 @@ export interface ConnectionStatus {
     url?: string;
     error?: string;
     lastConnected?: number;
+}
+
+export interface Environment {
+    id: string;
+    name: string;
+    description?: string;
+    is_global?: boolean;
+    active?: boolean;
+    order?: number;
+    variable_count?: number;
 }

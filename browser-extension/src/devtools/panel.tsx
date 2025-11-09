@@ -6,22 +6,36 @@
 
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MockConfig, ConnectionStatus, CapturedRequest } from '../shared/types';
+import { MockConfig, ConnectionStatus, CapturedRequest, Environment } from '../shared/types';
+import { MockPreview } from '../preview/MockPreview';
+
+type Tab = 'requests' | 'mocks' | 'preview';
 
 function ForgeConnectPanel() {
     const [mocks, setMocks] = useState<MockConfig[]>([]);
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({ connected: false });
     const [capturedRequests, setCapturedRequests] = useState<CapturedRequest[]>([]);
     const [selectedRequest, setSelectedRequest] = useState<CapturedRequest | null>(null);
+    const [activeTab, setActiveTab] = useState<Tab>('requests');
+    const [environments, setEnvironments] = useState<Environment[]>([]);
+    const [activeEnvironment, setActiveEnvironment] = useState<Environment | null>(null);
+    const [liveReloadEnabled, setLiveReloadEnabled] = useState(true);
 
     useEffect(() => {
-        // Load mocks
+        // Load mocks and environments
         loadMocks();
+        loadEnvironments();
 
         // Listen for messages from background
         chrome.runtime.onMessage.addListener((message) => {
             if (message.type === 'REQUEST_CAPTURED') {
                 setCapturedRequests((prev) => [message.payload, ...prev].slice(0, 100)); // Keep last 100
+            } else if (message.type === 'MOCK_UPDATED' && liveReloadEnabled) {
+                // Live reload: refresh mocks when updated
+                loadMocks();
+            } else if (message.type === 'MOCK_DELETED' && liveReloadEnabled) {
+                // Live reload: refresh mocks when deleted
+                loadMocks();
             }
         });
 
@@ -46,6 +60,35 @@ function ForgeConnectPanel() {
             }
         } catch (error) {
             console.error('Failed to load mocks:', error);
+        }
+    };
+
+    const loadEnvironments = async () => {
+        try {
+            const response = await chrome.runtime.sendMessage({ type: 'GET_ENVIRONMENTS' });
+            if (response.success) {
+                setEnvironments(response.data);
+                const active = response.data.find((env: Environment) => env.active) || response.data[0] || null;
+                setActiveEnvironment(active);
+            }
+        } catch (error) {
+            console.error('Failed to load environments:', error);
+        }
+    };
+
+    const handleEnvironmentChange = async (environmentId: string) => {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: 'SET_ACTIVE_ENVIRONMENT',
+                payload: { environmentId },
+            });
+            if (response.success) {
+                await loadEnvironments();
+            } else {
+                alert(`Failed to switch environment: ${response.error}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
 
@@ -115,6 +158,117 @@ function ForgeConnectPanel() {
                     : '✗ Not connected to MockForge'}
             </div>
 
+            {/* Environment Selector and Live Reload Toggle */}
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'flex-end' }}>
+                {environments.length > 0 && (
+                    <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                            Environment:
+                        </label>
+                        <select
+                            value={activeEnvironment?.id || ''}
+                            onChange={(e) => handleEnvironmentChange(e.target.value)}
+                            style={{
+                                padding: '8px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                minWidth: '200px',
+                            }}
+                        >
+                            {environments.map((env) => (
+                                <option key={env.id} value={env.id}>
+                                    {env.name} {env.active ? '(Active)' : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+                <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={liveReloadEnabled}
+                            onChange={(e) => {
+                                setLiveReloadEnabled(e.target.checked);
+                                chrome.storage.local.set({ liveReloadEnabled: e.target.checked });
+                            }}
+                        />
+                        <span style={{ fontWeight: 'bold' }}>Live Reload</span>
+                    </label>
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                        Auto-refresh when mocks change
+                    </div>
+                </div>
+            </div>
+
+            {/* Tab Navigation */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #ccc' }}>
+                <button
+                    onClick={() => setActiveTab('requests')}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: activeTab === 'requests' ? '#007bff' : 'transparent',
+                        color: activeTab === 'requests' ? 'white' : '#007bff',
+                        border: 'none',
+                        borderBottom: activeTab === 'requests' ? '2px solid #007bff' : '2px solid transparent',
+                        cursor: 'pointer',
+                        fontWeight: activeTab === 'requests' ? 'bold' : 'normal',
+                    }}
+                >
+                    Requests
+                </button>
+                <button
+                    onClick={() => setActiveTab('mocks')}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: activeTab === 'mocks' ? '#007bff' : 'transparent',
+                        color: activeTab === 'mocks' ? 'white' : '#007bff',
+                        border: 'none',
+                        borderBottom: activeTab === 'mocks' ? '2px solid #007bff' : '2px solid transparent',
+                        cursor: 'pointer',
+                        fontWeight: activeTab === 'mocks' ? 'bold' : 'normal',
+                    }}
+                >
+                    Mocks ({mocks.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('preview')}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: activeTab === 'preview' ? '#007bff' : 'transparent',
+                        color: activeTab === 'preview' ? 'white' : '#007bff',
+                        border: 'none',
+                        borderBottom: activeTab === 'preview' ? '2px solid #007bff' : '2px solid transparent',
+                        cursor: 'pointer',
+                        fontWeight: activeTab === 'preview' ? 'bold' : 'normal',
+                    }}
+                >
+                    Preview
+                </button>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'preview' && (
+                <MockPreview
+                    request={selectedRequest}
+                    onSave={async (mock) => {
+                        const response = await chrome.runtime.sendMessage({
+                            type: 'CREATE_MOCK',
+                            payload: mock,
+                        });
+                        if (response.success) {
+                            await loadMocks();
+                            alert('Mock created successfully!');
+                            setActiveTab('mocks');
+                        } else {
+                            alert(`Failed to create mock: ${response.error}`);
+                        }
+                    }}
+                    onCancel={() => setActiveTab('requests')}
+                />
+            )}
+
+            {activeTab !== 'preview' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 <div>
                     <h2>Captured Requests</h2>
@@ -151,7 +305,22 @@ function ForgeConnectPanel() {
                         )}
                     </div>
                     {selectedRequest && (
-                        <div style={{ marginTop: '10px' }}>
+                        <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                            <button
+                                onClick={() => {
+                                    setActiveTab('preview');
+                                }}
+                                style={{
+                                    padding: '8px 16px',
+                                    backgroundColor: '#28a745',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Preview Mock
+                            </button>
                             <button
                                 onClick={() => createMock(selectedRequest)}
                                 style={{
@@ -226,6 +395,7 @@ function ForgeConnectPanel() {
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 }

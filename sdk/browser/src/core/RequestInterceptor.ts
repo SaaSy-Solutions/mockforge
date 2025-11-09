@@ -6,6 +6,7 @@
 
 import { CapturedRequest } from '../types';
 import { analyzeRequest, shouldCreateMock } from '../utils/requestAnalyzer';
+import { OAuthPassthrough } from './OAuthPassthrough';
 
 /**
  * Callback type for captured requests
@@ -23,6 +24,7 @@ export class RequestInterceptor {
     private enabled: boolean = false;
     private autoMockStatusCodes: number[] = [404, 500, 502, 503, 504];
     private autoMockNetworkErrors: boolean = true;
+    private oauthPassthrough?: OAuthPassthrough;
 
     constructor() {
         this.originalFetch = window.fetch.bind(window);
@@ -83,6 +85,13 @@ export class RequestInterceptor {
     }
 
     /**
+     * Set OAuth passthrough instance
+     */
+    setOAuthPassthrough(oauthPassthrough: OAuthPassthrough): void {
+        this.oauthPassthrough = oauthPassthrough;
+    }
+
+    /**
      * Intercept fetch API
      */
     private interceptFetch(): void {
@@ -94,14 +103,56 @@ export class RequestInterceptor {
         ): Promise<Response> {
             const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
             const method = init?.method || (input instanceof Request ? input.method : 'GET');
-            const headers = init?.headers || (input instanceof Request ? input.headers : new Headers());
+            let headers = init?.headers || (input instanceof Request ? input.headers : new Headers());
             const body = init?.body || (input instanceof Request ? input.body : undefined);
+
+            // Check if OAuth passthrough should bypass this request
+            const shouldBypass = self.oauthPassthrough?.shouldBypass(url, method) || false;
+
+            // Inject OAuth token if configured
+            if (self.oauthPassthrough && !shouldBypass) {
+                headers = self.oauthPassthrough.injectToken(headers) as Headers;
+            }
 
             let response: Response;
             let error: CapturedRequest['error'] | undefined;
+            let responseBody: any = null;
 
             try {
-                response = await self.originalFetch(input, init);
+                // Clone request with updated headers if needed
+                const fetchInit: RequestInit = {
+                    ...init,
+                    headers: headers instanceof Headers ? headers : new Headers(headers),
+                };
+
+                response = await self.originalFetch(input, fetchInit);
+
+                // Extract and store OAuth token if this is an OAuth response
+                if (shouldBypass && self.oauthPassthrough) {
+                    try {
+                        // Clone response to read body without consuming the original
+                        const clonedResponse = response.clone();
+                        const contentType = response.headers.get('content-type') || '';
+
+                        if (contentType.includes('application/json')) {
+                            responseBody = await clonedResponse.json().catch(() => null);
+                        } else {
+                            const text = await clonedResponse.text().catch(() => null);
+                            if (text) {
+                                try {
+                                    responseBody = JSON.parse(text);
+                                } catch {
+                                    responseBody = text;
+                                }
+                            }
+                        }
+
+                        await self.oauthPassthrough.processResponse(response, responseBody);
+                    } catch (err) {
+                        // Ignore errors in token extraction - don't break the request flow
+                        console.warn('[ForgeConnect] Failed to extract OAuth token:', err);
+                    }
+                }
             } catch (err) {
                 // Network error occurred
                 error = {

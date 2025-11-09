@@ -4,11 +4,16 @@
  * Provides browser-based mock creation and management for MockForge
  */
 
-import { ForgeConnectConfig, MockConfig, CapturedRequest, ConnectionStatus } from '../types';
+import { ForgeConnectConfig, MockConfig, CapturedRequest, ConnectionStatus, Environment } from '../types';
 import { MockForgeClient } from './MockForgeClient';
 import { RequestInterceptor } from './RequestInterceptor';
 import { ServiceWorkerInterceptor } from './ServiceWorkerInterceptor';
 import { WebSocketClient } from './WebSocketClient';
+import { EnvironmentManager } from './EnvironmentManager';
+import { OfflineStorage } from './OfflineStorage';
+import { SyncQueue } from './SyncQueue';
+import { OfflineMockServer } from './OfflineMockServer';
+import { OAuthPassthrough } from './OAuthPassthrough';
 import { generateMockResponse, generateMockName } from '../utils/responseGenerator';
 import { shouldCreateMock } from '../utils/requestAnalyzer';
 
@@ -21,7 +26,13 @@ export class ForgeConnect {
     private interceptor: RequestInterceptor;
     private serviceWorkerInterceptor?: ServiceWorkerInterceptor;
     private websocketClient?: WebSocketClient;
+    private environmentManager?: EnvironmentManager;
+    private offlineStorage?: OfflineStorage;
+    private syncQueue?: SyncQueue;
+    private offlineMockServer?: OfflineMockServer;
+    private oauthPassthrough?: OAuthPassthrough;
     private connectionStatus: ConnectionStatus = { connected: false };
+    private offlineMode: boolean = false;
     private discoveryPorts: number[] = [3000, 3001, 8080, 9080];
     private discoveryTimeout: number = 2000; // 2 seconds per port
     private useServiceWorker: boolean = false;
@@ -75,6 +86,31 @@ export class ForgeConnect {
         this.updateConnectionStatus(connected, this.config.serverUrl);
 
         if (connected) {
+            // Initialize environment manager
+            this.environmentManager = new EnvironmentManager(this.client, this.config.workspaceId);
+            await this.environmentManager.initialize();
+
+            // Initialize offline storage and sync queue
+            this.offlineStorage = new OfflineStorage();
+            await this.offlineStorage.initialize();
+            this.syncQueue = new SyncQueue(this.offlineStorage, this.client);
+
+            // Initialize offline mock server
+            this.offlineMockServer = new OfflineMockServer(this.offlineStorage);
+
+            // Initialize OAuth passthrough if configured
+            if (this.config.oauthPassthrough) {
+                this.oauthPassthrough = new OAuthPassthrough(this.config.oauthPassthrough);
+            }
+
+            // Cache existing mocks
+            await this.cacheAllMocks();
+
+            // Set OAuth passthrough on interceptor if configured
+            if (this.oauthPassthrough) {
+                this.interceptor.setOAuthPassthrough(this.oauthPassthrough);
+            }
+
             // Start intercepting requests
             this.interceptor.start((request) => this.handleCapturedRequest(request));
 
@@ -103,11 +139,21 @@ export class ForgeConnect {
                     this.websocketClient.on('mock_updated', (event) => {
                         const mock = event.payload.mock || event.payload;
                         this.log(`Mock updated via WebSocket: ${mock?.id || mock?.name}`);
+
+                        // Trigger live reload callback if configured
+                        if (this.config.onMockUpdated) {
+                            this.config.onMockUpdated(mock);
+                        }
                     });
 
                     this.websocketClient.on('mock_deleted', (event) => {
                         const id = event.payload.id || event.payload;
                         this.log(`Mock deleted via WebSocket: ${id}`);
+
+                        // Trigger live reload callback if configured
+                        if (this.config.onMockDeleted) {
+                            this.config.onMockDeleted(id);
+                        }
                     });
 
                     this.websocketClient.on('stats_updated', (event) => {
@@ -151,6 +197,10 @@ export class ForgeConnect {
      * Handle a captured request
      */
     private async handleCapturedRequest(request: CapturedRequest): Promise<void> {
+        // Skip OAuth passthrough requests
+        if (this.oauthPassthrough?.shouldBypass(request.url, request.method)) {
+            return;
+        }
         if (!this.client || !this.connectionStatus.connected) {
             return;
         }
@@ -215,7 +265,35 @@ export class ForgeConnect {
                 status_code: request.statusCode || (request.error ? 502 : 200),
             };
 
-            const created = await this.client.createMock(mock);
+            // Try to create on server
+            let created: MockConfig;
+            try {
+                created = await this.client.createMock(mock);
+
+                // Cache the mock
+                if (this.offlineStorage) {
+                    const activeEnv = this.environmentManager?.getActiveEnvironment();
+                    await this.offlineStorage.cacheMock(created, activeEnv?.id);
+                }
+            } catch (error) {
+                // If offline, add to sync queue and cache locally
+                if (this.offlineStorage && this.syncQueue) {
+                    const queueId = await this.syncQueue.enqueue('create', mock);
+                    // Generate a temporary ID for offline mock
+                    mock.id = `offline_${queueId}`;
+                    const activeEnv = this.environmentManager?.getActiveEnvironment();
+                    await this.offlineStorage.cacheMock(mock, activeEnv?.id);
+
+                    // Enable offline mode if not already enabled
+                    if (!this.offlineMode && this.offlineMockServer) {
+                        await this.enableOfflineMode();
+                    }
+
+                    this.log(`Created mock offline (queued for sync): ${mockName}`);
+                    return mock;
+                }
+                throw error;
+            }
 
             this.log(`Created mock: ${created.id} - ${mockName}`);
 
@@ -271,7 +349,31 @@ export class ForgeConnect {
             throw new Error('ForgeConnect not initialized. Call initialize() first.');
         }
 
-        return await this.client.updateMock(id, mock);
+        try {
+            const updated = await this.client.updateMock(id, mock);
+
+            // Update cache
+            if (this.offlineStorage) {
+                const activeEnv = this.environmentManager?.getActiveEnvironment();
+                await this.offlineStorage.cacheMock(updated, activeEnv?.id);
+            }
+
+            return updated;
+        } catch (error) {
+            // If offline, add to sync queue
+            if (this.offlineStorage && this.syncQueue) {
+                await this.syncQueue.enqueue('update', mock, id);
+                const activeEnv = this.environmentManager?.getActiveEnvironment();
+                await this.offlineStorage.cacheMock(mock, activeEnv?.id);
+
+                if (!this.offlineMode && this.offlineMockServer) {
+                    await this.enableOfflineMode();
+                }
+
+                return mock;
+            }
+            throw error;
+        }
     }
 
     /**
@@ -282,7 +384,26 @@ export class ForgeConnect {
             throw new Error('ForgeConnect not initialized. Call initialize() first.');
         }
 
-        return await this.client.deleteMock(id);
+        try {
+            await this.client.deleteMock(id);
+
+            // Remove from cache
+            if (this.offlineStorage) {
+                await this.offlineStorage.deleteCachedMock(id);
+            }
+        } catch (error) {
+            // If offline, add to sync queue
+            if (this.offlineStorage && this.syncQueue) {
+                await this.syncQueue.enqueue('delete', null, id);
+                await this.offlineStorage.deleteCachedMock(id);
+
+                if (!this.offlineMode && this.offlineMockServer) {
+                    await this.enableOfflineMode();
+                }
+            } else {
+                throw error;
+            }
+        }
     }
 
     /**
@@ -293,15 +414,218 @@ export class ForgeConnect {
     }
 
     /**
+     * List all environments
+     */
+    async listEnvironments(): Promise<Environment[]> {
+        if (!this.environmentManager) {
+            throw new Error('ForgeConnect not initialized. Call initialize() first.');
+        }
+        return this.environmentManager.getEnvironments();
+    }
+
+    /**
+     * Get the active environment
+     */
+    async getActiveEnvironment(): Promise<Environment | null> {
+        if (!this.environmentManager) {
+            throw new Error('ForgeConnect not initialized. Call initialize() first.');
+        }
+        return this.environmentManager.getActiveEnvironment();
+    }
+
+    /**
+     * Set the active environment
+     */
+    async setActiveEnvironment(environmentId: string): Promise<void> {
+        if (!this.environmentManager) {
+            throw new Error('ForgeConnect not initialized. Call initialize() first.');
+        }
+        await this.environmentManager.setActiveEnvironment(environmentId);
+    }
+
+    /**
+     * Get environment variables for an environment
+     */
+    async getEnvironmentVariables(environmentId: string): Promise<Record<string, string>> {
+        if (!this.environmentManager) {
+            throw new Error('ForgeConnect not initialized. Call initialize() first.');
+        }
+        return this.environmentManager.getEnvironmentVariables(environmentId);
+    }
+
+    /**
+     * Get variables for the active environment
+     */
+    async getActiveEnvironmentVariables(): Promise<Record<string, string>> {
+        if (!this.environmentManager) {
+            throw new Error('ForgeConnect not initialized. Call initialize() first.');
+        }
+        return this.environmentManager.getActiveEnvironmentVariables();
+    }
+
+    /**
+     * Get the environment manager instance
+     */
+    getEnvironmentManager(): EnvironmentManager | undefined {
+        return this.environmentManager;
+    }
+
+    /**
+     * Enable live reload with callbacks
+     * Sets up automatic refresh when mocks are updated/deleted
+     */
+    enableLiveReload(onMockUpdated?: (mock: MockConfig) => void, onMockDeleted?: (mockId: string) => void): void {
+        this.config.onMockUpdated = onMockUpdated;
+        this.config.onMockDeleted = onMockDeleted;
+
+        // If WebSocket is not enabled, enable it for live reload
+        if (!this.useWebSocket && this.config.serverUrl) {
+            this.useWebSocket = true;
+            this.websocketClient = new WebSocketClient(this.config.serverUrl);
+            this.websocketClient.connect().then((connected) => {
+                if (connected) {
+                    this.setupWebSocketLiveReload();
+                }
+            });
+        } else if (this.websocketClient && this.websocketClient.isConnected()) {
+            this.setupWebSocketLiveReload();
+        }
+    }
+
+    /**
+     * Set up WebSocket listeners for live reload
+     */
+    private setupWebSocketLiveReload(): void {
+        if (!this.websocketClient) return;
+
+        this.websocketClient.on('mock_updated', (event) => {
+            const mock = event.payload.mock || event.payload;
+            if (this.config.onMockUpdated) {
+                this.config.onMockUpdated(mock);
+            }
+        });
+
+        this.websocketClient.on('mock_deleted', (event) => {
+            const id = event.payload.id || event.payload;
+            if (this.config.onMockDeleted) {
+                this.config.onMockDeleted(id);
+            }
+        });
+    }
+
+    /**
      * Reconnect to MockForge
      */
     async reconnect(): Promise<boolean> {
         if (this.client) {
             const connected = await this.client.healthCheck();
             this.updateConnectionStatus(connected, this.client.getBaseUrl());
+
+            if (connected) {
+                // Sync pending operations
+                if (this.syncQueue) {
+                    const result = await this.syncQueue.sync();
+                    this.log(`Synced ${result.success} operations, ${result.failed} failed`);
+                }
+
+                // Refresh cached mocks
+                await this.cacheAllMocks();
+
+                // Disable offline mode if enabled
+                if (this.offlineMode && this.offlineMockServer) {
+                    await this.disableOfflineMode();
+                }
+            }
+
             return connected;
         }
         return await this.initialize();
+    }
+
+    /**
+     * Cache all mocks from server
+     */
+    private async cacheAllMocks(): Promise<void> {
+        if (!this.offlineStorage || !this.client) {
+            return;
+        }
+
+        try {
+            const mocks = await this.client.listMocks();
+            const activeEnv = this.environmentManager?.getActiveEnvironment();
+
+            for (const mock of mocks) {
+                await this.offlineStorage.cacheMock(mock, activeEnv?.id);
+            }
+
+            // Update offline mock server if enabled
+            if (this.offlineMode && this.offlineMockServer) {
+                await this.offlineMockServer.updateCachedMocks(activeEnv?.id);
+            }
+        } catch (error) {
+            this.log(`Failed to cache mocks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Enable offline mode
+     */
+    async enableOfflineMode(): Promise<void> {
+        if (this.offlineMode || !this.offlineMockServer) {
+            return;
+        }
+
+        try {
+            await this.offlineMockServer.enable();
+            this.offlineMode = true;
+            this.log('Offline mode enabled');
+        } catch (error) {
+            this.log(`Failed to enable offline mode: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Disable offline mode
+     */
+    async disableOfflineMode(): Promise<void> {
+        if (!this.offlineMode || !this.offlineMockServer) {
+            return;
+        }
+
+        try {
+            await this.offlineMockServer.disable();
+            this.offlineMode = false;
+            this.log('Offline mode disabled');
+        } catch (error) {
+            this.log(`Failed to disable offline mode: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Check if offline mode is enabled
+     */
+    isOfflineModeEnabled(): boolean {
+        return this.offlineMode;
+    }
+
+    /**
+     * Get sync queue size
+     */
+    async getSyncQueueSize(): Promise<number> {
+        if (!this.syncQueue) {
+            return 0;
+        }
+        return await this.syncQueue.getQueueSize();
+    }
+
+    /**
+     * Manually trigger sync
+     */
+    async sync(): Promise<{ success: number; failed: number }> {
+        if (!this.syncQueue) {
+            return { success: 0, failed: 0 };
+        }
+        return await this.syncQueue.sync();
     }
 
     /**

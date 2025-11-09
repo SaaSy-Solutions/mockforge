@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "webRequest"
+    "webRequest",
+    "webRequestBlocking"
   ],
   "host_permissions": [
     "http://localhost/*",
@@ -40,7 +41,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/injector/injector.js"],
+      "resources": ["src/injector/injector.js", "src/preview/mock-sw.js"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -47,6 +47,16 @@ export interface ForgeConnectConfig {
     onConnectionChange?: (connected: boolean, url?: string) => void;
 
     /**
+     * Callback when a mock is updated (for live reload)
+     */
+    onMockUpdated?: (mock: MockConfig) => void;
+
+    /**
+     * Callback when a mock is deleted (for live reload)
+     */
+    onMockDeleted?: (mockId: string) => void;
+
+    /**
      * Custom prompt function for mock creation (used in 'prompt' or 'hybrid' mode)
      */
     promptMockCreation?: (request: CapturedRequest) => Promise<boolean>;
@@ -60,6 +70,46 @@ export interface ForgeConnectConfig {
      * Enable WebSocket for real-time updates (default: false)
      */
     enableWebSocket?: boolean;
+
+    /**
+     * Workspace ID for environment management (optional)
+     */
+    workspaceId?: string;
+
+    /**
+     * OAuth passthrough configuration
+     */
+    oauthPassthrough?: {
+        /**
+         * URLs or patterns to bypass mocking (e.g., OAuth endpoints)
+         */
+        bypassUrls?: string[];
+
+        /**
+         * Regex patterns for URLs to bypass
+         */
+        bypassPatterns?: RegExp[];
+
+        /**
+         * Function to determine if a request should bypass mocking
+         */
+        shouldBypass?: (url: string, method: string) => boolean;
+
+        /**
+         * Token storage key (default: 'forgeconnect_oauth_token')
+         */
+        tokenStorageKey?: string;
+
+        /**
+         * Auto-inject tokens into requests
+         */
+        autoInjectTokens?: boolean;
+
+        /**
+         * Token injection header name (default: 'Authorization')
+         */
+        tokenHeaderName?: string;
+    };
 }
 
 /**
@@ -208,4 +258,59 @@ export interface ConnectionStatus {
      * Last successful connection time
      */
     lastConnected?: number;
+}
+
+/**
+ * Environment configuration
+ */
+export interface Environment {
+    /**
+     * Unique identifier for the environment
+     */
+    id: string;
+
+    /**
+     * Human-readable name
+     */
+    name: string;
+
+    /**
+     * Optional description
+     */
+    description?: string;
+
+    /**
+     * Whether this is the global environment
+     */
+    is_global?: boolean;
+
+    /**
+     * Whether this environment is currently active
+     */
+    active?: boolean;
+
+    /**
+     * Display order
+     */
+    order?: number;
+
+    /**
+     * Number of variables in this environment
+     */
+    variable_count?: number;
+}
+
+/**
+ * Environment variable
+ */
+export interface EnvironmentVariable {
+    /**
+     * Variable name
+     */
+    key: string;
+
+    /**
+     * Variable value
+     */
+    value: string;
 }

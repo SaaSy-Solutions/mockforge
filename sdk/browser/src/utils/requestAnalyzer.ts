@@ -156,21 +156,156 @@ export async function analyzeRequest(
 
 /**
  * Check if a request should trigger mock creation
+ * Enhanced to detect unhandled requests (404/500/network errors)
  */
 export function shouldCreateMock(
     request: CapturedRequest,
     autoMockStatusCodes: number[] = [404, 500, 502, 503, 504],
     autoMockNetworkErrors: boolean = true
 ): boolean {
-    // Check for network errors
+    // Check for network errors (timeout, CORS, connection refused, etc.)
     if (request.error && autoMockNetworkErrors) {
         return true;
     }
 
     // Check for HTTP error status codes
-    if (request.statusCode && autoMockStatusCodes.includes(request.statusCode)) {
-        return true;
+    if (request.statusCode) {
+        // 4xx errors (client errors) - typically unhandled endpoints
+        if (request.statusCode >= 400 && request.statusCode < 500) {
+            if (autoMockStatusCodes.includes(request.statusCode)) {
+                return true;
+            }
+            // Also auto-mock 404s by default (endpoint not found)
+            if (request.statusCode === 404) {
+                return true;
+            }
+        }
+
+        // 5xx errors (server errors) - typically backend issues
+        if (request.statusCode >= 500 && request.statusCode < 600) {
+            if (autoMockStatusCodes.includes(request.statusCode)) {
+                return true;
+            }
+        }
+    }
+
+    // Check for requests that failed but don't have explicit error info
+    // This catches cases where the request was made but no response was received
+    if (!request.statusCode && !request.responseBody && !request.error) {
+        // Likely an unhandled request that didn't complete
+        return false; // Don't auto-mock incomplete requests
     }
 
     return false;
+}
+
+/**
+ * Infer schema from response body structure
+ * Creates an OpenAPI-like schema from actual API response
+ */
+export interface InferredSchema {
+    type: string;
+    properties?: Record<string, InferredSchema>;
+    items?: InferredSchema;
+    required?: string[];
+    example?: any;
+}
+
+export function inferSchemaFromResponse(responseBody: any): InferredSchema | null {
+    if (responseBody === null || responseBody === undefined) {
+        return { type: 'null' };
+    }
+
+    // Handle arrays
+    if (Array.isArray(responseBody)) {
+        if (responseBody.length === 0) {
+            return {
+                type: 'array',
+                items: { type: 'object' },
+            };
+        }
+
+        // Infer schema from first item
+        const itemSchema = inferSchemaFromValue(responseBody[0]);
+        return {
+            type: 'array',
+            items: itemSchema,
+        };
+    }
+
+    // Handle objects
+    if (typeof responseBody === 'object') {
+        return inferSchemaFromValue(responseBody);
+    }
+
+    // Handle primitives
+    return inferSchemaFromValue(responseBody);
+}
+
+/**
+ * Infer schema from a single value
+ */
+function inferSchemaFromValue(value: any): InferredSchema {
+    if (value === null || value === undefined) {
+        return { type: 'null' };
+    }
+
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return { type: 'array', items: { type: 'object' } };
+        }
+        return {
+            type: 'array',
+            items: inferSchemaFromValue(value[0]),
+        };
+    }
+
+    if (typeof value === 'object') {
+        const properties: Record<string, InferredSchema> = {};
+        const required: string[] = [];
+
+        for (const [key, val] of Object.entries(value)) {
+            const propSchema = inferSchemaFromValue(val);
+            properties[key] = propSchema;
+
+            // Consider non-null values as required
+            if (val !== null && val !== undefined) {
+                required.push(key);
+            }
+        }
+
+        return {
+            type: 'object',
+            properties,
+            required: required.length > 0 ? required : undefined,
+            example: value,
+        };
+    }
+
+    // Primitive types
+    if (typeof value === 'string') {
+        // Try to detect format
+        if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+            return { type: 'string', format: 'date-time', example: value };
+        }
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+            return { type: 'string', format: 'uuid', example: value };
+        }
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+            return { type: 'string', format: 'email', example: value };
+        }
+        return { type: 'string', example: value };
+    }
+
+    if (typeof value === 'number') {
+        return Number.isInteger(value)
+            ? { type: 'integer', example: value }
+            : { type: 'number', format: 'float', example: value };
+    }
+
+    if (typeof value === 'boolean') {
+        return { type: 'boolean', example: value };
+    }
+
+    return { type: 'string', example: String(value) };
 }

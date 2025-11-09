@@ -2,7 +2,7 @@
  * MockForge API Client for Extension
  */
 
-import { MockConfig, ConnectionStatus } from './types';
+import { MockConfig, ConnectionStatus, Environment } from './types';
 
 export class MockForgeApiClient {
     private baseUrl: string;
@@ -78,5 +78,72 @@ export class MockForgeApiClient {
 
     getBaseUrl(): string {
         return this.baseUrl;
+    }
+
+    private getDefaultWorkspaceId(): string {
+        return 'default';
+    }
+
+    async listEnvironments(workspaceId?: string): Promise<Environment[]> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await fetch(`${this.baseUrl}/__mockforge/workspaces/${wsId}/environments`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to list environments: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.data?.environments || data.environments || [];
+    }
+
+    async getActiveEnvironment(workspaceId?: string): Promise<Environment | null> {
+        const environments = await this.listEnvironments(workspaceId);
+        return environments.find((env) => env.active) || environments[0] || null;
+    }
+
+    async setActiveEnvironment(workspaceId: string | undefined, environmentId: string): Promise<void> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await fetch(
+            `${this.baseUrl}/__mockforge/workspaces/${wsId}/environments/${environmentId}/activate`,
+            {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to set active environment: ${response.status}`);
+        }
+    }
+
+    async getEnvironmentVariables(workspaceId: string | undefined, environmentId: string): Promise<Record<string, string>> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await fetch(
+            `${this.baseUrl}/__mockforge/workspaces/${wsId}/environments/${environmentId}/variables`,
+            {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to get environment variables: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const variables = data.data?.variables || data.variables || [];
+
+        if (Array.isArray(variables)) {
+            const result: Record<string, string> = {};
+            variables.forEach((v: { key: string; value: string }) => {
+                result[v.key] = v.value;
+            });
+            return result;
+        }
+
+        return variables;
     }
 }

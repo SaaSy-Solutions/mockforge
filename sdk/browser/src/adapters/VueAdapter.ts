@@ -87,73 +87,232 @@ export class VueAdapter {
 
 /**
  * Vue composable for ForgeConnect
+ * Full-featured implementation with all SDK features
  *
  * @example
  * ```vue
  * <script setup>
  * import { useForgeConnect } from '@mockforge/forgeconnect/adapters/vue';
+ * import { ref, onMounted, onUnmounted, readonly } from 'vue';
  *
- * const { forgeConnect, connected } = useForgeConnect({
+ * const {
+ *   forgeConnect,
+ *   connected,
+ *   mocks,
+ *   environments,
+ *   activeEnvironment,
+ *   offline,
+ *   loading,
+ *   error,
+ *   refreshMocks,
+ *   setActiveEnvironment
+ * } = useForgeConnect({
  *   mockMode: 'auto',
  * });
  * </script>
  * ```
  */
 export function useForgeConnect(config?: VueAdapterConfig) {
-    // Try to import Vue
-    let Vue: any;
-    try {
-        Vue = require('vue');
-    } catch {
-        // Vue not available, use basic implementation
-        const adapter = new VueAdapter(config);
-        const connected = Vue?.ref ? Vue.ref(false) : { value: false };
+    // Try to import Vue using dynamic imports
+    // This will be resolved at runtime
+    let Vue: any = null;
+    let vueModule: any = null;
 
-        adapter.initialize().then((isConnected) => {
-            if (connected.value !== undefined) {
-                connected.value = isConnected;
-            }
-        });
-
-        return {
-            adapter,
-            forgeConnect: adapter.getForgeConnect(),
-            connected: connected.value !== undefined ? connected : { value: false },
-        };
+    // Check if Vue is available in global scope (common in browser environments)
+    if (typeof window !== 'undefined') {
+        Vue = (window as any).Vue || (window as any).vue;
     }
 
-    // Vue 3 Composition API
-    if (Vue.ref) {
-        const adapter = new VueAdapter(config);
-        const connected = Vue.ref(false);
-        const error = Vue.ref<string | null>(null);
+    // If not in global scope, try dynamic import (will be async)
+    // For now, we'll use a synchronous approach that works in most environments
+    // The actual Vue instance will be detected when the composable runs
+    const getVue = () => {
+        if (Vue) return Vue;
 
-        Vue.onMounted(async () => {
-            try {
-                const result = await adapter.initialize();
-                connected.value = result;
-            } catch (err) {
-                error.value = err instanceof Error ? err.message : 'Unknown error';
+        // Try to access Vue from module system (works in bundlers)
+        try {
+            // @ts-ignore - dynamic module access
+            if (typeof require !== 'undefined') {
+                try {
+                    return require('vue');
+                } catch {
+                    try {
+                        return require('@vue/composition-api');
+                    } catch {
+                        return null;
+                    }
+                }
             }
-        });
+        } catch {
+            // Ignore
+        }
 
-        Vue.onUnmounted(() => {
-            adapter.stop();
+        return null;
+    };
+
+    Vue = getVue();
+
+    if (!Vue) {
+        // Vue not available, use basic implementation
+        const adapter = new VueAdapter(config);
+        const connected = { value: false };
+
+        adapter.initialize().then((isConnected) => {
+            connected.value = isConnected;
         });
 
         return {
             adapter,
             forgeConnect: adapter.getForgeConnect(),
             connected,
-            error,
+            mocks: { value: [] },
+            environments: { value: [] },
+            activeEnvironment: { value: null },
+            offline: { value: false },
+            loading: { value: false },
+            error: { value: null },
+            refreshMocks: async () => {},
+            refreshEnvironments: async () => {},
+            createMock: async () => null,
+            setActiveEnvironment: async () => {},
         };
     }
 
-    // Vue 2 Options API fallback
+    // Vue 3 Composition API (full implementation)
+    if (Vue.ref && Vue.onMounted && Vue.onUnmounted) {
+        const adapter = new VueAdapter(config);
+        const forgeConnect = adapter.getForgeConnect();
+
+        const connected = Vue.ref(false);
+        const mocks = Vue.ref<any[]>([]);
+        const environments = Vue.ref<any[]>([]);
+        const activeEnvironment = Vue.ref<any | null>(null);
+        const offline = Vue.ref(false);
+        const loading = Vue.ref(false);
+        const error = Vue.ref<string | null>(null);
+        const liveReloadEnabled = Vue.ref(true);
+
+        const initialize = async () => {
+            loading.value = true;
+            try {
+                const result = await adapter.initialize();
+                connected.value = result;
+
+                if (result) {
+                    await refreshMocks();
+                    await refreshEnvironments();
+
+                    // Watch connection status for offline detection
+                    const status = forgeConnect.getConnectionStatus();
+                    offline.value = !status.connected;
+
+                    // Watch for live reload events
+                    if (liveReloadEnabled.value) {
+                        // Set up WebSocket listeners if enabled
+                        if (config?.enableWebSocket) {
+                            // WebSocket events are handled by ForgeConnect internally
+                        }
+                    }
+                }
+            } catch (err) {
+                error.value = err instanceof Error ? err.message : 'Unknown error';
+            } finally {
+                loading.value = false;
+            }
+        };
+
+        const refreshMocks = async () => {
+            try {
+                const mockList = await forgeConnect.listMocks();
+                mocks.value = mockList;
+            } catch (err) {
+                console.error('[VueAdapter] Failed to refresh mocks:', err);
+            }
+        };
+
+        const refreshEnvironments = async () => {
+            try {
+                const envList = await forgeConnect.listEnvironments();
+                environments.value = envList;
+                const active = await forgeConnect.getActiveEnvironment();
+                activeEnvironment.value = active;
+            } catch (err) {
+                console.error('[VueAdapter] Failed to refresh environments:', err);
+            }
+        };
+
+        const createMock = async (request: any) => {
+            try {
+                const mock = await forgeConnect.createMockFromRequest(request);
+                await refreshMocks();
+                return mock;
+            } catch (err) {
+                console.error('[VueAdapter] Failed to create mock:', err);
+                throw err;
+            }
+        };
+
+        const setActiveEnvironment = async (envId: string) => {
+            try {
+                await forgeConnect.setActiveEnvironment(envId);
+                await refreshEnvironments();
+            } catch (err) {
+                console.error('[VueAdapter] Failed to set active environment:', err);
+                throw err;
+            }
+        };
+
+        Vue.onMounted(initialize);
+        Vue.onUnmounted(() => {
+            adapter.stop();
+        });
+
+        // Watch connection status
+        const checkConnection = () => {
+            const status = forgeConnect.getConnectionStatus();
+            connected.value = status.connected;
+            offline.value = !status.connected;
+        };
+
+        const connectionInterval = setInterval(checkConnection, 5000);
+        Vue.onUnmounted(() => {
+            clearInterval(connectionInterval);
+        });
+
+        return {
+            adapter,
+            forgeConnect: Vue.readonly(Vue.ref(forgeConnect)),
+            connected: Vue.readonly(connected),
+            mocks: Vue.readonly(mocks),
+            environments: Vue.readonly(environments),
+            activeEnvironment: Vue.readonly(activeEnvironment),
+            offline: Vue.readonly(offline),
+            loading: Vue.readonly(loading),
+            error: Vue.readonly(error),
+            liveReloadEnabled,
+            initialize,
+            refreshMocks,
+            refreshEnvironments,
+            createMock,
+            setActiveEnvironment,
+        };
+    }
+
+    // Vue 2 Options API fallback (basic)
     const adapter = new VueAdapter(config);
     return {
         adapter,
         forgeConnect: adapter.getForgeConnect(),
         connected: { value: false },
+        mocks: { value: [] },
+        environments: { value: [] },
+        activeEnvironment: { value: null },
+        offline: { value: false },
+        loading: { value: false },
+        error: { value: null },
+        refreshMocks: async () => {},
+        refreshEnvironments: async () => {},
+        createMock: async () => null,
+        setActiveEnvironment: async () => {},
     };
 }

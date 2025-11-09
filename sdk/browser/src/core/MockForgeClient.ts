@@ -4,7 +4,7 @@
  * Handles communication with MockForge server management API
  */
 
-import { MockConfig, ConnectionStatus } from '../types';
+import { MockConfig, ConnectionStatus, Environment, EnvironmentVariable } from '../types';
 
 /**
  * Client for interacting with MockForge management API
@@ -237,5 +237,112 @@ export class MockForgeClient {
     setBaseUrl(url: string): void {
         this.baseUrl = url.replace(/\/$/, '');
         this.connected = false; // Reset connection status
+    }
+
+    /**
+     * Get default workspace ID (for now, use 'default')
+     * In the future, this could be retrieved from the API
+     */
+    private getDefaultWorkspaceId(): string {
+        return 'default';
+    }
+
+    /**
+     * List all environments for a workspace
+     */
+    async listEnvironments(workspaceId?: string): Promise<Environment[]> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await this.request(`/__mockforge/workspaces/${wsId}/environments`, {
+            method: 'GET',
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to list environments: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.data?.environments || data.environments || [];
+    }
+
+    /**
+     * Get the active environment for a workspace
+     */
+    async getActiveEnvironment(workspaceId?: string): Promise<Environment | null> {
+        const environments = await this.listEnvironments(workspaceId);
+        return environments.find((env) => env.active) || environments[0] || null;
+    }
+
+    /**
+     * Set the active environment
+     */
+    async setActiveEnvironment(workspaceId: string | undefined, environmentId: string): Promise<void> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await this.request(
+            `/__mockforge/workspaces/${wsId}/environments/${environmentId}/activate`,
+            {
+                method: 'POST',
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to set active environment: ${response.status} ${response.statusText}`);
+        }
+    }
+
+    /**
+     * Get environment variables for an environment
+     */
+    async getEnvironmentVariables(workspaceId: string | undefined, environmentId: string): Promise<Record<string, string>> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await this.request(
+            `/__mockforge/workspaces/${wsId}/environments/${environmentId}/variables`,
+            {
+                method: 'GET',
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to get environment variables: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const variables = data.data?.variables || data.variables || [];
+
+        // Convert array to object if needed
+        if (Array.isArray(variables)) {
+            const result: Record<string, string> = {};
+            variables.forEach((v: EnvironmentVariable) => {
+                result[v.key] = v.value;
+            });
+            return result;
+        }
+
+        return variables;
+    }
+
+    /**
+     * Set an environment variable
+     */
+    async setEnvironmentVariable(
+        workspaceId: string | undefined,
+        environmentId: string,
+        key: string,
+        value: string
+    ): Promise<void> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await this.request(
+            `/__mockforge/workspaces/${wsId}/environments/${environmentId}/variables`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ key, value }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to set environment variable: ${response.status} ${response.statusText}`);
+        }
     }
 }
