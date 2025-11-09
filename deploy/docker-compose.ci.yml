@@ -26,6 +26,9 @@ services:
       - MOCKFORGE_RECORDER_ENABLED=false
       - MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
       - MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
+      # Reality level for CI testing (1-5, default: 3 = Moderate Realism)
+      # Override per pipeline: MOCKFORGE_REALITY_LEVEL=5 for production chaos testing
+      - MOCKFORGE_REALITY_LEVEL=${MOCKFORGE_REALITY_LEVEL:-3}
     volumes:
       - ../examples:/app/examples:ro
       - ../fixtures:/app/fixtures:ro

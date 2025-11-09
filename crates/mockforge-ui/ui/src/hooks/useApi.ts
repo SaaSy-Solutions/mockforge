@@ -21,6 +21,7 @@ import {
   importApi,
   chaosApi,
   timeTravelApi,
+  realityApi,
   proxyApi,
   type ProxyRuleRequest,
 } from '../services/api';
@@ -58,6 +59,8 @@ export const queryKeys = {
   mutationRules: ['mutationRules'] as const,
   proxyRules: ['proxyRules'] as const,
   proxyInspect: ['proxyInspect'] as const,
+  realityLevel: ['realityLevel'] as const,
+  realityPresets: ['realityPresets'] as const,
 };
 
 /**
@@ -1012,5 +1015,62 @@ export function useProxyInspect(limit?: number) {
     queryFn: () => proxyApi.getProxyInspect(limit),
     staleTime: 2000, // Very short cache for real-time inspection
     refetchInterval: 2000, // Auto-refresh every 2 seconds
+  });
+}
+
+/**
+ * Reality Slider hooks
+ */
+export function useRealityLevel() {
+  return useQuery({
+    queryKey: queryKeys.realityLevel,
+    queryFn: () => realityApi.getRealityLevel(),
+    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+}
+
+export function useSetRealityLevel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (level: number) => realityApi.setRealityLevel(level),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.realityLevel });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useRealityPresets() {
+  return useQuery({
+    queryKey: queryKeys.realityPresets,
+    queryFn: () => realityApi.listPresets(),
+    staleTime: 60000, // Presets don't change often
+  });
+}
+
+export function useImportRealityPreset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (path: string) => realityApi.importPreset(path),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.realityLevel });
+      queryClient.invalidateQueries({ queryKey: queryKeys.realityPresets });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useExportRealityPreset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      realityApi.exportPreset(name, description),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.realityPresets });
+    },
   });
 }

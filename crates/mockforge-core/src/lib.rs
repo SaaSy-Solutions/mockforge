@@ -239,6 +239,7 @@ pub mod performance;
 pub mod priority_handler;
 pub mod protocol_abstraction;
 pub mod proxy;
+pub mod reality;
 pub mod record_replay;
 pub mod request_capture;
 pub mod request_chaining;
@@ -267,6 +268,9 @@ pub mod ws_proxy;
 
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
+pub use reality::{
+    RealityConfig, RealityEngine, RealityLevel, RealityPreset, PresetMetadata,
+};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ApiKeyConfig,

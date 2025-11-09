@@ -1,9 +1,11 @@
-import { logger } from '@/utils/logger';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
 import { TimeTravelWidget } from '../components/time-travel/TimeTravelWidget';
+import { RealitySlider } from '../components/reality/RealitySlider';
+import { RealityIndicator } from '../components/reality/RealityIndicator';
+import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 import type { LatencyMetrics, LogEntry } from '../types';
 import { useDashboard, useLogs } from '../hooks/useApi';
 import {
@@ -45,6 +47,9 @@ export function DashboardPage() {
   const { data: dashboard, isLoading, error } = useDashboard();
   // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates
   const { data: logs } = useLogs({ limit: 100, refetchInterval: 3000 });
+
+  // Enable keyboard shortcuts for reality level changes
+  useRealityShortcuts();
 
   // Calculate failure counters
   const failureCounters = useMemo(() => {
@@ -161,15 +166,17 @@ export function DashboardPage() {
         title="Dashboard"
         subtitle="Real-time system overview and performance metrics"
         className="space-section"
+        action={<RealityIndicator />}
       />
 
-      {/* Time Travel Widget */}
+      {/* Reality Slider and Time Travel Widget */}
       <Section
-        title="Temporal Simulation"
-        subtitle="Control virtual time for testing time-dependent features"
+        title="Environment Control"
+        subtitle="Adjust realism and temporal simulation for testing"
         className="space-section section-breathing"
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 grid-gap-lg">
+          <RealitySlider />
           <TimeTravelWidget />
         </div>
       </Section>

@@ -13,6 +13,18 @@ use crate::time_travel_handlers;
 use mockforge_core::{get_global_logger, init_global_logger};
 
 /// Create the admin router with static assets and optional API endpoints
+///
+/// # Arguments
+/// * `http_server_addr` - HTTP server address
+/// * `ws_server_addr` - WebSocket server address
+/// * `grpc_server_addr` - gRPC server address
+/// * `graphql_server_addr` - GraphQL server address
+/// * `api_enabled` - Whether API endpoints are enabled
+/// * `admin_port` - Admin server port
+/// * `prometheus_url` - Prometheus metrics URL
+/// * `chaos_api_state` - Optional chaos API state for hot-reload support
+/// * `latency_injector` - Optional latency injector for hot-reload support
+/// * `mockai` - Optional MockAI instance for hot-reload support
 pub fn create_admin_router(
     http_server_addr: Option<std::net::SocketAddr>,
     ws_server_addr: Option<std::net::SocketAddr>,
@@ -21,6 +33,9 @@ pub fn create_admin_router(
     api_enabled: bool,
     admin_port: u16,
     prometheus_url: String,
+    chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+    latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
+    mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 ) -> Router {
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
@@ -32,6 +47,9 @@ pub fn create_admin_router(
         graphql_server_addr,
         api_enabled,
         admin_port,
+        chaos_api_state,
+        latency_injector,
+        mockai,
     );
 
     // Start system monitoring background task to poll CPU, memory, and thread metrics
@@ -168,6 +186,12 @@ pub fn create_admin_router(
         .route("/__mockforge/verification/sequence", post(verification::verify_sequence_handler))
         .route("/__mockforge/verification/never", post(verification::verify_never_handler))
         .route("/__mockforge/verification/at-least", post(verification::verify_at_least_handler))
+        // Reality Slider routes
+        .route("/__mockforge/reality/level", get(get_reality_level))
+        .route("/__mockforge/reality/level", axum::routing::put(set_reality_level))
+        .route("/__mockforge/reality/presets", get(list_reality_presets))
+        .route("/__mockforge/reality/presets/import", post(import_reality_preset))
+        .route("/__mockforge/reality/presets/export", post(export_reality_preset))
         // Contract diff routes
         .route("/__mockforge/contract-diff/upload", post(contract_diff::upload_request))
         .route("/__mockforge/contract-diff/submit", post(contract_diff::submit_request))

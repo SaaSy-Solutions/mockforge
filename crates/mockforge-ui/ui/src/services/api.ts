@@ -1555,6 +1555,161 @@ class TimeTravelApiService {
   }
 }
 
+/**
+ * Reality Slider API Service
+ * Handles reality level management and preset operations
+ */
+class RealityApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * Get current reality level and configuration
+   */
+  async getRealityLevel(): Promise<{
+    level: number;
+    level_name: string;
+    description: string;
+    chaos: {
+      enabled: boolean;
+      error_rate: number;
+      delay_rate: number;
+    };
+    latency: {
+      base_ms: number;
+      jitter_ms: number;
+    };
+    mockai: {
+      enabled: boolean;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/reality/level') as Promise<{
+      level: number;
+      level_name: string;
+      description: string;
+      chaos: {
+        enabled: boolean;
+        error_rate: number;
+        delay_rate: number;
+      };
+      latency: {
+        base_ms: number;
+        jitter_ms: number;
+      };
+      mockai: {
+        enabled: boolean;
+      };
+    }>;
+  }
+
+  /**
+   * Set reality level (1-5)
+   */
+  async setRealityLevel(level: number): Promise<{
+    level: number;
+    level_name: string;
+    description: string;
+    chaos: {
+      enabled: boolean;
+      error_rate: number;
+      delay_rate: number;
+    };
+    latency: {
+      base_ms: number;
+      jitter_ms: number;
+    };
+    mockai: {
+      enabled: boolean;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/reality/level', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    }) as Promise<{
+      level: number;
+      level_name: string;
+      description: string;
+      chaos: {
+        enabled: boolean;
+        error_rate: number;
+        delay_rate: number;
+      };
+      latency: {
+        base_ms: number;
+        jitter_ms: number;
+      };
+      mockai: {
+        enabled: boolean;
+      };
+    }>;
+  }
+
+  /**
+   * List all available reality presets
+   */
+  async listPresets(): Promise<Array<{
+    id: string;
+    path: string;
+    name: string;
+  }>> {
+    return this.fetchJson('/__mockforge/reality/presets') as Promise<Array<{
+      id: string;
+      path: string;
+      name: string;
+    }>>;
+  }
+
+  /**
+   * Import a reality preset
+   */
+  async importPreset(path: string): Promise<{
+    name: string;
+    description?: string;
+    level: number;
+    level_name: string;
+  }> {
+    return this.fetchJson('/__mockforge/reality/presets/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }) as Promise<{
+      name: string;
+      description?: string;
+      level: number;
+      level_name: string;
+    }>;
+  }
+
+  /**
+   * Export current reality configuration as a preset
+   */
+  async exportPreset(name: string, description?: string): Promise<{
+    name: string;
+    description?: string;
+    path: string;
+    level: number;
+  }> {
+    return this.fetchJson('/__mockforge/reality/presets/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description }),
+    }) as Promise<{
+      name: string;
+      description?: string;
+      path: string;
+      level: number;
+    }>;
+  }
+}
+
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await fetch(url, options);
@@ -1935,6 +2090,7 @@ export const smokeTestsApi = new SmokeTestsApiService();
 export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
+export const realityApi = new RealityApiService();
 export const verificationApi = new VerificationApiService();
 export const contractDiffApi = new ContractDiffApiService();
 export { proxyApi, type ProxyRule, type ProxyRuleRequest, type ProxyRulesResponse, type ProxyInspectResponse };

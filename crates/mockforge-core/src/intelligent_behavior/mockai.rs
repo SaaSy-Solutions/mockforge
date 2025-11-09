@@ -321,6 +321,41 @@ impl MockAI {
         self.mutation_analyzer = MutationAnalyzer::new().with_rules(self.rules.clone());
     }
 
+    /// Update configuration at runtime
+    ///
+    /// This allows changing MockAI configuration without recreating the instance.
+    /// Useful for hot-reloading reality level configurations.
+    ///
+    /// Note: This updates the configuration but does not regenerate rules.
+    /// For rule updates, use `update_rules()` or `learn_from_example()`.
+    pub fn update_config(&mut self, config: IntelligentBehaviorConfig) {
+        self.config = config.clone();
+
+        // Update components that depend on config
+        let behavior_config = self.config.behavior_model.clone();
+        self.validation_generator = ValidationGenerator::new(behavior_config.clone());
+        self.pagination_intelligence = PaginationIntelligence::new(behavior_config);
+
+        // Note: We don't recreate rule_generator or mutation_analyzer
+        // as they may have learned rules that should be preserved
+    }
+
+    /// Update configuration (async version for Arc<RwLock>)
+    ///
+    /// Convenience method for updating a MockAI instance wrapped in Arc<RwLock>.
+    /// This is the recommended way to update MockAI configuration at runtime.
+    ///
+    /// # Returns
+    /// `Ok(())` on success, or an error if the update fails.
+    pub async fn update_config_async(
+        this: &std::sync::Arc<tokio::sync::RwLock<Self>>,
+        config: IntelligentBehaviorConfig,
+    ) -> Result<()> {
+        let mut mockai = this.write().await;
+        mockai.update_config(config);
+        Ok(())
+    }
+
     // ===== Private helper methods =====
 
     /// Extract examples from OpenAPI spec

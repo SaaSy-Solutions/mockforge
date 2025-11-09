@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
 import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
@@ -23,6 +23,10 @@ import {
 } from '../components/ui/Dialog';
 import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import { AutocompleteInput } from '../components/ui/AutocompleteInput';
+import { RealitySlider } from '../components/reality/RealitySlider';
+import { RealityIndicator } from '../components/reality/RealityIndicator';
+import { RealityPresetManager } from '../components/reality/RealityPresetManager';
+import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 
 function extractPort(address?: string): string {
   if (!address) return '';
@@ -46,11 +50,25 @@ function isValidPort(port: number): boolean {
 }
 
 export function ConfigPage() {
-  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols'>('general');
+  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols' | 'reality'>('general');
   const { activeWorkspace } = useWorkspaceStore();
   const workspaceId = activeWorkspace?.id || 'default-workspace';
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRestartDialog, setShowRestartDialog] = useState(false);
+
+  // Enable keyboard shortcuts for reality level changes
+  useRealityShortcuts({
+    onOpenPresetManager: () => {
+      setActiveSection('reality');
+      // Scroll to preset manager section
+      setTimeout(() => {
+        const presetSection = document.querySelector('[data-section="reality"]');
+        if (presetSection) {
+          presetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    },
+  });
 
   const { data: config, isLoading: configLoading } = useConfig();
   const { data: validation, isLoading: validationLoading } = useValidation();
@@ -562,6 +580,7 @@ export function ConfigPage() {
   }
 
   const sections = [
+    { id: 'reality', label: 'Reality Slider', icon: Zap, description: 'Unified realism control' },
     { id: 'general', label: 'General', icon: Settings, description: 'Basic MockForge settings' },
     { id: 'protocols', label: 'Protocols', icon: Server, description: 'Protocol enable/disable settings' },
     { id: 'latency', label: 'Latency', icon: Zap, description: 'Response delay and timing' },
@@ -583,6 +602,7 @@ export function ConfigPage() {
         }
         action={
           <div className="flex items-center gap-3">
+            <RealityIndicator />
             <Button
               variant="outline"
               size="sm"
@@ -636,6 +656,25 @@ export function ConfigPage() {
 
         {/* Main Content */}
         <div className="lg:col-span-3">
+          {activeSection === 'reality' && (
+            <Section title="Reality Slider" subtitle="Unified control for chaos, latency, and MockAI" data-section="reality">
+              <div className="space-y-6">
+                <RealitySlider />
+                <RealityPresetManager />
+                <div className="mt-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    Keyboard Shortcuts
+                  </h4>
+                  <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+1-5</kbd> Set reality level</div>
+                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+R</kbd> Reset to default (Level 3)</div>
+                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+P</kbd> Open preset manager</div>
+                  </div>
+                </div>
+              </div>
+            </Section>
+          )}
+
           {activeSection === 'general' && (
             <Section title="General Settings" subtitle="Basic MockForge configuration">
               <ModernCard>

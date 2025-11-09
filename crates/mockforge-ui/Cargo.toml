@@ -45,6 +45,7 @@ mockforge-vbr = { version = "0.2.7", path = "../mockforge-vbr" }
 mockforge-plugin-core = "0.2.7"
 mockforge-plugin-loader = { version = "0.2.7", path = "../mockforge-plugin-loader" }
 mockforge-analytics = { version = "0.2.7", path = "../mockforge-analytics" }
+mockforge-chaos = { version = "0.2.7", path = "../mockforge-chaos" }
 
 [build-dependencies]
 serde = { workspace = true }

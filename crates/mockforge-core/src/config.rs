@@ -1,6 +1,6 @@
 //! Configuration management for MockForge
 
-use crate::{Config as CoreConfig, Error, Result};
+use crate::{Config as CoreConfig, Error, Result, RealityLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -417,6 +417,29 @@ impl Default for ProtocolsConfig {
     }
 }
 
+/// Reality slider configuration for YAML config files
+///
+/// This is a simplified configuration that stores just the level.
+/// The full RealityConfig with all subsystem settings is generated
+/// automatically from the level via the RealityEngine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RealitySliderConfig {
+    /// Reality level (1-5)
+    pub level: RealityLevel,
+    /// Whether to enable reality slider (if false, uses individual subsystem configs)
+    pub enabled: bool,
+}
+
+impl Default for RealitySliderConfig {
+    fn default() -> Self {
+        Self {
+            level: RealityLevel::ModerateRealism,
+            enabled: true,
+        }
+    }
+}
+
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -470,6 +493,9 @@ pub struct ServerConfig {
     /// Deceptive deploy configuration for production-like mock APIs
     #[serde(default)]
     pub deceptive_deploy: DeceptiveDeployConfig,
+    /// Reality slider configuration for unified realism control
+    #[serde(default)]
+    pub reality: RealitySliderConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings
@@ -539,6 +565,9 @@ pub struct ProfileConfig {
     /// Deceptive deploy configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deceptive_deploy: Option<DeceptiveDeployConfig>,
+    /// Reality slider configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reality: Option<RealitySliderConfig>,
 }
 
 // Default is derived for ServerConfig

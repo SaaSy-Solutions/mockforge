@@ -270,6 +270,17 @@ pub struct AdminState {
     pub workspace_persistence: Arc<WorkspacePersistence>,
     /// Plugin registry (protected by RwLock)
     pub plugin_registry: Arc<RwLock<PluginRegistry>>,
+    /// Reality engine for managing realism levels
+    pub reality_engine: Arc<RwLock<mockforge_core::RealityEngine>>,
+    /// Chaos API state for hot-reload support (optional)
+    /// Contains config that can be updated at runtime
+    pub chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+    /// Latency injector for HTTP middleware (optional)
+    /// Allows updating latency profile at runtime
+    pub latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
+    /// MockAI instance (optional)
+    /// Allows updating MockAI configuration at runtime
+    pub mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 impl AdminState {
@@ -323,6 +334,17 @@ impl AdminState {
     }
 
     /// Create new admin state
+    ///
+    /// # Arguments
+    /// * `http_server_addr` - HTTP server address
+    /// * `ws_server_addr` - WebSocket server address
+    /// * `grpc_server_addr` - gRPC server address
+    /// * `graphql_server_addr` - GraphQL server address
+    /// * `api_enabled` - Whether API endpoints are enabled
+    /// * `admin_port` - Admin server port
+    /// * `chaos_api_state` - Optional chaos API state for hot-reload support
+    /// * `latency_injector` - Optional latency injector for hot-reload support
+    /// * `mockai` - Optional MockAI instance for hot-reload support
     pub fn new(
         http_server_addr: Option<std::net::SocketAddr>,
         ws_server_addr: Option<std::net::SocketAddr>,
@@ -330,6 +352,9 @@ impl AdminState {
         graphql_server_addr: Option<std::net::SocketAddr>,
         api_enabled: bool,
         admin_port: u16,
+        chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+        latency_injector: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
+        mockai: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -385,6 +410,10 @@ impl AdminState {
             import_history: Arc::new(RwLock::new(Vec::new())),
             workspace_persistence: Arc::new(WorkspacePersistence::new("./workspaces")),
             plugin_registry: Arc::new(RwLock::new(PluginRegistry::new())),
+            reality_engine: Arc::new(RwLock::new(mockforge_core::RealityEngine::new())),
+            chaos_api_state,
+            latency_injector,
+            mockai,
         }
     }
 
@@ -3586,6 +3615,273 @@ pub async fn open_workspace_from_directory(
     Json(ApiResponse::success("Workspace opened from directory".to_string()))
 }
 
+// Reality Slider API handlers
+
+/// Get current reality level
+pub async fn get_reality_level(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.reality_engine.read().await;
+    let level = engine.get_level().await;
+    let config = engine.get_config().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "level": level.value(),
+        "level_name": level.name(),
+        "description": level.description(),
+        "chaos": {
+            "enabled": config.chaos.enabled,
+            "error_rate": config.chaos.error_rate,
+            "delay_rate": config.chaos.delay_rate,
+        },
+        "latency": {
+            "base_ms": config.latency.base_ms,
+            "jitter_ms": config.latency.jitter_ms,
+        },
+        "mockai": {
+            "enabled": config.mockai.enabled,
+        },
+    })))
+}
+
+/// Set reality level
+#[derive(Deserialize)]
+pub struct SetRealityLevelRequest {
+    level: u8,
+}
+
+pub async fn set_reality_level(
+    State(state): State<AdminState>,
+    Json(request): Json<SetRealityLevelRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let level = match mockforge_core::RealityLevel::from_value(request.level) {
+        Some(l) => l,
+        None => {
+            return Json(ApiResponse::error(
+                format!("Invalid reality level: {}. Must be between 1 and 5.", request.level),
+            ));
+        }
+    };
+
+    // Update reality engine
+    let mut engine = state.reality_engine.write().await;
+    engine.set_level(level).await;
+    let config = engine.get_config().await;
+    drop(engine); // Release lock early
+
+    // Apply hot-reload updates to subsystems
+    let mut update_errors = Vec::new();
+
+    // Update chaos config if available
+    if let Some(ref chaos_api_state) = state.chaos_api_state {
+        use mockforge_chaos::config::ChaosConfig;
+        let mut chaos_config = chaos_api_state.config.write().await;
+
+        // Convert reality config to chaos config using helper function
+        // This ensures proper mapping of all fields
+        use mockforge_chaos::config::{FaultInjectionConfig, LatencyConfig};
+
+        let latency_config = if config.latency.base_ms > 0 {
+            Some(LatencyConfig {
+                enabled: true,
+                fixed_delay_ms: Some(config.latency.base_ms),
+                random_delay_range_ms: config.latency.max_ms.map(|max| (config.latency.min_ms, max)),
+                jitter_percent: if config.latency.jitter_ms > 0 {
+                    (config.latency.jitter_ms as f64 / config.latency.base_ms as f64).min(1.0)
+                } else {
+                    0.0
+                },
+                probability: 1.0,
+            })
+        } else {
+            None
+        };
+
+        let fault_injection_config = if config.chaos.enabled {
+            Some(FaultInjectionConfig {
+                enabled: true,
+                http_errors: config.chaos.status_codes.clone(),
+                http_error_probability: config.chaos.error_rate,
+                connection_errors: false,
+                connection_error_probability: 0.0,
+                timeout_errors: config.chaos.inject_timeouts,
+                timeout_ms: config.chaos.timeout_ms,
+                timeout_probability: if config.chaos.inject_timeouts { config.chaos.error_rate } else { 0.0 },
+                partial_responses: false,
+                partial_response_probability: 0.0,
+                payload_corruption: false,
+                payload_corruption_probability: 0.0,
+                corruption_type: mockforge_chaos::config::CorruptionType::None,
+                error_pattern: Some(mockforge_chaos::config::ErrorPattern::Random {
+                    probability: config.chaos.error_rate,
+                }),
+                mockai_enabled: false,
+            })
+        } else {
+            None
+        };
+
+        // Update chaos config from converted config
+        chaos_config.enabled = config.chaos.enabled;
+        chaos_config.latency = latency_config;
+        chaos_config.fault_injection = fault_injection_config;
+
+        drop(chaos_config);
+        tracing::info!("✅ Updated chaos config for reality level {}", level.value());
+
+        // Update middleware injectors if middleware is accessible
+        // Note: The middleware reads from shared config, so injectors will be updated
+        // on next request, but we can also trigger an update if middleware is stored
+        // For now, the middleware reads config directly, so this is sufficient
+    }
+
+    // Update latency injector if available
+    if let Some(ref latency_injector) = state.latency_injector {
+        match mockforge_core::latency::LatencyInjector::update_profile_async(latency_injector, config.latency.clone()).await {
+            Ok(_) => {
+                tracing::info!("✅ Updated latency injector for reality level {}", level.value());
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to update latency injector: {}", e);
+                tracing::warn!("{}", error_msg);
+                update_errors.push(error_msg);
+            }
+        }
+    }
+
+    // Update MockAI if available
+    if let Some(ref mockai) = state.mockai {
+        match mockforge_core::intelligent_behavior::MockAI::update_config_async(mockai, config.mockai.clone()).await {
+            Ok(_) => {
+                tracing::info!("✅ Updated MockAI config for reality level {}", level.value());
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to update MockAI: {}", e);
+                tracing::warn!("{}", error_msg);
+                update_errors.push(error_msg);
+            }
+        }
+    }
+
+    // Build response
+    let mut response = serde_json::json!({
+        "level": level.value(),
+        "level_name": level.name(),
+        "description": level.description(),
+        "chaos": {
+            "enabled": config.chaos.enabled,
+            "error_rate": config.chaos.error_rate,
+            "delay_rate": config.chaos.delay_rate,
+        },
+        "latency": {
+            "base_ms": config.latency.base_ms,
+            "jitter_ms": config.latency.jitter_ms,
+        },
+        "mockai": {
+            "enabled": config.mockai.enabled,
+        },
+    });
+
+    // Add warnings if any updates failed
+    if !update_errors.is_empty() {
+        response["warnings"] = serde_json::json!(update_errors);
+        tracing::warn!(
+            "Reality level updated to {} but some subsystems failed to update: {:?}",
+            level.value(),
+            update_errors
+        );
+    } else {
+        tracing::info!("✅ Reality level successfully updated to {} (hot-reload applied)", level.value());
+    }
+
+    Json(ApiResponse::success(response))
+}
+
+/// List all available reality presets
+pub async fn list_reality_presets(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    let persistence = &state.workspace_persistence;
+    match persistence.list_reality_presets().await {
+        Ok(preset_paths) => {
+            let presets: Vec<serde_json::Value> = preset_paths
+                .iter()
+                .map(|path| {
+                    serde_json::json!({
+                        "id": path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown"),
+                        "path": path.to_string_lossy(),
+                        "name": path.file_stem().and_then(|n| n.to_str()).unwrap_or("unknown"),
+                    })
+                })
+                .collect();
+            Json(ApiResponse::success(presets))
+        }
+        Err(e) => Json(ApiResponse::error(format!("Failed to list presets: {}", e))),
+    }
+}
+
+/// Import a reality preset
+#[derive(Deserialize)]
+pub struct ImportPresetRequest {
+    path: String,
+}
+
+pub async fn import_reality_preset(
+    State(state): State<AdminState>,
+    Json(request): Json<ImportPresetRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let persistence = &state.workspace_persistence;
+    let path = std::path::Path::new(&request.path);
+
+    match persistence.import_reality_preset(path).await {
+        Ok(preset) => {
+            // Apply the preset to the reality engine
+            let mut engine = state.reality_engine.write().await;
+            engine.apply_preset(preset.clone()).await;
+
+            Json(ApiResponse::success(serde_json::json!({
+                "name": preset.name,
+                "description": preset.description,
+                "level": preset.config.level.value(),
+                "level_name": preset.config.level.name(),
+            })))
+        }
+        Err(e) => Json(ApiResponse::error(format!("Failed to import preset: {}", e))),
+    }
+}
+
+/// Export current reality configuration as a preset
+#[derive(Deserialize)]
+pub struct ExportPresetRequest {
+    name: String,
+    description: Option<String>,
+}
+
+pub async fn export_reality_preset(
+    State(state): State<AdminState>,
+    Json(request): Json<ExportPresetRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.reality_engine.read().await;
+    let preset = engine
+        .create_preset(request.name.clone(), request.description.clone())
+        .await;
+
+    let persistence = &state.workspace_persistence;
+    let presets_dir = persistence.presets_dir();
+    let filename = format!("{}.json", request.name.replace(' ', "_").to_lowercase());
+    let output_path = presets_dir.join(&filename);
+
+    match persistence.export_reality_preset(&preset, &output_path).await {
+        Ok(_) => Json(ApiResponse::success(serde_json::json!({
+            "name": preset.name,
+            "description": preset.description,
+            "path": output_path.to_string_lossy(),
+            "level": preset.config.level.value(),
+        }))),
+        Err(e) => Json(ApiResponse::error(format!("Failed to export preset: {}", e))),
+    }
+}
+
 pub async fn get_workspace(
     State(_state): State<AdminState>,
     axum::extract::Path(workspace_id): axum::extract::Path<String>,
@@ -3943,7 +4239,7 @@ mod tests {
     #[test]
     fn test_admin_state_new() {
         let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
-        let state = AdminState::new(Some(http_addr), None, None, None, true, 8080);
+        let state = AdminState::new(Some(http_addr), None, None, None, true, 8080, None, None, None);
 
         assert_eq!(state.http_server_addr, Some(http_addr));
         assert!(state.api_enabled);

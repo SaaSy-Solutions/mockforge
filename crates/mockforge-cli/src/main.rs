@@ -3507,8 +3507,15 @@ async fn handle_serve(
         use axum::middleware::from_fn;
         use std::sync::{Arc, OnceLock};
 
-        // Create chaos middleware with latency tracker
-        let chaos_middleware_instance = Arc::new(ChaosMiddleware::new(chaos_config, latency_tracker));
+        // Create chaos middleware with shared config for hot-reload support
+        // Pass the shared config Arc from chaos_api_state
+        let chaos_middleware_instance = Arc::new(ChaosMiddleware::new(chaos_config_arc.clone(), latency_tracker));
+
+        // Initialize middleware injectors from actual config (async, but we spawn it)
+        let middleware_init = chaos_middleware_instance.clone();
+        tokio::spawn(async move {
+            middleware_init.init_from_config().await;
+        });
 
         // Store the middleware in a static OnceLock to avoid Send issues with closures
         // This middleware will record latencies for the latency graph
@@ -3950,9 +3957,7 @@ async fn handle_serve(
     let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Create latency injector if latency is enabled (for hot-reload support)
-    use mockforge_core::latency::{LatencyInjector, LatencyProfile};
-    use mockforge_core::failure_injection::FaultConfig;
-    use std::sync::Arc;
+    use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
     use tokio::sync::RwLock;
 
     let latency_injector_for_admin = if config.core.latency_enabled {
@@ -4038,10 +4043,10 @@ async fn handle_serve(
                     http_addr,
                     ws_addr,
                     grpc_addr,
-                    None,
-                    true,
+                    None, // graphql_server_addr
+                    true, // api_enabled
                     prometheus_url,
-                    chaos_state,
+                    Some(chaos_state),
                     latency_injector,
                     mockai_ref,
                 ) => {
@@ -4485,6 +4490,9 @@ async fn handle_admin(
         None, // graphql_server_addr
         true, // api_enabled
         prometheus_url,
+        None, // chaos_api_state
+        None, // latency_injector
+        None, // mockai
     )
     .await?;
 

@@ -5816,6 +5816,7 @@ dependencies = [
  "html-escape",
  "mime_guess",
  "mockforge-analytics",
+ "mockforge-chaos",
  "mockforge-core 0.2.7",
  "mockforge-grpc",
  "mockforge-http",

@@ -270,7 +270,7 @@ pub fn create_chaos_api_router(
 
         .with_state(state.clone());
 
-    (router, config_arc, latency_tracker_for_return, state)
+    (router, config_arc, latency_tracker_for_return, Arc::new(state))
 }
 
 /// Get current configuration
