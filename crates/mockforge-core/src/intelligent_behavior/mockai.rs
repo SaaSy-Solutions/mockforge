@@ -356,6 +356,13 @@ impl MockAI {
         Ok(())
     }
 
+    /// Get current configuration
+    ///
+    /// Primarily for testing purposes to verify configuration updates.
+    pub fn get_config(&self) -> &IntelligentBehaviorConfig {
+        &self.config
+    }
+
     // ===== Private helper methods =====
 
     /// Extract examples from OpenAPI spec

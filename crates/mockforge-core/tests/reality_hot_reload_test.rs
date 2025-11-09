@@ -3,20 +3,16 @@
 //! These tests verify that LatencyInjector and MockAI can be updated
 //! at runtime without requiring recreation.
 
-use mockforge_core::latency::{LatencyInjector, LatencyProfile};
+use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
 use mockforge_core::intelligent_behavior::config::IntelligentBehaviorConfig;
 use mockforge_core::intelligent_behavior::MockAI;
-use mockforge_core::failure_injection::FaultConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[tokio::test]
 async fn test_latency_injector_update_profile() {
     // Create initial injector
-    let mut injector = LatencyInjector::new(
-        LatencyProfile::new(50, 20),
-        FaultConfig::default(),
-    );
+    let mut injector = LatencyInjector::new(LatencyProfile::new(50, 20), FaultConfig::default());
 
     // Verify initial state
     assert!(injector.is_enabled());
@@ -73,9 +69,7 @@ async fn test_mockai_update_config() {
 #[tokio::test]
 async fn test_mockai_update_config_async() {
     // Create MockAI wrapped in Arc<RwLock>
-    let mockai = Arc::new(RwLock::new(MockAI::new(
-        IntelligentBehaviorConfig::default(),
-    )));
+    let mockai = Arc::new(RwLock::new(MockAI::new(IntelligentBehaviorConfig::default())));
 
     // Create new config
     let mut new_config = IntelligentBehaviorConfig::default();
@@ -86,7 +80,8 @@ async fn test_mockai_update_config_async() {
     MockAI::update_config_async(&mockai, new_config.clone()).await.unwrap();
 
     // Verify config was updated
-    let updated_config = mockai.read().await.get_config();
+    let mockai_guard = mockai.read().await;
+    let updated_config = mockai_guard.get_config();
     assert_eq!(updated_config.enabled, true);
     assert_eq!(updated_config.behavior_model.llm_provider, "test");
 }
@@ -106,6 +101,11 @@ async fn test_mockai_preserves_rules_on_config_update() {
 
     // Verify rules are preserved
     let rules_after_update = mockai.rules();
-    // Rules should be the same (empty/default)
-    assert_eq!(rules_after_update, &initial_rules);
+    // Rules should be preserved - verify the method doesn't panic and returns a valid reference
+    // Since BehaviorRules doesn't implement PartialEq, we can't directly compare,
+    // but we can verify that rules still exist and are accessible after config update
+    let initial_prompt = initial_rules.system_prompt.clone();
+    let updated_prompt = rules_after_update.system_prompt.clone();
+    // The rules should still be accessible (not dropped)
+    assert_eq!(initial_prompt, updated_prompt);
 }

@@ -47,14 +47,14 @@ async fn test_reality_level_changes() {
 
     // Test Level 1: Static Stubs
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::StaticStubs).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::StaticStubs).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        assert_eq!(engine.get_level().await, RealityLevel::StaticStubs);
+        let engine_guard = engine.read().await;
+        assert_eq!(engine_guard.get_level().await, RealityLevel::StaticStubs);
 
-        let config = engine.get_config().await;
+        let config = engine_guard.get_config().await;
         assert_eq!(config.chaos.error_rate, 0.0);
         assert_eq!(config.latency.base_ms, 0);
         assert!(!config.mockai.enabled);
@@ -62,14 +62,14 @@ async fn test_reality_level_changes() {
 
     // Test Level 5: Production Chaos
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::ProductionChaos).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::ProductionChaos).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        assert_eq!(engine.get_level().await, RealityLevel::ProductionChaos);
+        let engine_guard = engine.read().await;
+        assert_eq!(engine_guard.get_level().await, RealityLevel::ProductionChaos);
 
-        let config = engine.get_config().await;
+        let config = engine_guard.get_config().await;
         assert!(config.chaos.error_rate > 0.1);
         assert!(config.latency.base_ms > 100);
         assert!(config.mockai.enabled);
@@ -87,12 +87,12 @@ async fn test_reality_config_progression() {
         let level = RealityLevel::from_value(level_value).unwrap();
 
         {
-            let engine = engine.read().await;
-            engine.set_level(level).await;
-            drop(engine);
+            let mut engine_guard = engine.write().await;
+            engine_guard.set_level(level).await;
+            drop(engine_guard);
 
-            let engine = engine.read().await;
-            let config = engine.get_config().await;
+            let engine_guard = engine.read().await;
+            let config = engine_guard.get_config().await;
 
             // Error rate should increase or stay the same as level increases
             assert!(
@@ -123,23 +123,19 @@ async fn test_reality_preset_creation() {
     let engine = Arc::new(RwLock::new(RealityEngine::new()));
 
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::HighRealism).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::HighRealism).await;
+        drop(engine_guard);
     }
 
     {
-        let engine = engine.read().await;
-        let preset = engine.create_preset(
-            "test-preset".to_string(),
-            Some("Test preset description".to_string()),
-        ).await;
+        let engine_guard = engine.read().await;
+        let preset = engine_guard
+            .create_preset("test-preset".to_string(), Some("Test preset description".to_string()))
+            .await;
 
         assert_eq!(preset.name, "test-preset");
-        assert_eq!(
-            preset.description,
-            Some("Test preset description".to_string())
-        );
+        assert_eq!(preset.description, Some("Test preset description".to_string()));
         assert_eq!(preset.config.level, RealityLevel::HighRealism);
         assert!(preset.metadata.is_some());
     }
@@ -151,31 +147,31 @@ async fn test_reality_preset_application() {
 
     // Create a preset at Level 5
     let preset = {
-        let mut engine = engine.write().await;
-        engine.set_level(RealityLevel::ProductionChaos);
-        drop(engine);
-        let engine = engine.read().await;
-        engine.create_preset("chaos-preset".to_string(), None).await
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::ProductionChaos).await;
+        drop(engine_guard);
+        let engine_guard = engine.read().await;
+        engine_guard.create_preset("chaos-preset".to_string(), None).await
     };
 
     // Reset to Level 1
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::StaticStubs).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::StaticStubs).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        assert_eq!(engine.get_level().await, RealityLevel::StaticStubs);
+        let engine_guard = engine.read().await;
+        assert_eq!(engine_guard.get_level().await, RealityLevel::StaticStubs);
     }
 
     // Apply preset
     {
-        let engine = engine.read().await;
-        engine.apply_preset(preset.clone()).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.apply_preset(preset.clone()).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
         assert!(config.chaos.error_rate > 0.1);
         assert!(config.latency.base_ms > 100);
         assert!(config.mockai.enabled);
@@ -247,8 +243,8 @@ async fn test_reality_engine_concurrent_access() {
             let engine = engine.clone();
             tokio::spawn(async move {
                 let level = RealityLevel::from_value(level_value).unwrap();
-                let engine = engine.read().await;
-                engine.set_level(level).await;
+                let mut engine_guard = engine.write().await;
+                engine_guard.set_level(level).await;
             })
         })
         .collect();
@@ -262,24 +258,24 @@ async fn test_reality_config_chaos_settings() {
 
     // Level 1 should have no chaos
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::StaticStubs).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::StaticStubs).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
         assert_eq!(config.chaos.error_rate, 0.0);
         assert_eq!(config.chaos.delay_rate, 0.0);
     }
 
     // Level 5 should have high chaos
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::ProductionChaos).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::ProductionChaos).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
         assert!(config.chaos.error_rate > 0.1);
         assert!(config.chaos.delay_rate > 0.2);
     }
@@ -291,24 +287,24 @@ async fn test_reality_config_latency_settings() {
 
     // Level 1 should have no latency
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::StaticStubs).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::StaticStubs).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
         assert_eq!(config.latency.base_ms, 0);
         assert_eq!(config.latency.jitter_ms, 0);
     }
 
     // Level 5 should have high latency
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::ProductionChaos).await;
-        drop(engine);
+        let mut engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::ProductionChaos).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
         assert!(config.latency.base_ms > 100);
         assert!(config.latency.jitter_ms > 0);
     }
@@ -320,28 +316,24 @@ async fn test_reality_config_mockai_settings() {
 
     // Level 1 should have MockAI disabled
     {
-        let engine = engine.read().await;
-        engine.set_level(RealityLevel::StaticStubs).await;
-        drop(engine);
+        let engine_guard = engine.write().await;
+        engine_guard.set_level(RealityLevel::StaticStubs).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
         assert!(!config.mockai.enabled);
     }
 
     // Levels 2-5 should have MockAI enabled
     for level_value in 2..=5 {
         let level = RealityLevel::from_value(level_value).unwrap();
-        let engine = engine.read().await;
-        engine.set_level(level).await;
-        drop(engine);
+        let engine_guard = engine.write().await;
+        engine_guard.set_level(level).await;
+        drop(engine_guard);
 
-        let engine = engine.read().await;
-        let config = engine.get_config().await;
-        assert!(
-            config.mockai.enabled,
-            "Level {} should have MockAI enabled",
-            level_value
-        );
+        let engine_guard = engine.read().await;
+        let config = engine_guard.get_config().await;
+        assert!(config.mockai.enabled, "Level {} should have MockAI enabled", level_value);
     }
 }
