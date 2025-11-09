@@ -42,6 +42,10 @@ pub struct ScenarioRegistryEntry {
     /// Total reviews
     pub reviews_count: u32,
 
+    /// List of reviews (optional, may not be included in all API responses)
+    #[serde(default)]
+    pub reviews: Vec<ScenarioReview>,
+
     /// Repository URL
     pub repository: Option<String>,
 
@@ -56,6 +60,70 @@ pub struct ScenarioRegistryEntry {
 
     /// Updated timestamp
     pub updated_at: String,
+}
+
+/// Scenario review
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioReview {
+    /// Review ID
+    pub id: String,
+
+    /// Reviewer name/username
+    pub reviewer: String,
+
+    /// Reviewer email (optional, may be hidden)
+    #[serde(default)]
+    pub reviewer_email: Option<String>,
+
+    /// Rating (1-5)
+    pub rating: u8,
+
+    /// Review title
+    #[serde(default)]
+    pub title: Option<String>,
+
+    /// Review text/comment
+    pub comment: String,
+
+    /// Review timestamp
+    pub created_at: String,
+
+    /// Whether this review was helpful (for other users)
+    #[serde(default)]
+    pub helpful_count: u32,
+
+    /// Whether the reviewer verified they used the scenario
+    #[serde(default)]
+    pub verified_purchase: bool,
+}
+
+/// Review submission request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioReviewSubmission {
+    /// Scenario name
+    pub scenario_name: String,
+
+    /// Scenario version (optional)
+    pub scenario_version: Option<String>,
+
+    /// Rating (1-5)
+    pub rating: u8,
+
+    /// Review title (optional)
+    pub title: Option<String>,
+
+    /// Review text/comment
+    pub comment: String,
+
+    /// Reviewer name/username
+    pub reviewer: String,
+
+    /// Reviewer email (optional)
+    pub reviewer_email: Option<String>,
+
+    /// Whether the reviewer verified they used the scenario
+    #[serde(default)]
+    pub verified_purchase: bool,
 }
 
 /// Version-specific entry
@@ -343,6 +411,77 @@ impl ScenarioRegistry {
         })?;
 
         Ok(result)
+    }
+
+    /// Submit a review for a scenario
+    pub async fn submit_review(&self, review: ScenarioReviewSubmission) -> Result<ScenarioReview> {
+        let url = format!("{}/api/v1/scenarios/{}/reviews", self.base_url, review.scenario_name);
+
+        let mut request = self.client.post(&url);
+        if let Some(ref token) = self.token {
+            request = request.bearer_auth(token);
+        }
+
+        let response =
+            request.json(&review).send().await.map_err(|e| {
+                ScenarioError::Network(format!("Submit review request failed: {}", e))
+            })?;
+
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(ScenarioError::AuthRequired);
+        }
+
+        if !response.status().is_success() {
+            return Err(ScenarioError::Network(format!(
+                "Submit review failed with status: {}",
+                response.status()
+            )));
+        }
+
+        let submitted_review: ScenarioReview = response.json().await.map_err(|e| {
+            ScenarioError::Network(format!("Failed to parse review response: {}", e))
+        })?;
+
+        Ok(submitted_review)
+    }
+
+    /// Get reviews for a scenario
+    pub async fn get_reviews(
+        &self,
+        name: &str,
+        page: Option<usize>,
+        per_page: Option<usize>,
+    ) -> Result<Vec<ScenarioReview>> {
+        let page = page.unwrap_or(0);
+        let per_page = per_page.unwrap_or(20);
+        let url = format!(
+            "{}/api/v1/scenarios/{}/reviews?page={}&per_page={}",
+            self.base_url, name, page, per_page
+        );
+
+        let mut request = self.client.get(&url);
+        if let Some(ref token) = self.token {
+            request = request.bearer_auth(token);
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ScenarioError::Network(format!("Get reviews request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(ScenarioError::Network(format!(
+                "Get reviews failed with status: {}",
+                response.status()
+            )));
+        }
+
+        let reviews: Vec<ScenarioReview> = response
+            .json()
+            .await
+            .map_err(|e| ScenarioError::Network(format!("Failed to parse reviews: {}", e)))?;
+
+        Ok(reviews)
     }
 }
 

@@ -332,6 +332,12 @@ export MOCKFORGE_REGISTRY_TOKEN=your-token
 - Check that the scenario passes validation
 - Ensure you have publishing permissions
 
+## Enhanced Features
+
+For information about advanced features including preview functionality, VBR integration, MockAI configuration, schema alignment, domain packs, and enhanced reviews, see:
+
+- [Enhanced Features Guide](./SCENARIO_MARKETPLACE_ENHANCED_FEATURES.md) - Complete guide to advanced scenario marketplace features
+
 ## See Also
 
 - [Configuration Guide](../CONFIG.md) - MockForge configuration options

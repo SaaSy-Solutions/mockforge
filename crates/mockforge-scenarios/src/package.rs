@@ -199,6 +199,21 @@ impl ScenarioPackage {
             None
         }
     }
+
+    /// Get the MockAI config file path if it exists
+    pub fn mockai_config_path(&self) -> Option<PathBuf> {
+        let path = self.root.join("mockai.yaml");
+        if path.exists() {
+            Some(path)
+        } else {
+            let path = self.root.join("mockai.json");
+            if path.exists() {
+                Some(path)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 /// Package validation result

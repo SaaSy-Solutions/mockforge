@@ -43,24 +43,42 @@
 //! - `examples/` - Example data files
 //! - `README.md` - Documentation
 
+pub mod domain_pack;
 pub mod error;
 pub mod installer;
 pub mod manifest;
+pub mod mockai_integration;
 pub mod package;
+pub mod preview;
 pub mod registry;
+pub mod schema_alignment;
 pub mod source;
 pub mod state_machine;
 pub mod storage;
+pub mod vbr_integration;
 
 // Re-export commonly used types
+pub use domain_pack::{DomainPackInfo, DomainPackInstaller, DomainPackManifest, PackScenario};
 pub use error::{Result, ScenarioError};
 pub use installer::{InstallOptions, ScenarioInstaller};
 pub use manifest::{CompatibilityInfo, PluginDependency, ScenarioCategory, ScenarioManifest};
+pub use mockai_integration::{
+    apply_mockai_config, MockAIConfigDefinition, MockAIIntegrationConfig, MockAIMergeMode,
+};
 pub use package::{PackageValidation, ScenarioPackage};
+pub use preview::{CompatibilityCheck, OpenApiEndpoint, ScenarioPreview};
 pub use registry::{
     RegistryClient, ScenarioPublishRequest, ScenarioPublishResponse, ScenarioRegistry,
-    ScenarioRegistryEntry, ScenarioSearchQuery, ScenarioSearchResults, ScenarioSortOrder,
+    ScenarioRegistryEntry, ScenarioReview, ScenarioReviewSubmission, ScenarioSearchQuery,
+    ScenarioSearchResults, ScenarioSortOrder,
+};
+pub use schema_alignment::{
+    align_openapi_specs, align_vbr_entities, ConflictType, MergeStrategy, OpenApiAlignmentResult,
+    SchemaAlignmentConfig, SchemaConflict,
 };
 pub use source::{ScenarioSource, SourceType};
 pub use state_machine::{ScenarioStateMachineManager, StateHistoryEntry, StateInstance};
 pub use storage::{InstalledScenario, ScenarioStorage};
+pub use vbr_integration::{
+    apply_vbr_entities, VbrEntityDefinition, VbrIntegrationConfig, VbrMergeMode,
+};

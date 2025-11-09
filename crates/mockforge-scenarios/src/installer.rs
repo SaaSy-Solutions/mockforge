@@ -4,10 +4,14 @@
 
 use crate::error::{Result, ScenarioError};
 use crate::package::ScenarioPackage;
+use crate::preview::ScenarioPreview;
+use crate::schema_alignment::{align_openapi_specs, SchemaAlignmentConfig};
 use crate::source::ScenarioSource;
 use crate::storage::{InstalledScenario, ScenarioStorage};
+// VBR integration is handled at CLI/application level to avoid circular dependencies
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
+use serde_json::Value;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -78,6 +82,51 @@ impl ScenarioInstaller {
         self.storage.init().await?;
         self.storage.load().await?;
         Ok(())
+    }
+
+    /// Preview a scenario from a source string without installing
+    ///
+    /// Downloads/loads the scenario package and returns preview information
+    /// without actually installing it.
+    pub async fn preview(&self, source_str: &str) -> Result<ScenarioPreview> {
+        let source = ScenarioSource::parse(source_str)?;
+        self.preview_from_source(&source).await
+    }
+
+    /// Preview a scenario from a specific source
+    pub async fn preview_from_source(&self, source: &ScenarioSource) -> Result<ScenarioPreview> {
+        info!("Previewing scenario from source: {}", source);
+
+        // Get the scenario package directory (without installing)
+        let package_dir = match source {
+            ScenarioSource::Local(path) => {
+                // Validate local path exists
+                if !path.exists() {
+                    return Err(ScenarioError::NotFound(format!(
+                        "Scenario path not found: {}",
+                        path.display()
+                    )));
+                }
+                path.clone()
+            }
+            ScenarioSource::Url { url, checksum } => {
+                self.download_from_url(&url, checksum.as_deref()).await?
+            }
+            ScenarioSource::Git {
+                url,
+                reference,
+                subdirectory,
+            } => self.clone_from_git(&url, reference.as_deref(), subdirectory.as_deref()).await?,
+            ScenarioSource::Registry { name, version } => {
+                self.download_from_registry(&name, version.as_deref()).await?
+            }
+        };
+
+        // Load package (without validation to allow preview of invalid packages)
+        let package = ScenarioPackage::from_directory(&package_dir)?;
+
+        // Create preview
+        ScenarioPreview::from_package(&package)
     }
 
     /// Install a scenario from a source string
@@ -740,6 +789,18 @@ impl ScenarioInstaller {
     ///
     /// Copies scenario files (config.yaml, openapi.json, fixtures, etc.) to the current directory
     pub async fn apply_to_workspace(&self, name: &str, version: Option<&str>) -> Result<()> {
+        self.apply_to_workspace_with_alignment(name, version, None).await
+    }
+
+    /// Apply scenario to current workspace with schema alignment
+    ///
+    /// Copies scenario files and optionally aligns schemas/routes with existing workspace files.
+    pub async fn apply_to_workspace_with_alignment(
+        &self,
+        name: &str,
+        version: Option<&str>,
+        alignment_config: Option<SchemaAlignmentConfig>,
+    ) -> Result<()> {
         let scenario = if let Some(v) = version {
             self.get(name, v)
         } else {
@@ -765,14 +826,111 @@ impl ScenarioInstaller {
             info!("Copied config.yaml to workspace");
         }
 
-        // Copy openapi.json if it exists
+        // Handle OpenAPI spec alignment if both exist
         let openapi_source = scenario.path.join("openapi.json");
-        if openapi_source.exists() {
-            let openapi_dest = current_dir.join("openapi.json");
-            std::fs::copy(&openapi_source, &openapi_dest).map_err(|e| {
-                ScenarioError::Storage(format!("Failed to copy openapi.json: {}", e))
-            })?;
-            info!("Copied openapi.json to workspace");
+        let openapi_dest = current_dir.join("openapi.json");
+        let openapi_yaml_source = scenario.path.join("openapi.yaml");
+        let openapi_yaml_dest = current_dir.join("openapi.yaml");
+
+        if openapi_source.exists() || openapi_yaml_source.exists() {
+            let scenario_spec_path = if openapi_source.exists() {
+                &openapi_source
+            } else {
+                &openapi_yaml_source
+            };
+
+            let scenario_spec_content =
+                std::fs::read_to_string(scenario_spec_path).map_err(|e| ScenarioError::Io(e))?;
+
+            // Try to parse as JSON first, then YAML
+            let scenario_spec: Value = if scenario_spec_path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext == "json")
+                .unwrap_or(false)
+            {
+                serde_json::from_str(&scenario_spec_content).map_err(|e| ScenarioError::Serde(e))?
+            } else {
+                serde_yaml::from_str(&scenario_spec_content).map_err(|e| ScenarioError::Yaml(e))?
+            };
+
+            // Check if existing OpenAPI spec exists
+            let existing_spec_path = if openapi_dest.exists() {
+                Some(&openapi_dest)
+            } else if openapi_yaml_dest.exists() {
+                Some(&openapi_yaml_dest)
+            } else {
+                None
+            };
+
+            if let (Some(existing_path), Some(ref align_config)) =
+                (existing_spec_path, alignment_config)
+            {
+                // Align schemas
+                let existing_spec_content =
+                    std::fs::read_to_string(existing_path).map_err(|e| ScenarioError::Io(e))?;
+
+                let existing_spec: Value = if existing_path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext == "json")
+                    .unwrap_or(false)
+                {
+                    serde_json::from_str(&existing_spec_content)
+                        .map_err(|e| ScenarioError::Serde(e))?
+                } else {
+                    serde_yaml::from_str(&existing_spec_content)
+                        .map_err(|e| ScenarioError::Yaml(e))?
+                };
+
+                let alignment_result =
+                    align_openapi_specs(&existing_spec, &scenario_spec, align_config)?;
+
+                if alignment_result.success {
+                    if let Some(merged_spec) = alignment_result.merged_spec {
+                        // Write merged spec
+                        let merged_json = serde_json::to_string_pretty(&merged_spec)
+                            .map_err(|e| ScenarioError::Serde(e))?;
+                        std::fs::write(&openapi_dest, merged_json).map_err(|e| {
+                            ScenarioError::Storage(format!(
+                                "Failed to write merged openapi.json: {}",
+                                e
+                            ))
+                        })?;
+                        info!(
+                            "Merged OpenAPI spec with existing (strategy: {:?})",
+                            align_config.merge_strategy
+                        );
+
+                        // Log warnings
+                        for warning in &alignment_result.warnings {
+                            warn!("OpenAPI alignment warning: {}", warning);
+                        }
+                    }
+                } else {
+                    // Alignment failed (e.g., interactive mode with conflicts)
+                    warn!("OpenAPI alignment found {} conflicts", alignment_result.conflicts.len());
+                    for conflict in &alignment_result.conflicts {
+                        warn!("Conflict: {:?} at {}", conflict.conflict_type, conflict.path);
+                    }
+                    // Fall back to copying scenario spec
+                    std::fs::copy(scenario_spec_path, &openapi_dest).map_err(|e| {
+                        ScenarioError::Storage(format!("Failed to copy openapi.json: {}", e))
+                    })?;
+                    info!("Copied openapi.json to workspace (alignment had conflicts)");
+                }
+            } else {
+                // No existing spec, just copy scenario spec
+                let dest_path = if openapi_source.exists() {
+                    &openapi_dest
+                } else {
+                    &openapi_yaml_dest
+                };
+                std::fs::copy(scenario_spec_path, dest_path).map_err(|e| {
+                    ScenarioError::Storage(format!("Failed to copy openapi spec: {}", e))
+                })?;
+                info!("Copied openapi spec to workspace");
+            }
         }
 
         // Copy fixtures directory if it exists
@@ -806,8 +964,66 @@ impl ScenarioInstaller {
             info!("Copied examples to workspace");
         }
 
+        // Apply VBR entities if defined in scenario
+        if let Some(ref vbr_entities) = scenario.manifest.vbr_entities {
+            if !vbr_entities.is_empty() {
+                info!("Scenario contains {} VBR entity definitions", vbr_entities.len());
+                info!("Note: VBR entities need to be applied separately using VBR engine");
+                info!("Use 'mockforge vbr' commands or programmatic API to apply entities");
+            }
+        }
+
+        // Apply MockAI config if defined in scenario
+        if let Some(ref mockai_config) = scenario.manifest.mockai_config {
+            info!("Scenario contains MockAI configuration");
+            info!("Note: MockAI config needs to be merged with existing config.yaml");
+            info!("MockAI config will be available in the scenario package");
+        }
+
         info!("Scenario applied successfully to workspace");
         Ok(())
+    }
+
+    /// Get VBR entity definitions from a scenario
+    ///
+    /// Returns the VBR entity definitions if the scenario contains any.
+    /// The actual application of entities should be handled at the CLI/application level.
+    pub fn get_vbr_entities(
+        &self,
+        name: &str,
+        version: Option<&str>,
+    ) -> Result<Option<&[crate::vbr_integration::VbrEntityDefinition]>> {
+        let scenario = if let Some(v) = version {
+            self.get(name, v)
+        } else {
+            self.get_latest(name)
+        };
+
+        let scenario = scenario
+            .ok_or_else(|| ScenarioError::NotFound(format!("Scenario '{}' not found", name)))?;
+
+        Ok(scenario.manifest.vbr_entities.as_deref())
+    }
+
+    /// Get MockAI configuration from a scenario
+    ///
+    /// Returns the MockAI configuration if the scenario contains any.
+    /// The actual application of config should be handled at the CLI/application level.
+    pub fn get_mockai_config(
+        &self,
+        name: &str,
+        version: Option<&str>,
+    ) -> Result<Option<&crate::mockai_integration::MockAIConfigDefinition>> {
+        let scenario = if let Some(v) = version {
+            self.get(name, v)
+        } else {
+            self.get_latest(name)
+        };
+
+        let scenario = scenario
+            .ok_or_else(|| ScenarioError::NotFound(format!("Scenario '{}' not found", name)))?;
+
+        Ok(scenario.manifest.mockai_config.as_ref())
     }
 }
 

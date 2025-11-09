@@ -17,9 +17,11 @@ mockforge-vbr = { path = "../crates/mockforge-vbr" }
 mockforge-data = { path = "../crates/mockforge-data" }
 mockforge-recorder = { path = "../crates/mockforge-recorder" }
 mockforge-chaos = { path = "../crates/mockforge-chaos" }
+mockforge-scenarios = { path = "../crates/mockforge-scenarios" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 axum = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }

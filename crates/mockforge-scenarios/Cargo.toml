@@ -76,6 +76,9 @@ mockforge-plugin-loader = "0.2.7"
 # Core types for state machines
 mockforge-core = { path = "../mockforge-core", version = "0.2.7" }
 
+# Data types for schemas
+mockforge-data = { path = "../mockforge-data", version = "0.2.7" }
+
 [features]
 default = ["git-support"]
 git-support = ["git2"]

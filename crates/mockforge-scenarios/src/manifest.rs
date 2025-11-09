@@ -92,6 +92,20 @@ pub struct ScenarioManifest {
     /// This allows the editor to restore node positions and visual structure.
     #[serde(default)]
     pub state_machine_graphs: HashMap<String, VisualLayout>,
+
+    /// VBR entity definitions
+    ///
+    /// If provided, these entities will be created in the VBR engine
+    /// when the scenario is applied to a workspace.
+    #[serde(default)]
+    pub vbr_entities: Option<Vec<crate::vbr_integration::VbrEntityDefinition>>,
+
+    /// MockAI configuration
+    ///
+    /// If provided, this MockAI configuration will be merged with existing
+    /// config when the scenario is applied to a workspace.
+    #[serde(default)]
+    pub mockai_config: Option<crate::mockai_integration::MockAIConfigDefinition>,
 }
 
 fn default_timestamp() -> DateTime<Utc> {
@@ -122,6 +136,8 @@ impl ScenarioManifest {
             updated_at: Utc::now(),
             state_machines: Vec::new(),
             state_machine_graphs: HashMap::new(),
+            vbr_entities: None,
+            mockai_config: None,
         }
     }
 
