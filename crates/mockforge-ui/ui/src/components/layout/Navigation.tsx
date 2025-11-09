@@ -1,5 +1,6 @@
 import { logger } from '@/utils/logger';
 import React from 'react';
+import { Play } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useAuthStore } from '../../stores/useAuthStore';
 
@@ -20,6 +21,7 @@ const navItems: NavItem[] = [
   { id: 'services', label: 'Services', requiredRoles: ['admin'] },
   { id: 'fixtures', label: 'Fixtures', requiredRoles: ['admin'] },
   { id: 'workspaces', label: 'Workspaces', requiredRoles: ['admin'] },
+  { id: 'playground', label: 'Playground', icon: <Play className="h-4 w-4" />, requiredRoles: ['admin', 'viewer'] },
   { id: 'import', label: 'Import', requiredRoles: ['admin'] },
   { id: 'logs', label: 'Live Logs', requiredRoles: ['admin', 'viewer'] },
   { id: 'metrics', label: 'Metrics', requiredRoles: ['admin', 'viewer'] },
@@ -44,12 +46,13 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
             key={item.id}
             onClick={() => onTabChange(item.id)}
             className={cn(
-              "border-b-2 px-1 py-4 text-sm font-medium",
+              "border-b-2 px-1 py-4 text-sm font-medium flex items-center gap-2",
               activeTab === item.id
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
             )}
           >
+            {item.icon}
             {item.label}
           </button>
         ))}

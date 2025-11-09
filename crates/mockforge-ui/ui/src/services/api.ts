@@ -2069,6 +2069,206 @@ class ProxyApiService {
     const url = limit ? `/__mockforge/api/proxy/inspect?limit=${limit}` : '/__mockforge/api/proxy/inspect';
     return this.fetchJson(url) as Promise<ProxyInspectResponse>;
   }
+
+  // ==================== PLAYGROUND API METHODS ====================
+
+  /**
+   * List available endpoints for playground
+   */
+  async listPlaygroundEndpoints(workspaceId?: string): Promise<{
+    protocol: string;
+    method: string;
+    path: string;
+    description?: string;
+    enabled: boolean;
+  }[]> {
+    const url = workspaceId
+      ? `/?workspace_id=${encodeURIComponent(workspaceId)}`
+      : '';
+    return this.fetchJson(`/__mockforge/playground/endpoints${url}`) as Promise<{
+      protocol: string;
+      method: string;
+      path: string;
+      description?: string;
+      enabled: boolean;
+    }[]>;
+  }
+
+  /**
+   * Execute a REST request
+   */
+  async executeRestRequest(request: {
+    method: string;
+    path: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+    base_url?: string;
+    use_mockai?: boolean;
+    workspace_id?: string;
+  }): Promise<{
+    status_code: number;
+    headers: Record<string, string>;
+    body: unknown;
+    response_time_ms: number;
+    request_id: string;
+    error?: string;
+  }> {
+    return this.fetchJson('/__mockforge/playground/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      status_code: number;
+      headers: Record<string, string>;
+      body: unknown;
+      response_time_ms: number;
+      request_id: string;
+      error?: string;
+    }>;
+  }
+
+  /**
+   * Execute a GraphQL query
+   */
+  async executeGraphQLQuery(request: {
+    query: string;
+    variables?: Record<string, unknown>;
+    operation_name?: string;
+    base_url?: string;
+    workspace_id?: string;
+  }): Promise<{
+    status_code: number;
+    headers: Record<string, string>;
+    body: unknown;
+    response_time_ms: number;
+    request_id: string;
+    error?: string;
+  }> {
+    return this.fetchJson('/__mockforge/playground/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      status_code: number;
+      headers: Record<string, string>;
+      body: unknown;
+      response_time_ms: number;
+      request_id: string;
+      error?: string;
+    }>;
+  }
+
+  /**
+   * Perform GraphQL introspection
+   */
+  async graphQLIntrospect(): Promise<{
+    schema: unknown;
+    query_types: string[];
+    mutation_types: string[];
+    subscription_types: string[];
+  }> {
+    return this.fetchJson('/__mockforge/playground/graphql/introspect') as Promise<{
+      schema: unknown;
+      query_types: string[];
+      mutation_types: string[];
+      subscription_types: string[];
+    }>;
+  }
+
+  /**
+   * Get request history
+   */
+  async getPlaygroundHistory(params?: {
+    limit?: number;
+    protocol?: string;
+    workspace_id?: string;
+  }): Promise<{
+    id: string;
+    protocol: string;
+    method: string;
+    path: string;
+    status_code: number;
+    response_time_ms: number;
+    timestamp: string;
+    request_headers?: Record<string, string>;
+    request_body?: unknown;
+    graphql_query?: string;
+    graphql_variables?: Record<string, unknown>;
+  }[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.protocol) {
+      queryParams.append('protocol', params.protocol);
+    }
+    if (params?.workspace_id) {
+      queryParams.append('workspace_id', params.workspace_id);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/playground/history?${queryParams.toString()}`
+      : '/__mockforge/playground/history';
+    return this.fetchJson(url) as Promise<{
+      id: string;
+      protocol: string;
+      method: string;
+      path: string;
+      status_code: number;
+      response_time_ms: number;
+      timestamp: string;
+      request_headers?: Record<string, string>;
+      request_body?: unknown;
+      graphql_query?: string;
+      graphql_variables?: Record<string, unknown>;
+    }[]>;
+  }
+
+  /**
+   * Replay a request from history
+   */
+  async replayRequest(requestId: string): Promise<{
+    status_code: number;
+    headers: Record<string, string>;
+    body: unknown;
+    response_time_ms: number;
+    request_id: string;
+    error?: string;
+  }> {
+    return this.fetchJson(`/__mockforge/playground/history/${requestId}/replay`, {
+      method: 'POST',
+    }) as Promise<{
+      status_code: number;
+      headers: Record<string, string>;
+      body: unknown;
+      response_time_ms: number;
+      request_id: string;
+      error?: string;
+    }>;
+  }
+
+  /**
+   * Generate code snippets
+   */
+  async generateCodeSnippet(request: {
+    protocol: string;
+    method?: string;
+    path: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+    graphql_query?: string;
+    graphql_variables?: Record<string, unknown>;
+    base_url: string;
+  }): Promise<{
+    snippets: Record<string, string>;
+  }> {
+    return this.fetchJson('/__mockforge/playground/snippets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      snippets: Record<string, string>;
+    }>;
+  }
 }
 
 export const apiService = new ApiService();

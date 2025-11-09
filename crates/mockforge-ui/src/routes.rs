@@ -204,6 +204,14 @@ pub fn create_admin_router(
         .route("/__mockforge/contract-diff/captures/{id}/analyze", post(contract_diff::analyze_captured_request))
         .route("/__mockforge/contract-diff/captures/{id}/patch", post(contract_diff::generate_patch_file))
         .route("/__mockforge/contract-diff/statistics", get(contract_diff::get_capture_statistics))
+        // Playground routes
+        .route("/__mockforge/playground/endpoints", get(playground::list_playground_endpoints))
+        .route("/__mockforge/playground/execute", post(playground::execute_rest_request))
+        .route("/__mockforge/playground/graphql", post(playground::execute_graphql_query))
+        .route("/__mockforge/playground/graphql/introspect", get(playground::graphql_introspect))
+        .route("/__mockforge/playground/history", get(playground::get_request_history))
+        .route("/__mockforge/playground/history/{id}/replay", post(playground::replay_request))
+        .route("/__mockforge/playground/snippets", post(playground::generate_code_snippet))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))

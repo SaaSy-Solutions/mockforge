@@ -19,6 +19,7 @@ const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default:
 const TestingPage = lazy(() => import('./pages/TestingPage').then(m => ({ default: m.TestingPage })));
 const ImportPage = lazy(() => import('./pages/ImportPage').then(m => ({ default: m.ImportPage })));
 const WorkspacesPage = lazy(() => import('./pages/WorkspacesPage'));
+const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then(m => ({ default: m.PlaygroundPage })));
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
 const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })));
@@ -84,6 +85,8 @@ function App() {
         return <DashboardPage />;
       case 'workspaces':
         return <WorkspacesPage />;
+      case 'playground':
+        return <PlaygroundPage />;
 
       // Services & Data
       case 'services':

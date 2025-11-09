@@ -54,6 +54,7 @@ pub mod graph;
 pub mod health;
 pub mod migration;
 pub mod plugin;
+pub mod playground;
 pub mod verification;
 
 // Re-export commonly used types
