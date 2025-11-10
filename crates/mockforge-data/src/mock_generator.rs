@@ -8,6 +8,8 @@ use crate::consistency::ConsistencyStore;
 use crate::domains::Domain;
 use crate::faker::EnhancedFaker;
 use crate::persona::PersonaRegistry;
+use crate::persona_backstory::BackstoryGenerator;
+use crate::persona_templates::PersonaTemplateRegistry;
 use crate::schema::{FieldDefinition, SchemaDefinition};
 use crate::{Error, Result};
 use serde_json::{json, Value};
@@ -30,6 +32,8 @@ pub struct MockGeneratorConfig {
     pub field_mappings: HashMap<String, String>,
     /// Whether to validate generated data against schemas
     pub validate_generated_data: bool,
+    /// Whether to generate backstories for personas
+    pub enable_backstories: bool,
 }
 
 impl Default for MockGeneratorConfig {
@@ -41,6 +45,7 @@ impl Default for MockGeneratorConfig {
             include_optional_fields: true,
             field_mappings: HashMap::new(),
             validate_generated_data: true,
+            enable_backstories: false,
         }
     }
 }
@@ -84,6 +89,12 @@ impl MockGeneratorConfig {
     /// Enable/disable data validation
     pub fn validate_generated_data(mut self, validate: bool) -> Self {
         self.validate_generated_data = validate;
+        self
+    }
+
+    /// Enable/disable backstory generation for personas
+    pub fn enable_backstories(mut self, enable: bool) -> Self {
+        self.enable_backstories = enable;
         self
     }
 }
@@ -385,6 +396,7 @@ impl MockDataGenerator {
     ///
     /// Generates data for a schema using a specific entity ID and domain.
     /// This ensures the same entity ID always generates the same data pattern.
+    /// If backstories are enabled, automatically generates backstories for personas.
     pub fn generate_with_persona(
         &mut self,
         entity_id: &str,
@@ -395,6 +407,11 @@ impl MockDataGenerator {
         let store = self.consistency_store.as_ref().ok_or_else(|| {
             Error::generic("Persona support not enabled. Use with_persona_support() to create generator with persona support.")
         })?;
+
+        // Generate backstory if enabled
+        if self.config.enable_backstories {
+            self.ensure_persona_backstory(store, entity_id, domain)?;
+        }
 
         let mut object = serde_json::Map::new();
 
@@ -426,6 +443,57 @@ impl MockDataGenerator {
         }
 
         Ok(Value::Object(object))
+    }
+
+    /// Ensure a persona has a backstory, generating one if needed
+    ///
+    /// Checks if the persona has a backstory, and if not, generates one
+    /// using the PersonaTemplateRegistry and BackstoryGenerator.
+    fn ensure_persona_backstory(
+        &self,
+        store: &ConsistencyStore,
+        entity_id: &str,
+        domain: Domain,
+    ) -> Result<()> {
+        let persona_registry = store.persona_registry();
+        let persona = store.get_entity_persona(entity_id, Some(domain));
+
+        // If persona already has a backstory, no need to generate
+        if persona.has_backstory() {
+            return Ok(());
+        }
+
+        // Generate traits using template if persona doesn't have traits
+        let mut persona_mut = persona.clone();
+        if persona_mut.traits.is_empty() {
+            let template_registry = PersonaTemplateRegistry::new();
+            template_registry.apply_template_to_persona(&mut persona_mut)?;
+        }
+
+        // Generate backstory using BackstoryGenerator
+        let backstory_generator = BackstoryGenerator::new();
+        match backstory_generator.generate_backstory(&persona_mut) {
+            Ok(backstory) => {
+                // Update persona in registry with traits and backstory
+                let mut traits = HashMap::new();
+                for (key, value) in &persona_mut.traits {
+                    traits.insert(key.clone(), value.clone());
+                }
+
+                // Update traits first
+                if !traits.is_empty() {
+                    persona_registry.update_persona(entity_id, traits)?;
+                }
+
+                // Update backstory
+                persona_registry.update_persona_backstory(entity_id, backstory)?;
+            }
+            Err(e) => {
+                warn!("Failed to generate backstory for persona {}: {}", entity_id, e);
+            }
+        }
+
+        Ok(())
     }
 
     /// Apply constraints to a generated value

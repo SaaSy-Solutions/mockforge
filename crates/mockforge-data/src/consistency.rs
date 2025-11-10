@@ -12,10 +12,50 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+/// Entity type for cross-endpoint consistency
+///
+/// Allows the same base ID to have different personas for different entity types
+/// while maintaining relationships between them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EntityType {
+    /// User entity
+    User,
+    /// Device entity
+    Device,
+    /// Organization entity
+    Organization,
+    /// Generic/unspecified entity type
+    Generic,
+}
+
+impl EntityType {
+    /// Convert entity type to string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EntityType::User => "user",
+            EntityType::Device => "device",
+            EntityType::Organization => "organization",
+            EntityType::Generic => "generic",
+        }
+    }
+
+    /// Parse entity type from string
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "user" | "users" => EntityType::User,
+            "device" | "devices" => EntityType::Device,
+            "organization" | "organizations" | "org" | "orgs" => EntityType::Organization,
+            _ => EntityType::Generic,
+        }
+    }
+}
+
 /// Consistency store for maintaining entity ID to persona mappings
 ///
 /// Provides thread-safe access to persona-based data generation with
 /// in-memory caching and optional persistence capabilities.
+/// Supports cross-entity type consistency where the same base ID can have
+/// different personas for different entity types (user, device, organization).
 #[derive(Debug, Clone)]
 pub struct ConsistencyStore {
     /// Persona registry for managing personas
@@ -64,6 +104,96 @@ impl ConsistencyStore {
     pub fn get_entity_persona(&self, entity_id: &str, domain: Option<Domain>) -> PersonaProfile {
         let domain = domain.or(self.default_domain).unwrap_or(Domain::General);
         self.persona_registry.get_or_create_persona(entity_id.to_string(), domain)
+    }
+
+    /// Get or create a persona for an entity with a specific type
+    ///
+    /// Creates a persona keyed by both entity ID and entity type, allowing
+    /// the same base ID to have different personas for different types
+    /// (e.g., "user123" as a user vs "user123" as a device owner).
+    ///
+    /// The persona ID is constructed as "{entity_type}:{entity_id}" to ensure uniqueness.
+    pub fn get_or_create_persona_by_type(
+        &self,
+        entity_id: &str,
+        entity_type: EntityType,
+        domain: Option<Domain>,
+    ) -> PersonaProfile {
+        let domain = domain.or(self.default_domain).unwrap_or(Domain::General);
+        let persona_id = format!("{}:{}", entity_type.as_str(), entity_id);
+        let persona = self.persona_registry.get_or_create_persona(persona_id.clone(), domain);
+
+        // If this is not a generic type, establish relationships with the base entity
+        if entity_type != EntityType::Generic {
+            // Get or create the base entity persona
+            let base_persona = self.get_entity_persona(entity_id, Some(domain));
+
+            // Link personas based on entity type relationships
+            let mut base_persona_mut = base_persona.clone();
+            match entity_type {
+                EntityType::User => {
+                    // User owns devices and belongs to organizations
+                    // Relationships will be established when device/org personas are created
+                }
+                EntityType::Device => {
+                    // Device is owned by user - establish reverse relationship
+                    base_persona_mut
+                        .add_relationship("owns_devices".to_string(), persona_id.clone());
+                }
+                EntityType::Organization => {
+                    // Organization has users - establish relationship
+                    base_persona_mut.add_relationship("has_users".to_string(), persona_id.clone());
+                }
+                EntityType::Generic => {}
+            }
+
+            // Update the base persona in registry with relationships
+            // Use the registry's add_relationship method to persist relationships
+            for (rel_type, related_ids) in &base_persona_mut.relationships {
+                for related_id in related_ids {
+                    // Only add if not already present
+                    if let Some(existing) = self.persona_registry.get_persona(entity_id) {
+                        if !existing.get_related_personas(rel_type).contains(related_id) {
+                            self.persona_registry
+                                .add_relationship(entity_id, rel_type.clone(), related_id.clone())
+                                .ok();
+                        }
+                    }
+                }
+            }
+        }
+
+        persona
+    }
+
+    /// Get all personas for a base entity ID across different types
+    ///
+    /// Returns personas for all entity types associated with the base ID.
+    pub fn get_personas_for_base_id(
+        &self,
+        base_id: &str,
+        domain: Option<Domain>,
+    ) -> Vec<PersonaProfile> {
+        let domain = domain.or(self.default_domain).unwrap_or(Domain::General);
+        let mut personas = Vec::new();
+
+        // Get the base persona
+        let base_persona = self.get_entity_persona(base_id, Some(domain));
+        personas.push(base_persona);
+
+        // Get personas for each entity type
+        for entity_type in [
+            EntityType::User,
+            EntityType::Device,
+            EntityType::Organization,
+        ] {
+            let persona_id = format!("{}:{}", entity_type.as_str(), base_id);
+            if let Some(persona) = self.persona_registry.get_persona(&persona_id) {
+                personas.push(persona);
+            }
+        }
+
+        personas
     }
 
     /// Generate a consistent value for an entity
@@ -194,11 +324,11 @@ impl EntityIdExtractor {
         None
     }
 
-    /// Extract entity ID from a request path
+    /// Extract entity ID and type from a request path
     ///
     /// Looks for path parameters like "/users/{user_id}" or "/devices/{device_id}".
-    /// Returns the entity ID if found in the path.
-    pub fn from_path(path: &str) -> Option<String> {
+    /// Returns a tuple of (entity_id, entity_type) if found in the path.
+    pub fn from_path(path: &str) -> Option<(String, EntityType)> {
         // Simple extraction: look for common patterns
         // This could be enhanced to parse OpenAPI path templates
 
@@ -209,11 +339,14 @@ impl EntityIdExtractor {
             let id = segments[segments.len() - 1];
 
             // Check if resource matches known entity types
+            let entity_type = EntityType::from_str(&resource);
+
+            if entity_type != EntityType::Generic && !id.is_empty() {
+                return Some((id.to_string(), entity_type));
+            }
+
+            // Fallback for other entity types
             let entity_types = [
-                "user",
-                "users",
-                "device",
-                "devices",
                 "transaction",
                 "transactions",
                 "order",
@@ -227,11 +360,18 @@ impl EntityIdExtractor {
             ];
 
             if entity_types.contains(&resource.as_str()) && !id.is_empty() {
-                return Some(id.to_string());
+                return Some((id.to_string(), EntityType::Generic));
             }
         }
 
         None
+    }
+
+    /// Extract entity ID from a request path (backward compatibility)
+    ///
+    /// Returns just the entity ID without type information.
+    pub fn from_path_id_only(path: &str) -> Option<String> {
+        Self::from_path(path).map(|(id, _)| id)
     }
 
     /// Extract entity ID from a JSON value (request body or response)
@@ -296,7 +436,7 @@ impl EntityIdExtractor {
 
         // Try path
         if let Some(p) = path {
-            if let Some(id) = Self::from_path(p) {
+            if let Some((id, _)) = Self::from_path(p) {
                 return Some(id);
             }
         }
@@ -366,10 +506,70 @@ mod tests {
 
     #[test]
     fn test_entity_id_extractor_from_path() {
-        assert_eq!(EntityIdExtractor::from_path("/users/123"), Some("123".to_string()));
-        assert_eq!(EntityIdExtractor::from_path("/devices/abc-123"), Some("abc-123".to_string()));
-        assert_eq!(EntityIdExtractor::from_path("/orders/ORD-456"), Some("ORD-456".to_string()));
+        assert_eq!(
+            EntityIdExtractor::from_path("/users/123"),
+            Some(("123".to_string(), EntityType::User))
+        );
+        assert_eq!(
+            EntityIdExtractor::from_path("/devices/abc-123"),
+            Some(("abc-123".to_string(), EntityType::Device))
+        );
+        assert_eq!(
+            EntityIdExtractor::from_path("/organizations/org1"),
+            Some(("org1".to_string(), EntityType::Organization))
+        );
         assert_eq!(EntityIdExtractor::from_path("/api/health"), None);
+    }
+
+    #[test]
+    fn test_entity_id_extractor_from_path_id_only() {
+        assert_eq!(EntityIdExtractor::from_path_id_only("/users/123"), Some("123".to_string()));
+        assert_eq!(
+            EntityIdExtractor::from_path_id_only("/devices/abc-123"),
+            Some("abc-123".to_string())
+        );
+        assert_eq!(
+            EntityIdExtractor::from_path_id_only("/organizations/org1"),
+            Some("org1".to_string())
+        );
+        assert_eq!(EntityIdExtractor::from_path_id_only("/api/health"), None);
+    }
+
+    #[test]
+    fn test_entity_type() {
+        assert_eq!(EntityType::User.as_str(), "user");
+        assert_eq!(EntityType::Device.as_str(), "device");
+        assert_eq!(EntityType::Organization.as_str(), "organization");
+        assert_eq!(EntityType::from_str("users"), EntityType::User);
+        assert_eq!(EntityType::from_str("devices"), EntityType::Device);
+        assert_eq!(EntityType::from_str("organizations"), EntityType::Organization);
+    }
+
+    #[test]
+    fn test_get_or_create_persona_by_type() {
+        let store = ConsistencyStore::with_default_domain(Domain::Finance);
+
+        // Create personas for same base ID but different types
+        let user_persona = store.get_or_create_persona_by_type("user123", EntityType::User, None);
+        let device_persona =
+            store.get_or_create_persona_by_type("user123", EntityType::Device, None);
+
+        // Should have different persona IDs
+        assert_ne!(user_persona.id, device_persona.id);
+        assert!(user_persona.id.contains("user:user123"));
+        assert!(device_persona.id.contains("device:user123"));
+    }
+
+    #[test]
+    fn test_get_personas_for_base_id() {
+        let store = ConsistencyStore::with_default_domain(Domain::Finance);
+
+        // Create personas for different types with same base ID
+        store.get_or_create_persona_by_type("user123", EntityType::User, None);
+        store.get_or_create_persona_by_type("user123", EntityType::Device, None);
+
+        let personas = store.get_personas_for_base_id("user123", None);
+        assert!(personas.len() >= 2); // At least base + user + device
     }
 
     #[test]

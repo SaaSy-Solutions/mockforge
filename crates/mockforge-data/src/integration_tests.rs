@@ -346,8 +346,11 @@ mod tests {
         assert_eq!(EntityIdExtractor::from_field_name("deviceId"), Some("deviceId".to_string()));
 
         // Test path extraction
-        assert_eq!(EntityIdExtractor::from_path("/users/12345"), Some("12345".to_string()));
-        assert_eq!(EntityIdExtractor::from_path("/devices/abc-123"), Some("abc-123".to_string()));
+        assert_eq!(EntityIdExtractor::from_path_id_only("/users/12345"), Some("12345".to_string()));
+        assert_eq!(
+            EntityIdExtractor::from_path_id_only("/devices/abc-123"),
+            Some("abc-123".to_string())
+        );
 
         // Test JSON value extraction
         let json = json!({

@@ -6,6 +6,7 @@
 
 use crate::domains::Domain;
 use crate::persona::PersonaProfile;
+use crate::persona_backstory::BackstoryGenerator;
 use mockforge_core::Result;
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -19,6 +20,19 @@ pub trait PersonaTemplate: Send + Sync {
 
     /// Get the domain this template applies to
     fn domain(&self) -> Domain;
+
+    /// Generate a backstory for a persona based on its traits
+    ///
+    /// This is an optional method that can be overridden by implementations
+    /// to provide domain-specific backstory generation. The default implementation
+    /// uses the BackstoryGenerator.
+    fn generate_backstory(&self, persona: &PersonaProfile) -> Result<Option<String>> {
+        let backstory_generator = BackstoryGenerator::new();
+        match backstory_generator.generate_backstory(persona) {
+            Ok(backstory) => Ok(Some(backstory)),
+            Err(_) => Ok(None), // Return None if backstory generation fails
+        }
+    }
 }
 
 /// Finance persona template
@@ -243,6 +257,30 @@ impl PersonaTemplateRegistry {
         for (key, value) in traits {
             persona.set_trait(key, value);
         }
+        Ok(())
+    }
+
+    /// Apply template traits and optionally generate a backstory
+    ///
+    /// Generates traits using the template, adds them to the persona, and
+    /// optionally generates a backstory if `generate_backstory` is true.
+    pub fn apply_template_to_persona_with_backstory(
+        &self,
+        persona: &mut PersonaProfile,
+        generate_backstory: bool,
+    ) -> Result<()> {
+        // First apply traits
+        self.apply_template_to_persona(persona)?;
+
+        // Then generate backstory if requested
+        if generate_backstory {
+            if let Some(template) = self.get_template(persona.domain) {
+                if let Ok(Some(backstory)) = template.generate_backstory(persona) {
+                    persona.set_backstory(backstory);
+                }
+            }
+        }
+
         Ok(())
     }
 }

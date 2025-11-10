@@ -17,6 +17,8 @@ pub mod mock_generator;
 pub mod mock_server;
 /// Persona profile system for consistent data generation
 pub mod persona;
+/// Backstory generation for personas
+pub mod persona_backstory;
 /// Domain-specific persona templates
 pub mod persona_templates;
 /// Provider utilities for faker and data generation
@@ -33,7 +35,7 @@ mod mock_data_tests;
 #[cfg(test)]
 mod integration_tests;
 
-pub use consistency::{ConsistencyStore, EntityIdExtractor};
+pub use consistency::{ConsistencyStore, EntityIdExtractor, EntityType};
 pub use dataset::{Dataset, DatasetValidationResult};
 pub use domains::{Domain, DomainGenerator, ParseDomainError};
 pub use drift::{DataDriftConfig, DataDriftEngine, DriftStrategy};
@@ -46,6 +48,7 @@ pub use mock_server::{
     MockServerConfig,
 };
 pub use persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
+pub use persona_backstory::{BackstoryGenerator, BackstoryTemplate};
 pub use persona_templates::{
     EcommercePersonaTemplate, FinancePersonaTemplate, HealthcarePersonaTemplate, PersonaTemplate,
     PersonaTemplateRegistry,
