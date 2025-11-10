@@ -13,7 +13,7 @@ publish = true  # Internal tracing component
 [dependencies]
 # OpenTelemetry core
 opentelemetry = { version = "0.21", features = ["trace"] }
-opentelemetry_sdk = { version = "0.21", features = ["trace", "rt-tokio"] }
+opentelemetry_sdk = { version = "0.31", features = ["trace", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.14", features = ["trace", "grpc-tonic"] }
 opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
 opentelemetry-semantic-conventions = "0.13"
