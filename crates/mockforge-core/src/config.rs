@@ -510,6 +510,9 @@ pub struct ServerConfig {
     /// Reality slider configuration for unified realism control
     #[serde(default)]
     pub reality: RealitySliderConfig,
+    /// Reality Continuum configuration for blending mock and real data sources
+    #[serde(default)]
+    pub reality_continuum: crate::reality_continuum::ContinuumConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings
@@ -582,6 +585,9 @@ pub struct ProfileConfig {
     /// Reality slider configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reality: Option<RealitySliderConfig>,
+    /// Reality Continuum configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reality_continuum: Option<crate::reality_continuum::ContinuumConfig>,
 }
 
 // Default is derived for ServerConfig

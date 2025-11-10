@@ -3,8 +3,8 @@
 
 use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
-    Error, FailureInjector, ProxyHandler, RecordReplayHandler, RequestFingerprint,
-    ResponsePriority, ResponseSource, Result, RouteChaosInjector,
+    Error, FailureInjector, ProxyHandler, RealityContinuumEngine, RecordReplayHandler,
+    RequestFingerprint, ResponsePriority, ResponseSource, Result, RouteChaosInjector,
 };
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
@@ -26,6 +26,8 @@ pub struct PriorityHttpHandler {
     mock_generator: Option<Box<dyn MockGenerator + Send + Sync>>,
     /// OpenAPI spec for tag extraction
     openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
+    /// Reality Continuum engine for blending mock and real responses
+    continuum_engine: Option<Arc<RealityContinuumEngine>>,
 }
 
 /// Trait for mock response generation
@@ -68,6 +70,7 @@ impl PriorityHttpHandler {
             proxy_handler,
             mock_generator,
             openapi_spec: None,
+            continuum_engine: None,
         }
     }
 
@@ -87,6 +90,7 @@ impl PriorityHttpHandler {
             proxy_handler,
             mock_generator,
             openapi_spec,
+            continuum_engine: None,
         }
     }
 
@@ -99,6 +103,12 @@ impl PriorityHttpHandler {
     /// Set per-route chaos injector
     pub fn with_route_chaos_injector(mut self, injector: Arc<RouteChaosInjector>) -> Self {
         self.route_chaos_injector = Some(injector);
+        self
+    }
+
+    /// Set Reality Continuum engine
+    pub fn with_continuum_engine(mut self, engine: Arc<RealityContinuumEngine>) -> Self {
+        self.continuum_engine = Some(engine);
         self
     }
 
@@ -208,6 +218,13 @@ impl PriorityHttpHandler {
             }
         }
 
+        // Check if Reality Continuum is enabled and should blend responses
+        let should_blend = if let Some(ref continuum_engine) = self.continuum_engine {
+            continuum_engine.is_enabled().await
+        } else {
+            false
+        };
+
         // 4. PROXY: Check if request should be proxied (respecting migration mode)
         if let Some(ref proxy_handler) = self.proxy_handler {
             // Check migration mode first
@@ -224,6 +241,183 @@ impl PriorityHttpHandler {
                 // Check if this is shadow mode (proxy + generate mock for comparison)
                 let is_shadow = proxy_handler.config.should_shadow(uri.path());
 
+                // If continuum is enabled, we need both mock and real responses
+                if should_blend {
+                    // Fetch both responses in parallel
+                    let proxy_future = proxy_handler.proxy_request(method, uri, headers, body);
+                    let mock_result = if let Some(ref mock_generator) = self.mock_generator {
+                        mock_generator.generate_mock_response(&fingerprint, headers, body)
+                    } else {
+                        Ok(None)
+                    };
+
+                    // Wait for proxy response
+                    let proxy_result = proxy_future.await;
+
+                    // Handle blending
+                    match (proxy_result, mock_result) {
+                        (Ok(proxy_response), Ok(Some(mock_response))) => {
+                            // Both succeeded - blend them
+                            if let Some(ref continuum_engine) = self.continuum_engine {
+                                let blend_ratio =
+                                    continuum_engine.get_blend_ratio(uri.path()).await;
+                                let blender = continuum_engine.blender();
+
+                                // Parse JSON bodies
+                                let mock_body_str = &mock_response.body;
+                                let real_body_bytes =
+                                    proxy_response.body.clone().unwrap_or_default();
+                                let real_body_str = String::from_utf8_lossy(&real_body_bytes);
+
+                                let mock_json: serde_json::Value =
+                                    serde_json::from_str(mock_body_str)
+                                        .unwrap_or_else(|_| serde_json::json!({}));
+                                let real_json: serde_json::Value =
+                                    serde_json::from_str(&real_body_str)
+                                        .unwrap_or_else(|_| serde_json::json!({}));
+
+                                // Blend the JSON responses
+                                let blended_json =
+                                    blender.blend_responses(&mock_json, &real_json, blend_ratio);
+                                let blended_body = serde_json::to_string(&blended_json)
+                                    .unwrap_or_else(|_| real_body_str.to_string());
+
+                                // Blend status codes
+                                let blended_status = blender.blend_status_code(
+                                    mock_response.status_code,
+                                    proxy_response.status_code,
+                                    blend_ratio,
+                                );
+
+                                // Blend headers
+                                let mut proxy_headers = HashMap::new();
+                                for (key, value) in proxy_response.headers.iter() {
+                                    if let Ok(value_str) = value.to_str() {
+                                        proxy_headers.insert(
+                                            key.as_str().to_string(),
+                                            value_str.to_string(),
+                                        );
+                                    }
+                                }
+                                let blended_headers = blender.blend_headers(
+                                    &mock_response.headers,
+                                    &proxy_headers,
+                                    blend_ratio,
+                                );
+
+                                let content_type = blended_headers
+                                    .get("content-type")
+                                    .or_else(|| {
+                                        proxy_response
+                                            .headers
+                                            .get("content-type")
+                                            .and_then(|v| v.to_str().ok())
+                                            .map(|s| s.to_string())
+                                    })
+                                    .unwrap_or_else(|| "application/json".to_string());
+
+                                tracing::info!(
+                                    path = %uri.path(),
+                                    blend_ratio = blend_ratio,
+                                    "Reality Continuum: blended mock and real responses"
+                                );
+
+                                let mut source = ResponseSource::new(
+                                    ResponsePriority::Proxy,
+                                    "continuum".to_string(),
+                                )
+                                .with_metadata("blend_ratio".to_string(), blend_ratio.to_string())
+                                .with_metadata(
+                                    "upstream_url".to_string(),
+                                    proxy_handler.config.get_upstream_url(uri.path()),
+                                );
+
+                                if let Some(mode) = migration_mode {
+                                    source = source.with_metadata(
+                                        "migration_mode".to_string(),
+                                        format!("{:?}", mode),
+                                    );
+                                }
+
+                                return Ok(PriorityResponse {
+                                    source,
+                                    status_code: blended_status,
+                                    headers: blended_headers,
+                                    body: blended_body.into_bytes(),
+                                    content_type,
+                                });
+                            }
+                        }
+                        (Ok(proxy_response), Ok(None)) => {
+                            // Only proxy succeeded - use it (fallback behavior)
+                            tracing::debug!(
+                                path = %uri.path(),
+                                "Continuum: mock generation failed, using real response"
+                            );
+                            // Fall through to normal proxy handling
+                        }
+                        (Ok(proxy_response), Err(_)) => {
+                            // Only proxy succeeded - use it (fallback behavior)
+                            tracing::debug!(
+                                path = %uri.path(),
+                                "Continuum: mock generation failed, using real response"
+                            );
+                            // Fall through to normal proxy handling
+                        }
+                        (Err(e), Ok(Some(mock_response))) => {
+                            // Only mock succeeded - use it (fallback behavior)
+                            tracing::debug!(
+                                path = %uri.path(),
+                                error = %e,
+                                "Continuum: proxy failed, using mock response"
+                            );
+                            // Fall through to normal mock handling below
+                            let mut source = ResponseSource::new(
+                                ResponsePriority::Mock,
+                                "continuum_fallback".to_string(),
+                            )
+                            .with_metadata("generated_from".to_string(), "openapi_spec".to_string())
+                            .with_metadata(
+                                "fallback_reason".to_string(),
+                                "proxy_failed".to_string(),
+                            );
+
+                            if let Some(mode) = migration_mode {
+                                source = source.with_metadata(
+                                    "migration_mode".to_string(),
+                                    format!("{:?}", mode),
+                                );
+                            }
+
+                            return Ok(PriorityResponse {
+                                source,
+                                status_code: mock_response.status_code,
+                                headers: mock_response.headers,
+                                body: mock_response.body.into_bytes(),
+                                content_type: mock_response.content_type,
+                            });
+                        }
+                        (Err(e), _) => {
+                            // Both failed
+                            tracing::warn!(
+                                path = %uri.path(),
+                                error = %e,
+                                "Continuum: both proxy and mock failed"
+                            );
+                            // If migration mode is Real, fail hard
+                            if let Some(crate::proxy::config::MigrationMode::Real) = migration_mode
+                            {
+                                return Err(Error::generic(format!(
+                                    "Proxy request failed in real mode: {}",
+                                    e
+                                )));
+                            }
+                            // Continue to next handler
+                        }
+                    }
+                }
+
+                // Normal proxy handling (when continuum is not enabled or blending failed)
                 match proxy_handler.proxy_request(method, uri, headers, body).await {
                     Ok(proxy_response) => {
                         let mut response_headers = HashMap::new();

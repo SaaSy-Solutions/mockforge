@@ -27,6 +27,8 @@ use std::net::SocketAddr;
 /// * `chaos_api_state` - Optional chaos API state for hot-reload support
 /// * `latency_injector` - Optional latency injector for hot-reload support
 /// * `mockai` - Optional MockAI instance for hot-reload support
+/// * `continuum_config` - Optional Reality Continuum configuration
+/// * `virtual_clock` - Optional virtual clock for time-based progression
 pub async fn start_admin_server(
     addr: SocketAddr,
     http_server_addr: Option<SocketAddr>,
@@ -42,6 +44,8 @@ pub async fn start_admin_server(
     mockai: Option<
         std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
     >,
+    continuum_config: Option<mockforge_core::ContinuumConfig>,
+    virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = create_admin_router(
         http_server_addr,
@@ -54,6 +58,8 @@ pub async fn start_admin_server(
         chaos_api_state,
         latency_injector,
         mockai,
+        continuum_config,
+        virtual_clock,
     );
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);

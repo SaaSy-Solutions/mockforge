@@ -4031,6 +4031,8 @@ pub async fn handle_serve(
     let chaos_api_state_for_admin_clone = chaos_api_state_for_admin.clone();
     let latency_injector_for_admin_clone = latency_injector_for_admin.clone();
     let mockai_for_admin = mockai.clone();
+    let continuum_config_for_admin = config.reality_continuum.clone();
+    let time_travel_manager_for_admin = time_travel_manager.clone();
 
     // Start Admin UI server (if enabled)
     let admin_handle = if config.admin.enabled {
@@ -4049,6 +4051,8 @@ pub async fn handle_serve(
         let chaos_state = chaos_api_state_for_admin_clone.clone();
         let latency_injector = latency_injector_for_admin_clone.clone();
         let mockai_ref = mockai_for_admin.clone();
+        let continuum_config = continuum_config_for_admin.clone();
+        let time_travel_manager_clone = time_travel_manager_for_admin.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://{}:{}", admin_host, admin_port);
 
@@ -4095,6 +4099,10 @@ pub async fn handle_serve(
                     }
                 };
 
+            // Initialize continuum engine from config
+            let continuum_config = Some(continuum_config);
+            let virtual_clock_for_continuum = time_travel_manager_clone.as_ref().map(|m| m.clock());
+
             tokio::select! {
                 result = mockforge_ui::start_admin_server(
                     addr,
@@ -4107,6 +4115,8 @@ pub async fn handle_serve(
                     Some(chaos_state),
                     latency_injector,
                     mockai_ref,
+                    continuum_config,
+                    virtual_clock_for_continuum,
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))
                 }
@@ -4551,6 +4561,8 @@ async fn handle_admin(
         None, // chaos_api_state
         None, // latency_injector
         None, // mockai
+        None, // continuum_config
+        None, // virtual_clock
     )
     .await?;
 

@@ -274,6 +274,8 @@ pub struct AdminState {
     pub plugin_registry: Arc<RwLock<PluginRegistry>>,
     /// Reality engine for managing realism levels
     pub reality_engine: Arc<RwLock<mockforge_core::RealityEngine>>,
+    /// Reality Continuum engine for blending mock and real data sources
+    pub continuum_engine: Arc<RwLock<mockforge_core::RealityContinuumEngine>>,
     /// Chaos API state for hot-reload support (optional)
     /// Contains config that can be updated at runtime
     pub chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
@@ -349,6 +351,8 @@ impl AdminState {
     /// * `chaos_api_state` - Optional chaos API state for hot-reload support
     /// * `latency_injector` - Optional latency injector for hot-reload support
     /// * `mockai` - Optional MockAI instance for hot-reload support
+    /// * `continuum_config` - Optional Reality Continuum configuration
+    /// * `virtual_clock` - Optional virtual clock for time-based progression
     pub fn new(
         http_server_addr: Option<std::net::SocketAddr>,
         ws_server_addr: Option<std::net::SocketAddr>,
@@ -363,6 +367,8 @@ impl AdminState {
         mockai: Option<
             std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
         >,
+        continuum_config: Option<mockforge_core::ContinuumConfig>,
+        virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -419,6 +425,14 @@ impl AdminState {
             workspace_persistence: Arc::new(WorkspacePersistence::new("./workspaces")),
             plugin_registry: Arc::new(RwLock::new(PluginRegistry::new())),
             reality_engine: Arc::new(RwLock::new(mockforge_core::RealityEngine::new())),
+            continuum_engine: Arc::new(RwLock::new({
+                let config = continuum_config.unwrap_or_default();
+                if let Some(clock) = virtual_clock {
+                    mockforge_core::RealityContinuumEngine::with_virtual_clock(config, clock)
+                } else {
+                    mockforge_core::RealityContinuumEngine::new(config)
+                }
+            })),
             chaos_api_state,
             latency_injector,
             mockai,
@@ -3907,6 +3921,189 @@ pub async fn export_reality_preset(
         }))),
         Err(e) => Json(ApiResponse::error(format!("Failed to export preset: {}", e))),
     }
+}
+
+// Reality Continuum API handlers
+
+/// Get current blend ratio for a path
+pub async fn get_continuum_ratio(
+    State(state): State<AdminState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let path = params.get("path").cloned().unwrap_or_else(|| "/".to_string());
+    let engine = state.continuum_engine.read().await;
+    let ratio = engine.get_blend_ratio(&path).await;
+    let config = engine.get_config().await;
+    let enabled = engine.is_enabled().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "path": path,
+        "blend_ratio": ratio,
+        "enabled": enabled,
+        "transition_mode": format!("{:?}", config.transition_mode),
+        "merge_strategy": format!("{:?}", config.merge_strategy),
+        "default_ratio": config.default_ratio,
+    })))
+}
+
+/// Set blend ratio for a path
+#[derive(Deserialize)]
+pub struct SetContinuumRatioRequest {
+    path: String,
+    ratio: f64,
+}
+
+pub async fn set_continuum_ratio(
+    State(state): State<AdminState>,
+    Json(request): Json<SetContinuumRatioRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let ratio = request.ratio.clamp(0.0, 1.0);
+    let engine = state.continuum_engine.read().await;
+    engine.set_blend_ratio(&request.path, ratio).await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "path": request.path,
+        "blend_ratio": ratio,
+    })))
+}
+
+/// Get time schedule
+pub async fn get_continuum_schedule(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    let schedule = engine.get_time_schedule().await;
+
+    match schedule {
+        Some(s) => Json(ApiResponse::success(serde_json::json!({
+            "start_time": s.start_time.to_rfc3339(),
+            "end_time": s.end_time.to_rfc3339(),
+            "start_ratio": s.start_ratio,
+            "end_ratio": s.end_ratio,
+            "curve": format!("{:?}", s.curve),
+            "duration_days": s.duration().num_days(),
+        }))),
+        None => Json(ApiResponse::success(serde_json::json!(null))),
+    }
+}
+
+/// Update time schedule
+#[derive(Deserialize)]
+pub struct SetContinuumScheduleRequest {
+    start_time: String,
+    end_time: String,
+    start_ratio: f64,
+    end_ratio: f64,
+    curve: Option<String>,
+}
+
+pub async fn set_continuum_schedule(
+    State(state): State<AdminState>,
+    Json(request): Json<SetContinuumScheduleRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let start_time = chrono::DateTime::parse_from_rfc3339(&request.start_time)
+        .map_err(|e| format!("Invalid start_time: {}", e))
+        .and_then(|dt| Ok(dt.with_timezone(&chrono::Utc)));
+
+    let end_time = chrono::DateTime::parse_from_rfc3339(&request.end_time)
+        .map_err(|e| format!("Invalid end_time: {}", e))
+        .and_then(|dt| Ok(dt.with_timezone(&chrono::Utc)));
+
+    match (start_time, end_time) {
+        (Ok(start), Ok(end)) => {
+            let curve = request
+                .curve
+                .as_deref()
+                .map(|c| match c {
+                    "linear" => mockforge_core::TransitionCurve::Linear,
+                    "exponential" => mockforge_core::TransitionCurve::Exponential,
+                    "sigmoid" => mockforge_core::TransitionCurve::Sigmoid,
+                    _ => mockforge_core::TransitionCurve::Linear,
+                })
+                .unwrap_or(mockforge_core::TransitionCurve::Linear);
+
+            let schedule = mockforge_core::TimeSchedule::with_curve(
+                start,
+                end,
+                request.start_ratio.clamp(0.0, 1.0),
+                request.end_ratio.clamp(0.0, 1.0),
+                curve,
+            );
+
+            let engine = state.continuum_engine.read().await;
+            engine.set_time_schedule(schedule.clone()).await;
+
+            Json(ApiResponse::success(serde_json::json!({
+                "start_time": schedule.start_time.to_rfc3339(),
+                "end_time": schedule.end_time.to_rfc3339(),
+                "start_ratio": schedule.start_ratio,
+                "end_ratio": schedule.end_ratio,
+                "curve": format!("{:?}", schedule.curve),
+            })))
+        }
+        (Err(e), _) | (_, Err(e)) => Json(ApiResponse::error(e)),
+    }
+}
+
+/// Manually advance blend ratio
+#[derive(Deserialize)]
+pub struct AdvanceContinuumRatioRequest {
+    increment: Option<f64>,
+}
+
+pub async fn advance_continuum_ratio(
+    State(state): State<AdminState>,
+    Json(request): Json<AdvanceContinuumRatioRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let increment = request.increment.unwrap_or(0.1);
+    let engine = state.continuum_engine.read().await;
+    engine.advance_ratio(increment).await;
+    let config = engine.get_config().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "default_ratio": config.default_ratio,
+        "increment": increment,
+    })))
+}
+
+/// Enable or disable continuum
+#[derive(Deserialize)]
+pub struct SetContinuumEnabledRequest {
+    enabled: bool,
+}
+
+pub async fn set_continuum_enabled(
+    State(state): State<AdminState>,
+    Json(request): Json<SetContinuumEnabledRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    engine.set_enabled(request.enabled).await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "enabled": request.enabled,
+    })))
+}
+
+/// Get all manual overrides
+pub async fn get_continuum_overrides(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    let overrides = engine.get_manual_overrides().await;
+
+    Json(ApiResponse::success(serde_json::json!(overrides)))
+}
+
+/// Clear all manual overrides
+pub async fn clear_continuum_overrides(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    engine.clear_manual_overrides().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "message": "All manual overrides cleared",
+    })))
 }
 
 pub async fn get_workspace(

@@ -240,6 +240,7 @@ pub mod priority_handler;
 pub mod protocol_abstraction;
 pub mod proxy;
 pub mod reality;
+pub mod reality_continuum;
 pub mod record_replay;
 pub mod request_capture;
 pub mod request_chaining;
@@ -323,6 +324,10 @@ pub use protocol_abstraction::{
 };
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};
 pub use reality::{PresetMetadata, RealityConfig, RealityEngine, RealityLevel, RealityPreset};
+pub use reality_continuum::{
+    ContinuumConfig, ContinuumRule, MergeStrategy, RealityContinuumEngine, ResponseBlender,
+    TimeSchedule, TransitionCurve, TransitionMode,
+};
 pub use record_replay::{
     clean_old_fixtures, list_fixtures, list_ready_fixtures, list_smoke_endpoints, RecordHandler,
     RecordReplayHandler, RecordedRequest, ReplayHandler,

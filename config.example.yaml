@@ -128,6 +128,37 @@ core:
         upstream_url: "https://orders-api.example.com"
         condition: "AND(header[authorization] != '', $.order.amount > 1000)"  # Multiple conditions
 
+# Reality Continuum configuration
+# Gradually transition from mock to real backend data by blending responses
+reality_continuum:
+  enabled: false  # Enable Reality Continuum feature
+  default_ratio: 0.0  # Default blend ratio (0.0 = 100% mock, 1.0 = 100% real)
+  transition_mode: "manual"  # manual, time_based, or scheduled
+  merge_strategy: "field_level"  # field_level, weighted, or body_blend
+
+  # Time-based progression schedule (optional, used when transition_mode is time_based or scheduled)
+  time_schedule:
+    start_time: "2025-01-01T00:00:00Z"  # RFC3339 timestamp
+    end_time: "2025-02-01T00:00:00Z"     # RFC3339 timestamp
+    start_ratio: 0.0                     # Blend ratio at start time
+    end_ratio: 1.0                       # Blend ratio at end time
+    curve: "linear"                       # linear, exponential, or sigmoid
+
+  # Per-route blend ratio overrides
+  routes:
+    - pattern: "/api/users/*"
+      ratio: 0.5                          # 50% real, 50% mock for user endpoints
+      group: "api-v1"                     # Optional: migration group
+      enabled: true
+    - pattern: "/api/orders/*"
+      ratio: 0.3                          # 30% real, 70% mock for order endpoints
+      enabled: true
+
+  # Group-level blend ratio overrides
+  groups:
+    "api-v1": 0.0                        # All routes in api-v1 group use 0% real
+    "api-v2": 0.5                        # All routes in api-v2 group use 50% real
+
   # ============================================================================
   # Per-Route Configuration: Fault Injection & Latency
   # ============================================================================
