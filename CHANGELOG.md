@@ -197,6 +197,42 @@
 
 - Nothing yet.
 
+## [0.2.8] - 2025-11-10
+
+### Added
+
+- **Generative Schema Mode**: Complete implementation of generative schema mode for dynamic mock data generation
+- **Smart Personas**: Feature for consistent cross-endpoint data generation using persona-based templates
+- **Reality Continuum**: Feature for blending mock and real data sources with configurable reality levels
+- **Voice + LLM Interface**: Voice interface implementation with Speech-to-Text (STT) backend support
+- **Deceptive Deploy**: Complete deceptive deploy feature for advanced testing scenarios
+- **GraphQL + REST Playground**: Interactive playground with workspace filtering capabilities
+- **ForgeConnect SDK**: Complete SDK implementation with full feature set
+- **Enhanced Scenario Marketplace**: Improved scenario marketplace with additional features
+- **Reality Slider**: Hot-reload support for reality level adjustments
+- **Chaos Lab**: Interactive network condition simulation tool
+- **AI Contract Diff**: Feature for comparing and diffing API contracts
+- **WireMock-Inspired Features**: Browser proxy mode, git sync, data sources, template library, managed hosting documentation, and user management
+- **Ecosystem Documentation**: Comprehensive ecosystem and use cases documentation
+- **Configuration Extensibility**: Complete configuration and extensibility implementation
+- **Advanced Behavior Simulation**: Enhanced behavior and simulation features
+
+### Changed
+
+- **SQLx Integration**: Configured SQLx and integrated mockforge-collab with mockforge-core
+- **Latency Recording**: Completed latency recording integration with WorkspaceConfig reality_level field support
+
+### Fixed
+
+- Fixed test compilation errors in reality integration and hot-reload tests
+- Fixed test compilation errors in openapi_generator_tests
+- Fixed all compilation errors for AI Contract Diff feature
+- Applied rustfmt formatting to Chaos Lab code
+
+### Security
+
+- Nothing yet.
+
 ## [Unreleased]
 
 ### Added
