@@ -223,6 +223,7 @@ pub mod encryption;
 pub mod error;
 pub mod failure_injection;
 pub mod generate_config;
+pub mod generative_schema;
 pub mod git_watch;
 pub mod graph;
 pub mod import;

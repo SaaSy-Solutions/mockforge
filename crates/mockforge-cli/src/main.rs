@@ -4101,7 +4101,7 @@ pub async fn handle_serve(
 
             // Initialize continuum engine from config
             let continuum_config = Some(continuum_config);
-            let virtual_clock_for_continuum = time_travel_manager_clone.as_ref().map(|m| m.clock());
+            let virtual_clock_for_continuum = Some(time_travel_manager_clone.clock());
 
             tokio::select! {
                 result = mockforge_ui::start_admin_server(

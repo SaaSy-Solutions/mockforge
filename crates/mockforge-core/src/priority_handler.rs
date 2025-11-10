@@ -307,6 +307,7 @@ impl PriorityHttpHandler {
 
                                 let content_type = blended_headers
                                     .get("content-type")
+                                    .cloned()
                                     .or_else(|| {
                                         proxy_response
                                             .headers
