@@ -32,7 +32,7 @@ thiserror = "1.0"
 anyhow = "1.0"
 
 # Image processing
-image = "0.24"
+image = "0.25"
 
 # HTML templating
 tera = "1.19"
