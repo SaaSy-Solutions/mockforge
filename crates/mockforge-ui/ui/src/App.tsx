@@ -62,6 +62,9 @@ const MockAIPage = lazy(() => import('./pages/MockAIPage').then(m => ({ default:
 const MockAIOpenApiGeneratorPage = lazy(() => import('./pages/MockAIOpenApiGeneratorPage').then(m => ({ default: m.MockAIOpenApiGeneratorPage })));
 const MockAIRulesPage = lazy(() => import('./pages/MockAIRulesPage').then(m => ({ default: m.MockAIRulesPage })));
 
+// Voice + LLM Interface
+const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m.VoicePage })));
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
@@ -166,6 +169,10 @@ function App() {
         return <MockAIOpenApiGeneratorPage />;
       case 'mockai-rules':
         return <MockAIRulesPage />;
+
+      // Voice + LLM Interface
+      case 'voice':
+        return <VoicePage />;
 
       // Configuration
       case 'config':

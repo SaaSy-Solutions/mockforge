@@ -358,7 +358,9 @@ async fn test_domain_pack_list() {
     // List installed packs (may be empty, that's ok)
     let packs = pack_installer.list_installed().unwrap();
     // Just verify the method works without panicking
-    assert!(packs.len() >= 0);
+    // packs.len() is always >= 0, so this assertion is redundant
+    // Just verify packs exists
+    let _ = packs.len();
 }
 
 #[tokio::test]
@@ -435,7 +437,8 @@ async fn test_scenario_preview_compatibility_check() {
 
     // Check compatibility
     let compatibility = preview.compatibility;
-    assert!(compatibility.compatible || !compatibility.compatible); // Just check it exists
+    // Just check compatibility exists (the boolean value is always true or false)
+    let _ = compatibility.compatible;
     assert!(!compatibility.current_version.is_empty());
 }
 

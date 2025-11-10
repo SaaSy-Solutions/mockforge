@@ -32,21 +32,21 @@ async fn test_latency_metrics_tracking() {
 
     // Get statistics
     let stats = tracker.get_stats();
-    assert_eq!(stats.total_requests, 5, "Should have 5 total requests");
-    assert!(stats.avg_latency_ms > 0.0, "Average latency should be positive");
-    assert_eq!(stats.min_latency_ms, 100, "Min latency should be 100ms");
-    assert_eq!(stats.max_latency_ms, 200, "Max latency should be 200ms");
+    assert_eq!(stats.count, 5, "Should have 5 total requests");
+    assert!(stats.avg_ms > 0.0, "Average latency should be positive");
+    assert_eq!(stats.min_ms, 100, "Min latency should be 100ms");
+    assert_eq!(stats.max_ms, 200, "Max latency should be 200ms");
 }
 
 /// Test network profile management
 #[tokio::test]
 async fn test_network_profile_management() {
-    use mockforge_chaos::profiles::ProfileManager;
+    use mockforge_chaos::api::ProfileManager;
 
     let profile_manager = ProfileManager::new();
 
     // Test listing profiles (should include built-in profiles)
-    let profiles = profile_manager.list_profiles();
+    let profiles = profile_manager.get_all_profiles();
     assert!(!profiles.is_empty(), "Should have at least built-in profiles");
 
     // Verify built-in profiles exist
@@ -100,13 +100,13 @@ async fn test_error_pattern_configuration() {
     let injector = FaultInjector::new(fault_config.clone());
 
     // Test that pattern is configured
-    assert!(injector.config.error_pattern.is_some(), "Error pattern should be configured");
+    assert!(injector.config().error_pattern.is_some(), "Error pattern should be configured");
 
     // Test random pattern
     fault_config.error_pattern = Some(ErrorPattern::Random { probability: 0.5 });
     let injector_random = FaultInjector::new(fault_config.clone());
     assert!(
-        injector_random.config.error_pattern.is_some(),
+        injector_random.config().error_pattern.is_some(),
         "Random pattern should be configured"
     );
 
@@ -116,7 +116,7 @@ async fn test_error_pattern_configuration() {
     });
     let injector_sequential = FaultInjector::new(fault_config);
     assert!(
-        injector_sequential.config.error_pattern.is_some(),
+        injector_sequential.config().error_pattern.is_some(),
         "Sequential pattern should be configured"
     );
 }
@@ -124,8 +124,8 @@ async fn test_error_pattern_configuration() {
 /// Test profile export/import
 #[tokio::test]
 async fn test_profile_export_import() {
+    use mockforge_chaos::api::ProfileManager;
     use mockforge_chaos::config::ChaosConfig;
-    use mockforge_chaos::profiles::ProfileManager;
     use serde_json;
 
     let profile_manager = ProfileManager::new();
@@ -142,7 +142,7 @@ async fn test_profile_export_import() {
     );
 
     // Parse back
-    let imported: mockforge_chaos::profiles::NetworkProfile =
+    let imported: mockforge_chaos::NetworkProfile =
         serde_json::from_str(&json_export).expect("Should deserialize from JSON");
     assert_eq!(imported.name, profile.name);
     assert_eq!(imported.builtin, profile.builtin);
@@ -169,8 +169,8 @@ async fn test_latency_metrics_api_format() {
     // Test stats serialization
     let stats = tracker.get_stats();
     let json = serde_json::to_string(&stats).expect("Should serialize stats");
-    assert!(json.contains("avg_latency_ms"), "Stats JSON should contain avg_latency_ms");
-    assert!(json.contains("total_requests"), "Stats JSON should contain total_requests");
+    assert!(json.contains("avg_ms"), "Stats JSON should contain avg_ms");
+    assert!(json.contains("count"), "Stats JSON should contain count");
 }
 
 /// Test error pattern serialization
@@ -206,13 +206,13 @@ async fn test_error_pattern_serialization() {
 /// Test profile creation and deletion
 #[tokio::test]
 async fn test_profile_crud_operations() {
+    use mockforge_chaos::api::ProfileManager;
     use mockforge_chaos::config::ChaosConfig;
-    use mockforge_chaos::profiles::ProfileManager;
 
     let profile_manager = ProfileManager::new();
 
     // Create a custom profile
-    let custom_profile = mockforge_chaos::profiles::NetworkProfile {
+    let custom_profile = mockforge_chaos::NetworkProfile {
         name: "test_custom_profile".to_string(),
         description: "Test custom profile for integration tests".to_string(),
         chaos_config: ChaosConfig::default(),
@@ -287,7 +287,7 @@ async fn test_error_pattern_state_management() {
 
     // Pattern state should be reset
     assert!(
-        injector.config.error_pattern.is_some(),
+        injector.config().error_pattern.is_some(),
         "Pattern should still be configured after update"
     );
 }
@@ -295,7 +295,7 @@ async fn test_error_pattern_state_management() {
 /// Test profile configuration structure
 #[tokio::test]
 async fn test_profile_configuration_structure() {
-    use mockforge_chaos::profiles::ProfileManager;
+    use mockforge_chaos::api::ProfileManager;
 
     let profile_manager = ProfileManager::new();
     let profile = profile_manager.get_profile("slow_3g").expect("Should have slow_3g profile");
@@ -328,11 +328,11 @@ async fn test_latency_statistics_calculation() {
     }
 
     let stats = tracker.get_stats();
-    assert_eq!(stats.total_requests, test_values.len());
-    assert_eq!(stats.min_latency_ms, 100);
-    assert_eq!(stats.max_latency_ms, 200);
+    assert_eq!(stats.count, test_values.len());
+    assert_eq!(stats.min_ms, 100);
+    assert_eq!(stats.max_ms, 200);
     assert!(
-        (stats.avg_latency_ms - expected_avg).abs() < 0.01,
+        (stats.avg_ms - expected_avg).abs() < 0.01,
         "Average should match expected value"
     );
 }

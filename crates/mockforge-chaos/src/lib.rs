@@ -65,7 +65,7 @@ pub use alerts::{
     Alert, AlertHandler, AlertManager, AlertRule, AlertRuleType, AlertSeverity, AlertType,
 };
 pub use analytics::{ChaosAnalytics, ChaosImpact, MetricsBucket, TimeBucket};
-pub use api::create_chaos_api_router;
+pub use api::{create_chaos_api_router, ProfileManager};
 pub use auto_remediation::{
     ApprovalRequest, EffectivenessMetrics, RemediationAction, RemediationConfig, RemediationEngine,
     RemediationResult, RemediationStats, RemediationStatus, RiskAssessment as AutoRiskAssessment,

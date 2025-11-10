@@ -3633,6 +3633,11 @@ mod tests {
             enabled: true,
             latency_ms: None,
             status_code: Some(200),
+            request_match: None,
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
         };
 
         // Create mock
@@ -3667,6 +3672,11 @@ mod tests {
                 enabled: true,
                 latency_ms: None,
                 status_code: Some(200),
+                request_match: None,
+                priority: None,
+                scenario: None,
+                required_scenario_state: None,
+                new_scenario_state: None,
             });
             mocks.push(MockConfig {
                 id: "2".to_string(),
@@ -3680,6 +3690,11 @@ mod tests {
                 enabled: false,
                 latency_ms: None,
                 status_code: Some(201),
+                request_match: None,
+                priority: None,
+                scenario: None,
+                required_scenario_state: None,
+                new_scenario_state: None,
             });
         }
 

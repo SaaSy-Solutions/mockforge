@@ -212,6 +212,9 @@ pub fn create_admin_router(
         .route("/__mockforge/playground/history", get(playground::get_request_history))
         .route("/__mockforge/playground/history/{id}/replay", post(playground::replay_request))
         .route("/__mockforge/playground/snippets", post(playground::generate_code_snippet))
+        // Voice + LLM Interface routes
+        .route("/api/v2/voice/process", post(voice::process_voice_command))
+        .route("/__mockforge/voice/process", post(voice::process_voice_command))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))
@@ -279,6 +282,9 @@ mod tests {
             true,
             8080,
             "http://localhost:9090".to_string(),
+            None,
+            None,
+            None,
         );
 
         // Router should be created successfully
@@ -295,6 +301,9 @@ mod tests {
             false,
             8080,
             "http://localhost:9090".to_string(),
+            None,
+            None,
+            None,
         );
 
         // Router should still work without server addresses

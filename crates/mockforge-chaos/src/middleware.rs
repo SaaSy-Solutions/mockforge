@@ -481,8 +481,9 @@ mod tests {
         };
 
         let latency_tracker = Arc::new(LatencyMetricsTracker::new());
-        let middleware = ChaosMiddleware::new(config, latency_tracker);
-        assert!(middleware.latency_injector.is_enabled());
+        let config_arc = Arc::new(RwLock::new(config));
+        let middleware = ChaosMiddleware::new(config_arc, latency_tracker);
+        assert!(middleware.latency_injector.read().await.is_enabled());
     }
 
     #[tokio::test]

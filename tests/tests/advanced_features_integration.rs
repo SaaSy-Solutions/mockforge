@@ -33,34 +33,48 @@ use tokio::time::Instant;
 async fn test_stub_mapping_conversion() {
     // Create a recorded exchange
     let recorded_request = RecordedRequest {
+        id: "test-request-1".to_string(),
+        protocol: Protocol::Http,
+        timestamp: chrono::Utc::now(),
         method: "POST".to_string(),
         path: "/api/users".to_string(),
-        headers: HashMap::from([("content-type".to_string(), "application/json".to_string())]),
+        query_params: None,
+        headers: serde_json::to_string(&HashMap::from([(
+            "content-type".to_string(),
+            "application/json".to_string(),
+        )]))
+        .unwrap(),
         body: Some(r#"{"name": "John Doe", "email": "john@example.com"}"#.to_string()),
-        query_params: HashMap::new(),
-        timestamp: chrono::Utc::now(),
+        body_encoding: "utf8".to_string(),
+        client_ip: None,
+        trace_id: None,
+        span_id: None,
+        duration_ms: None,
+        status_code: None,
+        tags: None,
     };
 
     let recorded_response = RecordedResponse {
+        request_id: "test-request-1".to_string(),
         status_code: 201,
-        headers: HashMap::from([("content-type".to_string(), "application/json".to_string())]),
-        body: r#"{"id": "123e4567-e89b-12d3-a456-426614174000", "name": "John Doe", "email": "john@example.com", "created_at": "2024-01-01T00:00:00Z"}"#.to_string(),
+        headers: serde_json::to_string(&HashMap::from([("content-type".to_string(), "application/json".to_string())])).unwrap(),
+        body: Some(r#"{"id": "123e4567-e89b-12d3-a456-426614174000", "name": "John Doe", "email": "john@example.com", "created_at": "2024-01-01T00:00:00Z"}"#.to_string()),
+        body_encoding: "utf8".to_string(),
+        size_bytes: 0,
         timestamp: chrono::Utc::now(),
     };
 
     let exchange = RecordedExchange {
-        id: "test-123".to_string(),
-        protocol: Protocol::Http,
         request: recorded_request,
-        response: recorded_response,
-        duration_ms: 50,
+        response: Some(recorded_response),
     };
 
     // Convert to stub mapping
-    let converter = StubMappingConverter::new();
+    let converter = StubMappingConverter::new(false);
+    let stub_mapping = converter.convert(&exchange).expect("Should convert to stub");
     let stub = converter
-        .convert_to_stub(&exchange, StubFormat::Yaml)
-        .expect("Should convert to stub");
+        .to_string(&stub_mapping, StubFormat::Yaml)
+        .expect("Should convert to string");
 
     // Verify stub structure
     assert!(stub.contains("request"));

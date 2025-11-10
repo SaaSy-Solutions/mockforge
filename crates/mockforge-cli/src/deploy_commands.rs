@@ -120,6 +120,9 @@ async fn deploy_mock_api(
 ) -> anyhow::Result<()> {
     info!("🚀 Starting deceptive deploy...");
 
+    // Clone config_path early since we'll need it later
+    let config_path_clone = config_path.clone();
+
     // Load configuration
     let mut server_config = if let Some(config_path) = config_path {
         load_config(&config_path)
@@ -174,6 +177,8 @@ async fn deploy_mock_api(
     }
 
     // Override spec path if specified
+    // Clone spec_path early since we'll need it later for handle_serve
+    let spec_path_for_serve = spec_path.clone();
     if let Some(spec) = spec_path {
         server_config.http.openapi_spec = Some(spec.to_string_lossy().to_string());
     }
@@ -258,7 +263,7 @@ async fn deploy_mock_api(
     info!("🚀 Starting server...");
 
     // Determine config file path for saving
-    let effective_config_path = if let Some(ref path) = config_path {
+    let effective_config_path = if let Some(ref path) = config_path_clone {
         path.clone()
     } else {
         let default_paths = [
@@ -279,7 +284,12 @@ async fn deploy_mock_api(
     let config_was_modified = if effective_config_path.exists() {
         // Load existing config to compare
         if let Ok(existing_config) = load_config(&effective_config_path).await {
-            existing_config.deceptive_deploy != server_config.deceptive_deploy
+            // Compare key fields since DeceptiveDeployConfig doesn't implement PartialEq
+            existing_config.deceptive_deploy.enabled != server_config.deceptive_deploy.enabled
+                || existing_config.deceptive_deploy.auto_tunnel
+                    != server_config.deceptive_deploy.auto_tunnel
+                || existing_config.deceptive_deploy.custom_domain
+                    != server_config.deceptive_deploy.custom_domain
         } else {
             true // If we can't load it, assume modified
         }
@@ -367,7 +377,7 @@ async fn deploy_mock_api(
         None,                                // chaos_rate_limit
         None,                                // chaos_bandwidth_limit
         None,                                // chaos_packet_loss
-        spec_path,                           // spec
+        spec_path_for_serve,                 // spec
         None,                                // ws_replay_file
         None,                                // graphql
         None,                                // graphql_port

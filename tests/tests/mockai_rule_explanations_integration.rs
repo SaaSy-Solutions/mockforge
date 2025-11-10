@@ -8,22 +8,21 @@ use serde_json::json;
 
 fn create_test_example_pair() -> ExamplePair {
     ExamplePair {
-        request: json!({
-            "method": "POST",
-            "path": "/api/users",
-            "body": {
-                "name": "Alice",
-                "email": "alice@example.com"
-            }
-        }),
-        response: json!({
-            "status_code": 201,
-            "body": {
-                "id": "user_123",
-                "name": "Alice",
-                "email": "alice@example.com"
-            }
-        }),
+        method: "POST".to_string(),
+        path: "/api/users".to_string(),
+        request: Some(json!({
+            "name": "Alice",
+            "email": "alice@example.com"
+        })),
+        status: 201,
+        response: Some(json!({
+            "id": "user_123",
+            "name": "Alice",
+            "email": "alice@example.com"
+        })),
+        query_params: std::collections::HashMap::new(),
+        headers: std::collections::HashMap::new(),
+        metadata: std::collections::HashMap::new(),
     }
 }
 

@@ -40,6 +40,7 @@ import {
   CheckCircle2,
   Brain,
   GitCompare,
+  Mic,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -93,6 +94,7 @@ const navItems = [
   { id: 'mockai', label: 'MockAI', icon: Brain },
   { id: 'mockai-openapi-generator', label: 'MockAI OpenAPI Generator', icon: Code2 },
   { id: 'mockai-rules', label: 'MockAI Rules', icon: BarChart3 },
+  { id: 'voice', label: 'Voice + LLM', icon: Mic },
 
   // Plugins
   { id: 'plugins', label: 'Plugins', icon: Puzzle },

@@ -332,6 +332,11 @@ mod tests {
             enabled: true,
             latency_ms: None,
             status_code: Some(200),
+            request_match: None,
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
         };
 
         let event = MockEvent::mock_created(mock);

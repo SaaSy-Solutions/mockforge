@@ -43,6 +43,7 @@ mod template_commands;
 mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
+mod voice_commands;
 mod workspace_commands;
 
 #[cfg(test)]
@@ -943,6 +944,21 @@ enum Commands {
     Mockai {
         #[command(subcommand)]
         mockai_command: mockai_commands::MockAICommands,
+    },
+
+    /// Voice + LLM Interface for conversational mock creation
+    ///
+    /// Build mocks conversationally using natural language commands powered by LLM.
+    /// Supports both single-shot and interactive conversational modes.
+    ///
+    /// Examples:
+    ///   mockforge voice create --command "Create a fake e-commerce API with 20 products" --output api.yaml
+    ///   mockforge voice create --serve --port 3000
+    ///   mockforge voice interactive
+    #[command(verbatim_doc_comment)]
+    Voice {
+        #[command(subcommand)]
+        voice_command: voice_commands::VoiceCommands,
     },
 
     /// Time travel / temporal simulation control
@@ -2244,6 +2260,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             mockai_commands::handle_mockai_command(mockai_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("MockAI command failed: {}", e))?;
+        }
+        Commands::Voice { voice_command } => {
+            voice_commands::handle_voice_command(voice_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Voice command failed: {}", e))?;
         }
 
         Commands::Chaos { chaos_command } => {

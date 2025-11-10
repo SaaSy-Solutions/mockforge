@@ -1024,6 +1024,8 @@ mod tests {
     #[test]
     fn test_router_creation() {
         // Just ensure router can be created
+        use crate::events::EventBus;
+        let event_bus = Arc::new(EventBus::new(100));
         let state = ApiState {
             auth: Arc::new(AuthService::new("test".to_string())),
             user: Arc::new(UserService::new(
@@ -1032,6 +1034,9 @@ mod tests {
             )),
             workspace: Arc::new(WorkspaceService::new(todo!())),
             history: Arc::new(VersionControl::new(todo!())),
+            merge: Arc::new(MergeService::new(todo!())),
+            backup: Arc::new(BackupService::new(todo!(), None, todo!(), todo!())),
+            sync: Arc::new(SyncEngine::new(event_bus)),
         };
         let _router = create_router(state);
     }

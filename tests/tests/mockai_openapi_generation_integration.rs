@@ -1,6 +1,6 @@
 //! Integration tests for MockAI OpenAPI generation from recorded traffic
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use mockforge_core::intelligent_behavior::openapi_generator::{
     HttpExchange, OpenApiGenerationConfig, OpenApiSpecGenerator,
 };
@@ -9,7 +9,6 @@ use mockforge_recorder::{
     models::{RecordedExchange, RecordedRequest, RecordedResponse},
     openapi_export::{QueryFilters, RecordingsToOpenApi},
 };
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 fn create_test_exchange(
@@ -128,12 +127,35 @@ async fn test_recorder_to_openapi_conversion() {
 
     // Create test recorded exchange
     let now = Utc::now();
-    let exchange = RecordedExchange {
-        id: 1,
-        request_id: 1,
-        response_id: 1,
+    let request = RecordedRequest {
+        id: "test-1".to_string(),
+        protocol: mockforge_recorder::models::Protocol::Http,
         timestamp: now,
-        duration_ms: 100,
+        method: "GET".to_string(),
+        path: "/test".to_string(),
+        query_params: None,
+        headers: "{}".to_string(),
+        body: None,
+        body_encoding: "utf8".to_string(),
+        client_ip: None,
+        trace_id: None,
+        span_id: None,
+        duration_ms: None,
+        status_code: None,
+        tags: None,
+    };
+    let response = RecordedResponse {
+        request_id: "test-1".to_string(),
+        status_code: 200,
+        headers: "{}".to_string(),
+        body: Some("{}".to_string()),
+        body_encoding: "utf8".to_string(),
+        size_bytes: 0,
+        timestamp: now,
+    };
+    let exchange = RecordedExchange {
+        request,
+        response: Some(response),
     };
 
     // Note: In a real test, we'd need to insert actual request/response records
@@ -235,7 +257,7 @@ async fn test_confidence_scoring_integration() {
     let generator = OpenApiSpecGenerator::new(config);
 
     let path_groups = generator.group_by_path_pattern(&exchanges);
-    let confidence = generator.calculate_confidence_scores(&path_groups);
+    let confidence = generator.calculate_confidence_scores(&path_groups, &exchanges);
 
     // Should have confidence scores
     assert!(!confidence.is_empty());

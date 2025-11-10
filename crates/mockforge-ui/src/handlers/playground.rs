@@ -177,7 +177,9 @@ pub async fn list_playground_endpoints(
                         for route in routes {
                             // Filter by workspace if workspace_id is provided and route has workspace info
                             if let Some(ws_id) = workspace_id {
-                                if let Some(route_workspace) = route.get("workspace_id").and_then(|w| w.as_str()) {
+                                if let Some(route_workspace) =
+                                    route.get("workspace_id").and_then(|w| w.as_str())
+                                {
                                     if route_workspace != ws_id {
                                         continue; // Skip routes not belonging to this workspace
                                     }
@@ -313,7 +315,9 @@ pub async fn execute_rest_request(
             if let Some(logger) = get_global_logger() {
                 // Store workspace_id in metadata for filtering
                 let mut metadata = HashMap::new();
-                if let Some(ws_id) = request.workspace_id.as_ref().or_else(|| headers.get("X-Workspace-ID")) {
+                if let Some(ws_id) =
+                    request.workspace_id.as_ref().or_else(|| headers.get("X-Workspace-ID"))
+                {
                     metadata.insert("workspace_id".to_string(), ws_id.clone());
                 }
 
@@ -327,7 +331,7 @@ pub async fn execute_rest_request(
                     response_time_ms,
                     client_ip: None,
                     user_agent: Some("MockForge-Playground".to_string()),
-                    headers,
+                    headers: headers.clone(),
                     response_size_bytes: serde_json::to_string(&body)
                         .map(|s| s.len() as u64)
                         .unwrap_or(0),
@@ -340,7 +344,7 @@ pub async fn execute_rest_request(
             Json(ApiResponse::success(ExecuteResponse {
                 status_code,
                 headers,
-                body,
+                body: body.clone(),
                 response_time_ms,
                 request_id,
                 error: None,
@@ -397,19 +401,14 @@ pub async fn execute_graphql_query(
 
     // Execute GraphQL request
     let url = format!("{}/graphql", base_url);
-    let mut graphql_request = client
-        .post(&url)
-        .header("Content-Type", "application/json");
+    let mut graphql_request = client.post(&url).header("Content-Type", "application/json");
 
     // Add workspace ID header if provided
     if let Some(ws_id) = &request.workspace_id {
         graphql_request = graphql_request.header("X-Workspace-ID", ws_id);
     }
 
-    let response = graphql_request
-        .json(&graphql_body)
-        .send()
-        .await;
+    let response = graphql_request.json(&graphql_body).send().await;
 
     let response_time_ms = start_time.elapsed().as_millis() as u64;
 
@@ -445,6 +444,7 @@ pub async fn execute_graphql_query(
                     }
                 }
 
+                let has_errors = body.get("errors").is_some();
                 let log_entry = RequestLogEntry {
                     id: request_id.clone(),
                     timestamp: Utc::now(),
@@ -459,7 +459,7 @@ pub async fn execute_graphql_query(
                     response_size_bytes: serde_json::to_string(&body)
                         .map(|s| s.len() as u64)
                         .unwrap_or(0),
-                    error_message: if body.get("errors").is_some() {
+                    error_message: if has_errors {
                         Some("GraphQL errors in response".to_string())
                     } else {
                         None
@@ -478,13 +478,14 @@ pub async fn execute_graphql_query(
                 logger.log_request(log_entry).await;
             }
 
+            let has_errors = body.get("errors").is_some();
             Json(ApiResponse::success(ExecuteResponse {
                 status_code,
                 headers,
-                body,
+                body: body.clone(),
                 response_time_ms,
                 request_id,
-                error: if body.get("errors").is_some() {
+                error: if has_errors {
                     Some("GraphQL errors in response".to_string())
                 } else {
                     None
@@ -662,18 +663,13 @@ pub async fn graphql_introspect(
                         subscription_types,
                     }))
                 } else {
-                    Json(ApiResponse::error(
-                        "Failed to parse introspection response".to_string(),
-                    ))
+                    Json(ApiResponse::error("Failed to parse introspection response".to_string()))
                 }
             } else {
                 Json(ApiResponse::error("Failed to parse response".to_string()))
             }
         }
-        Err(e) => Json(ApiResponse::error(format!(
-            "Failed to execute introspection query: {}",
-            e
-        ))),
+        Err(e) => Json(ApiResponse::error(format!("Failed to execute introspection query: {}", e))),
     }
 }
 
@@ -690,10 +686,7 @@ pub async fn get_request_history(
     };
 
     // Get limit from query params
-    let limit = params
-        .get("limit")
-        .and_then(|l| l.parse::<usize>().ok())
-        .unwrap_or(100);
+    let limit = params.get("limit").and_then(|l| l.parse::<usize>().ok()).unwrap_or(100);
 
     // Get protocol filter
     let protocol_filter = params.get("protocol");
@@ -712,12 +705,7 @@ pub async fn get_request_history(
 
     // Filter by workspace_id if provided
     if let Some(ws_id) = workspace_id_filter {
-        logs.retain(|log| {
-            log.metadata
-                .get("workspace_id")
-                .map(|w| w == ws_id)
-                .unwrap_or(false)
-        });
+        logs.retain(|log| log.metadata.get("workspace_id").map(|w| w == ws_id).unwrap_or(false));
     }
 
     // Limit after filtering
@@ -788,6 +776,7 @@ pub async fn replay_request(
                         variables,
                         operation_name: None,
                         base_url: None,
+                        workspace_id: log.metadata.get("workspace_id").cloned(),
                     };
 
                     execute_graphql_query(State(state), axum::extract::Json(graphql_request)).await
@@ -802,6 +791,8 @@ pub async fn replay_request(
                     headers: Some(log.headers.clone()),
                     body: None, // Request body not stored in logs
                     base_url: None,
+                    use_mockai: false,
+                    workspace_id: log.metadata.get("workspace_id").cloned(),
                 };
 
                 execute_rest_request(State(state), axum::extract::Json(rest_request)).await
@@ -911,10 +902,8 @@ pub async fn generate_code_snippet(
                 graphql_body["variables"] = json!(vars);
             }
 
-            curl_parts.push(format!(
-                "-d '{}'",
-                serde_json::to_string(&graphql_body).unwrap_or_default()
-            ));
+            curl_parts
+                .push(format!("-d '{}'", serde_json::to_string(&graphql_body).unwrap_or_default()));
             curl_parts.push(format!("\"{}/graphql\"", request.base_url));
 
             snippets.insert("curl".to_string(), curl_parts.join(" \\\n  "));

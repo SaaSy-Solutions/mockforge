@@ -58,11 +58,8 @@ async fn test_code_snippet_generation_rest() {
         base_url: "http://localhost:3000".to_string(),
     };
 
-    let response = generate_code_snippet(
-        axum::extract::State(state),
-        axum::extract::Json(request),
-    )
-    .await;
+    let response =
+        generate_code_snippet(axum::extract::State(state), axum::extract::Json(request)).await;
 
     let response_value = serde_json::to_value(&response).unwrap();
     let data = response_value.get("data").and_then(|d| d.get("snippets"));
@@ -111,11 +108,8 @@ async fn test_code_snippet_generation_graphql() {
         base_url: "http://localhost:4000".to_string(),
     };
 
-    let response = generate_code_snippet(
-        axum::extract::State(state),
-        axum::extract::Json(request),
-    )
-    .await;
+    let response =
+        generate_code_snippet(axum::extract::State(state), axum::extract::Json(request)).await;
 
     let response_value = serde_json::to_value(&response).unwrap();
     let data = response_value.get("data").and_then(|d| d.get("snippets"));

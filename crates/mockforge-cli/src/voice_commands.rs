@@ -1,0 +1,459 @@
+//! Voice + LLM Interface CLI commands
+//!
+//! This module provides CLI commands for voice-based mock creation using
+//! natural language commands and LLM interpretation.
+
+#[path = "speech_to_text.rs"]
+mod speech_to_text;
+
+use clap::Subcommand;
+use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+use mockforge_core::openapi::OpenApiSpec;
+use mockforge_core::{ConversationManager, VoiceCommandParser, VoiceSpecGenerator};
+use speech_to_text::{InteractiveVoiceInput, SpeechToTextManager};
+use std::io::{self, Write};
+use std::path::PathBuf;
+use uuid::Uuid;
+
+/// Voice CLI commands
+#[derive(Subcommand, Debug)]
+pub enum VoiceCommands {
+    /// Create a mock API from voice command (single-shot mode)
+    ///
+    /// Examples:
+    ///   mockforge voice create --output api.yaml
+    ///   mockforge voice create --serve --port 3000
+    Create {
+        /// Output file for generated OpenAPI spec
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Auto-start mock server with generated spec
+        #[arg(long)]
+        serve: bool,
+
+        /// HTTP server port (used with --serve)
+        #[arg(long, default_value = "3000")]
+        port: u16,
+
+        /// Text command (if not provided, will prompt or use stdin)
+        #[arg(short, long)]
+        command: Option<String>,
+    },
+
+    /// Interactive conversational mode
+    ///
+    /// Examples:
+    ///   mockforge voice interactive
+    ///   mockforge voice interactive --output api.yaml
+    Interactive {
+        /// Output file for generated OpenAPI spec
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Auto-start mock server when done
+        #[arg(long)]
+        serve: bool,
+
+        /// HTTP server port (used with --serve)
+        #[arg(long, default_value = "3000")]
+        port: u16,
+    },
+}
+
+/// Handle voice CLI commands
+pub async fn handle_voice_command(
+    command: VoiceCommands,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match command {
+        VoiceCommands::Create {
+            output,
+            serve,
+            port,
+            command,
+        } => {
+            handle_create(output, serve, port, command).await?;
+        }
+        VoiceCommands::Interactive {
+            output,
+            serve,
+            port,
+        } => {
+            handle_interactive(output, serve, port).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle create command (single-shot mode)
+async fn handle_create(
+    output: Option<PathBuf>,
+    serve: bool,
+    port: u16,
+    command: Option<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🎤 Voice + LLM Interface - Single Shot Mode");
+    println!();
+
+    // Get command text
+    let command_text = if let Some(cmd) = command {
+        cmd
+    } else {
+        // Use speech-to-text manager to get input
+        let stt_manager = SpeechToTextManager::new();
+        let available_backends = stt_manager.list_backends();
+
+        if available_backends.len() > 1 {
+            println!("🎤 Available input methods: {}", available_backends.join(", "));
+        }
+
+        stt_manager.transcribe().map_err(|e| format!("Failed to get input: {}", e))?
+    };
+
+    if command_text.is_empty() {
+        return Err("No command provided".into());
+    }
+
+    println!("📝 Command: {}", command_text);
+    println!("🤖 Parsing command with LLM...");
+
+    // Create parser with default config
+    let config = IntelligentBehaviorConfig::default();
+    let parser = VoiceCommandParser::new(config);
+
+    // Parse command
+    let parsed = parser.parse_command(&command_text).await?;
+
+    println!("✅ Parsed command successfully");
+    println!("   - API Type: {}", parsed.api_type);
+    println!("   - Endpoints: {}", parsed.endpoints.len());
+    println!("   - Models: {}", parsed.models.len());
+
+    // Generate OpenAPI spec
+    println!("📋 Generating OpenAPI specification...");
+    let spec_generator = VoiceSpecGenerator::new();
+    let spec = spec_generator.generate_spec(&parsed).await?;
+
+    println!("✅ Generated OpenAPI spec: {} v{}", spec.title(), spec.api_version());
+
+    // Save to file if output specified
+    if let Some(output_path) = output {
+        let spec_json = serde_json::to_value(&spec.spec)?;
+        let content = if output_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s == "yaml" || s == "yml")
+            .unwrap_or(false)
+        {
+            serde_yaml::to_string(&spec_json)?
+        } else {
+            serde_json::to_string_pretty(&spec_json)?
+        };
+
+        tokio::fs::write(&output_path, content).await?;
+        println!("💾 Saved OpenAPI spec to: {}", output_path.display());
+    }
+
+    // Start server if requested
+    if serve {
+        println!("🚀 Starting mock server on port {}...", port);
+        println!("📡 Server will be available at: http://localhost:{}", port);
+        println!("🛑 Press Ctrl+C to stop the server");
+        println!();
+
+        // Save spec to temp file
+        let temp_spec =
+            std::env::temp_dir().join(format!("voice-spec-{}.json", uuid::Uuid::new_v4()));
+        let spec_json = serde_json::to_value(&spec.spec)?;
+        let content = serde_json::to_string_pretty(&spec_json)?;
+        tokio::fs::write(&temp_spec, content).await?;
+
+        // Start server using the existing serve infrastructure
+        use crate::handle_serve;
+        handle_serve(
+            None,                      // config_path
+            None,                      // profile
+            Some(port),                // http_port
+            None,                      // ws_port
+            None,                      // grpc_port
+            None,                      // smtp_port
+            None,                      // tcp_port
+            true,                      // admin (enable admin UI)
+            None,                      // admin_port
+            false,                     // metrics
+            None,                      // metrics_port
+            false,                     // tracing
+            "mockforge".to_string(),   // tracing_service_name
+            "development".to_string(), // tracing_environment
+            String::new(),             // jaeger_endpoint
+            1.0,                       // tracing_sampling_rate
+            false,                     // recorder
+            String::new(),             // recorder_db
+            false,                     // recorder_no_api
+            None,                      // recorder_api_port
+            0,                         // recorder_max_requests
+            0,                         // recorder_retention_days
+            false,                     // chaos
+            None,                      // chaos_scenario
+            None,                      // chaos_latency_ms
+            None,                      // chaos_latency_range
+            0.0,                       // chaos_latency_probability
+            None,                      // chaos_http_errors
+            0.0,                       // chaos_http_error_probability
+            None,                      // chaos_rate_limit
+            None,                      // chaos_bandwidth_limit
+            None,                      // chaos_packet_loss
+            Some(temp_spec),           // spec
+            None,                      // ws_replay_file
+            None,                      // graphql
+            None,                      // graphql_port
+            None,                      // graphql_upstream
+            false,                     // traffic_shaping
+            0,                         // bandwidth_limit
+            0,                         // burst_size
+            None,                      // network_profile
+            false,                     // chaos_random
+            0.0,                       // chaos_random_error_rate
+            0.0,                       // chaos_random_delay_rate
+            0,                         // chaos_random_min_delay
+            0,                         // chaos_random_max_delay
+            None,                      // chaos_profile
+            false,                     // ai_enabled
+            None,                      // reality_level
+            None,                      // rag_provider
+            None,                      // rag_model
+            None,                      // rag_api_key
+            false,                     // dry_run
+            false,                     // progress
+            false,                     // verbose
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+/// Handle interactive command (conversational mode)
+async fn handle_interactive(
+    output: Option<PathBuf>,
+    serve: bool,
+    port: u16,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🎤 Voice + LLM Interface - Interactive Mode");
+    println!("💬 Start a conversation to build your API incrementally");
+    println!("   Type 'done' or 'exit' when finished");
+    println!("   Type 'help' for available commands");
+    println!();
+
+    // Create conversation manager
+    let mut conversation_manager = ConversationManager::new();
+    let conversation_id = conversation_manager.start_conversation();
+
+    // Create parser
+    let config = IntelligentBehaviorConfig::default();
+    let parser = VoiceCommandParser::new(config);
+    let spec_generator = VoiceSpecGenerator::new();
+
+    let mut current_spec: Option<OpenApiSpec> = None;
+
+    // Initialize voice input handler
+    let voice_input = InteractiveVoiceInput::new();
+    let stt_manager = SpeechToTextManager::new();
+    let available_backends = stt_manager.list_backends();
+
+    if available_backends.len() > 1 {
+        println!("🎤 Available input methods: {}", available_backends.join(", "));
+    }
+    println!();
+
+    loop {
+        print!("🎤 > ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        // Use speech-to-text manager for input
+        let command = match stt_manager.transcribe() {
+            Ok(text) => text,
+            Err(e) => {
+                eprintln!("⚠️  Error getting input: {}", e);
+                continue;
+            }
+        };
+
+        if command.is_empty() {
+            continue;
+        }
+
+        // Handle special commands
+        match command.to_lowercase().as_str() {
+            "done" | "exit" | "quit" => {
+                println!("✅ Conversation complete!");
+                break;
+            }
+            "help" => {
+                println!("Available commands:");
+                println!("  - Describe your API: 'Create an e-commerce API'");
+                println!("  - Add endpoints: 'Add a products endpoint'");
+                println!("  - Modify: 'Add checkout flow'");
+                println!("  - View: 'show spec' or 'show endpoints'");
+                println!("  - Exit: 'done', 'exit', or 'quit'");
+                continue;
+            }
+            "show spec" | "show endpoints" => {
+                if let Some(ref spec) = current_spec {
+                    println!("📋 Current API: {} v{}", spec.title(), spec.api_version());
+                    let paths = spec.all_paths_and_operations();
+                    for (path, ops) in paths {
+                        println!(
+                            "   {} ({})",
+                            path,
+                            ops.keys().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                        );
+                    }
+                } else {
+                    println!("ℹ️  No API created yet. Start by describing what you want to build.");
+                }
+                continue;
+            }
+            _ => {}
+        }
+
+        println!("🤖 Processing: {}", command);
+
+        // Get conversation context
+        let conversation_state = conversation_manager
+            .get_conversation(&conversation_id)
+            .ok_or_else(|| "Conversation not found")?;
+
+        // Parse command
+        let parsed = if current_spec.is_some() {
+            // Conversational mode - use context
+            parser
+                .parse_conversational_command(&command, &conversation_state.context)
+                .await?
+        } else {
+            // First command - single shot
+            parser.parse_command(&command).await?
+        };
+
+        // Generate or merge spec
+        let new_spec = if let Some(ref existing) = current_spec {
+            spec_generator.merge_spec(existing, &parsed).await?
+        } else {
+            spec_generator.generate_spec(&parsed).await?
+        };
+
+        // Update conversation
+        conversation_manager.update_conversation(
+            &conversation_id,
+            &command,
+            Some(new_spec.clone()),
+        )?;
+
+        current_spec = Some(new_spec.clone());
+
+        println!("✅ Updated API: {} v{}", new_spec.title(), new_spec.api_version());
+        println!("   Endpoints: {}", new_spec.all_paths_and_operations().len());
+    }
+
+    // Finalize
+    if let Some(ref spec) = current_spec {
+        // Save to file if output specified
+        if let Some(output_path) = output {
+            let spec_json = serde_json::to_value(&spec.spec)?;
+            let content = if output_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s == "yaml" || s == "yml")
+                .unwrap_or(false)
+            {
+                serde_yaml::to_string(&spec_json)?
+            } else {
+                serde_json::to_string_pretty(&spec_json)?
+            };
+
+            tokio::fs::write(&output_path, content).await?;
+            println!("💾 Saved OpenAPI spec to: {}", output_path.display());
+        }
+
+        // Start server if requested
+        if serve {
+            println!("🚀 Starting mock server on port {}...", port);
+            println!("📡 Server will be available at: http://localhost:{}", port);
+            println!("🛑 Press Ctrl+C to stop the server");
+            println!();
+
+            // Save spec to temp file
+            let temp_spec =
+                std::env::temp_dir().join(format!("voice-spec-{}.json", uuid::Uuid::new_v4()));
+            let spec_json = serde_json::to_value(&spec.spec)?;
+            let content = serde_json::to_string_pretty(&spec_json)?;
+            tokio::fs::write(&temp_spec, content).await?;
+
+            // Start server using the existing serve infrastructure
+            use crate::handle_serve;
+            handle_serve(
+                None,                      // config_path
+                None,                      // profile
+                Some(port),                // http_port
+                None,                      // ws_port
+                None,                      // grpc_port
+                None,                      // smtp_port
+                None,                      // tcp_port
+                true,                      // admin (enable admin UI)
+                None,                      // admin_port
+                false,                     // metrics
+                None,                      // metrics_port
+                false,                     // tracing
+                "mockforge".to_string(),   // tracing_service_name
+                "development".to_string(), // tracing_environment
+                String::new(),             // jaeger_endpoint
+                1.0,                       // tracing_sampling_rate
+                false,                     // recorder
+                String::new(),             // recorder_db
+                false,                     // recorder_no_api
+                None,                      // recorder_api_port
+                0,                         // recorder_max_requests
+                0,                         // recorder_retention_days
+                false,                     // chaos
+                None,                      // chaos_scenario
+                None,                      // chaos_latency_ms
+                None,                      // chaos_latency_range
+                0.0,                       // chaos_latency_probability
+                None,                      // chaos_http_errors
+                0.0,                       // chaos_http_error_probability
+                None,                      // chaos_rate_limit
+                None,                      // chaos_bandwidth_limit
+                None,                      // chaos_packet_loss
+                Some(temp_spec),           // spec
+                None,                      // ws_replay_file
+                None,                      // graphql
+                None,                      // graphql_port
+                None,                      // graphql_upstream
+                false,                     // traffic_shaping
+                0,                         // bandwidth_limit
+                0,                         // burst_size
+                None,                      // network_profile
+                false,                     // chaos_random
+                0.0,                       // chaos_random_error_rate
+                0.0,                       // chaos_random_delay_rate
+                0,                         // chaos_random_min_delay
+                0,                         // chaos_random_max_delay
+                None,                      // chaos_profile
+                false,                     // ai_enabled
+                None,                      // reality_level
+                None,                      // rag_provider
+                None,                      // rag_model
+                None,                      // rag_api_key
+                false,                     // dry_run
+                false,                     // progress
+                false,                     // verbose
+            )
+            .await?;
+        }
+    } else {
+        println!("ℹ️  No API was created. Exiting.");
+    }
+
+    Ok(())
+}

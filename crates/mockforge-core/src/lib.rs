@@ -261,6 +261,7 @@ pub mod time_travel_handler;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
+pub mod voice;
 pub mod workspace;
 pub mod workspace_import;
 pub mod workspace_persistence;
@@ -368,6 +369,10 @@ pub use validation::{validate_openapi_operation_security, validate_openapi_secur
 pub use verification::{
     matches_verification_pattern, verify_at_least, verify_never, verify_requests, verify_sequence,
     VerificationCount, VerificationRequest, VerificationResult,
+};
+pub use voice::{
+    ConversationContext, ConversationManager, ConversationState, ParsedCommand, VoiceCommandParser,
+    VoiceSpecGenerator,
 };
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 pub use workspace_import::{

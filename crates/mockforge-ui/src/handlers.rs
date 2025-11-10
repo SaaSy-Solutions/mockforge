@@ -53,9 +53,10 @@ pub mod contract_diff;
 pub mod graph;
 pub mod health;
 pub mod migration;
-pub mod plugin;
 pub mod playground;
+pub mod plugin;
 pub mod verification;
+pub mod voice;
 
 // Re-export commonly used types
 pub use assets::*;
