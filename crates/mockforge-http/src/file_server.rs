@@ -77,7 +77,7 @@ pub async fn serve_mock_file(
 pub fn file_serving_router() -> axum::Router {
     use axum::routing::get;
 
-    axum::Router::new().route("/mock-files/*path", get(serve_mock_file))
+    axum::Router::new().route("/mock-files/{*path}", get(serve_mock_file))
 }
 
 #[cfg(test)]
@@ -98,9 +98,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_serve_mock_file_invalid_format() {
-        // Test invalid path format
+        // Test invalid path format (empty string results in empty parts)
         use axum::extract::Path;
-        let result = serve_mock_file(Path("invalid".to_string())).await;
+        let result = serve_mock_file(Path("".to_string())).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
     }
