@@ -1,0 +1,535 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Reality Slider - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/reality-slider.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="reality-slider"><a class="header" href="#reality-slider">Reality Slider</a></h1>
+<p>The Reality Slider is a unified control mechanism that adjusts the realism of your mock environment from simple static stubs to full production-level chaos. It coordinates three key subsystems: Chaos Engineering, Latency Simulation, and MockAI.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>By adjusting a single slider from 1 to 5, you can instantly transform your mock environment to match different testing scenarios without manually configuring each subsystem.</p>
+<h2 id="reality-levels"><a class="header" href="#reality-levels">Reality Levels</a></h2>
+<h3 id="level-1-static-stubs"><a class="header" href="#level-1-static-stubs">Level 1: Static Stubs</a></h3>
+<p><strong>Use Case</strong>: Fast, predictable responses for basic functionality testing</p>
+<ul>
+<li><strong>Chaos</strong>: Disabled</li>
+<li><strong>Latency</strong>: 0ms (instant responses)</li>
+<li><strong>MockAI</strong>: Disabled</li>
+<li><strong>Best For</strong>: Unit tests, rapid prototyping, simple integration checks</li>
+</ul>
+<h3 id="level-2-light-simulation"><a class="header" href="#level-2-light-simulation">Level 2: Light Simulation</a></h3>
+<p><strong>Use Case</strong>: Minimal realism with basic intelligence</p>
+<ul>
+<li><strong>Chaos</strong>: Disabled</li>
+<li><strong>Latency</strong>: 10-50ms (minimal network delay)</li>
+<li><strong>MockAI</strong>: Basic AI (simple response generation)</li>
+<li><strong>Best For</strong>: Frontend development, basic API testing, quick demos</li>
+</ul>
+<h3 id="level-3-moderate-realism-default"><a class="header" href="#level-3-moderate-realism-default">Level 3: Moderate Realism (Default)</a></h3>
+<p><strong>Use Case</strong>: Balanced realism for most development scenarios</p>
+<ul>
+<li><strong>Chaos</strong>: 5% error rate, 10% delay probability</li>
+<li><strong>Latency</strong>: 50-200ms (moderate network conditions)</li>
+<li><strong>MockAI</strong>: Full AI enabled (intelligent responses, relationship awareness)</li>
+<li><strong>Best For</strong>: Integration testing, development environments, staging-like behavior</li>
+</ul>
+<h3 id="level-4-high-realism"><a class="header" href="#level-4-high-realism">Level 4: High Realism</a></h3>
+<p><strong>Use Case</strong>: Production-like conditions with increased complexity</p>
+<ul>
+<li><strong>Chaos</strong>: 10% error rate, 20% delay probability</li>
+<li><strong>Latency</strong>: 100-500ms (realistic network conditions)</li>
+<li><strong>MockAI</strong>: Full AI + session state management</li>
+<li><strong>Best For</strong>: Pre-production testing, realistic user flows, stress testing preparation</li>
+</ul>
+<h3 id="level-5-production-chaos"><a class="header" href="#level-5-production-chaos">Level 5: Production Chaos</a></h3>
+<p><strong>Use Case</strong>: Maximum realism for resilience testing</p>
+<ul>
+<li><strong>Chaos</strong>: 15% error rate, 30% delay probability</li>
+<li><strong>Latency</strong>: 200-2000ms (production-like network conditions)</li>
+<li><strong>MockAI</strong>: Full AI + mutations + advanced features</li>
+<li><strong>Best For</strong>: Chaos engineering, resilience testing, production simulation</li>
+</ul>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="ui-usage"><a class="header" href="#ui-usage">UI Usage</a></h3>
+<h4 id="dashboard"><a class="header" href="#dashboard">Dashboard</a></h4>
+<p>The Reality Slider is available on the Dashboard page:</p>
+<ol>
+<li>Navigate to <strong>Dashboard</strong> in the admin UI</li>
+<li>Find the <strong>Environment Control</strong> section</li>
+<li>Use the slider to adjust the reality level (1-5)</li>
+<li>Click level indicators for quick selection</li>
+<li>View current configuration in the details panel</li>
+</ol>
+<h4 id="configuration-page"><a class="header" href="#configuration-page">Configuration Page</a></h4>
+<p>For advanced control and preset management:</p>
+<ol>
+<li>Navigate to <strong>Configuration</strong> → <strong>Reality Slider</strong></li>
+<li>Use the full-featured slider with visual feedback</li>
+<li>Manage presets (export/import configurations)</li>
+<li>View keyboard shortcuts reference</li>
+</ol>
+<h3 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h3>
+<h4 id="command-line-flag"><a class="header" href="#command-line-flag">Command Line Flag</a></h4>
+<pre><code class="language-bash"># Set reality level at startup
+mockforge serve --reality-level 5
+
+# With OpenAPI spec
+mockforge serve --spec api.yaml --reality-level 3
+</code></pre>
+<h4 id="environment-variable"><a class="header" href="#environment-variable">Environment Variable</a></h4>
+<pre><code class="language-bash"># Set via environment variable
+export MOCKFORGE_REALITY_LEVEL=4
+mockforge serve
+
+# Or inline
+MOCKFORGE_REALITY_LEVEL=2 mockforge serve --spec api.yaml
+</code></pre>
+<p><strong>Precedence</strong>: CLI flag &gt; Environment variable &gt; Config file &gt; Default (Level 3)</p>
+<h3 id="configuration-file"><a class="header" href="#configuration-file">Configuration File</a></h3>
+<p>Add to your <code>mockforge.yaml</code>:</p>
+<pre><code class="language-yaml">reality:
+  enabled: true
+  level: 3  # 1-5
+</code></pre>
+<p>Or use per-profile configuration:</p>
+<pre><code class="language-yaml">profiles:
+  development:
+    reality:
+      level: 2
+  staging:
+    reality:
+      level: 4
+  production:
+    reality:
+      level: 5
+</code></pre>
+<h2 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h2>
+<p>Quick reality level changes from anywhere in the UI:</p>
+<div class="table-wrapper"><table><thead><tr><th>Shortcut</th><th>Action</th></tr></thead><tbody>
+<tr><td><code>Ctrl+Shift+1</code></td><td>Set to Level 1 (Static Stubs)</td></tr>
+<tr><td><code>Ctrl+Shift+2</code></td><td>Set to Level 2 (Light Simulation)</td></tr>
+<tr><td><code>Ctrl+Shift+3</code></td><td>Set to Level 3 (Moderate Realism)</td></tr>
+<tr><td><code>Ctrl+Shift+4</code></td><td>Set to Level 4 (High Realism)</td></tr>
+<tr><td><code>Ctrl+Shift+5</code></td><td>Set to Level 5 (Production Chaos)</td></tr>
+<tr><td><code>Ctrl+Shift+R</code></td><td>Reset to default (Level 3)</td></tr>
+<tr><td><code>Ctrl+Shift+P</code></td><td>Open preset manager (Config page)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Note</strong>: Shortcuts are disabled when typing in input fields to avoid conflicts.</p>
+<h2 id="presets"><a class="header" href="#presets">Presets</a></h2>
+<h3 id="exporting-presets"><a class="header" href="#exporting-presets">Exporting Presets</a></h3>
+<p>Save your current reality configuration for reuse:</p>
+<ol>
+<li>Navigate to <strong>Configuration</strong> → <strong>Reality Slider</strong></li>
+<li>Click <strong>Export Current</strong></li>
+<li>Enter a preset name (e.g., “production-chaos”, “staging-realistic”)</li>
+<li>Optionally add a description</li>
+<li>Click <strong>Export Preset</strong></li>
+</ol>
+<p>Presets are saved as JSON or YAML files in the workspace presets directory.</p>
+<h3 id="importing-presets"><a class="header" href="#importing-presets">Importing Presets</a></h3>
+<ol>
+<li>Navigate to <strong>Configuration</strong> → <strong>Reality Slider</strong></li>
+<li>Click <strong>Import Preset</strong></li>
+<li>Select a preset from the list</li>
+<li>Click <strong>Load</strong> to apply</li>
+</ol>
+<h3 id="preset-file-format"><a class="header" href="#preset-file-format">Preset File Format</a></h3>
+<p>Presets are stored as JSON or YAML:</p>
+<pre><code class="language-json">{
+  "metadata": {
+    "name": "production-chaos",
+    "description": "Maximum realism for resilience testing",
+    "created_at": "2025-01-15T10:30:00Z",
+    "version": "1.0"
+  },
+  "config": {
+    "chaos": {
+      "enabled": true,
+      "error_rate": 0.15,
+      "delay_rate": 0.30
+    },
+    "latency": {
+      "base_ms": 200,
+      "jitter_ms": 1800
+    },
+    "mockai": {
+      "enabled": true
+    }
+  }
+}
+</code></pre>
+<h2 id="cicd-integration"><a class="header" href="#cicd-integration">CI/CD Integration</a></h2>
+<h3 id="github-actions"><a class="header" href="#github-actions">GitHub Actions</a></h3>
+<pre><code class="language-yaml">env:
+  MOCKFORGE_REALITY_LEVEL: 3  # Moderate Realism for tests
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run tests with mock
+        run: |
+          mockforge serve --reality-level ${{ env.MOCKFORGE_REALITY_LEVEL }} &amp;
+          # Run your tests
+</code></pre>
+<h3 id="docker-compose"><a class="header" href="#docker-compose">Docker Compose</a></h3>
+<pre><code class="language-yaml">services:
+  mockforge:
+    environment:
+      - MOCKFORGE_REALITY_LEVEL=${MOCKFORGE_REALITY_LEVEL:-3}
+</code></pre>
+<h2 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h2>
+<h3 id="get-current-reality-level"><a class="header" href="#get-current-reality-level">Get Current Reality Level</a></h3>
+<pre><code class="language-http">GET /__mockforge/reality/level
+</code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code class="language-json">{
+  "level": 3,
+  "level_name": "Moderate Realism",
+  "description": "Some chaos, moderate latency, full intelligence",
+  "chaos": {
+    "enabled": true,
+    "error_rate": 0.05,
+    "delay_rate": 0.10
+  },
+  "latency": {
+    "base_ms": 50,
+    "jitter_ms": 150
+  },
+  "mockai": {
+    "enabled": true
+  }
+}
+</code></pre>
+<h3 id="set-reality-level"><a class="header" href="#set-reality-level">Set Reality Level</a></h3>
+<pre><code class="language-http">PUT /__mockforge/reality/level
+Content-Type: application/json
+
+{
+  "level": 5
+}
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h3>
+<ol>
+<li>
+<p><strong>Start Development</strong>: Level 2 (Light Simulation)</p>
+<ul>
+<li>Fast responses for rapid iteration</li>
+<li>Basic AI for realistic data</li>
+</ul>
+</li>
+<li>
+<p><strong>Integration Testing</strong>: Level 3 (Moderate Realism)</p>
+<ul>
+<li>Some chaos to catch error handling</li>
+<li>Realistic latency for network-aware code</li>
+</ul>
+</li>
+<li>
+<p><strong>Pre-Production</strong>: Level 4 (High Realism)</p>
+<ul>
+<li>Production-like conditions</li>
+<li>Full feature set enabled</li>
+</ul>
+</li>
+<li>
+<p><strong>Resilience Testing</strong>: Level 5 (Production Chaos)</p>
+<ul>
+<li>Maximum chaos for stress testing</li>
+<li>Simulate worst-case scenarios</li>
+</ul>
+</li>
+</ol>
+<h3 id="testing-scenarios"><a class="header" href="#testing-scenarios">Testing Scenarios</a></h3>
+<h4 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h4>
+<pre><code class="language-bash"># Fast, predictable responses
+MOCKFORGE_REALITY_LEVEL=1 npm test
+</code></pre>
+<h4 id="integration-tests"><a class="header" href="#integration-tests">Integration Tests</a></h4>
+<pre><code class="language-bash"># Moderate realism
+MOCKFORGE_REALITY_LEVEL=3 npm test
+</code></pre>
+<h4 id="e2e-tests"><a class="header" href="#e2e-tests">E2E Tests</a></h4>
+<pre><code class="language-bash"># High realism for production-like testing
+MOCKFORGE_REALITY_LEVEL=4 npm test
+</code></pre>
+<h4 id="chaos-engineering"><a class="header" href="#chaos-engineering">Chaos Engineering</a></h4>
+<pre><code class="language-bash"># Maximum chaos for resilience testing
+MOCKFORGE_REALITY_LEVEL=5 npm test
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start Low, Increase Gradually</strong>: Begin with Level 1-2 for development, increase as you approach production</li>
+<li><strong>Use Presets</strong>: Save common configurations for different environments</li>
+<li><strong>CI/CD Integration</strong>: Set appropriate levels for different test stages</li>
+<li><strong>Monitor Impact</strong>: Watch metrics as you change levels to understand the impact</li>
+<li><strong>Document Your Levels</strong>: Use preset descriptions to document when to use each configuration</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="level-changes-not-applying"><a class="header" href="#level-changes-not-applying">Level Changes Not Applying</a></h3>
+<ul>
+<li>Check that the reality slider is enabled in configuration</li>
+<li>Verify API endpoint is accessible: <code>curl http://localhost:9080/__mockforge/reality/level</code></li>
+<li>Check server logs for errors</li>
+</ul>
+<h3 id="shortcuts-not-working"><a class="header" href="#shortcuts-not-working">Shortcuts Not Working</a></h3>
+<ul>
+<li>Ensure you’re not typing in an input field</li>
+<li>Check browser console for JavaScript errors</li>
+<li>Verify shortcuts are enabled (disabled in compact mode)</li>
+</ul>
+<h3 id="presets-not-loading"><a class="header" href="#presets-not-loading">Presets Not Loading</a></h3>
+<ul>
+<li>Verify preset file format (JSON or YAML)</li>
+<li>Check file permissions</li>
+<li>Ensure preset path is correct</li>
+<li>Review server logs for import errors</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="chaos-lab.html">Chaos Lab</a> - Detailed chaos engineering features</li>
+<li><a href="mockai.html">MockAI</a> - Intelligent mocking system</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/chaos-lab.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/cloud-workspaces.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/chaos-lab.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/cloud-workspaces.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

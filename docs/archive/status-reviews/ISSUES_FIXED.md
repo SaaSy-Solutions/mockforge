@@ -30,7 +30,7 @@ This document summarizes fixes applied based on real-world usage feedback from A
 - ✅ Added `MOCKFORGE_ADMIN_HOST` environment variable support in `apply_env_overrides()`
 - ✅ Auto-detection of Docker environment in `AdminConfig::default()`:
   - Checks for `DOCKER_CONTAINER` env var
-  - Checks for `container` env var  
+  - Checks for `container` env var
   - Checks for `/.dockerenv` file existence
   - Defaults to `0.0.0.0` in Docker, `127.0.0.1` otherwise
 - ✅ Set `MOCKFORGE_ADMIN_HOST=0.0.0.0` in Dockerfile defaults
@@ -110,7 +110,7 @@ This document summarizes fixes applied based on real-world usage feedback from A
 
 💡 Tip: This field is usually optional and has a default value.
    Most configuration fields can be omitted - MockForge will use sensible defaults.
-   
+
    To fix: Either add the field at path 'http.port' or remove it entirely (defaults will be used).
    See config.template.yaml for all available options and their defaults.
 
@@ -174,7 +174,7 @@ protoc not available or compilation failed (this is OK for basic usage, using fa
 
 ### Fixed Issues:
 1. ✅ Docker build failures
-2. ✅ Admin UI accessibility  
+2. ✅ Admin UI accessibility
 3. ✅ Verified OpenAPI examples support
 4. ✅ Clarified protoc warnings
 5. ✅ Enhanced health check endpoint
@@ -197,4 +197,3 @@ protoc not available or compilation failed (this is OK for basic usage, using fa
 
 *Generated: 2025-01-27*
 *Based on feedback from Apiary Pro frontend development*
-

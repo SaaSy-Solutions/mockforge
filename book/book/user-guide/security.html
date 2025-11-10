@@ -404,9 +404,39 @@ request:
 <tr><td><code>verify(data, signature, key)</code></td><td>Verify signature with public key</td><td><code>{{verify(data, sig, 'public-key')}}</code></td></tr>
 </tbody></table>
 </div>
+<h2 id="mutual-tls-mtls"><a class="header" href="#mutual-tls-mtls">Mutual TLS (mTLS)</a></h2>
+<p>MockForge supports <strong>Mutual TLS (mTLS)</strong> for enhanced security, requiring both server and client certificates for authentication.</p>
+<h3 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h3>
+<p>Enable mTLS in your configuration:</p>
+<pre><code class="language-yaml">http:
+  tls:
+    enabled: true
+    cert_file: "./certs/server.crt"
+    key_file: "./certs/server.key"
+    ca_file: "./certs/ca.crt"           # CA certificate for client verification
+    require_client_cert: true            # Enable mTLS
+</code></pre>
+<h3 id="client-configuration"><a class="header" href="#client-configuration">Client Configuration</a></h3>
+<p>Clients must provide a certificate signed by the CA:</p>
+<pre><code class="language-bash"># Using cURL
+curl --cert client.crt --key client.key --cacert ca.crt \
+  https://localhost:3000/api/endpoint
+</code></pre>
+<h3 id="certificate-generation"><a class="header" href="#certificate-generation">Certificate Generation</a></h3>
+<p>For development, use <code>mkcert</code>:</p>
+<pre><code class="language-bash"># Install mkcert
+brew install mkcert
+mkcert -install
+
+# Generate certificates
+mkcert localhost 127.0.0.1 ::1
+mkcert -client localhost 127.0.0.1 ::1
+</code></pre>
+<p>For production, use OpenSSL or a trusted Certificate Authority.</p>
+<p><strong>Full Documentation:</strong> See <a href="../../docs/mTLS_CONFIGURATION.html">mTLS Configuration Guide</a> for complete setup instructions, certificate generation, client examples, and troubleshooting.</p>
 <h2 id="authentication--authorization"><a class="header" href="#authentication--authorization">Authentication &amp; Authorization</a></h2>
 <h3 id="admin-ui-authentication"><a class="header" href="#admin-ui-authentication">Admin UI Authentication</a></h3>
-<p>MockForge Admin UI v2 includes role-based authentication:</p>
+<p>MockForge Admin UI v2 includes <strong>complete role-based authentication</strong> with JWT-based authentication:</p>
 <pre><code class="language-yaml">admin:
   auth:
     enabled: true
@@ -430,10 +460,12 @@ request:
 </code></pre>
 <h3 id="role-permissions"><a class="header" href="#role-permissions">Role Permissions</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Role</th><th>Permissions</th></tr></thead><tbody>
-<tr><td><strong>Admin</strong></td><td>Full access to all features</td></tr>
-<tr><td><strong>Viewer</strong></td><td>Read-only access to dashboard, logs, metrics</td></tr>
+<tr><td><strong>Admin</strong></td><td>Full access to all features (workspace management, member management, all editing)</td></tr>
+<tr><td><strong>Editor</strong></td><td>Create, edit, and delete mocks; view history; cannot manage workspace settings</td></tr>
+<tr><td><strong>Viewer</strong></td><td>Read-only access to dashboard, logs, metrics, and mocks</td></tr>
 </tbody></table>
 </div>
+<p><strong>Full Documentation:</strong> See <a href="../../docs/RBAC_GUIDE.html">RBAC Guide</a> for complete role and permission details.</p>
 <h3 id="custom-authentication"><a class="header" href="#custom-authentication">Custom Authentication</a></h3>
 <p>Implement custom authentication via plugins:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -621,6 +653,16 @@ mockforge certs import --cert server.crt --key server.key --ca ca.crt
 <li><strong>Data Minimization</strong>: Only collect and store necessary data</li>
 <li><strong>Right to Deletion</strong>: Secure data deletion capabilities</li>
 </ul>
+<h2 id="audit-logging-1"><a class="header" href="#audit-logging-1">Audit Logging</a></h2>
+<p>MockForge provides comprehensive audit logging for security and compliance:</p>
+<ul>
+<li><strong>Authentication Audit Logs</strong>: Track all authentication attempts (success/failure)</li>
+<li><strong>Request Logs</strong>: Full request/response logging with metadata</li>
+<li><strong>Collaboration History</strong>: Git-style version control for workspace changes</li>
+<li><strong>Configuration Changes</strong>: Track all configuration modifications</li>
+<li><strong>Plugin Activity</strong>: Monitor plugin execution and security events</li>
+</ul>
+<p><strong>Full Documentation:</strong> See <a href="../../docs/AUDIT_TRAILS.html">Audit Trails Guide</a> for complete audit logging configuration and usage.</p>
 <h2 id="troubleshooting-security"><a class="header" href="#troubleshooting-security">Troubleshooting Security</a></h2>
 <h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
 <h4 id="encryption-not-working"><a class="header" href="#encryption-not-working">Encryption Not Working</a></h4>

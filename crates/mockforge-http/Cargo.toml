@@ -52,12 +52,12 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { version = "0.2.7", path = "../mockforge-core" }
-mockforge-data = "0.2.7"
-mockforge-observability = { version = "0.2.0", path = "../mockforge-observability" }
-mockforge-recorder = { version = "0.2.0", path = "../mockforge-recorder" }
-mockforge-scenarios = { version = "0.2.7", path = "../mockforge-scenarios" }
-mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }
+mockforge-core = "0.2.8"
+mockforge-data = "0.2.8"
+mockforge-observability = "0.2.8"
+mockforge-recorder = "0.2.8"
+mockforge-scenarios = { path = "../mockforge-scenarios", version = "0.2.8" }
+mockforge-tracing = "0.2.8"
 mockforge-mqtt = { version = "0.2.0", path = "../mockforge-mqtt", optional = true }
 opentelemetry = "0.21"
 rustls = "0.21"
@@ -79,8 +79,8 @@ reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-mockforge-ws = { version = "0.2.0", path = "../mockforge-ws" }
-mockforge-plugin-core = "0.2.7"
+mockforge-ws = "0.2.8"
+mockforge-plugin-core = "0.2.8"
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }

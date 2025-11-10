@@ -1,0 +1,552 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Generative Schema Mode - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/generative-schema.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="generative-schema-mode"><a class="header" href="#generative-schema-mode">Generative Schema Mode</a></h1>
+<p>Generative Schema Mode enables you to generate complete API ecosystems from JSON payloads. Simply provide example JSON data, and MockForge automatically creates routes, schemas, and entity relationships for a fully functional mock API.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Generative Schema Mode transforms example JSON payloads into:</p>
+<ul>
+<li><strong>Complete OpenAPI specifications</strong> with all endpoints</li>
+<li><strong>Automatic CRUD routes</strong> for each entity</li>
+<li><strong>Entity relationship inference</strong> from data structure</li>
+<li><strong>One-click environment creation</strong> ready for deployment</li>
+<li><strong>Preview and edit</strong> generated schemas before deployment</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="generate-from-json-file"><a class="header" href="#generate-from-json-file">Generate from JSON File</a></h3>
+<pre><code class="language-bash"># Generate API ecosystem from JSON payloads
+mockforge generate --from-json examples.json --output ./generated-api
+
+# Or from multiple files
+mockforge generate --from-json file1.json file2.json --output ./generated-api
+</code></pre>
+<h3 id="generate-from-json-payloads"><a class="header" href="#generate-from-json-payloads">Generate from JSON Payloads</a></h3>
+<pre><code class="language-bash"># Generate from inline JSON
+mockforge generate --from-json '{"users": [{"id": 1, "name": "Alice"}]}' --output ./api
+</code></pre>
+<h3 id="one-click-environment-creation"><a class="header" href="#one-click-environment-creation">One-Click Environment Creation</a></h3>
+<pre><code class="language-bash"># Generate and start server in one command
+mockforge generate --from-json data.json --serve --port 3000
+</code></pre>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<h3 id="1-entity-inference"><a class="header" href="#1-entity-inference">1. Entity Inference</a></h3>
+<p>MockForge analyzes JSON payloads to infer entity structures:</p>
+<p><strong>Input JSON:</strong></p>
+<pre><code class="language-json">{
+  "users": [
+    {"id": 1, "name": "Alice", "email": "alice@example.com"},
+    {"id": 2, "name": "Bob", "email": "bob@example.com"}
+  ],
+  "posts": [
+    {"id": 1, "user_id": 1, "title": "First Post", "content": "..."},
+    {"id": 2, "user_id": 1, "title": "Second Post", "content": "..."}
+  ]
+}
+</code></pre>
+<p><strong>Inferred Entities:</strong></p>
+<ul>
+<li><code>User</code> entity with fields: <code>id</code>, <code>name</code>, <code>email</code></li>
+<li><code>Post</code> entity with fields: <code>id</code>, <code>user_id</code>, <code>title</code>, <code>content</code></li>
+<li>Relationship: <code>User</code> has many <code>Post</code> (via <code>user_id</code>)</li>
+</ul>
+<h3 id="2-route-generation"><a class="header" href="#2-route-generation">2. Route Generation</a></h3>
+<p>Automatically generates CRUD routes for each entity:</p>
+<p><strong>Generated Routes:</strong></p>
+<ul>
+<li><code>GET /users</code> - List all users</li>
+<li><code>GET /users/{id}</code> - Get user by ID</li>
+<li><code>POST /users</code> - Create user</li>
+<li><code>PUT /users/{id}</code> - Update user</li>
+<li><code>DELETE /users/{id}</code> - Delete user</li>
+</ul>
+<p>Same routes generated for <code>posts</code>.</p>
+<h3 id="3-schema-building"><a class="header" href="#3-schema-building">3. Schema Building</a></h3>
+<p>Creates complete OpenAPI 3.0 specification:</p>
+<pre><code class="language-yaml">openapi: 3.0.0
+info:
+  title: Generated API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="generation-options"><a class="header" href="#generation-options">Generation Options</a></h3>
+<pre><code class="language-yaml">generative_schema:
+  enabled: true
+  
+  # API metadata
+  title: "My Generated API"
+  version: "1.0.0"
+  
+  # Naming rules
+  naming_rules:
+    entity_case: "PascalCase"  # PascalCase, camelCase, snake_case
+    route_case: "kebab-case"   # kebab-case, snake_case, camelCase
+    pluralization: "standard"  # standard, none, custom
+    
+  # Generation options
+  generate_crud: true
+  infer_relationships: true
+  merge_schemas: true
+</code></pre>
+<h3 id="naming-rules"><a class="header" href="#naming-rules">Naming Rules</a></h3>
+<p>Customize how entities and routes are named:</p>
+<pre><code class="language-yaml">naming_rules:
+  # Entity naming
+  entity_case: "PascalCase"  # User, OrderItem
+  entity_suffix: ""           # Optional suffix
+  
+  # Route naming
+  route_case: "kebab-case"    # /api/users, /api/order-items
+  route_prefix: "/api"        # Route prefix
+  
+  # Pluralization
+  pluralization: "standard"   # users, orders
+  custom_plurals:
+    person: "people"
+    child: "children"
+</code></pre>
+<h2 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h2>
+<h3 id="generate-from-json"><a class="header" href="#generate-from-json">Generate from JSON</a></h3>
+<pre><code class="language-bash"># Basic generation
+mockforge generate --from-json data.json
+
+# With output directory
+mockforge generate --from-json data.json --output ./generated
+
+# With options
+mockforge generate \
+  --from-json data.json \
+  --title "My API" \
+  --version "1.0.0" \
+  --output ./generated
+</code></pre>
+<h3 id="preview-before-generation"><a class="header" href="#preview-before-generation">Preview Before Generation</a></h3>
+<pre><code class="language-bash"># Preview generated schema without creating files
+mockforge generate --from-json data.json --preview
+</code></pre>
+<h3 id="generate-and-serve"><a class="header" href="#generate-and-serve">Generate and Serve</a></h3>
+<pre><code class="language-bash"># Generate and start server
+mockforge generate --from-json data.json --serve --port 3000
+</code></pre>
+<h2 id="programmatic-usage"><a class="header" href="#programmatic-usage">Programmatic Usage</a></h2>
+<h3 id="generate-ecosystem"><a class="header" href="#generate-ecosystem">Generate Ecosystem</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_core::generative_schema::{
+    EcosystemGenerator, GenerationOptions, NamingRules
+};
+use serde_json::json;
+
+// Example payloads
+let payloads = vec![
+    json!({
+        "users": [
+            {"id": 1, "name": "Alice", "email": "alice@example.com"}
+        ]
+    })
+];
+
+// Generation options
+let options = GenerationOptions {
+    title: Some("My API".to_string()),
+    version: Some("1.0.0".to_string()),
+    naming_rules: NamingRules::default(),
+    generate_crud: true,
+    output_dir: Some("./generated".into()),
+};
+
+// Generate ecosystem
+let result = EcosystemGenerator::generate_from_json(payloads, options).await?;
+
+// Access generated spec
+let spec = result.spec;
+let entities = result.entities;
+let routes = result.routes;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="entity-relationship-inference"><a class="header" href="#entity-relationship-inference">Entity Relationship Inference</a></h2>
+<p>MockForge automatically detects relationships from JSON structure:</p>
+<h3 id="one-to-many-1n"><a class="header" href="#one-to-many-1n">One-to-Many (1:N)</a></h3>
+<p>Detected from foreign key patterns:</p>
+<pre><code class="language-json">{
+  "users": [{"id": 1, "name": "Alice"}],
+  "posts": [{"id": 1, "user_id": 1, "title": "Post"}]
+}
+</code></pre>
+<p><strong>Detected Relationship:</strong></p>
+<ul>
+<li><code>User</code> has many <code>Post</code> (via <code>user_id</code>)</li>
+</ul>
+<h3 id="many-to-many-nn"><a class="header" href="#many-to-many-nn">Many-to-Many (N:N)</a></h3>
+<p>Detected from junction patterns:</p>
+<pre><code class="language-json">{
+  "users": [{"id": 1, "name": "Alice"}],
+  "roles": [{"id": 1, "name": "admin"}],
+  "user_roles": [
+    {"user_id": 1, "role_id": 1}
+  ]
+}
+</code></pre>
+<p><strong>Detected Relationship:</strong></p>
+<ul>
+<li><code>User</code> has many <code>Role</code> through <code>user_roles</code></li>
+</ul>
+<h2 id="schema-merging"><a class="header" href="#schema-merging">Schema Merging</a></h2>
+<p>When generating from multiple JSON files, schemas are intelligently merged:</p>
+<pre><code class="language-bash"># Generate from multiple files
+mockforge generate \
+  --from-json users.json posts.json comments.json \
+  --output ./generated
+</code></pre>
+<p><strong>Merging Strategy:</strong></p>
+<ul>
+<li>Common fields are preserved</li>
+<li>New fields are added</li>
+<li>Type conflicts are resolved (prefer more specific types)</li>
+<li>Relationships are merged</li>
+</ul>
+<h2 id="preview-and-edit"><a class="header" href="#preview-and-edit">Preview and Edit</a></h2>
+<p>Before deploying, preview and edit the generated schema:</p>
+<h3 id="preview-generated-schema"><a class="header" href="#preview-generated-schema">Preview Generated Schema</a></h3>
+<pre><code class="language-bash"># Preview in terminal
+mockforge generate --from-json data.json --preview
+
+# Preview in browser (opens generated OpenAPI spec)
+mockforge generate --from-json data.json --preview --open-browser
+</code></pre>
+<h3 id="edit-before-deployment"><a class="header" href="#edit-before-deployment">Edit Before Deployment</a></h3>
+<pre><code class="language-bash"># Generate and open in editor
+mockforge generate --from-json data.json --output ./generated --edit
+
+# Manually edit generated/openapi.yaml, then deploy
+mockforge serve --spec ./generated/openapi.yaml
+</code></pre>
+<h2 id="integration-with-vbr"><a class="header" href="#integration-with-vbr">Integration with VBR</a></h2>
+<p>Generated schemas can be automatically integrated with VBR:</p>
+<pre><code class="language-bash"># Generate with VBR integration
+mockforge generate \
+  --from-json data.json \
+  --vbr-enabled \
+  --output ./generated
+</code></pre>
+<p>This creates:</p>
+<ul>
+<li>VBR entity definitions</li>
+<li>Relationship mappings</li>
+<li>Seed data from JSON</li>
+</ul>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="rapid-prototyping"><a class="header" href="#rapid-prototyping">Rapid Prototyping</a></h3>
+<p>Quickly create mock APIs from example data:</p>
+<pre><code class="language-bash"># Generate API from sample responses
+mockforge generate --from-json sample-responses.json --serve
+</code></pre>
+<h3 id="api-design"><a class="header" href="#api-design">API Design</a></h3>
+<p>Design APIs by example:</p>
+<pre><code class="language-bash"># Create API from design mockups
+mockforge generate --from-json design-mockups.json --output ./api-design
+</code></pre>
+<h3 id="testing-data-generation"><a class="header" href="#testing-data-generation">Testing Data Generation</a></h3>
+<p>Generate test APIs with realistic data:</p>
+<pre><code class="language-bash"># Generate API with test data
+mockforge generate --from-json test-data.json --output ./test-api
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Provide Complete Examples</strong>: Include all fields you want in the generated schema</li>
+<li><strong>Use Consistent Naming</strong>: Consistent naming in JSON helps with entity inference</li>
+<li><strong>Include Relationships</strong>: Show relationships in JSON for automatic detection</li>
+<li><strong>Preview Before Deploy</strong>: Always preview generated schemas before deployment</li>
+<li><strong>Version Control</strong>: Commit generated schemas to version control</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="entities-not-detected"><a class="header" href="#entities-not-detected">Entities Not Detected</a></h3>
+<ul>
+<li>Ensure JSON has a clear structure (arrays of objects)</li>
+<li>Use consistent field names</li>
+<li>Include ID fields for relationship detection</li>
+</ul>
+<h3 id="routes-not-generated"><a class="header" href="#routes-not-generated">Routes Not Generated</a></h3>
+<ul>
+<li>Check that <code>generate_crud</code> is enabled</li>
+<li>Verify entity names are valid</li>
+<li>Review naming rules configuration</li>
+</ul>
+<h3 id="relationships-not-inferred"><a class="header" href="#relationships-not-inferred">Relationships Not Inferred</a></h3>
+<ul>
+<li>Use standard foreign key naming (<code>entity_id</code>)</li>
+<li>Include junction tables for many-to-many</li>
+<li>Provide complete relationship data in JSON</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="vbr-engine.html">VBR Engine</a> - State management for generated entities</li>
+<li><a href="http-mocking/openapi.html">OpenAPI Integration</a> - Working with generated OpenAPI specs</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/mockai.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/ai-contract-diff.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/mockai.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/ai-contract-diff.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

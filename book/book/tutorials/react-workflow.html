@@ -1,0 +1,704 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>React + MockForge Workflow - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/tutorials/react-workflow.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="react--mockforge-workflow"><a class="header" href="#react--mockforge-workflow">React + MockForge Workflow</a></h1>
+<p><strong>Goal</strong>: Build a React application that uses MockForge as a backend mock server for development and testing.</p>
+<p><strong>Time</strong>: 10-15 minutes</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>This tutorial shows you how to:</p>
+<ol>
+<li>Set up MockForge with an OpenAPI specification</li>
+<li>Generate TypeScript client code for React</li>
+<li>Build a React app that consumes the mock API</li>
+<li>Develop and test frontend features against mock data</li>
+</ol>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li>MockForge installed (<a href="../getting-started/installation.html">Installation Guide</a>)</li>
+<li>Node.js 16+ and npm/pnpm installed</li>
+<li>Basic React and TypeScript knowledge</li>
+</ul>
+<h2 id="step-1-prepare-your-openapi-specification"><a class="header" href="#step-1-prepare-your-openapi-specification">Step 1: Prepare Your OpenAPI Specification</a></h2>
+<p>Create or use an existing OpenAPI spec. For this tutorial, we’ll use a User Management API:</p>
+<p><strong><code>user-management-api.json</code>:</strong></p>
+<pre><code class="language-json">{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "User Management API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List all users",
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "summary": "Get user by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "required": ["id", "name", "email"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "{{uuid}}"
+          },
+          "name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "john@example.com"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "{{now}}"
+          }
+        }
+      },
+      "UserInput": {
+        "type": "object",
+        "required": ["name", "email"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      }
+    }
+  }
+}
+</code></pre>
+<h2 id="step-2-start-mockforge-server"><a class="header" href="#step-2-start-mockforge-server">Step 2: Start MockForge Server</a></h2>
+<p>Start the mock server with your OpenAPI spec:</p>
+<pre><code class="language-bash"># Terminal 1: Start MockForge
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+  mockforge serve --spec user-management-api.json --http-port 3000 --admin
+</code></pre>
+<p>You should see:</p>
+<pre><code>🚀 MockForge v1.0.0 starting...
+📡 HTTP server listening on 0.0.0.0:3000
+✅ Ready to serve requests at http://localhost:3000
+</code></pre>
+<p><strong>Tip</strong>: Keep this terminal running. The <code>--admin</code> flag enables the admin UI at http://localhost:9080 for monitoring requests.</p>
+<h2 id="step-3-create-react-application"><a class="header" href="#step-3-create-react-application">Step 3: Create React Application</a></h2>
+<p>Create a new React app (or use an existing one):</p>
+<pre><code class="language-bash"># Create React app with TypeScript
+npx create-react-app my-app --template typescript
+cd my-app
+</code></pre>
+<h2 id="step-4-generate-typescript-client-optional"><a class="header" href="#step-4-generate-typescript-client-optional">Step 4: Generate TypeScript Client (Optional)</a></h2>
+<p>MockForge can generate type-safe React hooks from your OpenAPI spec:</p>
+<pre><code class="language-bash"># Install MockForge CLI as dev dependency
+npm install --save-dev mockforge-cli
+
+# Add to package.json scripts
+</code></pre>
+<p>Update <code>package.json</code>:</p>
+<pre><code class="language-json">{
+  "scripts": {
+    "generate-client": "mockforge client generate --spec ../user-management-api.json --framework react --output ./src/generated",
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  }
+}
+</code></pre>
+<p>Generate the client:</p>
+<pre><code class="language-bash">npm run generate-client
+</code></pre>
+<p>This creates:</p>
+<ul>
+<li><code>src/generated/types.ts</code> - TypeScript type definitions</li>
+<li><code>src/generated/hooks.ts</code> - React hooks for API calls</li>
+</ul>
+<h2 id="step-5-configure-react-app"><a class="header" href="#step-5-configure-react-app">Step 5: Configure React App</a></h2>
+<h3 id="option-a-using-generated-hooks"><a class="header" href="#option-a-using-generated-hooks">Option A: Using Generated Hooks</a></h3>
+<p>If you generated the client, use the hooks:</p>
+<p><strong><code>src/App.tsx</code>:</strong></p>
+<pre><code class="language-typescript">import React, { useState } from 'react';
+import { useGetUsers, useCreateUser } from './generated/hooks';
+import type { UserInput } from './generated/types';
+
+function App() {
+  const { data: users, loading, error, refetch } = useGetUsers();
+  const { execute: createUser, loading: creating } = useCreateUser();
+  
+  const [formData, setFormData] = useState&lt;UserInput&gt;({
+    name: '',
+    email: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) =&gt; {
+    e.preventDefault();
+    try {
+      await createUser(formData);
+      setFormData({ name: '', email: '' });
+      refetch(); // Refresh user list
+    } catch (error) {
+      console.error('Failed to create user:', error);
+    }
+  };
+
+  if (loading) return &lt;div&gt;Loading users...&lt;/div&gt;;
+  if (error) return &lt;div&gt;Error: {error.message}&lt;/div&gt;;
+
+  return (
+    &lt;div className="App"&gt;
+      &lt;h1&gt;User Management&lt;/h1&gt;
+      
+      &lt;form onSubmit={handleSubmit}&gt;
+        &lt;input
+          type="text"
+          placeholder="Name"
+          value={formData.name}
+          onChange={(e) =&gt; setFormData({ ...formData, name: e.target.value })}
+        /&gt;
+        &lt;input
+          type="email"
+          placeholder="Email"
+          value={formData.email}
+          onChange={(e) =&gt; setFormData({ ...formData, email: e.target.value })}
+        /&gt;
+        &lt;button type="submit" disabled={creating}&gt;
+          {creating ? 'Creating...' : 'Create User'}
+        &lt;/button&gt;
+      &lt;/form&gt;
+
+      &lt;ul&gt;
+        {users?.map(user =&gt; (
+          &lt;li key={user.id}&gt;
+            &lt;strong&gt;{user.name}&lt;/strong&gt; - {user.email}
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+
+export default App;
+</code></pre>
+<h3 id="option-b-manual-fetch-implementation"><a class="header" href="#option-b-manual-fetch-implementation">Option B: Manual Fetch Implementation</a></h3>
+<p>If you prefer manual implementation:</p>
+<p><strong><code>src/App.tsx</code>:</strong></p>
+<pre><code class="language-typescript">import React, { useState, useEffect } from 'react';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+function App() {
+  const [users, setUsers] = useState&lt;User[]&gt;([]);
+  const [loading, setLoading] = useState(true);
+  const [formData, setFormData] = useState({ name: '', email: '' });
+
+  useEffect(() =&gt; {
+    fetch('http://localhost:3000/users')
+      .then(res =&gt; res.json())
+      .then(data =&gt; {
+        setUsers(data);
+        setLoading(false);
+      })
+      .catch(err =&gt; {
+        console.error('Error fetching users:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) =&gt; {
+    e.preventDefault();
+    try {
+      const res = await fetch('http://localhost:3000/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      const newUser = await res.json();
+      setUsers([...users, newUser]);
+      setFormData({ name: '', email: '' });
+    } catch (error) {
+      console.error('Failed to create user:', error);
+    }
+  };
+
+  if (loading) return &lt;div&gt;Loading...&lt;/div&gt;;
+
+  return (
+    &lt;div className="App"&gt;
+      &lt;h1&gt;User Management&lt;/h1&gt;
+      
+      &lt;form onSubmit={handleSubmit}&gt;
+        &lt;input
+          type="text"
+          placeholder="Name"
+          value={formData.name}
+          onChange={(e) =&gt; setFormData({ ...formData, name: e.target.value })}
+        /&gt;
+        &lt;input
+          type="email"
+          placeholder="Email"
+          value={formData.email}
+          onChange={(e) =&gt; setFormData({ ...formData, email: e.target.value })}
+        /&gt;
+        &lt;button type="submit"&gt;Create User&lt;/button&gt;
+      &lt;/form&gt;
+
+      &lt;ul&gt;
+        {users.map(user =&gt; (
+          &lt;li key={user.id}&gt;
+            &lt;strong&gt;{user.name}&lt;/strong&gt; - {user.email}
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+
+export default App;
+</code></pre>
+<h2 id="step-6-configure-api-base-url"><a class="header" href="#step-6-configure-api-base-url">Step 6: Configure API Base URL</a></h2>
+<p>Set the API URL as an environment variable:</p>
+<p><strong><code>.env.development</code>:</strong></p>
+<pre><code>REACT_APP_API_URL=http://localhost:3000
+</code></pre>
+<p><strong><code>.env.production</code>:</strong></p>
+<pre><code>REACT_APP_API_URL=https://api.yourdomain.com
+</code></pre>
+<p>Update your fetch calls to use the environment variable:</p>
+<pre><code class="language-typescript">const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+
+fetch(`${API_URL}/users`)
+</code></pre>
+<h2 id="step-7-start-react-app"><a class="header" href="#step-7-start-react-app">Step 7: Start React App</a></h2>
+<pre><code class="language-bash"># Terminal 2: Start React app
+npm start
+</code></pre>
+<p>Your React app will be available at http://localhost:3001 (or 3000 if available).</p>
+<h2 id="step-8-test-the-integration"><a class="header" href="#step-8-test-the-integration">Step 8: Test the Integration</a></h2>
+<ol>
+<li><strong>Create a user</strong>: Fill out the form and submit</li>
+<li><strong>View users</strong>: See the list update with new users</li>
+<li><strong>Monitor requests</strong>: Open http://localhost:9080 (Admin UI) to see all requests</li>
+</ol>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<h3 id="typical-development-cycle"><a class="header" href="#typical-development-cycle">Typical Development Cycle</a></h3>
+<ol>
+<li><strong>Start MockForge</strong> with your API spec</li>
+<li><strong>Develop React features</strong> against mock data</li>
+<li><strong>View requests</strong> in Admin UI for debugging</li>
+<li><strong>Update spec</strong> as API evolves</li>
+<li><strong>Regenerate client</strong> when spec changes</li>
+</ol>
+<h3 id="updating-api-spec"><a class="header" href="#updating-api-spec">Updating API Spec</a></h3>
+<p>When the OpenAPI spec changes:</p>
+<pre><code class="language-bash"># Regenerate TypeScript client
+npm run generate-client
+
+# Restart MockForge with updated spec
+# (Ctrl+C in Terminal 1, then restart)
+mockforge serve --spec user-management-api.json --http-port 3000 --admin
+</code></pre>
+<h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
+<p>Run tests against the mock server:</p>
+<pre><code class="language-bash"># Start mock server in background
+mockforge serve --spec user-management-api.json --http-port 3000 &amp;
+MOCKFORGE_PID=$!
+
+# Run tests
+npm test
+
+# Stop mock server
+kill $MOCKFORGE_PID
+</code></pre>
+<h2 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h2>
+<h3 id="cors-errors"><a class="header" href="#cors-errors">CORS Errors</a></h3>
+<p>If you see CORS errors, enable CORS in MockForge config:</p>
+<pre><code class="language-yaml"># mockforge.yaml
+http:
+  port: 3000
+  cors:
+    enabled: true
+    allowed_origins: ["http://localhost:3000", "http://localhost:3001"]
+</code></pre>
+<h3 id="template-variables-not-expanding"><a class="header" href="#template-variables-not-expanding">Template Variables Not Expanding</a></h3>
+<p>Make sure template expansion is enabled:</p>
+<pre><code class="language-bash">MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve ...
+</code></pre>
+<h3 id="client-generation-fails"><a class="header" href="#client-generation-fails">Client Generation Fails</a></h3>
+<ul>
+<li>Ensure MockForge CLI is in PATH</li>
+<li>Check OpenAPI spec is valid JSON/YAML</li>
+<li>Verify framework name is correct (<code>react</code>, not <code>reactjs</code>)</li>
+</ul>
+<h2 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h2>
+<h3 id="custom-hooks"><a class="header" href="#custom-hooks">Custom Hooks</a></h3>
+<p>Wrap generated hooks with custom logic:</p>
+<pre><code class="language-typescript">import { useGetUsers as useGetUsersBase } from './generated/hooks';
+
+export function useGetUsers() {
+  const result = useGetUsersBase();
+  
+  // Add custom logic
+  useEffect(() =&gt; {
+    if (result.data) {
+      console.log('Users loaded:', result.data.length);
+    }
+  }, [result.data]);
+  
+  return result;
+}
+</code></pre>
+<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
+<p>Implement global error handling:</p>
+<pre><code class="language-typescript">import { useGetUsers, useCreateUser } from './generated/hooks';
+
+function App() {
+  const { data, error } = useGetUsers();
+  
+  if (error) {
+    // Show user-friendly error message
+    return &lt;ErrorDisplay error={error} /&gt;;
+  }
+  
+  // ... rest of component
+}
+</code></pre>
+<h3 id="request-interceptors"><a class="header" href="#request-interceptors">Request Interceptors</a></h3>
+<p>Add authentication or custom headers:</p>
+<pre><code class="language-typescript">// In generated/hooks.ts, modify the base configuration
+const apiConfig = {
+  baseUrl: 'http://localhost:3000',
+  headers: {
+    'Authorization': `Bearer ${getToken()}`,
+  }
+};
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><strong>View Complete Example</strong>: See <a href="../../examples/react-demo/">React Demo</a> for a full implementation</li>
+<li><strong>Learn Vue Workflow</strong>: <a href="vue-workflow.html">Vue + MockForge Workflow</a></li>
+<li><strong>Explore Admin UI</strong>: <a href="admin-ui-walkthrough.html">Admin UI Walkthrough</a></li>
+<li><strong>Advanced Features</strong>: <a href="../user-guide/http-mocking/dynamic-data.html">Dynamic Data Generation</a></li>
+</ul>
+<hr />
+<p><strong>Need help?</strong> Check the <a href="../reference/faq.html">FAQ</a> or <a href="../reference/troubleshooting.html">Troubleshooting Guide</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tutorials/mock-openapi-spec.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tutorials/vue-workflow.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tutorials/mock-openapi-spec.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tutorials/vue-workflow.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

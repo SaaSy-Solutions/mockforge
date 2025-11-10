@@ -206,7 +206,9 @@
 <li><strong>gRPC HTTP Bridge</strong> for REST access to gRPC services</li>
 <li><strong>Built-in encryption</strong> for sensitive data</li>
 <li><strong>Rust performance</strong> with native compilation</li>
+<li><strong>Multi-language SDKs</strong> - Native support for 6 languages vs WireMock’s Java-first approach</li>
 </ul>
+<p>For detailed ecosystem comparison, see <a href="../../docs/ECOSYSTEM_COMPARISON.html">Ecosystem Comparison Guide</a>.</p>
 <h3 id="can-i-use-mockforge-in-production"><a class="header" href="#can-i-use-mockforge-in-production">Can I use MockForge in production?</a></h3>
 <p>Yes! MockForge is production-ready with:</p>
 <ul>
@@ -247,6 +249,38 @@ docker pull ghcr.io/saasy-solutions/mockforge:latest
 <li>Developing custom plugins</li>
 <li>Embedding MockForge as a library</li>
 </ul>
+<h3 id="what-programming-languages-are-supported"><a class="header" href="#what-programming-languages-are-supported">What programming languages are supported?</a></h3>
+<p>MockForge provides native SDKs for 6 languages:</p>
+<ul>
+<li><strong>Rust</strong> - Native SDK with zero-overhead embedding</li>
+<li><strong>Node.js/TypeScript</strong> - Full TypeScript support</li>
+<li><strong>Python</strong> - Context manager support with type hints</li>
+<li><strong>Go</strong> - Idiomatic Go API</li>
+<li><strong>Java</strong> - Maven/Gradle integration</li>
+<li><strong>.NET/C#</strong> - NuGet package</li>
+</ul>
+<p>All SDKs support embedded mock servers in your test suites. See <a href="../../sdk/README.html">SDK Documentation</a> for examples.</p>
+<h3 id="can-i-use-mockforge-from-pythonnodejsgoetc"><a class="header" href="#can-i-use-mockforge-from-pythonnodejsgoetc">Can I use MockForge from Python/Node.js/Go/etc.?</a></h3>
+<p>Yes! MockForge provides native SDKs for multiple languages. You can embed mock servers directly in your test code:</p>
+<p><strong>Python</strong>:</p>
+<pre><code class="language-python">from mockforge_sdk import MockServer
+
+with MockServer(port=3000) as server:
+    server.stub_response('GET', '/api/users/123', {'id': 123})
+    # Your test code here
+</code></pre>
+<p><strong>Node.js</strong>:</p>
+<pre><code class="language-typescript">import { MockServer } from '@mockforge/sdk';
+
+const server = await MockServer.start({ port: 3000 });
+await server.stubResponse('GET', '/api/users/123', { id: 123 });
+</code></pre>
+<p><strong>Go</strong>:</p>
+<pre><code class="language-go">server := mockforge.NewMockServer(mockforge.MockServerConfig{Port: 3000})
+server.Start()
+defer server.Stop()
+</code></pre>
+<p>See <a href="../../docs/ECOSYSTEM_AND_USE_CASES.html">Ecosystem &amp; Use Cases Guide</a> for complete examples in all languages.</p>
 <h3 id="how-do-i-create-my-first-mock-api"><a class="header" href="#how-do-i-create-my-first-mock-api">How do I create my first mock API?</a></h3>
 <pre><code class="language-bash"># 1. Initialize a project
 mockforge init my-api
@@ -646,6 +680,7 @@ let router = build_router(
 <ul>
 <li><strong>GitHub Discussions</strong>: <a href="https://github.com/SaaSy-Solutions/mockforge/discussions">Community Forum</a></li>
 <li><strong>GitHub Issues</strong>: <a href="https://github.com/SaaSy-Solutions/mockforge/issues">Bug Reports &amp; Feature Requests</a></li>
+<li><strong>Discord</strong>: <a href="https://discord.gg/2FxXqKpa">Join our community chat</a></li>
 </ul>
 <hr />
 <h2 id="licensing--commercial-use"><a class="header" href="#licensing--commercial-use">Licensing &amp; Commercial Use</a></h2>
@@ -665,11 +700,75 @@ let router = build_router(
 <li>Training/consulting</li>
 </ul>
 <hr />
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="what-use-cases-does-mockforge-support"><a class="header" href="#what-use-cases-does-mockforge-support">What use cases does MockForge support?</a></h3>
+<p>MockForge supports a wide range of use cases:</p>
+<ol>
+<li><strong>Unit Tests</strong> - Embed mock servers directly in test suites across all supported languages</li>
+<li><strong>Integration Tests</strong> - Test complex multi-service interactions with stateful mocking</li>
+<li><strong>Service Virtualization</strong> - Replace external dependencies with mocks using proxy mode</li>
+<li><strong>Development Environments</strong> - Create local development environments without backend dependencies</li>
+<li><strong>Isolating from Flaky Dependencies</strong> - Simulate network failures and slow responses</li>
+<li><strong>Simulating APIs That Don’t Exist Yet</strong> - Generate mocks from API specifications before implementation</li>
+</ol>
+<p>See <a href="../../docs/ECOSYSTEM_AND_USE_CASES.html">Ecosystem &amp; Use Cases Guide</a> for detailed examples and code samples.</p>
+<h3 id="can-i-use-mockforge-for-unit-testing"><a class="header" href="#can-i-use-mockforge-for-unit-testing">Can I use MockForge for unit testing?</a></h3>
+<p>Yes! MockForge SDKs allow you to embed mock servers directly in your unit tests:</p>
+<p><strong>Rust</strong>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut server = MockServer::new().port(0).start().await?;
+server.stub_response("GET", "/api/users/123", json!({"id": 123})).await?;
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Python</strong>:</p>
+<pre><code class="language-python">with MockServer(port=0) as server:
+    server.stub_response('GET', '/api/users/123', {'id': 123})
+</code></pre>
+<p>No separate server process required. See <a href="../../sdk/README.html">SDK Documentation</a> for examples.</p>
+<h3 id="how-do-i-replace-external-apis-in-my-tests"><a class="header" href="#how-do-i-replace-external-apis-in-my-tests">How do I replace external APIs in my tests?</a></h3>
+<p>Use MockForge’s proxy mode with record/replay:</p>
+<pre><code class="language-bash"># Record real API interactions
+mockforge serve --proxy-enabled \
+  --proxy-target https://api.external-service.com \
+  --record-responses ./recordings/
+
+# Replay from recordings
+mockforge serve --replay-from ./recordings/
+</code></pre>
+<p>Or use the SDK to programmatically stub responses. See <a href="../../docs/ECOSYSTEM_AND_USE_CASES.html#use-case-3-service-virtualization">Service Virtualization</a> for details.</p>
+<h3 id="can-i-simulate-network-failures-and-slow-responses"><a class="header" href="#can-i-simulate-network-failures-and-slow-responses">Can I simulate network failures and slow responses?</a></h3>
+<p>Yes! MockForge provides built-in latency and fault injection:</p>
+<pre><code class="language-bash"># Add latency
+mockforge serve --latency-mode normal --latency-mean-ms 500
+
+# Inject failures
+mockforge serve --failure-rate 0.1 --failure-codes 500,503
+</code></pre>
+<p>Or configure in your SDK:</p>
+<pre><code class="language-typescript">const server = await MockServer.start({
+  latency: { mode: 'normal', meanMs: 500 },
+  failures: { enabled: true, failureRate: 0.1 }
+});
+</code></pre>
+<p>See <a href="../../docs/ECOSYSTEM_AND_USE_CASES.html#use-case-5-isolating-from-flaky-dependencies">Isolating from Flaky Dependencies</a> for examples.</p>
+<h3 id="how-do-i-mock-an-api-that-doesnt-exist-yet"><a class="header" href="#how-do-i-mock-an-api-that-doesnt-exist-yet">How do I mock an API that doesn’t exist yet?</a></h3>
+<p>Generate mocks from API specifications:</p>
+<pre><code class="language-bash"># From OpenAPI spec
+mockforge serve --spec api-spec.yaml
+
+# From GraphQL schema
+mockforge serve --graphql-schema schema.graphql
+
+# From gRPC proto files
+mockforge serve --grpc-port 50051 --proto-dir ./proto
+</code></pre>
+<p>All endpoints are automatically available with schema-validated responses. See <a href="../../docs/ECOSYSTEM_AND_USE_CASES.html#use-case-6-simulating-apis-that-dont-exist-yet">Simulating APIs That Don’t Exist Yet</a> for details.</p>
 <h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
 <p><strong>Ready to start?</strong> Try our <strong><a href="../getting-started/five-minute-api.html">5-Minute Tutorial</a></strong>!</p>
 <p><strong>Need more help?</strong></p>
 <ul>
 <li><a href="https://docs.mockforge.dev/">Full Documentation</a></li>
+<li><a href="../../docs/ECOSYSTEM_AND_USE_CASES.html">Ecosystem &amp; Use Cases Guide</a></li>
 <li><a href="https://github.com/SaaSy-Solutions/mockforge/issues">GitHub Issues</a></li>
 <li><a href="https://github.com/SaaSy-Solutions/mockforge/discussions">Community Discussions</a></li>
 </ul>
@@ -678,7 +777,7 @@ let router = build_router(
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/troubleshooting.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../reference/common-issues.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -692,7 +791,7 @@ let router = build_router(
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/troubleshooting.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../reference/common-issues.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

@@ -12,7 +12,7 @@ keywords = ["ftp", "file-transfer", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = { version = "0.2.7", path = "../mockforge-core" }
+mockforge-core = "0.2.8"
 libunftp = "0.21"
 tokio = { workspace = true }
  serde = { workspace = true }

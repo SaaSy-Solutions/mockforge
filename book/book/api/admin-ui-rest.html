@@ -196,7 +196,108 @@
 <li><strong>Environment</strong>: Environment variable management</li>
 </ul>
 <h2 id="base-url"><a class="header" href="#base-url">Base URL</a></h2>
-<p>All API endpoints are prefixed with <code>/__mockforge</code> to avoid conflicts with user-defined routes.</p>
+<p>All API endpoints are prefixed with <code>/__mockforge/api</code> to avoid conflicts with user-defined routes.</p>
+<h3 id="standalone-mode-vs-embedded-mode"><a class="header" href="#standalone-mode-vs-embedded-mode">Standalone Mode vs Embedded Mode</a></h3>
+<p>The REST API works identically in both standalone and embedded modes:</p>
+<p><strong>Standalone Mode (Default):</strong></p>
+<ul>
+<li>Admin UI runs on a separate port (default: 9080)</li>
+<li>REST API endpoints available at: <code>http://localhost:9080/__mockforge/api/*</code></li>
+<li>Main HTTP server runs on port 3000 (or configured port)</li>
+<li>Example: <code>curl http://localhost:9080/__mockforge/api/mocks</code></li>
+</ul>
+<p><strong>Embedded Mode:</strong></p>
+<ul>
+<li>Admin UI mounted under HTTP server (e.g., <code>/admin</code>)</li>
+<li>REST API endpoints available at: <code>http://localhost:3000/__mockforge/api/*</code></li>
+<li>Same endpoints, different base URL</li>
+<li>Example: <code>curl http://localhost:3000/__mockforge/api/mocks</code></li>
+</ul>
+<p><strong>Configuration via REST API (JSON over HTTP):</strong></p>
+<p>The REST API supports full configuration management via JSON over HTTP, making it suitable for:</p>
+<ul>
+<li>CI/CD pipelines</li>
+<li>Automated testing</li>
+<li>Remote configuration</li>
+<li>Integration with external tools</li>
+</ul>
+<p>All endpoints accept and return JSON, following standard REST conventions.</p>
+<h3 id="standalone-mode-examples"><a class="header" href="#standalone-mode-examples">Standalone Mode Examples</a></h3>
+<p><strong>Starting MockForge in Standalone Mode:</strong></p>
+<pre><code class="language-bash"># Start MockForge with standalone admin UI
+mockforge serve --admin --admin-standalone --admin-port 9080
+
+# Or via config file
+# admin:
+#   enabled: true
+#   port: 9080
+#   api_enabled: true
+</code></pre>
+<p><strong>Creating a Mock via REST API (Standalone Mode):</strong></p>
+<pre><code class="language-bash"># Create a mock using JSON over HTTP
+curl -X POST http://localhost:9080/__mockforge/api/mocks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "user-get",
+    "name": "Get User",
+    "method": "GET",
+    "path": "/api/users/{id}",
+    "response": {
+      "body": {
+        "id": "{{request.path.id}}",
+        "name": "Alice",
+        "email": "alice@example.com"
+      },
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    },
+    "enabled": true,
+    "status_code": 200
+  }'
+</code></pre>
+<p><strong>Updating Configuration via REST API:</strong></p>
+<pre><code class="language-bash"># Update latency configuration
+curl -X POST http://localhost:9080/__mockforge/api/config/latency \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_ms": 100,
+    "jitter_ms": 50
+  }'
+</code></pre>
+<p><strong>Listing All Mocks:</strong></p>
+<pre><code class="language-bash"># Get all configured mocks
+curl http://localhost:9080/__mockforge/api/mocks
+</code></pre>
+<p><strong>Using the SDK with Standalone Mode:</strong></p>
+<pre><pre class="playground"><code class="language-rust">use mockforge_sdk::AdminClient;
+use mockforge_sdk::MockConfigBuilder;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Connect to standalone admin API
+    let client = AdminClient::new("http://localhost:9080");
+    
+    // Create a mock using the fluent builder API
+    let mock = MockConfigBuilder::new("POST", "/api/users")
+        .name("Create User")
+        .with_header("Authorization", "Bearer.*")
+        .with_query_param("role", "admin")
+        .status(201)
+        .body(json!({
+            "id": "{{uuid}}",
+            "name": "{{faker.name}}",
+            "created": true
+        }))
+        .priority(10)
+        .build();
+    
+    // Create the mock via REST API
+    client.create_mock(mock).await?;
+    
+    Ok(())
+}</code></pre></pre>
 <h2 id="authentication"><a class="header" href="#authentication">Authentication</a></h2>
 <p>Currently, the API does not implement authentication. In production deployments, consider adding authentication middleware.</p>
 <h2 id="response-format"><a class="header" href="#response-format">Response Format</a></h2>

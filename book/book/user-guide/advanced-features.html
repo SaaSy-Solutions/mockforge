@@ -1,0 +1,463 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Advanced Features - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/advanced-features.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h1>
+<p>MockForge includes a comprehensive set of advanced features that enable sophisticated mocking scenarios, intelligent behavior simulation, and production-like testing environments. This section provides an overview of all advanced features with links to detailed documentation.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>MockForge’s advanced features are organized into several categories:</p>
+<ul>
+<li><strong>Simulation &amp; State Management</strong>: Virtual Backend Reality (VBR), Temporal Simulation, Scenario State Machines</li>
+<li><strong>Intelligence &amp; Automation</strong>: MockAI, Generative Schema Mode, AI Contract Diff</li>
+<li><strong>Chaos &amp; Realism</strong>: Chaos Lab, Reality Slider</li>
+<li><strong>Collaboration &amp; Cloud</strong>: Cloud Workspaces, Data Scenario Marketplace</li>
+<li><strong>Developer Experience</strong>: ForgeConnect SDK</li>
+<li><strong>Experimental Features</strong>: Deceptive Deploys, Voice + LLM Interface, Reality Continuum, Smart Personas</li>
+</ul>
+<h2 id="simulation--state-management"><a class="header" href="#simulation--state-management">Simulation &amp; State Management</a></h2>
+<h3 id="virtual-backend-reality-vbr-engine"><a class="header" href="#virtual-backend-reality-vbr-engine">Virtual Backend Reality (VBR) Engine</a></h3>
+<p>The VBR Engine provides a virtual “database” layer that automatically generates CRUD operations from OpenAPI specifications. It supports relationship mapping, data persistence, and state management.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Automatic CRUD generation from OpenAPI specs</li>
+<li>Support for 1:N and N:N relationships</li>
+<li>Multiple storage backends (JSON, SQLite, in-memory)</li>
+<li>Data seeding and state snapshots</li>
+<li>Realistic ID generation</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="vbr-engine.html">VBR Engine Documentation</a></p>
+<h3 id="temporal-simulation-time-travel"><a class="header" href="#temporal-simulation-time-travel">Temporal Simulation (Time Travel)</a></h3>
+<p>Temporal Simulation allows you to control time in your mock environment, enabling time-based data mutations, scheduled events, and time-travel debugging.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Virtual clock abstraction</li>
+<li>Time advancement controls</li>
+<li>Data mutation rules triggered by time</li>
+<li>Scheduler for simulated cron events</li>
+<li>UI controls for time travel</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="temporal-simulation.html">Temporal Simulation Documentation</a></p>
+<h3 id="scenario-state-machines-20"><a class="header" href="#scenario-state-machines-20">Scenario State Machines 2.0</a></h3>
+<p>Advanced state machine system for modeling complex workflows and multi-step scenarios with visual flow editing and conditional transitions.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Visual flow editor for state transitions</li>
+<li>Conditional transitions with if/else logic</li>
+<li>Reusable sub-scenarios</li>
+<li>Real-time preview of active state</li>
+<li>Programmatic state manipulation</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="scenario-state-machines.html">Scenario State Machines Documentation</a></p>
+<h2 id="intelligence--automation"><a class="header" href="#intelligence--automation">Intelligence &amp; Automation</a></h2>
+<h3 id="mockai-intelligent-mocking"><a class="header" href="#mockai-intelligent-mocking">MockAI (Intelligent Mocking)</a></h3>
+<p>MockAI uses artificial intelligence to generate contextually appropriate, realistic API responses. It learns from OpenAPI specifications and example payloads.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Trainable rule engine from examples or schema</li>
+<li>Context-aware conditional logic generation</li>
+<li>LLM-based dynamic response option</li>
+<li>Automatic fake data consistency</li>
+<li>Realistic validation error simulation</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="mockai.html">MockAI Documentation</a></p>
+<h3 id="generative-schema-mode"><a class="header" href="#generative-schema-mode">Generative Schema Mode</a></h3>
+<p>Generate complete API ecosystems from JSON payloads, automatically creating routes, schemas, and entity relationships.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Complete “JSON → entire API ecosystem” generation</li>
+<li>Auto-route generation with realistic CRUD mapping</li>
+<li>One-click environment creation from JSON payloads</li>
+<li>Entity relation inference</li>
+<li>Schema merging from multiple examples</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="generative-schema.html">Generative Schema Mode Documentation</a></p>
+<h3 id="ai-contract-diff"><a class="header" href="#ai-contract-diff">AI Contract Diff</a></h3>
+<p>Automatically detect and analyze differences between API contracts and live requests, providing contextual recommendations for mismatches.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Contract diff analysis between schema and live requests</li>
+<li>Contextual recommendations for mismatches</li>
+<li>Inline schema correction proposals</li>
+<li>CI/CD integration (contract verification step)</li>
+<li>Dashboard visualization of mismatches</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="ai-contract-diff.html">AI Contract Diff Documentation</a></p>
+<h2 id="chaos--realism"><a class="header" href="#chaos--realism">Chaos &amp; Realism</a></h2>
+<h3 id="chaos-lab"><a class="header" href="#chaos-lab">Chaos Lab</a></h3>
+<p>Interactive network condition simulation with real-time latency visualization, network profiles, and error pattern scripting.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Real-time latency visualization</li>
+<li>Network profile management (slow 3G, flaky Wi-Fi, etc.)</li>
+<li>Error pattern scripting (burst, random, sequential)</li>
+<li>Profile export/import</li>
+<li>CLI integration</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="chaos-lab.html">Chaos Lab Documentation</a></p>
+<h3 id="reality-slider"><a class="header" href="#reality-slider">Reality Slider</a></h3>
+<p>Unified control mechanism that adjusts mock environment realism from simple static stubs to full production-level chaos.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Configurable realism levels (1–5)</li>
+<li>Automated toggling of chaos, latency, and MockAI behaviors</li>
+<li>Persistent slider state per environment</li>
+<li>Export/import of realism presets</li>
+<li>Keyboard shortcuts for quick changes</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="reality-slider.html">Reality Slider Documentation</a></p>
+<h2 id="collaboration--cloud"><a class="header" href="#collaboration--cloud">Collaboration &amp; Cloud</a></h2>
+<h3 id="cloud-workspaces"><a class="header" href="#cloud-workspaces">Cloud Workspaces</a></h3>
+<p>Multi-user collaborative editing with real-time state synchronization, version control, and role-based permissions.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>User authentication and access control</li>
+<li>Multi-user environment editing</li>
+<li>State synchronization between clients</li>
+<li>Git-style version control for mocks and data</li>
+<li>Role-based permissions (Owner, Editor, Viewer)</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="cloud-workspaces.html">Cloud Workspaces Documentation</a></p>
+<h3 id="data-scenario-marketplace"><a class="header" href="#data-scenario-marketplace">Data Scenario Marketplace</a></h3>
+<p>Marketplace for downloadable mock templates with tags, ratings, versioning, and one-click import/export.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Marketplace for downloadable mock templates</li>
+<li>Tags, ratings, and versioning</li>
+<li>One-click import/export</li>
+<li>Domain-specific packs (e-commerce, fintech, IoT)</li>
+<li>Automatic schema and route alignment</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="scenario-marketplace.html">Scenario Marketplace Documentation</a></p>
+<h2 id="developer-experience"><a class="header" href="#developer-experience">Developer Experience</a></h2>
+<h3 id="forgeconnect-sdk"><a class="header" href="#forgeconnect-sdk">ForgeConnect SDK</a></h3>
+<p>Browser extension and SDK for capturing network traffic, auto-generating mocks, and integrating with popular frameworks.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Browser extension to capture network traffic</li>
+<li>Auto-mock generation for unhandled requests</li>
+<li>Local mock preview in browser</li>
+<li>SDK for framework bindings (React, Vue, Angular)</li>
+<li>Auth passthrough support for OAuth flows</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="forgeconnect-sdk.html">ForgeConnect SDK Documentation</a></p>
+<h2 id="experimental-features"><a class="header" href="#experimental-features">Experimental Features</a></h2>
+<h3 id="deceptive-deploys"><a class="header" href="#deceptive-deploys">Deceptive Deploys</a></h3>
+<p>Deploy mock APIs that look identical to production endpoints, perfect for demos, PoCs, and client presentations.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Production-like headers and response patterns</li>
+<li>Production-like CORS configuration</li>
+<li>Production-like rate limiting</li>
+<li>OAuth flow simulation</li>
+<li>Auto-tunnel deployment</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="deceptive-deploys.html">Deceptive Deploys Documentation</a></p>
+<h3 id="voice--llm-interface"><a class="header" href="#voice--llm-interface">Voice + LLM Interface</a></h3>
+<p>Generate OpenAPI specifications and mock APIs from natural language voice commands.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Voice command parsing with LLM</li>
+<li>OpenAPI spec generation from voice commands</li>
+<li>Conversational mode for multi-turn interactions</li>
+<li>Single-shot mode for complete commands</li>
+<li>CLI and Web UI integration</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="voice-llm-interface.html">Voice + LLM Interface Documentation</a></p>
+<h3 id="reality-continuum"><a class="header" href="#reality-continuum">Reality Continuum</a></h3>
+<p>Gradually transition from mock to real backend data by intelligently blending responses from both sources.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Dynamic blending of mock and real responses</li>
+<li>Time-based progression with virtual clock integration</li>
+<li>Per-route, group-level, and global blend ratios</li>
+<li>Multiple merge strategies</li>
+<li>Fallback handling for failures</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="reality-continuum.html">Reality Continuum Documentation</a></p>
+<h3 id="smart-personas"><a class="header" href="#smart-personas">Smart Personas</a></h3>
+<p>Generate coherent, consistent mock data using persona profiles with unique backstories and deterministic generation.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Persona profile system with unique IDs and domains</li>
+<li>Coherent backstories with template-based generation</li>
+<li>Persona relationships (connections between personas)</li>
+<li>Deterministic data generation (same persona = same data)</li>
+<li>Domain-specific persona templates</li>
+</ul>
+<p><strong>Learn More:</strong> <a href="smart-personas.html">Smart Personas Documentation</a></p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<p>To get started with advanced features:</p>
+<ol>
+<li><strong>Review the feature documentation</strong> linked above for detailed information</li>
+<li><strong>Check configuration examples</strong> in the <a href="../configuration/files.html">Configuration Guide</a></li>
+<li><strong>Try the tutorials</strong> in the <a href="../tutorials/README.html">Tutorials section</a></li>
+<li><strong>Explore examples</strong> in the <code>examples/</code> directory</li>
+</ol>
+<h2 id="feature-comparison"><a class="header" href="#feature-comparison">Feature Comparison</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Use Case</th><th>Complexity</th></tr></thead><tbody>
+<tr><td>VBR Engine</td><td>Stateful CRUD operations</td><td>Medium</td></tr>
+<tr><td>Temporal Simulation</td><td>Time-based testing</td><td>Medium</td></tr>
+<tr><td>MockAI</td><td>Intelligent responses</td><td>High</td></tr>
+<tr><td>Chaos Lab</td><td>Resilience testing</td><td>Low</td></tr>
+<tr><td>Reality Slider</td><td>Quick realism adjustment</td><td>Low</td></tr>
+<tr><td>Cloud Workspaces</td><td>Team collaboration</td><td>Medium</td></tr>
+<tr><td>ForgeConnect SDK</td><td>Browser-based development</td><td>Low</td></tr>
+</tbody></table>
+</div>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start Simple</strong>: Begin with basic features (Chaos Lab, Reality Slider) before moving to advanced features</li>
+<li><strong>Read Documentation</strong>: Each feature has detailed documentation with examples</li>
+<li><strong>Use Examples</strong>: Check the <code>examples/</code> directory for working configurations</li>
+<li><strong>Test Incrementally</strong>: Enable features one at a time to understand their impact</li>
+<li><strong>Monitor Performance</strong>: Some features (like MockAI) may add latency</li>
+</ol>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="advanced-behavior.html">Advanced Behavior and Simulation</a> - Basic advanced features</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - How to configure features</li>
+<li><a href="../api/rust.html">API Reference</a> - Programmatic API access</li>
+<li><a href="../tutorials/README.html">Tutorials</a> - Step-by-step guides</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/admin-ui.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/vbr-engine.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/admin-ui.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/vbr-engine.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

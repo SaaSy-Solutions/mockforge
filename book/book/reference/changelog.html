@@ -182,82 +182,246 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
-<p>All notable changes to this project will be documented in this file.</p>
-<p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,
-and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
-<h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
+                        <h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
 <h3 id="added"><a class="header" href="#added">Added</a></h3>
 <ul>
-<li>
-<p>OpenAPI request validation (path/query/header/cookie/body) with deep $ref resolution and composite schemas (oneOf/anyOf/allOf).</p>
-</li>
-<li>
-<p>Validation modes: <code>disabled</code>, <code>warn</code>, <code>enforce</code>, with aggregate error reporting and detailed error objects.</p>
-</li>
-<li>
-<p>Runtime Admin UI panel to view/toggle validation mode and per-route overrides; Admin API endpoint <code>/__mockforge/validation</code>.</p>
-</li>
-<li>
-<p>CLI flags and config options to control validation (including <code>skip_admin_validation</code> and per-route <code>validation_overrides</code>).</p>
-</li>
-<li>
-<p>New e2e tests for 2xx/422 request validation and response example expansion across HTTP routes.</p>
-</li>
-<li>
-<p>Templating reference docs and examples; WS templating tests and demo update.</p>
-</li>
-<li>
-<p>Initial release of MockForge</p>
-</li>
-<li>
-<p>HTTP API mocking with OpenAPI support</p>
-</li>
-<li>
-<p>gRPC service mocking with Protocol Buffers</p>
-</li>
-<li>
-<p>WebSocket connection mocking with replay functionality</p>
-</li>
-<li>
-<p>CLI tool for easy local development</p>
-</li>
-<li>
-<p>Admin UI for managing mock servers</p>
-</li>
-<li>
-<p>Comprehensive documentation with mdBook</p>
-</li>
-<li>
-<p>GitHub Actions CI/CD pipeline</p>
-</li>
-<li>
-<p>Security audit integration</p>
-</li>
-<li>
-<p>Pre-commit hooks for code quality</p>
-</li>
+<li>Nothing yet.</li>
 </ul>
 <h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<ul>
+<li>Nothing yet.</li>
+</ul>
+<h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
+<ul>
+<li>Nothing yet.</li>
+</ul>
+<h3 id="removed"><a class="header" href="#removed">Removed</a></h3>
+<ul>
+<li>Nothing yet.</li>
+</ul>
+<h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
+<ul>
+<li>Nothing yet.</li>
+</ul>
+<h3 id="security"><a class="header" href="#security">Security</a></h3>
+<ul>
+<li>Nothing yet.</li>
+</ul>
+<h2 id="020---2025-10-29"><a class="header" href="#020---2025-10-29">[0.2.0] - 2025-10-29</a></h2>
+<h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
+<ul>
+<li>Output control features for MockForge generator with comprehensive configuration options</li>
+<li>Unified spec parser with enhanced validation and error reporting</li>
+<li>Multi-framework client generation with Angular and Svelte support</li>
+<li>Enhanced mock data generation with OpenAPI support</li>
+<li>Configuration file support for mock generation</li>
+<li>Browser mobile proxy mode implementation</li>
+<li>Comprehensive documentation and example workflows</li>
+</ul>
+<h3 id="changed-1"><a class="header" href="#changed-1">Changed</a></h3>
+<ul>
+<li>Enhanced CLI with progress indicators, error handling, and code quality improvements</li>
+<li>Comprehensive plugin architecture documentation</li>
+</ul>
+<h3 id="fixed-1"><a class="header" href="#fixed-1">Fixed</a></h3>
+<ul>
+<li>Remove tests that access private fields in mock data tests</li>
+<li>Fix compilation issues in mockforge-collab and mockforge-ui</li>
+<li>Update mockforge-plugin-core version to 0.1.6 in plugin-sdk</li>
+<li>Enable SQLx offline mode for mockforge-collab publishing</li>
+<li>Add description field to mockforge-analytics</li>
+<li>Add version requirements to all mockforge path dependencies</li>
+<li>Fix publish order dependencies (mockforge-chaos before mockforge-reporting)</li>
+<li>Update Cargo.lock and format client generator tests</li>
+</ul>
+<h2 id="013---2025-10-22"><a class="header" href="#013---2025-10-22">[0.1.3] - 2025-10-22</a></h2>
+<h3 id="changes"><a class="header" href="#changes">Changes</a></h3>
+<ul>
+<li>docs: prepare release 0.1.3</li>
+<li>docs: update CHANGELOG for 0.1.3 release</li>
+<li>docs: add roadmap completion summary</li>
+<li>feat: add Kubernetes-style health endpoint aliases and dashboard shortcut</li>
+<li>feat: add unified config &amp; profiles with multi-format support</li>
+<li>feat: add capture scrubbing and deterministic replay</li>
+<li>feat: add native GraphQL operation handlers with advanced features</li>
+<li>feat: add programmable WebSocket handlers</li>
+<li>feat: add HTTP scenario switching for OpenAPI response examples</li>
+<li>feat: add mockforge-test crate and integration testing examples</li>
+<li>build: enable publishing for mockforge-ui and mockforge-cli</li>
+<li>build: extend publish script for internal crates</li>
+<li>build: parameterize publish script with workspace version</li>
+</ul>
+<h2 id="013---2025-10-22-1"><a class="header" href="#013---2025-10-22-1">[0.1.3] - 2025-10-22</a></h2>
+<h3 id="changes-1"><a class="header" href="#changes-1">Changes</a></h3>
+<ul>
+<li>docs: update CHANGELOG for 0.1.3 release</li>
+<li>docs: add roadmap completion summary</li>
+<li>feat: add Kubernetes-style health endpoint aliases and dashboard shortcut</li>
+<li>feat: add unified config &amp; profiles with multi-format support</li>
+<li>feat: add capture scrubbing and deterministic replay</li>
+<li>feat: add native GraphQL operation handlers with advanced features</li>
+<li>feat: add programmable WebSocket handlers</li>
+<li>feat: add HTTP scenario switching for OpenAPI response examples</li>
+<li>feat: add mockforge-test crate and integration testing examples</li>
+<li>build: enable publishing for mockforge-ui and mockforge-cli</li>
+<li>build: extend publish script for internal crates</li>
+<li>build: parameterize publish script with workspace version</li>
+</ul>
+<h2 id="012---2025-10-17"><a class="header" href="#012---2025-10-17">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-2"><a class="header" href="#changes-2">Changes</a></h3>
+<ul>
+<li>build: make version update tolerant</li>
+<li>build: manage version references via wrapper</li>
+<li>build: mark example crates as non-publishable</li>
+<li>build: drop publish-order for cargo-release 0.25</li>
+<li>build: centralize release metadata in release.toml</li>
+<li>build: remove per-crate release metadata</li>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-1"><a class="header" href="#012---2025-10-17-1">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-3"><a class="header" href="#changes-3">Changes</a></h3>
+<ul>
+<li>build: mark example crates as non-publishable</li>
+<li>build: drop publish-order for cargo-release 0.25</li>
+<li>build: centralize release metadata in release.toml</li>
+<li>build: remove per-crate release metadata</li>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-2"><a class="header" href="#012---2025-10-17-2">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-4"><a class="header" href="#changes-4">Changes</a></h3>
+<ul>
+<li>build: mark example crates as non-publishable</li>
+<li>build: drop publish-order for cargo-release 0.25</li>
+<li>build: centralize release metadata in release.toml</li>
+<li>build: remove per-crate release metadata</li>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-3"><a class="header" href="#012---2025-10-17-3">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-5"><a class="header" href="#changes-5">Changes</a></h3>
+<ul>
+<li>build: drop publish-order for cargo-release 0.25</li>
+<li>build: centralize release metadata in release.toml</li>
+<li>build: remove per-crate release metadata</li>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-4"><a class="header" href="#012---2025-10-17-4">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-6"><a class="header" href="#changes-6">Changes</a></h3>
+<ul>
+<li>build: centralize release metadata in release.toml</li>
+<li>build: remove per-crate release metadata</li>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-5"><a class="header" href="#012---2025-10-17-5">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-7"><a class="header" href="#changes-7">Changes</a></h3>
+<ul>
+<li>build: remove per-crate release metadata</li>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-6"><a class="header" href="#012---2025-10-17-6">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-8"><a class="header" href="#changes-8">Changes</a></h3>
+<ul>
+<li>build: fix release metadata field name</li>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-7"><a class="header" href="#012---2025-10-17-7">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-9"><a class="header" href="#changes-9">Changes</a></h3>
+<ul>
+<li>build: move workspace release metadata into Cargo.toml</li>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-8"><a class="header" href="#012---2025-10-17-8">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-10"><a class="header" href="#changes-10">Changes</a></h3>
+<ul>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="012---2025-10-17-9"><a class="header" href="#012---2025-10-17-9">[0.1.2] - 2025-10-17</a></h2>
+<h3 id="changes-11"><a class="header" href="#changes-11">Changes</a></h3>
+<ul>
+<li>build: require execute flag for release wrapper</li>
+<li>build: automate changelog generation during release</li>
+<li>build: add release wrapper with changelog guard</li>
+<li>build: align release tooling with cargo-release 0.25</li>
+</ul>
+<h2 id="011---2025-10-17"><a class="header" href="#011---2025-10-17">[0.1.1] - 2025-10-17</a></h2>
+<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
+<ul>
+<li>OpenAPI request validation (path/query/header/cookie/body) with deep $ref resolution and composite schemas (oneOf/anyOf/allOf).</li>
+<li>Validation modes: <code>disabled</code>, <code>warn</code>, <code>enforce</code>, with aggregate error reporting and detailed error objects.</li>
+<li>Runtime Admin UI panel to view/toggle validation mode and per-route overrides; Admin API endpoint <code>/__mockforge/validation</code>.</li>
+<li>CLI flags and config options to control validation (including <code>skip_admin_validation</code> and per-route <code>validation_overrides</code>).</li>
+<li>New e2e tests for 2xx/422 request validation and response example expansion across HTTP routes.</li>
+<li>Templating reference docs and examples; WS templating tests and demo update.</li>
+<li>Initial release of MockForge</li>
+<li>HTTP API mocking with OpenAPI support</li>
+<li>gRPC service mocking with Protocol Buffers</li>
+<li>WebSocket connection mocking with replay functionality</li>
+<li>CLI tool for easy local development</li>
+<li>Admin UI for managing mock servers</li>
+<li>Comprehensive documentation with mdBook</li>
+<li>GitHub Actions CI/CD pipeline</li>
+<li>Security audit integration</li>
+<li>Pre-commit hooks for code quality</li>
+</ul>
+<h3 id="changed-2"><a class="header" href="#changed-2">Changed</a></h3>
 <ul>
 <li>HTTP handlers now perform request validation before routing; invalid requests return 400 with structured details (when <code>enforce</code>).</li>
 <li>Bump <code>jsonschema</code> to 0.33 and adapt validator API; enable draft selection and format checks internally.</li>
 <li>Improve route registry and OpenAPI parameter parsing, including styles/explode and array coercion for query/header/cookie parameters.</li>
 </ul>
-<h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
+<h3 id="deprecated-1"><a class="header" href="#deprecated-1">Deprecated</a></h3>
 <ul>
 <li>N/A</li>
 </ul>
-<h3 id="removed"><a class="header" href="#removed">Removed</a></h3>
+<h3 id="removed-1"><a class="header" href="#removed-1">Removed</a></h3>
 <ul>
 <li>N/A</li>
 </ul>
-<h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
+<h3 id="fixed-2"><a class="header" href="#fixed-2">Fixed</a></h3>
 <ul>
 <li>Resolve admin mount prefix from config and exclude admin routes from validation when configured.</li>
 <li>Various small correctness fixes in OpenAPI schema mapping and parameter handling; clearer error messages.</li>
 </ul>
-<h3 id="security"><a class="header" href="#security">Security</a></h3>
+<h3 id="security-1"><a class="header" href="#security-1">Security</a></h3>
 <ul>
 <li>N/A</li>
 </ul>

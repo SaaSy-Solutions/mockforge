@@ -183,6 +183,331 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="http-crate"><a class="header" href="#http-crate">HTTP Crate</a></h1>
+<p>The <code>mockforge-http</code> crate provides comprehensive HTTP/REST API mocking capabilities for MockForge, built on top of the <a href="https://github.com/tokio-rs/axum">Axum</a> web framework. It integrates OpenAPI specification support, AI-powered response generation, comprehensive management APIs, and advanced middleware for observability and traffic control.</p>
+<h2 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h2>
+<pre><code class="language-mermaid">graph TD
+    A[HTTP Server] --&gt; B[Router Builder]
+    B --&gt; C{Configuration Type}
+    C --&gt; D[OpenAPI Router]
+    C --&gt; E[Basic Router]
+    C --&gt; F[Auth Router]
+    C --&gt; G[Chain Router]
+
+    D --&gt; H[OpenAPI Spec Loader]
+    H --&gt; I[Route Registry]
+    I --&gt; J[Validation Middleware]
+
+    A --&gt; K[Middleware Stack]
+    K --&gt; L[Rate Limiting]
+    K --&gt; M[Request Logging]
+    K --&gt; N[Metrics Collection]
+    K --&gt; O[Tracing]
+
+    A --&gt; P[Management API]
+    P --&gt; Q[REST Endpoints]
+    P --&gt; R[WebSocket Events]
+    P --&gt; S[SSE Streams]
+
+    A --&gt; T[AI Integration]
+    T --&gt; U[Intelligent Generation]
+    T --&gt; V[Data Drift]
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="router-building-system"><a class="header" href="#router-building-system">Router Building System</a></h3>
+<p>The HTTP crate provides multiple router builders for different use cases:</p>
+<h4 id="build_router"><a class="header" href="#build_router"><code>build_router()</code></a></h4>
+<p>Basic router with optional OpenAPI integration:</p>
+<ul>
+<li>Loads and validates OpenAPI specifications</li>
+<li>Creates route handlers from spec operations</li>
+<li>Applies validation middleware</li>
+<li>Includes health check endpoints</li>
+</ul>
+<h4 id="build_router_with_auth"><a class="header" href="#build_router_with_auth"><code>build_router_with_auth()</code></a></h4>
+<p>Router with authentication support:</p>
+<ul>
+<li>Integrates OAuth2 and JWT authentication</li>
+<li>Supports custom auth middleware</li>
+<li>Validates tokens and permissions</li>
+</ul>
+<h4 id="build_router_with_chains"><a class="header" href="#build_router_with_chains"><code>build_router_with_chains()</code></a></h4>
+<p>Router with request chaining support:</p>
+<ul>
+<li>Enables multi-step request workflows</li>
+<li>Manages chain execution state</li>
+<li>Provides chain management endpoints</li>
+</ul>
+<h4 id="build_router_with_traffic_shaping"><a class="header" href="#build_router_with_traffic_shaping"><code>build_router_with_traffic_shaping()</code></a></h4>
+<p>Router with traffic control:</p>
+<ul>
+<li>Bandwidth limiting and packet loss simulation</li>
+<li>Network condition emulation</li>
+<li>Traffic shaping middleware</li>
+</ul>
+<h3 id="openapi-integration"><a class="header" href="#openapi-integration">OpenAPI Integration</a></h3>
+<h4 id="specification-loading"><a class="header" href="#specification-loading">Specification Loading</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Load OpenAPI spec from file
+let openapi = OpenApiSpec::from_file("api.yaml").await?;
+
+// Create route registry with validation options
+let registry = OpenApiRouteRegistry::new_with_options(
+    openapi,
+    ValidationOptions::enforce()
+);
+<span class="boring">}</span></code></pre></pre>
+<h4 id="route-generation"><a class="header" href="#route-generation">Route Generation</a></h4>
+<ul>
+<li>Automatic endpoint creation from OpenAPI operations</li>
+<li>Parameter extraction and validation</li>
+<li>Response schema validation</li>
+<li>Error response generation</li>
+</ul>
+<h4 id="validation-modes"><a class="header" href="#validation-modes">Validation Modes</a></h4>
+<ul>
+<li><strong>Strict</strong>: Full request/response validation</li>
+<li><strong>Lenient</strong>: Warnings for validation failures</li>
+<li><strong>Disabled</strong>: No validation (performance mode)</li>
+</ul>
+<h3 id="middleware-architecture"><a class="header" href="#middleware-architecture">Middleware Architecture</a></h3>
+<h4 id="request-processing-pipeline"><a class="header" href="#request-processing-pipeline">Request Processing Pipeline</a></h4>
+<pre><code>Request → Rate Limiting → Authentication → Logging → Metrics → Handler → Response
+</code></pre>
+<h4 id="key-middleware-components"><a class="header" href="#key-middleware-components">Key Middleware Components</a></h4>
+<ul>
+<li><strong>Rate Limiting</strong>: Uses <code>governor</code> crate for distributed rate limiting</li>
+<li><strong>Request Logging</strong>: Comprehensive HTTP request/response logging</li>
+<li><strong>Metrics Collection</strong>: Prometheus-compatible metrics</li>
+<li><strong>Tracing</strong>: OpenTelemetry integration for distributed tracing</li>
+<li><strong>Traffic Shaping</strong>: Bandwidth and latency control</li>
+</ul>
+<h3 id="management-api"><a class="header" href="#management-api">Management API</a></h3>
+<h4 id="rest-endpoints"><a class="header" href="#rest-endpoints">REST Endpoints</a></h4>
+<ul>
+<li><code>GET /__mockforge/health</code> - Health check</li>
+<li><code>GET /__mockforge/stats</code> - Server statistics</li>
+<li><code>GET /__mockforge/routes</code> - Route information</li>
+<li><code>GET /__mockforge/coverage</code> - API coverage metrics</li>
+<li><code>GET/POST/PUT/DELETE /__mockforge/mocks</code> - Mock management</li>
+</ul>
+<h4 id="websocket-integration"><a class="header" href="#websocket-integration">WebSocket Integration</a></h4>
+<ul>
+<li>Real-time server events</li>
+<li>Live request monitoring</li>
+<li>Interactive mock configuration</li>
+</ul>
+<h4 id="server-sent-events-sse"><a class="header" href="#server-sent-events-sse">Server-Sent Events (SSE)</a></h4>
+<ul>
+<li>Log streaming to clients</li>
+<li>Real-time metrics updates</li>
+<li>Coverage report streaming</li>
+</ul>
+<h3 id="ai-powered-features"><a class="header" href="#ai-powered-features">AI-Powered Features</a></h3>
+<h4 id="intelligent-mock-generation"><a class="header" href="#intelligent-mock-generation">Intelligent Mock Generation</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let ai_config = AiResponseConfig {
+    enabled: true,
+    rag_config: RagConfig {
+        provider: "openai".to_string(),
+        model: "gpt-4".to_string(),
+        api_key: Some(api_key),
+    },
+    prompt: "Generate realistic user data".to_string(),
+};
+
+let response = process_response_with_ai(&amp;ai_config, request_data).await?;
+<span class="boring">}</span></code></pre></pre>
+<h4 id="data-drift-simulation"><a class="header" href="#data-drift-simulation">Data Drift Simulation</a></h4>
+<ul>
+<li>Progressive response changes over time</li>
+<li>Realistic data evolution patterns</li>
+<li>Configurable drift parameters</li>
+</ul>
+<h3 id="authentication-system"><a class="header" href="#authentication-system">Authentication System</a></h3>
+<h4 id="supported-methods"><a class="header" href="#supported-methods">Supported Methods</a></h4>
+<ul>
+<li><strong>OAuth2</strong>: Authorization code, client credentials flows</li>
+<li><strong>JWT</strong>: Token validation and claims extraction</li>
+<li><strong>API Keys</strong>: Header and query parameter validation</li>
+<li><strong>Basic Auth</strong>: Username/password authentication</li>
+</ul>
+<h4 id="auth-middleware"><a class="header" href="#auth-middleware">Auth Middleware</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let auth_middleware = auth_middleware(auth_state);
+app = app.layer(auth_middleware);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="request-chaining"><a class="header" href="#request-chaining">Request Chaining</a></h3>
+<h4 id="chain-execution-engine"><a class="header" href="#chain-execution-engine">Chain Execution Engine</a></h4>
+<ul>
+<li>Multi-step request workflows</li>
+<li>Conditional execution based on responses</li>
+<li>Chain state management and persistence</li>
+<li>Execution history and debugging</li>
+</ul>
+<h4 id="chain-management-api"><a class="header" href="#chain-management-api">Chain Management API</a></h4>
+<ul>
+<li><code>POST /__mockforge/chains</code> - Create chains</li>
+<li><code>GET /__mockforge/chains/{id}/execute</code> - Execute chains</li>
+<li><code>GET /__mockforge/chains/{id}/history</code> - View execution history</li>
+</ul>
+<h3 id="multi-tenant-support"><a class="header" href="#multi-tenant-support">Multi-Tenant Support</a></h3>
+<h4 id="workspace-isolation"><a class="header" href="#workspace-isolation">Workspace Isolation</a></h4>
+<ul>
+<li>Path-based routing (<code>/workspace1/api/*</code>, <code>/workspace2/api/*</code>)</li>
+<li>Port-based isolation (different ports per tenant)</li>
+<li>Configuration isolation per workspace</li>
+</ul>
+<h4 id="auto-discovery"><a class="header" href="#auto-discovery">Auto-Discovery</a></h4>
+<ul>
+<li>Automatic workspace loading from config directories</li>
+<li>YAML-based workspace definitions</li>
+<li>Dynamic workspace registration</li>
+</ul>
+<h3 id="observability-integration"><a class="header" href="#observability-integration">Observability Integration</a></h3>
+<h4 id="metrics-collection"><a class="header" href="#metrics-collection">Metrics Collection</a></h4>
+<ul>
+<li>Request/response counts and timings</li>
+<li>Error rates and status code distribution</li>
+<li>Route coverage and usage statistics</li>
+<li>Performance histograms</li>
+</ul>
+<h4 id="tracing-integration"><a class="header" href="#tracing-integration">Tracing Integration</a></h4>
+<ul>
+<li>Distributed tracing with OpenTelemetry</li>
+<li>Request correlation IDs</li>
+<li>Span tagging for operations</li>
+<li>Jaeger and Zipkin export support</li>
+</ul>
+<h4 id="logging"><a class="header" href="#logging">Logging</a></h4>
+<ul>
+<li>Structured JSON logging</li>
+<li>Request/response body logging (configurable)</li>
+<li>Error tracking and correlation</li>
+<li>Log level configuration</li>
+</ul>
+<h3 id="traffic-shaping-and-chaos-engineering"><a class="header" href="#traffic-shaping-and-chaos-engineering">Traffic Shaping and Chaos Engineering</a></h3>
+<h4 id="network-simulation"><a class="header" href="#network-simulation">Network Simulation</a></h4>
+<ul>
+<li>Bandwidth limiting (bytes per second)</li>
+<li>Packet loss simulation (percentage)</li>
+<li>Latency injection (fixed or random)</li>
+<li>Connection failure simulation</li>
+</ul>
+<h4 id="chaos-scenarios"><a class="header" href="#chaos-scenarios">Chaos Scenarios</a></h4>
+<ul>
+<li>Predefined network profiles (3G, 4G, 5G, satellite)</li>
+<li>Custom traffic shaping rules</li>
+<li>Circuit breaker patterns</li>
+<li>Bulkhead isolation</li>
+</ul>
+<h3 id="testing-and-validation"><a class="header" href="#testing-and-validation">Testing and Validation</a></h3>
+<h4 id="integration-tests"><a class="header" href="#integration-tests">Integration Tests</a></h4>
+<ul>
+<li>End-to-end request/response validation</li>
+<li>OpenAPI compliance testing</li>
+<li>Authentication flow testing</li>
+<li>Performance benchmarking</li>
+</ul>
+<h4 id="coverage-analysis"><a class="header" href="#coverage-analysis">Coverage Analysis</a></h4>
+<ul>
+<li>API endpoint coverage tracking</li>
+<li>Request pattern analysis</li>
+<li>Missing endpoint detection</li>
+<li>Coverage reporting and visualization</li>
+</ul>
+<h2 id="key-data-structures"><a class="header" href="#key-data-structures">Key Data Structures</a></h2>
+<h3 id="httpserverstate"><a class="header" href="#httpserverstate"><code>HttpServerState</code></a></h3>
+<p>Shared state for route information and rate limiting:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HttpServerState {
+    pub routes: Vec&lt;RouteInfo&gt;,
+    pub rate_limiter: Option&lt;Arc&lt;GlobalRateLimiter&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="managementstate"><a class="header" href="#managementstate"><code>ManagementState</code></a></h3>
+<p>Management API state with server statistics:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ManagementState {
+    pub mocks: Arc&lt;RwLock&lt;Vec&lt;MockConfig&gt;&gt;&gt;,
+    pub spec: Option&lt;Arc&lt;OpenApiSpec&gt;&gt;,
+    pub request_counter: Arc&lt;RwLock&lt;u64&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="airesponsehandler"><a class="header" href="#airesponsehandler"><code>AiResponseHandler</code></a></h3>
+<p>AI-powered response generation:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct AiResponseHandler {
+    intelligent_generator: Option&lt;IntelligentMockGenerator&gt;,
+    drift_engine: Option&lt;Arc&lt;RwLock&lt;DataDriftEngine&gt;&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="integration-points"><a class="header" href="#integration-points">Integration Points</a></h2>
+<h3 id="core-dependencies"><a class="header" href="#core-dependencies">Core Dependencies</a></h3>
+<ul>
+<li><code>mockforge-core</code>: OpenAPI handling, validation, routing</li>
+<li><code>mockforge-data</code>: AI generation, data templating</li>
+<li><code>mockforge-observability</code>: Metrics, logging, tracing</li>
+</ul>
+<h3 id="external-integrations"><a class="header" href="#external-integrations">External Integrations</a></h3>
+<ul>
+<li><strong>Axum</strong>: Web framework for HTTP handling</li>
+<li><strong>OpenTelemetry</strong>: Distributed tracing</li>
+<li><strong>Prometheus</strong>: Metrics collection</li>
+<li><strong>OAuth2</strong>: Authentication flows</li>
+<li><strong>Governor</strong>: Rate limiting</li>
+<li><strong>Reqwest</strong>: HTTP client for chaining</li>
+</ul>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="startup-optimization"><a class="header" href="#startup-optimization">Startup Optimization</a></h3>
+<ul>
+<li>Lazy OpenAPI spec loading</li>
+<li>Parallel route registry creation</li>
+<li>Cached validation schemas</li>
+<li>Startup time profiling and logging</li>
+</ul>
+<h3 id="runtime-performance"><a class="header" href="#runtime-performance">Runtime Performance</a></h3>
+<ul>
+<li>Efficient middleware pipeline</li>
+<li>Minimal allocations in hot paths</li>
+<li>Async request processing</li>
+<li>Connection pooling for external calls</li>
+</ul>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<ul>
+<li>Shared state with Arc/RwLock</li>
+<li>Response streaming for large payloads</li>
+<li>Configurable request body limits</li>
+<li>Automatic cleanup of expired sessions</li>
+</ul>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="validation-errors"><a class="header" href="#validation-errors">Validation Errors</a></h3>
+<ul>
+<li>Structured error responses</li>
+<li>OpenAPI-compliant error schemas</li>
+<li>Configurable error verbosity</li>
+<li>Error correlation IDs</li>
+</ul>
+<h3 id="recovery-mechanisms"><a class="header" href="#recovery-mechanisms">Recovery Mechanisms</a></h3>
+<ul>
+<li>Graceful degradation on failures</li>
+<li>Fallback responses for AI generation</li>
+<li>Circuit breaker patterns</li>
+<li>Automatic retry logic</li>
+</ul>
+<h2 id="future-enhancements"><a class="header" href="#future-enhancements">Future Enhancements</a></h2>
+<ul>
+<li><strong>GraphQL Integration</strong>: Schema-based GraphQL mocking</li>
+<li><strong>WebSocket Mocking</strong>: Interactive WebSocket scenarios</li>
+<li><strong>Advanced Caching</strong>: Response caching and invalidation</li>
+<li><strong>Load Balancing</strong>: Multi-instance coordination</li>
+<li><strong>Plugin Architecture</strong>: Extensible middleware system</li>
+</ul>
 
                     </main>
 

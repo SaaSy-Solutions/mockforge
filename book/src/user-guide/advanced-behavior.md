@@ -293,6 +293,19 @@ MockForge processes requests through this priority chain:
 6. **Mock** - Generate mock response from OpenAPI spec
 7. **Record** - Record request for future replay
 
+## Related Advanced Features
+
+MockForge includes many additional advanced features that complement the basic advanced behavior:
+
+- **[VBR Engine](vbr-engine.md)**: Virtual database layer with automatic CRUD generation
+- **[Temporal Simulation](temporal-simulation.md)**: Time travel and time-based data mutations
+- **[Scenario State Machines](scenario-state-machines.md)**: Visual flow editor for complex workflows
+- **[MockAI](mockai.md)**: AI-powered intelligent response generation
+- **[Chaos Lab](chaos-lab.md)**: Interactive network condition simulation
+- **[Reality Slider](reality-slider.md)**: Unified control for mock environment realism
+
+For a complete overview, see [Advanced Features](advanced-features.md).
+
 ## Best Practices
 
 1. **Start simple** - Begin with basic configurations and add complexity gradually

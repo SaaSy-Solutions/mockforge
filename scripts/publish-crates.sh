@@ -207,19 +207,51 @@ version = sys.argv[2]
 text = path.read_text()
 changed = False
 
+# List of all internal mockforge crates that might be dependencies
 targets = [
     ("mockforge-core", "../mockforge-core"),
     ("mockforge-data", "../mockforge-data"),
     ("mockforge-plugin-core", "../mockforge-plugin-core"),
+    ("mockforge-plugin-sdk", "../mockforge-plugin-sdk"),
+    ("mockforge-plugin-loader", "../mockforge-plugin-loader"),
+    ("mockforge-plugin-registry", "../mockforge-plugin-registry"),
+    ("mockforge-observability", "../mockforge-observability"),
+    ("mockforge-tracing", "../mockforge-tracing"),
+    ("mockforge-recorder", "../mockforge-recorder"),
+    ("mockforge-reporting", "../mockforge-reporting"),
+    ("mockforge-chaos", "../mockforge-chaos"),
+    ("mockforge-analytics", "../mockforge-analytics"),
+    ("mockforge-collab", "../mockforge-collab"),
+    ("mockforge-http", "../mockforge-http"),
+    ("mockforge-grpc", "../mockforge-grpc"),
+    ("mockforge-ws", "../mockforge-ws"),
+    ("mockforge-graphql", "../mockforge-graphql"),
+    ("mockforge-mqtt", "../mockforge-mqtt"),
+    ("mockforge-smtp", "../mockforge-smtp"),
+    ("mockforge-amqp", "../mockforge-amqp"),
+    ("mockforge-kafka", "../mockforge-kafka"),
+    ("mockforge-ftp", "../mockforge-ftp"),
+    ("mockforge-tcp", "../mockforge-tcp"),
+    ("mockforge-sdk", "../mockforge-sdk"),
+    ("mockforge-bench", "../mockforge-bench"),
+    ("mockforge-test", "../mockforge-test"),
+    ("mockforge-tunnel", "../mockforge-tunnel"),
+    ("mockforge-ui", "../mockforge-ui"),
+    ("mockforge-cli", "../mockforge-cli"),
+    ("mockforge-scenarios", "../mockforge-scenarios"),
 ]
 
 for name, rel in targets:
-    patterns = [
-        rf'{name}\s*=\s*\{{\s*path\s*=\s*"{rel}"\s*\}}',
-        rf'{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{rel}"\s*\}}',
-    ]
+    # Pattern 1: { path = "../..." }
+    pattern1 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
+    # Pattern 2: { version = "...", path = "../..." }
+    pattern2 = rf'{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
+    # Pattern 3: { path = "../...", version = "..." }
+    pattern3 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}",\s*version\s*=\s*"[^"]*"\s*\}}'
+
     replacement = f'{name} = "{version}"'
-    for pattern in patterns:
+
+    for pattern in [pattern1, pattern2, pattern3]:
         new_text, count = re.subn(pattern, replacement, text)
         if count:
             text = new_text

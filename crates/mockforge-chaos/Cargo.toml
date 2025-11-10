@@ -58,13 +58,13 @@ bincode = "1.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = { version = "0.2.0", path = "../mockforge-tracing" }
+mockforge-tracing = "0.2.8"
 
 # Recorder
-mockforge-recorder = { version = "0.2.0", path = "../mockforge-recorder" }
+mockforge-recorder = "0.2.8"
 
 # Core (for MockAI integration)
-mockforge-core = { version = "0.2.7", path = "../mockforge-core" }
+mockforge-core = "0.2.8"
 
 # PDF generation
 printpdf = "0.7"

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/mockforge-cli",
     "crates/mockforge-http",
     "crates/mockforge-mqtt",
     "crates/mockforge-ws",
@@ -15,6 +14,7 @@ members = [
     "crates/mockforge-plugin-registry",
     "crates/mockforge-scenarios",
     "crates/mockforge-ui",
+    "crates/mockforge-cli",
     "crates/mockforge-observability",
     "crates/mockforge-tracing",
     "crates/mockforge-recorder",

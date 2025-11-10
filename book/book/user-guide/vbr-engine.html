@@ -1,0 +1,650 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>VBR Engine - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/vbr-engine.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="virtual-backend-reality-vbr-engine"><a class="header" href="#virtual-backend-reality-vbr-engine">Virtual Backend Reality (VBR) Engine</a></h1>
+<p>The Virtual Backend Reality (VBR) Engine provides a virtual “database” layer that automatically generates CRUD operations from OpenAPI specifications. It enables stateful mocking with relationship management, data persistence, and realistic data generation.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The VBR Engine transforms MockForge from a simple request/response mock server into a stateful backend simulator. Instead of returning static responses, VBR maintains a virtual database that supports:</p>
+<ul>
+<li><strong>Automatic CRUD operations</strong> from OpenAPI specs</li>
+<li><strong>Relationship mapping</strong> (1:N and N:N)</li>
+<li><strong>Data persistence</strong> across server restarts</li>
+<li><strong>State snapshots</strong> for point-in-time recovery</li>
+<li><strong>Realistic ID generation</strong> with customizable patterns</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="from-openapi-specification"><a class="header" href="#from-openapi-specification">From OpenAPI Specification</a></h3>
+<p>The easiest way to get started is to generate a VBR engine from an OpenAPI specification:</p>
+<pre><code class="language-bash"># Start server with VBR from OpenAPI spec
+mockforge serve --spec api.yaml --vbr-enabled
+</code></pre>
+<p>Or in your configuration:</p>
+<pre><code class="language-yaml">vbr:
+  enabled: true
+  openapi_spec: "./api.yaml"
+  backend: "sqlite"  # or "json", "memory"
+  storage_path: "./vbr-data"
+</code></pre>
+<h3 id="programmatic-usage"><a class="header" href="#programmatic-usage">Programmatic Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_vbr::VbrEngine;
+
+// Create engine from OpenAPI spec
+let (engine, result) = VbrEngine::from_openapi_file(config, "./api-spec.yaml").await?;
+
+// Or create manually
+let mut engine = VbrEngine::new(config).await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="automatic-crud-generation"><a class="header" href="#automatic-crud-generation">Automatic CRUD Generation</a></h3>
+<p>VBR automatically detects CRUD operations from your OpenAPI specification:</p>
+<ul>
+<li><strong>GET /users</strong> → List all users</li>
+<li><strong>GET /users/{id}</strong> → Get user by ID</li>
+<li><strong>POST /users</strong> → Create new user</li>
+<li><strong>PUT /users/{id}</strong> → Update user</li>
+<li><strong>DELETE /users/{id}</strong> → Delete user</li>
+</ul>
+<p>Primary keys are auto-detected (fields named <code>id</code>, <code>uuid</code>, etc.), and foreign keys are inferred from field names ending in <code>_id</code>.</p>
+<h3 id="relationship-mapping"><a class="header" href="#relationship-mapping">Relationship Mapping</a></h3>
+<h4 id="one-to-many-1n"><a class="header" href="#one-to-many-1n">One-to-Many (1:N)</a></h4>
+<p>VBR automatically detects foreign key relationships:</p>
+<pre><code class="language-yaml"># OpenAPI spec
+components:
+  schemas:
+    User:
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    
+    Post:
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }  # Foreign key detected
+        title: { type: string }
+</code></pre>
+<p>This creates a relationship where one User can have many Posts. Access related resources:</p>
+<pre><code class="language-bash"># Get all posts for a user
+GET /vbr-api/users/1/posts
+</code></pre>
+<h4 id="many-to-many-nn"><a class="header" href="#many-to-many-nn">Many-to-Many (N:N)</a></h4>
+<p>Define many-to-many relationships explicitly:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_vbr::ManyToManyDefinition;
+
+let m2m = ManyToManyDefinition::new("User".to_string(), "Role".to_string());
+schema.with_many_to_many(m2m);
+<span class="boring">}</span></code></pre></pre>
+<p>This creates a junction table automatically (e.g., <code>user_role</code>) and enables:</p>
+<pre><code class="language-bash"># Get all roles for a user
+GET /vbr-api/users/1/roles
+
+# Get all users with a role
+GET /vbr-api/roles/1/users
+</code></pre>
+<h3 id="data-seeding"><a class="header" href="#data-seeding">Data Seeding</a></h3>
+<p>Seed your virtual database with initial data:</p>
+<h4 id="from-file"><a class="header" href="#from-file">From File</a></h4>
+<pre><code class="language-bash"># Seed from JSON file
+mockforge vbr seed --file seed-data.json
+
+# Seed from YAML file
+mockforge vbr seed --file seed-data.yaml
+</code></pre>
+<p><strong>Seed file format:</strong></p>
+<pre><code class="language-json">{
+  "users": [
+    {"id": 1, "name": "Alice", "email": "alice@example.com"},
+    {"id": 2, "name": "Bob", "email": "bob@example.com"}
+  ],
+  "posts": [
+    {"id": 1, "user_id": 1, "title": "First Post"},
+    {"id": 2, "user_id": 1, "title": "Second Post"}
+  ]
+}
+</code></pre>
+<h4 id="programmatic-seeding"><a class="header" href="#programmatic-seeding">Programmatic Seeding</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Seed a single entity
+engine.seed_entity("users", vec![
+    json!({"name": "Alice", "email": "alice@example.com"}),
+    json!({"name": "Bob", "email": "bob@example.com"}),
+]).await?;
+
+// Seed all entities from file
+engine.seed_from_file("./seed-data.json").await?;
+
+// Clear entity data
+engine.clear_entity("users").await?;
+
+// Clear all data
+engine.reset().await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="id-generation"><a class="header" href="#id-generation">ID Generation</a></h3>
+<p>VBR supports multiple ID generation strategies:</p>
+<h4 id="pattern-based-ids"><a class="header" href="#pattern-based-ids">Pattern-Based IDs</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>.with_auto_generation("id", AutoGenerationRule::Pattern("USR-{increment:06}".to_string()))
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Template variables:</strong></p>
+<ul>
+<li><code>{increment}</code> or <code>{increment:06}</code> - Auto-incrementing with optional padding</li>
+<li><code>{timestamp}</code> - Unix timestamp</li>
+<li><code>{random}</code> or <code>{random:8}</code> - Random alphanumeric (default length 8)</li>
+<li><code>{uuid}</code> - UUID v4</li>
+</ul>
+<h4 id="realistic-ids-stripe-style"><a class="header" href="#realistic-ids-stripe-style">Realistic IDs (Stripe-style)</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>.with_auto_generation("id", AutoGenerationRule::Realistic {
+    prefix: "cus".to_string(),
+    length: 14
+})
+<span class="boring">}</span></code></pre></pre>
+<p>Generates IDs like: <code>cus_abc123def456</code></p>
+<h3 id="state-snapshots"><a class="header" href="#state-snapshots">State Snapshots</a></h3>
+<p>Create point-in-time snapshots of your virtual database:</p>
+<h4 id="create-snapshot"><a class="header" href="#create-snapshot">Create Snapshot</a></h4>
+<pre><code class="language-bash"># Via CLI
+mockforge vbr snapshot create --name initial --description "Initial state"
+
+# Via API
+curl -X POST http://localhost:3000/vbr-api/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{"name": "initial", "description": "Initial state"}'
+</code></pre>
+<h4 id="restore-snapshot"><a class="header" href="#restore-snapshot">Restore Snapshot</a></h4>
+<pre><code class="language-bash"># Via CLI
+mockforge vbr snapshot restore --name initial
+
+# Via API
+curl -X POST http://localhost:3000/vbr-api/snapshots/initial/restore
+</code></pre>
+<h4 id="list-snapshots"><a class="header" href="#list-snapshots">List Snapshots</a></h4>
+<pre><code class="language-bash"># Via CLI
+mockforge vbr snapshot list
+
+# Via API
+curl http://localhost:3000/vbr-api/snapshots
+</code></pre>
+<h4 id="delete-snapshot"><a class="header" href="#delete-snapshot">Delete Snapshot</a></h4>
+<pre><code class="language-bash"># Via CLI
+mockforge vbr snapshot delete --name initial
+
+# Via API
+curl -X DELETE http://localhost:3000/vbr-api/snapshots/initial
+</code></pre>
+<h3 id="time-based-expiry"><a class="header" href="#time-based-expiry">Time-Based Expiry</a></h3>
+<p>Configure records to expire after a certain time:</p>
+<pre><code class="language-yaml">vbr:
+  entities:
+    - name: sessions
+      ttl_seconds: 3600  # Expire after 1 hour
+      aging_enabled: true
+</code></pre>
+<p>Records older than the TTL are automatically removed.</p>
+<h2 id="storage-backends"><a class="header" href="#storage-backends">Storage Backends</a></h2>
+<p>VBR supports multiple storage backends:</p>
+<h3 id="sqlite-recommended"><a class="header" href="#sqlite-recommended">SQLite (Recommended)</a></h3>
+<p>Persistent storage with full SQL support:</p>
+<pre><code class="language-yaml">vbr:
+  backend: "sqlite"
+  storage_path: "./vbr-data.db"
+</code></pre>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Full SQL query support</li>
+<li>ACID transactions</li>
+<li>Efficient for large datasets</li>
+<li>Easy to inspect with SQL tools</li>
+</ul>
+<h3 id="json"><a class="header" href="#json">JSON</a></h3>
+<p>File-based storage for simple use cases:</p>
+<pre><code class="language-yaml">vbr:
+  backend: "json"
+  storage_path: "./vbr-data.json"
+</code></pre>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Human-readable</li>
+<li>Easy to version control</li>
+<li>Simple backup/restore</li>
+</ul>
+<h3 id="in-memory"><a class="header" href="#in-memory">In-Memory</a></h3>
+<p>Fast, non-persistent storage:</p>
+<pre><code class="language-yaml">vbr:
+  backend: "memory"
+</code></pre>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Fastest performance</li>
+<li>No disk I/O</li>
+<li>Perfect for testing</li>
+</ul>
+<p><strong>Note:</strong> Data is lost on server restart.</p>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<p>VBR automatically creates REST API endpoints for all entities:</p>
+<h3 id="entity-operations"><a class="header" href="#entity-operations">Entity Operations</a></h3>
+<pre><code class="language-http"># List all entities
+GET /vbr-api/{entity}
+
+# Get entity by ID
+GET /vbr-api/{entity}/{id}
+
+# Create entity
+POST /vbr-api/{entity}
+Content-Type: application/json
+
+{
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+
+# Update entity
+PUT /vbr-api/{entity}/{id}
+Content-Type: application/json
+
+{
+  "name": "Alice Updated"
+}
+
+# Delete entity
+DELETE /vbr-api/{entity}/{id}
+</code></pre>
+<h3 id="relationship-operations"><a class="header" href="#relationship-operations">Relationship Operations</a></h3>
+<pre><code class="language-http"># Get related entities (1:N)
+GET /vbr-api/{entity}/{id}/{relationship}
+
+# Get related entities (N:N)
+GET /vbr-api/{entity}/{id}/{relationship}
+</code></pre>
+<h3 id="snapshot-operations"><a class="header" href="#snapshot-operations">Snapshot Operations</a></h3>
+<pre><code class="language-http"># Create snapshot
+POST /vbr-api/snapshots
+Content-Type: application/json
+
+{
+  "name": "snapshot1",
+  "description": "Optional description"
+}
+
+# List snapshots
+GET /vbr-api/snapshots
+
+# Get snapshot metadata
+GET /vbr-api/snapshots/{name}
+
+# Restore snapshot
+POST /vbr-api/snapshots/{name}/restore
+
+# Delete snapshot
+DELETE /vbr-api/snapshots/{name}
+</code></pre>
+<h3 id="database-management"><a class="header" href="#database-management">Database Management</a></h3>
+<pre><code class="language-http"># Reset entire database
+POST /vbr-api/reset
+
+# Reset specific entity
+POST /vbr-api/reset/{entity}
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="full-configuration-example"><a class="header" href="#full-configuration-example">Full Configuration Example</a></h3>
+<pre><code class="language-yaml">vbr:
+  enabled: true
+  
+  # OpenAPI spec for auto-generation
+  openapi_spec: "./api.yaml"
+  
+  # Storage backend
+  backend: "sqlite"  # sqlite, json, memory
+  storage_path: "./vbr-data"
+  
+  # Entity configuration
+  entities:
+    - name: users
+      primary_key: "id"
+      auto_generation:
+        id: "pattern:USR-{increment:06}"
+      ttl_seconds: null  # No expiry
+      aging_enabled: false
+    
+    - name: sessions
+      primary_key: "id"
+      ttl_seconds: 3600  # Expire after 1 hour
+      aging_enabled: true
+  
+  # Relationships
+  relationships:
+    - type: "one_to_many"
+      from: "users"
+      to: "posts"
+      foreign_key: "user_id"
+    
+    - type: "many_to_many"
+      from: "users"
+      to: "roles"
+      junction_table: "user_role"
+  
+  # Snapshot configuration
+  snapshots:
+    enabled: true
+    directory: "./snapshots"
+    max_snapshots: 10
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="development-environment"><a class="header" href="#development-environment">Development Environment</a></h3>
+<p>Create a realistic development environment without a real database:</p>
+<pre><code class="language-yaml">vbr:
+  enabled: true
+  backend: "sqlite"
+  openapi_spec: "./api.yaml"
+</code></pre>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<p>Use VBR for integration tests with deterministic data:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Setup
+let engine = VbrEngine::from_openapi_file(config, "./api.yaml").await?;
+engine.seed_from_file("./test-data.json").await?;
+
+// Run tests
+// ...
+
+// Cleanup
+engine.reset().await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="demo-environments"><a class="header" href="#demo-environments">Demo Environments</a></h3>
+<p>Create snapshots for consistent demo environments:</p>
+<pre><code class="language-bash"># Setup demo data
+mockforge vbr seed --file demo-data.json
+
+# Create snapshot
+mockforge vbr snapshot create --name demo
+
+# Later, restore for consistent demos
+mockforge vbr snapshot restore --name demo
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Use SQLite for Production</strong>: SQLite provides the best balance of performance and features</li>
+<li><strong>Seed Initial Data</strong>: Use seed files for consistent starting states</li>
+<li><strong>Create Snapshots</strong>: Save important states for quick restoration</li>
+<li><strong>Configure TTL</strong>: Use time-based expiry for session-like data</li>
+<li><strong>Version Control Seed Files</strong>: Keep seed data in version control</li>
+<li><strong>Use Realistic IDs</strong>: Pattern-based IDs make data look more realistic</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="primary-key-not-detected"><a class="header" href="#primary-key-not-detected">Primary Key Not Detected</a></h3>
+<p>If VBR doesn’t detect your primary key, specify it explicitly:</p>
+<pre><code class="language-yaml">vbr:
+  entities:
+    - name: users
+      primary_key: "user_id"  # Explicit primary key
+</code></pre>
+<h3 id="foreign-key-not-detected"><a class="header" href="#foreign-key-not-detected">Foreign Key Not Detected</a></h3>
+<p>If foreign key relationships aren’t detected, define them explicitly:</p>
+<pre><code class="language-yaml">vbr:
+  relationships:
+    - type: "one_to_many"
+      from: "users"
+      to: "posts"
+      foreign_key: "author_id"  # Custom foreign key name
+</code></pre>
+<h3 id="snapshot-restore-fails"><a class="header" href="#snapshot-restore-fails">Snapshot Restore Fails</a></h3>
+<p>Ensure the snapshot directory exists and has write permissions:</p>
+<pre><code class="language-bash">mkdir -p ./snapshots
+chmod 755 ./snapshots
+</code></pre>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="temporal-simulation.html">Temporal Simulation</a> - Time-based data mutations</li>
+<li><a href="scenario-state-machines.html">Scenario State Machines</a> - State machine integration</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/advanced-features.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/temporal-simulation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/advanced-features.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/temporal-simulation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
