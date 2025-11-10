@@ -155,7 +155,7 @@ jobs:
 
     steps:
       - name: Run Grype vulnerability scanner
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v7
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           fail-build: true
