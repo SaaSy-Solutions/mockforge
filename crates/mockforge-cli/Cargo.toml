@@ -56,7 +56,7 @@ axum = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.8"
-rumqttc = { version = "0.24", optional = true }
+rumqttc = { version = "0.25", optional = true }
 hex = { workspace = true }
 zip = "2.2"
 ring = "0.17"
