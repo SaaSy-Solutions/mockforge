@@ -191,7 +191,7 @@ jobs:
         helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
 
     - name: Upload Helm chart to GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           .helm-release/*.tgz
