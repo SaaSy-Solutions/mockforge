@@ -78,7 +78,9 @@ pub fn create_admin_router(
         .route("/mockforge-icon-48.png", get(serve_icon_48))
         .route("/mockforge-logo.png", get(serve_logo))
         .route("/mockforge-logo-40.png", get(serve_logo_40))
-        .route("/mockforge-logo-80.png", get(serve_logo_80));
+        .route("/mockforge-logo-80.png", get(serve_logo_80))
+        .route("/manifest.json", get(serve_manifest))
+        .route("/sw.js", get(serve_service_worker));
 
     router = router
         .route("/__mockforge/dashboard", get(get_dashboard))

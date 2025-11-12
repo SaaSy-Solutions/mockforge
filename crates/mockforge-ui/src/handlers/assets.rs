@@ -106,6 +106,22 @@ pub async fn serve_api_docs() -> impl IntoResponse {
     Redirect::permanent("https://docs.mockforge.dev/api/admin-ui-rest.html")
 }
 
+/// Serve the PWA manifest.json file
+pub async fn serve_manifest() -> impl IntoResponse {
+    (
+        [(http::header::CONTENT_TYPE, "application/manifest+json")],
+        include_str!("../../ui/dist/manifest.json"),
+    )
+}
+
+/// Serve the service worker JavaScript file
+pub async fn serve_service_worker() -> impl IntoResponse {
+    (
+        [(http::header::CONTENT_TYPE, "application/javascript")],
+        include_str!("../../ui/dist/sw.js"),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

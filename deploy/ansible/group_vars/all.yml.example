@@ -1,0 +1,27 @@
+# MockForge Ansible Variables
+# Copy this file to group_vars/all.yml and customize
+
+# Docker image version
+mockforge_version: "latest"
+
+# Port configuration
+mockforge_http_port: 3000
+mockforge_admin_port: 9080
+mockforge_ws_port: 3001
+mockforge_grpc_port: 50051
+
+# Directory paths
+config_dir: "/etc/mockforge"
+data_dir: "/var/lib/mockforge"
+
+# Logging
+log_level: "info"
+
+# Service configuration
+enable_admin: true
+enable_metrics: true
+enable_chaos: false
+
+# Resource limits (optional)
+memory_limit: "1g"
+cpu_limit: "0.5"

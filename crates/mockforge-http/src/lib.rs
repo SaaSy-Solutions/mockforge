@@ -477,7 +477,10 @@ fn apply_cors_middleware(
 
         cors_layer = cors_layer.allow_credentials(should_allow_credentials);
 
-        info!("CORS middleware enabled with configured settings (credentials: {})", should_allow_credentials);
+        info!(
+            "CORS middleware enabled with configured settings (credentials: {})",
+            should_allow_credentials
+        );
         app.layer(cors_layer)
     } else {
         // No CORS config provided - use permissive CORS for development

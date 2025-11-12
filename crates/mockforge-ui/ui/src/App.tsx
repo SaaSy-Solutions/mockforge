@@ -77,6 +77,46 @@ function App() {
     loadWorkspaces();
   }, [loadWorkspaces]);
 
+  // Handle Tauri file open events (desktop app only)
+  useEffect(() => {
+    import('@/utils/tauri').then(({ isTauri, listenToTauriEvent }) => {
+      if (isTauri) {
+        // Listen for file-opened events
+        const cleanup1 = listenToTauriEvent<string>('file-opened', (filePath) => {
+          // Handle file open - trigger file open handler
+          import('@/utils/tauri').then(({ handleFileOpen }) => {
+            handleFileOpen(filePath).catch((err) => {
+              console.error('Failed to handle file open:', err);
+            });
+          });
+        });
+
+        // Listen for file-dropped events
+        const cleanup2 = listenToTauriEvent<string>('file-dropped', (filePath) => {
+          // Handle file drop - same as file open
+          import('@/utils/tauri').then(({ handleFileOpen }) => {
+            handleFileOpen(filePath).catch((err) => {
+              console.error('Failed to handle file drop:', err);
+            });
+          });
+        });
+
+        // Listen for config-file-opened events
+        const cleanup3 = listenToTauriEvent<string>('config-file-opened', (configContent) => {
+          // Config file has been opened and loaded by backend
+          // Could dispatch to store or show notification
+          // For now, the backend handles loading and auto-start if needed
+        });
+
+        return () => {
+          cleanup1();
+          cleanup2();
+          cleanup3();
+        };
+      }
+    });
+  }, []);
+
   const handleRefresh = () => {
     // Refresh data for the current page
   };

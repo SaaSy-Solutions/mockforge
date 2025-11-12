@@ -1,0 +1,56 @@
+[package]
+name = "mockforge-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "MockForge Desktop Application - Native desktop app for API mocking"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+# Tauri dependencies
+tauri = { version = "1.5", features = ["system-tray", "updater", "shell-open", "notification-all", "window-all", "dialog-all", "global-shortcut"] }
+# Note: Tauri 1.5 uses built-in APIs, plugins are for Tauri 2.0+
+# For Tauri 1.5, we use the built-in dialog and fs APIs directly
+
+# MockForge dependencies
+mockforge-core = { path = "../crates/mockforge-core" }
+mockforge-http = { path = "../crates/mockforge-http" }
+mockforge-ws = { path = "../crates/mockforge-ws" }
+mockforge-grpc = { path = "../crates/mockforge-grpc" }
+
+# Async runtime
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt"] }
+tokio-util = "0.7"
+
+# HTTP server
+axum = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Update checking
+reqwest = { workspace = true, features = ["json"] }
+
+# System integration
+dirs = "5.0"
+which = "5.0"
+
+[features]
+# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]

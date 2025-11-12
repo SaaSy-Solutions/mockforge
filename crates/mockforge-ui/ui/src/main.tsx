@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 import { useThemePaletteStore } from './stores/useThemePaletteStore'
+import { registerServiceWorker } from './utils/serviceWorker'
 
 // Lazy load React Query DevTools only in development
 const ReactQueryDevtools = import.meta.env.DEV
@@ -17,6 +18,25 @@ const ReactQueryDevtools = import.meta.env.DEV
 
 // Initialize theme store
 useThemePaletteStore.getState().init();
+
+// Register service worker for PWA functionality
+if (import.meta.env.PROD) {
+  registerServiceWorker({
+    onSuccess: (registration) => {
+      console.log('[PWA] Service worker registered successfully');
+      logger.info('PWA: Service worker registered', { registration });
+    },
+    onUpdate: (registration) => {
+      console.log('[PWA] New service worker available');
+      logger.info('PWA: New service worker available', { registration });
+      // Optionally show update notification to user
+      if (window.confirm('New version available! Reload to update?')) {
+        registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+        window.location.reload();
+      }
+    },
+  });
+}
 
 // Create a client with optimized defaults for performance
 const queryClient = new QueryClient({
