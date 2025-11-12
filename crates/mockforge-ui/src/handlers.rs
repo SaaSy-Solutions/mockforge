@@ -4463,8 +4463,19 @@ mod tests {
     #[test]
     fn test_admin_state_new() {
         let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
-        let state =
-            AdminState::new(Some(http_addr), None, None, None, true, 8080, None, None, None);
+        let state = AdminState::new(
+            Some(http_addr),
+            None,
+            None,
+            None,
+            true,
+            8080,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
 
         assert_eq!(state.http_server_addr, Some(http_addr));
         assert!(state.api_enabled);

@@ -139,13 +139,20 @@ pub async fn get_server_status(
 /// Open a configuration file
 #[tauri::command]
 pub async fn open_config_file(window: Window) -> Result<Option<String>, String> {
+    use std::sync::mpsc;
     use tauri::api::dialog::FileDialogBuilder;
 
-    let file_path = FileDialogBuilder::new()
+    let (tx, rx) = mpsc::channel();
+
+    FileDialogBuilder::new()
         .add_filter("YAML", &["yaml", "yml"])
         .add_filter("JSON", &["json"])
         .add_filter("All", &["*"])
-        .pick_file();
+        .pick_file(move |path_buf| {
+            let _ = tx.send(path_buf);
+        });
+
+    let file_path = rx.recv().map_err(|_| "Dialog cancelled".to_string())?;
 
     match file_path {
         Some(path) => {
@@ -161,13 +168,20 @@ pub async fn open_config_file(window: Window) -> Result<Option<String>, String> 
 /// Save a configuration file
 #[tauri::command]
 pub async fn save_config_file(content: String, window: Window) -> Result<Option<String>, String> {
+    use std::sync::mpsc;
     use tauri::api::dialog::FileDialogBuilder;
 
-    let file_path = FileDialogBuilder::new()
+    let (tx, rx) = mpsc::channel();
+
+    FileDialogBuilder::new()
         .add_filter("YAML", &["yaml", "yml"])
         .add_filter("JSON", &["json"])
         .set_file_name("mockforge.yaml")
-        .save_file();
+        .save_file(move |path_buf| {
+            let _ = tx.send(path_buf);
+        });
+
+    let file_path = rx.recv().map_err(|_| "Dialog cancelled".to_string())?;
 
     match file_path {
         Some(path) => {

@@ -1,6 +1,6 @@
 //! System tray event handling
 
-use tauri::{AppHandle, SystemTrayEvent, Window};
+use tauri::{AppHandle, Manager, SystemTrayEvent, Window};
 
 /// Handle system tray events
 pub fn handle_system_tray_event(app: &AppHandle, event: SystemTrayEvent) {

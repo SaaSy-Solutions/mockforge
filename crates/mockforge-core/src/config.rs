@@ -600,7 +600,7 @@ pub struct HttpValidationConfig {
 }
 
 /// HTTP CORS configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HttpCorsConfig {
     /// Enable CORS
     pub enabled: bool,

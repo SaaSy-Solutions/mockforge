@@ -1,8 +1,8 @@
 // Prevents additional console window on Windows in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use mockforge_desktop::app::AppState;
-use mockforge_desktop::server::MockServerManager;
+use crate::app::AppState;
+use crate::server::MockServerManager;
 use std::sync::Arc;
 use tauri::{Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
 use tokio::sync::RwLock;
@@ -43,7 +43,7 @@ fn main() {
         .on_system_tray_event(|app, event| {
             system_tray::handle_system_tray_event(app, event);
         })
-        .setup(|app| {
+        .setup(move |app| {
             // Initialize app state
             let state = app_state.clone();
             app.manage(state);
@@ -67,18 +67,20 @@ fn main() {
 
             // Handle file drop events
             let app_handle = app.handle().clone();
-            window.listen("tauri://file-drop", move |event| {
-                if let Some(paths) = event.payload() {
-                    if let Ok(paths) = serde_json::from_str::<Vec<String>>(paths) {
-                        if let Some(path) = paths.first() {
-                            // Emit event to frontend to handle file
-                            if let Some(window) = app_handle.get_window("main") {
-                                let _ = window.emit("file-dropped", path);
+            if let Some(window) = app.get_window("main") {
+                window.listen("tauri://file-drop", move |event| {
+                    if let Some(paths) = event.payload() {
+                        if let Ok(paths) = serde_json::from_str::<Vec<String>>(paths) {
+                            if let Some(path) = paths.first() {
+                                // Emit event to frontend to handle file
+                                if let Some(window) = app_handle.get_window("main") {
+                                    let _ = window.emit("file-dropped", path);
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
 
             // Handle file open events (when app is opened with a file)
             // Note: For Tauri 1.5, we handle file associations via window events

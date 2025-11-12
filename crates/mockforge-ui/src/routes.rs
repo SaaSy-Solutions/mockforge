@@ -302,6 +302,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
         );
 
         // Router should be created successfully
@@ -318,6 +320,8 @@ mod tests {
             false,
             8080,
             "http://localhost:9090".to_string(),
+            None,
+            None,
             None,
             None,
             None,

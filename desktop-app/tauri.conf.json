@@ -102,24 +102,7 @@
         "wix": {
           "language": "en-US"
         }
-      },
-      "fileAssociations": [
-        {
-          "ext": "yaml",
-          "mimeType": "application/x-yaml",
-          "description": "MockForge Configuration File"
-        },
-        {
-          "ext": "yml",
-          "mimeType": "application/x-yaml",
-          "description": "MockForge Configuration File"
-        },
-        {
-          "ext": "json",
-          "mimeType": "application/json",
-          "description": "MockForge Configuration File"
-        }
-      ]
+      }
     },
     "security": {
       "csp": null
@@ -146,8 +129,7 @@
     "systemTray": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true,
-      "menuOnLeftClick": false,
-      "tooltip": "MockForge"
+      "menuOnLeftClick": false
     }
   }
 }

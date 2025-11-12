@@ -7,7 +7,8 @@ pub fn show_notification(app: &AppHandle, title: &str, body: &str) {
     #[cfg(not(target_os = "macos"))]
     {
         use tauri::api::notification::Notification;
-        Notification::new(app).title(title).body(body).show().ok();
+        let app_id = app.config().tauri.bundle.identifier.clone();
+        Notification::new(&app_id).title(title).body(body).show().ok();
     }
 
     #[cfg(target_os = "macos")]

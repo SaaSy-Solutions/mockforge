@@ -17,7 +17,7 @@ missing_docs = "deny"
 
 [dependencies]
 # Plugin core types and traits
-mockforge-plugin-core = "0.2.8"
+mockforge-plugin-core = { path = "../mockforge-plugin-core", version = "0.2.8" }
 
 # Serialization
 serde.workspace = true

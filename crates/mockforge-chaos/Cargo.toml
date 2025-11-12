@@ -61,10 +61,10 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], opt
 mockforge-tracing = "0.2.8"
 
 # Recorder
-mockforge-recorder = "0.2.8"
+mockforge-recorder = { path = "../mockforge-recorder", version = "0.2.8" }
 
 # Core (for MockAI integration)
-mockforge-core = "0.2.8"
+mockforge-core = { path = "../mockforge-core", version = "0.2.8" }
 
 # PDF generation
 printpdf = "0.7"
