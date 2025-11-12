@@ -466,17 +466,17 @@ pub fn create_state_machine_routes() -> axum::Router<ManagementState> {
         // State machine CRUD
         .route("/", get(list_state_machines))
         .route("/", post(create_state_machine))
-        .route("/:resource_type", get(get_state_machine))
-        .route("/:resource_type", put(create_state_machine))
-        .route("/:resource_type", delete(delete_state_machine))
+        .route("/{resource_type}", get(get_state_machine))
+        .route("/{resource_type}", put(create_state_machine))
+        .route("/{resource_type}", delete(delete_state_machine))
 
         // State instance operations
         .route("/instances", get(list_instances))
         .route("/instances", post(create_instance))
-        .route("/instances/:resource_id", get(get_instance))
-        .route("/instances/:resource_id/state", get(get_current_state))
-        .route("/instances/:resource_id/next-states", get(get_next_states))
-        .route("/instances/:resource_id/transition", post(execute_transition))
+        .route("/instances/{resource_id}", get(get_instance))
+        .route("/instances/{resource_id}/state", get(get_current_state))
+        .route("/instances/{resource_id}/next-states", get(get_next_states))
+        .route("/instances/{resource_id}/transition", post(execute_transition))
 
         // Import/Export
         .route("/export", get(export_state_machines))
