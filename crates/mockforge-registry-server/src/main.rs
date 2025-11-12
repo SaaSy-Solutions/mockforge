@@ -3,14 +3,18 @@
 //! Central registry for discovering, publishing, and installing plugins.
 
 mod auth;
+mod cache;
 mod config;
 mod database;
 mod error;
 mod handlers;
 mod middleware;
 mod models;
+mod redis;
 mod routes;
 mod storage;
+mod two_factor;
+mod workers;
 
 use anyhow::Result;
 use axum::Router;
@@ -59,10 +63,13 @@ async fn main() -> Result<()> {
 
     // Create app state
     let state = AppState {
-        db,
+        db: db.clone(),
         storage,
         config: config.clone(),
     };
+
+    // Start background workers
+    workers::saml_cleanup::start_saml_cleanup_worker(db.pool().clone());
 
     // Build router
     let app = create_app(state);

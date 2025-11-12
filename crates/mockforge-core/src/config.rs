@@ -613,6 +613,14 @@ pub struct HttpCorsConfig {
     /// Allowed headers
     #[serde(default)]
     pub allowed_headers: Vec<String>,
+    /// Allow credentials (cookies, authorization headers)
+    /// Note: Cannot be true when using wildcard origin (*)
+    #[serde(default = "default_cors_allow_credentials")]
+    pub allow_credentials: bool,
+}
+
+fn default_cors_allow_credentials() -> bool {
+    false
 }
 
 /// HTTP server configuration
@@ -671,6 +679,7 @@ impl Default for HttpConfig {
                     "OPTIONS".to_string(),
                 ],
                 allowed_headers: vec!["content-type".to_string(), "authorization".to_string()],
+                allow_credentials: false, // Must be false when using wildcard origin
             }),
             request_timeout_secs: 30,
             validation: Some(HttpValidationConfig {

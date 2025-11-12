@@ -25,6 +25,11 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **Kafka** | ✅ Full Mock Broker | ❌ No | ❌ No | ❌ No |
 | **MQTT** | ✅ Full Broker (3.1.1 & 5.0) | ❌ No | ❌ No | ❌ No |
 | **AMQP/RabbitMQ** | ✅ Full Broker (0.9.1) | ❌ No | ❌ No | ❌ No |
+| **SMTP** | ✅ Full Email Server | ❌ No | ❌ No | ❌ No |
+| **FTP** | ✅ Full File Transfer | ❌ No | ❌ No | ❌ No |
+| **TCP** | ✅ Raw TCP Mocking | ❌ No | ❌ No | ❌ No |
+| **Client Generation** | ✅ React, Vue, Angular, Svelte | ❌ No | ❌ No | ❌ No |
+| **TLS/mTLS** | ✅ HTTPS + Mutual TLS | ⚠️ TLS only | ⚠️ TLS only | ⚠️ TLS only |
 | **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
 | **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
 | **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |

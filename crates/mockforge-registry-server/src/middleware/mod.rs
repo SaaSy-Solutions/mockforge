@@ -1,5 +1,6 @@
 //! HTTP middleware
 
+pub mod org_context;
 pub mod rate_limit;
 
 use axum::{
@@ -13,7 +14,8 @@ use uuid::Uuid;
 
 use crate::auth::verify_token;
 
-pub use rate_limit::{rate_limit_middleware, RateLimiterState};
+pub use org_context::resolve_org_context;
+pub use rate_limit::rate_limit_middleware;
 
 /// Extractor for authenticated user ID from JWT middleware
 #[derive(Debug, Clone)]

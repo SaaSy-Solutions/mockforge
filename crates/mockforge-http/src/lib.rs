@@ -386,10 +386,12 @@ fn apply_cors_middleware(
         }
 
         let mut cors_layer = CorsLayer::new();
+        let mut is_wildcard_origin = false;
 
         // Configure allowed origins
         if config.allowed_origins.contains(&"*".to_string()) {
             cors_layer = cors_layer.allow_origin(Any);
+            is_wildcard_origin = true;
         } else if !config.allowed_origins.is_empty() {
             // Try to parse each origin, fallback to permissive if parsing fails
             let origins: Vec<_> = config
@@ -404,11 +406,13 @@ fn apply_cors_middleware(
                 // If no valid origins, use permissive for development
                 warn!("No valid CORS origins configured, using permissive CORS");
                 cors_layer = cors_layer.allow_origin(Any);
+                is_wildcard_origin = true;
             } else {
                 // Use the first origin as exact match (tower-http limitation)
                 // For multiple origins, we'd need a custom implementation
                 if origins.len() == 1 {
                     cors_layer = cors_layer.allow_origin(origins[0].clone());
+                    is_wildcard_origin = false;
                 } else {
                     // Multiple origins - use permissive for now
                     warn!(
@@ -416,11 +420,13 @@ fn apply_cors_middleware(
                         Consider using '*' for all origins."
                     );
                     cors_layer = cors_layer.allow_origin(Any);
+                    is_wildcard_origin = true;
                 }
             }
         } else {
             // No origins specified, use permissive for development
             cors_layer = cors_layer.allow_origin(Any);
+            is_wildcard_origin = true;
         }
 
         // Configure allowed methods
@@ -458,15 +464,29 @@ fn apply_cors_middleware(
                 cors_layer.allow_headers([http::header::CONTENT_TYPE, http::header::AUTHORIZATION]);
         }
 
-        // Allow credentials and expose common headers
-        cors_layer = cors_layer.allow_credentials(true);
+        // Configure credentials - cannot allow credentials with wildcard origin
+        // Determine if credentials should be allowed
+        // Cannot allow credentials with wildcard origin per CORS spec
+        let should_allow_credentials = if is_wildcard_origin {
+            // Wildcard origin - credentials must be false
+            false
+        } else {
+            // Specific origins - use config value (defaults to false)
+            config.allow_credentials
+        };
 
-        info!("CORS middleware enabled with configured settings");
+        cors_layer = cors_layer.allow_credentials(should_allow_credentials);
+
+        info!("CORS middleware enabled with configured settings (credentials: {})", should_allow_credentials);
         app.layer(cors_layer)
     } else {
         // No CORS config provided - use permissive CORS for development
+        // Note: permissive() allows credentials, but since it uses wildcard origin,
+        // we need to disable credentials to avoid CORS spec violation
         debug!("No CORS config provided, using permissive CORS for development");
-        app.layer(CorsLayer::permissive())
+        // Create a permissive CORS layer but disable credentials to avoid CORS spec violation
+        // (cannot combine credentials with wildcard origin)
+        app.layer(CorsLayer::permissive().allow_credentials(false))
     }
 }
 
@@ -528,6 +548,7 @@ pub async fn build_router_with_multi_tenant(
                     allowed_origins: prod_cors.allowed_origins.clone(),
                     allowed_methods: prod_cors.allowed_methods.clone(),
                     allowed_headers: prod_cors.allowed_headers.clone(),
+                    allow_credentials: prod_cors.allow_credentials,
                 });
                 info!("Applied production-like CORS configuration");
             }
@@ -1462,6 +1483,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     allowed_origins: prod_cors.allowed_origins.clone(),
                     allowed_methods: prod_cors.allowed_methods.clone(),
                     allowed_headers: prod_cors.allowed_headers.clone(),
+                    allow_credentials: prod_cors.allow_credentials,
                 });
                 info!("Applied production-like CORS configuration");
             }

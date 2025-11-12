@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{Plugin, PluginVersion, PluginWithVersions, User},
+    models::{Plugin, PluginVersion, User},
     AppState,
 };
 
@@ -93,16 +93,24 @@ pub async fn search_plugins(
         let author = User::find_by_id(pool, plugin.author_id)
             .await
             .map_err(|e| ApiError::Database(e))?
-            .unwrap_or_else(|| User {
-                id: plugin.author_id,
-                username: "Unknown".to_string(),
-                email: String::new(),
-                password_hash: String::new(),
-                api_token: None,
-                is_verified: false,
-                is_admin: false,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
+            .unwrap_or_else(|| {
+                // Create a minimal user struct for display purposes
+                // This should not happen in production, but handle gracefully
+                User {
+                    id: plugin.author_id,
+                    username: "Unknown".to_string(),
+                    email: String::new(),
+                    password_hash: String::new(),
+                    api_token: None,
+                    is_verified: false,
+                    is_admin: false,
+                    two_factor_enabled: false,
+                    two_factor_secret: None,
+                    two_factor_backup_codes: None,
+                    two_factor_verified_at: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }
             });
 
         entries.push(RegistryEntry {
@@ -191,6 +199,10 @@ pub async fn get_plugin(
             api_token: None,
             is_verified: false,
             is_admin: false,
+            two_factor_enabled: false,
+            two_factor_secret: None,
+            two_factor_backup_codes: None,
+            two_factor_verified_at: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         });

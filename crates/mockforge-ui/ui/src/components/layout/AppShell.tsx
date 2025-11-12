@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
@@ -170,7 +169,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                       'w-full justify-start gap-4 h-12 text-lg nav-item-hover focus-ring spring-hover',
                       'animate-slide-in-up',
                       activeTab === item.id
-                        ? 'bg-brand text-white shadow-md'
+                        ? 'bg-brand-500 text-white shadow-md hover:bg-brand-600'
                         : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
@@ -207,7 +206,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                     className={cn(
                       'w-full justify-start gap-3 h-11 transition-all duration-200 nav-item-hover focus-ring spring-hover',
                       activeTab === item.id
-                        ? 'bg-brand text-white hover:bg-brand-600 shadow-lg'
+                        ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-lg'
                         : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
                     )}
                     onClick={() => onTabChange(item.id)}

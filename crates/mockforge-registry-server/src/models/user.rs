@@ -15,6 +15,12 @@ pub struct User {
     pub api_token: Option<String>,
     pub is_verified: bool,
     pub is_admin: bool,
+    pub two_factor_enabled: bool,
+    #[serde(skip_serializing)]
+    pub two_factor_secret: Option<String>, // Base32-encoded TOTP secret
+    #[serde(skip_serializing)]
+    pub two_factor_backup_codes: Option<Vec<String>>, // Array of hashed backup codes
+    pub two_factor_verified_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -79,6 +85,94 @@ impl User {
             .bind(user_id)
             .execute(pool)
             .await?;
+        Ok(())
+    }
+
+    /// Enable 2FA for a user
+    pub async fn enable_2fa(
+        pool: &sqlx::PgPool,
+        user_id: Uuid,
+        secret: &str,
+        backup_codes: &[String], // Hashed backup codes
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET two_factor_enabled = TRUE,
+                two_factor_secret = $1,
+                two_factor_backup_codes = $2,
+                two_factor_verified_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $3
+            "#,
+        )
+        .bind(secret)
+        .bind(backup_codes)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Disable 2FA for a user
+    pub async fn disable_2fa(
+        pool: &sqlx::PgPool,
+        user_id: Uuid,
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET two_factor_enabled = FALSE,
+                two_factor_secret = NULL,
+                two_factor_backup_codes = NULL,
+                two_factor_verified_at = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Update 2FA verified timestamp
+    pub async fn update_2fa_verified(
+        pool: &sqlx::PgPool,
+        user_id: Uuid,
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            "UPDATE users SET two_factor_verified_at = NOW(), updated_at = NOW() WHERE id = $1",
+        )
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Remove a used backup code
+    pub async fn remove_backup_code(
+        pool: &sqlx::PgPool,
+        user_id: Uuid,
+        code_index: usize,
+    ) -> sqlx::Result<()> {
+        // Get current backup codes
+        let user = Self::find_by_id(pool, user_id)
+            .await?
+            .ok_or_else(|| sqlx::Error::RowNotFound)?;
+
+        if let Some(mut codes) = user.two_factor_backup_codes {
+            if code_index < codes.len() {
+                codes.remove(code_index);
+                sqlx::query(
+                    "UPDATE users SET two_factor_backup_codes = $1, updated_at = NOW() WHERE id = $2",
+                )
+                .bind(&codes)
+                .bind(user_id)
+                .execute(pool)
+                .await?;
+            }
+        }
         Ok(())
     }
 }

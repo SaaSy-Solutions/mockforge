@@ -23,6 +23,10 @@ serde_json = "1.0"
 # Authentication
 jsonwebtoken = "9.2"
 bcrypt = "0.15"
+totp-lite = "2.0" # TOTP (Time-based One-Time Password) for 2FA
+qrcode = "0.14" # QR code generation for 2FA setup
+data-encoding = "2.5" # Base32 encoding for TOTP secrets
+rand = "0.8" # Random number generation for tokens
 
 # Storage
 aws-sdk-s3 = "1.10"
@@ -44,14 +48,24 @@ dotenvy = "0.15"
 # Security
 ring = "0.17"
 hex = "0.4"
-base64 = "0.21"
+base64 = { version = "0.21", features = ["default"] }
 sha2 = "0.10"
+sha1 = "0.10" # For TOTP (totp-lite 2.0 requires explicit hash types)
 
 # Validation
 validator = { version = "0.18", features = ["derive"] }
 
 # Rate limiting
 governor = "0.6"
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+
+# SAML 2.0 for SSO
+quick-xml = { version = "0.31", features = ["serialize", "overlapped-lists"] }
+regex = "1.10"
+urlencoding = "2.1"
+# X.509 certificate handling
+x509-parser = "0.17"
+rustls-pemfile = "2.0"
 
 # Internal dependencies
 mockforge-plugin-registry = { path = "../mockforge-plugin-registry" }

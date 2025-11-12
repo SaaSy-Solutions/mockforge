@@ -21,6 +21,7 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    pub two_factor_code: Option<String>, // Optional 2FA code (required if 2FA is enabled)
 }
 
 #[derive(Debug, Serialize)]
@@ -99,6 +100,51 @@ pub async fn login(
 
     if !valid {
         return Err(ApiError::InvalidRequest("Invalid email or password".to_string()));
+    }
+
+    // Check if 2FA is enabled
+    if user.two_factor_enabled {
+        // Require 2FA code
+        let code = request.two_factor_code
+            .ok_or_else(|| ApiError::InvalidRequest("2FA code is required".to_string()))?;
+
+        // Get secret
+        let secret = user.two_factor_secret
+            .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("2FA enabled but no secret found")))?;
+
+        // Verify TOTP code
+        use crate::two_factor::verify_totp_code;
+        let totp_valid = verify_totp_code(&secret, &code, Some(1))
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("TOTP verification error: {}", e)))?;
+
+        if !totp_valid {
+            // Try backup codes
+            let mut backup_valid = false;
+            if let Some(backup_codes) = &user.two_factor_backup_codes {
+                use crate::two_factor::verify_backup_code;
+                for (index, hashed_code) in backup_codes.iter().enumerate() {
+                    if verify_backup_code(&code, hashed_code)
+                        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Backup code verification error: {}", e)))?
+                    {
+                        // Remove used backup code
+                        User::remove_backup_code(pool, user.id, index)
+                            .await
+                            .map_err(|e| ApiError::Database(e))?;
+                        backup_valid = true;
+                        break;
+                    }
+                }
+            }
+
+            if !backup_valid {
+                return Err(ApiError::InvalidRequest("Invalid 2FA code".to_string()));
+            }
+        }
+
+        // Update 2FA verified timestamp
+        User::update_2fa_verified(pool, user.id)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
     }
 
     // Generate JWT token
