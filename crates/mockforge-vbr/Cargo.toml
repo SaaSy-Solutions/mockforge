@@ -47,6 +47,7 @@ base64 = "0.21"
 jsonwebtoken = { version = "9", optional = true }
 rand = "0.9"
 regex = "1.10"
+jsonpath = "0.1"
 
 # HTTP framework
 axum = { workspace = true }

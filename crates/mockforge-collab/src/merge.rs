@@ -78,8 +78,50 @@ impl MergeService {
             }
         }
 
-        // TODO: Implement more sophisticated common ancestor finding
-        // For now, return None if no fork relationship exists
+        // Implement sophisticated common ancestor finding by walking commit history
+        // This finds the Lowest Common Ancestor (LCA) by walking both commit histories
+        let source_commits = self
+            .version_control
+            .get_history(source_workspace_id, Some(1000))
+            .await?;
+        let target_commits = self
+            .version_control
+            .get_history(target_workspace_id, Some(1000))
+            .await?;
+
+        // Build commit ID sets for fast lookup
+        let source_commit_ids: std::collections::HashSet<Uuid> =
+            source_commits.iter().map(|c| c.id).collect();
+        let target_commit_ids: std::collections::HashSet<Uuid> =
+            target_commits.iter().map(|c| c.id).collect();
+
+        // Find the first commit that appears in both histories (LCA)
+        // Walk from most recent to oldest in source history
+        for source_commit in &source_commits {
+            if target_commit_ids.contains(&source_commit.id) {
+                return Ok(Some(source_commit.id));
+            }
+        }
+
+        // If no direct match, try walking parent chains
+        // Get the latest commits
+        if let (Some(source_latest), Some(target_latest)) = (
+            source_commits.first(),
+            target_commits.first(),
+        ) {
+            // Build ancestor sets by walking parent chains
+            let source_ancestors = self.build_ancestor_set(source_latest.id).await?;
+            let target_ancestors = self.build_ancestor_set(target_latest.id).await?;
+
+            // Find the first common ancestor
+            for ancestor in &source_ancestors {
+                if target_ancestors.contains(ancestor) {
+                    return Ok(Some(*ancestor));
+                }
+            }
+        }
+
+        // No common ancestor found
         Ok(None)
     }
 
@@ -534,5 +576,35 @@ impl MergeService {
         let merges = merges?;
 
         Ok(merges)
+    }
+
+    /// Build a set of all ancestor commit IDs by walking the parent chain
+    async fn build_ancestor_set(&self, commit_id: Uuid) -> Result<std::collections::HashSet<Uuid>> {
+        let mut ancestors = std::collections::HashSet::new();
+        let mut current_id = Some(commit_id);
+        let mut visited = std::collections::HashSet::new();
+
+        // Walk the parent chain up to a reasonable depth (prevent infinite loops)
+        let max_depth = 1000;
+        let mut depth = 0;
+
+        while let Some(id) = current_id {
+            if visited.contains(&id) || depth > max_depth {
+                break; // Cycle detected or max depth reached
+            }
+            visited.insert(id);
+            ancestors.insert(id);
+
+            // Get the commit and move to parent
+            match self.version_control.get_commit(id).await {
+                Ok(commit) => {
+                    current_id = commit.parent_id;
+                    depth += 1;
+                }
+                Err(_) => break, // Commit not found, stop walking
+            }
+        }
+
+        Ok(ancestors)
     }
 }

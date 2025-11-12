@@ -192,6 +192,32 @@ public class MockServer {
             stub.setLatencyMs(latencyMs);
         }
 
+        stubResponse(stub);
+    }
+
+    /**
+     * Stub a response using a ResponseStub object
+     *
+     * <p>This method allows you to use StubBuilder to create stubs:</p>
+     * <pre>{@code
+     * ResponseStub stub = new StubBuilder("GET", "/api/users/{id}")
+     *     .status(200)
+     *     .header("Content-Type", "application/json")
+     *     .body(Map.of("id", 123, "name", "John Doe"))
+     *     .latency(100)
+     *     .build();
+     *
+     * server.stubResponse(stub);
+     * }</pre>
+     *
+     * @param stub ResponseStub instance (can be created with StubBuilder)
+     * @throws MockServerException if the stub cannot be added
+     */
+    public void stubResponse(ResponseStub stub) throws MockServerException {
+        if (stub == null) {
+            throw new MockServerException("ResponseStub cannot be null");
+        }
+
         stubs.add(stub);
 
         // If admin API is available, use it to add the stub dynamically

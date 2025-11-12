@@ -208,6 +208,9 @@ pub mod ui_builder;
 /// Verification API for request verification
 pub mod verification;
 
+// Access review handlers
+pub mod handlers;
+
 // Re-export AI handler utilities
 pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
 // Re-export health check utilities
@@ -237,6 +240,46 @@ pub use http_tracing_middleware::http_tracing_middleware;
 // Re-export coverage utilities
 pub use coverage::{calculate_coverage, CoverageReport, MethodCoverage, RouteCoverage};
 
+/// Helper function to load persona from config file
+/// Tries to load from common config locations: config.yaml, mockforge.yaml, tools/mockforge/config.yaml
+async fn load_persona_from_config() -> Option<Arc<Persona>> {
+    use mockforge_core::config::load_config;
+
+    // Try common config file locations
+    let config_paths = [
+        "config.yaml",
+        "mockforge.yaml",
+        "tools/mockforge/config.yaml",
+        "../tools/mockforge/config.yaml",
+    ];
+
+    for path in &config_paths {
+        if let Ok(config) = load_config(path).await {
+            // Access intelligent_behavior through mockai config
+            // Note: Config structure is mockai.intelligent_behavior.personas
+            if let Some(persona) = config.mockai.intelligent_behavior.personas.get_active_persona() {
+                tracing::info!(
+                    "Loaded active persona '{}' from config file: {}",
+                    persona.name,
+                    path
+                );
+                return Some(Arc::new(persona.clone()));
+            } else {
+                tracing::debug!(
+                    "No active persona found in config file: {} (personas count: {})",
+                    path,
+                    config.mockai.intelligent_behavior.personas.personas.len()
+                );
+            }
+        } else {
+            tracing::debug!("Could not load config from: {}", path);
+        }
+    }
+
+    tracing::debug!("No persona found in config files, persona-based generation will be disabled");
+    None
+}
+
 use axum::middleware::from_fn_with_state;
 use axum::{extract::State, response::Json, Router};
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
@@ -244,6 +287,8 @@ use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi_routes::ValidationOptions;
+use mockforge_core::intelligent_behavior::config::Persona;
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use mockforge_core::LatencyProfile;
@@ -620,12 +665,22 @@ pub async fn build_router_with_multi_tenant(
                 // Measure route registry creation
                 tracing::debug!("Creating OpenAPI route registry...");
                 let registry_start = Instant::now();
+
+                // Try to load persona from config if available
+                let persona = load_persona_from_config().await;
+
                 let registry = if let Some(opts) = options {
                     tracing::debug!("Using custom validation options");
-                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_options_and_persona(openapi, opts, persona)
                 } else {
                     tracing::debug!("Using environment-based options");
-                    OpenApiRouteRegistry::new_with_env(openapi)
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_env_and_persona(openapi, persona)
                 };
                 let registry_duration = registry_start.elapsed();
                 info!(
@@ -811,11 +866,58 @@ pub async fn build_router_with_multi_tenant(
     // Add verification API endpoint
     app = app.merge(verification_router());
 
+    // Add access review API if enabled
+    {
+        use mockforge_core::security::get_global_access_review_service;
+        if let Some(service) = get_global_access_review_service().await {
+            use crate::handlers::access_review::{access_review_router, AccessReviewState};
+            let review_state = AccessReviewState { service };
+            app = app.nest("/api/v1/security/access-reviews", access_review_router(review_state));
+            debug!("Access review API mounted at /api/v1/security/access-reviews");
+        }
+    }
+
+    // Add privileged access API if enabled
+    {
+        use mockforge_core::security::get_global_privileged_access_manager;
+        if let Some(manager) = get_global_privileged_access_manager().await {
+            use crate::handlers::privileged_access::{privileged_access_router, PrivilegedAccessState};
+            let privileged_state = PrivilegedAccessState { manager };
+            app = app.nest("/api/v1/security/privileged-access", privileged_access_router(privileged_state));
+            debug!("Privileged access API mounted at /api/v1/security/privileged-access");
+        }
+    }
+
+    // Add change management API if enabled
+    {
+        use mockforge_core::security::get_global_change_management_engine;
+        if let Some(engine) = get_global_change_management_engine().await {
+            use crate::handlers::change_management::{change_management_router, ChangeManagementState};
+            let change_state = ChangeManagementState { engine };
+            app = app.nest("/api/v1/change-management", change_management_router(change_state));
+            debug!("Change management API mounted at /api/v1/change-management");
+        }
+    }
+
+    // Add risk assessment API if enabled
+    {
+        use mockforge_core::security::get_global_risk_assessment_engine;
+        if let Some(engine) = get_global_risk_assessment_engine().await {
+            use crate::handlers::risk_assessment::{risk_assessment_router, RiskAssessmentState};
+            let risk_state = RiskAssessmentState { engine };
+            app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
+            debug!("Risk assessment API mounted at /api/v1/security/risks");
+        }
+    }
+
     // Add management WebSocket endpoint
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    // Add security middleware for security event tracking (after logging, before contract diff)
+    app = app.layer(axum::middleware::from_fn(crate::middleware::security_middleware));
 
     // Add contract diff middleware for automatic request capture
     // This captures requests for contract diff analysis (after logging)
@@ -1414,6 +1516,50 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add verification API endpoint
     app = app.merge(verification_router());
+
+    // Add access review API if enabled
+    {
+        use mockforge_core::security::get_global_access_review_service;
+        if let Some(service) = get_global_access_review_service().await {
+            use crate::handlers::access_review::{access_review_router, AccessReviewState};
+            let review_state = AccessReviewState { service };
+            app = app.nest("/api/v1/security/access-reviews", access_review_router(review_state));
+            debug!("Access review API mounted at /api/v1/security/access-reviews");
+        }
+    }
+
+    // Add privileged access API if enabled
+    {
+        use mockforge_core::security::get_global_privileged_access_manager;
+        if let Some(manager) = get_global_privileged_access_manager().await {
+            use crate::handlers::privileged_access::{privileged_access_router, PrivilegedAccessState};
+            let privileged_state = PrivilegedAccessState { manager };
+            app = app.nest("/api/v1/security/privileged-access", privileged_access_router(privileged_state));
+            debug!("Privileged access API mounted at /api/v1/security/privileged-access");
+        }
+    }
+
+    // Add change management API if enabled
+    {
+        use mockforge_core::security::get_global_change_management_engine;
+        if let Some(engine) = get_global_change_management_engine().await {
+            use crate::handlers::change_management::{change_management_router, ChangeManagementState};
+            let change_state = ChangeManagementState { engine };
+            app = app.nest("/api/v1/change-management", change_management_router(change_state));
+            debug!("Change management API mounted at /api/v1/change-management");
+        }
+    }
+
+    // Add risk assessment API if enabled
+    {
+        use mockforge_core::security::get_global_risk_assessment_engine;
+        if let Some(engine) = get_global_risk_assessment_engine().await {
+            use crate::handlers::risk_assessment::{risk_assessment_router, RiskAssessmentState};
+            let risk_state = RiskAssessmentState { engine };
+            app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
+            debug!("Risk assessment API mounted at /api/v1/security/risks");
+        }
+    }
 
     // Add management WebSocket endpoint
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));

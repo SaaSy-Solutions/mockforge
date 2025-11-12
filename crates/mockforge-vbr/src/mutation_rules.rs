@@ -34,6 +34,7 @@ use crate::{Error, Result};
 use chrono::{DateTime, Duration, Utc};
 use mockforge_core::time_travel_now;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -331,6 +332,116 @@ impl MutationRuleManager {
         Ok(executed)
     }
 
+    /// Evaluate a JSONPath condition against a record
+    ///
+    /// The condition can be:
+    /// - A simple JSONPath expression that checks for existence (e.g., "$.status")
+    /// - A JSONPath expression with comparison (e.g., "$.status == 'active'")
+    /// - A boolean JSONPath expression (e.g., "$.enabled")
+    ///
+    /// Returns true if the condition is met, false otherwise.
+    fn evaluate_condition(condition: &str, record: &Value) -> Result<bool> {
+        // Simple JSONPath evaluation
+        // For basic existence checks (e.g., "$.field"), check if path exists and is truthy
+        // For comparison expressions (e.g., "$.field == 'value'"), parse and evaluate
+
+        // Try to parse as JSONPath selector
+        if let Ok(selector) = jsonpath::Selector::new(condition) {
+            // If condition is just a path (no comparison), check if it exists and is truthy
+            let results: Vec<_> = selector.find(record).collect();
+            if !results.is_empty() {
+                // Check if any result is truthy
+                for result in results {
+                    match result {
+                        Value::Bool(b) => {
+                            if *b {
+                                return Ok(true);
+                            }
+                        }
+                        Value::Null => continue,
+                        Value::String(s) => {
+                            if !s.is_empty() {
+                                return Ok(true);
+                            }
+                        }
+                        Value::Number(n) => {
+                            if n.as_f64().map(|f| f != 0.0).unwrap_or(false) {
+                                return Ok(true);
+                            }
+                        }
+                        _ => return Ok(true), // Other types (objects, arrays) are truthy
+                    }
+                }
+            }
+            return Ok(false);
+        }
+
+        // If JSONPath parsing fails, try to parse as a comparison expression
+        // Simple pattern: "$.field == 'value'" or "$.field > 10"
+        if condition.contains("==") {
+            let parts: Vec<&str> = condition.split("==").map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let path = parts[0].trim();
+                let expected = parts[1].trim().trim_matches('\'').trim_matches('"');
+
+                if let Ok(selector) = jsonpath::Selector::new(path) {
+                    let results: Vec<_> = selector.find(record).collect();
+                    for result in results {
+                        match result {
+                            Value::String(s) if s == expected => return Ok(true),
+                            Value::Number(n) => {
+                                if let Ok(expected_num) = expected.parse::<f64>() {
+                                    if n.as_f64().map(|f| f == expected_num).unwrap_or(false) {
+                                        return Ok(true);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        } else if condition.contains(">") {
+            let parts: Vec<&str> = condition.split(">").map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let path = parts[0].trim();
+                if let Ok(expected_num) = parts[1].trim().parse::<f64>() {
+                    if let Ok(selector) = jsonpath::Selector::new(path) {
+                        let results: Vec<_> = selector.find(record).collect();
+                        for result in results {
+                            if let Value::Number(n) = result {
+                                if n.as_f64().map(|f| f > expected_num).unwrap_or(false) {
+                                    return Ok(true);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if condition.contains("<") {
+            let parts: Vec<&str> = condition.split("<").map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let path = parts[0].trim();
+                if let Ok(expected_num) = parts[1].trim().parse::<f64>() {
+                    if let Ok(selector) = jsonpath::Selector::new(path) {
+                        let results: Vec<_> = selector.find(record).collect();
+                        for result in results {
+                            if let Value::Number(n) = result {
+                                if n.as_f64().map(|f| f < expected_num).unwrap_or(false) {
+                                    return Ok(true);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // If we can't parse the condition, log a warning and return false
+        warn!("Could not evaluate condition '{}', treating as false", condition);
+        Ok(false)
+    }
+
     /// Execute a specific mutation rule
     async fn execute_rule(
         &self,
@@ -366,10 +477,21 @@ impl MutationRuleManager {
         for record in records {
             // Check condition if specified
             if let Some(ref condition) = rule.condition {
-                // TODO: Implement condition evaluation (JSONPath)
-                // For now, skip if condition is specified
-                debug!("Condition evaluation not yet implemented, skipping record");
-                continue;
+                // Convert HashMap to Value for JSONPath evaluation
+                let record_value = Value::Object(
+                    record
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
+                );
+
+                // Evaluate JSONPath condition
+                // Condition should be a JSONPath expression that evaluates to a truthy value
+                // Examples: "$.status == 'active'", "$.age > 18", "$.enabled"
+                if !MutationRuleManager::evaluate_condition(condition, &record_value)? {
+                    debug!("Condition '{}' not met for record, skipping", condition);
+                    continue;
+                }
             }
 
             // Get primary key value

@@ -55,6 +55,17 @@ pub async fn search_templates(
     .await
     .map_err(|e| ApiError::Database(e))?;
 
+    // Get total count for pagination (before converting entries)
+    let total = Template::count_search(
+        pool,
+        query.query.as_deref(),
+        query.category.as_deref(),
+        &query.tags,
+        org_id,
+    )
+    .await
+    .map_err(|e| ApiError::Database(e))? as usize;
+
     // Convert to response format
     let mut entries = Vec::new();
     for template in templates {
@@ -115,9 +126,6 @@ pub async fn search_templates(
             published: template.published,
         });
     }
-
-    // TODO: Get total count for pagination
-    let total = entries.len();
 
     Ok(Json(TemplateSearchResults {
         templates: entries,

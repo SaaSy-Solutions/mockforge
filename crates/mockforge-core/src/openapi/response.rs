@@ -7,12 +7,13 @@ use crate::{
     ai_response::{expand_prompt_template, AiResponseConfig, RequestContext},
     OpenApiSpec, Result,
 };
+use crate::intelligent_behavior::config::Persona;
 use async_trait::async_trait;
 use chrono;
 use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
 use rand::{rng, Rng};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use uuid;
 
 /// Trait for AI response generation
@@ -120,7 +121,30 @@ impl ResponseGenerator {
         selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
         selector: Option<&crate::openapi::response_selection::ResponseSelector>,
     ) -> Result<Value> {
-        Self::generate_response_with_scenario_and_mode(
+        Self::generate_response_with_expansion_and_mode_and_persona(
+            spec,
+            operation,
+            status_code,
+            content_type,
+            expand_tokens,
+            selection_mode,
+            selector,
+            None, // No persona by default
+        )
+    }
+
+    /// Generate response with token expansion, selection mode, and persona
+    pub fn generate_response_with_expansion_and_mode_and_persona(
+        spec: &OpenApiSpec,
+        operation: &Operation,
+        status_code: u16,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        persona: Option<&Persona>,
+    ) -> Result<Value> {
+        Self::generate_response_with_scenario_and_mode_and_persona(
             spec,
             operation,
             status_code,
@@ -129,6 +153,7 @@ impl ResponseGenerator {
             None, // No scenario by default
             selection_mode,
             selector,
+            persona,
         )
     }
 
@@ -187,6 +212,31 @@ impl ResponseGenerator {
         scenario: Option<&str>,
         selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
         selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+    ) -> Result<Value> {
+        Self::generate_response_with_scenario_and_mode_and_persona(
+            spec,
+            operation,
+            status_code,
+            content_type,
+            expand_tokens,
+            scenario,
+            selection_mode,
+            selector,
+            None, // No persona by default
+        )
+    }
+
+    /// Generate response with scenario support, selection mode, and persona
+    pub fn generate_response_with_scenario_and_mode_and_persona(
+        spec: &OpenApiSpec,
+        operation: &Operation,
+        status_code: u16,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+        scenario: Option<&str>,
+        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        persona: Option<&Persona>,
     ) -> Result<Value> {
         // Find the response for the status code
         let response = Self::find_response_for_status(&operation.responses, status_code);
@@ -294,16 +344,40 @@ impl ResponseGenerator {
         selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
         selector: Option<&crate::openapi::response_selection::ResponseSelector>,
     ) -> Result<Value> {
+        Self::generate_from_response_with_scenario_and_mode_and_persona(
+            spec,
+            response,
+            content_type,
+            expand_tokens,
+            scenario,
+            selection_mode,
+            selector,
+            None, // No persona by default
+        )
+    }
+
+    /// Generate response from a Response object with scenario support, selection mode, and persona
+    fn generate_from_response_with_scenario_and_mode_and_persona(
+        spec: &OpenApiSpec,
+        response: &Response,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+        scenario: Option<&str>,
+        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        persona: Option<&Persona>,
+    ) -> Result<Value> {
         // If content_type is specified, look for that media type
         if let Some(content_type) = content_type {
             if let Some(media_type) = response.content.get(content_type) {
-                return Self::generate_from_media_type_with_scenario_and_mode(
+                return Self::generate_from_media_type_with_scenario_and_mode_and_persona(
                     spec,
                     media_type,
                     expand_tokens,
                     scenario,
                     selection_mode,
                     selector,
+                    persona,
                 );
             }
         }
@@ -313,26 +387,28 @@ impl ResponseGenerator {
 
         for content_type in &preferred_types {
             if let Some(media_type) = response.content.get(*content_type) {
-                return Self::generate_from_media_type_with_scenario_and_mode(
+                return Self::generate_from_media_type_with_scenario_and_mode_and_persona(
                     spec,
                     media_type,
                     expand_tokens,
                     scenario,
                     selection_mode,
                     selector,
+                    persona,
                 );
             }
         }
 
         // If no suitable content type found, return the first available
         if let Some((_, media_type)) = response.content.iter().next() {
-            return Self::generate_from_media_type_with_scenario_and_mode(
+            return Self::generate_from_media_type_with_scenario_and_mode_and_persona(
                 spec,
                 media_type,
                 expand_tokens,
                 scenario,
                 selection_mode,
                 selector,
+                persona,
             );
         }
 
@@ -374,6 +450,27 @@ impl ResponseGenerator {
         scenario: Option<&str>,
         selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
         selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+    ) -> Result<Value> {
+        Self::generate_from_media_type_with_scenario_and_mode_and_persona(
+            spec,
+            media_type,
+            expand_tokens,
+            scenario,
+            selection_mode,
+            selector,
+            None, // No persona by default
+        )
+    }
+
+    /// Generate response from a MediaType with scenario support, selection mode, and persona
+    fn generate_from_media_type_with_scenario_and_mode_and_persona(
+        spec: &OpenApiSpec,
+        media_type: &openapiv3::MediaType,
+        expand_tokens: bool,
+        scenario: Option<&str>,
+        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        persona: Option<&Persona>,
     ) -> Result<Value> {
         // First, check if there's an explicit example
         if let Some(example) = &media_type.example {
@@ -448,8 +545,10 @@ impl ResponseGenerator {
         }
 
         // Fall back to schema-based generation
+        // Note: Persona is not available at this level, will be None for now
+        // This can be enhanced later to pass persona through the call chain
         if let Some(schema_ref) = &media_type.schema {
-            Ok(Self::generate_example_from_schema_ref(spec, schema_ref))
+            Ok(Self::generate_example_from_schema_ref(spec, schema_ref, None))
         } else {
             Ok(Value::Object(serde_json::Map::new()))
         }
@@ -494,12 +593,13 @@ impl ResponseGenerator {
     fn generate_example_from_schema_ref(
         spec: &OpenApiSpec,
         schema_ref: &ReferenceOr<Schema>,
+        persona: Option<&Persona>,
     ) -> Value {
         match schema_ref {
-            ReferenceOr::Item(schema) => Self::generate_example_from_schema(spec, schema),
+            ReferenceOr::Item(schema) => Self::generate_example_from_schema(spec, schema, persona),
             ReferenceOr::Reference { reference } => spec
                 .get_schema(reference)
-                .map(|schema| Self::generate_example_from_schema(spec, &schema.schema))
+                .map(|schema| Self::generate_example_from_schema(spec, &schema.schema, persona))
                 .unwrap_or_else(|| Value::Object(serde_json::Map::new())),
         }
     }
@@ -510,7 +610,8 @@ impl ResponseGenerator {
     /// 1. Schema-level example (schema.schema_data.example)
     /// 2. Property-level examples when generating objects
     /// 3. Generated values based on schema type
-    fn generate_example_from_schema(spec: &OpenApiSpec, schema: &Schema) -> Value {
+    /// 4. Persona traits (if persona provided)
+    fn generate_example_from_schema(spec: &OpenApiSpec, schema: &Schema, persona: Option<&Persona>) -> Value {
         // First, check for schema-level example in schema_data
         // OpenAPI v3 stores examples in schema_data.example
         if let Some(example) = schema.schema_data.example.as_ref() {
@@ -532,8 +633,92 @@ impl ResponseGenerator {
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {
+                // First pass: Scan for pagination metadata (total, page, limit)
+                // This helps us generate the correct number of array items
+                let mut pagination_metadata: Option<(u64, u64, u64)> = None; // (total, page, limit)
+
+                // Check if this looks like a paginated response by scanning properties
+                // Look for "items" array property and pagination fields
+                let has_items = obj.properties.iter()
+                    .any(|(name, _)| name.to_lowercase() == "items");
+
+                if has_items {
+                    // Try to extract pagination metadata from schema properties
+                    let mut total_opt = None;
+                    let mut page_opt = None;
+                    let mut limit_opt = None;
+
+                    for (prop_name, prop_schema) in &obj.properties {
+                        let prop_lower = prop_name.to_lowercase();
+                        // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema> for extraction
+                        let schema_ref: ReferenceOr<Schema> = match prop_schema {
+                            ReferenceOr::Item(boxed) => ReferenceOr::Item(boxed.as_ref().clone()),
+                            ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                        };
+                        if prop_lower == "total" || prop_lower == "count" || prop_lower == "size" {
+                            total_opt = Self::extract_numeric_value_from_schema(&schema_ref);
+                        } else if prop_lower == "page" {
+                            page_opt = Self::extract_numeric_value_from_schema(&schema_ref);
+                        } else if prop_lower == "limit" || prop_lower == "per_page" {
+                            limit_opt = Self::extract_numeric_value_from_schema(&schema_ref);
+                        }
+                    }
+
+                    // If we found a total, use it (with defaults for page/limit)
+                    if let Some(total) = total_opt {
+                        let page = page_opt.unwrap_or(1);
+                        let limit = limit_opt.unwrap_or(20);
+                        pagination_metadata = Some((total, page, limit));
+                        tracing::debug!(
+                            "Detected pagination metadata: total={}, page={}, limit={}",
+                            total, page, limit
+                        );
+                    } else {
+                        // Phase 3: If no total found in schema, try to infer from parent entity
+                        // Look for "items" array to determine child entity name
+                        if obj.properties.contains_key("items") {
+                            // Try to infer parent/child relationship from schema names
+                            // This is a heuristic: if we're generating a paginated response,
+                            // check if we can find a parent entity schema with a count field
+                            if let Some(inferred_total) = Self::try_infer_total_from_context(spec, obj) {
+                                let page = page_opt.unwrap_or(1);
+                                let limit = limit_opt.unwrap_or(20);
+                                pagination_metadata = Some((inferred_total, page, limit));
+                                tracing::debug!(
+                                    "Inferred pagination metadata from parent entity: total={}, page={}, limit={}",
+                                    inferred_total, page, limit
+                                );
+                            } else {
+                                // Phase 4: Try to use persona traits if available
+                                if let Some(persona) = persona {
+                                    // Look for count-related traits (e.g., "hive_count", "apiary_count")
+                                    // Try common patterns
+                                    let count_keys = ["hive_count", "apiary_count", "item_count", "total_count"];
+                                    for key in &count_keys {
+                                        if let Some(count) = persona.get_numeric_trait(key) {
+                                            let page = page_opt.unwrap_or(1);
+                                            let limit = limit_opt.unwrap_or(20);
+                                            pagination_metadata = Some((count, page, limit));
+                                            tracing::debug!(
+                                                "Using persona trait '{}' for pagination: total={}, page={}, limit={}",
+                                                key, count, page, limit
+                                            );
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let mut map = serde_json::Map::new();
                 for (prop_name, prop_schema) in &obj.properties {
+                    let prop_lower = prop_name.to_lowercase();
+
+                    // Check if this is an array property that should use pagination metadata
+                    let is_items_array = prop_lower == "items" && pagination_metadata.is_some();
+
                     let value = match prop_schema {
                         ReferenceOr::Item(prop_schema) => {
                             // Check for property-level example first
@@ -544,8 +729,16 @@ impl ResponseGenerator {
                                     prop_example
                                 );
                                 prop_example.clone()
+                            } else if is_items_array {
+                                // Generate array with count based on pagination metadata
+                                Self::generate_array_with_count(
+                                    spec,
+                                    prop_schema.as_ref(),
+                                    pagination_metadata.unwrap(),
+                                    persona,
+                                )
                             } else {
-                                Self::generate_example_from_schema(spec, prop_schema.as_ref())
+                                Self::generate_example_from_schema(spec, prop_schema.as_ref(), persona)
                             }
                         }
                         ReferenceOr::Reference { reference } => {
@@ -560,10 +753,19 @@ impl ResponseGenerator {
                                         ref_example
                                     );
                                     ref_example.clone()
+                                } else if is_items_array {
+                                    // Generate array with count based on pagination metadata
+                                    Self::generate_array_with_count(
+                                        spec,
+                                        &resolved_schema.schema,
+                                        pagination_metadata.unwrap(),
+                                        persona,
+                                    )
                                 } else {
                                     Self::generate_example_from_schema(
                                         spec,
                                         &resolved_schema.schema,
+                                        persona,
                                     )
                                 }
                             } else {
@@ -580,6 +782,14 @@ impl ResponseGenerator {
                     };
                     map.insert(prop_name.clone(), value);
                 }
+
+                // Ensure pagination metadata is set if we detected it
+                if let Some((total, page, limit)) = pagination_metadata {
+                    map.insert("total".to_string(), Value::Number(total.into()));
+                    map.insert("page".to_string(), Value::Number(page.into()));
+                    map.insert("limit".to_string(), Value::Number(limit.into()));
+                }
+
                 Value::Object(map)
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) => {
@@ -594,7 +804,7 @@ impl ResponseGenerator {
                             ReferenceOr::Item(item_schema) => {
                                 // Recursively generate example for array item
                                 // This will check for item-level examples
-                                Self::generate_example_from_schema(spec, item_schema.as_ref())
+                                Self::generate_example_from_schema(spec, item_schema.as_ref(), persona)
                             }
                             ReferenceOr::Reference { reference } => {
                                 // Try to resolve reference and generate example
@@ -603,6 +813,7 @@ impl ResponseGenerator {
                                     Self::generate_example_from_schema(
                                         spec,
                                         &resolved_schema.schema,
+                                        persona,
                                     )
                                 } else {
                                     Value::Object(serde_json::Map::new())
@@ -616,6 +827,242 @@ impl ResponseGenerator {
             }
             _ => Value::Object(serde_json::Map::new()),
         }
+    }
+
+    /// Extract numeric value from a schema (from example or default)
+    /// Returns None if no numeric value can be extracted
+    fn extract_numeric_value_from_schema(
+        schema_ref: &ReferenceOr<Schema>,
+    ) -> Option<u64> {
+        match schema_ref {
+            ReferenceOr::Item(schema) => {
+                // Check for example value first
+                if let Some(example) = schema.schema_data.example.as_ref() {
+                    if let Some(num) = example.as_u64() {
+                        return Some(num);
+                    } else if let Some(num) = example.as_f64() {
+                        return Some(num as u64);
+                    }
+                }
+                // Check for default value
+                if let Some(default) = schema.schema_data.default.as_ref() {
+                    if let Some(num) = default.as_u64() {
+                        return Some(num);
+                    } else if let Some(num) = default.as_f64() {
+                        return Some(num as u64);
+                    }
+                }
+                // For integer types, try to extract from schema constraints
+                // Note: IntegerType doesn't have a default field in openapiv3
+                // Defaults are stored in schema_data.default instead
+                None
+            }
+            ReferenceOr::Reference { reference: _ } => {
+                // For references, we'd need to resolve them, but for now return None
+                // This can be enhanced later if needed
+                None
+            }
+        }
+    }
+
+    /// Generate an array with a specific count based on pagination metadata
+    /// Respects the limit (e.g., if total=50 and limit=20, generates 20 items)
+    fn generate_array_with_count(
+        spec: &OpenApiSpec,
+        array_schema: &Schema,
+        pagination: (u64, u64, u64), // (total, page, limit)
+        persona: Option<&Persona>,
+    ) -> Value {
+        let (total, _page, limit) = pagination;
+
+        // Determine how many items to generate
+        // Respect pagination: generate min(total, limit) items
+        let count = std::cmp::min(total, limit);
+
+        // Cap at reasonable maximum to avoid performance issues
+        let max_items = 100;
+        let count = std::cmp::min(count, max_items);
+
+        tracing::debug!(
+            "Generating array with count={} (total={}, limit={})",
+            count,
+            total,
+            limit
+        );
+
+        // Check if array schema has an example with items
+        if let Some(example) = array_schema.schema_data.example.as_ref() {
+            if let Some(example_array) = example.as_array() {
+                if !example_array.is_empty() {
+                    // Use first example item as template
+                    let template_item = &example_array[0];
+                    let items: Vec<Value> = (0..count)
+                        .map(|i| {
+                            // Clone template and add variation (e.g., unique IDs)
+                            let mut item = template_item.clone();
+                            if let Some(obj) = item.as_object_mut() {
+                                // Add variation to IDs to make items unique
+                                if let Some(id_val) = obj.get_mut("id") {
+                                    if let Some(id_str) = id_val.as_str() {
+                                        *id_val = Value::String(format!("{}_{}", id_str, i + 1));
+                                    }
+                                }
+                            }
+                            item
+                        })
+                        .collect();
+                    return Value::Array(items);
+                }
+            }
+        }
+
+        // Generate items from schema
+        if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) = &array_schema.schema_kind {
+            if let Some(item_schema) = &arr.items {
+                let items: Vec<Value> = match item_schema {
+                    ReferenceOr::Item(item_schema) => {
+                        (0..count)
+                            .map(|i| {
+                                let mut item = Self::generate_example_from_schema(spec, item_schema.as_ref(), persona);
+                                // Add variation to make items unique
+                                if let Some(obj) = item.as_object_mut() {
+                                    // Update ID fields to be unique
+                                    if let Some(id_val) = obj.get_mut("id") {
+                                        if let Some(id_str) = id_val.as_str() {
+                                            *id_val = Value::String(format!("{}_{}", id_str, i + 1));
+                                        }
+                                    }
+                                }
+                                item
+                            })
+                            .collect()
+                    }
+                    ReferenceOr::Reference { reference } => {
+                        if let Some(resolved_schema) = spec.get_schema(reference) {
+                            (0..count)
+                                .map(|i| {
+                                    let mut item = Self::generate_example_from_schema(
+                                        spec,
+                                        &resolved_schema.schema,
+                                        persona,
+                                    );
+                                    // Add variation to make items unique
+                                    if let Some(obj) = item.as_object_mut() {
+                                        if let Some(id_val) = obj.get_mut("id") {
+                                            if let Some(id_str) = id_val.as_str() {
+                                                *id_val = Value::String(format!("{}_{}", id_str, i + 1));
+                                            }
+                                        }
+                                    }
+                                    item
+                                })
+                                .collect()
+                        } else {
+                            vec![Value::Object(serde_json::Map::new()); count as usize]
+                        }
+                    }
+                };
+                return Value::Array(items);
+            }
+        }
+
+        // Fallback: generate simple items
+        Value::Array(
+            (0..count)
+                .map(|i| Value::String(format!("item_{}", i + 1)))
+                .collect(),
+        )
+    }
+
+    /// Try to infer total count from context (parent entity schemas)
+    /// This is a heuristic that looks for common relationship patterns
+    fn try_infer_total_from_context(
+        spec: &OpenApiSpec,
+        obj_type: &openapiv3::ObjectType,
+    ) -> Option<u64> {
+        // Look for "items" array to determine what we're generating
+        if let Some(items_schema_ref) = obj_type.properties.get("items") {
+            // Try to determine child entity name from items schema
+            // This is a heuristic: check schema names in the spec
+            if let Some(components) = &spec.spec.components {
+                let schemas = &components.schemas;
+                // Look through all schemas to find potential parent entities
+                // that might have count fields matching the items type
+                for (schema_name, schema_ref) in schemas {
+                    if let ReferenceOr::Item(schema) = schema_ref {
+                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) = &schema.schema_kind {
+                            // Look for count fields that might match
+                            for (prop_name, prop_schema) in &obj.properties {
+                                let prop_lower = prop_name.to_lowercase();
+                                if prop_lower.ends_with("_count") {
+                                    // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema>
+                                    let schema_ref: ReferenceOr<Schema> = match prop_schema {
+                                        ReferenceOr::Item(boxed) => ReferenceOr::Item(boxed.as_ref().clone()),
+                                        ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                                    };
+                                    // Found a count field, try to extract its value
+                                    if let Some(count) = Self::extract_numeric_value_from_schema(&schema_ref) {
+                                        // Use a reasonable default if count is very large
+                                        if count > 0 && count <= 1000 {
+                                            tracing::debug!(
+                                                "Inferred count {} from parent schema {} field {}",
+                                                count,
+                                                schema_name,
+                                                prop_name
+                                            );
+                                            return Some(count);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Infer relationship count from parent entity schema
+    /// When generating a child entity list, check if parent entity has a count field
+    fn infer_count_from_parent_schema(
+        spec: &OpenApiSpec,
+        parent_entity_name: &str,
+        child_entity_name: &str,
+    ) -> Option<u64> {
+        // Look for parent entity schema
+        let parent_schema_name = format!("{}", parent_entity_name);
+        let count_field_name = format!("{}_count", child_entity_name);
+
+        // Try to find the schema
+        if let Some(components) = &spec.spec.components {
+            let schemas = &components.schemas;
+            // Look for parent schema (case-insensitive)
+            for (schema_name, schema_ref) in schemas {
+                let schema_name_lower = schema_name.to_lowercase();
+                if schema_name_lower.contains(&parent_entity_name.to_lowercase()) {
+                    if let ReferenceOr::Item(schema) = schema_ref {
+                        // Check if this schema has the count field
+                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) = &schema.schema_kind {
+                            for (prop_name, prop_schema) in &obj.properties {
+                                if prop_name.to_lowercase() == count_field_name.to_lowercase() {
+                                    // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema>
+                                    let schema_ref: ReferenceOr<Schema> = match prop_schema {
+                                        ReferenceOr::Item(boxed) => ReferenceOr::Item(boxed.as_ref().clone()),
+                                        ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                                    };
+                                    // Extract count value from schema
+                                    return Self::extract_numeric_value_from_schema(&schema_ref);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Generate example value for a property based on its name

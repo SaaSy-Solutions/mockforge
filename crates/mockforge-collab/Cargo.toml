@@ -18,7 +18,7 @@ workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = "0.2.8"
+mockforge-core = { path = "../mockforge-core" }
 
 # Serialization
 serde = { workspace = true }

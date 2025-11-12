@@ -26,6 +26,17 @@ pub async fn log_http_requests(
         .map(|mp| mp.as_str().to_string())
         .unwrap_or_else(|| uri.split('?').next().unwrap_or(&uri).to_string());
 
+    // Extract query parameters from URI
+    let query_params: HashMap<String, String> = req
+        .uri()
+        .query()
+        .map(|q| {
+            url::form_urlencoded::parse(q.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_default();
+
     // Extract headers (filter sensitive ones)
     let headers = extract_safe_headers(req.headers());
 
@@ -62,8 +73,8 @@ pub async fn log_http_requests(
         None
     };
 
-    // Log the request
-    let log_entry = create_http_log_entry(
+    // Log the request with query parameters in metadata
+    let mut log_entry = create_http_log_entry(
         &method,
         &path,
         status_code,
@@ -75,18 +86,39 @@ pub async fn log_http_requests(
         error_message,
     );
 
+    // Add query parameters to metadata (clone to avoid move)
+    let query_params_for_log = query_params.clone();
+    if !query_params_for_log.is_empty() {
+        for (key, value) in query_params_for_log {
+            log_entry.metadata.insert(format!("query.{}", key), value);
+        }
+    }
+
     // Log to centralized logger
     log_request_global(log_entry).await;
 
-    // Also log to console for debugging
-    info!(
-        method = %method,
-        path = %path,
-        status = status_code,
-        duration_ms = response_time_ms,
-        client_ip = %addr.ip(),
-        "HTTP request processed"
-    );
+    // Also log to console for debugging (include query params if present)
+    if !query_params.is_empty() {
+        let query_params_clone = query_params.clone();
+        info!(
+            method = %method,
+            path = %path,
+            query = ?query_params_clone,
+            status = status_code,
+            duration_ms = response_time_ms,
+            client_ip = %addr.ip(),
+            "HTTP request processed"
+        );
+    } else {
+        info!(
+            method = %method,
+            path = %path,
+            status = status_code,
+            duration_ms = response_time_ms,
+            client_ip = %addr.ip(),
+            "HTTP request processed"
+        );
+    }
 
     response
 }

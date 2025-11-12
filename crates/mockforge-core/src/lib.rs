@@ -250,6 +250,7 @@ pub mod request_logger;
 pub mod request_scripting;
 pub mod route_chaos;
 pub mod routing;
+pub mod security;
 pub mod schema_diff;
 pub mod server_utils;
 pub mod spec_parser;

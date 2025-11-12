@@ -55,6 +55,7 @@
 //! }
 //! ```
 
+pub mod access_review_provider;
 pub mod api;
 pub mod auth;
 pub mod backup;

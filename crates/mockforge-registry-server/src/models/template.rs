@@ -137,6 +137,59 @@ impl Template {
         .await
     }
 
+    /// Build WHERE clause for search queries
+    fn build_search_where_clause(
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+    ) -> String {
+        let mut where_clause = String::from("WHERE published = TRUE");
+
+        if let Some(org) = org_id {
+            where_clause.push_str(&format!(" AND (org_id = '{}' OR org_id IS NULL)", org));
+        } else {
+            // Public templates only if no org context
+            where_clause.push_str(" AND org_id IS NULL");
+        }
+
+        if let Some(cat) = category {
+            where_clause.push_str(&format!(" AND category = '{}'", cat));
+        }
+
+        if !tags.is_empty() {
+            where_clause.push_str(&format!(" AND tags && ARRAY[{}]",
+                tags.iter().map(|t| format!("'{}'", t.replace("'", "''"))).collect::<Vec<_>>().join(",")));
+        }
+
+        if let Some(q) = query {
+            where_clause.push_str(&format!(
+                " AND (to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', '{}'))",
+                q.replace("'", "''")
+            ));
+        }
+
+        where_clause
+    }
+
+    /// Count templates matching search criteria
+    pub async fn count_search(
+        pool: &sqlx::PgPool,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+    ) -> sqlx::Result<i64> {
+        let where_clause = Self::build_search_where_clause(query, category, tags, org_id);
+        let sql = format!("SELECT COUNT(*) FROM templates {}", where_clause);
+
+        let result: (i64,) = sqlx::query_as(&sql)
+            .fetch_one(pool)
+            .await?;
+
+        Ok(result.0)
+    }
+
     /// Search templates
     pub async fn search(
         pool: &sqlx::PgPool,
@@ -147,34 +200,11 @@ impl Template {
         limit: i64,
         offset: i64,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut sql = String::from(
-            "SELECT * FROM templates WHERE published = TRUE",
+        let where_clause = Self::build_search_where_clause(query, category, tags, org_id);
+        let sql = format!(
+            "SELECT * FROM templates {} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            where_clause
         );
-
-        if let Some(org) = org_id {
-            sql.push_str(&format!(" AND (org_id = '{}' OR org_id IS NULL)", org));
-        } else {
-            // Public templates only if no org context
-            sql.push_str(" AND org_id IS NULL");
-        }
-
-        if let Some(cat) = category {
-            sql.push_str(&format!(" AND category = '{}'", cat));
-        }
-
-        if !tags.is_empty() {
-            sql.push_str(&format!(" AND tags && ARRAY[{}]",
-                tags.iter().map(|t| format!("'{}'", t)).collect::<Vec<_>>().join(",")));
-        }
-
-        if let Some(q) = query {
-            sql.push_str(&format!(
-                " AND (to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', '{}'))",
-                q.replace("'", "''")
-            ));
-        }
-
-        sql.push_str(" ORDER BY created_at DESC LIMIT $1 OFFSET $2");
 
         sqlx::query_as::<_, Self>(&sql)
             .bind(limit)

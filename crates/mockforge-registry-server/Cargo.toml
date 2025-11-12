@@ -60,6 +60,7 @@ governor = "0.6"
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 
 # SAML 2.0 for SSO
+# Using quick-xml for parsing and ring/rustls for signature verification
 quick-xml = { version = "0.31", features = ["serialize", "overlapped-lists"] }
 regex = "1.10"
 urlencoding = "2.1"

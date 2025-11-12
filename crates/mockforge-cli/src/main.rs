@@ -3253,6 +3253,237 @@ pub async fn handle_serve(
     init_global_capture_manager(1000); // Keep last 1000 requests
     tracing::info!("Request capture manager initialized for contract diff analysis");
 
+    // Initialize SIEM emitter for security event tracking
+    use mockforge_core::security::init_global_siem_emitter;
+    if let Err(e) = init_global_siem_emitter(config.security.monitoring.siem.clone()).await {
+        tracing::warn!("Failed to initialize SIEM emitter: {}", e);
+    } else if config.security.monitoring.siem.enabled {
+        tracing::info!("SIEM emitter initialized with {} destinations", config.security.monitoring.siem.destinations.len());
+    }
+
+    // Initialize access review system if enabled
+    let access_review_scheduler_handle = if config.security.monitoring.access_review.enabled {
+        use mockforge_core::security::{
+            access_review::{AccessReviewConfig, AccessReviewEngine},
+            access_review_notifications::{AccessReviewNotificationService, NotificationConfig},
+            access_review_scheduler::AccessReviewScheduler,
+            access_review_service::AccessReviewService,
+            api_tokens::InMemoryApiTokenStorage,
+            justification_storage::InMemoryJustificationStorage,
+            mfa_tracking::InMemoryMfaStorage,
+        };
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Create storage backends (in-memory for now, can be replaced with database-backed implementations)
+        let token_storage: Arc<dyn mockforge_core::security::ApiTokenStorage> =
+            Arc::new(InMemoryApiTokenStorage::new());
+        let mfa_storage: Arc<dyn mockforge_core::security::MfaStorage> =
+            Arc::new(InMemoryMfaStorage::new());
+        let justification_storage: Arc<dyn mockforge_core::security::JustificationStorage> =
+            Arc::new(InMemoryJustificationStorage::new());
+
+        // Create a simple user data provider (placeholder - would use CollabUserDataProvider if collab is enabled)
+        // For now, we'll create a minimal implementation that can be extended
+        struct SimpleUserDataProvider;
+        #[async_trait::async_trait]
+        impl mockforge_core::security::UserDataProvider for SimpleUserDataProvider {
+            async fn get_all_users(&self) -> Result<Vec<mockforge_core::security::UserAccessInfo>, mockforge_core::Error> {
+                // Return empty list - would be populated from actual user management system
+                Ok(Vec::new())
+            }
+            async fn get_privileged_users(&self) -> Result<Vec<mockforge_core::security::PrivilegedAccessInfo>, mockforge_core::Error> {
+                Ok(Vec::new())
+            }
+            async fn get_api_tokens(&self) -> Result<Vec<mockforge_core::security::ApiTokenInfo>, mockforge_core::Error> {
+                Ok(Vec::new())
+            }
+            async fn get_user(&self, _user_id: uuid::Uuid) -> Result<Option<mockforge_core::security::UserAccessInfo>, mockforge_core::Error> {
+                Ok(None)
+            }
+            async fn get_last_login(&self, _user_id: uuid::Uuid) -> Result<Option<chrono::DateTime<chrono::Utc>>, mockforge_core::Error> {
+                Ok(None)
+            }
+            async fn revoke_user_access(&self, _user_id: uuid::Uuid, _reason: String) -> Result<(), mockforge_core::Error> {
+                Ok(())
+            }
+            async fn update_user_permissions(
+                &self,
+                _user_id: uuid::Uuid,
+                _roles: Vec<String>,
+                _permissions: Vec<String>,
+            ) -> Result<(), mockforge_core::Error> {
+                Ok(())
+            }
+        }
+
+        let user_provider = SimpleUserDataProvider;
+
+        // Create access review engine and service
+        let review_config = config.security.monitoring.access_review.clone();
+        let review_config_for_scheduler = review_config.clone();
+        let engine = AccessReviewEngine::new(review_config.clone());
+        let review_service = AccessReviewService::new(engine, Box::new(user_provider));
+        let review_service_arc = Arc::new(RwLock::new(review_service));
+
+        // Create notification service
+        let notification_config = NotificationConfig {
+            enabled: review_config.notifications.enabled,
+            channels: review_config
+                .notifications
+                .channels
+                .iter()
+                .map(|c| match c.as_str() {
+                    "email" => mockforge_core::security::access_review_notifications::NotificationChannel::Email,
+                    "slack" => mockforge_core::security::access_review_notifications::NotificationChannel::Slack,
+                    "webhook" => mockforge_core::security::access_review_notifications::NotificationChannel::Webhook,
+                    _ => mockforge_core::security::access_review_notifications::NotificationChannel::InApp,
+                })
+                .collect(),
+            recipients: review_config.notifications.recipients,
+            channel_config: std::collections::HashMap::new(),
+        };
+        let notification_service = Arc::new(AccessReviewNotificationService::new(notification_config));
+
+        // Initialize global access review service for HTTP API
+        use mockforge_core::security::init_global_access_review_service;
+        if let Err(e) = init_global_access_review_service(review_service_arc.clone()).await {
+            tracing::warn!("Failed to initialize global access review service: {}", e);
+        } else {
+            tracing::info!("Global access review service initialized");
+        }
+
+        // Create and start scheduler
+        let scheduler = AccessReviewScheduler::with_notifications(
+            review_service_arc,
+            review_config_for_scheduler,
+            Some(notification_service),
+        );
+        let handle = scheduler.start();
+
+        tracing::info!("Access review scheduler started");
+        Some(handle)
+    } else {
+        None
+    };
+
+    // Initialize privileged access manager if enabled
+    let privileged_access_manager = if config.security.monitoring.privileged_access.require_mfa {
+        use mockforge_core::security::{
+            justification_storage::InMemoryJustificationStorage,
+            mfa_tracking::InMemoryMfaStorage,
+            privileged_access::{PrivilegedAccessConfig, PrivilegedAccessManager},
+        };
+        use std::sync::Arc;
+
+        let privileged_config = config.security.monitoring.privileged_access.clone();
+        let mfa_storage: Arc<dyn mockforge_core::security::MfaStorage> =
+            Arc::new(InMemoryMfaStorage::new());
+        let justification_storage: Arc<dyn mockforge_core::security::JustificationStorage> =
+            Arc::new(InMemoryJustificationStorage::new());
+
+        let manager = PrivilegedAccessManager::new(
+            privileged_config,
+            Some(mfa_storage),
+            Some(justification_storage),
+        );
+
+        // Start session cleanup task
+        let manager_for_cleanup = Arc::new(RwLock::new(manager));
+        let cleanup_manager = manager_for_cleanup.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
+            loop {
+                interval.tick().await;
+                if let Err(e) = cleanup_manager.write().await.cleanup_expired_sessions().await {
+                    tracing::warn!("Failed to cleanup expired privileged sessions: {}", e);
+                }
+            }
+        });
+
+        // Initialize global privileged access manager for HTTP API
+        use mockforge_core::security::init_global_privileged_access_manager;
+        if let Err(e) = init_global_privileged_access_manager(manager_for_cleanup.clone()).await {
+            tracing::warn!("Failed to initialize global privileged access manager: {}", e);
+        } else {
+            tracing::info!("Global privileged access manager initialized");
+        }
+
+        tracing::info!("Privileged access manager initialized");
+        Some(manager_for_cleanup)
+    } else {
+        None
+    };
+
+    // Initialize change management engine if enabled
+    let change_management_engine = if config.security.monitoring.change_management.enabled {
+        use mockforge_core::security::change_management::{ChangeManagementConfig, ChangeManagementEngine};
+        use std::sync::Arc;
+
+        let change_config = config.security.monitoring.change_management.clone();
+        let engine = ChangeManagementEngine::new(change_config);
+        let engine_arc = Arc::new(RwLock::new(engine));
+
+        // Initialize global change management engine for HTTP API
+        use mockforge_core::security::init_global_change_management_engine;
+        if let Err(e) = init_global_change_management_engine(engine_arc.clone()).await {
+            tracing::warn!("Failed to initialize global change management engine: {}", e);
+        } else {
+            tracing::info!("Global change management engine initialized");
+        }
+
+        tracing::info!("Change management engine initialized");
+        Some(engine_arc)
+    } else {
+        None
+    };
+
+    // Initialize compliance dashboard engine if enabled
+    let compliance_dashboard_engine = if config.security.monitoring.compliance_dashboard.enabled {
+        use mockforge_core::security::compliance_dashboard::{ComplianceDashboardConfig, ComplianceDashboardEngine};
+        use std::sync::Arc;
+
+        let dashboard_config = config.security.monitoring.compliance_dashboard.clone();
+        let engine = ComplianceDashboardEngine::new(dashboard_config);
+        let engine_arc = Arc::new(RwLock::new(engine));
+
+        // Initialize global compliance dashboard engine for HTTP API
+        use mockforge_core::security::init_global_compliance_dashboard_engine;
+        if let Err(e) = init_global_compliance_dashboard_engine(engine_arc.clone()).await {
+            tracing::warn!("Failed to initialize global compliance dashboard engine: {}", e);
+        } else {
+            tracing::info!("Global compliance dashboard engine initialized");
+        }
+
+        tracing::info!("Compliance dashboard engine initialized");
+        Some(engine_arc)
+    } else {
+        None
+    };
+
+    // Initialize risk assessment engine if enabled
+    let risk_assessment_engine = if config.security.monitoring.risk_assessment.enabled {
+        use mockforge_core::security::risk_assessment::{RiskAssessmentConfig, RiskAssessmentEngine};
+        use std::sync::Arc;
+
+        let risk_config = config.security.monitoring.risk_assessment.clone();
+        let engine = RiskAssessmentEngine::new(risk_config);
+        let engine_arc = Arc::new(RwLock::new(engine));
+
+        // Initialize global risk assessment engine for HTTP API
+        use mockforge_core::security::init_global_risk_assessment_engine;
+        if let Err(e) = init_global_risk_assessment_engine(engine_arc.clone()).await {
+            tracing::warn!("Failed to initialize global risk assessment engine: {}", e);
+        } else {
+            tracing::info!("Global risk assessment engine initialized");
+        }
+
+        tracing::info!("Risk assessment engine initialized");
+        Some(engine_arc)
+    } else {
+        None
+    };
+
     // Build HTTP router with OpenAPI spec, chain support, multi-tenant, and traffic shaping if enabled
     let multi_tenant_config = if config.multi_tenant.enabled {
         Some(config.multi_tenant.clone())

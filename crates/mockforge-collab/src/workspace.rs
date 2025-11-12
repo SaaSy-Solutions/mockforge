@@ -40,6 +40,17 @@ impl WorkspaceService {
         }
     }
 
+    /// Check database health by running a simple query
+    pub async fn check_database_health(&self) -> bool {
+        match sqlx::query("SELECT 1").execute(&self.db).await {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::error!("Database health check failed: {}", e);
+                false
+            }
+        }
+    }
+
     /// Create a new workspace
     pub async fn create_workspace(
         &self,

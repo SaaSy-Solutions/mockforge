@@ -35,7 +35,7 @@ url = { workspace = true }
 urlencoding = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
 once_cell = { workspace = true }
 rayon = { version = "1.10", optional = true }

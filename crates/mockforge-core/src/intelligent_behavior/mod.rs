@@ -58,6 +58,7 @@ pub mod mockai;
 pub mod mutation_analyzer;
 pub mod openapi_generator;
 pub mod pagination_intelligence;
+pub mod relationship_inference;
 pub mod rule_generator;
 pub mod rules;
 pub mod session;
@@ -67,10 +68,13 @@ pub mod types;
 pub mod validation_generator;
 pub mod visual_layout;
 
+#[cfg(test)]
+mod persona_integration_test;
+
 // Re-export main types
 pub use behavior::BehaviorModel;
 pub use condition_evaluator::{ConditionError, ConditionEvaluator, ConditionResult};
-pub use config::IntelligentBehaviorConfig;
+pub use config::{IntelligentBehaviorConfig, Persona, PersonasConfig};
 pub use context::StatefulAiContext;
 pub use history::HistoryManager;
 pub use memory::VectorMemoryStore;
@@ -86,6 +90,7 @@ pub use openapi_generator::{
 pub use pagination_intelligence::{
     PaginationFormat, PaginationIntelligence, PaginationMetadata, PaginationRequest, PaginationRule,
 };
+pub use relationship_inference::{Relationship, RelationshipInference};
 pub use rule_generator::{
     CrudExample, ErrorExample, ExamplePair, PaginatedResponse, PatternMatch, RuleExplanation,
     RuleGenerator, RuleType, ValidationRule,

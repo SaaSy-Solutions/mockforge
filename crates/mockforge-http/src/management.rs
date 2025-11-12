@@ -509,6 +509,11 @@ pub struct ManagementState {
             >,
         >,
     >,
+    /// Optional chaos API state for chaos config management
+    #[cfg(feature = "chaos")]
+    pub chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
+    /// Optional server configuration for profile application
+    pub server_config: Option<Arc<RwLock<mockforge_core::config::ServerConfig>>>,
 }
 
 impl ManagementState {
@@ -544,6 +549,9 @@ impl ManagementState {
             ws_broadcast: None,
             lifecycle_hooks: None,
             rule_explanations: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            #[cfg(feature = "chaos")]
+            chaos_api_state: None,
+            server_config: None,
         }
     }
 
@@ -595,6 +603,25 @@ impl ManagementState {
         kafka_broker: Arc<mockforge_kafka::KafkaMockBroker>,
     ) -> Self {
         self.kafka_broker = Some(kafka_broker);
+        self
+    }
+
+    #[cfg(feature = "chaos")]
+    /// Add chaos API state to management state
+    pub fn with_chaos_api_state(
+        mut self,
+        chaos_api_state: Arc<mockforge_chaos::api::ChaosApiState>,
+    ) -> Self {
+        self.chaos_api_state = Some(chaos_api_state);
+        self
+    }
+
+    /// Add server configuration to management state
+    pub fn with_server_config(
+        mut self,
+        server_config: Arc<RwLock<mockforge_core::config::ServerConfig>>,
+    ) -> Self {
+        self.server_config = Some(server_config);
         self
     }
 }
@@ -811,12 +838,10 @@ pub struct BulkConfigUpdateRequest {
 /// This endpoint allows updating multiple configuration options at once.
 /// Only the specified fields in the updates object will be modified.
 ///
-/// Note: This endpoint validates the configuration structure. Full runtime
-/// application of configuration changes would require architectural changes
-/// to store and apply ServerConfig in ManagementState. For now, this provides
-/// validation and acknowledgment of the update request.
+/// Configuration updates are applied to the server configuration if available
+/// in ManagementState. Changes take effect immediately for supported settings.
 async fn bulk_update_config(
-    State(_state): State<ManagementState>,
+    State(state): State<ManagementState>,
     Json(request): Json<BulkConfigUpdateRequest>,
 ) -> impl IntoResponse {
     // Validate the updates structure
@@ -3480,16 +3505,44 @@ fn extract_graphql_schema(text: &str) -> String {
 // ========== Chaos Engineering Management ==========
 
 /// Get current chaos engineering configuration
-async fn get_chaos_config(State(_state): State<ManagementState>) -> impl IntoResponse {
-    // TODO: Get from state when chaos config is stored
-    Json(serde_json::json!({
-        "enabled": false,
-        "latency": null,
-        "fault_injection": null,
-        "rate_limit": null,
-        "traffic_shaping": null,
-    }))
-    .into_response()
+async fn get_chaos_config(State(state): State<ManagementState>) -> impl IntoResponse {
+    #[cfg(feature = "chaos")]
+    {
+        if let Some(chaos_state) = &state.chaos_api_state {
+            let config = chaos_state.config.read().await;
+            // Convert ChaosConfig to JSON response format
+            Json(serde_json::json!({
+                "enabled": config.enabled,
+                "latency": config.latency.as_ref().map(|l| serde_json::to_value(l).unwrap_or(serde_json::Value::Null)),
+                "fault_injection": config.fault_injection.as_ref().map(|f| serde_json::to_value(f).unwrap_or(serde_json::Value::Null)),
+                "rate_limit": config.rate_limit.as_ref().map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null)),
+                "traffic_shaping": config.traffic_shaping.as_ref().map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null)),
+            }))
+            .into_response()
+        } else {
+            // Chaos API not available, return default
+            Json(serde_json::json!({
+                "enabled": false,
+                "latency": null,
+                "fault_injection": null,
+                "rate_limit": null,
+                "traffic_shaping": null,
+            }))
+            .into_response()
+        }
+    }
+    #[cfg(not(feature = "chaos"))]
+    {
+        // Chaos feature not enabled
+        Json(serde_json::json!({
+            "enabled": false,
+            "latency": null,
+            "fault_injection": null,
+            "rate_limit": null,
+            "traffic_shaping": null,
+        }))
+        .into_response()
+    }
 }
 
 /// Request to update chaos configuration
@@ -3509,15 +3562,83 @@ pub struct ChaosConfigUpdate {
 
 /// Update chaos engineering configuration
 async fn update_chaos_config(
-    State(_state): State<ManagementState>,
-    Json(config): Json<ChaosConfigUpdate>,
+    State(state): State<ManagementState>,
+    Json(config_update): Json<ChaosConfigUpdate>,
 ) -> impl IntoResponse {
-    // TODO: Apply chaos config to server
-    Json(serde_json::json!({
-        "success": true,
-        "message": "Chaos configuration updated"
-    }))
-    .into_response()
+    #[cfg(feature = "chaos")]
+    {
+        if let Some(chaos_state) = &state.chaos_api_state {
+            use mockforge_chaos::config::{ChaosConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig, TrafficShapingConfig};
+
+            let mut config = chaos_state.config.write().await;
+
+            // Update enabled flag if provided
+            if let Some(enabled) = config_update.enabled {
+                config.enabled = enabled;
+            }
+
+            // Update latency config if provided
+            if let Some(latency_json) = config_update.latency {
+                if let Ok(latency) = serde_json::from_value::<LatencyConfig>(latency_json) {
+                    config.latency = Some(latency);
+                }
+            }
+
+            // Update fault injection config if provided
+            if let Some(fault_json) = config_update.fault_injection {
+                if let Ok(fault) = serde_json::from_value::<FaultInjectionConfig>(fault_json) {
+                    config.fault_injection = Some(fault);
+                }
+            }
+
+            // Update rate limit config if provided
+            if let Some(rate_json) = config_update.rate_limit {
+                if let Ok(rate) = serde_json::from_value::<RateLimitConfig>(rate_json) {
+                    config.rate_limit = Some(rate);
+                }
+            }
+
+            // Update traffic shaping config if provided
+            if let Some(traffic_json) = config_update.traffic_shaping {
+                if let Ok(traffic) = serde_json::from_value::<TrafficShapingConfig>(traffic_json) {
+                    config.traffic_shaping = Some(traffic);
+                }
+            }
+
+            // Reinitialize middleware injectors with new config
+            // The middleware will pick up the changes on the next request
+            drop(config);
+
+            info!("Chaos configuration updated successfully");
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Chaos configuration updated and applied"
+            }))
+            .into_response()
+        } else {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": "Chaos API not available",
+                    "message": "Chaos engineering is not enabled or configured"
+                })),
+            )
+                .into_response()
+        }
+    }
+    #[cfg(not(feature = "chaos"))]
+    {
+        (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Chaos feature not enabled",
+                "message": "Chaos engineering feature is not compiled into this build"
+            })),
+        )
+            .into_response()
+    }
 }
 
 // ========== Network Profile Management ==========
@@ -3553,14 +3674,75 @@ pub struct ApplyNetworkProfileRequest {
 
 /// Apply a network profile
 async fn apply_network_profile(
-    State(_state): State<ManagementState>,
+    State(state): State<ManagementState>,
     Json(request): Json<ApplyNetworkProfileRequest>,
 ) -> impl IntoResponse {
     use mockforge_core::network_profiles::NetworkProfileCatalog;
 
     let catalog = NetworkProfileCatalog::default();
     if let Some(profile) = catalog.get(&request.profile_name) {
-        // TODO: Apply profile to server configuration
+        // Apply profile to server configuration if available
+        // NetworkProfile contains latency and traffic_shaping configs
+        if let Some(server_config) = &state.server_config {
+            let mut config = server_config.write().await;
+
+            // Apply network profile's traffic shaping to core config
+            use mockforge_core::config::NetworkShapingConfig;
+
+            // Convert NetworkProfile's TrafficShapingConfig to NetworkShapingConfig
+            // NetworkProfile uses mockforge_core::traffic_shaping::TrafficShapingConfig
+            // which has bandwidth and burst_loss fields
+            let network_shaping = NetworkShapingConfig {
+                enabled: profile.traffic_shaping.bandwidth.enabled || profile.traffic_shaping.burst_loss.enabled,
+                bandwidth_limit_bps: profile.traffic_shaping.bandwidth.max_bytes_per_sec * 8, // Convert bytes to bits
+                packet_loss_percent: profile.traffic_shaping.burst_loss.loss_rate_during_burst,
+                max_connections: 1000, // Default value
+            };
+
+            // Update chaos config if it exists, or create it
+            // Chaos config is in observability.chaos, not core.chaos
+            if let Some(ref mut chaos) = config.observability.chaos {
+                chaos.traffic_shaping = Some(network_shaping);
+            } else {
+                // Create minimal chaos config with traffic shaping
+                use mockforge_core::config::ChaosEngConfig;
+                config.observability.chaos = Some(ChaosEngConfig {
+                    enabled: true,
+                    latency: None,
+                    fault_injection: None,
+                    rate_limit: None,
+                    traffic_shaping: Some(network_shaping),
+                    scenario: None,
+                });
+            }
+
+            info!("Network profile '{}' applied to server configuration", request.profile_name);
+        } else {
+            warn!("Server configuration not available in ManagementState - profile applied but not persisted");
+        }
+
+        // Also update chaos API state if available
+        #[cfg(feature = "chaos")]
+        {
+            if let Some(chaos_state) = &state.chaos_api_state {
+                use mockforge_chaos::config::TrafficShapingConfig;
+
+                let mut chaos_config = chaos_state.config.write().await;
+                // Apply profile's traffic shaping to chaos API state
+                let chaos_traffic_shaping = TrafficShapingConfig {
+                    enabled: profile.traffic_shaping.bandwidth.enabled || profile.traffic_shaping.burst_loss.enabled,
+                    bandwidth_limit_bps: profile.traffic_shaping.bandwidth.max_bytes_per_sec * 8, // Convert bytes to bits
+                    packet_loss_percent: profile.traffic_shaping.burst_loss.loss_rate_during_burst,
+                    max_connections: 0,
+                    connection_timeout_ms: 30000,
+                };
+                chaos_config.traffic_shaping = Some(chaos_traffic_shaping);
+                chaos_config.enabled = true; // Enable chaos when applying a profile
+                drop(chaos_config);
+                info!("Network profile '{}' applied to chaos API state", request.profile_name);
+            }
+        }
+
         Json(serde_json::json!({
             "success": true,
             "message": format!("Network profile '{}' applied", request.profile_name),

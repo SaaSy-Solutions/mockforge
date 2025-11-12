@@ -49,6 +49,17 @@ pub async fn search_scenarios(
         ScenarioSortOrder::Name => "name",
     };
 
+    // Get total count for pagination (before fetching results)
+    let total = Scenario::count_search(
+        pool,
+        query.query.as_deref(),
+        query.category.as_deref(),
+        &query.tags,
+        org_id,
+    )
+    .await
+    .map_err(|e| ApiError::Database(e))? as usize;
+
     // Search scenarios
     let scenarios = Scenario::search(
         pool,
@@ -123,9 +134,6 @@ pub async fn search_scenarios(
             updated_at: scenario.updated_at.to_rfc3339(),
         });
     }
-
-    // TODO: Get total count for pagination
-    let total = entries.len();
 
     Ok(Json(ScenarioSearchResults {
         scenarios: entries,

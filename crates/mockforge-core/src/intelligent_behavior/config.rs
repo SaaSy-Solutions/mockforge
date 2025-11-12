@@ -1,6 +1,7 @@
 //! Configuration for the Intelligent Mock Behavior system
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::Duration;
 
 use super::session::SessionTracking;
@@ -28,6 +29,70 @@ pub struct IntelligentBehaviorConfig {
     /// Performance settings
     #[serde(default)]
     pub performance: PerformanceConfig,
+
+    /// Smart Personas configuration
+    #[serde(default)]
+    pub personas: PersonasConfig,
+}
+
+/// Personas configuration for consistent data generation
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PersonasConfig {
+    /// List of configured personas
+    #[serde(default)]
+    pub personas: Vec<Persona>,
+
+    /// Active persona name (if None, uses first persona or defaults)
+    pub active_persona: Option<String>,
+}
+
+impl PersonasConfig {
+    /// Get the active persona, or the first persona if no active persona is set
+    pub fn get_active_persona(&self) -> Option<&Persona> {
+        if let Some(active_name) = &self.active_persona {
+            // Find persona by name
+            self.personas.iter().find(|p| p.name == *active_name)
+        } else if !self.personas.is_empty() {
+            // Use first persona as default
+            Some(&self.personas[0])
+        } else {
+            None
+        }
+    }
+}
+
+/// A persona defines consistent data patterns across endpoints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Persona {
+    /// Persona name (e.g., "commercial_midwest", "hobbyist_urban")
+    pub name: String,
+
+    /// Persona traits (key-value pairs, e.g., "apiary_count": "20-40", "hive_count": "800-1500")
+    #[serde(default)]
+    pub traits: HashMap<String, String>,
+}
+
+impl Persona {
+    /// Get a numeric trait value, parsing ranges like "20-40" or single values
+    /// Returns the midpoint for ranges, or the value for single numbers
+    pub fn get_numeric_trait(&self, key: &str) -> Option<u64> {
+        self.traits.get(key).and_then(|value| {
+            // Try to parse as range (e.g., "20-40")
+            if let Some((min_str, max_str)) = value.split_once('-') {
+                if let (Ok(min), Ok(max)) = (min_str.trim().parse::<u64>(), max_str.trim().parse::<u64>()) {
+                    // Return midpoint for ranges
+                    return Some((min + max) / 2);
+                }
+            }
+            // Try to parse as single number
+            value.parse::<u64>().ok()
+        })
+    }
+
+    /// Get a trait value as string
+    pub fn get_trait(&self, key: &str) -> Option<&String> {
+        self.traits.get(key)
+    }
 }
 
 /// Behavior model configuration
@@ -208,6 +273,60 @@ mod tests {
         assert!(!config.vector_store.enabled);
         assert_eq!(config.behavior_model.llm_provider, "openai");
         assert_eq!(config.performance.cache_ttl_seconds, 300);
+    }
+
+    #[test]
+    fn test_persona_get_numeric_trait() {
+        let mut persona = Persona {
+            name: "test".to_string(),
+            traits: HashMap::new(),
+        };
+
+        // Test range parsing
+        persona.traits.insert("hive_count".to_string(), "20-40".to_string());
+        assert_eq!(persona.get_numeric_trait("hive_count"), Some(30)); // midpoint
+
+        // Test single value
+        persona.traits.insert("apiary_count".to_string(), "50".to_string());
+        assert_eq!(persona.get_numeric_trait("apiary_count"), Some(50));
+
+        // Test non-existent trait
+        assert_eq!(persona.get_numeric_trait("nonexistent"), None);
+
+        // Test invalid format
+        persona.traits.insert("invalid".to_string(), "not-a-number".to_string());
+        assert_eq!(persona.get_numeric_trait("invalid"), None);
+    }
+
+    #[test]
+    fn test_personas_config_get_active_persona() {
+        let mut config = PersonasConfig::default();
+
+        // Test with no personas
+        assert!(config.get_active_persona().is_none());
+
+        // Test with personas but no active specified (should return first)
+        config.personas.push(Persona {
+            name: "first".to_string(),
+            traits: HashMap::new(),
+        });
+        config.personas.push(Persona {
+            name: "second".to_string(),
+            traits: HashMap::new(),
+        });
+        let active = config.get_active_persona();
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().name, "first");
+
+        // Test with active persona specified
+        config.active_persona = Some("second".to_string());
+        let active = config.get_active_persona();
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().name, "second");
+
+        // Test with invalid active persona name
+        config.active_persona = Some("nonexistent".to_string());
+        assert!(config.get_active_persona().is_none());
     }
 
     #[test]

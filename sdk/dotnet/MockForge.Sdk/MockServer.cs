@@ -215,6 +215,33 @@ public class MockServer : IDisposable
             LatencyMs = latencyMs
         };
 
+        await StubResponseAsync(stub);
+    }
+
+    /// <summary>
+    /// Stub a response using a ResponseStub object
+    ///
+    /// <para>This method allows you to use StubBuilder to create stubs:</para>
+    /// <code>
+    /// var stub = new StubBuilder("GET", "/api/users/{id}")
+    ///     .Status(200)
+    ///     .Header("Content-Type", "application/json")
+    ///     .Body(new { id = 123, name = "John Doe" })
+    ///     .Latency(100)
+    ///     .Build();
+    ///
+    /// await server.StubResponseAsync(stub);
+    /// </code>
+    /// </summary>
+    /// <param name="stub">ResponseStub instance (can be created with StubBuilder)</param>
+    /// <exception cref="MockServerException">If the stub cannot be added</exception>
+    public async Task StubResponseAsync(ResponseStub stub)
+    {
+        if (stub == null)
+        {
+            throw new MockServerException("ResponseStub cannot be null");
+        }
+
         _stubs.Add(stub);
 
         // If admin API is available, use it to add the stub dynamically

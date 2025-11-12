@@ -513,6 +513,9 @@ pub struct ServerConfig {
     /// Reality Continuum configuration for blending mock and real data sources
     #[serde(default)]
     pub reality_continuum: crate::reality_continuum::ContinuumConfig,
+    /// Security monitoring and SIEM configuration
+    #[serde(default)]
+    pub security: SecurityConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings
@@ -588,6 +591,9 @@ pub struct ProfileConfig {
     /// Reality Continuum configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reality_continuum: Option<crate::reality_continuum::ContinuumConfig>,
+    /// Security configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<SecurityConfig>,
 }
 
 // Default is derived for ServerConfig
@@ -1398,6 +1404,53 @@ pub struct ObservabilityConfig {
     pub recorder: Option<RecorderConfig>,
     /// Chaos engineering configuration
     pub chaos: Option<ChaosEngConfig>,
+}
+
+/// Security monitoring and SIEM configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SecurityConfig {
+    /// Security monitoring configuration
+    pub monitoring: SecurityMonitoringConfig,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            monitoring: SecurityMonitoringConfig::default(),
+        }
+    }
+}
+
+/// Security monitoring configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SecurityMonitoringConfig {
+    /// SIEM integration configuration
+    pub siem: crate::security::siem::SiemConfig,
+    /// Access review configuration
+    pub access_review: crate::security::access_review::AccessReviewConfig,
+    /// Privileged access management configuration
+    pub privileged_access: crate::security::privileged_access::PrivilegedAccessConfig,
+    /// Change management configuration
+    pub change_management: crate::security::change_management::ChangeManagementConfig,
+    /// Compliance dashboard configuration
+    pub compliance_dashboard: crate::security::compliance_dashboard::ComplianceDashboardConfig,
+    /// Risk assessment configuration
+    pub risk_assessment: crate::security::risk_assessment::RiskAssessmentConfig,
+}
+
+impl Default for SecurityMonitoringConfig {
+    fn default() -> Self {
+        Self {
+            siem: crate::security::siem::SiemConfig::default(),
+            access_review: crate::security::access_review::AccessReviewConfig::default(),
+            privileged_access: crate::security::privileged_access::PrivilegedAccessConfig::default(),
+            change_management: crate::security::change_management::ChangeManagementConfig::default(),
+            compliance_dashboard: crate::security::compliance_dashboard::ComplianceDashboardConfig::default(),
+            risk_assessment: crate::security::risk_assessment::RiskAssessmentConfig::default(),
+        }
+    }
 }
 
 /// Prometheus metrics configuration

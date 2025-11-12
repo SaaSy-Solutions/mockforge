@@ -107,9 +107,17 @@ impl OpenApiRouteRegistry {
     /// - `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND`: "1"/"true" to expand templates (default: false)
     /// - `MOCKFORGE_VALIDATION_STATUS`: HTTP status code for validation failures (optional)
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
+        Self::new_with_env_and_persona(spec, None)
+    }
+
+    /// Create a new registry from an OpenAPI spec with environment-based validation options and persona
+    pub fn new_with_env_and_persona(
+        spec: OpenApiSpec,
+        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+    ) -> Self {
         tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
-        let routes = Self::generate_routes(&spec);
+        let routes = Self::generate_routes_with_persona(&spec, persona);
         let options = ValidationOptions {
             request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION")
                 .unwrap_or_else(|_| "enforce".into())
@@ -144,9 +152,18 @@ impl OpenApiRouteRegistry {
 
     /// Construct with explicit options
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
+        Self::new_with_options_and_persona(spec, options, None)
+    }
+
+    /// Construct with explicit options and persona
+    pub fn new_with_options_and_persona(
+        spec: OpenApiSpec,
+        options: ValidationOptions,
+        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+    ) -> Self {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
-        let routes = Self::generate_routes(&spec);
+        let routes = Self::generate_routes_with_persona(&spec, persona);
         Self {
             spec,
             routes,
@@ -168,6 +185,11 @@ impl OpenApiRouteRegistry {
 
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
+        Self::generate_routes_with_persona(spec, None)
+    }
+
+    /// Generate routes from the OpenAPI specification with optional persona
+    fn generate_routes_with_persona(spec: &Arc<OpenApiSpec>, persona: Option<Arc<crate::intelligent_behavior::config::Persona>>) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
 
         let all_paths_ops = spec.all_paths_and_operations();
@@ -176,11 +198,12 @@ impl OpenApiRouteRegistry {
         for (path, operations) in all_paths_ops {
             tracing::debug!("Processing path: {}", path);
             for (method, operation) in operations {
-                routes.push(OpenApiRoute::from_operation(
+                routes.push(OpenApiRoute::from_operation_with_persona(
                     &method,
                     path.clone(),
                     &operation,
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
         }

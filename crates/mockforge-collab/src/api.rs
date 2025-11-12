@@ -345,13 +345,37 @@ async fn list_members(
 
 /// Health check endpoint
 async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
+    Json(serde_json::json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    }))
 }
 
-/// Readiness check endpoint
-async fn readiness_check() -> impl IntoResponse {
-    // TODO: Check database connection
-    StatusCode::OK
+/// Readiness check endpoint with database health check
+async fn readiness_check(State(state): State<ApiState>) -> impl IntoResponse {
+    // Check database connection by running a simple query
+    // We need to access the database pool - let's add it to ApiState or use workspace service
+    // For now, we'll use a workspace service method to check DB health
+    let db_healthy = state.workspace.check_database_health().await;
+
+    if db_healthy {
+        Json(serde_json::json!({
+            "status": "ready",
+            "database": "healthy",
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        }))
+        .into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "status": "not_ready",
+                "database": "unhealthy",
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            })),
+        )
+            .into_response()
+    }
 }
 
 // ===== Validation Helpers =====
