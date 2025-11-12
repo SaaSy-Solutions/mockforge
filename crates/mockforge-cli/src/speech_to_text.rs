@@ -471,11 +471,11 @@ impl VoskBackend {
                 .to_str()
                 .ok_or_else(|| SttError::NotAvailable("Invalid model path".to_string()))?,
         )
-        .map_err(|e| SttError::NotAvailable(format!("Failed to load Vosk model: {}", e)))?;
+        .ok_or_else(|| SttError::NotAvailable("Failed to load Vosk model".to_string()))?;
 
         // Create recognizer
         let mut recognizer = Recognizer::new(&model, self.sample_rate)
-            .map_err(|e| SttError::Transcription(format!("Failed to create recognizer: {}", e)))?;
+            .ok_or_else(|| SttError::Transcription("Failed to create recognizer".to_string()))?;
 
         // Read WAV file
         let mut reader = WavReader::open(audio_path)

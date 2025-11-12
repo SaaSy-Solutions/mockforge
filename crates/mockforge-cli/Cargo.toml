@@ -54,7 +54,7 @@ regex = "1.10"
 base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["multipart"] }
 tempfile = "3.8"
 rumqttc = { version = "0.24", optional = true }
 hex = { workspace = true }
