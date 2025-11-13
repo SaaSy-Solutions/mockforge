@@ -1349,7 +1349,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     options: Option<ValidationOptions>,
     _circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
-    _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
+    route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
     _ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
@@ -1369,6 +1369,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
     use crate::op_middleware::Shared;
     use mockforge_core::Overrides;
 
+    // Extract template expansion setting before options is moved (used in OpenAPI routes and custom routes)
+    let template_expand = options.as_ref()
+        .map(|o| o.response_template_expand)
+        .unwrap_or_else(|| {
+            std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+        });
+
     let _shared = Shared {
         profiles: LatencyProfiles::default(),
         overrides: Overrides::default(),
@@ -1387,10 +1396,22 @@ pub async fn build_router_with_chains_and_multi_tenant(
         match OpenApiSpec::from_file(&spec).await {
             Ok(openapi) => {
                 info!("Loaded OpenAPI spec from {}", spec);
+
+                // Try to load persona from config if available
+                let persona = load_persona_from_config().await;
+
                 let registry = if let Some(opts) = options {
-                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                    tracing::debug!("Using custom validation options");
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_options_and_persona(openapi, opts, persona)
                 } else {
-                    OpenApiRouteRegistry::new_with_env(openapi)
+                    tracing::debug!("Using environment-based options");
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_env_and_persona(openapi, persona)
                 };
                 if registry
                     .routes()
@@ -1411,6 +1432,244 @@ pub async fn build_router_with_chains_and_multi_tenant(
             Err(e) => {
                 warn!("Failed to load OpenAPI spec from {:?}: {}. Starting without OpenAPI integration.", spec_path, e);
             }
+        }
+    }
+
+    // Helper function to recursively expand templates in JSON values
+    fn expand_templates_in_json(value: &serde_json::Value, context: &mockforge_core::ai_response::RequestContext) -> serde_json::Value {
+        use mockforge_core::ai_response::expand_prompt_template;
+        use serde_json::Value;
+
+        match value {
+            Value::String(s) => {
+                // Normalize {{request.query.name}} to {{query.name}} format
+                let normalized = s
+                    .replace("{{request.query.", "{{query.")
+                    .replace("{{request.path.", "{{path.")
+                    .replace("{{request.headers.", "{{headers.")
+                    .replace("{{request.body.", "{{body.")
+                    .replace("{{request.method}}", "{{method}}")
+                    .replace("{{request.path}}", "{{path}}");
+
+                // Handle || operator: extract template part and default value separately
+                // Pattern: "Hello {{query.name || \"world\"}}" -> extract "Hello {{query.name}}" and "world"
+                let (template_part, default_value) = if normalized.contains("||") {
+                    // Find the template part before || and default after ||
+                    // Pattern: "Hello {{query.name || \"world\"}}"
+                    // We need to find {{... || "..."}} and split it
+                    if let Some(open_idx) = normalized.find("{{") {
+                        if let Some(close_idx) = normalized[open_idx..].find("}}") {
+                            let template_block = &normalized[open_idx..open_idx+close_idx+2];
+                            if let Some(pipe_idx) = template_block.find("||") {
+                                // Split: "{{query.name || \"world\"}}" -> "{{query.name " and " \"world\"}}"
+                                let before_pipe = &template_block[..pipe_idx].trim();
+                                let after_pipe = &template_block[pipe_idx+2..].trim();
+
+                                // Extract template variable name (remove {{ and trim)
+                                let template_var = before_pipe.trim_start_matches("{{").trim();
+                                // Replace the entire template block with just the template variable
+                                let replacement = format!("{{{{{}}}}}}}", template_var);
+                                let template = normalized.replace(template_block, &replacement);
+
+                                // Extract default value: " \"world\"}}" -> "world"
+                                let mut default = after_pipe.trim_end_matches("}}").trim().to_string();
+                                // Remove quotes
+                                default = default.trim_matches('"').trim_matches('\'').trim_matches('\\').to_string();
+                                default = default.trim().to_string();
+
+                                (template, Some(default))
+                            } else {
+                                (normalized, None)
+                            }
+                        } else {
+                            (normalized, None)
+                        }
+                    } else {
+                        (normalized, None)
+                    }
+                } else {
+                    (normalized, None)
+                };
+
+                // Expand the template part
+                let mut expanded = expand_prompt_template(&template_part, context);
+
+                // If template wasn't fully expanded and we have a default, use default
+                // Otherwise use the expanded value
+                let final_expanded = if (expanded.contains("{{query.") || expanded.contains("{{path.") || expanded.contains("{{headers."))
+                    && default_value.is_some() {
+                    default_value.unwrap()
+                } else {
+                    // Clean up any stray closing braces that might remain
+                    // This can happen if template replacement left partial braces
+                    while expanded.ends_with('}') && !expanded.ends_with("}}") {
+                        expanded.pop();
+                    }
+                    expanded
+                };
+
+                Value::String(final_expanded)
+            }
+            Value::Array(arr) => {
+                Value::Array(arr.iter().map(|v| expand_templates_in_json(v, context)).collect())
+            }
+            Value::Object(obj) => {
+                let mut new_obj = serde_json::Map::new();
+                for (k, v) in obj {
+                    new_obj.insert(k.clone(), expand_templates_in_json(v, context));
+                }
+                Value::Object(new_obj)
+            }
+            _ => value.clone(),
+        }
+    }
+
+    // Register custom routes from config
+    if let Some(route_configs) = route_configs {
+        use axum::http::StatusCode;
+        use axum::routing::any;
+        use axum::response::IntoResponse;
+
+        if !route_configs.is_empty() {
+            info!("Registering {} custom route(s) from config", route_configs.len());
+        }
+
+        for route_config in route_configs {
+            let status = route_config.response.status;
+            let body = route_config.response.body.clone();
+            let headers = route_config.response.headers.clone();
+            let path = route_config.path.clone();
+            let method = route_config.method.clone();
+            let latency_config = route_config.latency.clone();
+
+            // Create handler that returns the configured response with template expansion
+            // Supports both basic templates ({{uuid}}, {{now}}) and request-aware templates
+            // ({{request.query.name}}, {{request.path.id}}, {{request.headers.name}})
+            // Register route using `any()` since we need full Request access for template expansion
+            let expected_method = method.to_uppercase();
+            app = app.route(&path, axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
+                let body = body.clone();
+                let headers = headers.clone();
+                let expand = template_expand;
+                let latency = latency_config.clone();
+                let expected = expected_method.clone();
+                let status_code = status;
+
+                async move {
+                    // Check if request method matches expected method
+                    if req.method().as_str() != expected.as_str() {
+                        // Return 405 Method Not Allowed for wrong method
+                        return axum::response::Response::builder()
+                            .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
+                            .header("Allow", &expected)
+                            .body(axum::body::Body::empty())
+                            .unwrap()
+                            .into_response();
+                    }
+
+                    // Apply latency injection if configured
+                    if let Some(ref lat) = latency {
+                        if lat.enabled {
+                            use tokio::time::{sleep, Duration};
+                            use rand::Rng;
+
+                            // Check probability
+                            let mut rng = rand::thread_rng();
+                            let roll: f64 = rng.gen();
+
+                            if roll < lat.probability {
+                                let delay_ms = if let Some(fixed) = lat.fixed_delay_ms {
+                                    // Fixed delay with optional jitter
+                                    let jitter = (fixed as f64 * lat.jitter_percent / 100.0) as u64;
+                                    let jitter_amount = if jitter > 0 {
+                                        rng.gen_range(0..=jitter)
+                                    } else {
+                                        0
+                                    };
+                                    fixed + jitter_amount
+                                } else if let Some((min, max)) = lat.random_delay_range_ms {
+                                    // Random delay range
+                                    rng.gen_range(min..=max)
+                                } else {
+                                    // Default to 0 if no delay specified
+                                    0
+                                };
+
+                                if delay_ms > 0 {
+                                    sleep(Duration::from_millis(delay_ms)).await;
+                                }
+                            }
+                        }
+                    }
+
+                    // Create JSON response from body, or empty object if None
+                    let mut body_value = body.unwrap_or(serde_json::json!({}));
+
+                    // Apply template expansion if enabled
+                    if expand {
+                        use mockforge_core::ai_response::RequestContext;
+                        use std::collections::HashMap;
+                        use serde_json::Value;
+
+                        // Extract request data for template expansion
+                        let method = req.method().to_string();
+                        let path = req.uri().path().to_string();
+
+                        // Extract query parameters
+                        let query_params: HashMap<String, Value> = req
+                            .uri()
+                            .query()
+                            .map(|q| {
+                                url::form_urlencoded::parse(q.as_bytes())
+                                    .into_owned()
+                                    .map(|(k, v)| (k, Value::String(v)))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        // Extract headers
+                        let request_headers: HashMap<String, Value> = req
+                            .headers()
+                            .iter()
+                            .filter_map(|(name, value)| {
+                                value.to_str().ok().map(|v| {
+                                    (name.to_string(), Value::String(v.to_string()))
+                                })
+                            })
+                            .collect();
+
+                        // Note: Request body extraction for {{request.body.field}} would go here
+                        // For now, we skip it to avoid consuming the body
+
+                        // Build request context
+                        let context = RequestContext::new(method.clone(), path.clone())
+                            .with_query_params(query_params)
+                            .with_headers(request_headers);
+
+                        // Recursively expand templates in JSON structure
+                        body_value = expand_templates_in_json(&body_value, &context);
+                    }
+
+                    let mut response = axum::Json(body_value).into_response();
+
+                    // Set status code
+                    *response.status_mut() = StatusCode::from_u16(status_code)
+                        .unwrap_or(StatusCode::OK);
+
+                    // Add custom headers
+                    for (key, value) in headers {
+                        if let Ok(header_name) = axum::http::HeaderName::from_bytes(key.as_bytes()) {
+                            if let Ok(header_value) = axum::http::HeaderValue::from_str(&value) {
+                                response.headers_mut().insert(header_name, header_value);
+                            }
+                        }
+                    }
+
+                    response
+                }
+            }));
+
+            debug!("Registered route: {} {}", method, path);
         }
     }
 

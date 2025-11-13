@@ -3664,10 +3664,32 @@ pub async fn handle_serve(
         None
     };
 
+    // Create ValidationOptions from config for template expansion
+    use mockforge_core::openapi_routes::{ValidationOptions, ValidationMode};
+    let request_mode = if let Some(ref validation) = config.http.validation {
+        match validation.mode.as_str() {
+            "off" | "disable" | "disabled" => ValidationMode::Disabled,
+            "warn" | "warning" => ValidationMode::Warn,
+            _ => ValidationMode::Enforce,
+        }
+    } else {
+        ValidationMode::Enforce
+    };
+
+    let validation_options = ValidationOptions {
+        request_mode,
+        aggregate_errors: config.http.aggregate_validation_errors,
+        validate_responses: config.http.validate_responses,
+        overrides: std::collections::HashMap::new(),
+        admin_skip_prefixes: vec!["/__mockforge".to_string(), "/health".to_string()],
+        response_template_expand: config.http.response_template_expand,
+        validation_status: config.http.validation_status,
+    };
+
     // Use standard router (traffic shaping temporarily disabled)
     let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
-        None,
+        Some(validation_options),
         None, // circling_config
         multi_tenant_config,
         Some(config.routes.clone()),
@@ -3894,20 +3916,31 @@ pub async fn handle_serve(
         }
     });
 
-    // Start gRPC server
+    // Start gRPC server (only if enabled and port is not 0)
     let grpc_port = config.grpc.port;
+    let grpc_enabled = config.grpc.enabled;
     let grpc_shutdown = shutdown_token.clone();
-    let grpc_handle = tokio::spawn(async move {
-        println!("⚡ gRPC server listening on localhost:{}", grpc_port);
-        tokio::select! {
-            result = mockforge_grpc::start(grpc_port) => {
-                result.map_err(|e| format!("gRPC server error: {}", e))
+    let grpc_handle = if grpc_enabled && grpc_port != 0 {
+        tokio::spawn(async move {
+            println!("⚡ gRPC server listening on localhost:{}", grpc_port);
+            tokio::select! {
+                result = mockforge_grpc::start(grpc_port) => {
+                    result.map_err(|e| format!("gRPC server error: {}", e))
+                }
+                _ = grpc_shutdown.cancelled() => {
+                    Ok(())
+                }
             }
-            _ = grpc_shutdown.cancelled() => {
-                Ok(())
-            }
-        }
-    });
+        })
+    } else {
+        // gRPC disabled or port is 0, create a no-op handle
+        tracing::debug!("gRPC server disabled (enabled: {}, port: {})", grpc_enabled, grpc_port);
+        tokio::spawn(async move {
+            // Wait for shutdown signal, then return Ok
+            grpc_shutdown.cancelled().await;
+            Ok(())
+        })
+    };
 
     #[cfg(feature = "smtp")]
     let _smtp_handle = if let Some(ref smtp_registry) = smtp_registry {

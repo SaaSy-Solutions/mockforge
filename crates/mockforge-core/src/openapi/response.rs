@@ -492,7 +492,13 @@ impl ResponseGenerator {
             if let Some(scenario_name) = scenario {
                 if let Some(example_ref) = media_type.examples.get(scenario_name) {
                     tracing::debug!("Using scenario '{}' from examples map", scenario_name);
-                    return Self::extract_example_value(spec, example_ref, expand_tokens);
+                    return Ok(Self::extract_example_value_with_persona(
+                        spec,
+                        example_ref,
+                        expand_tokens,
+                        persona,
+                        media_type.schema.as_ref(),
+                    )?);
                 } else {
                     tracing::warn!(
                         "Scenario '{}' not found in examples, falling back based on selection mode",
@@ -529,7 +535,13 @@ impl ResponseGenerator {
                             mode,
                             selected_index
                         );
-                        return Self::extract_example_value(spec, example_ref, expand_tokens);
+                        return Ok(Self::extract_example_value_with_persona(
+                            spec,
+                            example_ref,
+                            expand_tokens,
+                            persona,
+                            media_type.schema.as_ref(),
+                        )?);
                     }
                 }
             }
@@ -540,54 +552,164 @@ impl ResponseGenerator {
                     "Using first example '{}' from examples map as fallback",
                     example_name
                 );
-                return Self::extract_example_value(spec, example_ref, expand_tokens);
+                return Ok(Self::extract_example_value_with_persona(
+                    spec,
+                    example_ref,
+                    expand_tokens,
+                    persona,
+                    media_type.schema.as_ref(),
+                )?);
             }
         }
 
         // Fall back to schema-based generation
-        // Note: Persona is not available at this level, will be None for now
-        // This can be enhanced later to pass persona through the call chain
+        // Pass persona through to schema generation for consistent data patterns
         if let Some(schema_ref) = &media_type.schema {
-            Ok(Self::generate_example_from_schema_ref(spec, schema_ref, None))
+            Ok(Self::generate_example_from_schema_ref(spec, schema_ref, persona))
         } else {
             Ok(Value::Object(serde_json::Map::new()))
         }
     }
 
     /// Extract value from an example reference
+    /// Optionally expands items arrays based on pagination metadata if persona is provided
     fn extract_example_value(
         spec: &OpenApiSpec,
         example_ref: &ReferenceOr<openapiv3::Example>,
         expand_tokens: bool,
     ) -> Result<Value> {
-        match example_ref {
+        Self::extract_example_value_with_persona(spec, example_ref, expand_tokens, None, None)
+    }
+
+    /// Extract value from an example reference with optional persona and schema for pagination expansion
+    fn extract_example_value_with_persona(
+        spec: &OpenApiSpec,
+        example_ref: &ReferenceOr<openapiv3::Example>,
+        expand_tokens: bool,
+        persona: Option<&Persona>,
+        schema_ref: Option<&ReferenceOr<Schema>>,
+    ) -> Result<Value> {
+        let mut value = match example_ref {
             ReferenceOr::Item(example) => {
-                if let Some(value) = &example.value {
-                    tracing::debug!("Using example from examples map: {:?}", value);
+                if let Some(v) = &example.value {
+                    tracing::debug!("Using example from examples map: {:?}", v);
                     if expand_tokens {
-                        return Ok(Self::expand_templates(value));
+                        Self::expand_templates(v)
                     } else {
-                        return Ok(value.clone());
+                        v.clone()
                     }
+                } else {
+                    return Ok(Value::Object(serde_json::Map::new()));
                 }
             }
             ReferenceOr::Reference { reference } => {
                 // Resolve the example reference
                 if let Some(example) = spec.get_example(reference) {
-                    if let Some(value) = &example.value {
-                        tracing::debug!("Using resolved example reference: {:?}", value);
+                    if let Some(v) = &example.value {
+                        tracing::debug!("Using resolved example reference: {:?}", v);
                         if expand_tokens {
-                            return Ok(Self::expand_templates(value));
+                            Self::expand_templates(v)
                         } else {
-                            return Ok(value.clone());
+                            v.clone()
                         }
+                    } else {
+                        return Ok(Value::Object(serde_json::Map::new()));
                     }
                 } else {
                     tracing::warn!("Example reference '{}' not found", reference);
+                    return Ok(Value::Object(serde_json::Map::new()));
+                }
+            }
+        };
+
+        // Check for pagination mismatch and expand items array if needed
+        value = Self::expand_example_items_if_needed(spec, value, persona, schema_ref);
+
+        Ok(value)
+    }
+
+    /// Expand items array in example if pagination metadata suggests more items
+    /// Checks for common response structures: { data: { items: [...], total, limit } } or { items: [...], total, limit }
+    fn expand_example_items_if_needed(
+        spec: &OpenApiSpec,
+        mut example: Value,
+        persona: Option<&Persona>,
+        schema_ref: Option<&ReferenceOr<Schema>>,
+    ) -> Value {
+        // Try to find items array and pagination metadata in the example
+        // Support both nested (data.items) and flat (items) structures
+        let has_nested_items = example.get("data")
+            .and_then(|v| v.as_object())
+            .map(|obj| obj.contains_key("items"))
+            .unwrap_or(false);
+
+        let has_flat_items = example.get("items").is_some();
+
+        if !has_nested_items && !has_flat_items {
+            return example; // No items array found
+        }
+
+        // Extract pagination metadata
+        let total = example.get("data")
+            .and_then(|d| d.get("total"))
+            .or_else(|| example.get("total"))
+            .and_then(|v| {
+                v.as_u64().or_else(|| v.as_i64().map(|i| i as u64))
+            });
+
+        let limit = example.get("data")
+            .and_then(|d| d.get("limit"))
+            .or_else(|| example.get("limit"))
+            .and_then(|v| {
+                v.as_u64().or_else(|| v.as_i64().map(|i| i as u64))
+            });
+
+        // Get current items array
+        let items_array = example.get("data")
+            .and_then(|d| d.get("items"))
+            .or_else(|| example.get("items"))
+            .and_then(|v| v.as_array())
+            .cloned();
+
+        if let (Some(total_val), Some(limit_val), Some(mut items)) = (total, limit, items_array) {
+            let current_count = items.len() as u64;
+            let expected_count = std::cmp::min(total_val, limit_val);
+            let max_items = 100; // Cap at reasonable maximum
+            let expected_count = std::cmp::min(expected_count, max_items);
+
+            // If items array is smaller than expected, expand it
+            if current_count < expected_count && !items.is_empty() {
+                tracing::debug!(
+                    "Expanding example items array: {} -> {} items (total={}, limit={})",
+                    current_count,
+                    expected_count,
+                    total_val,
+                    limit_val
+                );
+
+                // Use first item as template
+                let template = items[0].clone();
+                let additional_count = expected_count - current_count;
+
+                // Generate additional items
+                for i in 0..additional_count {
+                    let mut new_item = template.clone();
+                    // Use the centralized variation function
+                    let item_index = current_count + i + 1;
+                    Self::add_item_variation(&mut new_item, item_index);
+                    items.push(new_item);
+                }
+
+                // Update the items array in the example
+                if let Some(data_obj) = example.get_mut("data").and_then(|v| v.as_object_mut()) {
+                    data_obj.insert("items".to_string(), Value::Array(items));
+                } else if let Some(root_obj) = example.as_object_mut() {
+                    root_obj.insert("items".to_string(), Value::Array(items));
                 }
             }
         }
-        Ok(Value::Object(serde_json::Map::new()))
+
+        example
     }
 
     fn generate_example_from_schema_ref(
@@ -721,15 +843,9 @@ impl ResponseGenerator {
 
                     let value = match prop_schema {
                         ReferenceOr::Item(prop_schema) => {
-                            // Check for property-level example first
-                            if let Some(prop_example) = prop_schema.schema_data.example.as_ref() {
-                                tracing::debug!(
-                                    "Using example for property '{}': {:?}",
-                                    prop_name,
-                                    prop_example
-                                );
-                                prop_example.clone()
-                            } else if is_items_array {
+                            // If this is an items array with pagination metadata, always use generate_array_with_count
+                            // (it will use the example as a template if one exists)
+                            if is_items_array {
                                 // Generate array with count based on pagination metadata
                                 Self::generate_array_with_count(
                                     spec,
@@ -737,23 +853,23 @@ impl ResponseGenerator {
                                     pagination_metadata.unwrap(),
                                     persona,
                                 )
+                            } else if let Some(prop_example) = prop_schema.schema_data.example.as_ref() {
+                                // Check for property-level example (only if not items array)
+                                tracing::debug!(
+                                    "Using example for property '{}': {:?}",
+                                    prop_name,
+                                    prop_example
+                                );
+                                prop_example.clone()
                             } else {
                                 Self::generate_example_from_schema(spec, prop_schema.as_ref(), persona)
                             }
                         }
                         ReferenceOr::Reference { reference } => {
-                            // Try to resolve reference and check for example
+                            // Try to resolve reference
                             if let Some(resolved_schema) = spec.get_schema(reference) {
-                                if let Some(ref_example) =
-                                    resolved_schema.schema.schema_data.example.as_ref()
-                                {
-                                    tracing::debug!(
-                                        "Using example from referenced schema '{}': {:?}",
-                                        reference,
-                                        ref_example
-                                    );
-                                    ref_example.clone()
-                                } else if is_items_array {
+                                // If this is an items array with pagination metadata, always use generate_array_with_count
+                                if is_items_array {
                                     // Generate array with count based on pagination metadata
                                     Self::generate_array_with_count(
                                         spec,
@@ -761,6 +877,16 @@ impl ResponseGenerator {
                                         pagination_metadata.unwrap(),
                                         persona,
                                     )
+                                } else if let Some(ref_example) =
+                                    resolved_schema.schema.schema_data.example.as_ref()
+                                {
+                                    // Check for example from referenced schema (only if not items array)
+                                    tracing::debug!(
+                                        "Using example from referenced schema '{}': {:?}",
+                                        reference,
+                                        ref_example
+                                    );
+                                    ref_example.clone()
                                 } else {
                                     Self::generate_example_from_schema(
                                         spec,
@@ -898,16 +1024,9 @@ impl ResponseGenerator {
                     let template_item = &example_array[0];
                     let items: Vec<Value> = (0..count)
                         .map(|i| {
-                            // Clone template and add variation (e.g., unique IDs)
+                            // Clone template and add variation
                             let mut item = template_item.clone();
-                            if let Some(obj) = item.as_object_mut() {
-                                // Add variation to IDs to make items unique
-                                if let Some(id_val) = obj.get_mut("id") {
-                                    if let Some(id_str) = id_val.as_str() {
-                                        *id_val = Value::String(format!("{}_{}", id_str, i + 1));
-                                    }
-                                }
-                            }
+                            Self::add_item_variation(&mut item, i + 1);
                             item
                         })
                         .collect();
@@ -925,14 +1044,7 @@ impl ResponseGenerator {
                             .map(|i| {
                                 let mut item = Self::generate_example_from_schema(spec, item_schema.as_ref(), persona);
                                 // Add variation to make items unique
-                                if let Some(obj) = item.as_object_mut() {
-                                    // Update ID fields to be unique
-                                    if let Some(id_val) = obj.get_mut("id") {
-                                        if let Some(id_str) = id_val.as_str() {
-                                            *id_val = Value::String(format!("{}_{}", id_str, i + 1));
-                                        }
-                                    }
-                                }
+                                Self::add_item_variation(&mut item, i + 1);
                                 item
                             })
                             .collect()
@@ -947,13 +1059,7 @@ impl ResponseGenerator {
                                         persona,
                                     );
                                     // Add variation to make items unique
-                                    if let Some(obj) = item.as_object_mut() {
-                                        if let Some(id_val) = obj.get_mut("id") {
-                                            if let Some(id_str) = id_val.as_str() {
-                                                *id_val = Value::String(format!("{}_{}", id_str, i + 1));
-                                            }
-                                        }
-                                    }
+                                    Self::add_item_variation(&mut item, i + 1);
                                     item
                                 })
                                 .collect()
@@ -972,6 +1078,167 @@ impl ResponseGenerator {
                 .map(|i| Value::String(format!("item_{}", i + 1)))
                 .collect(),
         )
+    }
+
+    /// Add variation to an item to make it unique (for array generation)
+    /// Varies IDs, names, addresses, and coordinates based on item index
+    fn add_item_variation(item: &mut Value, item_index: u64) {
+        if let Some(obj) = item.as_object_mut() {
+            // Update ID fields to be unique
+            if let Some(id_val) = obj.get_mut("id") {
+                if let Some(id_str) = id_val.as_str() {
+                    // Extract base ID (remove any existing suffix)
+                    let base_id = id_str.split('_').next().unwrap_or(id_str);
+                    *id_val = Value::String(format!("{}_{:03}", base_id, item_index));
+                } else if let Some(id_num) = id_val.as_u64() {
+                    *id_val = Value::Number((id_num + item_index).into());
+                }
+            }
+
+            // Update name fields - add variation for all names
+            if let Some(name_val) = obj.get_mut("name") {
+                if let Some(name_str) = name_val.as_str() {
+                    if name_str.contains('#') {
+                        // Pattern like "Hive #1" -> "Hive #2"
+                        *name_val = Value::String(format!("Hive #{}", item_index));
+                    } else {
+                        // Pattern like "Meadow Apiary" -> use rotation of varied names
+                        let apiary_names = [
+                            "Meadow Apiary", "Sunset Apiary", "Valley Apiary", "Riverside Apiary",
+                            "Hilltop Apiary", "Prairie Apiary", "Forest Apiary", "Mountain Apiary",
+                            "Lakeside Apiary", "Grove Apiary", "Field Apiary", "Ridge Apiary",
+                            "Brook Apiary", "Orchard Apiary", "Pasture Apiary", "Hillside Apiary",
+                            "Creek Apiary", "Woodland Apiary", "Farm Apiary", "Meadow Apiary"
+                        ];
+                        let name_index = (item_index - 1) as usize % apiary_names.len();
+                        *name_val = Value::String(apiary_names[name_index].to_string());
+                    }
+                }
+            }
+
+            // Update location/address fields
+            if let Some(location_val) = obj.get_mut("location") {
+                if let Some(location_obj) = location_val.as_object_mut() {
+                    // Update address
+                    if let Some(address_val) = location_obj.get_mut("address") {
+                        if let Some(address_str) = address_val.as_str() {
+                            // Extract street number if present, otherwise add variation
+                            if let Some(num_str) = address_str.split_whitespace().next() {
+                                if let Ok(num) = num_str.parse::<u64>() {
+                                    *address_val = Value::String(format!("{} Farm Road", num + item_index));
+                                } else {
+                                    *address_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                                }
+                            } else {
+                                *address_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                            }
+                        }
+                    }
+
+                    // Vary coordinates slightly
+                    if let Some(lat_val) = location_obj.get_mut("latitude") {
+                        if let Some(lat) = lat_val.as_f64() {
+                            *lat_val = Value::Number(serde_json::Number::from_f64(lat + (item_index as f64 * 0.01)).unwrap());
+                        }
+                    }
+                    if let Some(lng_val) = location_obj.get_mut("longitude") {
+                        if let Some(lng) = lng_val.as_f64() {
+                            *lng_val = Value::Number(serde_json::Number::from_f64(lng + (item_index as f64 * 0.01)).unwrap());
+                        }
+                    }
+                } else if let Some(address_str) = location_val.as_str() {
+                    // Flat address string
+                    if let Some(num_str) = address_str.split_whitespace().next() {
+                        if let Ok(num) = num_str.parse::<u64>() {
+                            *location_val = Value::String(format!("{} Farm Road", num + item_index));
+                        } else {
+                            *location_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                        }
+                    }
+                }
+            }
+
+            // Update address field if it exists at root level
+            if let Some(address_val) = obj.get_mut("address") {
+                if let Some(address_str) = address_val.as_str() {
+                    if let Some(num_str) = address_str.split_whitespace().next() {
+                        if let Ok(num) = num_str.parse::<u64>() {
+                            *address_val = Value::String(format!("{} Farm Road", num + item_index));
+                        } else {
+                            *address_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                        }
+                    }
+                }
+            }
+
+            // Vary status fields (common enum values)
+            if let Some(status_val) = obj.get_mut("status") {
+                if let Some(status_str) = status_val.as_str() {
+                    let statuses = ["healthy", "sick", "needs_attention", "quarantined", "active", "inactive"];
+                    let status_index = (item_index - 1) as usize % statuses.len();
+                    // Bias towards "healthy" and "active" (70% of items)
+                    let final_status = if (item_index - 1) % 10 < 7 {
+                        statuses[0] // "healthy" or "active"
+                    } else {
+                        statuses[status_index]
+                    };
+                    *status_val = Value::String(final_status.to_string());
+                }
+            }
+
+            // Vary hive_type fields
+            if let Some(hive_type_val) = obj.get_mut("hive_type") {
+                if let Some(_) = hive_type_val.as_str() {
+                    let hive_types = ["langstroth", "top_bar", "warre", "flow_hive", "national"];
+                    let type_index = (item_index - 1) as usize % hive_types.len();
+                    *hive_type_val = Value::String(hive_types[type_index].to_string());
+                }
+            }
+
+            // Vary nested queen breed fields
+            if let Some(queen_val) = obj.get_mut("queen") {
+                if let Some(queen_obj) = queen_val.as_object_mut() {
+                    if let Some(breed_val) = queen_obj.get_mut("breed") {
+                        if let Some(_) = breed_val.as_str() {
+                            let breeds = ["italian", "carniolan", "russian", "buckfast", "caucasian"];
+                            let breed_index = (item_index - 1) as usize % breeds.len();
+                            *breed_val = Value::String(breeds[breed_index].to_string());
+                        }
+                    }
+                    // Vary queen age
+                    if let Some(age_val) = queen_obj.get_mut("age_days") {
+                        if let Some(base_age) = age_val.as_u64() {
+                            *age_val = Value::Number((base_age + (item_index * 10) % 200).into());
+                        } else if let Some(base_age) = age_val.as_i64() {
+                            *age_val = Value::Number((base_age + (item_index as i64 * 10) % 200).into());
+                        }
+                    }
+                    // Vary queen mark color
+                    if let Some(color_val) = queen_obj.get_mut("mark_color") {
+                        if let Some(_) = color_val.as_str() {
+                            let colors = ["yellow", "white", "red", "green", "blue"];
+                            let color_index = (item_index - 1) as usize % colors.len();
+                            *color_val = Value::String(colors[color_index].to_string());
+                        }
+                    }
+                }
+            }
+
+            // Vary description fields if they exist
+            if let Some(desc_val) = obj.get_mut("description") {
+                if let Some(desc_str) = desc_val.as_str() {
+                    let descriptions = [
+                        "Production apiary",
+                        "Research apiary",
+                        "Commercial operation",
+                        "Backyard apiary",
+                        "Educational apiary"
+                    ];
+                    let desc_index = (item_index - 1) as usize % descriptions.len();
+                    *desc_val = Value::String(descriptions[desc_index].to_string());
+                }
+            }
+        }
     }
 
     /// Try to infer total count from context (parent entity schemas)
