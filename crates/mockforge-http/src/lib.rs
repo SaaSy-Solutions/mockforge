@@ -1527,7 +1527,6 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Register custom routes from config
     if let Some(route_configs) = route_configs {
         use axum::http::StatusCode;
-        use axum::routing::any;
         use axum::response::IntoResponse;
 
         if !route_configs.is_empty() {
@@ -1568,37 +1567,47 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     }
 
                     // Apply latency injection if configured
-                    if let Some(ref lat) = latency {
+                    // Calculate delay before any await to avoid Send issues
+                    let delay_ms = if let Some(ref lat) = latency {
                         if lat.enabled {
-                            use tokio::time::{sleep, Duration};
-                            use rand::Rng;
+                            use rand::{rng, Rng};
 
-                            // Check probability
-                            let mut rng = rand::thread_rng();
-                            let roll: f64 = rng.gen();
+                            // Check probability - generate all random values before await
+                            let mut rng = rng();
+                            let roll: f64 = rng.random();
 
                             if roll < lat.probability {
-                                let delay_ms = if let Some(fixed) = lat.fixed_delay_ms {
+                                if let Some(fixed) = lat.fixed_delay_ms {
                                     // Fixed delay with optional jitter
                                     let jitter = (fixed as f64 * lat.jitter_percent / 100.0) as u64;
                                     let jitter_amount = if jitter > 0 {
-                                        rng.gen_range(0..=jitter)
+                                        rng.random_range(0..=jitter)
                                     } else {
                                         0
                                     };
-                                    fixed + jitter_amount
+                                    Some(fixed + jitter_amount)
                                 } else if let Some((min, max)) = lat.random_delay_range_ms {
                                     // Random delay range
-                                    rng.gen_range(min..=max)
+                                    Some(rng.random_range(min..=max))
                                 } else {
                                     // Default to 0 if no delay specified
-                                    0
-                                };
-
-                                if delay_ms > 0 {
-                                    sleep(Duration::from_millis(delay_ms)).await;
+                                    Some(0)
                                 }
+                            } else {
+                                None
                             }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Apply delay if calculated (after all random generation is done)
+                    if let Some(delay) = delay_ms {
+                        if delay > 0 {
+                            use tokio::time::{sleep, Duration};
+                            sleep(Duration::from_millis(delay)).await;
                         }
                     }
 

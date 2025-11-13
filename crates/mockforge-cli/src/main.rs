@@ -6122,15 +6122,21 @@ async fn handle_init(
     if config_path.exists() {
         println!("⚠️  Configuration file already exists: {}", config_path.display());
     } else {
-        let config_content = r#"# MockForge Configuration
+        // Conditionally include openapi_spec line only if examples are being created
+        let openapi_spec_line = if !no_examples {
+            "  openapi_spec: \"./examples/openapi.json\"\n"
+        } else {
+            ""
+        };
+
+        let config_content = format!(r#"# MockForge Configuration
 # Full configuration reference: https://docs.mockforge.dev/config
 
 # HTTP Server
 http:
   port: 3000
   host: "0.0.0.0"
-  openapi_spec: "./examples/openapi.json"
-  cors_enabled: true
+{}  cors_enabled: true
   request_timeout_secs: 30
   request_validation: "enforce"
   aggregate_validation_errors: true
@@ -6193,7 +6199,7 @@ logging:
   json_format: false
   max_file_size_mb: 10
   max_files: 5
-"#;
+"#, openapi_spec_line);
         fs::write(&config_path, config_content)?;
         println!("✅ Created mockforge.yaml");
     }
