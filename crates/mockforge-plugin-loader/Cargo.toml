@@ -38,8 +38,8 @@ uuid.workspace = true
 regex.workspace = true
 
 # WebAssembly runtime for plugin execution
-wasmtime = "34.0"
-wasmtime-wasi = "34.0"
+wasmtime = "36.0.3"
+wasmtime-wasi = "36.0.3"
 wasmparser = "0.239"
 
 # Plugin communication

@@ -21,7 +21,7 @@ crate-type = ["lib"]
 
 [dependencies]
 # Re-export core plugin functionality
-mockforge-plugin-core = "0.1.6"
+mockforge-plugin-core = { path = "../mockforge-plugin-core" }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }

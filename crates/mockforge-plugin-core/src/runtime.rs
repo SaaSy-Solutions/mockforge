@@ -17,7 +17,7 @@ use wasmtime::{
     Config, Engine, Linker, Module, PoolingAllocationConfig, ResourceLimiter, Store, StoreLimits,
     StoreLimitsBuilder,
 };
-use wasmtime_wasi::p2::WasiCtxBuilder;
+use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 use wasmtime_wasi::{DirPerms, FilePerms};
 

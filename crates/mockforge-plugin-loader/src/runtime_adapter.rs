@@ -17,7 +17,7 @@ use mockforge_plugin_core::{
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Instance, Linker, Module, Store};
-use wasmtime_wasi::p2::{WasiCtx, WasiCtxBuilder};
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 /// Enum representing different plugin runtime types
 #[derive(Debug, Clone, PartialEq, Eq)]
