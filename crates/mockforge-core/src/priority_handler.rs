@@ -1,10 +1,11 @@
 //! Priority-based HTTP request handler implementing the full priority chain:
-//! Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
+//! Custom Fixtures → Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
 
 use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
-    Error, FailureInjector, ProxyHandler, RealityContinuumEngine, RecordReplayHandler,
-    RequestFingerprint, ResponsePriority, ResponseSource, Result, RouteChaosInjector,
+    CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RealityContinuumEngine,
+    RecordReplayHandler, RequestFingerprint, ResponsePriority, ResponseSource, Result,
+    RouteChaosInjector,
 };
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
@@ -12,6 +13,8 @@ use std::sync::Arc;
 
 /// Priority-based HTTP request handler
 pub struct PriorityHttpHandler {
+    /// Custom fixture loader (simple format fixtures)
+    custom_fixture_loader: Option<Arc<CustomFixtureLoader>>,
     /// Record/replay handler
     record_replay: RecordReplayHandler,
     /// Stateful response handler
@@ -63,6 +66,7 @@ impl PriorityHttpHandler {
         mock_generator: Option<Box<dyn MockGenerator + Send + Sync>>,
     ) -> Self {
         Self {
+            custom_fixture_loader: None,
             record_replay,
             stateful_handler: None,
             route_chaos_injector: None,
@@ -83,6 +87,7 @@ impl PriorityHttpHandler {
         openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
     ) -> Self {
         Self {
+            custom_fixture_loader: None,
             record_replay,
             stateful_handler: None,
             route_chaos_injector: None,
@@ -92,6 +97,12 @@ impl PriorityHttpHandler {
             openapi_spec,
             continuum_engine: None,
         }
+    }
+
+    /// Set custom fixture loader
+    pub fn with_custom_fixture_loader(mut self, loader: Arc<CustomFixtureLoader>) -> Self {
+        self.custom_fixture_loader = Some(loader);
+        self
     }
 
     /// Set stateful response handler
@@ -121,6 +132,47 @@ impl PriorityHttpHandler {
         body: Option<&[u8]>,
     ) -> Result<PriorityResponse> {
         let fingerprint = RequestFingerprint::new(method.clone(), uri, headers, body);
+
+        // 0. CUSTOM FIXTURES: Check if we have a custom fixture (highest priority)
+        if let Some(ref custom_loader) = self.custom_fixture_loader {
+            if let Some(custom_fixture) = custom_loader.load_fixture(&fingerprint) {
+                // Apply delay if specified
+                if custom_fixture.delay_ms > 0 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                        custom_fixture.delay_ms,
+                    ))
+                    .await;
+                }
+
+                // Convert response to JSON string if it's not already a string
+                let response_body = if custom_fixture.response.is_string() {
+                    custom_fixture.response.as_str().unwrap().to_string()
+                } else {
+                    serde_json::to_string(&custom_fixture.response).map_err(|e| {
+                        Error::generic(format!("Failed to serialize custom fixture response: {}", e))
+                    })?
+                };
+
+                // Determine content type
+                let content_type = custom_fixture
+                    .headers
+                    .get("content-type")
+                    .cloned()
+                    .unwrap_or_else(|| "application/json".to_string());
+
+                return Ok(PriorityResponse {
+                    source: ResponseSource::new(
+                        ResponsePriority::Replay,
+                        "custom_fixture".to_string(),
+                    )
+                    .with_metadata("fixture_path".to_string(), custom_fixture.path.clone()),
+                    status_code: custom_fixture.status,
+                    headers: custom_fixture.headers.clone(),
+                    body: response_body.into_bytes(),
+                    content_type,
+                });
+            }
+        }
 
         // 1. REPLAY: Check if we have a recorded fixture
         if let Some(recorded_request) =

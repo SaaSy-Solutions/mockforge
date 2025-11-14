@@ -2,6 +2,7 @@ import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
+import { authApi } from '../services/authApi';
 
 interface AuthStore extends AuthState, AuthActions {
   checkAuth: () => Promise<void>;
@@ -10,72 +11,33 @@ interface AuthStore extends AuthState, AuthActions {
   stopTokenRefresh: () => void;
 }
 
-// Mock user database
-const mockUsers: Record<string, { password: string; user: User }> = {
-  admin: {
-    password: 'admin123',
-    user: {
-      id: 'admin-001',
-      username: 'admin',
-      role: 'admin',
-      email: 'admin@mockforge.dev',
-    },
-  },
-  viewer: {
-    password: 'viewer123',
-    user: {
-      id: 'viewer-001',
-      username: 'viewer',
-      role: 'viewer',
-      email: 'viewer@mockforge.dev',
-    },
-  },
-};
-
-// Mock JWT token generation
-const generateToken = (user: User): string => {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const payload = {
-    sub: user.id,
-    username: user.username,
-    role: user.role,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24), // 24 hours
-  };
-
-  // In a real app, this would be properly signed
-  return `mock.${btoa(JSON.stringify(header))}.${btoa(JSON.stringify(payload))}`;
-};
-
-// Mock token validation
-const validateToken = (token: string): User | null => {
+// Parse JWT token to extract user info (client-side validation only)
+const parseToken = (token: string): { user: User | null; expiresAt: number | null } => {
   try {
-    if (!token.startsWith('mock.')) return null;
-
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) return { user: null, expiresAt: null };
 
-    const payload = JSON.parse(atob(parts[2]));
+    const payload = JSON.parse(atob(parts[1])); // JWT payload is base64url encoded
 
     // Check expiration
-    if (payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
+    const expiresAt = payload.exp * 1000; // Convert to milliseconds
+    if (expiresAt < Date.now()) {
+      return { user: null, expiresAt: null };
     }
 
-    // Return user data
-    return {
+    // Extract user data from token
+    const user: User = {
       id: payload.sub,
       username: payload.username,
       email: payload.email || '',
       role: payload.role,
     };
+
+    return { user, expiresAt };
   } catch {
-    return null;
+    return { user: null, expiresAt: null };
   }
 };
-
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Token refresh interval management
 let tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -93,31 +55,39 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
 
         try {
-          // Simulate API call delay
-          await delay(800);
-
-          const userRecord = mockUsers[username];
-          if (!userRecord || userRecord.password !== password) {
-            throw new Error('Invalid username or password');
-          }
-
-          const token = generateToken(userRecord.user);
-          const refreshToken = `refresh_${token}`;
+          // Call real authentication API
+          const response = await authApi.login(username, password);
 
           set({
-            user: userRecord.user,
-            token,
-            refreshToken,
+            user: response.user,
+            token: response.token,
+            refreshToken: response.refresh_token,
             isAuthenticated: true,
             isLoading: false,
           });
+
+          // Start automatic token refresh
+          get().startTokenRefresh();
         } catch (error) {
           set({ isLoading: false });
-          throw error;
+          const errorMessage = error instanceof Error ? error.message : 'Login failed';
+          logger.error('Login failed', errorMessage);
+          throw new Error(errorMessage);
         }
       },
 
       logout: async () => {
+        // Stop token refresh
+        get().stopTokenRefresh();
+
+        // Call logout API (fire and forget)
+        try {
+          await authApi.logout();
+        } catch (error) {
+          logger.warn('Logout API call failed', error);
+        }
+
+        // Clear local state
         set({
           user: null,
           token: null,
@@ -132,21 +102,17 @@ export const useAuthStore = create<AuthStore>()(
         if (!refreshToken) throw new Error('No refresh token available');
 
         try {
-          await delay(300);
-
-          // In a real app, this would validate the refresh token and return a new access token
-          const currentUser = get().user;
-          if (!currentUser) throw new Error('No user found');
-
-          const newToken = generateToken(currentUser);
-          const newRefreshToken = `refresh_${newToken}`;
+          // Call real refresh token API
+          const response = await authApi.refreshToken(refreshToken);
 
           set({
-            token: newToken,
-            refreshToken: newRefreshToken,
+            token: response.token,
+            refreshToken: response.refresh_token,
+            user: response.user, // Update user info in case it changed
           });
         } catch (error) {
           // If refresh fails, logout
+          logger.error('Token refresh failed', error);
           get().logout();
           throw error;
         }
@@ -157,16 +123,19 @@ export const useAuthStore = create<AuthStore>()(
         if (!token) return false;
 
         try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          const timeUntilExpiry = payload.exp - Math.floor(Date.now() / 1000);
-          return timeUntilExpiry > 0;
+          const { expiresAt } = parseToken(token);
+          if (!expiresAt) return false;
+
+          // Check if token expires in less than 5 minutes
+          const timeUntilExpiry = expiresAt - Date.now();
+          return timeUntilExpiry > 5 * 60 * 1000; // 5 minutes in milliseconds
         } catch {
           return false;
         }
       },
 
       checkAuth: async () => {
-        const { token } = get();
+        const { token, refreshToken } = get();
         if (!token) {
           set({ isAuthenticated: false, isLoading: false });
           return;
@@ -175,24 +144,33 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
 
         try {
-          await delay(200);
+          // Parse token to check validity
+          const { user, expiresAt } = parseToken(token);
 
-          const user = validateToken(token);
-          if (user) {
+          if (user && expiresAt && expiresAt > Date.now()) {
+            // Token is valid
             set({
               user,
               isAuthenticated: true,
               isLoading: false,
             });
-          } else {
-            // Token is invalid, try to refresh
+
+            // Start token refresh if not already started
+            get().startTokenRefresh();
+          } else if (refreshToken) {
+            // Token expired, try to refresh
             try {
               await get().refreshTokenAction();
             } catch {
+              // Refresh failed, logout
               get().logout();
             }
+          } else {
+            // No refresh token, logout
+            get().logout();
           }
-        } catch {
+        } catch (error) {
+          logger.error('Auth check failed', error);
           get().logout();
         }
       },
@@ -201,39 +179,30 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
 
         try {
-          // Simulate API call delay
-          await delay(500);
-
-          // In a real app, this would make an API call to update the user profile
-          // For now, we'll just update the local state
+          // TODO: Implement profile update API endpoint
+          // For now, just update local state
           set({
             user: userData,
             isLoading: false,
           });
-
-          // Update the token to reflect the new user data
-          const newToken = generateToken(userData);
-          const newRefreshToken = `refresh_${newToken}`;
-
-          set({
-            token: newToken,
-            refreshToken: newRefreshToken,
-          });
         } catch (error) {
           set({ isLoading: false });
-          throw error;
+          const errorMessage = error instanceof Error ? error.message : 'Profile update failed';
+          logger.error('Profile update failed', errorMessage);
+          throw new Error(errorMessage);
         }
       },
 
-      setAuthenticated: (user: User, token: string) => {
-        const refreshToken = `refresh_${token}`;
+      setAuthenticated: (user: User, token: string, refreshToken?: string) => {
         set({
           user,
           token,
-          refreshToken,
+          refreshToken: refreshToken || null,
           isAuthenticated: true,
           isLoading: false,
         });
+        // Start token refresh
+        get().startTokenRefresh();
       },
 
       startTokenRefresh: () => {

@@ -4,6 +4,7 @@ import { ServerControlProvider } from './providers/serverControlProvider';
 import { MockForgeClient } from './services/mockforgeClient';
 import { Logger } from './utils/logger';
 import { validateConfiguration } from './utils/validation';
+import { MockForgeStatusBar } from './utils/statusBar';
 
 // Import command handlers
 import { registerRefreshMocksCommand } from './commands/refreshMocks';
@@ -40,6 +41,15 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize MockForge client
     let client = new MockForgeClient(serverUrl);
 
+    // Create status bar item
+    const statusBar = new MockForgeStatusBar();
+    context.subscriptions.push(statusBar);
+
+    // Listen for connection state changes to update status bar
+    client.onStateChange((state) => {
+        statusBar.updateStatus(state);
+    });
+
     // Create tree data providers
     let mocksProvider = new MocksTreeDataProvider(client);
     let serverProvider = new ServerControlProvider(client);
@@ -60,6 +70,11 @@ export function activate(context: vscode.ExtensionContext) {
 
                 // Create new client with new URL
                 client = new MockForgeClient(newServerUrl);
+
+                // Update status bar listener
+                client.onStateChange((state) => {
+                    statusBar.updateStatus(state);
+                });
 
                 // Recreate providers with new client
                 mocksProvider = new MocksTreeDataProvider(client);
@@ -91,14 +106,19 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Auto-connect to server if enabled
     if (config.get<boolean>('autoConnect', true)) {
+        statusBar.updateStatus('connecting');
         client.connect().then(() => {
             Logger.info('Connected to MockForge server');
+            statusBar.updateStatus('connected');
             vscode.window.showInformationMessage('Connected to MockForge server');
             mocksProvider.refresh();
         }).catch(error => {
             Logger.error('Failed to connect to MockForge server:', error);
+            statusBar.updateStatus('disconnected');
             vscode.window.showWarningMessage(`Could not connect to MockForge server: ${error.message}`);
         });
+    } else {
+        statusBar.updateStatus('disconnected');
     }
 }
 

@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex};
 use tracing;
 
 /// OpenAPI route registry that manages generated routes
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenApiRouteRegistry {
     /// The OpenAPI specification
     spec: Arc<OpenApiSpec>,
@@ -45,6 +45,8 @@ pub struct OpenApiRouteRegistry {
     routes: Vec<OpenApiRoute>,
     /// Validation options
     options: ValidationOptions,
+    /// Custom fixture loader (optional)
+    custom_fixture_loader: Option<Arc<crate::CustomFixtureLoader>>,
 }
 
 /// Validation mode for request/response validation
@@ -147,6 +149,7 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            custom_fixture_loader: None,
         }
     }
 
@@ -168,7 +171,14 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            custom_fixture_loader: None,
         }
+    }
+
+    /// Set custom fixture loader
+    pub fn with_custom_fixture_loader(mut self, loader: Arc<crate::CustomFixtureLoader>) -> Self {
+        self.custom_fixture_loader = Some(loader);
+        self
     }
 
     /// Clone this registry for validation purposes (creates an independent copy)
@@ -180,6 +190,7 @@ impl OpenApiRouteRegistry {
             spec: self.spec.clone(),
             routes: self.routes.clone(),
             options: self.options.clone(),
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
         }
     }
 
@@ -228,6 +239,7 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Building router from {} routes", self.routes.len());
 
         // Create individual routes for each operation
+        let custom_loader = self.custom_fixture_loader.clone();
         for route in &self.routes {
             tracing::debug!("Adding route: {} {}", route.method, route.path);
             let axum_path = route.axum_path();
@@ -236,8 +248,9 @@ impl OpenApiRouteRegistry {
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
             let route_clone = route.clone();
+            let custom_loader_clone = custom_loader.clone();
 
-            // Handler: validate path/query/header/cookie/body, then return mock
+            // Handler: check custom fixtures, then validate path/query/header/cookie/body, then return mock
             let handler = move |AxumPath(path_params): AxumPath<
                 std::collections::HashMap<String, String>,
             >,
@@ -245,6 +258,88 @@ impl OpenApiRouteRegistry {
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
                 tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
+
+                // Check for custom fixture first (highest priority)
+                if let Some(ref loader) = custom_loader_clone {
+                    use crate::RequestFingerprint;
+                    use axum::http::{Method, Uri};
+
+                    // Reconstruct the full path from template and params
+                    let mut request_path = path_template.clone();
+                    for (key, value) in &path_params {
+                        request_path = request_path.replace(&format!("{{{}}}", key), value);
+                    }
+
+                    // Build query string
+                    let query_string = raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
+
+                    // Create URI for fingerprint
+                    // Note: RequestFingerprint only uses the path, not the full URI with query
+                    // So we can create a simple URI from just the path
+                    let uri_str = if query_string.is_empty() {
+                        request_path.clone()
+                    } else {
+                        format!("{}?{}", request_path, query_string)
+                    };
+
+                    if let Ok(uri) = uri_str.parse::<Uri>() {
+                        let http_method = Method::from_bytes(method.as_bytes())
+                            .unwrap_or(Method::GET);
+                        let body_slice = if body.is_empty() { None } else { Some(body.as_ref()) };
+                        let fingerprint = RequestFingerprint::new(http_method, &uri, &headers, body_slice);
+
+                        if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
+                            tracing::debug!("Using custom fixture for {} {}", method, path_template);
+
+                            // Apply delay if specified
+                            if custom_fixture.delay_ms > 0 {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(
+                                    custom_fixture.delay_ms,
+                                ))
+                                .await;
+                            }
+
+                            // Convert response to JSON string if needed
+                            let response_body = if custom_fixture.response.is_string() {
+                                custom_fixture.response.as_str().unwrap().to_string()
+                            } else {
+                                serde_json::to_string(&custom_fixture.response)
+                                    .unwrap_or_else(|_| "{}".to_string())
+                            };
+
+                            // Parse response body as JSON
+                            let json_value: serde_json::Value = serde_json::from_str(&response_body)
+                                .unwrap_or_else(|_| serde_json::json!({}));
+
+                            // Build response with status and JSON body
+                            let status = axum::http::StatusCode::from_u16(custom_fixture.status)
+                                .unwrap_or(axum::http::StatusCode::OK);
+
+                            let mut response = (status, axum::response::Json(json_value)).into_response();
+
+                            // Add custom headers to response
+                            let response_headers = response.headers_mut();
+                            for (key, value) in &custom_fixture.headers {
+                                if let (Ok(header_name), Ok(header_value)) = (
+                                    axum::http::HeaderName::from_bytes(key.as_bytes()),
+                                    axum::http::HeaderValue::from_str(value),
+                                ) {
+                                    response_headers.insert(header_name, header_value);
+                                }
+                            }
+
+                            // Ensure content-type is set if not already present
+                            if !custom_fixture.headers.contains_key("content-type") {
+                                response_headers.insert(
+                                    axum::http::header::CONTENT_TYPE,
+                                    axum::http::HeaderValue::from_static("application/json"),
+                                );
+                            }
+
+                            return response;
+                        }
+                    }
+                }
 
                 // Determine scenario from header or environment variable
                 // Header takes precedence over environment variable

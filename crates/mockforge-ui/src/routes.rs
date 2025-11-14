@@ -6,10 +6,14 @@ use axum::{
 };
 use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 
+use crate::audit::init_global_audit_store;
+use crate::auth::init_global_user_store;
 use crate::handlers::analytics::AnalyticsState;
 use crate::handlers::AdminState;
 use crate::handlers::*;
+use crate::rbac::rbac_middleware;
 use crate::time_travel_handlers;
+use axum::middleware::from_fn;
 use mockforge_core::{get_global_logger, init_global_logger};
 
 /// Create the admin router with static assets and optional API endpoints
@@ -48,6 +52,12 @@ pub fn create_admin_router(
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
 
+    // Initialize audit log store (keep last 10000 audit entries)
+    let _audit_store = init_global_audit_store(10000);
+
+    // Initialize user store for authentication
+    let _user_store = init_global_user_store();
+
     let state = AdminState::new(
         http_server_addr,
         ws_server_addr,
@@ -68,6 +78,7 @@ pub fn create_admin_router(
         state_clone.start_system_monitoring().await;
     });
     let mut router = Router::new()
+        // Public routes (no authentication required)
         .route("/", get(serve_admin_html))
         .route("/assets/index.css", get(serve_admin_css))
         .route("/assets/index.js", get(serve_admin_js))
@@ -80,12 +91,17 @@ pub fn create_admin_router(
         .route("/mockforge-logo-40.png", get(serve_logo_40))
         .route("/mockforge-logo-80.png", get(serve_logo_80))
         .route("/manifest.json", get(serve_manifest))
-        .route("/sw.js", get(serve_service_worker));
+        .route("/sw.js", get(serve_service_worker))
+        // Authentication endpoints (public)
+        .route("/__mockforge/auth/login", post(crate::auth::login))
+        .route("/__mockforge/auth/refresh", post(crate::auth::refresh_token))
+        .route("/__mockforge/auth/logout", post(crate::auth::logout))
+        .route("/__mockforge/health", get(get_health));
 
+    // Protected routes (require authentication and RBAC)
     router = router
         .route("/__mockforge/dashboard", get(get_dashboard))
         .route("/_mf", get(get_dashboard))  // Short alias for dashboard
-        .route("/__mockforge/health", get(get_health))
         .route("/admin/server-info", get(get_server_info))
         .route("/__mockforge/server-info", get(get_server_info))
         .route("/__mockforge/routes", get(get_routes))
@@ -103,6 +119,8 @@ pub fn create_admin_router(
         .route("/__mockforge/fixtures", get(get_fixtures))
         .route("/__mockforge/fixtures/{id}", delete(delete_fixture))
         .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
+        .route("/__mockforge/audit/logs", get(get_audit_logs))
+        .route("/__mockforge/audit/stats", get(get_audit_stats))
         .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
         .route("/__mockforge/fixtures/{id}/rename", post(rename_fixture))
         .route("/__mockforge/fixtures/{id}/move", post(move_fixture))
@@ -232,6 +250,15 @@ pub fn create_admin_router(
         // Voice + LLM Interface routes
         .route("/api/v2/voice/process", post(voice::process_voice_command))
         .route("/__mockforge/voice/process", post(voice::process_voice_command))
+        // Community portal routes
+        .route("/__mockforge/community/showcase/projects", get(community::get_showcase_projects))
+        .route("/__mockforge/community/showcase/projects/{id}", get(community::get_showcase_project))
+        .route("/__mockforge/community/showcase/categories", get(community::get_showcase_categories))
+        .route("/__mockforge/community/showcase/stories", get(community::get_success_stories))
+        .route("/__mockforge/community/showcase/submit", post(community::submit_showcase_project))
+        .route("/__mockforge/community/learning/resources", get(community::get_learning_resources))
+        .route("/__mockforge/community/learning/resources/{id}", get(community::get_learning_resource))
+        .route("/__mockforge/community/learning/categories", get(community::get_learning_categories))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))
@@ -277,6 +304,11 @@ pub fn create_admin_router(
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes
     router = router.route("/{*path}", get(serve_admin_html));
+
+    // Apply RBAC middleware to protected routes
+    // Note: The middleware will check authentication and permissions for all routes
+    // Public routes (auth endpoints, static assets) should be handled gracefully
+    router = router.layer(from_fn(rbac_middleware));
 
     router
         .layer(CompressionLayer::new())

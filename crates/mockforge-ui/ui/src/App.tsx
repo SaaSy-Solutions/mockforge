@@ -54,6 +54,10 @@ const OrchestrationExecutionView = lazy(() => import('./pages/OrchestrationExecu
 const PluginRegistryPage = lazy(() => import('./pages/PluginRegistryPage'));
 const TemplateMarketplacePage = lazy(() => import('./pages/TemplateMarketplacePage'));
 
+// Community Portal
+const ShowcasePage = lazy(() => import('./pages/ShowcasePage').then(m => ({ default: m.ShowcasePage })));
+const LearningHubPage = lazy(() => import('./pages/LearningHubPage').then(m => ({ default: m.LearningHubPage })));
+
 // User Management
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
 
@@ -191,6 +195,12 @@ function App() {
         return <ImportPage />;
       case 'template-marketplace':
         return <TemplateMarketplacePage />;
+
+      // Community Portal
+      case 'showcase':
+        return <ShowcasePage />;
+      case 'learning-hub':
+        return <LearningHubPage />;
 
       // Plugins
       case 'plugins':

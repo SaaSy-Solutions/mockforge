@@ -85,7 +85,10 @@
       "shortDescription": "MockForge Desktop - API Mocking Framework",
       "longDescription": "MockForge Desktop provides a native desktop application for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.",
       "deb": {
-        "depends": []
+        "depends": [],
+        "files": {
+          "/usr/share/applications/mockforge.desktop": "assets/mockforge.desktop"
+        }
       },
       "macOS": {
         "frameworks": [],

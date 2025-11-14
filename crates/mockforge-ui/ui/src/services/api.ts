@@ -85,10 +85,21 @@ export type { CreateRequestRequest, CreateRequestResponse, ExecuteRequestRequest
 const API_BASE = '/__mockforge/chains';
 const WORKSPACE_API_BASE = '/__mockforge/workspaces';
 
+// Import authenticated fetch
+import { authenticatedFetch } from '../utils/apiClient';
+
 class ApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      // Handle 401/403 errors
+      if (response.status === 401) {
+        // Token expired or invalid - auth store will handle refresh/logout
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -681,8 +692,14 @@ class ApiService {
 
 class ImportApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -762,8 +779,14 @@ class FixturesApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -812,8 +835,14 @@ class FixturesApiService {
   }
 
   async downloadFixture(fixtureId: string): Promise<Blob> {
-    const response = await fetch(`/__mockforge/fixtures/${fixtureId}/download`);
+    const response = await authenticatedFetch(`/__mockforge/fixtures/${fixtureId}/download`);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.blob();
@@ -844,8 +873,14 @@ class FixturesApiService {
 
 class DashboardApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -884,13 +919,20 @@ class DashboardApiService {
 
 class ServerApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
     return json.data || json;
   }
+
 
   async getServerInfo(): Promise<ServerInfo> {
     return this.fetchJson('/__mockforge/server-info') as Promise<ServerInfo>;
@@ -911,8 +953,14 @@ class ServerApiService {
 
 class RoutesApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -931,8 +979,14 @@ class LogsApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -990,8 +1044,14 @@ class MetricsApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1005,8 +1065,14 @@ class MetricsApiService {
 
 class ConfigApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1044,8 +1110,14 @@ class ConfigApiService {
 
 class ValidationApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1067,8 +1139,14 @@ class ValidationApiService {
 
 class EnvApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1090,8 +1168,14 @@ class EnvApiService {
 
 class FilesApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1117,8 +1201,14 @@ class FilesApiService {
 
 class SmokeTestsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1138,8 +1228,14 @@ class SmokeTestsApiService {
 
 class ChaosApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1326,8 +1422,14 @@ class ChaosApiService {
    * Export a network profile (JSON or YAML)
    */
   async exportNetworkProfile(name: string, format: 'json' | 'yaml' = 'json'): Promise<any> {
-    const response = await fetch(`/api/chaos/profiles/${encodeURIComponent(name)}/export?format=${format}`);
+    const response = await authenticatedFetch(`/api/chaos/profiles/${encodeURIComponent(name)}/export?format=${format}`);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     if (format === 'yaml') {
@@ -1372,8 +1474,14 @@ class ChaosApiService {
  */
 class TimeTravelApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       throw new Error(error.error || `HTTP error! status: ${response.status}`);
     }
@@ -1561,8 +1669,14 @@ class TimeTravelApiService {
  */
 class RealityApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       throw new Error(error.error || `HTTP error! status: ${response.status}`);
     }
@@ -1712,8 +1826,14 @@ class RealityApiService {
 
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1772,8 +1892,14 @@ class PluginsApiService {
 
 class VerificationApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
@@ -1893,8 +2019,14 @@ export interface AnalyzeRequestPayload {
 
 class ContractDiffApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const errorText = await response.text();
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
@@ -1910,7 +2042,7 @@ class ContractDiffApiService {
   }
 
   async uploadRequest(request: Omit<CapturedRequest, 'id' | 'captured_at' | 'analyzed'>): Promise<{ capture_id: string; message: string }> {
-    const response = await fetch('/__mockforge/contract-diff/upload', {
+    const response = await authenticatedFetch('/__mockforge/contract-diff/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

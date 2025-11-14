@@ -333,11 +333,11 @@ impl BackupService {
                     storage_backend: serde_json::from_str(&row.storage_backend).map_err(|e| {
                         CollabError::Internal(format!("Invalid storage_backend: {}", e))
                     })?,
-                    storage_config: row.storage_config.and_then(|s| serde_json::from_str(&s).ok()),
+                    storage_config: row.storage_config.as_ref().and_then(|s| serde_json::from_str(s).ok()),
                     size_bytes: row.size_bytes,
                     backup_format: row.backup_format,
                     encrypted: row.encrypted != 0,
-                    commit_id: row.commit_id.and_then(|s| Uuid::parse_str(&s).ok()),
+                    commit_id: row.commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
                     created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
                         .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
                         .with_timezone(&chrono::Utc),
@@ -345,8 +345,9 @@ impl BackupService {
                         .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
                     expires_at: row
                         .expires_at
+                        .as_ref()
                         .map(|s| {
-                            chrono::DateTime::parse_from_rfc3339(&s)
+                            chrono::DateTime::parse_from_rfc3339(s)
                                 .map(|dt| dt.with_timezone(&chrono::Utc))
                                 .map_err(|e| {
                                     CollabError::Internal(format!("Invalid timestamp: {}", e))
@@ -396,11 +397,11 @@ impl BackupService {
             backup_url: row.backup_url,
             storage_backend: serde_json::from_str(&row.storage_backend)
                 .map_err(|e| CollabError::Internal(format!("Invalid storage_backend: {}", e)))?,
-            storage_config: row.storage_config.and_then(|s| serde_json::from_str(&s).ok()),
+            storage_config: row.storage_config.as_ref().and_then(|s| serde_json::from_str(s).ok()),
             size_bytes: row.size_bytes,
             backup_format: row.backup_format,
             encrypted: row.encrypted != 0,
-            commit_id: row.commit_id.and_then(|s| Uuid::parse_str(&s).ok()),
+            commit_id: row.commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
                 .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
                 .with_timezone(&chrono::Utc),
@@ -408,8 +409,9 @@ impl BackupService {
                 .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
             expires_at: row
                 .expires_at
+                .as_ref()
                 .map(|s| {
-                    chrono::DateTime::parse_from_rfc3339(&s)
+                    chrono::DateTime::parse_from_rfc3339(s)
                         .map(|dt| dt.with_timezone(&chrono::Utc))
                         .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))
                 })

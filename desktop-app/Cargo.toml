@@ -51,6 +51,10 @@ reqwest = { workspace = true, features = ["json"] }
 dirs = "5.0"
 which = "5.0"
 
+# Windows registry access for theme detection
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]

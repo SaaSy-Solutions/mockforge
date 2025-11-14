@@ -46,6 +46,18 @@ mockforge-plugin-core = { path = "../mockforge-plugin-core", version = "0.2.8" }
 mockforge-plugin-loader = { path = "../mockforge-plugin-loader", version = "0.2.8" }
 mockforge-analytics = { path = "../mockforge-analytics", version = "0.2.8" }
 mockforge-chaos = { path = "../mockforge-chaos", version = "0.2.8" }
+mockforge-collab = { path = "../mockforge-collab", version = "0.2.8" }
+base64 = { workspace = true }
+jsonwebtoken = "9.3"
+bcrypt = "0.15"
+tokio-util = { version = "0.7", features = ["time"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "migrate"], optional = true }
+blake3 = { version = "0.3", optional = true }
+
+[features]
+default = []
+database-auth = ["sqlx", "blake3"]
+password-policy = []
 
 [build-dependencies]
 serde = { workspace = true }

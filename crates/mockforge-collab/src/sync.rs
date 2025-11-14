@@ -47,7 +47,7 @@ pub struct SyncState {
     /// Full state
     pub state: serde_json::Value,
     /// Last updated timestamp
-    pub last_updated: chrono::DateTime<chrono::Utc>,
+    pub last_updated: chrono::DateTime<Utc>,
 }
 
 impl SyncState {
@@ -56,7 +56,7 @@ impl SyncState {
         Self {
             version,
             state,
-            last_updated: chrono::Utc::now(),
+            last_updated: Utc::now(),
         }
     }
 
@@ -64,7 +64,7 @@ impl SyncState {
     pub fn update(&mut self, new_state: serde_json::Value) {
         self.version += 1;
         self.state = new_state;
-        self.last_updated = chrono::Utc::now();
+        self.last_updated = Utc::now();
     }
 }
 
@@ -338,7 +338,7 @@ impl SyncEngine {
             // Parse timestamp (stored as TEXT in SQLite, format: ISO8601)
             // SQLite stores timestamps as TEXT, try parsing as RFC3339 first, then fallback
             let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
-                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .map(|dt| dt.with_timezone(&Utc))
                 .or_else(|_| {
                     // Try parsing as ISO8601 without timezone (SQLite default format)
                     chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S%.f")

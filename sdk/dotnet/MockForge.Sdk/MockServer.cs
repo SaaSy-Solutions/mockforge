@@ -122,14 +122,14 @@ public class MockServer : IDisposable
             _process = Process.Start(startInfo);
             if (_process == null)
             {
-                throw new MockServerException("Failed to start MockForge process");
+                throw MockServerException.ServerStartFailed("Failed to start MockForge process");
             }
 
             await WaitForServerAsync();
         }
         catch (Exception e)
         {
-            throw new MockServerException("Failed to start MockForge process", e);
+            throw MockServerException.ServerStartFailed("Failed to start MockForge process", e);
         }
     }
 
@@ -171,8 +171,9 @@ public class MockServer : IDisposable
             _process = null;
         }
 
-        throw new MockServerException(
-            $"Timeout waiting for server to start on {_host}:{_port}"
+        throw MockServerException.HealthCheckTimeout(
+            STARTUP_TIMEOUT_SECONDS * 1000,
+            _port
         );
     }
 
@@ -239,7 +240,7 @@ public class MockServer : IDisposable
     {
         if (stub == null)
         {
-            throw new MockServerException("ResponseStub cannot be null");
+            throw MockServerException.InvalidConfig("ResponseStub cannot be null");
         }
 
         _stubs.Add(stub);
@@ -373,7 +374,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
@@ -407,7 +408,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
@@ -446,7 +447,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
@@ -482,7 +483,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();

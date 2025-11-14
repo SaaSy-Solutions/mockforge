@@ -363,7 +363,7 @@ impl UserDataProvider for CollabUserDataProvider {
         // Use last_activity from workspace_members as proxy for last login
         let result = sqlx::query!(
             r#"
-            SELECT MAX(last_activity) as last_activity
+            SELECT MAX(last_activity) as "last_activity: chrono::DateTime<chrono::Utc>"
             FROM workspace_members
             WHERE user_id = ?
             "#,

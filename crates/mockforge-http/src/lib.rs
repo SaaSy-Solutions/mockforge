@@ -1400,7 +1400,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 // Try to load persona from config if available
                 let persona = load_persona_from_config().await;
 
-                let registry = if let Some(opts) = options {
+                let mut registry = if let Some(opts) = options {
                     tracing::debug!("Using custom validation options");
                     if let Some(ref persona) = persona {
                         tracing::info!("Using persona '{}' for route generation", persona.name);
@@ -1413,6 +1413,30 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     }
                     OpenApiRouteRegistry::new_with_env_and_persona(openapi, persona)
                 };
+
+                // Load custom fixtures if enabled
+                let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+                    .unwrap_or_else(|_| "/app/fixtures".to_string());
+                let custom_fixtures_enabled = std::env::var("MOCKFORGE_CUSTOM_FIXTURES_ENABLED")
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(true); // Enabled by default
+
+                if custom_fixtures_enabled {
+                    use mockforge_core::CustomFixtureLoader;
+                    use std::path::PathBuf;
+                    use std::sync::Arc;
+
+                    let fixtures_path = PathBuf::from(&fixtures_dir);
+                    let mut custom_loader = CustomFixtureLoader::new(fixtures_path, true);
+
+                    if let Err(e) = custom_loader.load_fixtures().await {
+                        tracing::warn!("Failed to load custom fixtures: {}", e);
+                    } else {
+                        tracing::info!("Custom fixtures loaded from {}", fixtures_dir);
+                        registry = registry.with_custom_fixture_loader(Arc::new(custom_loader));
+                    }
+                }
+
                 if registry
                     .routes()
                     .iter()

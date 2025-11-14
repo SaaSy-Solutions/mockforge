@@ -221,6 +221,27 @@ make build
 make install
 ```
 
+#### Command Aliases (Optional)
+
+For faster typing, you can set up command aliases:
+
+```bash
+# Run the setup script
+./scripts/setup-aliases.sh
+
+# Or manually add to your ~/.bashrc or ~/.zshrc:
+alias mf='mockforge'
+alias mf-serve='mockforge serve'
+alias mf-wizard='mockforge wizard'
+```
+
+Then use `mf` instead of `mockforge`:
+```bash
+mf wizard        # Interactive setup wizard
+mf serve         # Start mock server
+mf init .        # Initialize project
+```
+
 ### Try the Examples
 
 MockForge comes with comprehensive examples to get you started quickly:

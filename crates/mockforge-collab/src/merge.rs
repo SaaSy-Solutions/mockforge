@@ -48,8 +48,8 @@ impl MergeService {
         .await?;
 
         if let Some(fork) = fork {
-            if let Some(commit_id_str) = fork.fork_point_commit_id {
-                if let Ok(commit_id) = Uuid::parse_str(&commit_id_str) {
+            if let Some(commit_id_str) = fork.fork_point_commit_id.as_ref() {
+                if let Ok(commit_id) = Uuid::parse_str(commit_id_str) {
                     return Ok(Some(commit_id));
                 }
             }
@@ -71,8 +71,8 @@ impl MergeService {
         .await?;
 
         if let Some(fork) = fork {
-            if let Some(commit_id_str) = fork.fork_point_commit_id {
-                if let Ok(commit_id) = Uuid::parse_str(&commit_id_str) {
+            if let Some(commit_id_str) = fork.fork_point_commit_id.as_ref() {
+                if let Ok(commit_id) = Uuid::parse_str(commit_id_str) {
                     return Ok(Some(commit_id));
                 }
             }
@@ -489,15 +489,16 @@ impl MergeService {
                 .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
             target_commit_id: Uuid::parse_str(&row.target_commit_id)
                 .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
-            merge_commit_id: row.merge_commit_id.and_then(|s| Uuid::parse_str(&s).ok()),
+            merge_commit_id: row.merge_commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             status: serde_json::from_str(&row.status)
                 .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
-            conflict_data: row.conflict_data.and_then(|s| serde_json::from_str(&s).ok()),
-            merged_by: row.merged_by.and_then(|s| Uuid::parse_str(&s).ok()),
+            conflict_data: row.conflict_data.as_ref().and_then(|s| serde_json::from_str(s).ok()),
+            merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             merged_at: row
                 .merged_at
+                .as_ref()
                 .map(|s| {
-                    chrono::DateTime::parse_from_rfc3339(&s)
+                    chrono::DateTime::parse_from_rfc3339(s)
                         .map(|dt| dt.with_timezone(&chrono::Utc))
                         .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))
                 })
@@ -552,15 +553,16 @@ impl MergeService {
                         .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
                     target_commit_id: Uuid::parse_str(&row.target_commit_id)
                         .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
-                    merge_commit_id: row.merge_commit_id.and_then(|s| Uuid::parse_str(&s).ok()),
+                    merge_commit_id: row.merge_commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
                     status: serde_json::from_str(&row.status)
                         .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
-                    conflict_data: row.conflict_data.and_then(|s| serde_json::from_str(&s).ok()),
-                    merged_by: row.merged_by.and_then(|s| Uuid::parse_str(&s).ok()),
+                    conflict_data: row.conflict_data.as_ref().and_then(|s| serde_json::from_str(s).ok()),
+                    merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
                     merged_at: row
                         .merged_at
+                        .as_ref()
                         .map(|s| {
-                            chrono::DateTime::parse_from_rfc3339(&s)
+                            chrono::DateTime::parse_from_rfc3339(s)
                                 .map(|dt| dt.with_timezone(&chrono::Utc))
                                 .map_err(|e| {
                                     CollabError::Internal(format!("Invalid timestamp: {}", e))

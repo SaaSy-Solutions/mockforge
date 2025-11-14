@@ -1103,12 +1103,36 @@ impl ResponseGenerator {
                         *name_val = Value::String(format!("Hive #{}", item_index));
                     } else {
                         // Pattern like "Meadow Apiary" -> use rotation of varied names
+                        // 60+ unique apiary names with geographic diversity for realistic demo
                         let apiary_names = [
-                            "Meadow Apiary", "Sunset Apiary", "Valley Apiary", "Riverside Apiary",
-                            "Hilltop Apiary", "Prairie Apiary", "Forest Apiary", "Mountain Apiary",
-                            "Lakeside Apiary", "Grove Apiary", "Field Apiary", "Ridge Apiary",
-                            "Brook Apiary", "Orchard Apiary", "Pasture Apiary", "Hillside Apiary",
-                            "Creek Apiary", "Woodland Apiary", "Farm Apiary", "Meadow Apiary"
+                            // Midwest/Prairie names
+                            "Meadow Apiary", "Prairie Apiary", "Sunset Valley Apiary", "Golden Fields Apiary",
+                            "Miller Family Apiary", "Heartland Honey Co.", "Cornfield Apiary", "Harvest Moon Apiary",
+                            "Prairie Winds Apiary", "Amber Fields Apiary",
+                            // California/Coastal names
+                            "Coastal Apiary", "Sunset Coast Apiary", "Pacific Grove Apiary", "Golden Gate Apiary",
+                            "Napa Valley Apiary", "Coastal Breeze Apiary", "Pacific Heights Apiary", "Bay Area Apiary",
+                            "Sunset Valley Honey Co.", "Coastal Harvest Apiary",
+                            // Texas/Ranch names
+                            "Lone Star Apiary", "Texas Ranch Apiary", "Big Sky Apiary", "Prairie Rose Apiary",
+                            "Hill Country Apiary", "Lone Star Honey Co.", "Texas Pride Apiary", "Wildflower Ranch",
+                            "Desert Bloom Apiary", "Cactus Creek Apiary",
+                            // Florida/Grove names
+                            "Orange Grove Apiary", "Citrus Grove Apiary", "Palm Grove Apiary", "Tropical Breeze Apiary",
+                            "Everglades Apiary", "Sunshine State Apiary", "Florida Keys Apiary", "Grove View Apiary",
+                            "Tropical Harvest Apiary", "Palm Coast Apiary",
+                            // Northeast/Valley names
+                            "Mountain View Apiary", "Valley Apiary", "Riverside Apiary", "Hilltop Apiary",
+                            "Forest Apiary", "Mountain Apiary", "Lakeside Apiary", "Ridge Apiary",
+                            "Brook Apiary", "Hillside Apiary",
+                            // Generic/Professional names
+                            "Field Apiary", "Creek Apiary", "Woodland Apiary", "Farm Apiary",
+                            "Orchard Apiary", "Pasture Apiary", "Green Valley Apiary", "Blue Sky Apiary",
+                            "Sweet Honey Apiary", "Nature's Best Apiary",
+                            // Business/Commercial names
+                            "Premium Honey Co.", "Artisan Apiary", "Heritage Apiary", "Summit Apiary",
+                            "Crystal Springs Apiary", "Maple Grove Apiary", "Wildflower Apiary", "Thistle Apiary",
+                            "Clover Field Apiary", "Honeycomb Apiary"
                         ];
                         let name_index = (item_index - 1) as usize % apiary_names.len();
                         *name_val = Value::String(apiary_names[name_index].to_string());
@@ -1236,6 +1260,50 @@ impl ResponseGenerator {
                     ];
                     let desc_index = (item_index - 1) as usize % descriptions.len();
                     *desc_val = Value::String(descriptions[desc_index].to_string());
+                }
+            }
+
+            // Vary timestamp fields (created_at, updated_at, timestamp, date) for realistic time-series data
+            // Generate timestamps spanning 12-24 months with proper distribution
+            let timestamp_fields = ["created_at", "updated_at", "timestamp", "date", "forecastDate", "predictedDate"];
+            for field_name in &timestamp_fields {
+                if let Some(timestamp_val) = obj.get_mut(*field_name) {
+                    if let Some(_timestamp_str) = timestamp_val.as_str() {
+                        // Generate realistic timestamp: distribute items over past 12-18 months
+                        // Use item_index to create variation (not all same date)
+                        let months_ago = 12 + ((item_index - 1) % 6); // Distribute over 6 months (12-18 months ago)
+                        let days_offset = (item_index - 1) % 28; // Distribute within month (cap at 28)
+                        let hours_offset = ((item_index * 7) % 24) as u8; // Distribute throughout day
+                        let minutes_offset = ((item_index * 11) % 60) as u8; // Vary minutes
+
+                        // Calculate timestamp relative to current date (November 2024)
+                        // Format: ISO 8601 (e.g., "2024-11-12T14:30:00Z")
+                        let base_year = 2024;
+                        let base_month = 11;
+
+                        // Calculate target month (going back in time)
+                        let target_year = if months_ago >= base_month as u64 {
+                            base_year - 1
+                        } else {
+                            base_year
+                        };
+                        let target_month = if months_ago >= base_month as u64 {
+                            12 - (months_ago - base_month as u64) as u8
+                        } else {
+                            (base_month as u64 - months_ago) as u8
+                        };
+                        let target_day = std::cmp::min(28, 1 + days_offset as u8); // Start from day 1, cap at 28
+
+                        // Format as ISO 8601
+                        let timestamp = format!("{:04}-{:02}-{:02}T{:02}:{:02}:00Z",
+                            target_year,
+                            target_month,
+                            target_day,
+                            hours_offset,
+                            minutes_offset
+                        );
+                        *timestamp_val = Value::String(timestamp);
+                    }
                 }
             }
         }

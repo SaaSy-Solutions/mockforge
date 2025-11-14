@@ -34,4 +34,6 @@
 
 export { MockServer } from './mockServer';
 export { StubBuilder } from './stubBuilder';
+export { MockServerError, MockServerErrorCode } from './errors';
+export type { MockServerConfig, ResponseStub, StubOptions, VerificationRequest, VerificationCount, VerificationResult } from './types';
 export * from './types';

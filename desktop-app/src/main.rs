@@ -13,6 +13,7 @@ mod notifications;
 mod server;
 mod shortcuts;
 mod system_tray;
+mod theme;
 mod updater;
 
 use notifications::show_notification;
@@ -95,6 +96,12 @@ fn main() {
             // Show notification on startup
             show_notification(&app.handle(), "MockForge", "MockForge Desktop is running");
 
+            // Start watching for system theme changes
+            theme::watch_system_theme(app.handle().clone());
+
+            // Start periodic update checking
+            updater::start_periodic_update_check(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -107,6 +114,9 @@ fn main() {
             commands::handle_file_open,
             commands::check_for_updates,
             commands::install_update,
+            theme::get_system_theme,
+            theme::get_theme_preference,
+            theme::save_theme_preference,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

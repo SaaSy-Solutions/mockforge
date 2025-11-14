@@ -15,6 +15,8 @@ pub struct AppState {
     pub admin_port: Option<u16>,
     /// Last error message
     pub last_error: Option<String>,
+    /// Theme preference (light, dark, system)
+    pub theme_preference: Option<String>,
 }
 
 impl AppState {
@@ -25,6 +27,7 @@ impl AppState {
             http_port: Some(3000),
             admin_port: Some(9080),
             last_error: None,
+            theme_preference: None,
         }
     }
 }

@@ -11,6 +11,7 @@ import {
   Section,
   ModernBadge
 } from '../components/ui/DesignSystem';
+import { PerformanceDashboard } from '../components/metrics/PerformanceDashboard';
 
 // Simple chart component using CSS
 function SimpleBarChart({ data, title }: { data: Array<{ label: string; value: number; color: string }>; title: string }) {
@@ -235,6 +236,9 @@ export function MetricsPage() {
         title="Performance Metrics"
         subtitle="Real-time system performance and request analytics"
       />
+
+      {/* Performance Dashboard with Latency Percentiles */}
+      <PerformanceDashboard />
 
       {/* Key Metrics Overview */}
       <Section

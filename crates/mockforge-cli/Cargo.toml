@@ -64,6 +64,8 @@ urlencoding = "2.1"
 colored = "2.2"
 indicatif = "0.17"
 console = "0.15"
+dialoguer = "0.11"
+dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { workspace = true }
 openapiv3 = "2.0"

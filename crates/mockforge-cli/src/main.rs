@@ -21,6 +21,7 @@ use tokio::net::TcpListener;
 mod amqp_commands;
 mod backend_generator;
 mod client_generator;
+mod cloud_commands;
 mod contract_diff_commands;
 mod contract_sync_commands;
 mod deploy_commands;
@@ -45,6 +46,8 @@ mod tunnel_commands;
 mod vbr_commands;
 mod voice_commands;
 mod workspace_commands;
+mod wizard;
+mod error_helpers;
 
 #[cfg(test)]
 mod tests;
@@ -629,6 +632,15 @@ enum Commands {
         no_examples: bool,
     },
 
+    /// Interactive getting started wizard
+    ///
+    /// Guides you through setting up your first MockForge project with
+    /// auto-detection and sample mock generation.
+    ///
+    /// Examples:
+    ///   mockforge wizard
+    Wizard,
+
     /// Generate mock servers from OpenAPI specifications
     ///
     /// Examples:
@@ -885,6 +897,19 @@ enum Commands {
     Workspace {
         #[command(subcommand)]
         workspace_command: workspace_commands::WorkspaceCommands,
+    },
+
+    /// Cloud sync and collaboration commands
+    ///
+    /// Examples:
+    ///   mockforge cloud login
+    ///   mockforge cloud sync --workspace my-workspace
+    ///   mockforge cloud workspace list
+    ///   mockforge cloud team members --workspace my-workspace
+    #[command(verbatim_doc_comment)]
+    Cloud {
+        #[command(subcommand)]
+        cloud_command: cloud_commands::CloudCommands,
     },
 
     /// Expose local MockForge server via public URL (tunneling)
@@ -1942,9 +1967,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ws_port,
             grpc_port,
             smtp_port: _smtp_port,
-            mqtt_port,
-            kafka_port,
-            amqp_port,
+            mqtt_port: _mqtt_port,
+            kafka_port: _kafka_port,
+            amqp_port: _amqp_port,
             tcp_port,
             admin,
             admin_port,
@@ -2137,6 +2162,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Init { name, no_examples } => {
             handle_init(name, no_examples).await?;
         }
+        Commands::Wizard => {
+            let config = wizard::run_wizard().await?;
+            wizard::generate_project(&config).await?;
+        }
         Commands::Generate {
             config,
             spec,
@@ -2236,6 +2265,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Workspace { workspace_command } => {
             workspace_commands::handle_workspace_command(workspace_command).await?;
+        }
+
+        Commands::Cloud { cloud_command } => {
+            cloud_commands::handle_cloud_command(cloud_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Cloud command failed: {}", e))?;
         }
 
         Commands::Tunnel { tunnel_command } => {
@@ -3245,20 +3280,29 @@ pub async fn handle_serve(
         std::env::set_var("MOCKFORGE_RAG_MODEL", model);
     }
 
-    // Initialize key store at startup
+    // Initialize key store at startup (lightweight operation, keep synchronous)
     init_key_store();
 
-    // Initialize request capture manager for contract diff analysis
-    use mockforge_core::request_capture::init_global_capture_manager;
-    init_global_capture_manager(1000); // Keep last 1000 requests
-    tracing::info!("Request capture manager initialized for contract diff analysis");
+    // Initialize request capture manager lazily (defer until first use)
+    // This is lightweight but can be deferred to improve startup time
+    tokio::spawn(async {
+        use mockforge_core::request_capture::init_global_capture_manager;
+        init_global_capture_manager(1000); // Keep last 1000 requests
+        tracing::info!("Request capture manager initialized for contract diff analysis (lazy-loaded)");
+    });
 
-    // Initialize SIEM emitter for security event tracking
-    use mockforge_core::security::init_global_siem_emitter;
-    if let Err(e) = init_global_siem_emitter(config.security.monitoring.siem.clone()).await {
-        tracing::warn!("Failed to initialize SIEM emitter: {}", e);
-    } else if config.security.monitoring.siem.enabled {
-        tracing::info!("SIEM emitter initialized with {} destinations", config.security.monitoring.siem.destinations.len());
+    // Initialize SIEM emitter lazily (defer until first use to improve startup time)
+    let siem_config = config.security.monitoring.siem.clone();
+    if siem_config.enabled {
+        use mockforge_core::security::init_global_siem_emitter;
+        // Spawn async task to initialize SIEM emitter in background (non-blocking)
+        tokio::spawn(async move {
+            if let Err(e) = init_global_siem_emitter(siem_config.clone()).await {
+                tracing::warn!("Failed to initialize SIEM emitter: {}", e);
+            } else {
+                tracing::info!("SIEM emitter initialized with {} destinations (lazy-loaded)", siem_config.destinations.len());
+            }
+        });
     }
 
     // Initialize access review system if enabled
@@ -3625,41 +3669,48 @@ pub async fn handle_serve(
     let mutation_rule_manager = Arc::new(MutationRuleManager::new());
     time_travel_handlers::init_mutation_rule_manager(mutation_rule_manager.clone());
 
-    // Initialize MockAI if enabled
+    // Initialize MockAI in parallel with router building to improve startup time
+    // This allows MockAI initialization to happen concurrently with HTTP router setup
     let mockai = if config.mockai.enabled {
         use mockforge_core::intelligent_behavior::{IntelligentBehaviorConfig, MockAI};
         use std::sync::Arc;
         use tokio::sync::RwLock;
         use tracing::{info, warn};
 
-        // Create MockAI from OpenAPI spec if available
-        if let Some(ref spec_path) = config.http.openapi_spec {
-            match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
-                Ok(openapi_spec) => {
-                    let behavior_config = config.mockai.intelligent_behavior.clone();
-                    match MockAI::from_openapi(&openapi_spec, behavior_config).await {
-                        Ok(mockai_instance) => {
-                            info!("✅ MockAI initialized from OpenAPI spec");
-                            Some(Arc::new(RwLock::new(mockai_instance)))
-                        }
-                        Err(e) => {
-                            warn!("Failed to initialize MockAI from OpenAPI spec: {}", e);
-                            None
+        let behavior_config = config.mockai.intelligent_behavior.clone();
+        let spec_path = config.http.openapi_spec.clone();
+
+        // Create MockAI with a default instance first (fast), then upgrade in background
+        // This allows the server to start immediately while MockAI initializes
+        let mockai_arc = Arc::new(RwLock::new(MockAI::new(behavior_config.clone())));
+        let mockai_for_upgrade = mockai_arc.clone();
+        let behavior_config_for_upgrade = behavior_config.clone();
+
+        // Spawn task to upgrade MockAI with OpenAPI spec if available (non-blocking)
+        tokio::spawn(async move {
+            if let Some(ref spec_path) = spec_path {
+                match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+                    Ok(openapi_spec) => {
+                        match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade).await {
+                            Ok(instance) => {
+                                *mockai_for_upgrade.write().await = instance;
+                                info!("✅ MockAI upgraded with OpenAPI spec (background initialization)");
+                            }
+                            Err(e) => {
+                                warn!("Failed to upgrade MockAI from OpenAPI spec: {}", e);
+                                // Keep default instance
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    warn!("Failed to load OpenAPI spec for MockAI: {}", e);
-                    None
+                    Err(e) => {
+                        warn!("Failed to load OpenAPI spec for MockAI: {}", e);
+                        // Keep default instance
+                    }
                 }
             }
-        } else {
-            // Create MockAI with default config if no spec
-            let behavior_config = config.mockai.intelligent_behavior.clone();
-            let mockai_instance = MockAI::new(behavior_config);
-            info!("✅ MockAI initialized with default configuration");
-            Some(Arc::new(RwLock::new(mockai_instance)))
-        }
+        });
+
+        Some(mockai_arc)
     } else {
         None
     };
@@ -6136,13 +6187,13 @@ async fn handle_init(
 http:
   port: 3000
   host: "0.0.0.0"
-{}  cors_enabled: true
+  cors_enabled: true
   request_timeout_secs: 30
   request_validation: "enforce"
   aggregate_validation_errors: true
   validate_responses: false
   response_template_expand: false
-  validation_overrides: {}
+  validation_overrides: {{}}
   skip_admin_validation: true
 
 # WebSocket Server
