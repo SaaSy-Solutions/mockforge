@@ -81,20 +81,36 @@ All errors follow this format:
 ```json
 {
   "error": "Error message",
-  "code": "ERROR_CODE",
-  "details": {}
+  "error_code": "ERROR_CODE",
+  "status": 404,
+  "details": {
+    "resource": "plugin",
+    "name": "my-plugin",
+    "hint": "Check that the plugin name is correct"
+  }
 }
 ```
 
 **HTTP Status Codes:**
 - `200` - Success
 - `201` - Created
-- `400` - Bad Request
-- `401` - Unauthorized
-- `403` - Forbidden
-- `404` - Not Found
+- `400` - Bad Request (validation errors)
+- `401` - Unauthorized (authentication required)
+- `403` - Forbidden (permission denied, resource limits)
+- `404` - Not Found (resource doesn't exist)
+- `409` - Conflict (resource already exists)
 - `429` - Rate Limit Exceeded
 - `500` - Internal Server Error
+
+**Common Error Codes:**
+- `PLUGIN_NOT_FOUND`, `TEMPLATE_NOT_FOUND`, `SCENARIO_NOT_FOUND` - Resource not found
+- `VERSION_NOT_FOUND` - Version doesn't exist
+- `AUTH_REQUIRED` - Authentication required
+- `PERMISSION_DENIED` - Insufficient permissions
+- `VALIDATION_FAILED` - Input validation failed
+- `RATE_LIMIT_EXCEEDED` - Rate limit exceeded
+- `RESOURCE_LIMIT_EXCEEDED` - Plan limit exceeded
+- `DATABASE_ERROR`, `STORAGE_ERROR`, `INTERNAL_ERROR` - Server errors
 
 ---
 
@@ -970,21 +986,61 @@ POST /api/v1/plugins/publish
 
 **Authentication:** Required
 
-**Request:** (multipart/form-data)
-- `name`: Plugin name
-- `version`: Version (semver)
-- `description`: Description
-- `category`: Category
-- `wasm_file`: WASM file (binary)
-
-**Response:**
+**Request:** (application/json)
 ```json
 {
   "name": "my-plugin",
   "version": "1.0.0",
-  "message": "Plugin published successfully"
+  "description": "My awesome plugin",
+  "category": "testing",
+  "license": "MIT",
+  "repository": "https://github.com/user/my-plugin",
+  "homepage": "https://example.com",
+  "tags": ["test", "e2e"],
+  "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "file_size": 1024,
+  "wasm_data": "AGFzbQEAAAA=",
+  "dependencies": {
+    "other-plugin": "1.0.0"
+  }
 }
 ```
+
+**Request Fields:**
+- `name` (required): Plugin name (alphanumeric, hyphens, underscores, dots only)
+- `version` (required): Semantic version (e.g., "1.0.0")
+- `description` (required): Plugin description
+- `category` (required): Category (auth, template, response, datasource, middleware, testing, observability, other)
+- `license` (required): License identifier (e.g., "MIT", "Apache-2.0")
+- `repository` (optional): Repository URL
+- `homepage` (optional): Homepage URL
+- `tags` (optional): Array of tags
+- `checksum` (required): SHA-256 checksum (64 hex characters)
+- `file_size` (required): File size in bytes
+- `wasm_data` (required): Base64-encoded WASM file
+- `dependencies` (optional): Map of plugin name to version
+
+**Validation:**
+- WASM file must be valid (magic bytes: `\0asm`)
+- File size limit: 10 MB
+- Name and version validated for path traversal prevention
+- Checksum verified against uploaded data
+
+**Response:**
+```json
+{
+  "success": true,
+  "upload_url": "https://storage.mockforge.dev/plugins/my-plugin/1.0.0.wasm",
+  "message": "Plugin my-plugin version 1.0.0 published successfully"
+}
+```
+
+**Error Responses:**
+- `400` - Validation failed (invalid WASM, file too large, invalid name/version)
+- `401` - Authentication required
+- `409` - Plugin already exists
+- `429` - Rate limit exceeded
+- `500` - Storage or database error
 
 #### Search Templates
 
@@ -996,10 +1052,19 @@ POST /api/v1/templates/search
 ```json
 {
   "query": "chaos",
-  "category": "testing",
-  "limit": 20
+  "category": "chaos",
+  "tags": ["testing"],
+  "page": 0,
+  "per_page": 20
 }
 ```
+
+**Request Fields:**
+- `query` (optional): Search query string
+- `category` (optional): Filter by category
+- `tags` (optional): Array of tags to filter by
+- `page` (optional): Page number (default: 0)
+- `per_page` (optional): Results per page (default: 20)
 
 **Response:**
 ```json
@@ -1007,13 +1072,21 @@ POST /api/v1/templates/search
   "templates": [
     {
       "name": "chaos-testing",
+      "slug": "chaos-testing",
       "version": "1.0.0",
       "description": "Chaos testing template",
-      "category": "testing",
-      "downloads": 500
+      "category": "chaos",
+      "tags": ["testing", "chaos"],
+      "author": "johndoe",
+      "downloads": 500,
+      "rating": 4.5,
+      "reviews_count": 10,
+      "created_at": "2025-01-01T00:00:00Z"
     }
   ],
-  "total": 1
+  "total": 1,
+  "page": 0,
+  "per_page": 20
 }
 ```
 
@@ -1027,10 +1100,25 @@ GET /api/v1/templates/:name/:version
 ```json
 {
   "name": "chaos-testing",
+  "slug": "chaos-testing",
   "version": "1.0.0",
   "description": "Chaos testing template",
-  "manifest": {},
-  "download_url": "https://storage.mockforge.dev/templates/chaos-testing-1.0.0.tar.gz"
+  "category": "chaos",
+  "tags": ["testing"],
+  "author": "johndoe",
+  "author_email": "john@example.com",
+  "content": {
+    "name": "chaos-testing",
+    "version": "1.0.0"
+  },
+  "download_url": "https://storage.mockforge.dev/templates/chaos-testing/1.0.0.tar.gz",
+  "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "size": 1024,
+  "downloads": 500,
+  "rating": 4.5,
+  "reviews_count": 10,
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z"
 }
 ```
 
@@ -1042,16 +1130,117 @@ POST /api/v1/templates/publish
 
 **Authentication:** Required
 
-**Request:** (multipart/form-data)
-- `manifest`: Template manifest (JSON string)
-- `package`: Template package (tar.gz file)
+**Headers:**
+- `Authorization: Bearer <token>`
+- `X-Org-Id: <org_id>` (optional, uses default org if not provided)
+
+**Request:** (application/json)
+```json
+{
+  "name": "my-template",
+  "slug": "my-template",
+  "description": "My awesome template",
+  "version": "1.0.0",
+  "category": "chaos",
+  "content_json": {
+    "name": "my-template",
+    "version": "1.0.0",
+    "description": "Template content"
+  },
+  "package": "H4sIAAAAAAAAA+3BMQ0AAAwDIKFLj/k3UR8FAAAAAAAAAAA=",
+  "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "file_size": 1024
+}
+```
+
+**Request Fields:**
+- `name` (required): Template name
+- `slug` (required): URL-friendly slug
+- `description` (required): Template description
+- `version` (required): Semantic version
+- `category` (required): Category (chaos, performance, security, etc.)
+- `content_json` (required): Template content as JSON
+- `package` (required): Base64-encoded package (tar.gz or zip)
+- `checksum` (required): SHA-256 checksum
+- `file_size` (required): Package size in bytes
+
+**Validation:**
+- Package must be valid tar.gz or zip
+- File size limit: 50 MB
+- Name and slug validated for path traversal prevention
+- Checksum verified against uploaded data
+- Plan limits enforced (max templates per plan)
 
 **Response:**
 ```json
 {
   "name": "my-template",
   "version": "1.0.0",
-  "message": "Template published successfully"
+  "download_url": "https://storage.mockforge.dev/templates/my-template/1.0.0.tar.gz",
+  "published_at": "2025-01-20T12:00:00Z"
+}
+```
+
+#### Get Template Reviews
+
+```http
+GET /api/v1/templates/:name/:version/reviews?page=0&per_page=20
+```
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 0)
+- `per_page` (optional): Results per page (default: 20)
+
+**Response:**
+```json
+{
+  "reviews": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "reviewer": "johndoe",
+      "reviewer_email": "john@example.com",
+      "rating": 5,
+      "title": "Great template!",
+      "comment": "This template works perfectly for my use case.",
+      "created_at": "2025-01-15T10:00:00Z",
+      "helpful_count": 5,
+      "verified_use": true
+    }
+  ],
+  "total": 1,
+  "page": 0,
+  "per_page": 20
+}
+```
+
+#### Submit Template Review
+
+```http
+POST /api/v1/templates/:name/:version/reviews
+```
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "rating": 5,
+  "title": "Great template!",
+  "comment": "This template works perfectly for my use case."
+}
+```
+
+**Request Fields:**
+- `rating` (required): Rating from 1 to 5
+- `title` (optional): Review title
+- `comment` (required): Review comment (minimum 10 characters)
+
+**Response:**
+```json
+{
+  "success": true,
+  "review_id": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Review submitted successfully"
 }
 ```
 
@@ -1066,9 +1255,18 @@ POST /api/v1/scenarios/search
 {
   "query": "payment",
   "category": "ecommerce",
-  "limit": 20
+  "tags": ["api"],
+  "page": 0,
+  "per_page": 20
 }
 ```
+
+**Request Fields:**
+- `query` (optional): Search query string
+- `category` (optional): Filter by category
+- `tags` (optional): Array of tags to filter by
+- `page` (optional): Page number (default: 0)
+- `per_page` (optional): Results per page (default: 20)
 
 **Response:**
 ```json
@@ -1079,10 +1277,28 @@ POST /api/v1/scenarios/search
       "version": "1.0.0",
       "description": "Payment processing scenario",
       "category": "ecommerce",
-      "downloads": 200
+      "tags": ["payment", "api"],
+      "author": "johndoe",
+      "downloads": 200,
+      "rating": 4.0,
+      "reviews_count": 5,
+      "reviews": [
+        {
+          "id": "123e4567-e89b-12d3-a456-426614174000",
+          "reviewer": "janedoe",
+          "rating": 5,
+          "title": "Excellent!",
+          "comment": "Works great!",
+          "created_at": "2025-01-15T10:00:00Z",
+          "helpful_count": 3
+        }
+      ],
+      "created_at": "2025-01-01T00:00:00Z"
     }
   ],
-  "total": 1
+  "total": 1,
+  "page": 0,
+  "per_page": 20
 }
 ```
 
@@ -1097,9 +1313,42 @@ GET /api/v1/scenarios/:name
 {
   "name": "payment-flow",
   "description": "Payment processing scenario",
-  "latest_version": "1.0.0",
-  "downloads_total": 200,
-  "rating_avg": 4.0
+  "version": "1.0.0",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "download_url": "https://storage.mockforge.dev/scenarios/payment-flow/1.0.0.tar.gz",
+      "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 2048,
+      "published_at": "2025-01-01T00:00:00Z",
+      "yanked": false
+    }
+  ],
+  "author": "johndoe",
+  "author_email": "john@example.com",
+  "tags": ["payment", "api"],
+  "category": "ecommerce",
+  "downloads": 200,
+  "rating": 4.0,
+  "reviews_count": 5,
+  "reviews": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "reviewer": "janedoe",
+      "reviewer_email": "jane@example.com",
+      "rating": 5,
+      "title": "Excellent!",
+      "comment": "Works great!",
+      "created_at": "2025-01-15T10:00:00Z",
+      "helpful_count": 3,
+      "verified_purchase": true
+    }
+  ],
+  "repository": "https://github.com/user/payment-flow",
+  "homepage": "https://example.com",
+  "license": "MIT",
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z"
 }
 ```
 
@@ -1112,10 +1361,13 @@ GET /api/v1/scenarios/:name/versions/:version
 **Response:**
 ```json
 {
-  "name": "payment-flow",
   "version": "1.0.0",
-  "manifest": {},
-  "download_url": "https://storage.mockforge.dev/scenarios/payment-flow-1.0.0.tar.gz"
+  "download_url": "https://storage.mockforge.dev/scenarios/payment-flow/1.0.0.tar.gz",
+  "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "size": 2048,
+  "published_at": "2025-01-01T00:00:00Z",
+  "yanked": false,
+  "min_mockforge_version": "1.0.0"
 }
 ```
 
@@ -1127,18 +1379,115 @@ POST /api/v1/scenarios/publish
 
 **Authentication:** Required
 
-**Request:** (multipart/form-data)
-- `name`: Scenario name
-- `version`: Version (semver)
-- `manifest`: Scenario manifest (JSON string)
-- `package`: Scenario package (tar.gz file)
+**Headers:**
+- `Authorization: Bearer <token>`
+- `X-Org-Id: <org_id>` (optional, uses default org if not provided)
+
+**Request:** (application/json)
+```json
+{
+  "manifest": "{\"name\":\"my-scenario\",\"version\":\"1.0.0\",\"description\":\"My scenario\"}",
+  "package": "H4sIAAAAAAAAA+3BMQ0AAAwDIKFLj/k3UR8FAAAAAAAAAAA=",
+  "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "size": 2048
+}
+```
+
+**Request Fields:**
+- `manifest` (required): Scenario manifest as JSON string (must contain `name` and `version`)
+- `package` (required): Base64-encoded package (tar.gz or zip)
+- `checksum` (required): SHA-256 checksum (64 hex characters)
+- `size` (required): Package size in bytes
+
+**Manifest Format:**
+```json
+{
+  "name": "my-scenario",
+  "version": "1.0.0",
+  "description": "Scenario description",
+  "author": "johndoe",
+  "license": "MIT"
+}
+```
+
+**Validation:**
+- Package must be valid tar.gz or zip
+- File size limit: 100 MB
+- Manifest must be valid JSON with `name` and `version` fields
+- Name validated for path traversal prevention
+- Checksum verified against uploaded data
+- Plan limits enforced (max scenarios per plan)
 
 **Response:**
 ```json
 {
   "name": "my-scenario",
   "version": "1.0.0",
-  "message": "Scenario published successfully"
+  "download_url": "https://storage.mockforge.dev/scenarios/my-scenario/1.0.0.tar.gz",
+  "published_at": "2025-01-20T12:00:00Z"
+}
+```
+
+#### Get Scenario Reviews
+
+```http
+GET /api/v1/scenarios/:name/reviews?page=0&per_page=20
+```
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 0)
+- `per_page` (optional): Results per page (default: 20)
+
+**Response:**
+```json
+{
+  "reviews": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "reviewer": "johndoe",
+      "reviewer_email": "john@example.com",
+      "rating": 5,
+      "title": "Great scenario!",
+      "comment": "This scenario works perfectly for testing purposes.",
+      "created_at": "2025-01-15T10:00:00Z",
+      "helpful_count": 5,
+      "verified_purchase": true
+    }
+  ],
+  "total": 1,
+  "page": 0,
+  "per_page": 20
+}
+```
+
+#### Submit Scenario Review
+
+```http
+POST /api/v1/scenarios/:name/reviews
+```
+
+**Authentication:** Required
+
+**Request:**
+```json
+{
+  "rating": 5,
+  "title": "Great scenario!",
+  "comment": "This scenario works perfectly for testing purposes."
+}
+```
+
+**Request Fields:**
+- `rating` (required): Rating from 1 to 5
+- `title` (optional): Review title
+- `comment` (required): Review comment (minimum 10 characters)
+
+**Response:**
+```json
+{
+  "success": true,
+  "review_id": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Review submitted successfully"
 }
 ```
 

@@ -84,39 +84,58 @@ impl Scenario {
             .await
     }
 
-    /// Build WHERE clause for search queries
+    /// Build WHERE clause for search queries (using parameterized queries for security)
     fn build_search_where_clause(
         query: Option<&str>,
         category: Option<&str>,
         tags: &[String],
         org_id: Option<Uuid>,
-    ) -> String {
-        let mut where_clause = String::from("WHERE 1=1");
+    ) -> (String, Vec<String>) {
+        let mut where_parts = Vec::new();
+        let mut param_placeholders = Vec::new();
+        let mut param_index = 1;
 
-        if let Some(org) = org_id {
-            where_clause.push_str(&format!(" AND (org_id = '{}' OR org_id IS NULL)", org));
+        // Org filtering
+        if let Some(_org) = org_id {
+            param_placeholders.push(format!("${}", param_index));
+            where_parts.push(format!("(org_id = ${} OR org_id IS NULL)", param_index));
+            param_index += 1;
         } else {
             // Public scenarios only if no org context
-            where_clause.push_str(" AND org_id IS NULL");
+            where_parts.push("org_id IS NULL".to_string());
         }
 
-        if let Some(cat) = category {
-            where_clause.push_str(&format!(" AND category = '{}'", cat));
+        // Category filter
+        if let Some(_cat) = category {
+            param_placeholders.push(format!("${}", param_index));
+            where_parts.push(format!("category = ${}", param_index));
+            param_index += 1;
         }
 
+        // Tags filter
         if !tags.is_empty() {
-            where_clause.push_str(&format!(" AND tags && ARRAY[{}]",
-                tags.iter().map(|t| format!("'{}'", t.replace("'", "''"))).collect::<Vec<_>>().join(",")));
+            param_placeholders.push(format!("${}", param_index));
+            where_parts.push(format!("tags && ${}::text[]", param_index));
+            param_index += 1;
         }
 
-        if let Some(q) = query {
-            where_clause.push_str(&format!(
-                " AND (to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', '{}'))",
-                q.replace("'", "''")
+        // Full-text search
+        if let Some(_q) = query {
+            param_placeholders.push(format!("${}", param_index));
+            where_parts.push(format!(
+                "to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', ${})",
+                param_index
             ));
+            param_index += 1;
         }
 
-        where_clause
+        let where_clause = if where_parts.is_empty() {
+            "WHERE 1=1".to_string()
+        } else {
+            format!("WHERE {}", where_parts.join(" AND "))
+        };
+
+        (where_clause, param_placeholders)
     }
 
     /// Count scenarios matching search criteria
@@ -127,13 +146,26 @@ impl Scenario {
         tags: &[String],
         org_id: Option<Uuid>,
     ) -> sqlx::Result<i64> {
-        let where_clause = Self::build_search_where_clause(query, category, tags, org_id);
+        let (where_clause, _) = Self::build_search_where_clause(query, category, tags, org_id);
         let sql = format!("SELECT COUNT(*) FROM scenarios {}", where_clause);
 
-        let result: (i64,) = sqlx::query_as(&sql)
-            .fetch_one(pool)
-            .await?;
+        let mut query_builder = sqlx::query_as::<_, (i64,)>(&sql);
 
+        // Bind parameters in order
+        if let Some(org) = org_id {
+            query_builder = query_builder.bind(org);
+        }
+        if let Some(cat) = category {
+            query_builder = query_builder.bind(cat);
+        }
+        if !tags.is_empty() {
+            query_builder = query_builder.bind(tags);
+        }
+        if let Some(q) = query {
+            query_builder = query_builder.bind(q);
+        }
+
+        let result = query_builder.fetch_one(pool).await?;
         Ok(result.0)
     }
 
@@ -148,7 +180,7 @@ impl Scenario {
         limit: i64,
         offset: i64,
     ) -> sqlx::Result<Vec<Self>> {
-        let where_clause = Self::build_search_where_clause(query, category, tags, org_id);
+        let (where_clause, _) = Self::build_search_where_clause(query, category, tags, org_id);
 
         // Sort
         let order_by = match sort {
@@ -159,16 +191,44 @@ impl Scenario {
             _ => "ORDER BY downloads_total DESC",
         };
 
+        // Calculate parameter offset for LIMIT/OFFSET
+        let mut param_count = 1;
+        if org_id.is_some() {
+            param_count += 1;
+        }
+        if category.is_some() {
+            param_count += 1;
+        }
+        if !tags.is_empty() {
+            param_count += 1;
+        }
+        if query.is_some() {
+            param_count += 1;
+        }
+
         let sql = format!(
-            "SELECT * FROM scenarios {} {} LIMIT $1 OFFSET $2",
-            where_clause, order_by
+            "SELECT * FROM scenarios {} {} LIMIT ${} OFFSET ${}",
+            where_clause, order_by, param_count, param_count + 1
         );
 
-        sqlx::query_as::<_, Self>(&sql)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await
+        let mut query_builder = sqlx::query_as::<_, Self>(&sql);
+
+        // Bind parameters in order
+        if let Some(org) = org_id {
+            query_builder = query_builder.bind(org);
+        }
+        if let Some(cat) = category {
+            query_builder = query_builder.bind(cat);
+        }
+        if !tags.is_empty() {
+            query_builder = query_builder.bind(tags);
+        }
+        if let Some(q) = query {
+            query_builder = query_builder.bind(q);
+        }
+        query_builder = query_builder.bind(limit).bind(offset);
+
+        query_builder.fetch_all(pool).await
     }
 
     /// Find scenarios by organization

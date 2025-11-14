@@ -20,6 +20,7 @@ pub async fn search_plugins(
     State(state): State<AppState>,
     Json(query): Json<SearchQuery>,
 ) -> ApiResult<Json<SearchResults>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     // Map sort order
@@ -43,11 +44,14 @@ pub async fn search_plugins(
         PluginCategory::Other => "other",
     });
 
-    let limit = query.per_page as i64;
-    let offset = (query.page * query.per_page) as i64;
+    // Validate and limit pagination parameters
+    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let page = query.page;
+    let limit = per_page as i64;
+    let offset = (page * per_page) as i64;
 
     // Search plugins
-    let plugins = Plugin::search(
+    let plugins = match Plugin::search(
         pool,
         query.query.as_deref(),
         category_str,
@@ -57,7 +61,13 @@ pub async fn search_plugins(
         offset,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    {
+        Ok(plugins) => plugins,
+        Err(e) => {
+            metrics.record_search_error("database_error");
+            return Err(ApiError::Database(e));
+        }
+    };
 
     // Convert to registry entries
     let mut entries = Vec::new();
@@ -142,9 +152,12 @@ pub async fn search_plugins(
     let results = SearchResults {
         plugins: entries,
         total,
-        page: query.page,
-        per_page: query.per_page,
+        page,
+        per_page,
     };
+
+    // Record metrics
+    metrics.record_search_success();
 
     Ok(Json(results))
 }
@@ -153,6 +166,7 @@ pub async fn get_plugin(
     State(state): State<AppState>,
     Path(name): Path<String>,
 ) -> ApiResult<Json<RegistryEntry>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     let plugin = Plugin::find_by_name(pool, &name)
@@ -229,6 +243,9 @@ pub async fn get_plugin(
         updated_at: plugin.updated_at.to_rfc3339(),
     };
 
+    // Record metrics
+    metrics.record_download_success();
+
     Ok(Json(entry))
 }
 
@@ -236,6 +253,7 @@ pub async fn get_version(
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
 ) -> ApiResult<Json<VersionEntry>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     let plugin = Plugin::find_by_name(pool, &name)
@@ -263,6 +281,9 @@ pub async fn get_version(
         min_mockforge_version: plugin_version.min_mockforge_version,
         dependencies,
     };
+
+    // Record metrics
+    metrics.record_download_success();
 
     Ok(Json(entry))
 }
@@ -295,6 +316,7 @@ pub async fn publish_plugin(
     State(state): State<AppState>,
     Json(request): Json<PublishRequest>,
 ) -> ApiResult<Json<PublishResponse>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     // Check if plugin exists
@@ -324,9 +346,20 @@ pub async fn publish_plugin(
         .map_err(|e| ApiError::Database(e))?
     };
 
+    // Validate input fields
+    crate::validation::validate_name(&request.name)?;
+    crate::validation::validate_version(&request.version)?;
+    crate::validation::validate_checksum(&request.checksum)?;
+
+    // Validate base64 encoding
+    crate::validation::validate_base64(&request.wasm_data)?;
+
     // Decode WASM data
     let wasm_bytes = base64::decode(&request.wasm_data)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
+
+    // Validate WASM file
+    crate::validation::validate_wasm_file(&wasm_bytes, request.file_size as u64)?;
 
     // Verify checksum matches uploaded data
     use sha2::{Sha256, Digest};
@@ -369,6 +402,9 @@ pub async fn publish_plugin(
                 .map_err(|e| ApiError::Database(e))?;
         }
     }
+
+    // Record metrics
+    metrics.record_publish_success();
 
     Ok(Json(PublishResponse {
         success: true,

@@ -26,7 +26,7 @@ pub async fn get_template_reviews(
     let template = Template::find_by_name_version(pool, &name, &version)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Template '{}@{}' not found", name, version)))?;
+        .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     let limit = params.per_page.unwrap_or(20) as i64;
     let offset = (params.page.unwrap_or(0) * limit as usize) as i64;
@@ -104,7 +104,7 @@ pub async fn submit_template_review(
     let template = Template::find_by_name_version(pool, &name, &version)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Template '{}@{}' not found", name, version)))?;
+        .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     // Check if user already reviewed
     let existing = sqlx::query_as::<_, (Uuid,)>(

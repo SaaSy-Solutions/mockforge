@@ -344,8 +344,10 @@ impl DeploymentMetrics {
         pool: &sqlx::PgPool,
         hosted_mock_id: Uuid,
     ) -> sqlx::Result<Self> {
-        let period_start = chrono::Utc::now().date_naive();
-        let period_start = period_start.with_day(1).unwrap_or(period_start);
+        use chrono::Datelike;
+        let now = chrono::Utc::now().date_naive();
+        let period_start = chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
+            .unwrap_or(now);
 
         // Try to get existing
         if let Some(metrics) = sqlx::query_as::<_, Self>(

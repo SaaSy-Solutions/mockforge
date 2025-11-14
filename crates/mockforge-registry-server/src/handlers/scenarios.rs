@@ -4,14 +4,16 @@
 
 use axum::{
     extract::{Path, State},
+    http::HeaderMap,
     Json,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{OptionalAuthUser, resolve_org_context},
-    models::{FeatureType, FeatureUsage, Scenario, ScenarioVersion, User, UsageCounter},
+    models::{FeatureType, FeatureUsage, Scenario, ScenarioReview, ScenarioVersion, User, UsageCounter},
     AppState,
 };
 
@@ -23,6 +25,7 @@ pub async fn search_scenarios(
     headers: HeaderMap,
     Json(query): Json<ScenarioSearchQuery>,
 ) -> ApiResult<Json<ScenarioSearchResults>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "scenario");
     let pool = state.db.pool();
 
     // Try to resolve org context for filtering (optional)
@@ -37,8 +40,11 @@ pub async fn search_scenarios(
         None
     };
 
-    let limit = query.per_page as i64;
-    let offset = (query.page * query.per_page) as i64;
+    // Validate and limit pagination parameters
+    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let page = query.page;
+    let limit = per_page as i64;
+    let offset = (page * per_page) as i64;
 
     // Map sort order
     let sort = match query.sort {
@@ -114,6 +120,57 @@ pub async fn search_scenarios(
             })
             .collect();
 
+        // Load top 3 reviews (most helpful) for search results
+        let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, 3, 0)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
+
+        // Batch load all reviewers to avoid N+1 queries
+        let reviewer_ids: Vec<Uuid> = reviews.iter().map(|r| r.reviewer_id).collect();
+        let reviewers: std::collections::HashMap<Uuid, User> = if !reviewer_ids.is_empty() {
+            User::find_by_ids(pool, &reviewer_ids)
+                .await
+                .map_err(|e| ApiError::Database(e))?
+                .into_iter()
+                .map(|u| (u.id, u))
+                .collect()
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        let review_responses: Vec<ScenarioReviewResponse> = reviews
+            .into_iter()
+            .map(|review| {
+                let reviewer = reviewers.get(&review.reviewer_id).cloned().unwrap_or_else(|| User {
+                    id: review.reviewer_id,
+                    username: "unknown".to_string(),
+                    email: "unknown@example.com".to_string(),
+                    password_hash: String::new(),
+                    api_token: None,
+                    is_verified: false,
+                    is_admin: false,
+                    two_factor_enabled: false,
+                    two_factor_secret: None,
+                    two_factor_backup_codes: None,
+                    two_factor_verified_at: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                });
+
+                ScenarioReviewResponse {
+                    id: review.id.to_string(),
+                    reviewer: reviewer.username,
+                    reviewer_email: Some(reviewer.email),
+                    rating: review.rating as u8,
+                    title: review.title,
+                    comment: review.comment,
+                    created_at: review.created_at.to_rfc3339(),
+                    helpful_count: review.helpful_count as u32,
+                    verified_purchase: review.verified_purchase,
+                }
+            })
+            .collect();
+
         entries.push(ScenarioRegistryEntry {
             name: scenario.name,
             description: scenario.description,
@@ -126,7 +183,7 @@ pub async fn search_scenarios(
             downloads: scenario.downloads_total as u64,
             rating: scenario.rating_avg.to_string().parse::<f64>().unwrap_or(0.0),
             reviews_count: scenario.rating_count as u32,
-            reviews: vec![], // TODO: Load reviews separately if needed
+            reviews: review_responses,
             repository: scenario.repository,
             homepage: scenario.homepage,
             license: scenario.license,
@@ -135,11 +192,14 @@ pub async fn search_scenarios(
         });
     }
 
+    // Record metrics
+    metrics.record_search_success();
+
     Ok(Json(ScenarioSearchResults {
         scenarios: entries,
         total,
-        page: query.page,
-        per_page: query.per_page,
+        page,
+        per_page,
     }))
 }
 
@@ -148,12 +208,13 @@ pub async fn get_scenario(
     State(state): State<AppState>,
     Path(name): Path<String>,
 ) -> ApiResult<Json<ScenarioRegistryEntry>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "scenario");
     let pool = state.db.pool();
 
     let scenario = Scenario::find_by_name(pool, &name)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Scenario '{}' not found", name)))?;
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let versions = ScenarioVersion::get_by_scenario(pool, scenario.id)
         .await
@@ -191,6 +252,57 @@ pub async fn get_scenario(
         })
         .collect();
 
+    // Load top 5 reviews (most helpful) for single scenario view
+    let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, 5, 0)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+
+    // Batch load all reviewers to avoid N+1 queries
+    let reviewer_ids: Vec<Uuid> = reviews.iter().map(|r| r.reviewer_id).collect();
+    let reviewers: std::collections::HashMap<Uuid, User> = if !reviewer_ids.is_empty() {
+        User::find_by_ids(pool, &reviewer_ids)
+            .await
+            .map_err(|e| ApiError::Database(e))?
+            .into_iter()
+            .map(|u| (u.id, u))
+            .collect()
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    let review_responses: Vec<ScenarioReviewResponse> = reviews
+        .into_iter()
+        .map(|review| {
+            let reviewer = reviewers.get(&review.reviewer_id).cloned().unwrap_or_else(|| User {
+                id: review.reviewer_id,
+                username: "unknown".to_string(),
+                email: "unknown@example.com".to_string(),
+                password_hash: String::new(),
+                api_token: None,
+                is_verified: false,
+                is_admin: false,
+                two_factor_enabled: false,
+                two_factor_secret: None,
+                two_factor_backup_codes: None,
+                two_factor_verified_at: None,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            });
+
+            ScenarioReviewResponse {
+                id: review.id.to_string(),
+                reviewer: reviewer.username,
+                reviewer_email: Some(reviewer.email),
+                rating: review.rating as u8,
+                title: review.title,
+                comment: review.comment,
+                created_at: review.created_at.to_rfc3339(),
+                helpful_count: review.helpful_count as u32,
+                verified_purchase: review.verified_purchase,
+            }
+        })
+        .collect();
+
     Ok(Json(ScenarioRegistryEntry {
         name: scenario.name,
         description: scenario.description,
@@ -203,7 +315,30 @@ pub async fn get_scenario(
         downloads: scenario.downloads_total as u64,
         rating: scenario.rating_avg.to_string().parse::<f64>().unwrap_or(0.0),
         reviews_count: scenario.rating_count as u32,
-        reviews: vec![], // TODO: Load reviews
+        reviews: review_responses,
+        repository: scenario.repository,
+        homepage: scenario.homepage,
+        license: scenario.license,
+        created_at: scenario.created_at.to_rfc3339(),
+        updated_at: scenario.updated_at.to_rfc3339(),
+    }));
+
+    // Record metrics
+    metrics.record_download_success();
+
+    Ok(Json(ScenarioRegistryEntry {
+        name: scenario.name,
+        description: scenario.description,
+        version: scenario.current_version,
+        versions: version_entries,
+        author: author.username,
+        author_email: Some(author.email),
+        tags: scenario.tags,
+        category: scenario.category,
+        downloads: scenario.downloads_total as u64,
+        rating: scenario.rating_avg.to_string().parse::<f64>().unwrap_or(0.0),
+        reviews_count: scenario.rating_count as u32,
+        reviews: review_responses,
         repository: scenario.repository,
         homepage: scenario.homepage,
         license: scenario.license,
@@ -222,12 +357,12 @@ pub async fn get_scenario_version(
     let scenario = Scenario::find_by_name(pool, &name)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Scenario '{}' not found", name)))?;
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let scenario_version = ScenarioVersion::find(pool, scenario.id, &version)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Version '{}' not found", version)))?;
+        .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
     Ok(Json(ScenarioVersionEntry {
         version: scenario_version.version,
@@ -247,11 +382,12 @@ pub async fn publish_scenario(
     headers: HeaderMap,
     Json(request): Json<PublishScenarioRequest>,
 ) -> ApiResult<Json<PublishScenarioResponse>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "scenario");
     let pool = state.db.pool();
 
     // Resolve org context
     let org_ctx = resolve_org_context(&state, author_id, &headers, None).await
-        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+        .map_err(|_| ApiError::OrganizationNotFound)?;
 
     // Check publishing limits
     let limits = &org_ctx.org.limits_json;
@@ -292,13 +428,39 @@ pub async fn publish_scenario(
         )));
     }
 
+    // Validate checksum format
+    crate::validation::validate_checksum(&request.checksum)?;
+
+    // Validate base64 encoding
+    crate::validation::validate_base64(&request.package)?;
+
     // Parse manifest
     let manifest: serde_json::Value = serde_json::from_str(&request.manifest)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid manifest JSON: {}", e)))?;
 
+    // Extract scenario name and version from manifest for validation
+    let name = manifest.get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'name' field".to_string()))?;
+
+    let version = manifest.get("version")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'version' field".to_string()))?;
+
+    // Validate name and version
+    crate::validation::validate_name(name)?;
+    crate::validation::validate_version(version)?;
+
     // Decode package data
     let package_data = base64::decode(&request.package)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
+
+    // Validate package file
+    crate::validation::validate_package_file(
+        &package_data,
+        request.size,
+        crate::validation::MAX_SCENARIO_SIZE,
+    )?;
 
     // Verify checksum
     use sha2::{Sha256, Digest};
@@ -309,14 +471,6 @@ pub async fn publish_scenario(
     if calculated_checksum != request.checksum {
         return Err(ApiError::InvalidRequest("Checksum mismatch".to_string()));
     }
-
-    // Extract scenario name and version from manifest
-    let name = manifest.get("name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'name' field".to_string()))?;
-    let version = manifest.get("version")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'version' field".to_string()))?;
 
     // Generate slug from name
     let slug = name
@@ -402,6 +556,9 @@ pub async fn publish_scenario(
     )
     .await;
 
+    // Record metrics
+    metrics.record_publish_success();
+
     Ok(Json(PublishScenarioResponse {
         name: name.to_string(),
         version: version.to_string(),
@@ -470,7 +627,7 @@ pub struct ScenarioRegistryEntry {
     pub downloads: u64,
     pub rating: f64,
     pub reviews_count: u32,
-    pub reviews: Vec<ScenarioReview>,
+    pub reviews: Vec<ScenarioReviewResponse>,
     pub repository: Option<String>,
     pub homepage: Option<String>,
     pub license: String,

@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace
 
 # Default target
 help: ## Show this help message
@@ -135,6 +135,9 @@ load-test-websocket: ## Run WebSocket load test only
 
 load-test-grpc: ## Run gRPC load test only
 	./tests/load/run_grpc_load.sh
+
+load-test-marketplace: ## Run marketplace load test only
+	./tests/load/run_marketplace_load.sh
 
 security-scan: ## Run comprehensive security scan (RustSec, licenses, static analysis)
 	./scripts/security-scan.sh

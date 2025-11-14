@@ -53,6 +53,21 @@ impl User {
             .await
     }
 
+    /// Find multiple users by IDs (batch lookup to avoid N+1 queries)
+    pub async fn find_by_ids(
+        pool: &sqlx::PgPool,
+        ids: &[Uuid],
+    ) -> sqlx::Result<Vec<Self>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE id = ANY($1)")
+            .bind(ids)
+            .fetch_all(pool)
+            .await
+    }
+
     /// Create a new user
     pub async fn create(
         pool: &sqlx::PgPool,

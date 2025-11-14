@@ -2,19 +2,20 @@
 name = "mockforge-registry-server"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 authors = ["MockForge Contributors"]
 description = "Plugin registry server for MockForge"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
 # Web framework
-axum = "0.7"
+axum = { version = "0.8", features = ["ws", "multipart", "macros"] }
 tokio = { version = "1.35", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace", "compression-full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-full"] }
 
 # Database
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "migrate"] }
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "migrate", "rust_decimal"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -35,6 +36,7 @@ aws-config = "1.1"
 # Utilities
 anyhow = "1.0"
 thiserror = "1.0"
+async-trait = "0.1"
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
@@ -70,7 +72,19 @@ rustls-pemfile = "2.0"
 
 # Internal dependencies
 mockforge-plugin-registry = { path = "../mockforge-plugin-registry" }
+mockforge-observability = { path = "../mockforge-observability" }
+
+# Metrics
+prometheus = { version = "0.14", features = ["process"] }
+
+# HTTP client for Fly.io API
+reqwest = { version = "0.11", features = ["json"] }
 
 [dev-dependencies]
-reqwest = { version = "0.11", features = ["json"] }
 tokio-test = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+base64 = { version = "0.21", features = ["default"] }
+sha2 = "0.10"

@@ -106,6 +106,16 @@ run_test "gRPC Load Test" \
     "GRPC_ADDR=$GRPC_ADDR" \
     "DURATION=$GRPC_DURATION"
 
+# Run marketplace load tests (if registry server is available)
+if curl -s -f "${BASE_URL}/health" > /dev/null 2>&1; then
+    run_test "Marketplace Load Test" \
+        "tests/load/run_marketplace_load.sh" \
+        "REGISTRY_URL=$BASE_URL"
+else
+    echo -e "${YELLOW}⚠ Skipping marketplace load test (registry server not available)${NC}"
+    echo ""
+fi
+
 # Summary
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║         Load Test Summary              ║${NC}"

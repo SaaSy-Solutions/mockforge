@@ -858,4 +858,217 @@ Privacy: https://mockforge.dev/privacy
             text_body,
         }
     }
+
+    /// Generate password reset email
+    pub fn generate_password_reset_email(
+        username: &str,
+        email: &str,
+        reset_token: &str,
+    ) -> EmailMessage {
+        let reset_url = format!(
+            "{}/reset-password?token={}",
+            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
+            reset_token
+        );
+
+        let html_body = format!(
+            r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+        .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; }}
+        .button {{ display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
+        .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }}
+        .warning {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }}
+        .code {{ background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Reset Your Password</h1>
+    </div>
+    <div class="content">
+        <p>Hi {},</p>
+        <p>We received a request to reset your password for your MockForge Cloud account.</p>
+        <p style="text-align: center;">
+            <a href="{}" class="button">Reset Password</a>
+        </p>
+        <p>Or copy and paste this link into your browser:</p>
+        <div class="code">{}</div>
+        <div class="warning">
+            <strong>Security Notice:</strong> This password reset link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+        </div>
+        <p>If you continue to have problems, please contact our support team.</p>
+        <p>Best regards,<br>The MockForge Team</p>
+    </div>
+    <div class="footer">
+        <p>© {} MockForge. All rights reserved.</p>
+        <p><a href="https://mockforge.dev/terms">Terms of Service</a> | <a href="https://mockforge.dev/privacy">Privacy Policy</a></p>
+    </div>
+</body>
+</html>
+"#,
+            username,
+            reset_url,
+            reset_url,
+            chrono::Utc::now().year()
+        );
+
+        let text_body = format!(
+            r#"
+Reset Your Password
+
+Hi {},
+
+We received a request to reset your password for your MockForge Cloud account.
+
+Click this link to reset your password:
+{}
+
+This password reset link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+
+If you continue to have problems, please contact our support team.
+
+Best regards,
+The MockForge Team
+
+© {} MockForge. All rights reserved.
+Terms: https://mockforge.dev/terms
+Privacy: https://mockforge.dev/privacy
+"#,
+            username,
+            reset_url,
+            chrono::Utc::now().year()
+        );
+
+        EmailMessage {
+            to: email.to_string(),
+            subject: "Reset Your Password - MockForge Cloud".to_string(),
+            html_body,
+            text_body,
+        }
+    }
+
+    /// Generate deployment status notification email
+    pub fn generate_deployment_status_email(
+        username: &str,
+        email: &str,
+        deployment_name: &str,
+        status: &str,
+        deployment_url: Option<&str>,
+        error_message: Option<&str>,
+    ) -> EmailMessage {
+        let (header_color, header_text, status_icon) = match status {
+            "active" => ("#28a745", "Deployment Successful", "✅"),
+            "failed" => ("#dc3545", "Deployment Failed", "❌"),
+            "deploying" => ("#007bff", "Deployment In Progress", "⏳"),
+            _ => ("#6c757d", "Deployment Status Update", "ℹ️"),
+        };
+
+        let deployment_link = deployment_url.map(|url| {
+            format!(
+                r#"<p style="text-align: center;">
+            <a href="{}" class="button">View Deployment</a>
+        </p>"#,
+                url
+            )
+        }).unwrap_or_else(String::new);
+
+        let error_section = error_message.map(|msg| {
+            format!(
+                r#"<div class="warning">
+            <strong>Error Details:</strong><br>
+            <pre style="white-space: pre-wrap; font-size: 12px;">{}</pre>
+        </div>"#,
+                msg
+            )
+        }).unwrap_or_else(String::new);
+
+        let html_body = format!(
+            r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, {} 0%, {} 100%); color: white; padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+        .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; }}
+        .button {{ display: inline-block; padding: 12px 24px; background: {}; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
+        .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }}
+        .warning {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{} {}</h1>
+    </div>
+    <div class="content">
+        <p>Hi {},</p>
+        <p>Your hosted mock deployment "<strong>{}</strong>" status has been updated to <strong>{}</strong>.</p>
+        {}
+        {}
+        <p>You can view and manage your deployments in the MockForge Cloud dashboard.</p>
+        <p>Best regards,<br>The MockForge Team</p>
+    </div>
+    <div class="footer">
+        <p>© {} MockForge. All rights reserved.</p>
+        <p><a href="https://mockforge.dev/terms">Terms of Service</a> | <a href="https://mockforge.dev/privacy">Privacy Policy</a></p>
+    </div>
+</body>
+</html>
+"#,
+            header_color,
+            header_color,
+            header_color,
+            status_icon,
+            header_text,
+            username,
+            deployment_name,
+            status,
+            deployment_link,
+            error_section,
+            chrono::Utc::now().year()
+        );
+
+        let text_body = format!(
+            r#"
+Deployment Status Update
+
+Hi {},
+
+Your hosted mock deployment "{}" status has been updated to {}.
+
+{}
+
+{}
+
+You can view and manage your deployments in the MockForge Cloud dashboard.
+
+Best regards,
+The MockForge Team
+
+© {} MockForge. All rights reserved.
+Terms: https://mockforge.dev/terms
+Privacy: https://mockforge.dev/privacy
+"#,
+            username,
+            deployment_name,
+            status,
+            deployment_url.map(|url| format!("View deployment: {}", url)).unwrap_or_else(String::new),
+            error_message.map(|msg| format!("Error: {}", msg)).unwrap_or_else(String::new),
+            chrono::Utc::now().year()
+        );
+
+        EmailMessage {
+            to: email.to_string(),
+            subject: format!("{} - Deployment '{}' is {}", status_icon, deployment_name, status),
+            html_body,
+            text_body,
+        }
+    }
 }

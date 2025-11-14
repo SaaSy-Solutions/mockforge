@@ -13,9 +13,11 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{AuthUser, resolve_org_context},
-    models::{AuditEventType, FeatureType, FeatureUsage, HostedMock, DeploymentLog, DeploymentMetrics, Organization, DeploymentStatus, HealthStatus, record_audit_event},
+    models::{AuditEventType, FeatureType, FeatureUsage, HostedMock, DeploymentLog, DeploymentMetrics, Organization, DeploymentStatus, HealthStatus, User, record_audit_event},
+    deployment::flyio::FlyioClient,
     AppState,
 };
+use tracing::{error, warn};
 
 /// Create a new hosted mock deployment
 pub async fn create_deployment(
@@ -273,6 +275,32 @@ pub async fn update_deployment_status(
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| ApiError::Internal("Failed to retrieve updated deployment".to_string()))?;
 
+    // Send deployment status notification email (non-blocking)
+    if let Ok(org) = Organization::find_by_id(pool, deployment.org_id).await {
+        if let Some(org) = org {
+            if let Ok(owner) = User::find_by_id(pool, org.owner_id).await {
+                if let Some(owner) = owner {
+                    let email_service = crate::email::EmailService::from_env();
+                    let status_str = format!("{:?}", deployment.status()).to_lowercase();
+                    let email_msg = crate::email::EmailService::generate_deployment_status_email(
+                        &owner.username,
+                        &owner.email,
+                        &deployment.name,
+                        &status_str,
+                        deployment.deployment_url.as_deref(),
+                        request.error_message.as_deref(),
+                    );
+
+                    tokio::spawn(async move {
+                        if let Err(e) = email_service.send(email_msg).await {
+                            tracing::warn!("Failed to send deployment status email: {}", e);
+                        }
+                    });
+                }
+            }
+        }
+    }
+
     Ok(Json(DeploymentResponse::from(deployment)))
 }
 
@@ -326,12 +354,102 @@ pub async fn delete_deployment(
     )
     .await;
 
-    // Soft delete
+    // Update status to deleting before cleanup
+    HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+
+    // Trigger actual deletion (stop service, cleanup resources, etc.)
+    // Try to delete from Fly.io if configured
+    if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
+        let flyio_client = FlyioClient::new(flyio_token);
+
+        // Generate app name (same as in orchestrator)
+        let app_name = format!("mockforge-{}-{}",
+            deployment.org_id.to_string().replace("-", "").chars().take(8).collect::<String>(),
+            deployment.slug
+        );
+
+        // Try to get machine_id from metadata
+        let machine_id = deployment.metadata_json
+            .get("flyio_machine_id")
+            .and_then(|v| v.as_str());
+
+        if let Some(machine_id) = machine_id {
+            // Delete the specific machine
+            match flyio_client.delete_machine(&app_name, machine_id).await {
+                Ok(_) => {
+                    DeploymentLog::create(
+                        pool,
+                        deployment_id,
+                        "info",
+                        &format!("Deleted Fly.io machine: {}", machine_id),
+                        None,
+                    )
+                    .await
+                    .ok(); // Log but don't fail on log error
+
+                    // Check if there are other machines for this app
+                    // If not, we could delete the app, but for now we'll leave it
+                    // (apps can be reused for future deployments)
+                }
+                Err(e) => {
+                    warn!("Failed to delete Fly.io machine {}: {}", machine_id, e);
+                    DeploymentLog::create(
+                        pool,
+                        deployment_id,
+                        "warning",
+                        &format!("Failed to delete Fly.io machine: {}", e),
+                        None,
+                    )
+                    .await
+                    .ok();
+                    // Continue with database deletion even if Fly.io deletion fails
+                }
+            }
+        } else {
+            // Machine ID not found in metadata, try to list and delete all machines
+            warn!("Machine ID not found in metadata for deployment {}, attempting to list machines", deployment_id);
+            match flyio_client.list_machines(&app_name).await {
+                Ok(machines) => {
+                    for machine in machines {
+                        if let Err(e) = flyio_client.delete_machine(&app_name, &machine.id).await {
+                            warn!("Failed to delete Fly.io machine {}: {}", machine.id, e);
+                        } else {
+                            DeploymentLog::create(
+                                pool,
+                                deployment_id,
+                                "info",
+                                &format!("Deleted Fly.io machine: {}", machine.id),
+                                None,
+                            )
+                            .await
+                            .ok();
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to list Fly.io machines for app {}: {}", app_name, e);
+                    // Continue with database deletion
+                }
+            }
+        }
+    }
+
+    // Soft delete from database
     HostedMock::delete(pool, deployment_id)
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    // TODO: Trigger actual deletion (stop service, cleanup resources, etc.)
+    DeploymentLog::create(
+        pool,
+        deployment_id,
+        "info",
+        "Deployment deleted successfully",
+        None,
+    )
+    .await
+    .ok(); // Log but don't fail on log error
 
     Ok(Json(serde_json::json!({
         "success": true,

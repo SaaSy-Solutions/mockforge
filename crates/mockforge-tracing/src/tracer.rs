@@ -4,7 +4,6 @@ use crate::exporter::ExporterType;
 use opentelemetry::global;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::trace::Tracer;
 use opentelemetry_sdk::Resource;
 use std::error::Error;
 use std::time::Duration;
@@ -85,7 +84,7 @@ impl TracingConfig {
 }
 
 /// Initialize the OpenTelemetry tracer
-pub fn init_tracer(config: TracingConfig) -> Result<Tracer, Box<dyn Error + Send + Sync>> {
+pub fn init_tracer(config: TracingConfig) -> Result<opentelemetry::global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     match config.exporter_type {
         ExporterType::Jaeger => init_jaeger_tracer(config),
         ExporterType::Otlp => init_otlp_tracer(config),
@@ -93,19 +92,22 @@ pub fn init_tracer(config: TracingConfig) -> Result<Tracer, Box<dyn Error + Send
 }
 
 /// Initialize Jaeger tracer
-fn init_jaeger_tracer(config: TracingConfig) -> Result<Tracer, Box<dyn Error + Send + Sync>> {
+fn init_jaeger_tracer(config: TracingConfig) -> Result<opentelemetry::global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     let endpoint = config.jaeger_endpoint.ok_or("Jaeger endpoint not configured")?;
 
-    let tracer = opentelemetry_jaeger::new_agent_pipeline()
+    // Install the tracer provider (this sets it as global)
+    let _tracer_provider = opentelemetry_jaeger::new_agent_pipeline()
         .with_service_name(&config.service_name)
         .with_endpoint(&endpoint)
         .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
+    // Get the tracer from the global provider
+    let tracer = opentelemetry::global::tracer("mockforge");
     Ok(tracer)
 }
 
 /// Initialize OTLP tracer
-fn init_otlp_tracer(config: TracingConfig) -> Result<Tracer, Box<dyn Error + Send + Sync>> {
+fn init_otlp_tracer(config: TracingConfig) -> Result<opentelemetry::global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     let endpoint = config.otlp_endpoint.ok_or("OTLP endpoint not configured")?;
 
     // Build resource attributes
@@ -120,24 +122,32 @@ fn init_otlp_tracer(config: TracingConfig) -> Result<Tracer, Box<dyn Error + Sen
 
     let resource = Resource::new(resource_attrs);
 
-    // Create OTLP exporter with gRPC protocol
-    let exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        .with_endpoint(&endpoint)
-        .with_timeout(Duration::from_secs(10));
+    // Create OTLP exporter with gRPC protocol (opentelemetry-otlp 0.14 API)
+    // Build the exporter configuration
+    let mut exporter_builder = opentelemetry_otlp::TonicExporterBuilder::default();
+    exporter_builder = exporter_builder.with_endpoint(endpoint);
+    exporter_builder = exporter_builder.with_timeout(Duration::from_secs(10));
 
-    // Build tracer pipeline
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(exporter)
-        .with_trace_config(
+    // Build the exporter
+    let exporter = exporter_builder.build_span_exporter()?;
+
+    // Build tracer provider using opentelemetry_sdk directly
+    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+        .with_config(
             opentelemetry_sdk::trace::Config::default()
                 .with_resource(resource)
                 .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(
                     config.sampling_rate,
                 )),
         )
-        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        .build();
+
+    // Set the tracer provider as global
+    opentelemetry::global::set_tracer_provider(tracer_provider.clone());
+
+    // Get the tracer from the global provider
+    let tracer = opentelemetry::global::tracer("mockforge");
 
     Ok(tracer)
 }

@@ -17,10 +17,12 @@ tests/load/
 ├── http_load.js              # k6 HTTP load test scenarios
 ├── websocket_load.js         # k6 WebSocket stress test
 ├── grpc_load.js              # k6 gRPC load test
+├── marketplace_load.js       # k6 marketplace load test (plugins, templates, scenarios)
 ├── wrk_http.lua              # wrk Lua script for HTTP testing
 ├── run_http_load.sh          # HTTP load test runner
 ├── run_websocket_load.sh     # WebSocket load test runner
 ├── run_grpc_load.sh          # gRPC load test runner
+├── run_marketplace_load.sh   # Marketplace load test runner
 ├── run_all_load_tests.sh     # Run all load tests sequentially
 ├── results/                  # Test results directory (auto-created)
 └── README.md                 # This file

@@ -113,7 +113,6 @@ impl Project {
         default_env: Option<&str>,
     ) -> sqlx::Result<()> {
         let mut updates = Vec::new();
-        let mut params: Vec<&dyn sqlx::postgres::PgHasArrayType> = Vec::new();
         let mut param_count = 1;
 
         if let Some(n) = name {

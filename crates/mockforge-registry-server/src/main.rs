@@ -6,14 +6,18 @@ mod auth;
 mod cache;
 mod config;
 mod database;
+mod deployment;
+mod email;
 mod error;
 mod handlers;
+mod metrics;
 mod middleware;
 mod models;
 mod redis;
 mod routes;
 mod storage;
 mod two_factor;
+mod validation;
 mod workers;
 
 use anyhow::Result;
@@ -27,11 +31,16 @@ use crate::config::Config;
 use crate::database::Database;
 use crate::storage::PluginStorage;
 
+use mockforge_observability::get_global_registry;
+use std::sync::Arc;
+use axum::response::IntoResponse;
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Database,
     pub storage: PluginStorage,
     pub config: Config,
+    pub metrics: Arc<mockforge_observability::prometheus::MetricsRegistry>,
 }
 
 #[tokio::main]
@@ -61,11 +70,15 @@ async fn main() -> Result<()> {
     let storage = PluginStorage::new(&config).await?;
     tracing::info!("Storage initialized");
 
+    // Initialize metrics registry
+    let metrics = Arc::new(get_global_registry().clone());
+
     // Create app state
     let state = AppState {
         db: db.clone(),
         storage,
         config: config.clone(),
+        metrics: metrics.clone(),
     };
 
     // Start background workers
@@ -87,11 +100,45 @@ async fn main() -> Result<()> {
 fn create_app(state: AppState) -> Router {
     let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
+    // Add metrics endpoint (separate router without state)
+    let metrics_router = Router::new()
+        .route("/metrics", axum::routing::get(metrics_handler))
+        .route("/metrics/health", axum::routing::get(|| async { "OK" }));
+
     Router::new()
         .merge(routes::create_router())
+        .merge(metrics_router)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn metrics_handler() -> impl axum::response::IntoResponse {
+    use mockforge_observability::get_global_registry;
+    use prometheus::{Encoder, TextEncoder};
+
+    let encoder = TextEncoder::new();
+    let metric_families = get_global_registry().registry().gather();
+
+    let mut buffer = Vec::new();
+    if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
+        tracing::error!("Failed to encode metrics: {}", e);
+        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to encode metrics").into_response();
+    }
+
+    let body = match String::from_utf8(buffer) {
+        Ok(body) => body,
+        Err(e) => {
+            tracing::error!("Failed to convert metrics to UTF-8: {}", e);
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to convert metrics").into_response();
+        }
+    };
+
+    (
+        axum::http::StatusCode::OK,
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        body,
+    ).into_response()
 }
 
 #[cfg(test)]

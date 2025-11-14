@@ -102,9 +102,10 @@ impl FlyioClient {
             .await
             .context("Failed to create Fly.io app")?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            anyhow::bail!("Failed to create Fly.io app: {} - {}", response.status(), error_text);
+            anyhow::bail!("Failed to create Fly.io app: {} - {}", status, error_text);
         }
 
         let app: FlyioApp = response
@@ -139,9 +140,10 @@ impl FlyioClient {
             .await
             .context("Failed to create Fly.io machine")?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            anyhow::bail!("Failed to create Fly.io machine: {} - {}", response.status(), error_text);
+            anyhow::bail!("Failed to create Fly.io machine: {} - {}", status, error_text);
         }
 
         let machine: FlyioMachine = response
@@ -164,9 +166,10 @@ impl FlyioClient {
             .await
             .context("Failed to get Fly.io machine")?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            anyhow::bail!("Failed to get Fly.io machine: {} - {}", response.status(), error_text);
+            anyhow::bail!("Failed to get Fly.io machine: {} - {}", status, error_text);
         }
 
         let machine: FlyioMachine = response
@@ -189,9 +192,10 @@ impl FlyioClient {
             .await
             .context("Failed to delete Fly.io machine")?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            anyhow::bail!("Failed to delete Fly.io machine: {} - {}", response.status(), error_text);
+            anyhow::bail!("Failed to delete Fly.io machine: {} - {}", status, error_text);
         }
 
         Ok(())
@@ -209,9 +213,10 @@ impl FlyioClient {
             .await
             .context("Failed to get Fly.io app")?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            anyhow::bail!("Failed to get Fly.io app: {} - {}", response.status(), error_text);
+            anyhow::bail!("Failed to get Fly.io app: {} - {}", status, error_text);
         }
 
         let app: FlyioApp = response
@@ -220,5 +225,31 @@ impl FlyioClient {
             .context("Failed to parse Fly.io app response")?;
 
         Ok(app)
+    }
+
+    /// List machines for an app
+    pub async fn list_machines(&self, app_name: &str) -> Result<Vec<FlyioMachine>> {
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1/apps/{}/machines", self.base_url, app_name);
+
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .send()
+            .await
+            .context("Failed to list Fly.io machines")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Failed to list Fly.io machines: {} - {}", status, error_text);
+        }
+
+        let machines: Vec<FlyioMachine> = response
+            .json()
+            .await
+            .context("Failed to parse Fly.io machines response")?;
+
+        Ok(machines)
     }
 }

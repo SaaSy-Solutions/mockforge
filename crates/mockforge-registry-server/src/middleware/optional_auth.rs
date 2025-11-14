@@ -4,7 +4,6 @@
 //! but doesn't fail if authentication is missing
 
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
@@ -17,7 +16,6 @@ use crate::auth::verify_token;
 #[derive(Debug, Clone)]
 pub struct OptionalAuthUser(pub Option<Uuid>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for OptionalAuthUser
 where
     S: Send + Sync,

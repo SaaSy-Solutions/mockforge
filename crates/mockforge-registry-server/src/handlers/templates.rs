@@ -25,6 +25,7 @@ pub async fn search_templates(
     headers: HeaderMap,
     Json(query): Json<TemplateSearchQuery>,
 ) -> ApiResult<Json<TemplateSearchResults>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "template");
     let pool = state.db.pool();
 
     // Try to resolve org context for filtering (optional)
@@ -39,8 +40,11 @@ pub async fn search_templates(
         None
     };
 
-    let limit = query.per_page as i64;
-    let offset = (query.page * query.per_page) as i64;
+    // Validate and limit pagination parameters
+    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let page = query.page;
+    let limit = per_page as i64;
+    let offset = (page * per_page) as i64;
 
     // Search templates
     let templates = Template::search(
@@ -127,11 +131,14 @@ pub async fn search_templates(
         });
     }
 
+    // Record metrics
+    metrics.record_search_success();
+
     Ok(Json(TemplateSearchResults {
         templates: entries,
         total,
-        page: query.page,
-        per_page: query.per_page,
+        page,
+        per_page,
     }))
 }
 
@@ -140,12 +147,13 @@ pub async fn get_template(
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
 ) -> ApiResult<Json<TemplateRegistryEntry>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "template");
     let pool = state.db.pool();
 
     let template = Template::find_by_name_version(pool, &name, &version)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Template '{}@{}' not found", name, version)))?;
+        .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     let author = User::find_by_id(pool, template.author_id)
         .await
@@ -198,6 +206,40 @@ pub async fn get_template(
         created_at: template.created_at.to_rfc3339(),
         updated_at: template.updated_at.to_rfc3339(),
         published: template.published,
+    }));
+
+    // Record metrics
+    metrics.record_download_success();
+
+    Ok(Json(TemplateRegistryEntry {
+        id: template.id.to_string(),
+        name: template.name,
+        description: template.description,
+        author: author.username,
+        author_email: Some(author.email),
+        version: template.version,
+        category: template.category(),
+        tags: template.tags,
+        content: template.content_json,
+        readme: template.readme,
+        example_usage: template.example_usage,
+        requirements: template.requirements,
+        compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| CompatibilityInfo {
+            min_version: "0.1.0".to_string(),
+            max_version: None,
+            required_features: vec![],
+            protocols: vec![],
+        }),
+        stats: serde_json::from_value(stats).unwrap_or_else(|_| TemplateStats {
+            downloads: 0,
+            stars: 0,
+            forks: 0,
+            rating: 0.0,
+            rating_count: 0,
+        }),
+        created_at: template.created_at.to_rfc3339(),
+        updated_at: template.updated_at.to_rfc3339(),
+        published: template.published,
     }))
 }
 
@@ -208,11 +250,12 @@ pub async fn publish_template(
     headers: HeaderMap,
     Json(request): Json<PublishTemplateRequest>,
 ) -> ApiResult<Json<PublishTemplateResponse>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "template");
     let pool = state.db.pool();
 
     // Resolve org context
     let org_ctx = resolve_org_context(&state, author_id, &headers, None).await
-        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+        .map_err(|_| ApiError::OrganizationNotFound)?;
 
     // Check publishing limits
     let limits = &org_ctx.org.limits_json;
@@ -253,9 +296,25 @@ pub async fn publish_template(
         )));
     }
 
+    // Validate input fields
+    crate::validation::validate_name(&request.name)?;
+    crate::validation::validate_name(&request.slug)?;
+    crate::validation::validate_version(&request.version)?;
+    crate::validation::validate_checksum(&request.checksum)?;
+
+    // Validate base64 encoding
+    crate::validation::validate_base64(&request.package)?;
+
     // Decode package data
     let package_data = base64::decode(&request.package)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
+
+    // Validate package file
+    crate::validation::validate_package_file(
+        &package_data,
+        request.file_size as u64,
+        crate::validation::MAX_TEMPLATE_SIZE,
+    )?;
 
     // Verify checksum
     use sha2::{Sha256, Digest};
@@ -323,6 +382,9 @@ pub async fn publish_template(
         })),
     )
     .await;
+
+    // Record metrics
+    metrics.record_publish_success();
 
     Ok(Json(PublishTemplateResponse {
         name: request.name,

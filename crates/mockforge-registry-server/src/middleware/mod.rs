@@ -4,7 +4,6 @@ pub mod org_context;
 pub mod rate_limit;
 
 use axum::{
-    async_trait,
     extract::{FromRequestParts, Request},
     http::{request::Parts, HeaderMap, StatusCode},
     middleware::Next,
@@ -21,7 +20,6 @@ pub use rate_limit::rate_limit_middleware;
 #[derive(Debug, Clone)]
 pub struct AuthUser(pub Uuid);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,

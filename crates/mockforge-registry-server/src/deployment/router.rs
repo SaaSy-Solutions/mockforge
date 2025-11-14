@@ -105,15 +105,21 @@ impl MultitenantRouter {
 
         let mut request = request_builder.timeout(std::time::Duration::from_secs(30));
 
-        // Forward relevant headers
+        // Forward relevant headers (convert to strings for reqwest)
         if let Some(accept) = headers.get("accept") {
-            request = request.header("accept", accept);
+            if let Ok(accept_str) = accept.to_str() {
+                request = request.header("accept", accept_str);
+            }
         }
         if let Some(content_type) = headers.get("content-type") {
-            request = request.header("content-type", content_type);
+            if let Ok(content_type_str) = content_type.to_str() {
+                request = request.header("content-type", content_type_str);
+            }
         }
         if let Some(authorization) = headers.get("authorization") {
-            request = request.header("authorization", authorization);
+            if let Ok(auth_str) = authorization.to_str() {
+                request = request.header("authorization", auth_str);
+            }
         }
 
         let response = request
@@ -121,9 +127,19 @@ impl MultitenantRouter {
             .await
             .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
-        // Convert response
+        // Convert response - save status and headers before consuming body
         let status = StatusCode::from_u16(response.status().as_u16())
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+        // Collect headers before consuming response
+        let mut response_headers = Vec::new();
+        for (key, value) in response.headers() {
+            if let (Ok(header_name), Ok(value_str)) = (key.as_str().parse::<axum::http::HeaderName>(), value.to_str()) {
+                if let Ok(header_value) = axum::http::HeaderValue::from_str(value_str) {
+                    response_headers.push((header_name, header_value));
+                }
+            }
+        }
 
         let body_bytes = response
             .bytes()
@@ -132,10 +148,8 @@ impl MultitenantRouter {
 
         // Build response with headers
         let mut response_builder = Response::builder().status(status);
-
-        // Copy response headers
-        for (key, value) in response.headers() {
-            response_builder = response_builder.header(key, value);
+        for (header_name, header_value) in response_headers {
+            response_builder = response_builder.header(header_name, header_value);
         }
 
         let http_response = response_builder

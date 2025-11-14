@@ -23,10 +23,12 @@ impl VerificationToken {
         pool: &sqlx::PgPool,
         user_id: Uuid,
     ) -> sqlx::Result<Self> {
-        // Generate random token
+        // Generate random token (must be done before any await to ensure Send)
         use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let token_bytes: [u8; 32] = rng.gen();
+        let token_bytes: [u8; 32] = {
+            let mut rng = rand::thread_rng();
+            rng.gen()
+        };
         use base64::engine::general_purpose;
         let token = general_purpose::URL_SAFE_NO_PAD
             .encode(&token_bytes);

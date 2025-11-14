@@ -26,7 +26,7 @@ pub async fn get_scenario_reviews(
     let scenario = Scenario::find_by_name(pool, &name)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Scenario '{}' not found", name)))?;
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let limit = params.per_page.unwrap_or(20) as i64;
     let offset = (params.page.unwrap_or(0) * limit as usize) as i64;
@@ -104,7 +104,7 @@ pub async fn submit_scenario_review(
     let scenario = Scenario::find_by_name(pool, &name)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Scenario '{}' not found", name)))?;
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     // Check if user already reviewed
     let existing = sqlx::query_as::<_, (Uuid,)>(
