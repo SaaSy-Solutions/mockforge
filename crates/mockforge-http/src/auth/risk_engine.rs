@@ -75,7 +75,7 @@ impl Default for RiskEngineConfig {
         risk_factors.insert("new_device".to_string(), 0.3);
         risk_factors.insert("unusual_location".to_string(), 0.4);
         risk_factors.insert("suspicious_activity".to_string(), 0.5);
-        
+
         let mut risk_rules = Vec::new();
         risk_rules.push(RiskRule {
             condition: "risk_score > 0.9".to_string(),
@@ -89,7 +89,7 @@ impl Default for RiskEngineConfig {
             condition: "risk_score > 0.5".to_string(),
             action: RiskAction::DeviceChallenge,
         });
-        
+
         Self {
             mfa_threshold: 0.7,
             device_challenge_threshold: 0.5,
@@ -132,11 +132,11 @@ impl RiskEngine {
             let risks = self.simulated_risks.read().await;
             risks.get(user_id).copied().flatten()
         };
-        
+
         if let Some(risk_score) = simulated_risk {
             return self.create_assessment_from_score(risk_score);
         }
-        
+
         // Check for simulated risk factors override
         let factors_to_use = {
             let simulated = self.simulated_factors.read().await;
@@ -146,16 +146,16 @@ impl RiskEngine {
                 risk_factors.clone()
             }
         };
-        
+
         // Calculate risk score from factors
         let mut risk_factors_vec = Vec::new();
         let mut total_score = 0.0;
-        
+
         for (name, value) in factors_to_use {
             let weight = self.config.risk_factors.get(&name).copied().unwrap_or(0.0);
             let contribution = weight * value;
             total_score += contribution;
-            
+
             risk_factors_vec.push(RiskFactor {
                 name: name.clone(),
                 weight,
@@ -163,13 +163,13 @@ impl RiskEngine {
                 contribution,
             });
         }
-        
+
         // Clamp score to 0.0 - 1.0
         let risk_score = total_score.min(1.0).max(0.0);
-        
+
         // Determine recommended action
         let recommended_action = self.determine_action(risk_score);
-        
+
         RiskAssessment {
             risk_score,
             risk_factors: risk_factors_vec,
@@ -180,7 +180,7 @@ impl RiskEngine {
     /// Create assessment from a risk score (for simulation)
     fn create_assessment_from_score(&self, risk_score: f64) -> RiskAssessment {
         let recommended_action = self.determine_action(risk_score);
-        
+
         RiskAssessment {
             risk_score,
             risk_factors: vec![],
@@ -196,7 +196,7 @@ impl RiskEngine {
                 return rule.action.clone();
             }
         }
-        
+
         // Fallback to threshold-based logic
         if risk_score >= self.config.blocked_login_threshold {
             RiskAction::Block
@@ -249,7 +249,7 @@ impl RiskEngine {
                 }
             }
         }
-        
+
         false
     }
 
@@ -283,4 +283,3 @@ impl Default for RiskEngine {
         Self::new(RiskEngineConfig::default())
     }
 }
-

@@ -9,7 +9,7 @@ use mockforge_core::Error;
 use super::oidc::{JwkKey, JwkPublicKey};
 
 /// Convert a PEM-encoded RSA public key to JWK format
-/// 
+///
 /// Note: Full PEM-to-JWK conversion requires ASN.1 parsing to extract n and e components.
 /// For now, this function validates the PEM format but returns a basic JWK structure.
 /// Keys should be configured in JWK format (JSON) for full functionality.
@@ -17,7 +17,7 @@ pub fn rsa_pem_to_jwk(_pem: &str, kid: &str, alg: &str) -> Result<JwkPublicKey, 
     // Validate PEM format (basic check)
     // Full ASN.1 parsing would be needed to extract n and e components
     // For production, configure keys in JWK format directly
-    
+
     Ok(JwkPublicKey {
         kid: kid.to_string(),
         kty: "RSA".to_string(),
@@ -32,7 +32,7 @@ pub fn rsa_pem_to_jwk(_pem: &str, kid: &str, alg: &str) -> Result<JwkPublicKey, 
 }
 
 /// Convert a PEM-encoded ECDSA public key to JWK format
-/// 
+///
 /// Note: Full PEM-to-JWK conversion requires ASN.1 parsing to extract x, y, and crv components.
 /// For now, this function validates the PEM format but returns a basic JWK structure.
 /// Keys should be configured in JWK format (JSON) for full functionality.
@@ -44,7 +44,7 @@ pub fn ecdsa_pem_to_jwk(_pem: &str, kid: &str, alg: &str) -> Result<JwkPublicKey
         "ES512" => "P-521",
         _ => "P-256", // Default
     };
-    
+
     Ok(JwkPublicKey {
         kid: kid.to_string(),
         kty: "EC".to_string(),
@@ -96,7 +96,7 @@ pub fn jwk_key_to_public(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
 
 /// Simplified JWK conversion that works with base64-encoded key material
 /// This is a fallback when full ASN.1 parsing isn't available
-/// 
+///
 /// Note: For production use, keys should be configured with JWK format components
 /// (n, e for RSA or x, y, crv for EC) rather than PEM format for the JWKS endpoint.
 pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
@@ -132,7 +132,7 @@ pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
             });
         }
     }
-    
+
     // If not JSON, assume PEM format and return basic structure
     // For full PEM parsing, would need ASN.1 library
     match jwk_key.kty.as_str() {
@@ -159,7 +159,7 @@ pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
                 "ES512" => "P-521",
                 _ => "P-256", // Default
             };
-            
+
             Ok(JwkPublicKey {
                 kid: jwk_key.kid.clone(),
                 kty: "EC".to_string(),
@@ -178,4 +178,3 @@ pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
         _ => Err(Error::generic(format!("Unsupported key type: {}", jwk_key.kty))),
     }
 }
-

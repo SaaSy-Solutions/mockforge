@@ -35,4 +35,3 @@ pub fn extract_user_id_with_fallback(claims: Option<Extension<AuthClaims>>) -> U
 pub fn extract_username_from_claims(claims: Option<Extension<AuthClaims>>) -> Option<String> {
     claims.and_then(|Extension(claims)| claims.username)
 }
-

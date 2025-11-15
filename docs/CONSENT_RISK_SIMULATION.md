@@ -334,4 +334,3 @@ expected_behavior: Login blocked, no consent screen
 - [OIDC Simulation Guide](OIDC_SIMULATION.md)
 - [Token Lifecycle Scenarios Guide](TOKEN_LIFECYCLE_SCENARIOS.md)
 - [OAuth2 Documentation](../book/src/user-guide/security.md)
-

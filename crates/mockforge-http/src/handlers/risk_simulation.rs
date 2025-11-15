@@ -66,7 +66,7 @@ pub async fn set_risk_score(
         .risk_engine
         .set_simulated_risk(request.user_id.clone(), Some(request.risk_score))
         .await;
-    
+
     Ok(Json(serde_json::json!({
         "success": true,
         "user_id": request.user_id,
@@ -83,7 +83,7 @@ pub async fn set_risk_factors(
         .risk_engine
         .set_simulated_factors(request.user_id.clone(), request.risk_factors.clone())
         .await;
-    
+
     Ok(Json(serde_json::json!({
         "success": true,
         "user_id": request.user_id,
@@ -97,7 +97,7 @@ pub async fn clear_risk(
     axum::extract::Path(user_id): axum::extract::Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     state.risk_engine.clear_simulated_risk(&user_id).await;
-    
+
     Ok(Json(serde_json::json!({
         "success": true,
         "user_id": user_id,
@@ -115,7 +115,7 @@ pub async fn trigger_mfa(
         .risk_engine
         .set_simulated_risk(request.user_id.clone(), Some(0.8))
         .await;
-    
+
     Ok(Json(serde_json::json!({
         "success": true,
         "user_id": request.user_id,
@@ -134,7 +134,7 @@ pub async fn block_user(
         .risk_engine
         .set_simulated_risk(request.user_id.clone(), Some(0.95))
         .await;
-    
+
     Ok(Json(serde_json::json!({
         "success": true,
         "user_id": request.user_id,
@@ -153,7 +153,7 @@ pub async fn get_risk_assessment(
         .risk_engine
         .assess_risk(&user_id, &risk_factors)
         .await;
-    
+
     Json(serde_json::json!({
         "user_id": user_id,
         "risk_score": assessment.risk_score,
@@ -165,7 +165,7 @@ pub async fn get_risk_assessment(
 /// Create risk simulation router
 pub fn risk_simulation_router(state: RiskSimulationState) -> axum::Router {
     use axum::routing::{get, post, delete};
-    
+
     axum::Router::new()
         .route("/risk/simulate", post(set_risk_score))
         .route("/risk/factors", post(set_risk_factors))
@@ -175,4 +175,3 @@ pub fn risk_simulation_router(state: RiskSimulationState) -> axum::Router {
         .route("/risk/assessment/:user_id", get(get_risk_assessment))
         .with_state(state)
 }
-

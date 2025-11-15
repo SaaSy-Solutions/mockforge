@@ -300,4 +300,3 @@ pub fn token_lifecycle_router(state: TokenLifecycleState) -> axum::Router {
         .route("/test/revoke-mid-session", post(revoke_mid_session))
         .with_state(state)
 }
-

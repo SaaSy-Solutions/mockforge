@@ -176,7 +176,7 @@ impl OidcState {
     /// Create new OIDC state from configuration
     pub fn new(config: OidcConfig) -> Result<Self, Error> {
         let mut signing_keys = HashMap::new();
-        
+
         // Load signing keys
         for key in &config.jwks.keys {
             if let Some(ref private_key) = key.private_key {
@@ -213,7 +213,7 @@ pub async fn get_oidc_discovery() -> Json<OidcDiscoveryDocument> {
     // In production, this would be loaded from configuration
     let base_url = std::env::var("MOCKFORGE_BASE_URL")
         .unwrap_or_else(|_| "https://mockforge.example.com".to_string());
-    
+
     let discovery = OidcDiscoveryDocument {
         issuer: base_url.clone(),
         authorization_endpoint: format!("{}/oauth2/authorize", base_url),
@@ -277,9 +277,9 @@ pub async fn get_jwks() -> Json<JwksResponse> {
 /// Get JWKS from OIDC state
 pub fn get_jwks_from_state(oidc_state: &OidcState) -> Result<JwksResponse, Error> {
     use crate::auth::jwks_converter::convert_jwk_key_simple;
-    
+
     let mut public_keys = Vec::new();
-    
+
     for key in &oidc_state.config.jwks.keys {
         match convert_jwk_key_simple(key) {
             Ok(jwk) => public_keys.push(jwk),
@@ -289,7 +289,7 @@ pub fn get_jwks_from_state(oidc_state: &OidcState) -> Result<JwksResponse, Error
             }
         }
     }
-    
+
     Ok(JwksResponse { keys: public_keys })
 }
 
@@ -313,7 +313,7 @@ pub fn generate_signed_jwt(
     audience: Option<String>,
 ) -> Result<String, Error> {
     use chrono::Utc;
-    
+
     let mut header = Header::new(algorithm);
     if let Some(kid) = kid {
         header.kid = Some(kid);
@@ -322,16 +322,16 @@ pub fn generate_signed_jwt(
     // Add standard claims
     let now = Utc::now();
     claims.insert("iat".to_string(), json!(now.timestamp()));
-    
+
     if let Some(exp_seconds) = expires_in_seconds {
         let exp = now + chrono::Duration::seconds(exp_seconds);
         claims.insert("exp".to_string(), json!(exp.timestamp()));
     }
-    
+
     if let Some(iss) = issuer {
         claims.insert("iss".to_string(), json!(iss));
     }
-    
+
     if let Some(aud) = audience {
         claims.insert("aud".to_string(), json!(aud));
     }
@@ -361,12 +361,12 @@ pub fn generate_oidc_token(
 ) -> Result<String, Error> {
     use chrono::Utc;
     use jsonwebtoken::Algorithm;
-    
+
     // Start with default claims
     let mut claims = HashMap::new();
     claims.insert("sub".to_string(), json!(subject));
     claims.insert("iss".to_string(), json!(oidc_state.config.issuer.clone()));
-    
+
     // Add default claims from config
     for claim_name in &oidc_state.config.claims.default {
         if !claims.contains_key(claim_name) {
@@ -390,14 +390,14 @@ pub fn generate_oidc_token(
             }
         }
     }
-    
+
     // Add custom claims from config
     for (key, value) in &oidc_state.config.claims.custom {
         if !claims.contains_key(key) {
             claims.insert(key.clone(), value.clone());
         }
     }
-    
+
     // Add multi-tenant claims if enabled
     if let Some(ref mt_config) = oidc_state.config.multi_tenant {
         if mt_config.enabled {
@@ -410,7 +410,7 @@ pub fn generate_oidc_token(
                 .as_ref()
                 .and_then(|ctx| ctx.tenant_id.clone())
                 .or_else(|| Some("tenant-default".to_string()));
-            
+
             claims.insert(mt_config.org_id_claim.clone(), json!(org_id));
             if let Some(ref tenant_claim) = mt_config.tenant_id_claim {
                 if let Some(tid) = tenant_id {
@@ -419,21 +419,21 @@ pub fn generate_oidc_token(
             }
         }
     }
-    
+
     // Merge additional claims (override defaults)
     if let Some(additional) = additional_claims {
         for (key, value) in additional {
             claims.insert(key, value);
         }
     }
-    
+
     // Get signing key (use first available key for now)
     let signing_keys = oidc_state.signing_keys.blocking_read();
     let (kid, encoding_key) = signing_keys
         .iter()
         .next()
         .ok_or_else(|| Error::generic("No signing keys available".to_string()))?;
-    
+
     // Determine algorithm from key configuration
     // Default to HS256 if algorithm not specified in key config
     let algorithm = oidc_state
@@ -455,7 +455,7 @@ pub fn generate_oidc_token(
             _ => None,
         })
         .unwrap_or(Algorithm::HS256);
-    
+
     generate_signed_jwt(
         claims,
         Some(kid.clone()),
@@ -470,9 +470,8 @@ pub fn generate_oidc_token(
 /// Create OIDC router with well-known endpoints
 pub fn oidc_router() -> axum::Router {
     use axum::routing::get;
-    
+
     axum::Router::new()
         .route("/.well-known/openid-configuration", get(get_oidc_discovery))
         .route("/.well-known/jwks.json", get(get_jwks))
 }
-

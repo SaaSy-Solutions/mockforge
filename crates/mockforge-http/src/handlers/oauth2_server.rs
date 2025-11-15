@@ -112,27 +112,27 @@ pub async fn authorize(
     State(state): State<OAuth2ServerState>,
     Query(params): Query<AuthorizationRequest>,
 ) -> Result<Redirect, StatusCode> {
-    
+
     // Validate response_type
     if params.response_type != "code" {
         return Err(StatusCode::BAD_REQUEST);
     }
-    
+
     // Check if consent is required (simplified - in production, check user consent)
     // For now, auto-approve and generate authorization code
-    
+
     // Generate authorization code
     let mut rng = rand::thread_rng();
     let code_bytes: [u8; 32] = rng.gen();
     let auth_code = hex::encode(code_bytes);
-    
+
     // Parse scopes
     let scopes = params
         .scope
         .as_ref()
         .map(|s| s.split(' ').map(|s| s.to_string()).collect())
         .unwrap_or_else(Vec::new);
-    
+
     // Store authorization code (expires in 10 minutes)
     let code_info = AuthorizationCodeInfo {
         client_id: params.client_id.clone(),
@@ -146,12 +146,12 @@ pub async fn authorize(
         // Tenant context can be extracted from request headers or session
         tenant_context: None,
     };
-    
+
     {
         let mut codes = state.auth_codes.write().await;
         codes.insert(auth_code.clone(), code_info);
     }
-    
+
     // Build redirect URL with authorization code
     let mut redirect_url = url::Url::parse(&params.redirect_uri)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -161,7 +161,7 @@ pub async fn authorize(
     if let Some(state) = params.state {
         redirect_url.query_pairs_mut().append_pair("state", &state);
     }
-    
+
     Ok(Redirect::to(redirect_url.as_str()))
 }
 
@@ -171,7 +171,7 @@ pub async fn token(
     axum::extract::Form(request): axum::extract::Form<TokenRequest>,
 ) -> Result<Json<TokenResponse>, StatusCode> {
     use chrono::Utc;
-    
+
     match request.grant_type.as_str() {
         "authorization_code" => {
             handle_authorization_code_grant(state, request).await
@@ -191,39 +191,39 @@ async fn handle_authorization_code_grant(
     state: OAuth2ServerState,
     request: TokenRequest,
 ) -> Result<Json<TokenResponse>, StatusCode> {
-    
+
     let code = request.code.ok_or(StatusCode::BAD_REQUEST)?;
     let redirect_uri = request.redirect_uri.ok_or(StatusCode::BAD_REQUEST)?;
-    
+
     // Look up authorization code
     let code_info = {
         let mut codes = state.auth_codes.write().await;
         codes.remove(&code).ok_or(StatusCode::BAD_REQUEST)?
     };
-    
+
     // Validate redirect URI
     if code_info.redirect_uri != redirect_uri {
         return Err(StatusCode::BAD_REQUEST);
     }
-    
+
     // Check expiration
     if code_info.expires_at < Utc::now().timestamp() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    
+
     // Generate access token using OIDC
     let oidc_state_guard = state.oidc_state.read().await;
     let oidc_state = oidc_state_guard
         .as_ref()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     // Build claims
     let mut additional_claims = HashMap::new();
     additional_claims.insert("scope".to_string(), json!(code_info.scopes.join(" ")));
     if let Some(nonce) = request.nonce {
         additional_claims.insert("nonce".to_string(), json!(nonce));
     }
-    
+
     let access_token = generate_oidc_token(
         oidc_state,
         code_info.user_id.clone(),
@@ -232,16 +232,16 @@ async fn handle_authorization_code_grant(
         code_info.tenant_context.clone(),
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     // Check if token is revoked (shouldn't be, but check anyway)
     let token_id = extract_token_id(&access_token);
     if state.lifecycle_manager.revocation.is_revoked(&token_id).await.is_some() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    
+
     // Generate refresh token (simplified)
     let refresh_token = format!("refresh_{}", uuid::Uuid::new_v4());
-    
+
     Ok(Json(TokenResponse {
         access_token,
         token_type: "Bearer".to_string(),
@@ -261,21 +261,21 @@ async fn handle_client_credentials_grant(
 ) -> Result<Json<TokenResponse>, StatusCode> {
     let client_id = request.client_id.ok_or(StatusCode::BAD_REQUEST)?;
     let _client_secret = request.client_secret.ok_or(StatusCode::BAD_REQUEST)?;
-    
+
     // Validate client credentials (simplified - in production, check against database)
-    
+
     // Generate access token
     let oidc_state_guard = state.oidc_state.read().await;
     let oidc_state = oidc_state_guard
         .as_ref()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     let mut additional_claims = HashMap::new();
     additional_claims.insert("client_id".to_string(), serde_json::json!(client_id));
     if let Some(scope) = request.scope {
         additional_claims.insert("scope".to_string(), serde_json::json!(scope));
     }
-    
+
     let access_token = generate_oidc_token(
         oidc_state,
         format!("client_{}", client_id),
@@ -284,7 +284,7 @@ async fn handle_client_credentials_grant(
         None,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     Ok(Json(TokenResponse {
         access_token,
         token_type: "Bearer".to_string(),
@@ -305,22 +305,22 @@ async fn handle_refresh_token_grant(
     // 2. Check if it's revoked
     // 3. Generate a new access token
     // 4. Optionally generate a new refresh token
-    
+
     // Simplified implementation - in production, validate refresh token from storage
     let client_id = request.client_id.ok_or(StatusCode::BAD_REQUEST)?;
-    
+
     // Generate new access token
     let oidc_state_guard = state.oidc_state.read().await;
     let oidc_state = oidc_state_guard
         .as_ref()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     let mut additional_claims = HashMap::new();
     additional_claims.insert("client_id".to_string(), json!(client_id));
     if let Some(scope) = request.scope {
         additional_claims.insert("scope".to_string(), json!(scope));
     }
-    
+
     let access_token = generate_oidc_token(
         oidc_state,
         format!("client_{}", client_id),
@@ -329,10 +329,10 @@ async fn handle_refresh_token_grant(
         None,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     // Generate new refresh token
     let refresh_token = format!("refresh_{}", uuid::Uuid::new_v4());
-    
+
     Ok(Json(TokenResponse {
         access_token,
         token_type: "Bearer".to_string(),
@@ -346,10 +346,9 @@ async fn handle_refresh_token_grant(
 /// Create OAuth2 server router
 pub fn oauth2_server_router(state: OAuth2ServerState) -> axum::Router {
     use axum::routing::{get, post};
-    
+
     axum::Router::new()
         .route("/oauth2/authorize", get(authorize))
         .route("/oauth2/token", post(token))
         .with_state(state)
 }
-

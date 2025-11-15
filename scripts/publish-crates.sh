@@ -228,7 +228,7 @@ convert_crate_dependencies() {
                 published_crates="$published_crates $dep_crate"
             fi
         done
-        
+
         python3 - "$cargo_toml" "$WORKSPACE_VERSION" "$published_crates" <<'PY'
 import re
 import sys
@@ -279,7 +279,7 @@ for name, rel in targets:
     # Only convert if this crate has been published
     if name not in published:
         continue
-        
+
     # Pattern 1: { path = "../..." }
     pattern1 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
     # Pattern 2: { version = "...", path = "../..." }

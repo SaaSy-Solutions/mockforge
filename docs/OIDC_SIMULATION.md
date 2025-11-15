@@ -254,4 +254,3 @@ client.provider_config("https://mockforge.example.com")
 - [Consent & Risk Simulation Guide](CONSENT_RISK_SIMULATION.md)
 - [Token Lifecycle Scenarios Guide](TOKEN_LIFECYCLE_SCENARIOS.md)
 - [OAuth2 Documentation](../book/src/user-guide/security.md)
-

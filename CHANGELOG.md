@@ -63,25 +63,25 @@
 ### Added
 
 - **[Reality] Generative Schema Mode**: Complete implementation of generative schema mode for dynamic mock data generation
-  
+
   **Why it matters**: Spin up a believable API even when the backend doesn't exist yet—no sample DB or seed data required.
 
 - **[Reality] Smart Personas**: Feature for consistent cross-endpoint data generation using persona-based templates
 
 - **[Reality] Reality Continuum**: Feature for blending mock and real data sources with configurable reality levels
-  
+
   **Why it matters**: Turn the dial between deterministic mock and noisy production-like chaos without changing your client code.
 
 - **[Reality] Reality Slider**: Hot-reload support for reality level adjustments
-  
+
   **Why it matters**: Adjust reality levels on the fly during development and testing without restarting the server.
 
 - **[Reality] Chaos Lab**: Interactive network condition simulation tool
-  
+
   **Why it matters**: Test how your application handles real-world network conditions like latency spikes, packet loss, and connection failures.
 
 - **[Contracts] AI Contract Diff**: Feature for comparing and diffing API contracts
-  
+
   **Why it matters**: Automatically detect and visualize API contract changes to catch breaking changes before they reach production.
 
 - **[DevX] Voice + LLM Interface**: Voice interface implementation with Speech-to-Text (STT) backend support
@@ -123,9 +123,9 @@
 ### Added
 
 - **[Contracts] Automatic API Sync & Change Detection**: Implemented periodic polling and automatic sync for detecting upstream API changes
-  
+
   **Why it matters**: Keep your mocks in sync with real APIs automatically—catch breaking changes before they break your tests.
-  
+
   - Periodic sync service with configurable intervals (default: 1 hour)
   - Automatic change detection using deep response comparison (status, headers, body)
   - Optional automatic fixture updates when changes detected
@@ -138,9 +138,9 @@
   - API endpoints: `/api/recorder/sync/status`, `/api/recorder/sync/config`, `/api/recorder/sync/changes`
 
 - **[Reality] TCP Protocol Support**: Added raw TCP server mocking support via new `mockforge-tcp` crate
-  
+
   **Why it matters**: Mock any protocol that runs over TCP—not just HTTP. Perfect for testing database clients, custom protocols, and legacy systems.
-  
+
   - Raw TCP connection handling with fixture-based matching
   - Echo mode for testing TCP clients
   - TLS/SSL support for encrypted connections

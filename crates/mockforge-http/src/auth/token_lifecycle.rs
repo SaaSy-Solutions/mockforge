@@ -162,7 +162,7 @@ impl KeyRotationState {
     /// Rotate to a new key
     pub async fn rotate_key(&self, new_kid: String) -> Result<(), Error> {
         let mut keys = self.active_keys.write().await;
-        
+
         // Mark all existing keys as non-primary
         for key in keys.values_mut() {
             key.is_primary = false;
@@ -316,4 +316,3 @@ pub fn extract_token_id(token: &str) -> String {
     hasher.update(token.as_bytes());
     format!("{:x}", hasher.finalize())
 }
-

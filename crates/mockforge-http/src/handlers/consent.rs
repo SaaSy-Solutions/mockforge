@@ -64,19 +64,19 @@ pub async fn get_consent_screen(
         .risk_engine
         .assess_risk("user-default", &risk_factors)
         .await;
-    
+
     // If risk is too high, block or require additional verification
     if risk_assessment.recommended_action == RiskAction::Block {
         return Ok(Html(blocked_login_html()));
     }
-    
+
     // Parse scopes
     let scopes = params
         .scope
         .as_ref()
         .map(|s| s.split(' ').map(|s| s.to_string()).collect::<Vec<_>>())
         .unwrap_or_else(Vec::new);
-    
+
     // Generate consent screen HTML
     let html = generate_consent_screen_html(&params.client_id, &scopes, params.state.as_deref());
     Ok(Html(html))
@@ -93,7 +93,7 @@ pub async fn submit_consent(
             "message": "Consent denied"
         })));
     }
-    
+
     // Store consent decision and redirect back to OAuth2 flow
     // In a full implementation, this would store consent and redirect to authorization endpoint
     Ok(Json(serde_json::json!({
@@ -123,11 +123,11 @@ fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Optio
             )
         })
         .collect::<String>();
-    
+
     let state_param = state
         .map(|s| format!(r#"<input type="hidden" name="state" value="{}">"#, s))
         .unwrap_or_default();
-    
+
     format!(
         r#"
 <!DOCTYPE html>
@@ -285,16 +285,16 @@ fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Optio
         <div class="app-icon">🔐</div>
         <h1>Authorize Application</h1>
         <p class="client-id">{}</p>
-        
+
         <p class="permissions-title">This application is requesting the following permissions:</p>
-        
+
         <form id="consent-form" method="POST" action="/consent/decision">
             <input type="hidden" name="client_id" value="{}">
             {}
             <div class="scopes">
                 {}
             </div>
-            
+
             <div class="buttons">
                 <button type="submit" class="btn-approve" name="approved" value="true">
                     Approve
@@ -304,12 +304,12 @@ fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Optio
                 </button>
             </div>
         </form>
-        
+
         <div class="privacy-link">
             By approving, you agree to our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>.
         </div>
     </div>
-    
+
     <script>
         function denyConsent() {{
             document.getElementById('consent-form').innerHTML += '<input type="hidden" name="approved" value="false">';
@@ -400,10 +400,9 @@ fn blocked_login_html() -> String {
 /// Create consent router
 pub fn consent_router(state: ConsentState) -> axum::Router {
     use axum::routing::{get, post};
-    
+
     axum::Router::new()
         .route("/consent", get(get_consent_screen))
         .route("/consent/decision", post(submit_consent))
         .with_state(state)
 }
-

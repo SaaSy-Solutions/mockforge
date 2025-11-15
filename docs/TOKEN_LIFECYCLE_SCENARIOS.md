@@ -277,11 +277,11 @@ POST /api/v1/auth/test/clock-skew
 import { useTokenLifecycle } from '@mockforge/auth';
 
 function TestComponent() {
-  const { 
-    revokeToken, 
-    rotateKeys, 
+  const {
+    revokeToken,
+    rotateKeys,
     setClockSkew,
-    forceRefreshFailure 
+    forceRefreshFailure
   } = useTokenLifecycle();
 
   const handleTestRevocation = async () => {
@@ -377,4 +377,3 @@ steps:
 - [OIDC Simulation Guide](OIDC_SIMULATION.md)
 - [Consent & Risk Simulation Guide](CONSENT_RISK_SIMULATION.md)
 - [OAuth2 Documentation](../book/src/user-guide/security.md)
-
