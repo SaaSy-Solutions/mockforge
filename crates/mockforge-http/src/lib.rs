@@ -866,6 +866,10 @@ pub async fn build_router_with_multi_tenant(
     // Add verification API endpoint
     app = app.merge(verification_router());
 
+    // Add OIDC well-known endpoints
+    use crate::auth::oidc::oidc_router;
+    app = app.merge(oidc_router());
+
     // Add access review API if enabled
     {
         use mockforge_core::security::get_global_access_review_service;
@@ -908,6 +912,67 @@ pub async fn build_router_with_multi_tenant(
             app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
             debug!("Risk assessment API mounted at /api/v1/security/risks");
         }
+    }
+
+    // Add token lifecycle API
+    {
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let lifecycle_state = TokenLifecycleState {
+            manager: lifecycle_manager,
+        };
+        app = app.nest("/api/v1/auth", token_lifecycle_router(lifecycle_state));
+        debug!("Token lifecycle API mounted at /api/v1/auth");
+    }
+
+    // Add OAuth2 server endpoints
+    {
+        use crate::auth::oidc::OidcState;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
+        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state,
+            lifecycle_manager,
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        app = app.merge(oauth2_server_router(oauth2_state));
+        debug!("OAuth2 server endpoints mounted at /oauth2/authorize and /oauth2/token");
+    }
+
+    // Add consent screen endpoints
+    {
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::consent::{consent_router, ConsentState};
+        use crate::handlers::oauth2_server::OAuth2ServerState;
+        use crate::auth::oidc::OidcState;
+        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state: oidc_state.clone(),
+            lifecycle_manager: lifecycle_manager.clone(),
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        let risk_engine = Arc::new(RiskEngine::default());
+        let consent_state = ConsentState {
+            oauth2_state,
+            risk_engine,
+        };
+        app = app.merge(consent_router(consent_state));
+        debug!("Consent screen endpoints mounted at /consent");
+    }
+
+    // Add risk simulation API
+    {
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::handlers::risk_simulation::{risk_simulation_router, RiskSimulationState};
+        let risk_engine = Arc::new(RiskEngine::default());
+        let risk_state = RiskSimulationState { risk_engine };
+        app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
+        debug!("Risk simulation API mounted at /api/v1/auth/risk");
     }
 
     // Add management WebSocket endpoint
@@ -1809,6 +1874,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Add verification API endpoint
     app = app.merge(verification_router());
 
+    // Add OIDC well-known endpoints
+    use crate::auth::oidc::oidc_router;
+    app = app.merge(oidc_router());
+
     // Add access review API if enabled
     {
         use mockforge_core::security::get_global_access_review_service;
@@ -1851,6 +1920,67 @@ pub async fn build_router_with_chains_and_multi_tenant(
             app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
             debug!("Risk assessment API mounted at /api/v1/security/risks");
         }
+    }
+
+    // Add token lifecycle API
+    {
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let lifecycle_state = TokenLifecycleState {
+            manager: lifecycle_manager,
+        };
+        app = app.nest("/api/v1/auth", token_lifecycle_router(lifecycle_state));
+        debug!("Token lifecycle API mounted at /api/v1/auth");
+    }
+
+    // Add OAuth2 server endpoints
+    {
+        use crate::auth::oidc::OidcState;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
+        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state,
+            lifecycle_manager,
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        app = app.merge(oauth2_server_router(oauth2_state));
+        debug!("OAuth2 server endpoints mounted at /oauth2/authorize and /oauth2/token");
+    }
+
+    // Add consent screen endpoints
+    {
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::consent::{consent_router, ConsentState};
+        use crate::handlers::oauth2_server::OAuth2ServerState;
+        use crate::auth::oidc::OidcState;
+        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state: oidc_state.clone(),
+            lifecycle_manager: lifecycle_manager.clone(),
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        let risk_engine = Arc::new(RiskEngine::default());
+        let consent_state = ConsentState {
+            oauth2_state,
+            risk_engine,
+        };
+        app = app.merge(consent_router(consent_state));
+        debug!("Consent screen endpoints mounted at /consent");
+    }
+
+    // Add risk simulation API
+    {
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::handlers::risk_simulation::{risk_simulation_router, RiskSimulationState};
+        let risk_engine = Arc::new(RiskEngine::default());
+        let risk_state = RiskSimulationState { risk_engine };
+        app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
+        debug!("Risk simulation API mounted at /api/v1/auth/risk");
     }
 
     // Add management WebSocket endpoint

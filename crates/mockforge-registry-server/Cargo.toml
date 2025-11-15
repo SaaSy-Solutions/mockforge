@@ -71,8 +71,8 @@ x509-parser = "0.17"
 rustls-pemfile = "2.0"
 
 # Internal dependencies
-mockforge-plugin-registry = { path = "../mockforge-plugin-registry" }
-mockforge-observability = { path = "../mockforge-observability" }
+mockforge-plugin-registry = "0.2.9"
+mockforge-observability = "0.2.9"
 
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }

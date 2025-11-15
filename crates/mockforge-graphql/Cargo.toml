@@ -37,9 +37,9 @@ notify = "7.0"
 parking_lot = { workspace = true }
 
 # MockForge core
-mockforge-core = "0.2.8"
-mockforge-observability = "0.2.8"
-mockforge-tracing = "0.2.8"
+mockforge-core = "0.2.9"
+mockforge-observability = "0.2.9"
+mockforge-tracing = "0.2.9"
 opentelemetry = "0.21"
 
 # Optional data generation support

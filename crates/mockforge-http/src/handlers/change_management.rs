@@ -4,7 +4,7 @@
 //! approvals, implementation tracking, and completion.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -20,6 +20,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
+
+use crate::auth::types::AuthClaims;
+use crate::handlers::auth_helpers::{extract_user_id_with_fallback, extract_username_from_claims};
 
 /// State for change management handlers
 #[derive(Clone)]
@@ -129,10 +132,10 @@ pub struct ChangeSummary {
 pub async fn create_change_request(
     State(state): State<ChangeManagementState>,
     Json(request): Json<CreateChangeRequest>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<ChangeRequestResponse>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let requester_id = Uuid::new_v4(); // Placeholder
+    // Extract requester ID from authentication claims, or use default for mock server
+    let requester_id = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     let change = engine
@@ -193,11 +196,12 @@ pub async fn approve_change(
     State(state): State<ChangeManagementState>,
     Path(change_id): Path<String>,
     Json(request): Json<ApproveChangeRequest>,
-    // TODO: Extract actual approver ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual approver ID and approver name from authentication
-    let approver_id = Uuid::new_v4(); // Placeholder
-    let approver = "approver".to_string(); // Placeholder
+    // Extract approver ID and name from authentication claims, or use defaults for mock server
+    let approver_id = extract_user_id_with_fallback(claims.clone());
+    let approver = extract_username_from_claims(claims)
+        .unwrap_or_else(|| format!("user-{}", approver_id));
 
     let engine = state.engine.write().await;
 
@@ -280,10 +284,10 @@ pub async fn start_implementation(
     State(state): State<ChangeManagementState>,
     Path(change_id): Path<String>,
     Json(request): Json<StartImplementationRequest>,
-    // TODO: Extract actual implementer ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual implementer ID from authentication
-    let implementer_id = Uuid::new_v4(); // Placeholder
+    // Extract implementer ID from authentication claims, or use default for mock server
+    let implementer_id = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     engine
@@ -328,10 +332,10 @@ pub async fn complete_change(
     State(state): State<ChangeManagementState>,
     Path(change_id): Path<String>,
     Json(request): Json<CompleteChangeRequest>,
-    // TODO: Extract actual implementer ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual implementer ID from authentication
-    let implementer_id = Uuid::new_v4(); // Placeholder
+    // Extract implementer ID from authentication claims, or use default for mock server
+    let implementer_id = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     engine

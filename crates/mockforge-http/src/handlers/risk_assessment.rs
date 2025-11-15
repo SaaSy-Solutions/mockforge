@@ -4,7 +4,7 @@
 //! creating risks, updating assessments, and tracking treatment plans.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -22,6 +22,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
+
+use crate::auth::types::AuthClaims;
+use crate::handlers::auth_helpers::extract_user_id_with_fallback;
 
 /// State for risk assessment handlers
 #[derive(Clone)]
@@ -103,10 +106,10 @@ pub struct RiskListResponse {
 pub async fn create_risk(
     State(state): State<RiskAssessmentState>,
     Json(request): Json<CreateRiskRequest>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let created_by = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let created_by = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     let mut risk = engine
@@ -274,10 +277,10 @@ pub async fn update_risk_assessment(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
     Json(request): Json<UpdateRiskAssessmentRequest>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let _updated_by = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let updated_by = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     engine
@@ -293,7 +296,7 @@ pub async fn update_risk_assessment(
     // Emit security event
     let event = SecurityEvent::new(SecurityEventType::ConfigChanged, None, None)
         .with_actor(EventActor {
-            user_id: Some(_updated_by.to_string()),
+            user_id: Some(updated_by.to_string()),
             username: None,
             ip_address: None,
             user_agent: None,
@@ -322,10 +325,10 @@ pub async fn update_treatment_plan(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
     Json(request): Json<UpdateTreatmentPlanRequest>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let _updated_by = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let updated_by = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     engine
@@ -347,7 +350,7 @@ pub async fn update_treatment_plan(
     // Emit security event
     let event = SecurityEvent::new(SecurityEventType::ConfigChanged, None, None)
         .with_actor(EventActor {
-            user_id: Some(_updated_by.to_string()),
+            user_id: Some(updated_by.to_string()),
             username: None,
             ip_address: None,
             user_agent: None,
@@ -376,10 +379,10 @@ pub async fn update_treatment_status(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
     Json(request): Json<serde_json::Value>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let _updated_by = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let _updated_by = extract_user_id_with_fallback(claims);
 
     let status_str = request
         .get("status")
@@ -418,10 +421,10 @@ pub async fn set_residual_risk(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
     Json(request): Json<SetResidualRiskRequest>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let _updated_by = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let _updated_by = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     engine
@@ -446,10 +449,10 @@ pub async fn set_residual_risk(
 pub async fn review_risk(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let reviewed_by = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let reviewed_by = extract_user_id_with_fallback(claims);
 
     let engine = state.engine.write().await;
     engine

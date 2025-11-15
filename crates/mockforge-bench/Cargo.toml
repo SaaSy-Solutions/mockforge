@@ -11,9 +11,9 @@ documentation = "https://docs.rs/mockforge"
 
 [dependencies]
 # Core dependencies
-mockforge-core = { path = "../mockforge-core", version = "0.2.8" }
-mockforge-data = { path = "../mockforge-data", version = "0.2.8" }
-mockforge-recorder = { version = "0.2.8", path = "../mockforge-recorder", optional = true }
+mockforge-core = "0.2.9"
+mockforge-data = "0.2.9"
+mockforge-recorder = { version = "0.2.9", path = "../mockforge-recorder", optional = true }
 
 # OpenAPI and spec parsing
 openapiv3 = "2.0"

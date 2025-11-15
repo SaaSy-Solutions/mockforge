@@ -68,16 +68,16 @@ ring = "0.17"
 hex = "0.4"
 
 # Reuse plugin registry infrastructure
-mockforge-plugin-registry = { path = "../mockforge-plugin-registry", version = "0.2.8" }
+mockforge-plugin-registry = { path = "../mockforge-plugin-registry", version = "0.2.9" }
 
 # Reuse plugin loader patterns
-mockforge-plugin-loader = { path = "../mockforge-plugin-loader", version = "0.2.8" }
+mockforge-plugin-loader = { path = "../mockforge-plugin-loader", version = "0.2.9" }
 
 # Core types for state machines
-mockforge-core = { path = "../mockforge-core", version = "0.2.8" }
+mockforge-core = { path = "../mockforge-core", version = "0.2.9" }
 
 # Data types for schemas
-mockforge-data = { path = "../mockforge-data", version = "0.2.8" }
+mockforge-data = { path = "../mockforge-data", version = "0.2.9" }
 
 [features]
 default = ["git-support"]

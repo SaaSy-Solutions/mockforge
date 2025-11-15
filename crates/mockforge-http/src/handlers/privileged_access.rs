@@ -4,7 +4,7 @@
 //! monitoring privileged actions, and managing privileged sessions.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::Json,
 };
@@ -17,6 +17,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
+
+use crate::auth::types::AuthClaims;
+use crate::handlers::auth_helpers::extract_user_id_with_fallback;
 
 /// State for privileged access handlers
 #[derive(Clone)]
@@ -88,10 +91,10 @@ pub struct PrivilegedActionSummary {
 pub async fn request_privileged_access(
     State(state): State<PrivilegedAccessState>,
     Json(request): Json<CreatePrivilegedAccessRequest>,
-    // TODO: Extract actual user ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<PrivilegedAccessRequestResponse>, StatusCode> {
-    // TODO: Extract actual user ID from authentication
-    let user_id = Uuid::new_v4(); // Placeholder
+    // Extract user ID from authentication claims, or use default for mock server
+    let user_id = extract_user_id_with_fallback(claims);
 
     let manager = state.manager.read().await;
     let access_request = manager
@@ -143,10 +146,10 @@ pub async fn request_privileged_access(
 pub async fn approve_manager(
     State(state): State<PrivilegedAccessState>,
     Path(request_id): Path<Uuid>,
-    // TODO: Extract actual approver ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract actual approver ID from authentication
-    let approver_id = Uuid::new_v4(); // Placeholder
+    // Extract approver ID from authentication claims, or use default for mock server
+    let approver_id = extract_user_id_with_fallback(claims);
 
     let manager = state.manager.write().await;
     manager
@@ -191,14 +194,14 @@ pub async fn approve_security(
     State(state): State<PrivilegedAccessState>,
     Path(request_id): Path<Uuid>,
     Json(request): Json<ApproveRequest>,
-    // TODO: Extract actual approver ID from authentication
+    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if !request.approved {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // TODO: Extract actual approver ID from authentication
-    let approver_id = Uuid::new_v4(); // Placeholder
+    // Extract approver ID from authentication claims, or use default for mock server
+    let approver_id = extract_user_id_with_fallback(claims);
 
     let expiration_days = request.expiration_days.unwrap_or(365);
 

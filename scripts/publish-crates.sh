@@ -108,7 +108,14 @@ crate_dir_exists() {
 # Function to check if crate is in workspace
 crate_in_workspace() {
     local crate_name=$1
-    if cargo metadata --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate_name\""; then
+    # Check if we can locate the crate using cargo locate-project
+    # This is more reliable than grepping metadata
+    if cargo locate-project --manifest-path "crates/$crate_name/Cargo.toml" &>/dev/null; then
+        return 0
+    fi
+    # Fallback: check if crate exists in workspace metadata
+    if cargo metadata --format-version 1 --no-deps 2>/dev/null | \
+       python3 -c "import sys, json; data = json.load(sys.stdin); packages = [p['name'] for p in data.get('packages', [])]; sys.exit(0 if '$crate_name' in packages else 1)" 2>/dev/null; then
         return 0
     fi
     return 1
@@ -151,8 +158,15 @@ publish_crate() {
         publish_env="CARGO_REGISTRY_TOKEN=$CARGO_REGISTRY_TOKEN"
     fi
 
+    # Use --no-verify to skip verification, which can fail when workspace crates
+    # depend on unpublished versions of other workspace crates
+    local no_verify_flag="--no-verify"
+    if [ "$DRY_RUN" = "true" ]; then
+        no_verify_flag=""  # Don't use --no-verify for dry runs, we want to see verification errors
+    fi
+
     if [ -n "$publish_env" ]; then
-        if env $publish_env cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
+        if env $publish_env cargo publish -p "$crate_name" $dry_run_flag $no_verify_flag --allow-dirty; then
             print_success "Successfully published $crate_name"
         else
             # Check if it's a "package not found" error
@@ -164,7 +178,7 @@ publish_crate() {
             fi
         fi
     else
-        if cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
+        if cargo publish -p "$crate_name" $dry_run_flag $no_verify_flag --allow-dirty; then
             print_success "Successfully published $crate_name"
         else
             # Check if it's a "package not found" error
@@ -176,6 +190,16 @@ publish_crate() {
             fi
         fi
     fi
+}
+
+# Function to check if a crate version is already published on crates.io
+crate_version_published() {
+    local crate_name=$1
+    local version=$2
+    if cargo search "$crate_name" --limit 1 2>/dev/null | grep -q "^$crate_name = \"$version\""; then
+        return 0
+    fi
+    return 1
 }
 
 # Function to convert dependencies for a specific crate
@@ -197,13 +221,22 @@ convert_crate_dependencies() {
 
     if [ -f "$cargo_toml" ]; then
         print_status "Converting dependencies for $crate_name..."
-        python3 - "$cargo_toml" "$WORKSPACE_VERSION" <<'PY'
+        # Build list of published crates to only convert those
+        local published_crates=""
+        for dep_crate in mockforge-core mockforge-data mockforge-plugin-core mockforge-plugin-sdk mockforge-plugin-loader mockforge-plugin-registry mockforge-observability mockforge-tracing mockforge-recorder mockforge-reporting mockforge-chaos mockforge-analytics mockforge-collab mockforge-http mockforge-grpc mockforge-ws mockforge-graphql mockforge-mqtt mockforge-smtp mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli mockforge-scenarios; do
+            if crate_version_published "$dep_crate" "$WORKSPACE_VERSION"; then
+                published_crates="$published_crates $dep_crate"
+            fi
+        done
+        
+        python3 - "$cargo_toml" "$WORKSPACE_VERSION" "$published_crates" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 version = sys.argv[2]
+published = set(sys.argv[3].split()) if len(sys.argv) > 3 and sys.argv[3] else set()
 text = path.read_text()
 changed = False
 
@@ -235,6 +268,7 @@ targets = [
     ("mockforge-sdk", "../mockforge-sdk"),
     ("mockforge-bench", "../mockforge-bench"),
     ("mockforge-test", "../mockforge-test"),
+    ("mockforge-vbr", "../mockforge-vbr"),
     ("mockforge-tunnel", "../mockforge-tunnel"),
     ("mockforge-ui", "../mockforge-ui"),
     ("mockforge-cli", "../mockforge-cli"),
@@ -242,6 +276,10 @@ targets = [
 ]
 
 for name, rel in targets:
+    # Only convert if this crate has been published
+    if name not in published:
+        continue
+        
     # Pattern 1: { path = "../..." }
     pattern1 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
     # Pattern 2: { version = "...", path = "../..." }
@@ -500,18 +538,20 @@ main() {
     publish_crate "mockforge-plugin-core"
     wait_for_processing
 
-    # Convert dependencies for mockforge-plugin-sdk and publish it
-    convert_crate_dependencies "mockforge-plugin-sdk"
-    publish_crate "mockforge-plugin-sdk"
-    wait_for_processing
-
     # Publish shared internal crates required by downstream crates
+    # These must be published before crates that depend on them (like mockforge-http, mockforge-plugin-sdk)
     convert_crate_dependencies "mockforge-observability"
     publish_crate "mockforge-observability"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-tracing"
     publish_crate "mockforge-tracing"
+    wait_for_processing
+
+    # Convert dependencies for mockforge-plugin-sdk and publish it
+    # (Now that observability and tracing are published)
+    convert_crate_dependencies "mockforge-plugin-sdk"
+    publish_crate "mockforge-plugin-sdk"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-recorder"
@@ -607,6 +647,11 @@ main() {
 
     convert_crate_dependencies "mockforge-registry-server"
     publish_crate "mockforge-registry-server"
+    wait_for_processing
+
+    # VBR (needs to be published before mockforge-ui)
+    convert_crate_dependencies "mockforge-vbr"
+    publish_crate "mockforge-vbr"
     wait_for_processing
 
     # CLI binary (needs mockforge-ui and mockforge-tunnel published first)

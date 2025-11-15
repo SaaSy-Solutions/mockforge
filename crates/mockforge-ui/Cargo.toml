@@ -37,16 +37,16 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
-mockforge-core = { path = "../mockforge-core", version = "0.2.8" }
-mockforge-http = { version = "0.2.8", path = "../mockforge-http", features = ["smtp", "mqtt"] }
-mockforge-ws = { path = "../mockforge-ws", version = "0.2.8" }
-mockforge-grpc = { path = "../mockforge-grpc", version = "0.2.8" }
-mockforge-vbr = { version = "0.2.8", path = "../mockforge-vbr" }
-mockforge-plugin-core = { path = "../mockforge-plugin-core", version = "0.2.8" }
-mockforge-plugin-loader = { path = "../mockforge-plugin-loader", version = "0.2.8" }
-mockforge-analytics = { path = "../mockforge-analytics", version = "0.2.8" }
-mockforge-chaos = { path = "../mockforge-chaos", version = "0.2.8" }
-mockforge-collab = { path = "../mockforge-collab", version = "0.2.8" }
+mockforge-core = "0.2.9"
+mockforge-http = { version = "0.2.9", path = "../mockforge-http", features = ["smtp", "mqtt"] }
+mockforge-ws = "0.2.9"
+mockforge-grpc = "0.2.9"
+mockforge-vbr = { version = "0.2.9", path = "../mockforge-vbr" }
+mockforge-plugin-core = "0.2.9"
+mockforge-plugin-loader = "0.2.9"
+mockforge-analytics = "0.2.9"
+mockforge-chaos = "0.2.9"
+mockforge-collab = "0.2.9"
 base64 = { workspace = true }
 jsonwebtoken = "9.3"
 bcrypt = "0.15"
