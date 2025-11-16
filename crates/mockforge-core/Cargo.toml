@@ -22,6 +22,7 @@ missing_docs = "deny"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+dirs = "5.0"
 toml = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "0.28"
@@ -70,13 +71,15 @@ rquickjs = { version = "0.9", features = ["macro", "classes"] }
 # Cron expression parsing for scheduled events
 cron = "0.15"
 
+mockforge-data = "0.2.9"
+mockforge-chaos = { path = "../mockforge-chaos" }
+
 [dev-dependencies]
 tempfile = "3.10"
 tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
 proptest = "1.8.0"
-mockforge-data = "0.1.2"
 
 [[bench]]
 name = "core_benchmarks"

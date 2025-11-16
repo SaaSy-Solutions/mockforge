@@ -57,7 +57,7 @@ mockforge-core = { path = "../mockforge-core" }
 mockforge-data = "0.2.9"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"], optional = true }
 mockforge-observability = "0.2.9"
-mockforge-recorder = "0.2.9"
+mockforge-recorder = { path = "../mockforge-recorder" }
 mockforge-scenarios = "0.2.9"
 mockforge-tracing = "0.2.9"
 mockforge-mqtt = { version = "0.2.0", path = "../mockforge-mqtt", optional = true }

@@ -51,6 +51,34 @@ pub struct ConsumerContractsConfig {
     pub track_usage: bool,
 }
 
+/// Behavioral cloning configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BehavioralCloningConfig {
+    /// Whether behavioral cloning is enabled
+    pub enabled: bool,
+    /// Path to recorder database (defaults to ./recordings.db)
+    pub database_path: Option<String>,
+    /// Enable middleware to apply learned behavior
+    pub enable_middleware: bool,
+    /// Minimum frequency threshold for sequence learning (0.0 to 1.0)
+    pub min_sequence_frequency: f64,
+    /// Minimum requests per trace for sequence discovery
+    pub min_requests_per_trace: Option<i32>,
+}
+
+impl Default for BehavioralCloningConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            database_path: None,
+            enable_middleware: false,
+            min_sequence_frequency: 0.1, // 10% default
+            min_requests_per_trace: None,
+        }
+    }
+}
+
 /// Authentication configuration for HTTP requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -557,6 +585,9 @@ pub struct ServerConfig {
     /// Deceptive deploy configuration for production-like mock APIs
     #[serde(default)]
     pub deceptive_deploy: DeceptiveDeployConfig,
+    /// Behavioral cloning configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavioral_cloning: Option<BehavioralCloningConfig>,
     /// Reality slider configuration for unified realism control
     #[serde(default)]
     pub reality: RealitySliderConfig,

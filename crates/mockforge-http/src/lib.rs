@@ -165,6 +165,8 @@
 pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
+/// Cross-protocol consistency engine integration for HTTP
+pub mod consistency;
 /// Contract diff middleware for automatic request capture
 pub mod contract_diff_middleware;
 pub mod coverage;
@@ -2099,6 +2101,50 @@ pub async fn build_router_with_chains_and_multi_tenant(
         debug!("Drift budget and incident management endpoints mounted at /api/v1/drift");
     }
 
+    // Add behavioral cloning middleware (optional - applies learned behavior to requests)
+    {
+        use crate::middleware::behavioral_cloning::BehavioralCloningMiddlewareState;
+        use std::path::PathBuf;
+
+        // Determine database path (defaults to ./recordings.db)
+        let db_path = std::env::var("RECORDER_DATABASE_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .map(|p| p.join("recordings.db"))
+            });
+
+        let bc_middleware_state = if let Some(path) = db_path {
+            BehavioralCloningMiddlewareState::with_database_path(path)
+        } else {
+            BehavioralCloningMiddlewareState::new()
+        };
+
+        // Only enable if BEHAVIORAL_CLONING_ENABLED is set to true
+        let enabled = std::env::var("BEHAVIORAL_CLONING_ENABLED")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
+        if enabled {
+            let bc_state_clone = bc_middleware_state.clone();
+            app = app.layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let state = bc_state_clone.clone();
+                async move {
+                    // Insert state into extensions if not already present
+                    if req.extensions().get::<BehavioralCloningMiddlewareState>().is_none() {
+                        req.extensions_mut().insert(state);
+                    }
+                    // Call the middleware function
+                    crate::middleware::behavioral_cloning::behavioral_cloning_middleware(req, next).await
+                }
+            }));
+            debug!("Behavioral cloning middleware enabled (applies learned behavior to requests)");
+        }
+    }
+
     // Add consumer contracts endpoints
     {
         use crate::handlers::consumer_contracts::{consumer_contracts_router, ConsumerContractsState};
@@ -2124,6 +2170,105 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         app = app.merge(consumer_contracts_router(consumer_state));
         debug!("Consumer contracts endpoints mounted at /api/v1/consumers");
+    }
+
+    // Add behavioral cloning endpoints
+    {
+        use crate::handlers::behavioral_cloning::{behavioral_cloning_router, BehavioralCloningState};
+        use std::path::PathBuf;
+
+        // Determine database path (defaults to ./recordings.db)
+        let db_path = std::env::var("RECORDER_DATABASE_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .map(|p| p.join("recordings.db"))
+            });
+
+        let bc_state = if let Some(path) = db_path {
+            BehavioralCloningState::with_database_path(path)
+        } else {
+            BehavioralCloningState::new()
+        };
+
+        app = app.merge(behavioral_cloning_router(bc_state));
+        debug!("Behavioral cloning endpoints mounted at /api/v1/behavioral-cloning");
+    }
+
+    // Add consistency engine and cross-protocol state management
+    {
+        use crate::consistency::{HttpAdapter, ConsistencyMiddlewareState};
+        use crate::handlers::consistency::{consistency_router, ConsistencyState};
+        use mockforge_core::consistency::ConsistencyEngine;
+        use std::sync::Arc;
+
+        // Initialize consistency engine
+        let consistency_engine = Arc::new(ConsistencyEngine::new());
+
+        // Create and register HTTP adapter
+        let http_adapter = Arc::new(HttpAdapter::new(consistency_engine.clone()));
+        consistency_engine.register_adapter(http_adapter.clone()).await;
+
+        // Create consistency state for handlers
+        let consistency_state = ConsistencyState {
+            engine: consistency_engine.clone(),
+        };
+
+        // Create consistency middleware state
+        let consistency_middleware_state = ConsistencyMiddlewareState {
+            engine: consistency_engine.clone(),
+            adapter: http_adapter,
+        };
+
+        // Add consistency middleware (before other middleware to inject state early)
+        let consistency_middleware_state_clone = consistency_middleware_state.clone();
+        app = app.layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+            let state = consistency_middleware_state_clone.clone();
+            async move {
+                // Insert state into extensions if not already present
+                if req.extensions().get::<ConsistencyMiddlewareState>().is_none() {
+                    req.extensions_mut().insert(state);
+                }
+                // Call the middleware function
+                crate::consistency::middleware::consistency_middleware(req, next).await
+            }
+        }));
+
+        // Add consistency API endpoints
+        app = app.merge(consistency_router(consistency_state));
+        debug!("Consistency engine initialized and endpoints mounted at /api/v1/consistency");
+
+        // Add snapshot management endpoints
+        {
+            use crate::handlers::snapshots::{snapshot_router, SnapshotState};
+            use mockforge_core::snapshots::SnapshotManager;
+            use std::path::PathBuf;
+
+            let snapshot_dir = std::env::var("MOCKFORGE_SNAPSHOT_DIR")
+                .ok()
+                .map(PathBuf::from);
+            let snapshot_manager = Arc::new(SnapshotManager::new(snapshot_dir));
+
+            let snapshot_state = SnapshotState {
+                manager: snapshot_manager,
+                consistency_engine: Some(consistency_engine.clone()),
+            };
+
+            app = app.merge(snapshot_router(snapshot_state));
+            debug!("Snapshot management endpoints mounted at /api/v1/snapshots");
+
+            // Add X-Ray API endpoints for browser extension
+            {
+                use crate::handlers::xray::{xray_router, XRayState};
+                let xray_state = XRayState {
+                    engine: consistency_engine.clone(),
+                };
+                app = app.merge(xray_router(xray_state));
+                debug!("X-Ray API endpoints mounted at /api/v1/xray");
+            }
+        }
     }
 
     // Add PR generation endpoints (optional - only if configured)

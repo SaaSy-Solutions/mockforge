@@ -147,6 +147,82 @@ impl RecorderDatabase {
         .execute(&self.pool)
         .await?;
 
+        // Create behavioral_sequences table for Behavioral Cloning
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS behavioral_sequences (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                steps TEXT NOT NULL,
+                frequency REAL NOT NULL,
+                confidence REAL NOT NULL,
+                learned_from TEXT,
+                description TEXT,
+                tags TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create endpoint_probabilities table for Behavioral Cloning
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS endpoint_probabilities (
+                endpoint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                status_code_distribution TEXT NOT NULL,
+                latency_distribution TEXT NOT NULL,
+                error_patterns TEXT,
+                payload_variations TEXT,
+                sample_count INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (endpoint, method)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create edge_case_patterns table for Behavioral Cloning
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS edge_case_patterns (
+                id TEXT PRIMARY KEY,
+                endpoint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                pattern_type TEXT NOT NULL,
+                original_probability REAL NOT NULL,
+                amplified_probability REAL,
+                conditions TEXT,
+                sample_responses TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create indexes for behavioral cloning tables
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_behavioral_sequences_name ON behavioral_sequences(name)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_endpoint_probabilities_endpoint ON endpoint_probabilities(endpoint, method)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_edge_case_patterns_endpoint ON edge_case_patterns(endpoint, method)",
+        )
+        .execute(&self.pool)
+        .await?;
+
         debug!("Database schema initialized");
         Ok(())
     }
@@ -567,6 +643,260 @@ impl RecorderDatabase {
 
         info!("Deleted {} old snapshots (kept {} per endpoint)", result.rows_affected(), keep_per_endpoint);
         Ok(result.rows_affected())
+    }
+
+    /// Insert a behavioral sequence
+    pub async fn insert_behavioral_sequence(
+        &self,
+        sequence: &mockforge_core::behavioral_cloning::BehavioralSequence,
+    ) -> Result<()> {
+        let steps_json = serde_json::to_string(&sequence.steps)?;
+        let learned_from_json = serde_json::to_string(&sequence.learned_from)?;
+        let tags_json = serde_json::to_string(&sequence.tags)?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO behavioral_sequences (
+                id, name, steps, frequency, confidence, learned_from, description, tags
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&sequence.id)
+        .bind(&sequence.name)
+        .bind(&steps_json)
+        .bind(sequence.frequency)
+        .bind(sequence.confidence)
+        .bind(&learned_from_json)
+        .bind(&sequence.description)
+        .bind(&tags_json)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Inserted behavioral sequence: {}", sequence.id);
+        Ok(())
+    }
+
+    /// Get all behavioral sequences
+    pub async fn get_behavioral_sequences(&self) -> Result<Vec<mockforge_core::behavioral_cloning::BehavioralSequence>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, name, steps, frequency, confidence, learned_from, description, tags
+            FROM behavioral_sequences
+            ORDER BY frequency DESC, confidence DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut sequences = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let steps_json: String = row.try_get("steps")?;
+            let learned_from_json: String = row.try_get("learned_from")?;
+            let tags_json: String = row.try_get("tags")?;
+
+            sequences.push(mockforge_core::behavioral_cloning::BehavioralSequence {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                steps: serde_json::from_str(&steps_json)?,
+                frequency: row.try_get("frequency")?,
+                confidence: row.try_get("confidence")?,
+                learned_from: serde_json::from_str(&learned_from_json).unwrap_or_default(),
+                description: row.try_get("description")?,
+                tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+            });
+        }
+
+        Ok(sequences)
+    }
+
+    /// Insert or update endpoint probability model
+    pub async fn insert_endpoint_probability_model(
+        &self,
+        model: &mockforge_core::behavioral_cloning::EndpointProbabilityModel,
+    ) -> Result<()> {
+        let status_code_dist_json = serde_json::to_string(&model.status_code_distribution)?;
+        let latency_dist_json = serde_json::to_string(&model.latency_distribution)?;
+        let error_patterns_json = serde_json::to_string(&model.error_patterns)?;
+        let payload_variations_json = serde_json::to_string(&model.payload_variations)?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO endpoint_probabilities (
+                endpoint, method, status_code_distribution, latency_distribution,
+                error_patterns, payload_variations, sample_count, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&model.endpoint)
+        .bind(&model.method)
+        .bind(&status_code_dist_json)
+        .bind(&latency_dist_json)
+        .bind(&error_patterns_json)
+        .bind(&payload_variations_json)
+        .bind(model.sample_count as i64)
+        .bind(model.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Inserted probability model: {} {}", model.method, model.endpoint);
+        Ok(())
+    }
+
+    /// Get endpoint probability model
+    pub async fn get_endpoint_probability_model(
+        &self,
+        endpoint: &str,
+        method: &str,
+    ) -> Result<Option<mockforge_core::behavioral_cloning::EndpointProbabilityModel>> {
+        let row = sqlx::query(
+            r#"
+            SELECT endpoint, method, status_code_distribution, latency_distribution,
+                   error_patterns, payload_variations, sample_count, updated_at
+            FROM endpoint_probabilities
+            WHERE endpoint = ? AND method = ?
+            "#,
+        )
+        .bind(endpoint)
+        .bind(method)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            use sqlx::Row;
+            let status_code_dist_json: String = row.try_get("status_code_distribution")?;
+            let latency_dist_json: String = row.try_get("latency_distribution")?;
+            let error_patterns_json: String = row.try_get("error_patterns")?;
+            let payload_variations_json: String = row.try_get("payload_variations")?;
+
+            Ok(Some(mockforge_core::behavioral_cloning::EndpointProbabilityModel {
+                endpoint: row.try_get("endpoint")?,
+                method: row.try_get("method")?,
+                status_code_distribution: serde_json::from_str(&status_code_dist_json)?,
+                latency_distribution: serde_json::from_str(&latency_dist_json)?,
+                error_patterns: serde_json::from_str(&error_patterns_json).unwrap_or_default(),
+                payload_variations: serde_json::from_str(&payload_variations_json).unwrap_or_default(),
+                sample_count: row.try_get::<i64, _>("sample_count")? as u64,
+                updated_at: row.try_get("updated_at")?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get all endpoint probability models
+    pub async fn get_all_endpoint_probability_models(
+        &self,
+    ) -> Result<Vec<mockforge_core::behavioral_cloning::EndpointProbabilityModel>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT endpoint, method, status_code_distribution, latency_distribution,
+                   error_patterns, payload_variations, sample_count, updated_at
+            FROM endpoint_probabilities
+            ORDER BY sample_count DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut models = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let status_code_dist_json: String = row.try_get("status_code_distribution")?;
+            let latency_dist_json: String = row.try_get("latency_distribution")?;
+            let error_patterns_json: String = row.try_get("error_patterns")?;
+            let payload_variations_json: String = row.try_get("payload_variations")?;
+
+            models.push(mockforge_core::behavioral_cloning::EndpointProbabilityModel {
+                endpoint: row.try_get("endpoint")?,
+                method: row.try_get("method")?,
+                status_code_distribution: serde_json::from_str(&status_code_dist_json)?,
+                latency_distribution: serde_json::from_str(&latency_dist_json)?,
+                error_patterns: serde_json::from_str(&error_patterns_json).unwrap_or_default(),
+                payload_variations: serde_json::from_str(&payload_variations_json).unwrap_or_default(),
+                sample_count: row.try_get::<i64, _>("sample_count")? as u64,
+                updated_at: row.try_get("updated_at")?,
+            });
+        }
+
+        Ok(models)
+    }
+
+    /// Get requests grouped by trace_id for sequence learning
+    pub async fn get_requests_by_trace(
+        &self,
+        min_requests_per_trace: Option<i32>,
+    ) -> Result<Vec<(String, Vec<RecordedRequest>)>> {
+        // Get all requests with trace_id, ordered by trace_id and timestamp
+        let requests = sqlx::query_as::<_, RecordedRequest>(
+            r#"
+            SELECT id, protocol, timestamp, method, path, query_params,
+                   headers, body, body_encoding, client_ip, trace_id, span_id,
+                   duration_ms, status_code, tags
+            FROM requests
+            WHERE trace_id IS NOT NULL AND trace_id != ''
+            ORDER BY trace_id, timestamp ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Group by trace_id
+        let mut grouped: std::collections::HashMap<String, Vec<RecordedRequest>> = std::collections::HashMap::new();
+        for request in requests {
+            if let Some(trace_id) = &request.trace_id {
+                grouped.entry(trace_id.clone()).or_insert_with(Vec::new).push(request);
+            }
+        }
+
+        // Filter by minimum requests per trace if specified
+        let mut result: Vec<(String, Vec<RecordedRequest>)> = grouped
+            .into_iter()
+            .filter(|(_, requests)| {
+                min_requests_per_trace.map_or(true, |min| requests.len() >= min as usize)
+            })
+            .collect();
+
+        // Sort by trace_id for consistency
+        result.sort_by_key(|(trace_id, _)| trace_id.clone());
+
+        Ok(result)
+    }
+
+    /// Get requests and responses for a specific endpoint and method
+    ///
+    /// Returns a list of (request, response) pairs for building probability models.
+    pub async fn get_exchanges_for_endpoint(
+        &self,
+        endpoint: &str,
+        method: &str,
+        limit: Option<i32>,
+    ) -> Result<Vec<(RecordedRequest, Option<RecordedResponse>)>> {
+        let limit = limit.unwrap_or(10000);
+        let requests = sqlx::query_as::<_, RecordedRequest>(
+            r#"
+            SELECT id, protocol, timestamp, method, path, query_params,
+                   headers, body, body_encoding, client_ip, trace_id, span_id,
+                   duration_ms, status_code, tags
+            FROM requests
+            WHERE path = ? AND method = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(endpoint)
+        .bind(method)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut exchanges = Vec::new();
+        for request in requests {
+            let response = self.get_response(&request.id).await?;
+            exchanges.push((request, response));
+        }
+
+        Ok(exchanges)
     }
 }
 

@@ -8,8 +8,9 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MockConfig, ConnectionStatus, CapturedRequest, Environment } from '../shared/types';
 import { MockPreview } from '../preview/MockPreview';
+import XRayPanel from './xray-panel';
 
-type Tab = 'requests' | 'mocks' | 'preview';
+type Tab = 'requests' | 'mocks' | 'preview' | 'xray';
 
 function ForgeConnectPanel() {
     const [mocks, setMocks] = useState<MockConfig[]>([]);
@@ -245,6 +246,20 @@ function ForgeConnectPanel() {
                 >
                     Preview
                 </button>
+                <button
+                    onClick={() => setActiveTab('xray')}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: activeTab === 'xray' ? '#007bff' : 'transparent',
+                        color: activeTab === 'xray' ? 'white' : '#007bff',
+                        border: 'none',
+                        borderBottom: activeTab === 'xray' ? '2px solid #007bff' : '2px solid transparent',
+                        cursor: 'pointer',
+                        fontWeight: activeTab === 'xray' ? 'bold' : 'normal',
+                    }}
+                >
+                    🔍 X-Ray
+                </button>
             </div>
 
             {/* Tab Content */}
@@ -268,7 +283,11 @@ function ForgeConnectPanel() {
                 />
             )}
 
-            {activeTab !== 'preview' && (
+            {activeTab === 'xray' && (
+                <XRayPanel />
+            )}
+
+            {activeTab !== 'preview' && activeTab !== 'xray' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 <div>
                     <h2>Captured Requests</h2>

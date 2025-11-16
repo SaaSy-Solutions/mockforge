@@ -38,6 +38,7 @@ mod plugin_commands;
 mod progress;
 mod recorder_commands;
 mod scenario_commands;
+mod snapshot_commands;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
 mod template_commands;
@@ -969,6 +970,23 @@ enum Commands {
     Mockai {
         #[command(subcommand)]
         mockai_command: mockai_commands::MockAICommands,
+    },
+
+    /// Time travel and snapshot management
+    ///
+    /// Save and restore entire system states (across protocols, personas, and reality level).
+    /// Enables point-in-time recovery and state management.
+    ///
+    /// Examples:
+    ///   mockforge snapshot save "post-checkout-failure" --description "State after checkout failure"
+    ///   mockforge snapshot load "post-checkout-failure"
+    ///   mockforge snapshot list
+    ///   mockforge snapshot info "post-checkout-failure"
+    ///   mockforge snapshot delete "old-snapshot"
+    #[command(verbatim_doc_comment)]
+    Snapshot {
+        #[command(subcommand)]
+        snapshot_command: snapshot_commands::SnapshotCommands,
     },
 
     /// Voice + LLM Interface for conversational mock creation
@@ -2289,6 +2307,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             vbr_commands::execute_vbr_command(vbr_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("VBR command failed: {}", e))?;
+        }
+
+        Commands::Snapshot { snapshot_command } => {
+            snapshot_commands::handle_snapshot_command(snapshot_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Snapshot command failed: {}", e))?;
         }
 
         Commands::Mockai { mockai_command } => {

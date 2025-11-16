@@ -203,7 +203,11 @@
 
 pub mod ai_contract_diff;
 pub mod ai_response;
+/// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
+pub mod behavioral_cloning;
 pub mod cache;
+/// Cross-protocol consistency engine for unified state across all protocols
+pub mod consistency;
 pub mod chain_execution;
 pub mod chaos_utilities;
 pub mod codegen;
@@ -264,6 +268,8 @@ pub mod route_chaos;
 pub mod routing;
 pub mod scenarios;
 pub mod security;
+/// Time travel and snapshot functionality for saving and restoring system states
+pub mod snapshots;
 pub mod schema_diff;
 pub mod server_utils;
 pub mod spec_parser;
@@ -283,6 +289,17 @@ pub mod workspace_import;
 pub mod workspace_persistence;
 pub mod ws_proxy;
 
+pub use behavioral_cloning::{
+    AmplificationScope, BehavioralSequence, EdgeAmplificationConfig, EdgeAmplifier,
+    EndpointProbabilityModel, ErrorPattern, LatencyDistribution, PayloadVariation,
+    ProbabilisticModel, SequenceLearner, SequenceStep,
+};
+pub use consistency::{
+    ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
+};
+pub use snapshots::{
+    SnapshotComponents, SnapshotManager, SnapshotManifest, SnapshotMetadata,
+};
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
 pub use scenarios::{
     ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
