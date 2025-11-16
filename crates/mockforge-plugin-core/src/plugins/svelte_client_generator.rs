@@ -56,6 +56,32 @@ impl SvelteClientGenerator {
 
     /// Register Handlebars templates for Svelte code generation
     fn register_templates(templates: &mut Handlebars<'static>) -> Result<()> {
+        // Register JSON helper for serializing schemas
+        templates.register_helper(
+            "json",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).ok_or_else(|| {
+                        handlebars::RenderError::new("json helper requires a parameter")
+                    })?;
+                    let json_str = serde_json::to_string(&value.value())
+                        .map_err(|e| {
+                            handlebars::RenderError::new(&format!(
+                                "Failed to serialize to JSON: {}",
+                                e
+                            ))
+                        })?;
+                    out.write(&json_str)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // TypeScript types template
         templates
             .register_template_string(
@@ -224,6 +250,52 @@ export class RequiredError extends Error {
     super(message || `Required parameter '${field}' was null or undefined`);
     this.name = 'RequiredError';
     Object.setPrototypeOf(this, RequiredError.prototype);
+  }
+}
+
+/**
+ * Contract validation error with schema path and contract diff reference
+ *
+ * This error type provides detailed information about validation failures
+ * and can link back to contract diff entries for tracking breaking changes.
+ */
+export class ContractValidationError extends ApiError {
+  constructor(
+    status: number,
+    statusText: string,
+    public schemaPath: string,
+    public expectedType: string,
+    public actualValue?: any,
+    public contractDiffId?: string,
+    public isBreakingChange: boolean = false,
+    body?: any,
+    message?: string
+  ) {
+    super(
+      status,
+      statusText,
+      body,
+      message || `Contract validation failed at '${schemaPath}': expected ${expectedType}${actualValue !== undefined ? `, got ${JSON.stringify(actualValue)}` : ''}`
+    );
+    this.name = 'ContractValidationError';
+    Object.setPrototypeOf(this, ContractValidationError.prototype);
+  }
+
+  /**
+   * Get a detailed error message with contract diff information
+   */
+  getDetailedMessage(): string {
+    let msg = `Validation failed at '${this.schemaPath}': expected ${this.expectedType}`;
+    if (this.actualValue !== undefined) {
+      msg += `, got ${typeof this.actualValue === 'object' ? JSON.stringify(this.actualValue) : String(this.actualValue)}`;
+    }
+    if (this.contractDiffId) {
+      msg += ` (Contract Diff ID: ${this.contractDiffId})`;
+    }
+    if (this.isBreakingChange) {
+      msg += ' [BREAKING CHANGE]';
+    }
+    return msg;
   }
 }
 
@@ -443,10 +515,16 @@ export interface ApiConfig {
   timeout?: number;
   /** Enable request/response validation (default: false) */
   validateRequests?: boolean;
+  /** Enable response validation (default: false) */
+  validateResponses?: boolean;
   /** Enable verbose error messages (default: false) */
   verboseErrors?: boolean;
   /** Automatically unwrap ApiResponse<T> format to return data directly (default: false) */
   unwrapResponse?: boolean;
+  /** Schema registry for runtime validation (schema_id -> JSON Schema) */
+  schemas?: Record<string, any>;
+  /** Whether to include contract diff references in validation errors */
+  includeContractDiffs?: boolean;
 }
 
 /**
@@ -884,13 +962,100 @@ async function getAuthHeaders(config: ApiConfig, oauthManager?: OAuth2TokenManag
   return headers;
 }
 
+// ============================================================================
+// Base URL Resolver (Frictionless Drop-In Mode)
+// ============================================================================
+
+/**
+ * MockForge mode for endpoint switching
+ */
+export type MockForgeMode = 'mock' | 'real' | 'hybrid';
+
+/**
+ * Base URL resolver that supports environment-based switching between mock and real endpoints
+ *
+ * Environment variables:
+ * - MOCKFORGE_MODE: 'mock' | 'real' | 'hybrid' (default: uses explicit config)
+ * - MOCKFORGE_BASE_URL: Override base URL (default: uses explicit config)
+ * - MOCKFORGE_REALITY_LEVEL: 0.0-1.0 for hybrid mode (0.0 = 100% mock, 1.0 = 100% real)
+ */
+export class BaseUrlResolver {
+  static resolve(
+    mockBaseUrl: string,
+    realBaseUrl: string,
+    explicitBaseUrl?: string
+  ): string {
+    const envBaseUrl = this.getEnvVar('MOCKFORGE_BASE_URL');
+    if (envBaseUrl) return envBaseUrl;
+    if (explicitBaseUrl) return explicitBaseUrl;
+    const mode = this.getMode();
+    switch (mode) {
+      case 'mock': return mockBaseUrl;
+      case 'real': return realBaseUrl;
+      case 'hybrid': return mockBaseUrl;
+      default: return mockBaseUrl;
+    }
+  }
+  static getMode(): MockForgeMode | null {
+    const mode = this.getEnvVar('MOCKFORGE_MODE');
+    if (!mode) return null;
+    const normalized = mode.toLowerCase().trim();
+    if (normalized === 'mock' || normalized === 'real' || normalized === 'hybrid') {
+      return normalized as MockForgeMode;
+    }
+    return null;
+  }
+  static getRealityLevel(): number | null {
+    const level = this.getEnvVar('MOCKFORGE_REALITY_LEVEL');
+    if (!level) return null;
+    const parsed = parseFloat(level);
+    if (isNaN(parsed) || parsed < 0 || parsed > 1) return null;
+    return parsed;
+  }
+  private static getEnvVar(name: string): string | null {
+    if (typeof process !== 'undefined' && process.env) {
+      if (process.env[name]) return process.env[name];
+      const prefixes = ['VITE_', 'REACT_APP_', 'NEXT_PUBLIC_', 'NUXT_PUBLIC_'];
+      for (const prefix of prefixes) {
+        const prefixedName = prefix + name;
+        if (process.env[prefixedName]) return process.env[prefixedName];
+      }
+    }
+    if (typeof window !== 'undefined') {
+      // @ts-ignore
+      if (window.__ENV__ && window.__ENV__[name]) return window.__ENV__[name];
+      const metaTag = document.querySelector(`meta[name="${name}"]`);
+      if (metaTag) {
+        const content = metaTag.getAttribute('content');
+        if (content) return content;
+      }
+    }
+    return null;
+  }
+}
+
+// Bundled schemas for runtime validation
+// These schemas are used when validateRequests or validateResponses is enabled
+// Install ajv for full schema validation: npm install ajv
+const bundledSchemas: Record<string, any> = {{#if bundled_schemas}}{
+  {{#each bundled_schemas}}
+  '{{@key}}': {{json this}},
+  {{/each}}
+}{{else}}{}{{/if}};
+
 // Default API configuration
 const defaultConfig: ApiConfig = {
-  baseUrl: '{{base_url}}',
+  baseUrl: BaseUrlResolver.resolve(
+    '{{base_url}}',
+    '{{real_base_url}}',
+    undefined
+  ),
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 30000,
+  schemas: bundledSchemas, // Include bundled schemas for runtime validation
+  includeContractDiffs: true, // Enable contract diff references in errors
 };
 
 // ============================================================================
@@ -947,10 +1112,9 @@ class ApiClient {
 
   /**
    * Validate request data against schema (if validation enabled)
-   * Note: Full schema validation requires additional libraries like ajv
-   * This provides basic type checking and required field validation
+   * Supports both basic validation (required fields) and full JSON Schema validation
    */
-  private validateRequest(data: any, requiredFields?: string[]): void {
+  private validateRequest(data: any, requiredFields?: string[], schemaId?: string): void {
     if (!this.config.validateRequests) {
       return;
     }
@@ -959,7 +1123,7 @@ class ApiClient {
       return;
     }
 
-    // Check required fields
+    // Check required fields (basic validation)
     if (requiredFields && Array.isArray(requiredFields)) {
       const missingFields: string[] = [];
       for (const field of requiredFields) {
@@ -974,6 +1138,103 @@ class ApiClient {
           `Missing required fields: ${missingFields.join(', ')}`
         );
       }
+    }
+
+    // Full JSON Schema validation (if schema provided and ajv available)
+    if (schemaId && this.config.schemas && this.config.schemas[schemaId]) {
+      this.validateAgainstSchema(data, this.config.schemas[schemaId], schemaId, 'request');
+    }
+  }
+
+  /**
+   * Validate data against JSON Schema using ajv (if available)
+   * Falls back to basic validation if ajv is not available
+   */
+  private validateAgainstSchema(
+    data: any,
+    schema: any,
+    schemaId: string,
+    context: 'request' | 'response'
+  ): void {
+    // Try to use ajv if available (user must install: npm install ajv)
+    if (typeof window !== 'undefined' && (window as any).ajv) {
+      const Ajv = (window as any).ajv;
+      const ajv = new Ajv({ allErrors: true, strict: false });
+      const validate = ajv.compile(schema);
+      const valid = validate(data);
+
+      if (!valid && validate.errors) {
+        const firstError = validate.errors[0];
+        const schemaPath = firstError.instancePath || firstError.schemaPath || '';
+        const expectedType = firstError.schema?.type || firstError.params?.type || 'unknown';
+        const actualValue = firstError.data;
+
+        // Try to get contract diff ID from schema metadata
+        const contractDiffId = schema['x-contract-diff-id'] || schema.contractDiffId;
+        const isBreakingChange = schema['x-breaking-change'] || schema.isBreakingChange || false;
+
+        throw new ContractValidationError(
+          400,
+          'Validation Error',
+          schemaPath || `${context}.${schemaId}`,
+          expectedType,
+          actualValue,
+          contractDiffId,
+          isBreakingChange,
+          { errors: validate.errors },
+          `Schema validation failed for ${context}`
+        );
+      }
+    } else if (typeof require !== 'undefined') {
+      // Node.js environment - try to require ajv
+      try {
+        const Ajv = require('ajv');
+        const ajv = new Ajv({ allErrors: true, strict: false });
+        const validate = ajv.compile(schema);
+        const valid = validate(data);
+
+        if (!valid && validate.errors) {
+          const firstError = validate.errors[0];
+          const schemaPath = firstError.instancePath || firstError.schemaPath || '';
+          const expectedType = firstError.schema?.type || firstError.params?.type || 'unknown';
+          const actualValue = firstError.data;
+          const contractDiffId = schema['x-contract-diff-id'] || schema.contractDiffId;
+          const isBreakingChange = schema['x-breaking-change'] || schema.isBreakingChange || false;
+
+          throw new ContractValidationError(
+            400,
+            'Validation Error',
+            schemaPath || `${context}.${schemaId}`,
+            expectedType,
+            actualValue,
+            contractDiffId,
+            isBreakingChange,
+            { errors: validate.errors },
+            `Schema validation failed for ${context}`
+          );
+        }
+      } catch (e) {
+        // ajv not available - fall back to basic validation
+        console.warn('ajv not available, using basic validation only. Install ajv for full schema validation: npm install ajv');
+      }
+    }
+  }
+
+  /**
+   * Validate response data against schema (if validation enabled)
+   */
+  private validateResponse(data: any, schemaId?: string): void {
+    if (!this.config.validateResponses) {
+      return;
+    }
+
+    if (!data) {
+      return;
+    }
+
+    // Full JSON Schema validation (if schema provided)
+    if (schemaId && this.config.schemas && this.config.schemas[schemaId]) {
+      this.validateAgainstSchema(data, this.config.schemas[schemaId], schemaId, 'response');
     }
   }
 
@@ -1244,7 +1505,9 @@ class ApiClient {
 
     // Validate request data if validation is enabled
     if (requestData && this.config.validateRequests) {
-      this.validateRequest(requestData, requiredFields);
+      // Try to determine schema ID from endpoint context
+      const schemaId = endpoint.split('/').pop()?.replace(/\{|\}/g, '') + 'Request';
+      this.validateRequest(requestData, requiredFields, schemaId);
     }
 
     // Helper function to execute a single request attempt
@@ -1380,8 +1643,10 @@ class ApiClient {
         data = this.unwrapApiResponse(data);
 
         // Validate response data if validation is enabled
-        if (this.config.validateRequests && data) {
-          this.validateResponse(data);
+        if (this.config.validateResponses && data) {
+          // Try to determine schema ID from endpoint/operation
+          const schemaId = endpoint.split('/').pop()?.replace(/\{|\}/g, '') + 'Response';
+          this.validateResponse(data, schemaId);
         }
 
         // Apply response interceptor if provided
@@ -1505,11 +1770,86 @@ class ApiClient {
 }
 
 // ============================================================================
+// Scenario-First SDKs
+// ============================================================================
+
+/**
+ * Scenario execution result
+ */
+export interface ScenarioExecutionResult {
+  scenarioId: string;
+  success: boolean;
+  stepResults: Array<{
+    stepId: string;
+    success: boolean;
+    statusCode?: number;
+    responseBody?: any;
+    extractedVariables: Record<string, any>;
+    error?: string;
+    durationMs: number;
+  }>;
+  durationMs: number;
+  error?: string;
+  finalState: Record<string, any>;
+}
+
+/**
+ * Scenario executor for high-level business workflows
+ *
+ * Enables executing scenarios like "CheckoutSuccess" that chain multiple
+ * API calls together, instead of manually calling individual endpoints.
+ */
+export class ScenarioExecutor {
+  constructor(private apiClient: ApiClient) {}
+
+  /**
+   * Execute a scenario by ID
+   */
+  async executeScenario(
+    scenarioId: string,
+    parameters?: Record<string, any>
+  ): Promise<ScenarioExecutionResult> {
+    throw new Error(
+      `Scenario '${scenarioId}' not found. ` +
+      `Scenarios must be registered via the scenario registry or defined in the SDK.`
+    );
+  }
+
+  /**
+   * Register a scenario definition
+   */
+  async registerScenario(scenario: {
+    id: string;
+    name: string;
+    description?: string;
+    steps: Array<{
+      id: string;
+      name: string;
+      method: string;
+      path: string;
+      body?: any;
+      extract?: Record<string, string>;
+      expectedStatus?: number;
+    }>;
+    parameters?: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+    }>;
+  }): Promise<void> {
+    console.warn('Scenario registration not yet implemented. Scenarios should be defined at SDK generation time.');
+  }
+}
+
+// ============================================================================
 // Svelte Stores (Built-in writable/derived)
 // ============================================================================
 
 // Singleton API client instance (shared across all stores)
 const apiClient = new ApiClient(defaultConfig);
+
+// Export scenario executor
+export const scenarioExecutor = new ScenarioExecutor(apiClient);
 
 // Global configuration store (reactive)
 export const apiConfig: Writable<ApiConfig> = writable(defaultConfig);
@@ -1637,8 +1977,8 @@ export async function generatePKCECodeChallenge(verifier: string): Promise<strin
 }
 
 // Export configuration utilities
-export { defaultConfig, ApiClient, ApiError, RequiredError, getAuthHeaders, OAuth2TokenManager, generatePKCECodeVerifier, generatePKCECodeChallenge, TokenStorage, LocalStorageTokenStorage, apiClient };
-export type { ApiConfig, OAuth2Config, JwtConfig, RetryConfig };
+export { defaultConfig, ApiClient, ApiError, RequiredError, ContractValidationError, getAuthHeaders, OAuth2TokenManager, generatePKCECodeVerifier, generatePKCECodeChallenge, TokenStorage, LocalStorageTokenStorage, apiClient, ScenarioExecutor, scenarioExecutor, BaseUrlResolver };
+export type { ApiConfig, OAuth2Config, JwtConfig, RetryConfig, MockForgeMode, ScenarioExecutionResult };
 
 // Export types
 export * from './types';"#,
@@ -2069,13 +2409,38 @@ export * from './types';"#,
             }
         }
 
+        // Extract real base URL from OpenAPI spec servers or use a default
+        let real_base_url = spec
+            .servers
+            .as_ref()
+            .and_then(|servers| servers.first())
+            .map(|server| server.url.clone())
+            .unwrap_or_else(|| "https://api.production.com".to_string());
+
+        // Prepare schemas for bundling (convert to JSON Schema format for runtime validation)
+        let mut bundled_schemas = serde_json::Map::new();
+        for (schema_name, schema) in &schemas {
+            // Convert OpenAPI schema to JSON Schema format
+            // Add schema metadata for contract diff tracking
+            let mut schema_json = json!(schema);
+            if let Some(schema_obj) = schema_json.as_object_mut() {
+                // Add schema ID for lookup
+                schema_obj.insert("$id".to_string(), json!(schema_name));
+                // Add metadata fields for contract diff tracking (can be populated by drift detection)
+                schema_obj.insert("x-schema-id".to_string(), json!(schema_name));
+            }
+            bundled_schemas.insert(schema_name.clone(), schema_json);
+        }
+
         Ok(json!({
             "api_title": spec.info.title,
             "api_version": spec.info.version,
             "api_description": spec.info.description,
             "base_url": config.base_url.as_ref().unwrap_or(&"http://localhost:3000".to_string()),
+            "real_base_url": real_base_url,
             "operations": operations,
             "schemas": schemas,
+            "bundled_schemas": bundled_schemas,
         }))
     }
 

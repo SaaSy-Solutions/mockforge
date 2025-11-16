@@ -15,8 +15,10 @@ pub mod collaboration;
 pub mod config;
 pub mod dashboard;
 pub mod distributed_coordinator;
+pub mod failure_designer;
 pub mod fault;
 pub mod gitops;
+pub mod incident_replay;
 pub mod integrations;
 pub mod latency;
 pub mod latency_metrics;
@@ -88,8 +90,16 @@ pub use distributed_coordinator::{
     CoordinationMode, DistributedCoordinator, DistributedTask, ExecutionMetrics, LeaderState, Node,
     NodeExecutionState, NodeStatus, TaskStatus,
 };
+pub use failure_designer::{
+    ConditionOperator, ConditionType, FailureCondition, FailureDesigner, FailureDesignRule,
+    FailureTarget, FailureType,
+};
 pub use fault::{FaultInjector, FaultType};
 pub use gitops::{GitOpsAuth, GitOpsConfig, GitOpsManager, SyncState, SyncStatus};
+pub use incident_replay::{
+    IncidentEvent, IncidentEventType, IncidentFormatAdapter, IncidentReplayGenerator,
+    IncidentTimeline,
+};
 pub use integrations::{
     GrafanaConfig, GrafanaIntegration, IntegrationConfig, IntegrationManager, JiraConfig,
     JiraIntegration, Notification, NotificationResults, NotificationSeverity, PagerDutyConfig,

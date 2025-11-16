@@ -18,6 +18,9 @@ pub mod replay;
 pub mod scrubbing;
 pub mod stub_mapping;
 pub mod sync;
+pub mod sync_gitops;
+pub mod sync_snapshots;
+pub mod sync_traffic;
 pub mod test_generation;
 
 pub use api::create_api_router;
@@ -40,7 +43,12 @@ pub use scrubbing::{
 pub use stub_mapping::{
     RequestMatcher, ResponseTemplate, StubFormat, StubMapping, StubMappingConverter,
 };
-pub use sync::{SyncConfig, SyncService, SyncStatus};
+pub use sync::{GitOpsConfig, SyncConfig, SyncService, SyncStatus, TrafficAwareConfig};
+pub use sync_traffic::{EndpointPriority, EndpointUsageStats, TrafficAnalyzer};
+pub use sync_gitops::GitOpsSyncHandler;
+pub use sync_snapshots::{
+    EndpointEvolutionSummary, EndpointTimeline, ErrorPattern, SnapshotData, SyncSnapshot,
+};
 pub use test_generation::{
     GeneratedTest, LlmConfig, TestFormat, TestGenerationConfig, TestGenerationResult,
     TestGenerator, TestSuiteMetadata,

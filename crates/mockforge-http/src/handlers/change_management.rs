@@ -4,7 +4,7 @@
 //! approvals, implementation tracking, and completion.
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -21,8 +21,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::auth::types::AuthClaims;
-use crate::handlers::auth_helpers::{extract_user_id_with_fallback, extract_username_from_claims};
+use crate::handlers::auth_helpers::{extract_user_id_with_fallback, extract_username_from_claims, OptionalAuthClaims};
 
 /// State for change management handlers
 #[derive(Clone)]
@@ -131,11 +130,11 @@ pub struct ChangeSummary {
 /// POST /api/v1/change-management/change-requests
 pub async fn create_change_request(
     State(state): State<ChangeManagementState>,
+    claims: OptionalAuthClaims,
     Json(request): Json<CreateChangeRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<ChangeRequestResponse>, StatusCode> {
     // Extract requester ID from authentication claims, or use default for mock server
-    let requester_id = extract_user_id_with_fallback(claims);
+    let requester_id = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     let change = engine
@@ -195,12 +194,12 @@ pub async fn create_change_request(
 pub async fn approve_change(
     State(state): State<ChangeManagementState>,
     Path(change_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<ApproveChangeRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract approver ID and name from authentication claims, or use defaults for mock server
-    let approver_id = extract_user_id_with_fallback(claims.clone());
-    let approver = extract_username_from_claims(claims)
+    let approver_id = extract_user_id_with_fallback(&claims);
+    let approver = extract_username_from_claims(&claims)
         .unwrap_or_else(|| format!("user-{}", approver_id));
 
     let engine = state.engine.write().await;
@@ -283,11 +282,11 @@ pub async fn approve_change(
 pub async fn start_implementation(
     State(state): State<ChangeManagementState>,
     Path(change_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<StartImplementationRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract implementer ID from authentication claims, or use default for mock server
-    let implementer_id = extract_user_id_with_fallback(claims);
+    let implementer_id = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     engine
@@ -331,11 +330,11 @@ pub async fn start_implementation(
 pub async fn complete_change(
     State(state): State<ChangeManagementState>,
     Path(change_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<CompleteChangeRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract implementer ID from authentication claims, or use default for mock server
-    let implementer_id = extract_user_id_with_fallback(claims);
+    let implementer_id = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     engine

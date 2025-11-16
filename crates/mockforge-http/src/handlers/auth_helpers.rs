@@ -7,21 +7,29 @@ use uuid::Uuid;
 
 use crate::auth::types::AuthClaims;
 
-/// Extract user ID from AuthClaims extension
+/// Optional AuthClaims extractor
+///
+/// Extracts AuthClaims from request extensions if available.
+/// This allows handlers to work with or without authentication.
+/// This is a type alias for Option<Extension<AuthClaims>> which Axum supports natively.
+pub type OptionalAuthClaims = Option<Extension<AuthClaims>>;
+
+/// Extract user ID from OptionalAuthClaims
 ///
 /// Returns the user ID from AuthClaims if available, otherwise returns None.
 /// For mock server purposes, this allows handlers to work with or without authentication.
-pub fn extract_user_id_from_claims(claims: Option<Extension<AuthClaims>>) -> Option<Uuid> {
+pub fn extract_user_id_from_claims(claims: &OptionalAuthClaims) -> Option<Uuid> {
     claims
-        .and_then(|Extension(claims)| claims.sub)
-        .and_then(|sub| Uuid::parse_str(&sub).ok())
+        .as_ref()
+        .and_then(|Extension(claims)| claims.sub.as_ref())
+        .and_then(|sub| Uuid::parse_str(sub).ok())
 }
 
-/// Extract user ID from AuthClaims extension with fallback
+/// Extract user ID from OptionalAuthClaims with fallback
 ///
 /// Returns the user ID from AuthClaims if available, otherwise returns a default UUID.
 /// This is useful for mock servers where authentication may be optional.
-pub fn extract_user_id_with_fallback(claims: Option<Extension<AuthClaims>>) -> Uuid {
+pub fn extract_user_id_with_fallback(claims: &OptionalAuthClaims) -> Uuid {
     extract_user_id_from_claims(claims).unwrap_or_else(|| {
         // For mock server, use a deterministic default user ID
         // In production, this should return an error if authentication is required
@@ -29,9 +37,9 @@ pub fn extract_user_id_with_fallback(claims: Option<Extension<AuthClaims>>) -> U
     })
 }
 
-/// Extract username from AuthClaims extension
+/// Extract username from OptionalAuthClaims
 ///
 /// Returns the username from AuthClaims if available, otherwise returns None.
-pub fn extract_username_from_claims(claims: Option<Extension<AuthClaims>>) -> Option<String> {
-    claims.and_then(|Extension(claims)| claims.username)
+pub fn extract_username_from_claims(claims: &OptionalAuthClaims) -> Option<String> {
+    claims.as_ref().and_then(|Extension(claims)| claims.username.clone())
 }

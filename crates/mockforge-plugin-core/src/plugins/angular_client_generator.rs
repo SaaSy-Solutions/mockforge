@@ -56,6 +56,32 @@ impl AngularClientGenerator {
 
     /// Register Handlebars templates for Angular code generation
     fn register_templates(templates: &mut Handlebars<'static>) -> Result<()> {
+        // Register JSON helper for serializing schemas
+        templates.register_helper(
+            "json",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let value = h.param(0).ok_or_else(|| {
+                        handlebars::RenderError::new("json helper requires a parameter")
+                    })?;
+                    let json_str = serde_json::to_string(&value.value())
+                        .map_err(|e| {
+                            handlebars::RenderError::new(&format!(
+                                "Failed to serialize to JSON: {}",
+                                e
+                            ))
+                        })?;
+                    out.write(&json_str)?;
+                    Ok(())
+                },
+            ),
+        );
+
         // Register helper for eq comparison
         templates.register_helper(
             "eq",
@@ -306,6 +332,52 @@ export class RequiredError extends Error {
   }
 }
 
+/**
+ * Contract validation error with schema path and contract diff reference
+ *
+ * This error type provides detailed information about validation failures
+ * and can link back to contract diff entries for tracking breaking changes.
+ */
+export class ContractValidationError extends ApiError {
+  constructor(
+    status: number,
+    statusText: string,
+    public schemaPath: string,
+    public expectedType: string,
+    public actualValue?: any,
+    public contractDiffId?: string,
+    public isBreakingChange: boolean = false,
+    body?: any,
+    message?: string
+  ) {
+    super(
+      status,
+      statusText,
+      body,
+      message || `Contract validation failed at '${schemaPath}': expected ${expectedType}${actualValue !== undefined ? `, got ${JSON.stringify(actualValue)}` : ''}`
+    );
+    this.name = 'ContractValidationError';
+    Object.setPrototypeOf(this, ContractValidationError.prototype);
+  }
+
+  /**
+   * Get a detailed error message with contract diff information
+   */
+  getDetailedMessage(): string {
+    let msg = `Validation failed at '${this.schemaPath}': expected ${this.expectedType}`;
+    if (this.actualValue !== undefined) {
+      msg += `, got ${typeof this.actualValue === 'object' ? JSON.stringify(this.actualValue) : String(this.actualValue)}`;
+    }
+    if (this.contractDiffId) {
+      msg += ` (Contract Diff ID: ${this.contractDiffId})`;
+    }
+    if (this.isBreakingChange) {
+      msg += ' [BREAKING CHANGE]';
+    }
+    return msg;
+  }
+}
+
 // ============================================================================
 // Configuration Interfaces
 // ============================================================================
@@ -408,10 +480,16 @@ export interface ApiConfig {
   timeout?: number;
   /** Enable request/response validation (default: false) */
   validateRequests?: boolean;
+  /** Enable response validation (default: false) */
+  validateResponses?: boolean;
   /** Enable verbose error messages (default: false) */
   verboseErrors?: boolean;
   /** Automatically unwrap ApiResponse<T> format to return data directly (default: false) */
   unwrapResponse?: boolean;
+  /** Schema registry for runtime validation (schema_id -> JSON Schema) */
+  schemas?: Record<string, any>;
+  /** Whether to include contract diff references in validation errors */
+  includeContractDiffs?: boolean;
 }
 
 /**
@@ -957,12 +1035,47 @@ export class ApiConfigService {
   public config$: Observable<ApiConfig>;
 
   constructor() {
+    // Base URL resolver for environment-based switching
+    const getEnvVar = (name: string): string | null => {
+      if (typeof process !== 'undefined' && process.env) {
+        if (process.env[name]) return process.env[name];
+        const prefixes = ['VITE_', 'REACT_APP_', 'NEXT_PUBLIC_', 'NUXT_PUBLIC_'];
+        for (const prefix of prefixes) {
+          if (process.env[prefix + name]) return process.env[prefix + name];
+        }
+      }
+      return null;
+    };
+
+    const resolveBaseUrl = (mockBaseUrl: string, realBaseUrl: string, explicitBaseUrl?: string): string => {
+      const envBaseUrl = getEnvVar('MOCKFORGE_BASE_URL');
+      if (envBaseUrl) return envBaseUrl;
+      if (explicitBaseUrl) return explicitBaseUrl;
+      const mode = getEnvVar('MOCKFORGE_MODE');
+      if (mode === 'real') return realBaseUrl;
+      if (mode === 'hybrid') return mockBaseUrl;
+      return mockBaseUrl;
+    };
+
+    // Bundled schemas for runtime validation
+    const bundledSchemas: Record<string, any> = {{#if bundled_schemas}}{
+      {{#each bundled_schemas}}
+      '{{@key}}': {{json this}},
+      {{/each}}
+    }{{else}}{}{{/if}};
+
     const defaultConfig: ApiConfig = {
-      baseUrl: '{{base_url}}',
+      baseUrl: resolveBaseUrl(
+        '{{base_url}}',
+        '{{real_base_url}}',
+        undefined
+      ),
       headers: {
         'Content-Type': 'application/json',
       },
       timeout: 30000,
+      schemas: bundledSchemas, // Include bundled schemas for runtime validation
+      includeContractDiffs: true, // Enable contract diff references in errors
     };
     this.configSubject = new BehaviorSubject<ApiConfig>(defaultConfig);
     this.config$ = this.configSubject.asObservable();
@@ -1061,9 +1174,11 @@ export class {{api_title}}Service {
 
   /**
    * Validate request data against schema (if validation enabled)
+   * Supports both basic validation (required fields) and full JSON Schema validation
    */
-  private validateRequest(data: any, requiredFields?: string[], config: ApiConfig): void {
-    if (!config.validateRequests) {
+  private validateRequest(data: any, requiredFields?: string[], schemaId?: string, config?: ApiConfig): void {
+    const cfg = config || this.apiConfig.getConfig();
+    if (!cfg.validateRequests) {
       return;
     }
 
@@ -1071,7 +1186,7 @@ export class {{api_title}}Service {
       return;
     }
 
-    // Check required fields
+    // Check required fields (basic validation)
     if (requiredFields && Array.isArray(requiredFields)) {
       const missingFields: string[] = [];
       for (const field of requiredFields) {
@@ -1081,8 +1196,89 @@ export class {{api_title}}Service {
       }
 
       if (missingFields.length > 0) {
-        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+        throw new RequiredError(
+          missingFields.join(', '),
+          `Missing required fields: ${missingFields.join(', ')}`
+        );
       }
+    }
+
+    // Full JSON Schema validation (if schema provided and ajv available)
+    if (schemaId && cfg.schemas && cfg.schemas[schemaId]) {
+      this.validateAgainstSchema(data, cfg.schemas[schemaId], schemaId, 'request', cfg);
+    }
+  }
+
+  /**
+   * Validate data against JSON Schema using ajv (if available)
+   * Falls back to basic validation if ajv is not available
+   */
+  private validateAgainstSchema(
+    data: any,
+    schema: any,
+    schemaId: string,
+    context: 'request' | 'response',
+    config: ApiConfig
+  ): void {
+    try {
+      let Ajv: any;
+      if (typeof window !== 'undefined' && (window as any).ajv) {
+        Ajv = (window as any).ajv;
+      } else if (typeof require !== 'undefined') {
+        Ajv = require('ajv');
+      } else {
+        console.warn('ajv not available, using basic validation only. Install ajv for full schema validation: npm install ajv');
+        return;
+      }
+
+      const ajv = new Ajv({ allErrors: true, strict: false });
+      const validate = ajv.compile(schema);
+      const valid = validate(data);
+
+      if (!valid && validate.errors) {
+        const firstError = validate.errors[0];
+        const schemaPath = firstError.instancePath || firstError.schemaPath || '';
+        const expectedType = firstError.schema?.type || firstError.params?.type || 'unknown';
+        const actualValue = firstError.data;
+        const contractDiffId = schema['x-contract-diff-id'] || schema.contractDiffId;
+        const isBreakingChange = schema['x-breaking-change'] || schema.isBreakingChange || false;
+
+        throw new ContractValidationError(
+          400,
+          'Validation Error',
+          schemaPath || `${context}.${schemaId}`,
+          expectedType,
+          actualValue,
+          contractDiffId,
+          isBreakingChange,
+          { errors: validate.errors },
+          `Schema validation failed for ${context}`
+        );
+      }
+    } catch (e) {
+      if (e instanceof ContractValidationError) {
+        throw e;
+      }
+      console.warn('ajv not available, using basic validation only. Install ajv for full schema validation: npm install ajv');
+    }
+  }
+
+  /**
+   * Validate response data against schema (if validation enabled)
+   */
+  private validateResponse(data: any, schemaId?: string, config?: ApiConfig): void {
+    const cfg = config || this.apiConfig.getConfig();
+    if (!cfg.validateResponses) {
+      return;
+    }
+
+    if (!data) {
+      return;
+    }
+
+    // Full JSON Schema validation (if schema provided)
+    if (schemaId && cfg.schemas && cfg.schemas[schemaId]) {
+      this.validateAgainstSchema(data, cfg.schemas[schemaId], schemaId, 'response', cfg);
     }
   }
 
@@ -1104,7 +1300,8 @@ export class {{api_title}}Service {
     {{#if request_body}}
     // Validate request data if validation is enabled
     if (data && config.validateRequests) {
-      this.validateRequest(data, {{#if required_fields}}[{{#each required_fields}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}undefined{{/if}}, config);
+      const schemaId = '{{operation_id}}Request';
+      this.validateRequest(data, {{#if required_fields}}[{{#each required_fields}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}undefined{{/if}}, schemaId, config);
     }
     {{/if}}
 
@@ -1123,7 +1320,14 @@ export class {{api_title}}Service {
     {{/if}}
     return this.http.get<{{response_type_name}}>(`${this.baseUrl}${endpoint}`{{#if query_params}}, { params }{{/if}}).pipe(
       timeout(config.timeout || 30000),
-      map(response => this.unwrapResponse(response, config)),
+      map(response => {
+        const unwrapped = this.unwrapResponse(response, config);
+        if (config.validateResponses) {
+          const schemaId = '{{operation_id}}Response';
+          this.validateResponse(unwrapped, schemaId, config);
+        }
+        return unwrapped;
+      }),
       catchError((error) => {
         return throwError(() => ApiError.fromHttpErrorResponse(error));
       })
@@ -1155,7 +1359,14 @@ export class {{api_title}}Service {
     {{/if}}
     {{/if}}
       timeout(config.timeout || 30000),
-      map(response => this.unwrapResponse(response, config)),
+      map(response => {
+        const unwrapped = this.unwrapResponse(response, config);
+        if (config.validateResponses) {
+          const schemaId = '{{operation_id}}Response';
+          this.validateResponse(unwrapped, schemaId, config);
+        }
+        return unwrapped;
+      }),
       catchError((error) => {
         return throwError(() => ApiError.fromHttpErrorResponse(error));
       })
@@ -1695,14 +1906,39 @@ export class OAuth2TokenManagerService {
 
         let api_title_lowercase = spec.info.title.to_lowercase().replace(' ', "-");
 
+        // Extract real base URL from OpenAPI spec servers or use a default
+        let real_base_url = spec
+            .servers
+            .as_ref()
+            .and_then(|servers| servers.first())
+            .map(|server| server.url.clone())
+            .unwrap_or_else(|| "https://api.production.com".to_string());
+
+        // Prepare schemas for bundling (convert to JSON Schema format for runtime validation)
+        let mut bundled_schemas = serde_json::Map::new();
+        for (schema_name, schema) in &schemas {
+            // Convert OpenAPI schema to JSON Schema format
+            // Add schema metadata for contract diff tracking
+            let mut schema_json = json!(schema);
+            if let Some(schema_obj) = schema_json.as_object_mut() {
+                // Add schema ID for lookup
+                schema_obj.insert("$id".to_string(), json!(schema_name));
+                // Add metadata fields for contract diff tracking (can be populated by drift detection)
+                schema_obj.insert("x-schema-id".to_string(), json!(schema_name));
+            }
+            bundled_schemas.insert(schema_name.clone(), schema_json);
+        }
+
         Ok(json!({
             "api_title": spec.info.title,
             "api_title_lowercase": api_title_lowercase,
             "api_version": spec.info.version,
             "api_description": spec.info.description,
             "base_url": config.base_url.as_ref().unwrap_or(&"http://localhost:3000".to_string()),
+            "real_base_url": real_base_url,
             "operations": operations,
             "schemas": schemas,
+            "bundled_schemas": bundled_schemas,
         }))
     }
 

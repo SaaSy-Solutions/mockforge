@@ -889,10 +889,14 @@ async fn bulk_update_config(
     match serde_json::from_value::<ServerConfig>(merged) {
         Ok(_) => {
             // Config is valid
-            // TODO: Apply config to server when ServerConfig is stored in ManagementState
+            // Note: Runtime application of config changes would require:
+            // 1. Storing ServerConfig in ManagementState
+            // 2. Implementing hot-reload mechanism for server configuration
+            // 3. Updating router state and middleware based on new config
+            // For now, this endpoint only validates the configuration structure
             Json(serde_json::json!({
                 "success": true,
-                "message": "Bulk configuration update validated successfully. Note: Runtime application requires ServerConfig in ManagementState.",
+                "message": "Bulk configuration update validated successfully. Note: Runtime application requires ServerConfig in ManagementState and hot-reload support.",
                 "updates_received": request.updates,
                 "validated": true
             }))
@@ -2113,13 +2117,17 @@ async fn get_proxy_inspect(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let limit: usize = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
 
-    // TODO: In a full implementation, this would return actual intercepted requests/responses
-    // For now, return a placeholder response
+    // Note: Request/response inspection would require:
+    // 1. Storing intercepted requests/responses in ManagementState or a separate store
+    // 2. Integrating with proxy middleware to capture traffic
+    // 3. Implementing filtering and pagination for large volumes of traffic
+    // For now, return an empty response structure indicating the feature is not yet implemented
     Ok(Json(serde_json::json!({
         "requests": [],
         "responses": [],
         "limit": limit,
-        "message": "Request/response inspection not yet implemented. This endpoint will return intercepted traffic in a future version."
+        "total": 0,
+        "message": "Request/response inspection not yet implemented. This endpoint will return intercepted traffic when proxy inspection is fully integrated."
     })))
 }
 
@@ -3126,7 +3134,10 @@ async fn generate_openapi_from_traffic(
     };
 
     // Query HTTP exchanges
-    let exchanges = match RecordingsToOpenApi::query_http_exchanges(&db, Some(query_filters)).await
+    // Note: We need to convert from mockforge-recorder's HttpExchange to mockforge-core's HttpExchange
+    // to avoid version mismatch issues. The converter returns the version from mockforge-recorder's
+    // dependency, so we need to manually convert to the local version.
+    let exchanges_from_recorder = match RecordingsToOpenApi::query_http_exchanges(&db, Some(query_filters)).await
     {
         Ok(exchanges) => exchanges,
         Err(e) => {
@@ -3141,7 +3152,7 @@ async fn generate_openapi_from_traffic(
         }
     };
 
-    if exchanges.is_empty() {
+    if exchanges_from_recorder.is_empty() {
         return (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({
@@ -3151,6 +3162,25 @@ async fn generate_openapi_from_traffic(
         )
             .into_response();
     }
+
+    // Convert to local HttpExchange type to avoid version mismatch
+    use mockforge_core::intelligent_behavior::openapi_generator::HttpExchange as LocalHttpExchange;
+    let exchanges: Vec<LocalHttpExchange> = exchanges_from_recorder
+        .into_iter()
+        .map(|e| LocalHttpExchange {
+            method: e.method,
+            path: e.path,
+            query_params: e.query_params,
+            headers: e.headers,
+            body: e.body,
+            body_encoding: e.body_encoding,
+            status_code: e.status_code,
+            response_headers: e.response_headers,
+            response_body: e.response_body,
+            response_body_encoding: e.response_body_encoding,
+            timestamp: e.timestamp,
+        })
+        .collect();
 
     // Create OpenAPI generator config
     let behavior_config = IntelligentBehaviorConfig::default();
@@ -3479,6 +3509,7 @@ fn extract_yaml_spec(text: &str) -> String {
     text.trim().to_string()
 }
 
+/// Extract GraphQL schema from text content
 fn extract_graphql_schema(text: &str) -> String {
     // Try to find GraphQL code blocks
     if let Some(start) = text.find("```graphql") {

@@ -36,6 +36,9 @@ pub struct PersonaProfile {
     /// Additional persona-specific metadata
     #[serde(default)]
     pub metadata: HashMap<String, Value>,
+    /// Optional lifecycle state management
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<crate::persona_lifecycle::PersonaLifecycle>,
 }
 
 impl PersonaProfile {
@@ -53,6 +56,7 @@ impl PersonaProfile {
             backstory: None,
             relationships: HashMap::new(),
             metadata: HashMap::new(),
+            lifecycle: None,
         }
     }
 
@@ -61,6 +65,38 @@ impl PersonaProfile {
         let mut persona = Self::new(id, domain);
         persona.traits = traits;
         persona
+    }
+
+    /// Set the persona's lifecycle
+    pub fn set_lifecycle(&mut self, lifecycle: crate::persona_lifecycle::PersonaLifecycle) {
+        self.lifecycle = Some(lifecycle);
+    }
+
+    /// Get the persona's lifecycle
+    pub fn get_lifecycle(&self) -> Option<&crate::persona_lifecycle::PersonaLifecycle> {
+        self.lifecycle.as_ref()
+    }
+
+    /// Get mutable reference to lifecycle
+    pub fn get_lifecycle_mut(&mut self) -> Option<&mut crate::persona_lifecycle::PersonaLifecycle> {
+        self.lifecycle.as_mut()
+    }
+
+    /// Update lifecycle state based on virtual clock time
+    ///
+    /// Checks if any transitions should occur based on elapsed time and conditions.
+    pub fn update_lifecycle_state(&mut self, current_time: chrono::DateTime<chrono::Utc>) {
+        if let Some(ref mut lifecycle) = self.lifecycle {
+            if let Some((new_state, _rule)) = lifecycle.transition_if_elapsed(current_time) {
+                lifecycle.transition_to(new_state, current_time);
+
+                // Apply lifecycle effects to persona traits
+                let effects = lifecycle.apply_lifecycle_effects();
+                for (key, value) in effects {
+                    self.set_trait(key, value);
+                }
+            }
+        }
     }
 
     /// Derive a deterministic seed from persona ID and domain
@@ -177,6 +213,8 @@ pub struct PersonaRegistry {
     personas: Arc<RwLock<HashMap<String, PersonaProfile>>>,
     /// Default traits to apply to new personas
     default_traits: HashMap<String, String>,
+    /// Graph structure for relationship management
+    graph: Arc<crate::persona_graph::PersonaGraph>,
 }
 
 impl PersonaRegistry {
@@ -185,6 +223,7 @@ impl PersonaRegistry {
         Self {
             personas: Arc::new(RwLock::new(HashMap::new())),
             default_traits: HashMap::new(),
+            graph: Arc::new(crate::persona_graph::PersonaGraph::new()),
         }
     }
 
@@ -193,7 +232,13 @@ impl PersonaRegistry {
         Self {
             personas: Arc::new(RwLock::new(HashMap::new())),
             default_traits,
+            graph: Arc::new(crate::persona_graph::PersonaGraph::new()),
         }
+    }
+
+    /// Get the persona graph
+    pub fn graph(&self) -> Arc<crate::persona_graph::PersonaGraph> {
+        Arc::clone(&self.graph)
     }
 
     /// Get or create a persona profile
@@ -217,7 +262,13 @@ impl PersonaRegistry {
 
         // Store the new persona
         let mut personas = self.personas.write().unwrap();
-        personas.insert(id, persona.clone());
+        personas.insert(id.clone(), persona.clone());
+
+        // Add to graph
+        let entity_type = persona.domain.as_str().to_string();
+        let graph_node = crate::persona_graph::PersonaNode::new(id.clone(), entity_type);
+        self.graph.add_node(graph_node);
+
         persona
     }
 
@@ -370,7 +421,15 @@ impl PersonaRegistry {
     ) -> Result<()> {
         let mut personas = self.personas.write().unwrap();
         if let Some(persona) = personas.get_mut(from_persona_id) {
-            persona.add_relationship(relationship_type, to_persona_id);
+            persona.add_relationship(relationship_type.clone(), to_persona_id.clone());
+
+            // Also add to graph
+            self.graph.add_edge(
+                from_persona_id.to_string(),
+                to_persona_id,
+                relationship_type,
+            );
+
             Ok(())
         } else {
             Err(mockforge_core::Error::generic(format!(
@@ -378,6 +437,49 @@ impl PersonaRegistry {
                 from_persona_id
             )))
         }
+    }
+
+    /// Switch to a new persona and update all related personas in the graph
+    ///
+    /// This ensures coherent persona switching across related entities.
+    /// When switching to a new root persona, all related personas (orders, payments, etc.)
+    /// are also updated to maintain consistency.
+    ///
+    /// # Arguments
+    /// * `root_persona_id` - The root persona ID to switch to (e.g., user ID)
+    /// * `relationship_types` - Optional filter for relationship types to follow
+    /// * `update_callback` - Optional callback to update each related persona
+    ///
+    /// # Returns
+    /// Vector of persona IDs that were updated
+    pub fn coherent_persona_switch<F>(
+        &self,
+        root_persona_id: &str,
+        relationship_types: Option<&[String]>,
+        update_callback: Option<F>,
+    ) -> Result<Vec<String>>
+    where
+        F: Fn(&str, &mut PersonaProfile),
+    {
+        // Find all related personas using BFS traversal
+        let related_ids = self.graph.find_related_bfs(root_persona_id, relationship_types, None);
+
+        // Start with the root persona
+        let mut updated_ids = vec![root_persona_id.to_string()];
+        updated_ids.extend(related_ids);
+
+        // Update each persona in the graph
+        let mut personas = self.personas.write().unwrap();
+        for persona_id in &updated_ids {
+            if let Some(persona) = personas.get_mut(persona_id) {
+                // Apply update callback if provided
+                if let Some(ref callback) = update_callback {
+                    callback(persona_id, persona);
+                }
+            }
+        }
+
+        Ok(updated_ids)
     }
 }
 

@@ -211,22 +211,32 @@ pub mod codegen;
 pub mod collection_export;
 pub mod conditions;
 pub mod config;
+/// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
+pub mod consumer_contracts;
+/// Contract validation for ensuring API contracts match specifications
+pub mod contract_drift;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
 pub mod contract_webhooks;
+/// Runtime validation for SDKs (request/response validation at runtime)
+pub mod runtime_validation;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
+/// Deceptive canary mode for routing team traffic to deceptive deploys
+pub mod deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
 pub mod docker_compose;
 pub mod encryption;
 pub mod error;
 pub mod failure_injection;
+pub mod fidelity;
 pub mod generate_config;
 pub mod generative_schema;
 pub mod git_watch;
 pub mod graph;
 pub mod import;
+pub mod incidents;
 pub mod intelligent_behavior;
 pub mod latency;
 pub mod lifecycle;
@@ -238,6 +248,7 @@ pub mod output_control;
 pub mod overrides;
 pub mod performance;
 pub mod priority_handler;
+pub mod pr_generation;
 pub mod protocol_abstraction;
 pub mod proxy;
 pub mod reality;
@@ -251,6 +262,7 @@ pub mod request_logger;
 pub mod request_scripting;
 pub mod route_chaos;
 pub mod routing;
+pub mod scenarios;
 pub mod security;
 pub mod schema_diff;
 pub mod server_utils;
@@ -272,6 +284,11 @@ pub mod workspace_persistence;
 pub mod ws_proxy;
 
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
+pub use scenarios::{
+    ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
+    ScenarioStep,
+};
+pub use scenarios::types::StepResult;
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
@@ -282,7 +299,12 @@ pub use data_source::{
     DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
     DataSourceType, GitDataSource, HttpDataSource, LocalDataSource,
 };
+pub use deceptive_canary::{
+    CanaryRoutingStrategy, CanaryStats, DeceptiveCanaryConfig, DeceptiveCanaryRouter,
+    TeamIdentifiers,
+};
 pub use error::{Error, Result};
+pub use fidelity::{FidelityCalculator, FidelityScore, SampleComparator, SchemaComparator};
 pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
 };
@@ -391,6 +413,9 @@ pub use workspace_import::{
 };
 pub use workspace_persistence::WorkspacePersistence;
 pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
+pub use runtime_validation::{
+    RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,
+};
 // Note: ValidationError and ValidationResult from spec_parser conflict with schema_diff::ValidationError
 // Use qualified paths: spec_parser::ValidationError, spec_parser::ValidationResult
 

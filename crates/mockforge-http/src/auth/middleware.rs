@@ -110,8 +110,10 @@ pub async fn auth_middleware(
             emit_security_event(event).await;
 
             // Add claims to request extensions for downstream handlers
+            // Wrap in Extension for Axum extractor compatibility
+            use axum::extract::Extension;
             let mut req = req;
-            req.extensions_mut().insert(claims);
+            req.extensions_mut().insert(Extension(claims));
             next.run(req).await
         }
         AuthResult::Failure(reason) => {

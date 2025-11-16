@@ -66,6 +66,9 @@ pub struct ContinuumConfig {
     /// Group-level blend ratio overrides
     #[serde(default)]
     pub groups: HashMap<String, f64>,
+    /// Field-level reality mixing configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_mixing: Option<crate::reality_continuum::FieldRealityConfig>,
 }
 
 fn default_false() -> bool {
@@ -86,6 +89,7 @@ impl Default for ContinuumConfig {
             merge_strategy: MergeStrategy::FieldLevel,
             routes: Vec::new(),
             groups: HashMap::new(),
+            field_mixing: None,
         }
     }
 }

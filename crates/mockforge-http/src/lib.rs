@@ -168,6 +168,7 @@ pub mod chain_handlers;
 /// Contract diff middleware for automatic request capture
 pub mod contract_diff_middleware;
 pub mod coverage;
+pub mod database;
 /// File generation service for creating mock PDF, CSV, JSON files
 pub mod file_generator;
 /// File serving for generated mock files
@@ -928,10 +929,11 @@ pub async fn build_router_with_multi_tenant(
 
     // Add OAuth2 server endpoints
     {
-        use crate::auth::oidc::OidcState;
+        use crate::auth::oidc::{load_oidc_state, OidcState};
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
-        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
         let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
         let oauth2_state = OAuth2ServerState {
             oidc_state,
@@ -948,8 +950,9 @@ pub async fn build_router_with_multi_tenant(
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::consent::{consent_router, ConsentState};
         use crate::handlers::oauth2_server::OAuth2ServerState;
-        use crate::auth::oidc::OidcState;
-        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        use crate::auth::oidc::{load_oidc_state, OidcState};
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
         let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
         let oauth2_state = OAuth2ServerState {
             oidc_state: oidc_state.clone(),
@@ -1808,7 +1811,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     app = app.merge(file_server::file_serving_router());
 
     // Add management API endpoints
-    let mut management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
+    let spec_path_clone = spec_path.clone();
+    let mut management_state = ManagementState::new(None, spec_path_clone, 3000); // Port will be updated when we know the actual port
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -1936,10 +1940,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add OAuth2 server endpoints
     {
-        use crate::auth::oidc::OidcState;
+        use crate::auth::oidc::{load_oidc_state, OidcState};
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
-        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
         let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
         let oauth2_state = OAuth2ServerState {
             oidc_state,
@@ -1956,8 +1961,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::consent::{consent_router, ConsentState};
         use crate::handlers::oauth2_server::OAuth2ServerState;
-        use crate::auth::oidc::OidcState;
-        let oidc_state = Arc::new(RwLock::new(None::<OidcState>)); // TODO: Load from config
+        use crate::auth::oidc::{load_oidc_state, OidcState};
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
         let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
         let oauth2_state = OAuth2ServerState {
             oidc_state: oidc_state.clone(),
@@ -1981,6 +1987,183 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let risk_state = RiskSimulationState { risk_engine };
         app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
         debug!("Risk simulation API mounted at /api/v1/auth/risk");
+    }
+
+    // Initialize database connection (optional)
+    let database = {
+        use crate::database::Database;
+        let database_url = std::env::var("DATABASE_URL").ok();
+        match Database::connect_optional(database_url.as_deref()).await {
+            Ok(db) => {
+                if db.is_connected() {
+                    // Run migrations if database is connected
+                    if let Err(e) = db.migrate_if_connected().await {
+                        warn!("Failed to run database migrations: {}", e);
+                    } else {
+                        info!("Database connected and migrations applied");
+                    }
+                }
+                Some(db)
+            }
+            Err(e) => {
+                warn!("Failed to connect to database: {}. Continuing without database support.", e);
+                None
+            }
+        }
+    };
+
+    // Add drift budget and incident management endpoints
+    {
+        use crate::handlers::drift_budget::{drift_budget_router, DriftBudgetState};
+        use crate::middleware::drift_tracking::DriftTrackingState;
+        use mockforge_core::ai_contract_diff::ContractDiffAnalyzer;
+        use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
+        use mockforge_core::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
+        use mockforge_core::incidents::{IncidentManager, IncidentStore};
+        use std::sync::Arc;
+
+        // Initialize drift budget engine with default config
+        let drift_config = DriftBudgetConfig::default();
+        let drift_engine = Arc::new(DriftBudgetEngine::new(drift_config.clone()));
+
+        // Initialize incident store and manager
+        let incident_store = Arc::new(IncidentStore::default());
+        let incident_manager = Arc::new(IncidentManager::new(incident_store.clone()));
+
+        // Initialize usage recorder and consumer detector
+        let usage_recorder = Arc::new(UsageRecorder::default());
+        let consumer_detector = Arc::new(ConsumerBreakingChangeDetector::new(usage_recorder.clone()));
+
+        // Initialize contract diff analyzer if enabled
+        let diff_analyzer = if drift_config.enabled {
+            match ContractDiffAnalyzer::new(mockforge_core::ai_contract_diff::ContractDiffConfig::default()) {
+                Ok(analyzer) => Some(Arc::new(analyzer)),
+                Err(e) => {
+                    warn!("Failed to create contract diff analyzer: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Get OpenAPI spec if available
+        // Note: Load from spec_path if available, or leave as None for manual configuration.
+        let spec = if let Some(ref spec_path) = spec_path {
+            match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+                Ok(s) => Some(Arc::new(s)),
+                Err(e) => {
+                    debug!("Failed to load OpenAPI spec for drift tracking: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create drift tracking state
+        let drift_tracking_state = DriftTrackingState {
+            diff_analyzer,
+            spec,
+            drift_engine: drift_engine.clone(),
+            incident_manager: incident_manager.clone(),
+            usage_recorder,
+            consumer_detector,
+            enabled: drift_config.enabled,
+        };
+
+        // Add response body buffering middleware (before drift tracking)
+        app = app.layer(axum::middleware::from_fn(crate::middleware::buffer_response_middleware));
+
+        // Add drift tracking middleware (after response buffering)
+        // Use a wrapper that inserts state into extensions before calling the middleware
+        let drift_tracking_state_clone = drift_tracking_state.clone();
+        app = app.layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+            let state = drift_tracking_state_clone.clone();
+            async move {
+                // Insert state into extensions if not already present
+                if req.extensions().get::<crate::middleware::drift_tracking::DriftTrackingState>().is_none() {
+                    req.extensions_mut().insert(state);
+                }
+                // Call the middleware function
+                crate::middleware::drift_tracking::drift_tracking_middleware_with_extensions(req, next).await
+            }
+        }));
+
+        let drift_state = DriftBudgetState {
+            engine: drift_engine,
+            incident_manager,
+        };
+
+        app = app.merge(drift_budget_router(drift_state));
+        debug!("Drift budget and incident management endpoints mounted at /api/v1/drift");
+    }
+
+    // Add consumer contracts endpoints
+    {
+        use crate::handlers::consumer_contracts::{consumer_contracts_router, ConsumerContractsState};
+        use mockforge_core::consumer_contracts::{
+            ConsumerBreakingChangeDetector, ConsumerRegistry, UsageRecorder,
+        };
+        use std::sync::Arc;
+
+        // Initialize consumer registry
+        let registry = Arc::new(ConsumerRegistry::default());
+
+        // Initialize usage recorder
+        let usage_recorder = Arc::new(UsageRecorder::default());
+
+        // Initialize breaking change detector
+        let detector = Arc::new(ConsumerBreakingChangeDetector::new(usage_recorder.clone()));
+
+        let consumer_state = ConsumerContractsState {
+            registry,
+            usage_recorder,
+            detector,
+        };
+
+        app = app.merge(consumer_contracts_router(consumer_state));
+        debug!("Consumer contracts endpoints mounted at /api/v1/consumers");
+    }
+
+    // Add PR generation endpoints (optional - only if configured)
+    {
+        use crate::handlers::pr_generation::{pr_generation_router, PRGenerationState};
+        use mockforge_core::pr_generation::{PRGenerator, PRProvider};
+        use std::sync::Arc;
+
+        // Load PR generation config from environment or use default
+        let pr_config = mockforge_core::pr_generation::PRGenerationConfig::from_env();
+
+        let generator = if pr_config.enabled && pr_config.token.is_some() {
+            let token = pr_config.token.as_ref().unwrap().clone();
+            let generator = match pr_config.provider {
+                PRProvider::GitHub => PRGenerator::new_github(
+                    pr_config.owner.clone(),
+                    pr_config.repo.clone(),
+                    token,
+                    pr_config.base_branch.clone(),
+                ),
+                PRProvider::GitLab => PRGenerator::new_gitlab(
+                    pr_config.owner.clone(),
+                    pr_config.repo.clone(),
+                    token,
+                    pr_config.base_branch.clone(),
+                ),
+            };
+            Some(Arc::new(generator))
+        } else {
+            None
+        };
+
+        let pr_state = PRGenerationState { generator: generator.clone() };
+
+        app = app.merge(pr_generation_router(pr_state));
+        if generator.is_some() {
+            debug!("PR generation endpoints mounted at /api/v1/pr (configured for {:?})", pr_config.provider);
+        } else {
+            debug!("PR generation endpoints mounted at /api/v1/pr (not configured - set GITHUB_TOKEN/GITLAB_TOKEN and PR_REPO_OWNER/PR_REPO_NAME)");
+        }
     }
 
     // Add management WebSocket endpoint

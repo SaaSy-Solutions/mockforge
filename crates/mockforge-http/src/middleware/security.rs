@@ -41,8 +41,11 @@ pub async fn security_middleware(req: Request<Body>, next: Next) -> Response<Bod
         .map(|s| s.to_string());
 
     // Extract user ID from request extensions (set by auth middleware)
-    // Note: This would need to be adjusted based on actual auth implementation
-    let user_id: Option<String> = None; // TODO: Extract from auth middleware when available
+    // AuthClaims are wrapped in Extension by the auth middleware
+    let user_id: Option<String> = req
+        .extensions()
+        .get::<axum::extract::Extension<crate::auth::types::AuthClaims>>()
+        .and_then(|claims| claims.sub.clone());
 
     // Process request
     let response = next.run(req).await;

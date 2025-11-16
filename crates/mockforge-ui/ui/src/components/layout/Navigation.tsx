@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { id: 'import', label: 'Import', requiredRoles: ['admin'] },
   { id: 'logs', label: 'Live Logs', requiredRoles: ['admin', 'viewer'] },
   { id: 'metrics', label: 'Metrics', requiredRoles: ['admin', 'viewer'] },
+  { id: 'incidents', label: 'Incidents', requiredRoles: ['admin', 'viewer'] },
   { id: 'testing', label: 'Testing', requiredRoles: ['admin'] },
   { id: 'time-travel', label: 'Time Travel', requiredRoles: ['admin'] },
   { id: 'config', label: 'Configuration', requiredRoles: ['admin'] },

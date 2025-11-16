@@ -9,7 +9,11 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use mockforge_core::intelligent_behavior::{rules::StateMachine, visual_layout::VisualLayout};
+// Import types - we use local versions for API types and convert when interacting with manager
+use mockforge_core::intelligent_behavior::{
+    rules::StateMachine,
+    visual_layout::VisualLayout,
+};
 use mockforge_scenarios::{
     state_machine::{ScenarioStateMachineManager, StateInstance},
     ScenarioManifest,
@@ -142,16 +146,19 @@ pub async fn list_state_machines(
     // Get all state machines
     let machines = manager.list_state_machines().await;
 
-    let state_machine_list: Vec<_> = machines
-        .iter()
-        .map(|(resource_type, sm)| StateMachineInfo {
+    // Check visual layouts separately for each state machine
+    // We need to check if a visual layout exists for each state machine
+    let mut state_machine_list = Vec::new();
+    for (resource_type, sm) in machines.iter() {
+        let has_visual_layout = manager.get_visual_layout(resource_type).await.is_some();
+        state_machine_list.push(StateMachineInfo {
             resource_type: resource_type.clone(),
             state_count: sm.states.len(),
             transition_count: sm.transitions.len(),
             sub_scenario_count: sm.sub_scenarios.len(),
-            has_visual_layout: sm.visual_layout.is_some(),
-        })
-        .collect();
+            has_visual_layout,
+        });
+    }
 
     Ok(Json(StateMachineListResponse {
         state_machines: state_machine_list.clone(),
@@ -171,6 +178,23 @@ pub async fn get_state_machine(
 
     let visual_layout = manager.get_visual_layout(&resource_type).await;
 
+    // Convert types from mockforge-scenarios' dependency version to local version
+    // by serializing and deserializing through JSON
+    let state_machine_json = serde_json::to_value(&state_machine)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let state_machine: StateMachine = serde_json::from_value(state_machine_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let visual_layout: Option<VisualLayout> = visual_layout
+        .map(|layout| {
+            let layout_json = serde_json::to_value(&layout)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            serde_json::from_value(layout_json)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        })
+        .transpose()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(StateMachineResponse {
         state_machine,
         visual_layout,
@@ -184,26 +208,47 @@ pub async fn create_state_machine(
 ) -> Result<Json<StateMachineResponse>, StatusCode> {
     let mut manager = state.state_machine_manager.write().await;
 
-    // Validate state machine
-    if let Err(e) = manager.validate_state_machine(&request.state_machine) {
-        error!("Invalid state machine: {}", e);
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    // Convert types from local version to mockforge-scenarios' dependency version
+    // by serializing and deserializing through JSON
+    // The ScenarioManifest uses types from mockforge-scenarios' mockforge-core dependency (0.2.9)
+    // We need to convert our local StateMachine to that version
+    let state_machine_json = serde_json::to_value(&request.state_machine)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Store state machine (we'd need to add a method to store directly)
-    // For now, we'll create a minimal manifest and load it
-    let mut manifest = ScenarioManifest::new(
-        "api".to_string(),
-        "1.0.0".to_string(),
-        "API State Machine".to_string(),
-        "State machine created via API".to_string(),
-    );
-    manifest.state_machines.push(request.state_machine.clone());
+    // Create manifest with JSON values - serde will deserialize into the correct types
+    // We need to provide all required fields for ScenarioManifest
+    let mut manifest_json = serde_json::json!({
+        "manifest_version": "1.0",
+        "name": "api",
+        "version": "1.0.0",
+        "title": "API State Machine",
+        "description": "State machine created via API",
+        "author": "api",
+        "category": "other",
+        "compatibility": {
+            "min_version": "0.1.0",
+            "max_version": null
+        },
+        "files": [],
+        "state_machines": [state_machine_json],
+        "state_machine_graphs": {}
+    });
 
     if let Some(layout) = &request.visual_layout {
-        manifest
-            .state_machine_graphs
-            .insert(request.state_machine.resource_type.clone(), layout.clone());
+        let layout_json = serde_json::to_value(layout)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        manifest_json["state_machine_graphs"][&request.state_machine.resource_type] = layout_json;
+    }
+
+    let manifest: ScenarioManifest = serde_json::from_value(manifest_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Validate the first state machine from manifest
+    if let Some(ref sm) = manifest.state_machines.first() {
+        if let Err(e) = manager.validate_state_machine(sm) {
+            error!("Invalid state machine: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
+        }
     }
 
     if let Err(e) = manager.load_from_manifest(&manifest).await {
@@ -211,13 +256,7 @@ pub async fn create_state_machine(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // Set visual layout if provided
-    let visual_layout = request.visual_layout.clone();
-    if let Some(layout) = &visual_layout {
-        manager
-            .set_visual_layout(&request.state_machine.resource_type, layout.clone())
-            .await;
-    }
+    // Visual layout is already set in the manifest, no need to set separately
 
     // Broadcast WebSocket event
     if let Some(ref ws_tx) = state.ws_broadcast {
@@ -228,8 +267,33 @@ pub async fn create_state_machine(
         let _ = ws_tx.send(event);
     }
 
+    // Get state machine and layout back after loading (returns version from mockforge-scenarios' dependency)
+    let state_machine_from_manager = manager
+        .get_state_machine(&request.state_machine.resource_type)
+        .await
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let visual_layout_from_manager = manager
+        .get_visual_layout(&request.state_machine.resource_type)
+        .await;
+
+    // Convert back to local types
+    let state_machine_json = serde_json::to_value(&state_machine_from_manager)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let state_machine: StateMachine = serde_json::from_value(state_machine_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let visual_layout: Option<VisualLayout> = visual_layout_from_manager
+        .map(|layout| {
+            let layout_json = serde_json::to_value(&layout)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            serde_json::from_value(layout_json)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        })
+        .transpose()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(StateMachineResponse {
-        state_machine: request.state_machine,
+        state_machine,
         visual_layout,
     }))
 }
@@ -416,8 +480,30 @@ pub async fn export_state_machines(
 ) -> Result<Json<ImportExportResponse>, StatusCode> {
     let manager = state.state_machine_manager.read().await;
 
-    // Export all state machines and visual layouts
-    let (state_machines, visual_layouts) = manager.export_all().await;
+    // Export all state machines and visual layouts (returns versions from mockforge-scenarios' dependency)
+    let (state_machines_from_manager, visual_layouts_from_manager) = manager.export_all().await;
+
+    // Convert to local types by serializing and deserializing
+    let state_machines: Vec<StateMachine> = state_machines_from_manager
+        .into_iter()
+        .map(|sm| {
+            let json = serde_json::to_value(&sm)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            serde_json::from_value(json)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        })
+        .collect::<Result<Vec<_>, StatusCode>>()?;
+
+    let visual_layouts: HashMap<String, VisualLayout> = visual_layouts_from_manager
+        .into_iter()
+        .map(|(k, v)| {
+            let json = serde_json::to_value(&v)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let layout: VisualLayout = serde_json::from_value(json)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            Ok((k, layout))
+        })
+        .collect::<Result<HashMap<_, _>, StatusCode>>()?;
 
     Ok(Json(ImportExportResponse {
         state_machines,
@@ -432,25 +518,34 @@ pub async fn import_state_machines(
 ) -> Result<StatusCode, StatusCode> {
     let mut manager = state.state_machine_manager.write().await;
 
-    // Create a manifest from imported data
-    let mut manifest = ScenarioManifest::new(
-        "imported".to_string(),
-        "1.0.0".to_string(),
-        "Imported State Machines".to_string(),
-        "State machines imported via API".to_string(),
-    );
-    manifest.state_machines = request.state_machines.clone();
-    manifest.state_machine_graphs = request.visual_layouts.clone();
+    // Create manifest from JSON to let serde handle type conversion
+    // We need to provide all required fields for ScenarioManifest
+    let manifest_json = serde_json::json!({
+        "manifest_version": "1.0",
+        "name": "imported",
+        "version": "1.0.0",
+        "title": "Imported State Machines",
+        "description": "State machines imported via API",
+        "author": "api",
+        "category": "other",
+        "compatibility": {
+            "min_version": "0.1.0",
+            "max_version": null
+        },
+        "files": [],
+        "state_machines": request.state_machines,
+        "state_machine_graphs": request.visual_layouts
+    });
+
+    let manifest: ScenarioManifest = serde_json::from_value(manifest_json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if let Err(e) = manager.load_from_manifest(&manifest).await {
         error!("Failed to import state machines: {}", e);
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Set visual layouts
-    for (resource_type, layout) in request.visual_layouts {
-        manager.set_visual_layout(&resource_type, layout).await;
-    }
+    // Visual layouts are already set in the manifest, no need to set separately
 
     Ok(StatusCode::CREATED)
 }

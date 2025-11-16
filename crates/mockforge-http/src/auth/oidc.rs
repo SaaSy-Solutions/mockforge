@@ -164,7 +164,7 @@ pub struct JwkPublicKey {
 }
 
 /// OIDC state stored in AuthState
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OidcState {
     /// OIDC configuration
     pub config: OidcConfig,
@@ -205,6 +205,82 @@ impl OidcState {
             signing_keys: Arc::new(RwLock::new(signing_keys)),
         })
     }
+
+    /// Create OIDC state with default configuration for mock server
+    ///
+    /// This creates a basic OIDC configuration suitable for testing and development.
+    /// For production use, load configuration from config files or environment variables.
+    pub fn default_mock() -> Result<Self, Error> {
+        use std::env;
+
+        // Get issuer from environment or use default
+        let issuer = env::var("MOCKFORGE_OIDC_ISSUER")
+            .unwrap_or_else(|_| {
+                env::var("MOCKFORGE_BASE_URL")
+                    .unwrap_or_else(|_| "https://mockforge.example.com".to_string())
+            });
+
+        // Create default HS256 key for signing (suitable for development/testing)
+        let default_secret = env::var("MOCKFORGE_OIDC_SECRET")
+            .unwrap_or_else(|_| "mockforge-default-secret-key-change-in-production".to_string());
+
+        let default_key = JwkKey {
+            kid: "default".to_string(),
+            alg: "HS256".to_string(),
+            public_key: default_secret.clone(),
+            private_key: Some(default_secret),
+            kty: "oct".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let config = OidcConfig {
+            enabled: true,
+            issuer,
+            jwks: JwksConfig {
+                keys: vec![default_key],
+            },
+            claims: ClaimsConfig {
+                default: vec!["sub".to_string(), "iss".to_string(), "exp".to_string()],
+                custom: HashMap::new(),
+            },
+            multi_tenant: None,
+        };
+
+        Self::new(config)
+    }
+}
+
+/// Helper function to load OIDC state from configuration
+///
+/// Attempts to load OIDC configuration from:
+/// 1. Environment variables (MOCKFORGE_OIDC_CONFIG, MOCKFORGE_OIDC_ISSUER, etc.)
+/// 2. Config file (if available)
+/// 3. Default mock configuration
+///
+/// Returns None if OIDC is not configured or disabled.
+pub fn load_oidc_state() -> Option<OidcState> {
+    use std::env;
+
+    // Check if OIDC is explicitly disabled
+    if let Ok(disabled) = env::var("MOCKFORGE_OIDC_ENABLED") {
+        if disabled == "false" || disabled == "0" {
+            return None;
+        }
+    }
+
+    // Try to load from environment variable (JSON config)
+    if let Ok(config_json) = env::var("MOCKFORGE_OIDC_CONFIG") {
+        if let Ok(config) = serde_json::from_str::<OidcConfig>(&config_json) {
+            if config.enabled {
+                return OidcState::new(config).ok();
+            }
+            return None;
+        }
+    }
+
+    // Try to load from config file (future enhancement)
+    // For now, use default mock configuration if OIDC is not explicitly disabled
+    OidcState::default_mock().ok()
 }
 
 /// Get OIDC discovery document
@@ -448,7 +524,6 @@ pub fn generate_oidc_token(
             "RS512" => Some(Algorithm::RS512),
             "ES256" => Some(Algorithm::ES256),
             "ES384" => Some(Algorithm::ES384),
-            "ES512" => Some(Algorithm::ES512),
             "HS256" => Some(Algorithm::HS256),
             "HS384" => Some(Algorithm::HS384),
             "HS512" => Some(Algorithm::HS512),

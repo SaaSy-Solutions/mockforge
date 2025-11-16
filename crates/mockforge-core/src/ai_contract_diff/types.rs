@@ -62,7 +62,7 @@ pub struct Mismatch {
 }
 
 /// Types of mismatches that can be detected
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MismatchType {
     /// Missing required field in request

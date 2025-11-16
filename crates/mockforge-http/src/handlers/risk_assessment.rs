@@ -4,7 +4,7 @@
 //! creating risks, updating assessments, and tracking treatment plans.
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -23,8 +23,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::auth::types::AuthClaims;
-use crate::handlers::auth_helpers::extract_user_id_with_fallback;
+use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
 
 /// State for risk assessment handlers
 #[derive(Clone)]
@@ -105,11 +104,11 @@ pub struct RiskListResponse {
 /// POST /api/v1/security/risks
 pub async fn create_risk(
     State(state): State<RiskAssessmentState>,
+    claims: OptionalAuthClaims,
     Json(request): Json<CreateRiskRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let created_by = extract_user_id_with_fallback(claims);
+    let created_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     let mut risk = engine
@@ -276,11 +275,11 @@ pub async fn list_risks(
 pub async fn update_risk_assessment(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<UpdateRiskAssessmentRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let updated_by = extract_user_id_with_fallback(claims);
+    let updated_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     engine
@@ -324,11 +323,11 @@ pub async fn update_risk_assessment(
 pub async fn update_treatment_plan(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<UpdateTreatmentPlanRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let updated_by = extract_user_id_with_fallback(claims);
+    let updated_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     engine
@@ -378,11 +377,11 @@ pub async fn update_treatment_plan(
 pub async fn update_treatment_status(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<serde_json::Value>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let _updated_by = extract_user_id_with_fallback(claims);
+    let _updated_by = extract_user_id_with_fallback(&claims);
 
     let status_str = request
         .get("status")
@@ -420,11 +419,11 @@ pub async fn update_treatment_status(
 pub async fn set_residual_risk(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<SetResidualRiskRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let _updated_by = extract_user_id_with_fallback(claims);
+    let _updated_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     engine
@@ -449,10 +448,10 @@ pub async fn set_residual_risk(
 pub async fn review_risk(
     State(state): State<RiskAssessmentState>,
     Path(risk_id): Path<String>,
-    claims: Option<Extension<AuthClaims>>,
+    claims: OptionalAuthClaims,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let reviewed_by = extract_user_id_with_fallback(claims);
+    let reviewed_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
     engine

@@ -109,6 +109,44 @@ impl RecorderDatabase {
             .execute(&self.pool)
             .await?;
 
+        // Create sync_snapshots table for Shadow Snapshot Mode
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS sync_snapshots (
+                id TEXT PRIMARY KEY,
+                endpoint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                sync_cycle_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                before_status_code INTEGER NOT NULL,
+                after_status_code INTEGER NOT NULL,
+                before_body TEXT NOT NULL,
+                after_body TEXT NOT NULL,
+                before_headers TEXT NOT NULL,
+                after_headers TEXT NOT NULL,
+                response_time_before_ms INTEGER,
+                response_time_after_ms INTEGER,
+                changes_summary TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create indexes for sync_snapshots
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_sync_snapshots_endpoint ON sync_snapshots(endpoint, method, timestamp DESC)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_sync_snapshots_cycle ON sync_snapshots(sync_cycle_id)",
+        )
+        .execute(&self.pool)
+        .await?;
+
         debug!("Database schema initialized");
         Ok(())
     }
@@ -354,6 +392,276 @@ impl RecorderDatabase {
     pub async fn close(self) {
         self.pool.close().await;
         debug!("Recorder database connection closed");
+    }
+
+    /// Insert a sync snapshot
+    pub async fn insert_sync_snapshot(&self, snapshot: &crate::sync_snapshots::SyncSnapshot) -> Result<()> {
+        let before_headers_json = serde_json::to_string(&snapshot.before.headers)?;
+        let after_headers_json = serde_json::to_string(&snapshot.after.headers)?;
+        let before_body_encoded = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            &snapshot.before.body,
+        );
+        let after_body_encoded = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            &snapshot.after.body,
+        );
+        let changes_summary_json = serde_json::to_string(&snapshot.changes)?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO sync_snapshots (
+                id, endpoint, method, sync_cycle_id, timestamp,
+                before_status_code, after_status_code,
+                before_body, after_body,
+                before_headers, after_headers,
+                response_time_before_ms, response_time_after_ms,
+                changes_summary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&snapshot.id)
+        .bind(&snapshot.endpoint)
+        .bind(&snapshot.method)
+        .bind(&snapshot.sync_cycle_id)
+        .bind(snapshot.timestamp.to_rfc3339())
+        .bind(snapshot.before.status_code as i32)
+        .bind(snapshot.after.status_code as i32)
+        .bind(&before_body_encoded)
+        .bind(&after_body_encoded)
+        .bind(&before_headers_json)
+        .bind(&after_headers_json)
+        .bind(snapshot.response_time_before.map(|v| v as i64))
+        .bind(snapshot.response_time_after.map(|v| v as i64))
+        .bind(&changes_summary_json)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Inserted sync snapshot: {} for {} {}", snapshot.id, snapshot.method, snapshot.endpoint);
+        Ok(())
+    }
+
+    /// Get snapshots for an endpoint
+    pub async fn get_snapshots_for_endpoint(
+        &self,
+        endpoint: &str,
+        method: Option<&str>,
+        limit: Option<i32>,
+    ) -> Result<Vec<crate::sync_snapshots::SyncSnapshot>> {
+        let limit = limit.unwrap_or(100);
+
+        // If endpoint is empty, get all snapshots
+        let query = if endpoint.is_empty() {
+            sqlx::query_as::<_, SyncSnapshotRow>(
+                r#"
+                SELECT id, endpoint, method, sync_cycle_id, timestamp,
+                       before_status_code, after_status_code,
+                       before_body, after_body,
+                       before_headers, after_headers,
+                       response_time_before_ms, response_time_after_ms,
+                       changes_summary
+                FROM sync_snapshots
+                ORDER BY timestamp DESC
+                LIMIT ?
+                "#,
+            )
+            .bind(limit)
+        } else if let Some(method) = method {
+            sqlx::query_as::<_, SyncSnapshotRow>(
+                r#"
+                SELECT id, endpoint, method, sync_cycle_id, timestamp,
+                       before_status_code, after_status_code,
+                       before_body, after_body,
+                       before_headers, after_headers,
+                       response_time_before_ms, response_time_after_ms,
+                       changes_summary
+                FROM sync_snapshots
+                WHERE endpoint = ? AND method = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                "#,
+            )
+            .bind(endpoint)
+            .bind(method)
+            .bind(limit)
+        } else {
+            sqlx::query_as::<_, SyncSnapshotRow>(
+                r#"
+                SELECT id, endpoint, method, sync_cycle_id, timestamp,
+                       before_status_code, after_status_code,
+                       before_body, after_body,
+                       before_headers, after_headers,
+                       response_time_before_ms, response_time_after_ms,
+                       changes_summary
+                FROM sync_snapshots
+                WHERE endpoint = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                "#,
+            )
+            .bind(endpoint)
+            .bind(limit)
+        };
+
+        let rows = query.fetch_all(&self.pool).await?;
+
+        let mut snapshots = Vec::new();
+        for row in rows {
+            snapshots.push(row.to_snapshot()?);
+        }
+
+        Ok(snapshots)
+    }
+
+    /// Get snapshots by sync cycle ID
+    pub async fn get_snapshots_by_cycle(
+        &self,
+        sync_cycle_id: &str,
+    ) -> Result<Vec<crate::sync_snapshots::SyncSnapshot>> {
+        let rows = sqlx::query_as::<_, SyncSnapshotRow>(
+            r#"
+            SELECT id, endpoint, method, sync_cycle_id, timestamp,
+                   before_status_code, after_status_code,
+                   before_body, after_body,
+                   before_headers, after_headers,
+                   response_time_before_ms, response_time_after_ms,
+                   changes_summary
+            FROM sync_snapshots
+            WHERE sync_cycle_id = ?
+            ORDER BY timestamp DESC
+            "#,
+        )
+        .bind(sync_cycle_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut snapshots = Vec::new();
+        for row in rows {
+            snapshots.push(row.to_snapshot()?);
+        }
+
+        Ok(snapshots)
+    }
+
+    /// Delete old snapshots (retention policy)
+    pub async fn delete_old_snapshots(&self, keep_per_endpoint: i32) -> Result<u64> {
+        // This is a simplified retention policy - keep the most recent N snapshots per endpoint+method
+        // SQLite doesn't support window functions well, so we'll use a subquery approach
+        let result = sqlx::query(
+            r#"
+            DELETE FROM sync_snapshots
+            WHERE id NOT IN (
+                SELECT id FROM sync_snapshots
+                ORDER BY timestamp DESC
+                LIMIT (
+                    SELECT COUNT(*) FROM (
+                        SELECT DISTINCT endpoint || '|' || method FROM sync_snapshots
+                    )
+                ) * ?
+            )
+            "#,
+        )
+        .bind(keep_per_endpoint)
+        .execute(&self.pool)
+        .await?;
+
+        info!("Deleted {} old snapshots (kept {} per endpoint)", result.rows_affected(), keep_per_endpoint);
+        Ok(result.rows_affected())
+    }
+}
+
+/// Internal row representation for sync snapshots
+#[derive(Debug)]
+struct SyncSnapshotRow {
+    id: String,
+    endpoint: String,
+    method: String,
+    sync_cycle_id: String,
+    timestamp: String,
+    before_status_code: i32,
+    after_status_code: i32,
+    before_body: String,
+    after_body: String,
+    before_headers: String,
+    after_headers: String,
+    response_time_before_ms: Option<i64>,
+    response_time_after_ms: Option<i64>,
+    changes_summary: String,
+}
+
+impl SyncSnapshotRow {
+    fn to_snapshot(&self) -> Result<crate::sync_snapshots::SyncSnapshot> {
+        use crate::sync_snapshots::{SnapshotData, SyncSnapshot};
+        use std::collections::HashMap;
+
+        let timestamp = chrono::DateTime::parse_from_rfc3339(&self.timestamp)
+            .map_err(|e| crate::RecorderError::InvalidFilter(format!("Invalid timestamp: {}", e)))?
+            .with_timezone(&chrono::Utc);
+
+        let before_headers: HashMap<String, String> = serde_json::from_str(&self.before_headers)?;
+        let after_headers: HashMap<String, String> = serde_json::from_str(&self.after_headers)?;
+        let changes: crate::diff::ComparisonResult = serde_json::from_str(&self.changes_summary)?;
+
+        let before_body = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &self.before_body,
+        )
+        .map_err(|e| crate::RecorderError::InvalidFilter(format!("Invalid base64: {}", e)))?;
+
+        let after_body = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &self.after_body,
+        )
+        .map_err(|e| crate::RecorderError::InvalidFilter(format!("Invalid base64: {}", e)))?;
+
+        let before_body_json = serde_json::from_slice(&before_body).ok();
+        let after_body_json = serde_json::from_slice(&after_body).ok();
+
+        Ok(SyncSnapshot {
+            id: self.id.clone(),
+            endpoint: self.endpoint.clone(),
+            method: self.method.clone(),
+            sync_cycle_id: self.sync_cycle_id.clone(),
+            timestamp,
+            before: SnapshotData {
+                status_code: self.before_status_code as u16,
+                headers: before_headers,
+                body: before_body,
+                body_json: before_body_json,
+            },
+            after: SnapshotData {
+                status_code: self.after_status_code as u16,
+                headers: after_headers,
+                body: after_body,
+                body_json: after_body_json,
+            },
+            changes,
+            response_time_before: self.response_time_before_ms.map(|v| v as u64),
+            response_time_after: self.response_time_after_ms.map(|v| v as u64),
+        })
+    }
+}
+
+impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for SyncSnapshotRow {
+    fn from_row(row: &'r sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        use sqlx::Row;
+
+        Ok(SyncSnapshotRow {
+            id: row.try_get("id")?,
+            endpoint: row.try_get("endpoint")?,
+            method: row.try_get("method")?,
+            sync_cycle_id: row.try_get("sync_cycle_id")?,
+            timestamp: row.try_get("timestamp")?,
+            before_status_code: row.try_get("before_status_code")?,
+            after_status_code: row.try_get("after_status_code")?,
+            before_body: row.try_get("before_body")?,
+            after_body: row.try_get("after_body")?,
+            before_headers: row.try_get("before_headers")?,
+            after_headers: row.try_get("after_headers")?,
+            response_time_before_ms: row.try_get("response_time_before_ms")?,
+            response_time_after_ms: row.try_get("response_time_after_ms")?,
+            changes_summary: row.try_get("changes_summary")?,
+        })
     }
 }
 

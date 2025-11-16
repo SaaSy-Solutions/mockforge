@@ -174,6 +174,7 @@ pub async fn rotate_keys(
         .manager
         .key_rotation
         .rotate_key(request.new_key_id.clone())
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(serde_json::json!({

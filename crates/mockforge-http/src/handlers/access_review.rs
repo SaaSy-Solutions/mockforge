@@ -7,7 +7,7 @@
 //! - Starting reviews
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -25,8 +25,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-use crate::auth::types::AuthClaims;
-use crate::handlers::auth_helpers::extract_user_id_with_fallback;
+use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
 
 /// State for access review handlers
 #[derive(Clone)]
@@ -160,13 +159,13 @@ pub async fn get_review(
 pub async fn approve_access(
     State(state): State<AccessReviewState>,
     Path(review_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<ApproveAccessRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<ReviewActionResponse>, StatusCode> {
     let mut service = state.service.write().await;
 
     // Extract approver ID from authentication claims, or use default for mock server
-    let approver_id = extract_user_id_with_fallback(claims);
+    let approver_id = extract_user_id_with_fallback(&claims);
 
     match service.approve_user_access(&review_id, request.user_id, approver_id, request.justification).await {
         Ok(()) => {
@@ -216,13 +215,13 @@ pub async fn approve_access(
 pub async fn revoke_access(
     State(state): State<AccessReviewState>,
     Path(review_id): Path<String>,
+    claims: OptionalAuthClaims,
     Json(request): Json<RevokeAccessRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<ReviewActionResponse>, StatusCode> {
     let mut service = state.service.write().await;
 
     // Extract revoker ID from authentication claims, or use default for mock server
-    let revoker_id = extract_user_id_with_fallback(claims);
+    let revoker_id = extract_user_id_with_fallback(&claims);
 
     match service.revoke_user_access(&review_id, request.user_id, revoker_id, request.reason.clone()).await {
         Ok(()) => {

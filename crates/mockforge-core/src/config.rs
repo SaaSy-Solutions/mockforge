@@ -6,6 +6,51 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
 
+/// Incident management configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct IncidentConfig {
+    /// Storage configuration
+    pub storage: IncidentStorageConfig,
+    /// External integrations configuration
+    pub external_integrations: crate::incidents::integrations::ExternalIntegrationConfig,
+    /// Webhook configurations
+    pub webhooks: Vec<crate::incidents::integrations::WebhookConfig>,
+}
+
+/// Incident storage configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IncidentStorageConfig {
+    /// Use in-memory cache (default: true)
+    pub use_cache: bool,
+    /// Use database persistence (default: true)
+    pub use_database: bool,
+    /// Retention period for resolved incidents (days)
+    pub retention_days: u32,
+}
+
+impl Default for IncidentStorageConfig {
+    fn default() -> Self {
+        Self {
+            use_cache: true,
+            use_database: true,
+            retention_days: 90,
+        }
+    }
+}
+
+/// Consumer contracts configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ConsumerContractsConfig {
+    /// Whether consumer contracts are enabled
+    pub enabled: bool,
+    /// Auto-register consumers from requests
+    pub auto_register: bool,
+    /// Track field usage
+    pub track_usage: bool,
+}
+
 /// Authentication configuration for HTTP requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -269,6 +314,9 @@ pub struct DeceptiveDeployConfig {
     pub custom_domain: Option<String>,
     /// Auto-start tunnel when deploying
     pub auto_tunnel: bool,
+    /// Deceptive canary mode configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canary: Option<crate::deceptive_canary::DeceptiveCanaryConfig>,
 }
 
 impl Default for DeceptiveDeployConfig {
@@ -281,6 +329,7 @@ impl Default for DeceptiveDeployConfig {
             oauth: None,
             custom_domain: None,
             auto_tunnel: false,
+            canary: None,
         }
     }
 }
@@ -317,6 +366,7 @@ impl DeceptiveDeployConfig {
             oauth: None, // Configured separately
             custom_domain: None,
             auto_tunnel: true,
+            canary: None,
         }
     }
 }
@@ -516,6 +566,18 @@ pub struct ServerConfig {
     /// Security monitoring and SIEM configuration
     #[serde(default)]
     pub security: SecurityConfig,
+    /// Drift budget and contract monitoring configuration
+    #[serde(default)]
+    pub drift_budget: crate::contract_drift::DriftBudgetConfig,
+    /// Incident management configuration
+    #[serde(default)]
+    pub incidents: IncidentConfig,
+    /// PR generation configuration
+    #[serde(default)]
+    pub pr_generation: crate::pr_generation::PRGenerationConfig,
+    /// Consumer contracts configuration
+    #[serde(default)]
+    pub consumer_contracts: ConsumerContractsConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings

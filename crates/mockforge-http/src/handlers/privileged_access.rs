@@ -4,7 +4,7 @@
 //! monitoring privileged actions, and managing privileged sessions.
 
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Path, State},
     http::StatusCode,
     response::Json,
 };
@@ -18,8 +18,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::auth::types::AuthClaims;
-use crate::handlers::auth_helpers::extract_user_id_with_fallback;
+use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
 
 /// State for privileged access handlers
 #[derive(Clone)]
@@ -90,11 +89,11 @@ pub struct PrivilegedActionSummary {
 /// POST /api/v1/security/privileged-access/request
 pub async fn request_privileged_access(
     State(state): State<PrivilegedAccessState>,
+    claims: OptionalAuthClaims,
     Json(request): Json<CreatePrivilegedAccessRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<PrivilegedAccessRequestResponse>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let user_id = extract_user_id_with_fallback(claims);
+    let user_id = extract_user_id_with_fallback(&claims);
 
     let manager = state.manager.read().await;
     let access_request = manager
@@ -146,10 +145,10 @@ pub async fn request_privileged_access(
 pub async fn approve_manager(
     State(state): State<PrivilegedAccessState>,
     Path(request_id): Path<Uuid>,
-    claims: Option<Extension<AuthClaims>>,
+    claims: OptionalAuthClaims,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract approver ID from authentication claims, or use default for mock server
-    let approver_id = extract_user_id_with_fallback(claims);
+    let approver_id = extract_user_id_with_fallback(&claims);
 
     let manager = state.manager.write().await;
     manager
@@ -193,15 +192,15 @@ pub async fn approve_manager(
 pub async fn approve_security(
     State(state): State<PrivilegedAccessState>,
     Path(request_id): Path<Uuid>,
+    claims: OptionalAuthClaims,
     Json(request): Json<ApproveRequest>,
-    claims: Option<Extension<AuthClaims>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if !request.approved {
         return Err(StatusCode::BAD_REQUEST);
     }
 
     // Extract approver ID from authentication claims, or use default for mock server
-    let approver_id = extract_user_id_with_fallback(claims);
+    let approver_id = extract_user_id_with_fallback(&claims);
 
     let expiration_days = request.expiration_days.unwrap_or(365);
 

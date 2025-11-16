@@ -121,10 +121,12 @@ pub async fn authorize(
     // Check if consent is required (simplified - in production, check user consent)
     // For now, auto-approve and generate authorization code
 
-    // Generate authorization code
-    let mut rng = rand::thread_rng();
-    let code_bytes: [u8; 32] = rng.gen();
-    let auth_code = hex::encode(code_bytes);
+    // Generate authorization code before any await points (ThreadRng is not Send)
+    let auth_code = {
+        let mut rng = rand::thread_rng();
+        let code_bytes: [u8; 32] = rng.gen();
+        hex::encode(code_bytes)
+    };
 
     // Parse scopes
     let scopes = params
@@ -272,7 +274,8 @@ async fn handle_client_credentials_grant(
 
     let mut additional_claims = HashMap::new();
     additional_claims.insert("client_id".to_string(), serde_json::json!(client_id));
-    if let Some(scope) = request.scope {
+    let scope_clone = request.scope.clone();
+    if let Some(ref scope) = request.scope {
         additional_claims.insert("scope".to_string(), serde_json::json!(scope));
     }
 
@@ -290,7 +293,7 @@ async fn handle_client_credentials_grant(
         token_type: "Bearer".to_string(),
         expires_in: 3600,
         refresh_token: None,
-        scope: request.scope,
+        scope: scope_clone,
         id_token: None,
     }))
 }
@@ -317,7 +320,8 @@ async fn handle_refresh_token_grant(
 
     let mut additional_claims = HashMap::new();
     additional_claims.insert("client_id".to_string(), json!(client_id));
-    if let Some(scope) = request.scope {
+    let scope_clone = request.scope.clone();
+    if let Some(ref scope) = request.scope {
         additional_claims.insert("scope".to_string(), json!(scope));
     }
 
@@ -338,7 +342,7 @@ async fn handle_refresh_token_grant(
         token_type: "Bearer".to_string(),
         expires_in: 3600,
         refresh_token: Some(refresh_token),
-        scope: request.scope,
+        scope: scope_clone,
         id_token: None,
     }))
 }

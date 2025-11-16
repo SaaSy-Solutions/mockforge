@@ -33,6 +33,7 @@ tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 mockforge-smtp = { version = "0.2.0", path = "../mockforge-smtp", optional = true }
+mockforge-chaos = { path = "../mockforge-chaos" }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -52,8 +53,9 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = "0.2.9"
+mockforge-core = { path = "../mockforge-core" }
 mockforge-data = "0.2.9"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"], optional = true }
 mockforge-observability = "0.2.9"
 mockforge-recorder = "0.2.9"
 mockforge-scenarios = "0.2.9"
@@ -72,6 +74,8 @@ data-faker = []
 smtp = ["mockforge-smtp"]
 # Enable MQTT integration
 mqtt = ["mockforge-mqtt"]
+# Enable database support (PostgreSQL)
+database = ["sqlx"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
