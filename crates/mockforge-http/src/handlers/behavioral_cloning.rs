@@ -198,6 +198,28 @@ pub async fn build_probability_model(
         }
     }
 
+    // Extract request and response payloads
+    let mut request_payloads = Vec::new();
+    let mut response_payloads = Vec::new();
+
+    for (req, resp_opt) in &exchanges {
+        // Parse request body if available
+        if let Some(ref body) = req.body {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+                request_payloads.push(json);
+            }
+        }
+
+        // Parse response body if available
+        if let Some(ref resp) = resp_opt {
+            if let Some(ref body) = resp.body {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+                    response_payloads.push(json);
+                }
+            }
+        }
+    }
+
     // Build probability model
     let model = ProbabilisticModel::build_probability_model_from_data(
         &request.endpoint,
@@ -205,6 +227,8 @@ pub async fn build_probability_model(
         &status_codes,
         &latencies_ms,
         &error_responses,
+        &request_payloads,
+        &response_payloads,
     );
 
     // Store model in database
@@ -620,4 +644,3 @@ pub fn behavioral_cloning_router(state: BehavioralCloningState) -> axum::Router 
         )
         .with_state(state)
 }
-

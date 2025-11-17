@@ -8,8 +8,38 @@ use crate::{
     RouteChaosInjector,
 };
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+/// Trait for behavioral scenario replay engines
+#[async_trait]
+pub trait BehavioralScenarioReplay: Send + Sync {
+    /// Try to replay a request against active scenarios
+    async fn try_replay(
+        &self,
+        method: &Method,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: Option<&[u8]>,
+        session_id: Option<&str>,
+    ) -> Result<Option<BehavioralReplayResponse>>;
+}
+
+/// Response from behavioral scenario replay
+#[derive(Debug, Clone)]
+pub struct BehavioralReplayResponse {
+    /// HTTP status code
+    pub status_code: u16,
+    /// Response headers
+    pub headers: HashMap<String, String>,
+    /// Response body
+    pub body: Vec<u8>,
+    /// Timing delay in milliseconds
+    pub timing_ms: Option<u64>,
+    /// Content type
+    pub content_type: String,
+}
 
 /// Priority-based HTTP request handler
 pub struct PriorityHttpHandler {
@@ -17,6 +47,8 @@ pub struct PriorityHttpHandler {
     custom_fixture_loader: Option<Arc<CustomFixtureLoader>>,
     /// Record/replay handler
     record_replay: RecordReplayHandler,
+    /// Behavioral scenario replay engine (for journey-level simulations)
+    behavioral_scenario_replay: Option<Arc<dyn BehavioralScenarioReplay + Send + Sync>>,
     /// Stateful response handler
     stateful_handler: Option<Arc<StatefulResponseHandler>>,
     /// Per-route chaos injector (fault injection and latency)
@@ -68,6 +100,7 @@ impl PriorityHttpHandler {
         Self {
             custom_fixture_loader: None,
             record_replay,
+            behavioral_scenario_replay: None,
             stateful_handler: None,
             route_chaos_injector: None,
             failure_injector,
@@ -89,6 +122,7 @@ impl PriorityHttpHandler {
         Self {
             custom_fixture_loader: None,
             record_replay,
+            behavioral_scenario_replay: None,
             stateful_handler: None,
             route_chaos_injector: None,
             failure_injector,
@@ -120,6 +154,15 @@ impl PriorityHttpHandler {
     /// Set Reality Continuum engine
     pub fn with_continuum_engine(mut self, engine: Arc<RealityContinuumEngine>) -> Self {
         self.continuum_engine = Some(engine);
+        self
+    }
+
+    /// Set behavioral scenario replay engine
+    pub fn with_behavioral_scenario_replay(
+        mut self,
+        replay_engine: Arc<dyn BehavioralScenarioReplay + Send + Sync>,
+    ) -> Self {
+        self.behavioral_scenario_replay = Some(replay_engine);
         self
     }
 
@@ -192,6 +235,37 @@ impl PriorityHttpHandler {
                 body: recorded_request.response_body.into_bytes(),
                 content_type,
             });
+        }
+
+        // 1.5. BEHAVIORAL SCENARIO REPLAY: Check for active behavioral scenarios
+        if let Some(ref scenario_replay) = self.behavioral_scenario_replay {
+            // Extract session ID from headers or cookies
+            let session_id = headers
+                .get("x-session-id")
+                .or_else(|| headers.get("session-id"))
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+
+            if let Ok(Some(replay_response)) = scenario_replay
+                .try_replay(method, uri, headers, body, session_id.as_deref())
+                .await
+            {
+                // Apply timing delay if specified
+                if let Some(timing_ms) = replay_response.timing_ms {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(timing_ms)).await;
+                }
+                return Ok(PriorityResponse {
+                    source: ResponseSource::new(
+                        ResponsePriority::Replay,
+                        "behavioral_scenario".to_string(),
+                    )
+                    .with_metadata("replay_type".to_string(), "scenario".to_string()),
+                    status_code: replay_response.status_code,
+                    headers: replay_response.headers,
+                    body: replay_response.body,
+                    content_type: replay_response.content_type,
+                });
+            }
         }
 
         // 2. STATEFUL: Check for stateful response handling

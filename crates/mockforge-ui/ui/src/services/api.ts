@@ -2401,6 +2401,193 @@ class ProxyApiService {
       snippets: Record<string, string>;
     }>;
   }
+
+  // ==================== BEHAVIORAL CLONING API METHODS ====================
+
+  /**
+   * List all recorded flows
+   */
+  async getFlows(params?: { limit?: number; db_path?: string }): Promise<{
+    flows: import('../types').Flow[];
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows?${queryParams.toString()}`
+      : '/__mockforge/flows';
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { flows: import('../types').Flow[]; total: number } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch flows');
+    }
+    return response.data;
+  }
+
+  /**
+   * Get flow details with timeline
+   */
+  async getFlow(flowId: string, params?: { db_path?: string }): Promise<import('../types').Flow> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: import('../types').Flow | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * Tag a flow
+   */
+  async tagFlow(
+    flowId: string,
+    request: import('../types').TagFlowRequest,
+    params?: { db_path?: string }
+  ): Promise<{ message: string; flow_id: string }> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}/tag?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}/tag`;
+    const response = await this.fetchJson(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as {
+      success: boolean;
+      data: { message: string; flow_id: string } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to tag flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * Compile flow to scenario
+   */
+  async compileFlow(
+    flowId: string,
+    request: import('../types').CompileFlowRequest,
+    params?: { db_path?: string }
+  ): Promise<import('../types').CompileFlowResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}/compile?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}/compile`;
+    const response = await this.fetchJson(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as {
+      success: boolean;
+      data: import('../types').CompileFlowResponse | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to compile flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * List all scenarios
+   */
+  async getScenarios(params?: { limit?: number; db_path?: string }): Promise<{
+    scenarios: import('../types').Scenario[];
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/scenarios?${queryParams.toString()}`
+      : '/__mockforge/scenarios';
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { scenarios: import('../types').Scenario[]; total: number } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch scenarios');
+    }
+    return response.data;
+  }
+
+  /**
+   * Get scenario details
+   */
+  async getScenario(scenarioId: string, params?: { db_path?: string }): Promise<import('../types').ScenarioDetail> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/scenarios/${scenarioId}?${queryParams.toString()}`
+      : `/__mockforge/scenarios/${scenarioId}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: import('../types').ScenarioDetail | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch scenario');
+    }
+    return response.data;
+  }
+
+  /**
+   * Export scenario
+   */
+  async exportScenario(
+    scenarioId: string,
+    format: 'yaml' | 'json' = 'yaml',
+    params?: { db_path?: string }
+  ): Promise<string> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('format', format);
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = `/__mockforge/scenarios/${scenarioId}/export?${queryParams.toString()}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { content: string } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to export scenario');
+    }
+    return response.data.content;
+  }
 }
 
 export const apiService = new ApiService();

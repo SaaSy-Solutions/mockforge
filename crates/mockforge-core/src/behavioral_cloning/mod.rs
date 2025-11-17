@@ -44,9 +44,8 @@ pub mod types;
 
 pub use edge_amplifier::EdgeAmplifier;
 pub use probabilistic_model::ProbabilisticModel;
-pub use sequence_learner::SequenceLearner;
+pub use sequence_learner::{SequenceLearner, TraceQueryProvider, TraceRequest};
 pub use types::{
     AmplificationScope, BehavioralSequence, EdgeAmplificationConfig, EndpointProbabilityModel,
     ErrorPattern, LatencyDistribution, PayloadVariation, SequenceStep,
 };
-

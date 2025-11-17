@@ -6,7 +6,36 @@
 use crate::behavioral_cloning::types::BehavioralSequence;
 use crate::scenarios::ScenarioDefinition;
 use crate::Result;
+use async_trait::async_trait;
 use std::collections::HashMap;
+
+/// Trait for querying trace data for sequence learning
+#[async_trait]
+pub trait TraceQueryProvider: Send + Sync {
+    /// Get requests grouped by trace_id, ordered by timestamp
+    ///
+    /// Returns a vector of (trace_id, requests) tuples where requests
+    /// are ordered by timestamp within each trace.
+    async fn get_requests_by_trace(
+        &self,
+        min_requests_per_trace: Option<usize>,
+    ) -> Result<Vec<(String, Vec<TraceRequest>)>>;
+}
+
+/// A request in a trace for sequence learning
+#[derive(Debug, Clone)]
+pub struct TraceRequest {
+    /// Request ID
+    pub id: String,
+    /// HTTP method
+    pub method: String,
+    /// Request path
+    pub path: String,
+    /// Timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Duration in milliseconds (time until next request in sequence)
+    pub duration_ms: Option<u64>,
+}
 
 /// Sequence learner for discovering behavioral patterns
 pub struct SequenceLearner;
@@ -17,20 +46,105 @@ impl SequenceLearner {
     /// Uses trace_id/span_id to find correlated request sequences
     /// and identifies common patterns.
     ///
-    /// Note: This is a placeholder implementation. Full implementation will
-    /// query the database and analyze trace correlations.
+    /// This implementation:
+    /// 1. Queries database for requests grouped by trace_id
+    /// 2. Orders by timestamp within each trace
+    /// 3. Identifies common subsequences (e.g., login → list → detail)
+    /// 4. Calculates transition probabilities between steps
+    /// 5. Returns reusable behavioral sequences
     pub async fn discover_sequences_from_traces(
-        _database: &(dyn std::any::Any + Send + Sync),
+        provider: &dyn TraceQueryProvider,
+        min_frequency: f64,
+        min_requests_per_trace: Option<usize>,
     ) -> Result<Vec<BehavioralSequence>> {
-        // TODO: Implement sequence discovery
-        // 1. Query database for requests grouped by trace_id
-        // 2. Order by timestamp within each trace
-        // 3. Identify common subsequences (e.g., login → list → detail)
-        // 4. Calculate transition probabilities between steps
-        // 5. Store as reusable behavioral scenarios
+        // Query database for requests grouped by trace_id
+        let trace_groups = provider
+            .get_requests_by_trace(min_requests_per_trace)
+            .await?;
 
-        // Placeholder implementation
-        Ok(Vec::new())
+        if trace_groups.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Convert trace groups to sequences of (endpoint, method, delay) tuples
+        let mut sequences: Vec<Vec<(String, String, Option<u64>)>> = Vec::new();
+        let mut trace_ids: Vec<String> = Vec::new();
+
+        for (trace_id, requests) in trace_groups {
+            trace_ids.push(trace_id.clone());
+            let mut sequence: Vec<(String, String, Option<u64>)> = Vec::new();
+
+            // Sort requests by timestamp (should already be sorted, but ensure)
+            let mut sorted_requests = requests;
+            sorted_requests.sort_by_key(|r| r.timestamp);
+
+            // Build sequence with delays between requests
+            for (idx, request) in sorted_requests.iter().enumerate() {
+                let delay = if idx > 0 {
+                    let prev_timestamp = sorted_requests[idx - 1].timestamp;
+                    let duration = request
+                        .timestamp
+                        .signed_duration_since(prev_timestamp)
+                        .num_milliseconds();
+                    if duration > 0 {
+                        Some(duration as u64)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                sequence.push((
+                    request.path.clone(),
+                    request.method.clone(),
+                    delay,
+                ));
+            }
+
+            if !sequence.is_empty() {
+                sequences.push(sequence);
+            }
+        }
+
+        // Use existing learn_sequence_pattern to identify common patterns
+        // This will match sequences and group them, but we need to track which trace_ids
+        // contributed to each learned sequence
+        let learned_sequences = Self::learn_sequence_pattern(&sequences, min_frequency)?;
+
+        // Map learned sequences back to trace IDs by matching patterns
+        let mut result = Vec::new();
+        for mut learned_seq in learned_sequences {
+            // Find all trace IDs that match this learned sequence pattern
+            let mut contributing_traces = Vec::new();
+            for (trace_idx, sequence) in sequences.iter().enumerate() {
+                if trace_idx < trace_ids.len() {
+                    // Check if this sequence matches the learned pattern
+                    if sequence.len() == learned_seq.steps.len() {
+                        let mut matches = true;
+                        for (step_idx, step) in learned_seq.steps.iter().enumerate() {
+                            if step_idx < sequence.len() {
+                                let (path, method, _) = &sequence[step_idx];
+                                if step.endpoint != *path || step.method != *method {
+                                    matches = false;
+                                    break;
+                                }
+                            } else {
+                                matches = false;
+                                break;
+                            }
+                        }
+                        if matches {
+                            contributing_traces.push(trace_ids[trace_idx].clone());
+                        }
+                    }
+                }
+            }
+            learned_seq.learned_from = contributing_traces;
+            result.push(learned_seq);
+        }
+
+        Ok(result)
     }
 
     /// Learn sequence pattern from a set of request sequences
@@ -298,4 +412,3 @@ impl SequenceLearner {
         }
     }
 }
-

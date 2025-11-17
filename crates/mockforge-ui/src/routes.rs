@@ -276,6 +276,14 @@ pub fn create_admin_router(
         .route("/__mockforge/community/learning/resources", get(community::get_learning_resources))
         .route("/__mockforge/community/learning/resources/{id}", get(community::get_learning_resource))
         .route("/__mockforge/community/learning/categories", get(community::get_learning_categories))
+        // Behavioral cloning / flow management routes
+        .route("/__mockforge/flows", get(behavioral_cloning::get_flows))
+        .route("/__mockforge/flows/{id}", get(behavioral_cloning::get_flow))
+        .route("/__mockforge/flows/{id}/tag", axum::routing::put(behavioral_cloning::tag_flow))
+        .route("/__mockforge/flows/{id}/compile", post(behavioral_cloning::compile_flow))
+        .route("/__mockforge/scenarios", get(behavioral_cloning::get_scenarios))
+        .route("/__mockforge/scenarios/{id}", get(behavioral_cloning::get_scenario))
+        .route("/__mockforge/scenarios/{id}/export", get(behavioral_cloning::export_scenario))
         // Health check endpoints for Kubernetes probes
         .route("/health/live", get(health::liveness_probe))
         .route("/health/ready", get(health::readiness_probe))

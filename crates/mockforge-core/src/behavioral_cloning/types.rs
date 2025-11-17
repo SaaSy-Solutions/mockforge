@@ -63,6 +63,9 @@ pub struct EndpointProbabilityModel {
     pub sample_count: u64,
     /// Last update timestamp
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Original error pattern probabilities before amplification (for restoration)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_error_probabilities: Option<HashMap<String, f64>>,
 }
 
 /// Latency distribution statistics
@@ -277,4 +280,3 @@ impl ErrorPattern {
         self
     }
 }
-

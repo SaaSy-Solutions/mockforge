@@ -36,12 +36,23 @@ impl EdgeAmplifier {
     ///
     /// Increases the probability of rare patterns and normalizes
     /// the remaining probabilities to sum to 1.0.
+    ///
+    /// Stores original probabilities before amplification for later restoration.
     pub fn apply_amplification(
         model: &mut EndpointProbabilityModel,
         config: &EdgeAmplificationConfig,
     ) -> Result<()> {
         if !config.enabled {
             return Ok(());
+        }
+
+        // Store original probabilities if not already stored
+        if model.original_error_probabilities.is_none() {
+            let mut original = std::collections::HashMap::new();
+            for pattern in &model.error_patterns {
+                original.insert(pattern.error_type.clone(), pattern.probability);
+            }
+            model.original_error_probabilities = Some(original);
         }
 
         // Identify rare patterns
@@ -113,12 +124,28 @@ impl EdgeAmplifier {
 
     /// Restore original probabilities (before amplification)
     ///
-    /// This would require storing original probabilities separately.
-    /// For now, this is a placeholder that does nothing.
-    pub fn restore_original(_model: &mut EndpointProbabilityModel) -> Result<()> {
-        // TODO: Implement restoration of original probabilities
-        // This would require storing original probabilities before amplification
-        // For now, this is a no-op
+    /// Restores the error pattern probabilities to their values before
+    /// amplification was applied. Requires that original probabilities
+    /// were stored during amplification.
+    pub fn restore_original(model: &mut EndpointProbabilityModel) -> Result<()> {
+        let original_probs = match &model.original_error_probabilities {
+            Some(probs) => probs,
+            None => {
+                // No original probabilities stored - nothing to restore
+                return Ok(());
+            }
+        };
+
+        // Restore each pattern's probability from the stored original
+        for pattern in &mut model.error_patterns {
+            if let Some(&original_prob) = original_probs.get(&pattern.error_type) {
+                pattern.probability = original_prob;
+            }
+        }
+
+        // Clear the stored original probabilities after restoration
+        model.original_error_probabilities = None;
+
         Ok(())
     }
 }
@@ -128,4 +155,3 @@ impl Default for EdgeAmplifier {
         Self::new()
     }
 }
-

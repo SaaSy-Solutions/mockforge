@@ -23,6 +23,8 @@ impl ProbabilisticModel {
         status_codes: &[u16],
         latencies_ms: &[u64],
         error_responses: &[(u16, serde_json::Value)],
+        request_payloads: &[serde_json::Value],
+        response_payloads: &[serde_json::Value],
     ) -> EndpointProbabilityModel {
         let sample_count = status_codes.len().max(latencies_ms.len()) as u64;
 
@@ -96,15 +98,157 @@ impl ProbabilisticModel {
             }
         }
 
+        // Detect payload variations
+        let payload_variations = Self::detect_payload_variations(
+            request_payloads,
+            response_payloads,
+            status_codes,
+        );
+
         EndpointProbabilityModel {
             endpoint: endpoint.to_string(),
             method: method.to_string(),
             status_code_distribution,
             latency_distribution,
             error_patterns,
-            payload_variations: Vec::new(), // TODO: Implement payload variation detection
+            payload_variations,
             sample_count,
             updated_at: chrono::Utc::now(),
+            original_error_probabilities: None,
+        }
+    }
+
+    /// Detect payload variations from observed request/response bodies
+    ///
+    /// Groups similar payloads and calculates their probabilities.
+    /// Uses structural similarity (JSON structure) rather than exact matching.
+    fn detect_payload_variations(
+        request_payloads: &[serde_json::Value],
+        response_payloads: &[serde_json::Value],
+        status_codes: &[u16],
+    ) -> Vec<crate::behavioral_cloning::types::PayloadVariation> {
+        use crate::behavioral_cloning::types::PayloadVariation;
+        use std::collections::HashMap;
+
+        if response_payloads.is_empty() && request_payloads.is_empty() {
+            return Vec::new();
+        }
+
+        // Group response payloads by status code and structure
+        let mut variation_groups: HashMap<String, (usize, serde_json::Value, Option<u16>)> =
+            HashMap::new();
+
+        // Process response payloads (grouped by status code)
+        for (idx, payload) in response_payloads.iter().enumerate() {
+            let status_code = if idx < status_codes.len() {
+                Some(status_codes[idx])
+            } else {
+                None
+            };
+
+            // Create a structural signature (normalized JSON structure)
+            let signature = Self::payload_signature(payload);
+            let key = if let Some(code) = status_code {
+                format!("{}:{}", code, signature)
+            } else {
+                signature.clone()
+            };
+
+            let entry = variation_groups.entry(key).or_insert_with(|| {
+                (0, payload.clone(), status_code)
+            });
+            entry.0 += 1;
+        }
+
+        // Process request payloads (if provided)
+        for payload in request_payloads {
+            let signature = Self::payload_signature(payload);
+            let key = format!("request:{}", signature);
+
+            let entry = variation_groups.entry(key).or_insert_with(|| {
+                (0, payload.clone(), None)
+            });
+            entry.0 += 1;
+        }
+
+        // Convert groups to PayloadVariation structs
+        let total_samples = variation_groups.values().map(|(count, _, _)| *count).sum::<usize>() as f64;
+        if total_samples == 0.0 {
+            return Vec::new();
+        }
+
+        let mut variations = Vec::new();
+        for (idx, (key, (count, sample, status_code))) in variation_groups.into_iter().enumerate() {
+            let probability = count as f64 / total_samples;
+            let variation_id = format!("var_{}", idx);
+
+            let mut variation = PayloadVariation {
+                id: variation_id,
+                probability,
+                sample_payload: sample,
+                conditions: None,
+            };
+
+            // Add status code as a condition if present
+            if let Some(code) = status_code {
+                let mut conditions = HashMap::new();
+                conditions.insert("status_code".to_string(), code.to_string());
+                variation.conditions = Some(conditions);
+            }
+
+            variations.push(variation);
+        }
+
+        // Sort by probability (descending)
+        variations.sort_by(|a, b| b.probability.partial_cmp(&a.probability).unwrap_or(std::cmp::Ordering::Equal));
+
+        variations
+    }
+
+    /// Create a structural signature for a JSON payload
+    ///
+    /// Normalizes the payload to show only structure (keys, types) without values.
+    /// This allows grouping similar payloads together.
+    fn payload_signature(payload: &serde_json::Value) -> String {
+        match payload {
+            serde_json::Value::Object(map) => {
+                let mut keys: Vec<String> = map.keys().cloned().collect();
+                keys.sort();
+                let mut sig_parts = Vec::new();
+                for key in keys {
+                    if let Some(value) = map.get(&key) {
+                        let value_type = match value {
+                            serde_json::Value::Null => "null",
+                            serde_json::Value::Bool(_) => "bool",
+                            serde_json::Value::Number(_) => "number",
+                            serde_json::Value::String(_) => "string",
+                            serde_json::Value::Array(_) => "array",
+                            serde_json::Value::Object(_) => "object",
+                        };
+                        sig_parts.push(format!("{}:{}", key, value_type));
+                    }
+                }
+                format!("{{{}}}", sig_parts.join(","))
+            }
+            serde_json::Value::Array(arr) => {
+                if arr.is_empty() {
+                    "[]".to_string()
+                } else {
+                    // Use first element's structure as representative
+                    format!("[{}]", Self::payload_signature(&arr[0]))
+                }
+            }
+            _ => {
+                // Primitive value - use type
+                match payload {
+                    serde_json::Value::Null => "null",
+                    serde_json::Value::Bool(_) => "bool",
+                    serde_json::Value::Number(_) => "number",
+                    serde_json::Value::String(_) => "string",
+                    _ => "unknown",
+                }
+                .to_string()
+            }
         }
     }
 
@@ -211,4 +355,3 @@ impl ProbabilisticModel {
         model.updated_at = chrono::Utc::now();
     }
 }
-

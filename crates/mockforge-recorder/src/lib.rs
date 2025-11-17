@@ -4,6 +4,7 @@
 //! Provides a queryable SQLite database of all interactions.
 
 pub mod api;
+pub mod behavioral_cloning;
 pub mod database;
 pub mod diff;
 pub mod har_export;
@@ -54,6 +55,11 @@ pub use sync_snapshots::{
 pub use test_generation::{
     GeneratedTest, LlmConfig, TestFormat, TestGenerationConfig, TestGenerationResult,
     TestGenerator, TestSuiteMetadata,
+};
+pub use behavioral_cloning::{
+    Flow, FlowCompiler, FlowRecorder, FlowRecordingConfig, FlowStep, FlowGroupingStrategy,
+    BehavioralScenario, BehavioralScenarioReplayEngine, BehavioralScenarioStep, ReplayResponse,
+    ScenarioInfo, ScenarioStorage, StateVariable,
 };
 
 use thiserror::Error;

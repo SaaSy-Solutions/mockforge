@@ -25,6 +25,7 @@ const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ defaul
 const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
 const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })));
 const ScenarioStateMachineEditor = lazy(() => import('./pages/ScenarioStateMachineEditor').then(m => ({ default: m.ScenarioStateMachineEditor })));
+const ScenarioStudioPage = lazy(() => import('./pages/ScenarioStudioPage').then(m => ({ default: m.ScenarioStudioPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 
 // Observability & Monitoring
@@ -40,6 +41,7 @@ const IntegrationTestBuilder = lazy(() => import('./pages/IntegrationTestBuilder
 const ChaosPage = lazy(() => import('./pages/ChaosPage').then(m => ({ default: m.ChaosPage })));
 const ResiliencePage = lazy(() => import('./pages/ResiliencePage').then(m => ({ default: m.ResiliencePage })));
 const RecorderPage = lazy(() => import('./pages/RecorderPage').then(m => ({ default: m.RecorderPage })));
+const BehavioralCloningPage = lazy(() => import('./pages/BehavioralCloningPage').then(m => ({ default: m.BehavioralCloningPage })));
 
 // Time Travel
 const TimeTravelPage = lazy(() => import('./pages/TimeTravelPage').then(m => ({ default: m.TimeTravelPage })));
@@ -149,6 +151,8 @@ function App() {
         return <GraphPage />;
       case 'state-machine-editor':
         return <ScenarioStateMachineEditor />;
+      case 'scenario-studio':
+        return <ScenarioStudioPage />;
       case 'orchestration-builder':
         return <OrchestrationBuilder />;
       case 'orchestration-execution':
@@ -193,6 +197,8 @@ function App() {
         return <ResiliencePage />;
       case 'recorder':
         return <RecorderPage />;
+      case 'behavioral-cloning':
+        return <BehavioralCloningPage />;
 
       // Import & Templates
       case 'import':

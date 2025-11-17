@@ -34,6 +34,7 @@ mod kafka_commands;
 mod mockai_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
+mod flow_commands;
 mod plugin_commands;
 mod progress;
 mod recorder_commands;
@@ -832,6 +833,20 @@ enum Commands {
     Recorder {
         #[command(subcommand)]
         recorder_command: recorder_commands::RecorderCommands,
+    },
+
+    /// Flow recording and behavioral cloning
+    ///
+    /// Record multi-step flows, view timelines, and compile behavioral scenarios.
+    ///
+    /// Examples:
+    ///   mockforge flow list
+    ///   mockforge flow view <flow-id>
+    ///   mockforge flow tag <flow-id> --name "checkout_success"
+    ///   mockforge flow compile <flow-id> --scenario-name "checkout"
+    Flow {
+        #[command(subcommand)]
+        flow_command: flow_commands::FlowCommands,
     },
 
     /// Scenario marketplace management
@@ -2268,6 +2283,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Recorder { recorder_command } => {
             recorder_commands::handle_recorder_command(recorder_command).await?;
+        }
+        Commands::Flow { flow_command } => {
+            flow_commands::handle_flow_command(flow_command).await?;
         }
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;

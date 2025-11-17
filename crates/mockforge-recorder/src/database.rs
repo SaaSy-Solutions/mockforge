@@ -223,6 +223,73 @@ impl RecorderDatabase {
         .execute(&self.pool)
         .await?;
 
+        // Create flows table for behavioral cloning v1
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS flows (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                tags TEXT,  -- JSON array
+                metadata TEXT  -- JSON object
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create flow_steps table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS flow_steps (
+                flow_id TEXT NOT NULL,
+                step_index INTEGER NOT NULL,
+                request_id TEXT NOT NULL,
+                step_label TEXT,  -- e.g., "login", "list", "checkout"
+                timing_ms INTEGER,  -- delay from previous step
+                FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE,
+                FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE,
+                PRIMARY KEY (flow_id, step_index)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create scenarios table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS scenarios (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                description TEXT,
+                scenario_data TEXT NOT NULL,  -- JSON serialized BehavioralScenario
+                metadata TEXT,  -- JSON object
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                tags TEXT,  -- JSON array
+                UNIQUE(name, version)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Create indexes for flows and scenarios
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_flows_created_at ON flows(created_at DESC)")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_flow_steps_flow_id ON flow_steps(flow_id)")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_scenarios_name ON scenarios(name, version)")
+            .execute(&self.pool)
+            .await?;
+
         debug!("Database schema initialized");
         Ok(())
     }
@@ -778,6 +845,7 @@ impl RecorderDatabase {
                 payload_variations: serde_json::from_str(&payload_variations_json).unwrap_or_default(),
                 sample_count: row.try_get::<i64, _>("sample_count")? as u64,
                 updated_at: row.try_get("updated_at")?,
+                original_error_probabilities: None,
             }))
         } else {
             Ok(None)
@@ -815,6 +883,7 @@ impl RecorderDatabase {
                 error_patterns: serde_json::from_str(&error_patterns_json).unwrap_or_default(),
                 payload_variations: serde_json::from_str(&payload_variations_json).unwrap_or_default(),
                 sample_count: row.try_get::<i64, _>("sample_count")? as u64,
+                original_error_probabilities: None,
                 updated_at: row.try_get("updated_at")?,
             });
         }
@@ -898,6 +967,340 @@ impl RecorderDatabase {
 
         Ok(exchanges)
     }
+
+    /// Create a new flow
+    pub async fn create_flow(
+        &self,
+        flow_id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        tags: &[String],
+    ) -> Result<()> {
+        let tags_json = serde_json::to_string(tags)?;
+        let metadata_json = serde_json::to_string(&std::collections::HashMap::<String, serde_json::Value>::new())?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO flows (id, name, description, created_at, tags, metadata)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(flow_id)
+        .bind(name)
+        .bind(description)
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(&tags_json)
+        .bind(&metadata_json)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Created flow: {}", flow_id);
+        Ok(())
+    }
+
+    /// Add a step to a flow
+    pub async fn add_flow_step(
+        &self,
+        flow_id: &str,
+        request_id: &str,
+        step_index: usize,
+        step_label: Option<&str>,
+        timing_ms: Option<u64>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO flow_steps (flow_id, step_index, request_id, step_label, timing_ms)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(flow_id)
+        .bind(step_index as i64)
+        .bind(request_id)
+        .bind(step_label)
+        .bind(timing_ms.map(|t| t as i64))
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Added step {} to flow {}", step_index, flow_id);
+        Ok(())
+    }
+
+    /// Get the number of steps in a flow
+    pub async fn get_flow_step_count(&self, flow_id: &str) -> Result<usize> {
+        let count: Option<i64> = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM flow_steps WHERE flow_id = ?",
+        )
+        .bind(flow_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(count.unwrap_or(0) as usize)
+    }
+
+    /// Get flow steps
+    pub async fn get_flow_steps(&self, flow_id: &str) -> Result<Vec<FlowStepRow>> {
+        let rows = sqlx::query_as::<_, FlowStepRow>(
+            r#"
+            SELECT request_id, step_index, step_label, timing_ms
+            FROM flow_steps
+            WHERE flow_id = ?
+            ORDER BY step_index ASC
+            "#,
+        )
+        .bind(flow_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    /// Get flow metadata
+    pub async fn get_flow_metadata(&self, flow_id: &str) -> Result<Option<FlowMetadataRow>> {
+        let row = sqlx::query_as::<_, FlowMetadataRow>(
+            r#"
+            SELECT id, name, description, created_at, tags, metadata
+            FROM flows
+            WHERE id = ?
+            "#,
+        )
+        .bind(flow_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
+    /// List flows
+    pub async fn list_flows(&self, limit: Option<i64>) -> Result<Vec<FlowMetadataRow>> {
+        let limit = limit.unwrap_or(100);
+        let rows = sqlx::query_as::<_, FlowMetadataRow>(
+            r#"
+            SELECT id, name, description, created_at, tags, metadata
+            FROM flows
+            ORDER BY created_at DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    /// Update flow metadata
+    pub async fn update_flow_metadata(
+        &self,
+        flow_id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        tags: Option<&[String]>,
+    ) -> Result<()> {
+        if let Some(tags) = tags {
+            let tags_json = serde_json::to_string(tags)?;
+            sqlx::query(
+                r#"
+                UPDATE flows
+                SET name = COALESCE(?, name),
+                    description = COALESCE(?, description),
+                    tags = ?
+                WHERE id = ?
+                "#,
+            )
+            .bind(name)
+            .bind(description)
+            .bind(&tags_json)
+            .bind(flow_id)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query(
+                r#"
+                UPDATE flows
+                SET name = COALESCE(?, name),
+                    description = COALESCE(?, description)
+                WHERE id = ?
+                "#,
+            )
+            .bind(name)
+            .bind(description)
+            .bind(flow_id)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        info!("Updated flow metadata: {}", flow_id);
+        Ok(())
+    }
+
+    /// Delete a flow
+    pub async fn delete_flow(&self, flow_id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM flows WHERE id = ?")
+            .bind(flow_id)
+            .execute(&self.pool)
+            .await?;
+
+        info!("Deleted flow: {}", flow_id);
+        Ok(())
+    }
+
+    /// Store a behavioral scenario
+    pub async fn store_scenario(
+        &self,
+        scenario: &crate::behavioral_cloning::BehavioralScenario,
+        version: &str,
+    ) -> Result<()> {
+        let scenario_json = serde_json::to_string(scenario)?;
+        let metadata_json = serde_json::to_string(&scenario.metadata)?;
+        let tags_json = serde_json::to_string(&scenario.tags)?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO scenarios (
+                id, name, version, description, scenario_data, metadata, updated_at, tags
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&scenario.id)
+        .bind(&scenario.name)
+        .bind(version)
+        .bind(&scenario.description)
+        .bind(&scenario_json)
+        .bind(&metadata_json)
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(&tags_json)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Stored scenario: {} v{}", scenario.id, version);
+        Ok(())
+    }
+
+    /// Get a scenario by ID
+    pub async fn get_scenario(
+        &self,
+        scenario_id: &str,
+    ) -> Result<Option<crate::behavioral_cloning::BehavioralScenario>> {
+        let row = sqlx::query(
+            r#"
+            SELECT scenario_data
+            FROM scenarios
+            WHERE id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(scenario_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            use sqlx::Row;
+            let scenario_json: String = row.try_get("scenario_data")?;
+            let scenario: crate::behavioral_cloning::BehavioralScenario =
+                serde_json::from_str(&scenario_json)?;
+            Ok(Some(scenario))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get a scenario by name and version
+    pub async fn get_scenario_by_name_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<Option<crate::behavioral_cloning::BehavioralScenario>> {
+        let row = sqlx::query(
+            r#"
+            SELECT scenario_data
+            FROM scenarios
+            WHERE name = ? AND version = ?
+            "#,
+        )
+        .bind(name)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            use sqlx::Row;
+            let scenario_json: String = row.try_get("scenario_data")?;
+            let scenario: crate::behavioral_cloning::BehavioralScenario =
+                serde_json::from_str(&scenario_json)?;
+            Ok(Some(scenario))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// List all scenarios
+    pub async fn list_scenarios(
+        &self,
+        limit: Option<i64>,
+    ) -> Result<Vec<ScenarioMetadataRow>> {
+        let limit = limit.unwrap_or(100);
+        let rows = sqlx::query_as::<_, ScenarioMetadataRow>(
+            r#"
+            SELECT id, name, version, description, created_at, updated_at, tags
+            FROM scenarios
+            ORDER BY name, version DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    /// Delete a scenario
+    pub async fn delete_scenario(&self, scenario_id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM scenarios WHERE id = ?")
+            .bind(scenario_id)
+            .execute(&self.pool)
+            .await?;
+
+        info!("Deleted scenario: {}", scenario_id);
+        Ok(())
+    }
+}
+
+/// Flow step row from database
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FlowStepRow {
+    pub request_id: String,
+    #[sqlx(rename = "step_index")]
+    pub step_index: i64,
+    pub step_label: Option<String>,
+    pub timing_ms: Option<i64>,
+}
+
+/// Flow metadata row from database
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FlowMetadataRow {
+    pub id: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    #[sqlx(rename = "created_at")]
+    pub created_at: String,
+    pub tags: String,
+    pub metadata: String,
+}
+
+/// Scenario metadata row from database
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ScenarioMetadataRow {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+    #[sqlx(rename = "created_at")]
+    pub created_at: String,
+    #[sqlx(rename = "updated_at")]
+    pub updated_at: String,
+    pub tags: String,
 }
 
 /// Internal row representation for sync snapshots

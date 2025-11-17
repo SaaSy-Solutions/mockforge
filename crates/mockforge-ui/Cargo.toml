@@ -48,6 +48,7 @@ mockforge-plugin-loader = "0.2.9"
 mockforge-analytics = "0.2.9"
 mockforge-chaos = "0.2.9"
 mockforge-collab = "0.2.9"
+mockforge-recorder = { version = "0.2.9", path = "../mockforge-recorder" }
 base64 = { workspace = true }
 jsonwebtoken = "9.3"
 bcrypt = "0.15"

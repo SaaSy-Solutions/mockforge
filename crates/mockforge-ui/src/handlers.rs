@@ -48,6 +48,7 @@ pub mod analytics;
 pub mod analytics_stream;
 pub mod analytics_v2;
 pub mod assets;
+pub mod behavioral_cloning;
 pub mod chains;
 pub mod community;
 pub mod contract_diff;
